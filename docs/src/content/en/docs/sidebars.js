@@ -15,17 +15,16 @@
 const sidebars = {
   // Docs sidebar - main documentation
   docsSidebar: [
-    'index',
+    {
+      type: 'doc',
+      id: 'index',
+      label: 'Get Started',
+    },
     {
       type: 'category',
-      label: 'Getting Started',
+      label: 'Fundamentals',
       collapsed: false,
       items: [
-        {
-          type: 'doc',
-          id: 'getting-started/start',
-          label: 'Start',
-        },
         {
           type: 'doc',
           id: 'getting-started/studio',
@@ -71,6 +70,11 @@ const sidebars = {
           type: 'doc',
           id: 'agents/structured-output',
           label: 'Structured Output',
+        },
+        {
+          type: 'doc',
+          id: 'agents/supervisor-agents',
+          label: 'Supervisor Agents',
         },
         {
           type: 'doc',
@@ -665,40 +669,7 @@ const sidebars = {
         },
       ],
     },
-    {
-      type: 'category',
-      label: 'Mastra Code',
-      customProps: {
-        tags: ['new'],
-      },
-      items: [
-        {
-          type: 'doc',
-          id: 'mastra-code/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-code/modes',
-          label: 'Modes',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-code/tools',
-          label: 'Tools',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-code/configuration',
-          label: 'Configuration',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-code/customization',
-          label: 'Customization',
-        },
-      ],
-    },
+
     {
       type: 'category',
       label: 'Build with AI',

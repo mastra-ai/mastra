@@ -17,8 +17,8 @@ import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
-import type { ObservabilityEntrypoint } from '../observability';
-import { NoOpObservability } from '../observability';
+import type { ObservabilityEntrypoint, LoggerContext, MetricsContext } from '../observability';
+import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
@@ -174,6 +174,8 @@ export interface Config<
 
   /**
    * Custom ID generator function for creating unique identifiers.
+   * Receives optional context about what type of ID is being generated
+   * and where it's being requested from.
    * @default `crypto.randomUUID()`
    */
   idGenerator?: MastraIdGenerator;
@@ -365,10 +367,13 @@ export class Mastra<
    * @example
    * ```typescript
    * const mastra = new Mastra({
-   *   idGenerator: () => `custom-${Date.now()}`
+   *   idGenerator: context =>
+   *     context?.idType === 'message' && context.threadId
+   *       ? `msg-${context.threadId}-${Date.now()}`
+   *       : `custom-${Date.now()}`
    * });
    * const generator = mastra.getIdGenerator();
-   * console.log(generator?.()); // \"custom-1234567890\"
+   * console.log(generator?.({ idType: 'message', threadId: 'thread-123' })); // \"msg-thread-123-1234567890\"
    * ```
    */
   public getIdGenerator() {
@@ -456,18 +461,37 @@ export class Mastra<
    *
    * The ID generator function will be used by `generateId()` instead of the default
    * `crypto.randomUUID()`. This is useful for creating application-specific ID formats
-   * or integrating with existing ID generation systems.
+   * or integrating with existing ID generation systems. The function receives
+   * optional context about what is requesting the ID.
    *
    * @example
    * ```typescript
    * const mastra = new Mastra();
-   * mastra.setIdGenerator(() => `custom-${Date.now()}`);
-   * const id = mastra.generateId();
-   * console.log(id); // "custom-1234567890"
+   * mastra.setIdGenerator(context =>
+   *   context?.idType === 'run' && context.entityId
+   *     ? `run-${context.entityId}-${Date.now()}`
+   *     : `custom-${Date.now()}`
+   * );
+   * const id = mastra.generateId({ idType: 'run', entityId: 'agent-123' });
+   * console.log(id); // "run-agent-123-1234567890"
    * ```
    */
   public setIdGenerator(idGenerator: MastraIdGenerator) {
     this.#idGenerator = idGenerator;
+  }
+
+  /**
+   * Sets the server configuration for this Mastra instance.
+   *
+   * @param server - The server configuration object
+   *
+   * @example
+   * ```typescript
+   * mastra.setServer({ ...mastra.getServer(), auth: new MastraAuthWorkos() });
+   * ```
+   */
+  public setServer(server: ServerConfig): void {
+    this.#server = server;
   }
 
   /**
@@ -1295,7 +1319,7 @@ export class Mastra<
    * @example Getting and executing a workflow
    * ```typescript
    * import { createWorkflow, createStep } from '@mastra/core/workflows';
-   * import { z } from 'zod';
+   * import { z } from 'zod/v4';
    *
    * const processDataWorkflow = createWorkflow({
    *   name: 'process-data',
@@ -2486,6 +2510,26 @@ export class Mastra<
 
   get observability(): ObservabilityEntrypoint {
     return this.#observability;
+  }
+
+  /**
+   * Structured logging API for observability.
+   * Logs emitted via this API will not have trace correlation when used outside a span.
+   * Use for startup logs, background jobs, or other non-traced scenarios.
+   *
+   * Note: For the infrastructure logger (IMastraLogger), use getLogger() instead.
+   */
+  get loggerVNext(): LoggerContext {
+    return this.#observability.getDefaultInstance()?.getLoggerContext?.() ?? noOpLoggerContext;
+  }
+
+  /**
+   * Direct metrics API for use outside trace context.
+   * Metrics emitted via this API will not have auto-labels from spans.
+   * Use for background jobs, startup metrics, or other non-traced scenarios.
+   */
+  get metrics(): MetricsContext {
+    return this.#observability.getDefaultInstance()?.getMetricsContext?.() ?? noOpMetricsContext;
   }
 
   public getServerMiddleware() {

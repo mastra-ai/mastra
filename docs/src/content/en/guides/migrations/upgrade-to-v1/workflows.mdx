@@ -106,7 +106,7 @@ npx @mastra/codemod@latest v1/workflow-run-count .
 ### `getInitData` returns unknown
 
 The `getInitData` function in the execute function now returns unknown instead of any. You'll need to type it yourself.
-To simply migrate, change `getInitData()` into `getInitData<any>()`
+To migrate, change `getInitData()` into `getInitData<any>()`
 
 ```diff
   createStep({
@@ -152,7 +152,7 @@ npx @mastra/codemod@latest v1/workflow-list-runs .
 
 ### Inputs are validated by default
 
-Previously, inputs weren't validated by default. The [`validateInputs`](/reference/workflows/workflow#workflowoptions) flag determines whether to validate the workflow inputs or not. This boolean has been flipped to `true`. If you want the old behavior or have workflows whose schemas don't need to be validated, set `validateInputs: false`.
+Previously, inputs weren't validated by default. The [`validateInputs`](/reference/workflows/workflow#constructor-parameters) flag determines whether to validate the workflow inputs or not. This boolean has been flipped to `true`. If you want the old behavior or have workflows whose schemas don't need to be validated, set `validateInputs: false`.
 
 ```diff
 createWorkflow({
@@ -230,7 +230,7 @@ This change simplifies the API - rather than creating a `WritableStream` wrapper
 
 :::note
 
-The `writer` parameter passed to step `execute` functions is not affected by this change. It remains a `ToolStream` that extends `WritableStream<unknown>` and provides `.write()` and `.custom()` methods:
+The `writer` parameter passed to step `execute` functions isn't affected by this change. It remains a `ToolStream` that extends `WritableStream<unknown>` and provides `.write()` and `.custom()` methods:
 
 ```ts
 createStep({
@@ -278,9 +278,9 @@ npx @mastra/codemod@latest v1/workflow-stream-vnext .
 
 :::
 
-### `suspend` and `setState` are not available in step condition functions parameters
+### `suspend` and `setState` aren't available in step condition functions parameters
 
-The `suspend` and `setState` functions are not available in step condition functions parameters.
+The `suspend` and `setState` functions aren't available in step condition functions parameters.
 
 To migrate, use the `suspend` function in the step execute function instead.
 
@@ -298,7 +298,7 @@ This is the same for `dountil` and `branch` condition functions parameters.
 
 The `./workflows/legacy` export path has been removed from `@mastra/core`. Legacy workflows are no longer supported.
 
-To migrate, use the new workflow API. There is no direct migration path from legacy workflows.
+To migrate, use the new workflow API. No direct migration path exists from legacy workflows.
 
 ```diff
 - import { LegacyWorkflow } from '@mastra/core/workflows/legacy';
@@ -306,7 +306,7 @@ To migrate, use the new workflow API. There is no direct migration path from leg
 + // Migrate to the new workflow API
 ```
 
-### `pipeThrough` and `pipeTo` methods from WorkflowRunOutput
+### `pipeThrough` and `pipeTo` methods from `WorkflowRunOutput`
 
 The `pipeThrough()` and `pipeTo()` methods on `WorkflowRunOutput` are deprecated. These methods still work but show console warnings.
 

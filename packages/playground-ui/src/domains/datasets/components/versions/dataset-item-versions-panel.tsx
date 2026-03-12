@@ -18,8 +18,6 @@ export interface DatasetItemVersionsPanelProps {
   activeVersion?: number | null;
 }
 
-const versionsListColumns = [{ name: 'version', label: 'Item Version History', size: '1fr' }];
-
 /**
  * Panel showing dataset item version history.
  */
@@ -80,12 +78,9 @@ export function DatasetItemVersionsPanel({
       {isSelectionActive ? (
         <Column.Toolbar className="grid justify-stretch gap-3 w-full">
           <ButtonsGroup>
-            <Button variant="standard" size="default" onClick={handleCancelSelection}>
-              Cancel
-            </Button>
+            <Button onClick={handleCancelSelection}>Cancel</Button>
             <ButtonWithTooltip
-              variant="cta"
-              size="default"
+              variant="primary"
               disabled={selectedIds.size !== 2}
               onClick={handleExecuteCompare}
               tooltipContent={selectedIds.size !== 2 ? 'Check 2 versions to compare' : undefined}
@@ -99,7 +94,7 @@ export function DatasetItemVersionsPanel({
         <>
           {(versions || []).length > 1 && (
             <Column.Toolbar>
-              <Button variant="standard" size="default" onClick={handleCompareClick} className="w-full">
+              <Button onClick={handleCompareClick} className="w-full">
                 <GitCompareIcon /> Compare Ver.
               </Button>
             </Column.Toolbar>
@@ -111,14 +106,8 @@ export function DatasetItemVersionsPanel({
         <DatasetItemVersionsListSkeleton />
       ) : (
         <ItemList>
-          <ItemList.Header columns={versionsListColumns}>
-            {versionsListColumns.map(col =>
-              col.name === 'checkbox' ? (
-                <ItemList.Cell key={col.name}>.</ItemList.Cell>
-              ) : (
-                <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
-              ),
-            )}
+          <ItemList.Header>
+            <ItemList.HeaderCol>Item Version History</ItemList.HeaderCol>
           </ItemList.Header>
 
           <ItemList.Scroller>
@@ -133,7 +122,7 @@ export function DatasetItemVersionsPanel({
                     isSelected={isSelectionActive && selectedIds.has(versionKey)}
                   >
                     {isSelectionActive && (
-                      <ItemList.Cell className="w-12 pl-2 ">
+                      <ItemList.LabelCell>
                         <Checkbox
                           checked={selectedIds.has(versionKey)}
                           disabled={item.isDeleted}
@@ -146,11 +135,11 @@ export function DatasetItemVersionsPanel({
                           }}
                           aria-label={`Select version ${item.datasetVersion}`}
                         />
-                      </ItemList.Cell>
+                      </ItemList.LabelCell>
                     )}
                     <ItemList.RowButton
                       item={item}
-                      columns={versionsListColumns}
+                      columns={[{ name: 'version', label: 'Item Version History', size: '1fr' }]}
                       isFeatured={isVersionSelected(item)}
                       onClick={() => handleVersionClick(item)}
                       className="py-2"
@@ -176,16 +165,14 @@ export function DatasetItemVersionsPanel({
 function DatasetItemVersionsListSkeleton() {
   return (
     <ItemList>
-      <ItemList.Header columns={versionsListColumns} />
+      <ItemList.Header columns={[{ name: 'version', label: 'Item Version History', size: '1fr' }]}>
+        <ItemList.HeaderCol>Item Version History</ItemList.HeaderCol>
+      </ItemList.Header>
       <ItemList.Items>
         {Array.from({ length: 3 }).map((_, index) => (
           <ItemList.Row key={index}>
-            <ItemList.RowButton columns={versionsListColumns}>
-              {versionsListColumns.map((col, colIndex) => (
-                <ItemList.TextCell key={colIndex} isLoading>
-                  Loading...
-                </ItemList.TextCell>
-              ))}
+            <ItemList.RowButton columns={[{ name: 'version', label: 'Item Version History', size: '1fr' }]}>
+              <ItemList.TextCell>Loading...</ItemList.TextCell>
             </ItemList.RowButton>
           </ItemList.Row>
         ))}

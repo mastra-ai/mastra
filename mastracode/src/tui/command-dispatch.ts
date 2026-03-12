@@ -15,19 +15,23 @@ import {
   handleModeCommand,
   handleSkillsCommand,
   handleNewCommand,
+  handleCloneCommand,
   handleResourceCommand,
   handleDiffCommand,
   handleThreadsCommand,
   handleThreadTagDirCommand,
   handleSandboxCommand as handleSandboxCmd,
-  handleModelsCommand,
   handleModelsPackCommand,
+  handleCustomProvidersCommand,
   handleSubagentsCommand,
   handleOMCommand,
   handleSettingsCommand,
   handleLoginCommand,
   handleReviewCommand as handleReviewCmd,
+  handleReportIssueCommand as handleReportIssueCmd,
   handleSetupCommand,
+  handleThemeCommand,
+  handleUpdateCommand,
 } from './commands/index.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { SlashCommandComponent } from './components/slash-command.js';
@@ -64,6 +68,9 @@ export async function dispatchSlashCommand(
     case 'new':
       handleNewCommand(buildCtx());
       return true;
+    case 'clone':
+      await handleCloneCommand(buildCtx());
+      return true;
     case 'threads':
       await handleThreadsCommand(buildCtx());
       return true;
@@ -80,10 +87,10 @@ export async function dispatchSlashCommand(
       await handleModeCommand(buildCtx(), args);
       return true;
     case 'models':
-      await handleModelsCommand(buildCtx());
-      return true;
-    case 'models:pack':
       await handleModelsPackCommand(buildCtx());
+      return true;
+    case 'custom-providers':
+      await handleCustomProvidersCommand(buildCtx());
       return true;
     case 'subagents':
       await handleSubagentsCommand(buildCtx());
@@ -92,7 +99,7 @@ export async function dispatchSlashCommand(
       await handleOMCommand(buildCtx());
       return true;
     case 'think':
-      await handleThinkCommand(buildCtx());
+      await handleThinkCommand(buildCtx(), args);
       return true;
     case 'permissions':
       await handlePermissionsCommand(buildCtx(), args);
@@ -136,8 +143,17 @@ export async function dispatchSlashCommand(
     case 'review':
       await handleReviewCmd(buildCtx(), args);
       return true;
+    case 'report-issue':
+      await handleReportIssueCmd(buildCtx(), args);
+      return true;
     case 'setup':
       await handleSetupCommand(buildCtx());
+      return true;
+    case 'theme':
+      await handleThemeCommand(buildCtx(), args);
+      return true;
+    case 'update':
+      await handleUpdateCommand(buildCtx());
       return true;
     default: {
       const customCommand = state.customSlashCommands.find(cmd => cmd.name === command);

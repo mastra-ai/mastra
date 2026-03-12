@@ -24,10 +24,10 @@ describe('workspace_file_stat', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT].execute({ path: '/test.txt' });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT].execute({ path: 'test.txt' }, { workspace });
 
     expect(typeof result).toBe('string');
-    expect(result).toContain('/test.txt');
+    expect(result).toContain('test.txt');
     expect(result).toContain('Type: file');
     expect(result).toContain('Size: 7 bytes');
     expect(result).toContain('Modified:');
@@ -37,10 +37,10 @@ describe('workspace_file_stat', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT].execute({ path: '/nonexistent' });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT].execute({ path: 'nonexistent' }, { workspace });
 
     expect(typeof result).toBe('string');
-    expect(result).toBe('/nonexistent: not found');
+    expect(result).toBe('nonexistent: not found');
   });
 
   it('should return type=directory for directories', async () => {
@@ -48,10 +48,10 @@ describe('workspace_file_stat', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT].execute({ path: '/subdir' });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT].execute({ path: 'subdir' }, { workspace });
 
     expect(typeof result).toBe('string');
-    expect(result).toContain('/subdir');
+    expect(result).toContain('subdir');
     expect(result).toContain('Type: directory');
     expect(result).toContain('Modified:');
   });

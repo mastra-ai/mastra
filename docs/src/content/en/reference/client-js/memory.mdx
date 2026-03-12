@@ -9,7 +9,7 @@ packages:
 
 The Memory API provides methods to manage conversation threads and message history in Mastra.
 
-## Get All Threads
+## Get all threads
 
 Retrieve all memory threads for a specific resource:
 
@@ -22,7 +22,7 @@ const threads = await mastraClient.getMemoryThreads({
 
 When `agentId` is omitted and storage is configured on the server, threads will be retrieved using storage directly. This is useful when multiple agents share the same threads (e.g., in workflows with multiple agent steps).
 
-## Create a New Thread
+## Create a new thread
 
 Create a new memory thread:
 
@@ -35,7 +35,7 @@ const thread = await mastraClient.createMemoryThread({
 })
 ```
 
-## Working with a Specific Thread
+## Working with a specific thread
 
 Get an instance of a specific memory thread:
 
@@ -43,7 +43,7 @@ Get an instance of a specific memory thread:
 const thread = mastraClient.getMemoryThread({ threadId: 'thread-id', agentId: 'agent-id' })
 ```
 
-## Thread Methods
+## Thread methods
 
 ### Get Thread Details
 
@@ -112,7 +112,7 @@ The clone response includes:
 - `thread`: The newly created cloned thread with clone metadata
 - `clonedMessages`: Array of the cloned messages with new IDs
 
-## Message Operations
+## Message operations
 
 ### Save Messages
 
@@ -175,7 +175,7 @@ const result = await thread.deleteMessages(['message-1', 'message-2', 'message-3
 // Returns: { success: true, message: "Message deleted successfully" }
 ```
 
-## Working Memory
+## Working memory
 
 Working memory allows agents to maintain persistent information about users across interactions. It can be scoped to either a specific thread or across all threads for a resource (user).
 

@@ -30,19 +30,22 @@
  * ```
  */
 
+import * as path from 'node:path';
 import type { IMastraLogger } from '../logger';
 import type { RequestContext } from '../request-context';
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError } from './errors';
-import { CompositeFilesystem } from './filesystem';
+import { CompositeFilesystem, LocalFilesystem } from './filesystem';
 import type { WorkspaceFilesystem, FilesystemInfo } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
-import { isGlobPattern, extractGlobBase, createGlobMatcher } from './glob';
+import { resolvePathPattern } from './glob';
+import type { ReaddirEntry } from './glob';
 import { callLifecycle } from './lifecycle';
 import { findProjectRoot, isLSPAvailable, LSPManager } from './lsp';
 import type { LSPConfig } from './lsp/types';
 import type { WorkspaceSandbox, OnMountHook } from './sandbox';
+import { LocalSandbox } from './sandbox/local-sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
 import { SearchEngine } from './search';
 import type { BM25Config, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
@@ -198,7 +201,7 @@ export interface WorkspaceConfig<
   /**
    * Paths to auto-index on init().
    * Files in these directories will be indexed for search.
-   * @example ['/docs', '/support']
+   * @example ['docs', 'support']
    */
   autoIndexPaths?: string[];
 
@@ -211,7 +214,7 @@ export interface WorkspaceConfig<
    *
    * @example Static paths
    * ```typescript
-   * skills: ['/skills', '/node_modules/@myorg/skills']
+   * skills: ['skills', 'node_modules/@myorg/skills']
    * ```
    *
    * @example Dynamic paths
@@ -219,8 +222,8 @@ export interface WorkspaceConfig<
    * skills: (ctx) => {
    *   const tier = ctx.requestContext?.get('userTier');
    *   return tier === 'premium'
-   *     ? ['/skills/basic', '/skills/premium']
-   *     : ['/skills/basic'];
+   *     ? ['skills/basic', 'skills/premium']
+   *     : ['skills/basic'];
    * }
    * ```
    */
@@ -238,7 +241,7 @@ export interface WorkspaceConfig<
    * import { VersionedSkillSource } from '@mastra/core/workspace';
    *
    * const workspace = new Workspace({
-   *   skills: ['/skills'],
+   *   skills: ['skills'],
    *   skillSource: new VersionedSkillSource(tree, blobStore, versionCreatedAt),
    * });
    * ```
@@ -428,6 +431,18 @@ export class Workspace<
       // Validate: can't use both filesystem and mounts
       if (config.filesystem) {
         throw new WorkspaceError('Cannot use both "filesystem" and "mounts"', 'INVALID_CONFIG');
+      }
+
+      // Warn: contained: false is incompatible with mounts
+      for (const [mountPath, fs] of Object.entries(config.mounts)) {
+        if (fs instanceof LocalFilesystem && !fs.contained) {
+          console.warn(
+            `[Workspace] LocalFilesystem at mount "${mountPath}" has contained: false, which is incompatible with mounts. ` +
+              `CompositeFilesystem strips mount prefixes and produces absolute paths (e.g. "/file.txt"), ` +
+              `which a non-contained LocalFilesystem interprets as real host paths instead of paths ` +
+              `relative to basePath. Use contained: true (default) or allowedPaths for specific exceptions.`,
+          );
+        }
       }
 
       this._fs = new CompositeFilesystem({ mounts: config.mounts });
@@ -713,9 +728,9 @@ export class Workspace<
    * Rebuild the search index from filesystem paths.
    * Used internally for auto-indexing on init.
    *
-   * Paths can be plain directories (e.g., '/docs') or glob patterns
-   * (e.g., '/docs/**\/*.md'). Glob patterns are resolved to a walk root
-   * via extractGlobBase, then files are filtered by the pattern.
+   * Paths can be plain directories, single files, or glob patterns.
+   * Uses resolvePathPattern for unified resolution: file matches are
+   * indexed directly, directory matches are recursed.
    */
   private async rebuildSearchIndex(paths: string[]): Promise<void> {
     if (!this._searchEngine || !this._fs || paths.length === 0) {
@@ -725,27 +740,49 @@ export class Workspace<
     // Clear existing BM25 index
     this._searchEngine.clear();
 
-    // Index all files from specified paths
+    // Adapt filesystem readdir to the ReaddirEntry interface
+    const readdir = async (dir: string): Promise<ReaddirEntry[]> => {
+      const entries = await this._fs!.readdir(dir);
+      return entries.map(e => ({ name: e.name, type: e.type, isSymlink: e.isSymlink }));
+    };
+
+    // Index all files from specified paths (track across patterns to avoid re-indexing overlaps)
+    const indexedPaths = new Set<string>();
     for (const pathOrGlob of paths) {
       try {
-        if (isGlobPattern(pathOrGlob)) {
-          // Glob pattern: walk from the base directory, filter with matcher
-          const walkRoot = extractGlobBase(pathOrGlob);
-          const matcher = createGlobMatcher(pathOrGlob);
-          const files = await this.getAllFiles(walkRoot);
-          for (const filePath of files) {
-            if (!matcher(filePath)) continue;
-            await this.indexFileForSearch(filePath);
+        const resolved = await resolvePathPattern(pathOrGlob, readdir);
+        const filesToIndex = new Set<string>();
+        const directoryRoots: string[] = [];
+        for (const entry of resolved) {
+          if (entry.type === 'file') {
+            filesToIndex.add(entry.path);
+            continue;
           }
-        } else {
-          // Plain path: recurse everything (existing behavior)
-          const files = await this.getAllFiles(pathOrGlob);
-          for (const filePath of files) {
-            await this.indexFileForSearch(filePath);
+          // Skip directories already covered by a parent directory
+          const alreadyCovered = directoryRoots.some(root => entry.path === root || entry.path.startsWith(`${root}/`));
+          if (!alreadyCovered) directoryRoots.push(entry.path);
+        }
+        // Index direct file matches first so they aren't lost if a directory scan fails
+        for (const filePath of filesToIndex) {
+          if (indexedPaths.has(filePath)) continue;
+          await this.indexFileForSearch(filePath);
+          indexedPaths.add(filePath);
+        }
+        for (const dir of directoryRoots) {
+          try {
+            const files = await this.getAllFiles(dir);
+            for (const filePath of files) {
+              if (!indexedPaths.has(filePath)) {
+                await this.indexFileForSearch(filePath);
+                indexedPaths.add(filePath);
+              }
+            }
+          } catch {
+            // Skip directories that can't be read
           }
         }
       } catch {
-        // Skip paths that don't exist
+        // Skip paths that don't exist or can't be read
       }
     }
   }
@@ -772,7 +809,7 @@ export class Workspace<
     const entries = await this._fs.readdir(dir);
 
     for (const entry of entries) {
-      const fullPath = dir === '/' ? `/${entry.name}` : `${dir}/${entry.name}`;
+      const fullPath = dir === '.' || dir === '' ? entry.name : `${dir}/${entry.name}`;
       if (entry.type === 'file') {
         files.push(fullPath);
       } else if (entry.type === 'directory' && !entry.isSymlink) {
@@ -876,7 +913,7 @@ export class Workspace<
 
       if (options?.includeFileCount) {
         try {
-          const files = await this.getAllFiles('/');
+          const files = await this.getAllFiles('.');
           info.filesystem.totalFiles = files.length;
         } catch {
           // Ignore errors - filesystem may not support listing
@@ -919,15 +956,22 @@ export class Workspace<
     if (mountEntries && mountEntries.size > 0) {
       const sandboxAccessible: string[] = [];
       const workspaceOnly: string[] = [];
+      const workingDir = this._sandbox instanceof LocalSandbox ? this._sandbox.workingDirectory : undefined;
 
       for (const [mountPath, entry] of mountEntries) {
         const fsName = entry.filesystem.displayName || entry.filesystem.provider;
         const access = entry.filesystem.readOnly ? 'read-only' : 'read-write';
 
-        if (entry.state === 'mounted') {
-          sandboxAccessible.push(`  - ${mountPath}: ${fsName} (${access})`);
+        // Resolve mount path against workingDirectory when available
+        // so the LLM sees the actual usable path (e.g. /tmp/sandbox/s3 instead of /s3)
+        const displayPath = workingDir ? path.join(workingDir, mountPath.replace(/^\/+/, '')) : mountPath;
+
+        if (entry.state === 'mounted' || entry.state === 'pending' || entry.state === 'mounting') {
+          // mounted: ready now. pending/mounting: will be ready when sandbox starts
+          // (executeCommand triggers ensureRunning which processes pending mounts)
+          sandboxAccessible.push(`  - ${displayPath}: ${fsName} (${access})`);
         } else {
-          // pending, mounting, error, unsupported — NOT accessible in sandbox
+          // error, unsupported, unavailable — NOT accessible in sandbox
           workspaceOnly.push(`  - ${mountPath}: ${fsName} (${access})`);
         }
       }
@@ -977,7 +1021,7 @@ export class Workspace<
       sandbox: this._sandbox
         ? {
             provider: this._sandbox.provider,
-            workingDirectory: this._sandbox.workingDirectory,
+            workingDirectory: this._sandbox instanceof LocalSandbox ? this._sandbox.workingDirectory : undefined,
           }
         : undefined,
       instructions,

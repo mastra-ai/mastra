@@ -1,5 +1,57 @@
 # create-mastra
 
+## 1.3.9
+
+## 1.3.9-alpha.1
+
+## 1.3.9-alpha.0
+
+## 1.3.8
+
+### Patch Changes
+
+- dependencies updates: ([#14062](https://github.com/mastra-ai/mastra/pull/14062))
+  - Updated dependency [`prettier@^3.8.1` ↗︎](https://www.npmjs.com/package/prettier/v/3.8.1) (from `^3.7.4`, in `dependencies`)
+
+- dependencies updates: ([#14099](https://github.com/mastra-ai/mastra/pull/14099))
+  - Updated dependency [`fs-extra@^11.3.4` ↗︎](https://www.npmjs.com/package/fs-extra/v/11.3.4) (from `^11.3.3`, in `dependencies`)
+
+## 1.3.8-alpha.2
+
+## 1.3.8-alpha.1
+
+## 1.3.8-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#14062](https://github.com/mastra-ai/mastra/pull/14062))
+  - Updated dependency [`prettier@^3.8.1` ↗︎](https://www.npmjs.com/package/prettier/v/3.8.1) (from `^3.7.4`, in `dependencies`)
+
+- dependencies updates: ([#14099](https://github.com/mastra-ai/mastra/pull/14099))
+  - Updated dependency [`fs-extra@^11.3.4` ↗︎](https://www.npmjs.com/package/fs-extra/v/11.3.4) (from `^11.3.3`, in `dependencies`)
+
+## 1.3.7
+
+### Patch Changes
+
+- Updated default OpenAI model from gpt-4o to gpt-5-mini for new projects. ([#13874](https://github.com/mastra-ai/mastra/pull/13874))
+
+## 1.3.7-alpha.1
+
+### Patch Changes
+
+- Updated default OpenAI model from gpt-4o to gpt-5-mini for new projects. ([#13874](https://github.com/mastra-ai/mastra/pull/13874))
+
+## 1.3.7-alpha.0
+
+## 1.3.6
+
+## 1.3.6-alpha.0
+
+## 1.3.5
+
+## 1.3.5-alpha.0
+
 ## 1.3.4
 
 ## 1.3.4-alpha.0

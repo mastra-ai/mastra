@@ -3,7 +3,8 @@ import type { Agent, AgentExecutionOptions, AiMessageType, UIMessageWithMetadata
 import { isSupportedLanguageModel } from '../../agent';
 import { MastraError } from '../../error';
 import { validateAndSaveScore } from '../../mastra/hooks';
-import type { TracingContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
+import { resolveObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { Workflow } from '../../workflows';
 import type { AnyWorkflow, WorkflowResult, WorkflowRunStartOptions, StepResult } from '../../workflows';
@@ -22,9 +23,8 @@ type RunEvalsDataItem<TTarget = unknown> = {
       : unknown;
   groundTruth?: any;
   requestContext?: RequestContext;
-  tracingContext?: TracingContext;
   startOptions?: WorkflowRunOptions;
-};
+} & Partial<ObservabilityContext>;
 
 type WorkflowScorerConfig = {
   workflow?: MastraScorer<any, any, any, any>[];
@@ -248,12 +248,14 @@ async function executeTarget(
 }
 
 async function executeWorkflow(target: Workflow, item: RunEvalsDataItem<any>, targetOptions?: WorkflowRunOptions) {
+  const observabilityContext = resolveObservabilityContext(item);
   const run = await target.createRun({ disableScorers: true });
   const workflowResult = await run.start({
     ...targetOptions,
     ...item.startOptions,
     inputData: item.input,
     requestContext: item.requestContext,
+    ...observabilityContext,
   });
 
   return {
@@ -270,19 +272,26 @@ async function executeAgent(
   item: RunEvalsDataItem<any>,
   targetOptions?: Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>,
 ) {
+  const observabilityContext = resolveObservabilityContext(item);
   const model = await agent.getModel();
   if (isSupportedLanguageModel(model)) {
-    return await agent.generate(item.input as any, {
-      ...targetOptions,
+    const { structuredOutput, ...restOptions } = targetOptions ?? {};
+    const baseOptions = {
+      ...restOptions,
+      ...observabilityContext,
       scorers: {},
       returnScorerData: true,
       requestContext: item.requestContext,
-    });
+    };
+    return structuredOutput
+      ? await agent.generate(item.input, { ...baseOptions, structuredOutput })
+      : await agent.generate(item.input, baseOptions);
   } else {
-    return await agent.generateLegacy(item.input as any, {
+    return await agent.generateLegacy(item.input, {
       scorers: {},
       returnScorerData: true,
       requestContext: item.requestContext,
+      ...observabilityContext,
     });
   }
 }
@@ -302,7 +311,7 @@ async function runScorers(
           output: targetResult.scoringData?.output,
           groundTruth: item.groundTruth,
           requestContext: item.requestContext,
-          tracingContext: item.tracingContext,
+          ...resolveObservabilityContext(item),
         });
 
         scorerResults[scorer.id] = score;
@@ -332,7 +341,7 @@ async function runScorers(
           output: targetResult.scoringData.output,
           groundTruth: item.groundTruth,
           requestContext: item.requestContext,
-          tracingContext: item.tracingContext,
+          ...resolveObservabilityContext(item),
         });
         workflowScorerResults[scorer.id] = score;
       }
@@ -345,16 +354,16 @@ async function runScorers(
       const stepScorerResults: Record<string, any> = {};
       for (const [stepId, stepScorers] of Object.entries(scorers.steps)) {
         const stepResult = targetResult.scoringData.stepResults?.[stepId];
-        if (stepResult?.status === 'success' && stepResult.payload && stepResult.output) {
+        if (stepResult?.status === 'success' && stepResult.output !== undefined) {
           const stepResults: Record<string, any> = {};
           for (const scorer of stepScorers) {
             try {
               const score = await scorer.run({
-                input: stepResult.payload,
+                input: stepResult.payload !== undefined ? stepResult.payload : targetResult.scoringData.input,
                 output: stepResult.output,
                 groundTruth: item.groundTruth,
                 requestContext: item.requestContext,
-                tracingContext: item.tracingContext,
+                ...resolveObservabilityContext(item),
               });
               stepResults[scorer.id] = score;
             } catch (error) {

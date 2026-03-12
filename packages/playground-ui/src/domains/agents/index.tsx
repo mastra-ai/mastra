@@ -1,7 +1,7 @@
 export * from './components/agent-chat';
 export * from './context';
 export * from './components/agent-settings';
-export * from './components/agent-table/agent-table';
+export * from './components/agent-list/agent-list';
 export * from './components/request-context';
 export * from './components/provider-map-icon';
 export * from './components/agent-metadata';
@@ -35,3 +35,7 @@ export * from './utils/compute-agent-initial-values';
 export * from './hooks/use-agent-cms-form';
 export * from './components/agent-cms-form-shell';
 export * from './components/agent-version-panel';
+export * from './components/agent-playground';
+export * from './components/agent-page-tabs';
+export * from './hooks/use-agent-experiments';
+export * from './components/agent-traces-panel';

@@ -8,7 +8,7 @@ import { stepCountIs, tool } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, mockId, mockValues } from '@internal/ai-sdk-v5/test';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import z from 'zod';
+import z from 'zod/v4';
 import type { loop } from '../loop';
 import type { ChunkType } from '../../stream/types';
 import {
@@ -220,28 +220,28 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       await result.consumeStream();
 
       expect(tools).toMatchInlineSnapshot(`
-            [
-              {
-                "description": undefined,
-                "inputSchema": {
-                  "$schema": "http://json-schema.org/draft-07/schema#",
-                  "additionalProperties": false,
-                  "properties": {
-                    "value": {
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "value",
-                  ],
-                  "type": "object",
+        [
+          {
+            "description": undefined,
+            "inputSchema": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "additionalProperties": false,
+              "properties": {
+                "value": {
+                  "type": "string",
                 },
-                "name": "tool1",
-                "providerOptions": undefined,
-                "type": "function",
               },
-            ]
-          `);
+              "required": [
+                "value",
+              ],
+              "type": "object",
+            },
+            "name": "tool1",
+            "providerOptions": undefined,
+            "type": "function",
+          },
+        ]
+      `);
     });
   });
 
@@ -2576,6 +2576,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 {
                   "content": {
                     "format": 2,
+                    "metadata": {
+                      "modelId": "mock-model-id",
+                    },
                     "parts": [
                       {
                         "providerExecuted": undefined,
@@ -4694,7 +4697,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             { type: 'text-start', id: 'text-1' },
             { type: 'text-delta', id: 'text-1', delta: 'Hello' },
             { type: 'text-end', id: 'text-1' },
-            { type: 'tool-input-start', id: '2', toolName: 'tool1' },
+            {
+              type: 'tool-input-start',
+              id: '2',
+              toolName: 'tool1',
+              providerMetadata: { provider: { custom: 'value' } },
+            },
             { type: 'tool-input-delta', id: '2', delta: '{"value": "' },
             { type: 'reasoning-start', id: '3' },
             { type: 'reasoning-delta', id: '3', delta: 'Feeling clever' },
@@ -4844,8 +4852,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           {
             "from": "AGENT",
             "payload": {
+              "dynamic": undefined,
               "providerExecuted": undefined,
-              "providerMetadata": undefined,
+              "providerMetadata": {
+                "provider": {
+                  "custom": "value",
+                },
+              },
               "toolCallId": "2",
               "toolName": "tool1",
             },
@@ -4916,9 +4929,19 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           {
             "from": "AGENT",
             "payload": {
+              "providerMetadata": undefined,
+              "toolCallId": "2",
+            },
+            "runId": "test-run-id",
+            "type": "tool-call-input-streaming-end",
+          },
+          {
+            "from": "AGENT",
+            "payload": {
               "args": {
                 "value": "test",
               },
+              "dynamic": undefined,
               "providerExecuted": undefined,
               "providerMetadata": {
                 "provider": {
@@ -7272,8 +7295,29 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "content": [
                         {
                           "providerOptions": undefined,
-                          "text": "",
+                          "text": "Thinking...",
                           "type": "reasoning",
+                        },
+                        {
+                          "text": "Hello, ",
+                          "type": "text",
+                        },
+                        {
+                          "text": "This is ",
+                          "type": "text",
+                        },
+                        {
+                          "providerOptions": undefined,
+                          "text": "I'm thinking...Separate thoughts",
+                          "type": "reasoning",
+                        },
+                        {
+                          "text": "aworld!",
+                          "type": "text",
+                        },
+                        {
+                          "text": " test.",
+                          "type": "text",
                         },
                       ],
                       "role": "assistant",
@@ -7293,8 +7337,29 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "content": [
                         {
                           "providerOptions": undefined,
-                          "text": "",
+                          "text": "Thinking...",
                           "type": "reasoning",
+                        },
+                        {
+                          "text": "Hello, ",
+                          "type": "text",
+                        },
+                        {
+                          "text": "This is ",
+                          "type": "text",
+                        },
+                        {
+                          "providerOptions": undefined,
+                          "text": "I'm thinking...Separate thoughts",
+                          "type": "reasoning",
+                        },
+                        {
+                          "text": "aworld!",
+                          "type": "text",
+                        },
+                        {
+                          "text": " test.",
+                          "type": "text",
                         },
                       ],
                       "role": "assistant",
@@ -7342,8 +7407,29 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                             "content": [
                               {
                                 "providerOptions": undefined,
-                                "text": "",
+                                "text": "Thinking...",
                                 "type": "reasoning",
+                              },
+                              {
+                                "text": "Hello, ",
+                                "type": "text",
+                              },
+                              {
+                                "text": "This is ",
+                                "type": "text",
+                              },
+                              {
+                                "providerOptions": undefined,
+                                "text": "I'm thinking...Separate thoughts",
+                                "type": "reasoning",
+                              },
+                              {
+                                "text": "aworld!",
+                                "type": "text",
+                              },
+                              {
+                                "text": " test.",
+                                "type": "text",
                               },
                             ],
                             "role": "assistant",
@@ -7392,8 +7478,29 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "content": [
                         {
                           "providerOptions": undefined,
-                          "text": "",
+                          "text": "Thinking...",
                           "type": "reasoning",
+                        },
+                        {
+                          "text": "Hello, ",
+                          "type": "text",
+                        },
+                        {
+                          "text": "This is ",
+                          "type": "text",
+                        },
+                        {
+                          "providerOptions": undefined,
+                          "text": "I'm thinking...Separate thoughts",
+                          "type": "reasoning",
+                        },
+                        {
+                          "text": "aworld!",
+                          "type": "text",
+                        },
+                        {
+                          "text": " test.",
+                          "type": "text",
                         },
                       ],
                       "role": "assistant",
@@ -7413,8 +7520,29 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "content": [
                         {
                           "providerOptions": undefined,
-                          "text": "",
+                          "text": "Thinking...",
                           "type": "reasoning",
+                        },
+                        {
+                          "text": "Hello, ",
+                          "type": "text",
+                        },
+                        {
+                          "text": "This is ",
+                          "type": "text",
+                        },
+                        {
+                          "providerOptions": undefined,
+                          "text": "I'm thinking...Separate thoughts",
+                          "type": "reasoning",
+                        },
+                        {
+                          "text": "aworld!",
+                          "type": "text",
+                        },
+                        {
+                          "text": " test.",
+                          "type": "text",
                         },
                       ],
                       "role": "assistant",
@@ -7462,8 +7590,29 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                             "content": [
                               {
                                 "providerOptions": undefined,
-                                "text": "",
+                                "text": "Thinking...",
                                 "type": "reasoning",
+                              },
+                              {
+                                "text": "Hello, ",
+                                "type": "text",
+                              },
+                              {
+                                "text": "This is ",
+                                "type": "text",
+                              },
+                              {
+                                "providerOptions": undefined,
+                                "text": "I'm thinking...Separate thoughts",
+                                "type": "reasoning",
+                              },
+                              {
+                                "text": "aworld!",
+                                "type": "text",
+                              },
+                              {
+                                "text": " test.",
+                                "type": "text",
                               },
                             ],
                             "role": "assistant",
@@ -7727,25 +7876,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
-              "payload": {
-                "id": "id-2",
-                "providerMetadata": undefined,
-              },
-              "runId": "test-run-id",
-              "type": "text-start",
-            },
-            {
-              "from": "AGENT",
-              "payload": {
-                "id": "id-2",
-                "providerMetadata": undefined,
-                "text": "Hello",
-              },
-              "runId": "test-run-id",
-              "type": "text-delta",
-            },
-            {
-              "from": "AGENT",
               "payload": {},
               "runId": "test-run-id",
               "type": "abort",
@@ -7796,7 +7926,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 },
                 "output": {
                   "steps": [],
-                  "text": "Hello",
+                  "text": "",
                   "toolCalls": [],
                   "usage": {
                     "inputTokens": 0,
@@ -8258,25 +8388,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
-              "payload": {
-                "id": "id-2",
-                "providerMetadata": undefined,
-              },
-              "runId": "test-run-id",
-              "type": "text-start",
-            },
-            {
-              "from": "AGENT",
-              "payload": {
-                "id": "id-2",
-                "providerMetadata": undefined,
-                "text": "Hello",
-              },
-              "runId": "test-run-id",
-              "type": "text-delta",
-            },
-            {
-              "from": "AGENT",
               "payload": {},
               "runId": "test-run-id",
               "type": "abort",
@@ -8390,7 +8501,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 },
                 "output": {
                   "steps": [],
-                  "text": "Hello",
+                  "text": "",
                   "toolCalls": [],
                   "usage": {
                     "inputTokens": 3,

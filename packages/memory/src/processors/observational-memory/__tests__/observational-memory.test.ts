@@ -1,12 +1,15 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { coreFeatures } from '@mastra/core/features';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { ObservationalMemory } from '../observational-memory';
 import {
   buildObserverPrompt,
   buildObserverSystemPrompt,
+  buildObserverHistoryMessage,
+  buildMultiThreadObserverHistoryMessage,
   parseObserverOutput,
   optimizeObservationsForContext,
   formatMessagesForObserver,
@@ -21,6 +24,7 @@ import {
   validateCompression,
   buildReflectorSystemPrompt,
 } from '../reflector-agent';
+import { resolveRetentionFloor } from '../thresholds';
 import { TokenCounter } from '../token-counter';
 
 // =============================================================================
@@ -51,6 +55,49 @@ function createTestMessages(count: number, baseContent = 'Test message'): Mastra
 function createInMemoryStorage(): InMemoryMemory {
   const db = new InMemoryDB();
   return new InMemoryMemory({ db });
+}
+
+function createStreamCapableMockModel(config: Record<string, any>) {
+  if (config.doGenerate && !config.doStream) {
+    const originalDoGenerate = config.doGenerate;
+    return new MockLanguageModelV2({
+      ...config,
+      // Replace doGenerate so any accidental generate-path call fails fast
+      doGenerate: async () => {
+        throw new Error('Unexpected doGenerate call — OM should use the stream path');
+      },
+      doStream: async (options: any) => {
+        const generated = await originalDoGenerate(options);
+        const text = generated.content?.find((part: any) => part?.type === 'text')?.text ?? generated.text ?? '';
+        const usage = generated.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: generated.warnings ?? [] });
+            controller.enqueue({
+              type: 'response-metadata',
+              id: 'mock-response',
+              modelId: 'mock-model',
+              timestamp: new Date(),
+            });
+            controller.enqueue({ type: 'text-start', id: 'text-1' });
+            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: text });
+            controller.enqueue({ type: 'text-end', id: 'text-1' });
+            controller.enqueue({ type: 'finish', finishReason: generated.finishReason ?? 'stop', usage });
+            controller.close();
+          },
+        });
+
+        return {
+          stream,
+          rawCall: generated.rawCall ?? { rawPrompt: null, rawSettings: {} },
+          warnings: generated.warnings ?? [],
+        };
+      },
+    });
+  }
+
+  return new MockLanguageModelV2(config);
 }
 
 // =============================================================================
@@ -596,6 +643,110 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).toContain('2024');
       expect(formatted).toContain('Dec');
     });
+
+    it('should include attachment placeholders for image and file parts', () => {
+      const msg = createTestMessage('ignored', 'user');
+      msg.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Please inspect these attachments.' },
+          { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+          {
+            type: 'file',
+            data: 'https://example.com/specs/floorplan.pdf',
+            mimeType: 'application/pdf',
+            filename: 'floorplan.pdf',
+          } as any,
+        ],
+      };
+
+      const formatted = formatMessagesForObserver([msg]);
+      expect(formatted).toContain('[Image #1: reference-board.png]');
+      expect(formatted).toContain('[File #1: floorplan.pdf]');
+    });
+  });
+
+  describe('buildObserverHistoryMessage', () => {
+    it('should preserve image attachments and image-like file attachments in observer input order', () => {
+      const msg = createTestMessage('ignored', 'user');
+      msg.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Look at these.' },
+          { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+          {
+            type: 'file',
+            data: 'https://example.com/annotated-photo.jpg',
+            mimeType: 'application/octet-stream',
+            filename: 'annotated-photo.jpg',
+          } as any,
+          {
+            type: 'file',
+            data: 'https://example.com/floorplan.pdf',
+            mimeType: 'application/pdf',
+            filename: 'floorplan.pdf',
+          } as any,
+        ],
+      };
+
+      const historyMessage = buildObserverHistoryMessage([msg]);
+      expect(historyMessage.role).toBe('user');
+      expect(Array.isArray(historyMessage.content)).toBe(true);
+
+      const content = historyMessage.content as any[];
+      expect(content[0]).toMatchObject({ type: 'text' });
+      expect(content[1]).toMatchObject({ type: 'text' });
+      expect(content[1].text).toContain('[Image #1: reference-board.png]');
+      expect(content[1].text).toContain('[Image #2: annotated-photo.jpg]');
+      expect(content[1].text).toContain('[File #1: floorplan.pdf]');
+      expect(content[2]).toMatchObject({ type: 'image', image: 'https://example.com/reference-board.png' });
+      expect(content[3]).toMatchObject({ type: 'image', image: 'https://example.com/annotated-photo.jpg' });
+      expect(content).not.toContainEqual(expect.objectContaining({ image: 'https://example.com/floorplan.pdf' }));
+    });
+
+    it('should preserve thread grouping while attaching multimodal content for multi-thread observer input', () => {
+      const threadA = createTestMessage('ignored', 'user', 'msg-a');
+      threadA.threadId = 'thread-a';
+      threadA.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Thread A' },
+          { type: 'image', image: 'https://example.com/a.png', mimeType: 'image/png' } as any,
+        ],
+      };
+
+      const threadB = createTestMessage('ignored', 'user', 'msg-b');
+      threadB.threadId = 'thread-b';
+      threadB.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Thread B' },
+          {
+            type: 'file',
+            data: 'https://example.com/b.jpeg',
+            mimeType: 'image/jpeg',
+            filename: 'b.jpeg',
+          } as any,
+        ],
+      };
+
+      const historyMessage = buildMultiThreadObserverHistoryMessage(
+        new Map([
+          ['thread-a', [threadA]],
+          ['thread-b', [threadB]],
+        ]),
+        ['thread-a', 'thread-b'],
+      );
+
+      const content = historyMessage.content as any[];
+      expect(content[0].text).toContain('2 different conversation threads');
+      expect(content.some(part => part.type === 'text' && part.text.includes('<thread id="thread-a">'))).toBe(true);
+      expect(content.some(part => part.type === 'text' && part.text.includes('[Image #1: a.png]'))).toBe(true);
+      expect(content.some(part => part.type === 'image' && part.image === 'https://example.com/a.png')).toBe(true);
+      expect(content.some(part => part.type === 'text' && part.text.includes('<thread id="thread-b">'))).toBe(true);
+      expect(content.some(part => part.type === 'text' && part.text.includes('[Image #2: b.jpeg]'))).toBe(true);
+      expect(content.some(part => part.type === 'image' && part.image === 'https://example.com/b.jpeg')).toBe(true);
+    });
   });
 
   describe('buildObserverPrompt', () => {
@@ -622,6 +773,172 @@ describe('Observer Agent Helpers', () => {
       const prompt = buildObserverPrompt(undefined, messages);
 
       expect(prompt).not.toContain('Previous Observations');
+    });
+  });
+
+  describe('observer request payloads', () => {
+    it('should send multimodal observer history as structured messages', async () => {
+      let capturedPrompt: any;
+
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        observation: { messageTokens: 1000, bufferTokens: false, model: 'test-model' },
+        reflection: { observationTokens: 1000 },
+      });
+
+      (om as any).observerAgent = {
+        stream: async (prompt: any) => {
+          capturedPrompt = prompt;
+          return {
+            getFullOutput: async () => ({
+              text: '<observations>\n- saw image\n</observations>',
+              usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+            }),
+          };
+        },
+      };
+
+      const message = createTestMessage('ignored', 'user');
+      message.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Please inspect these.' },
+          { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+          {
+            type: 'file',
+            data: 'https://example.com/annotated-photo.jpg',
+            mimeType: 'application/octet-stream',
+            filename: 'annotated-photo.jpg',
+          } as any,
+          {
+            type: 'file',
+            data: 'https://example.com/floorplan.pdf',
+            mimeType: 'application/pdf',
+            filename: 'floorplan.pdf',
+          } as any,
+        ],
+      };
+
+      await (om as any).callObserver(undefined, [message]);
+
+      expect(Array.isArray(capturedPrompt)).toBe(true);
+      expect(capturedPrompt).toHaveLength(2);
+      expect(capturedPrompt[0]).toMatchObject({ role: 'user' });
+      expect(capturedPrompt[1]).toMatchObject({ role: 'user' });
+      expect(capturedPrompt[1].content[1].text).toContain('[Image #1: reference-board.png]');
+      expect(capturedPrompt[1].content[1].text).toContain('[Image #2: annotated-photo.jpg]');
+      expect(capturedPrompt[1].content[1].text).toContain('[File #1: floorplan.pdf]');
+      expect(capturedPrompt[1].content[2]).toMatchObject({
+        type: 'image',
+        image: 'https://example.com/reference-board.png',
+      });
+      expect(capturedPrompt[1].content[3]).toMatchObject({
+        type: 'image',
+        image: 'https://example.com/annotated-photo.jpg',
+      });
+      expect(capturedPrompt[1].content).toContainEqual(
+        expect.objectContaining({
+          type: 'file',
+          data: 'https://example.com/floorplan.pdf',
+          mimeType: 'application/pdf',
+          filename: 'floorplan.pdf',
+        }),
+      );
+    });
+  });
+
+  describe('buildObserverHistoryMessage', () => {
+    it('should preserve placeholders and attachments in order', () => {
+      const msg = createTestMessage('ignored', 'user');
+      msg.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Compare these.' },
+          { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+          {
+            type: 'file',
+            data: 'https://example.com/specs/floorplan.pdf',
+            mimeType: 'application/pdf',
+            filename: 'floorplan.pdf',
+          } as any,
+        ],
+      };
+
+      const historyMessage = buildObserverHistoryMessage([msg]) as any;
+
+      expect(historyMessage.role).toBe('user');
+      expect(historyMessage.content[0].text).toContain('New Message History');
+      expect(historyMessage.content[1].text).toContain('[Image #1: reference-board.png]');
+      expect(historyMessage.content[1].text).toContain('[File #1: floorplan.pdf]');
+      expect(historyMessage.content[2]).toMatchObject({
+        type: 'image',
+        image: 'https://example.com/reference-board.png',
+      });
+      expect(historyMessage.content).toContainEqual(
+        expect.objectContaining({
+          type: 'file',
+          data: 'https://example.com/specs/floorplan.pdf',
+          mimeType: 'application/pdf',
+          filename: 'floorplan.pdf',
+        }),
+      );
+    });
+
+    it('should preserve thread wrappers and attachments for multi-thread history', () => {
+      const imageMessage = createTestMessage('ignored', 'user', 'thread-a-image');
+      imageMessage.threadId = 'thread-a';
+      imageMessage.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Inspect this board.' },
+          { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+        ],
+      };
+
+      const fileMessage = createTestMessage('ignored', 'assistant', 'thread-b-file');
+      fileMessage.threadId = 'thread-b';
+      fileMessage.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Here is the floorplan.' },
+          {
+            type: 'file',
+            data: 'https://example.com/specs/floorplan.pdf',
+            mimeType: 'application/pdf',
+            filename: 'floorplan.pdf',
+          } as any,
+        ],
+      };
+
+      const historyMessage = buildMultiThreadObserverHistoryMessage(
+        new Map([
+          ['thread-a', [imageMessage]],
+          ['thread-b', [fileMessage]],
+        ]),
+        ['thread-a', 'thread-b'],
+      ) as any;
+
+      expect(historyMessage.content[0].text).toContain('2 different conversation threads');
+      expect(
+        historyMessage.content.some(
+          (part: any) => part.type === 'text' && part.text.includes('<thread id="thread-a">'),
+        ),
+      ).toBe(true);
+      expect(
+        historyMessage.content.some(
+          (part: any) => part.type === 'text' && part.text.includes('<thread id="thread-b">'),
+        ),
+      ).toBe(true);
+      expect(historyMessage.content.some((part: any) => part.type === 'image')).toBe(true);
+      expect(
+        historyMessage.content.some(
+          (part: any) =>
+            part.type === 'file' &&
+            part.filename === 'floorplan.pdf' &&
+            part.mimeType === 'application/pdf' &&
+            part.data === 'https://example.com/specs/floorplan.pdf',
+        ),
+      ).toBe(true);
     });
   });
 
@@ -1384,6 +1701,77 @@ describe('ObservationalMemory Integration', () => {
       const counter = om.getTokenCounter();
       expect(counter).toBeInstanceOf(TokenCounter);
     });
+
+    it('should use the actor model context before counting images', async () => {
+      const { MessageList } = await import('@mastra/core/agent');
+      const { RequestContext } = await import('@mastra/core/di');
+
+      const omWithDynamicObserverModel = new ObservationalMemory({
+        storage,
+        observation: {
+          messageTokens: 100_000,
+          model: ({ requestContext }) => requestContext?.get('observerModel') ?? 'openai/gpt-4o',
+        },
+        reflection: {
+          observationTokens: 100_000,
+          model: 'test-model',
+        },
+        scope: 'thread',
+      });
+
+      const makeContext = (observerModel: string) => {
+        const requestContext = new RequestContext();
+        requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+        requestContext.set('observerModel', observerModel);
+        return requestContext;
+      };
+
+      const imageMessage = {
+        id: 'image-message',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'image',
+              image: 'https://example.com/cat.png',
+              providerOptions: { openai: { detail: 'low' } },
+            },
+          ],
+        },
+        type: 'text',
+        createdAt: new Date(),
+      } as unknown as MastraDBMessage;
+
+      const countImageForModel = async (actorModel: string) => {
+        const [provider, modelId] = actorModel.split('/');
+
+        await omWithDynamicObserverModel.processInputStep({
+          messageList: new MessageList({ threadId, resourceId }),
+          messages: [imageMessage],
+          requestContext: makeContext(actorModel),
+          stepNumber: 0,
+          state: {},
+          steps: [],
+          systemMessages: [],
+          model: { provider, modelId } as any,
+          retryCount: 0,
+          abort: (() => {
+            throw new Error('aborted');
+          }) as any,
+        });
+
+        return omWithDynamicObserverModel.getTokenCounter().runWithModelContext({ provider, modelId }, () => {
+          return omWithDynamicObserverModel.getTokenCounter().countMessage(imageMessage);
+        });
+      };
+
+      const gpt4oTokens = await countImageForModel('openai/gpt-4o');
+      const gpt4oMiniTokens = await countImageForModel('openai/gpt-4o-mini');
+
+      expect(gpt4oTokens).toBeGreaterThan(0);
+      expect(gpt4oMiniTokens).toBeGreaterThan(gpt4oTokens);
+    });
   });
 
   describe('getStorage', () => {
@@ -1391,6 +1779,144 @@ describe('ObservationalMemory Integration', () => {
       const s = om.getStorage();
       expect(s).toBe(storage);
     });
+  });
+
+  it('should trigger observation when an image-heavy message crosses the threshold', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const multimodalOm = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 500,
+        bufferTokens: false,
+        model: 'openai/gpt-4o',
+      },
+      reflection: {
+        observationTokens: 100_000,
+        model: 'test-model',
+      },
+      scope: 'thread',
+    });
+
+    const imageMessage = {
+      id: 'image-threshold-msg',
+      role: 'user' as const,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'image',
+            image: 'https://example.com/reference-board.png',
+            providerOptions: { openai: { detail: 'high' } },
+            width: 1024,
+            height: 1024,
+          } as any,
+        ],
+      },
+      type: 'text',
+      createdAt: new Date('2025-01-01T12:00:00Z'),
+      threadId,
+      resourceId,
+    };
+
+    const textOnlyMessage = createTestMessage('Please review this design draft.', 'user', 'text-threshold-msg');
+
+    const messageList = new MessageList({ threadId, resourceId });
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await multimodalOm.processInputStep({
+      messageList,
+      messages: [imageMessage as any],
+      requestContext,
+      stepNumber: 0,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: 'test-model' as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const threshold = 500;
+    const textTokens = multimodalOm.getTokenCounter().countMessage(textOnlyMessage);
+    const imageTokens = multimodalOm.getTokenCounter().countMessage(imageMessage as any);
+
+    expect(textTokens).toBeLessThan(threshold);
+    expect(imageTokens).toBeGreaterThan(threshold);
+  });
+
+  it('should treat image-like file parts as image-heavy for threshold checks', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const multimodalOm = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 500,
+        bufferTokens: false,
+        model: 'openai/gpt-4o',
+      },
+      reflection: {
+        observationTokens: 100_000,
+        model: 'test-model',
+      },
+      scope: 'thread',
+    });
+
+    const imageLikeFileMessage = {
+      id: 'image-file-threshold-msg',
+      role: 'user' as const,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'file',
+            data: 'https://example.com/reference-board.png',
+            mimeType: 'image/png',
+            filename: 'reference-board.png',
+            providerOptions: { openai: { detail: 'high' } },
+            width: 1024,
+            height: 1024,
+          } as any,
+        ],
+      },
+      type: 'text',
+      createdAt: new Date('2025-01-01T12:00:00Z'),
+      threadId,
+      resourceId,
+    };
+
+    const textOnlyMessage = createTestMessage('Please review this design draft.', 'user', 'text-file-threshold-msg');
+
+    const messageList = new MessageList({ threadId, resourceId });
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await multimodalOm.processInputStep({
+      messageList,
+      messages: [imageLikeFileMessage as any],
+      requestContext,
+      stepNumber: 0,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: 'test-model' as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const threshold = 500;
+    const textTokens = multimodalOm.getTokenCounter().countMessage(textOnlyMessage);
+    const imageLikeFileTokens = multimodalOm.getTokenCounter().countMessage(imageLikeFileMessage as any);
+
+    expect(textTokens).toBeLessThan(threshold);
+    expect(imageLikeFileTokens).toBeGreaterThan(threshold);
   });
 
   describe('cursor-based message loading (lastObservedAt)', () => {
@@ -2235,7 +2761,7 @@ describe('Instruction property integration', () => {
     const customInstruction = 'Focus on capturing user dietary preferences and allergies.';
 
     let capturedPrompt: any = null;
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = createStreamCapableMockModel({
       doGenerate: async options => {
         capturedPrompt = options.prompt;
         return {
@@ -2300,12 +2826,79 @@ Ask about favorite vegetarian dishes
     expect(systemMessage.content).toContain('<current-task>');
   });
 
+  it('should send attachment parts to the observer alongside placeholder text', async () => {
+    let capturedPrompt: any = null;
+
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      observation: {
+        messageTokens: 10,
+        model: 'test-model',
+      },
+      reflection: { observationTokens: 10000 },
+      scope: 'thread',
+    });
+
+    (om as any).observerAgent = {
+      stream: async (prompt: any) => {
+        capturedPrompt = prompt;
+        return {
+          getFullOutput: async () => ({
+            text: `<observations>\n- User shared a reference image and floorplan\n</observations>`,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          }),
+        };
+      },
+    };
+
+    const attachmentMessage = createTestMessage('ignored', 'user', 'msg-attachment');
+    attachmentMessage.content = {
+      format: 2,
+      parts: [
+        { type: 'text', text: 'Please compare these attachments.' },
+        { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+        {
+          type: 'file',
+          data: 'https://example.com/specs/floorplan.pdf',
+          mimeType: 'application/pdf',
+          filename: 'floorplan.pdf',
+        } as any,
+      ],
+    };
+
+    await (om as any).callObserver(undefined, [attachmentMessage]);
+
+    const historyMessage = capturedPrompt.find(
+      (msg: any) =>
+        msg.role === 'user' && Array.isArray(msg.content) && msg.content.some((part: any) => part.type === 'image'),
+    );
+
+    expect(historyMessage).toBeDefined();
+    expect(historyMessage.content[0].text).toContain('New Message History');
+    expect(historyMessage.content[1].text).toContain('[Image #1: reference-board.png]');
+    expect(historyMessage.content[1].text).toContain('[File #1: floorplan.pdf]');
+    expect(
+      historyMessage.content.some(
+        (part: any) => part.type === 'image' && part.image === 'https://example.com/reference-board.png',
+      ),
+    ).toBe(true);
+    expect(
+      historyMessage.content.some(
+        (part: any) =>
+          part.type === 'file' &&
+          part.filename === 'floorplan.pdf' &&
+          part.mimeType === 'application/pdf' &&
+          part.data === 'https://example.com/specs/floorplan.pdf',
+      ),
+    ).toBe(true);
+  });
+
   it('should pass reflection instruction to reflector agent during synchronous reflection', async () => {
     const storage = createInMemoryStorage();
     const customInstruction = 'Consolidate observations about user preferences and remove duplicates.';
 
     let capturedPrompt: any = null;
-    const mockObserverModel = new MockLanguageModelV2({
+    const mockObserverModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -2328,7 +2921,7 @@ Ask about favorite pizza toppings
       }),
     });
 
-    const mockReflectorModel = new MockLanguageModelV2({
+    const mockReflectorModel = createStreamCapableMockModel({
       doGenerate: async options => {
         capturedPrompt = options.prompt;
         return {
@@ -2481,6 +3074,31 @@ describe('Scenario: Observation quality checks', () => {
     expect(observations).toBeGreaterThan(20);
     expect(observations).toBeLessThan(100);
   });
+
+  it('reuses cached part token metadata across repeated counting and message lifecycle copy', () => {
+    const counter = new TokenCounter();
+    const message = createTestMessage('ignored-content', 'assistant');
+    message.content = {
+      format: 2,
+      parts: [{ type: 'text', text: 'Persistent token estimate on part metadata' } as any],
+    } as any;
+
+    const firstCount = counter.countMessage(message);
+    const firstCache = (message.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate;
+
+    expect(firstCache).toBeTruthy();
+
+    const reloaded = {
+      ...JSON.parse(JSON.stringify(message)),
+      createdAt: new Date(message.createdAt),
+    } as MastraDBMessage;
+
+    const secondCount = counter.countMessage(reloaded);
+    const secondCache = (reloaded.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate;
+
+    expect(secondCount).toBe(firstCount);
+    expect(secondCache).toEqual(firstCache);
+  });
 });
 
 // =============================================================================
@@ -2495,7 +3113,7 @@ describe('Thread Attribution Helpers', () => {
     storage = createInMemoryStorage();
     om = new ObservationalMemory({
       storage,
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 100 },
       reflection: { observationTokens: 1000 },
       scope: 'resource',
@@ -2617,7 +3235,7 @@ describe('Resource Scope Observation Flow', () => {
       },
     });
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -2692,7 +3310,7 @@ Ask about preferred brewing method
       },
     });
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -2750,7 +3368,7 @@ describe('Locking Behavior', () => {
     const storage = createInMemoryStorage();
 
     let reflectorCalled = false;
-    const mockReflectorModel = new MockLanguageModelV2({
+    const mockReflectorModel = createStreamCapableMockModel({
       doGenerate: async () => {
         reflectorCalled = true;
         return {
@@ -2772,7 +3390,7 @@ describe('Locking Behavior', () => {
       },
     });
 
-    const mockObserverModel = new MockLanguageModelV2({
+    const mockObserverModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -2845,7 +3463,7 @@ describe('Locking Behavior', () => {
     const storage = createInMemoryStorage();
 
     let _observerCalled = false;
-    const mockObserverModel = new MockLanguageModelV2({
+    const mockObserverModel = createStreamCapableMockModel({
       doGenerate: async () => {
         _observerCalled = true;
         return {
@@ -2933,7 +3551,7 @@ describe('Reflection with Thread Attribution', () => {
   it('should create a new record after reflection', async () => {
     const storage = createInMemoryStorage();
 
-    const mockReflectorModel = new MockLanguageModelV2({
+    const mockReflectorModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -3012,7 +3630,7 @@ describe('Reflection with Thread Attribution', () => {
     const storage = createInMemoryStorage();
 
     // Reflector that maintains thread attribution
-    const mockReflectorModel = new MockLanguageModelV2({
+    const mockReflectorModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -3094,7 +3712,7 @@ describe('Reflection with Thread Attribution', () => {
   it('should update lastObservedAt cursor after reflection', async () => {
     const storage = createInMemoryStorage();
 
-    const mockReflectorModel = new MockLanguageModelV2({
+    const mockReflectorModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -3267,7 +3885,7 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
     expect(setupRecord?.activeObservations).toContain('favorite color is blue');
 
     // Create OM with resource scope
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -4018,6 +4636,30 @@ describe('Async Buffering Storage Operations', () => {
 });
 
 describe('Model Requirement', () => {
+  const originalCoreFeatures = new Set(coreFeatures);
+
+  afterEach(() => {
+    coreFeatures.clear();
+    for (const feature of originalCoreFeatures) {
+      coreFeatures.add(feature);
+    }
+  });
+
+  it('should throw when core does not support request-response-id-rotation', () => {
+    coreFeatures.delete('request-response-id-rotation');
+
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+          observation: { messageTokens: 50000 },
+          reflection: { observationTokens: 20000 },
+        }),
+    ).toThrow('Please bump @mastra/core to a newer version');
+  });
+
   it('should throw when no model is provided at all', () => {
     expect(
       () =>
@@ -4048,7 +4690,7 @@ describe('Model Requirement', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: { messageTokens: 50000 },
           reflection: { observationTokens: 20000 },
         }),
@@ -4063,7 +4705,7 @@ describe('Model Requirement', () => {
           scope: 'thread',
           observation: {
             messageTokens: 50000,
-            model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+            model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           },
           reflection: { observationTokens: 20000 },
         }),
@@ -4079,7 +4721,7 @@ describe('Model Requirement', () => {
           observation: { messageTokens: 50000 },
           reflection: {
             observationTokens: 20000,
-            model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+            model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           },
         }),
     ).not.toThrow();
@@ -4104,14 +4746,42 @@ describe('Model Requirement', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
-            model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+            model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           },
           reflection: { observationTokens: 20000 },
         }),
     ).toThrow('Cannot set both');
+  });
+});
+
+describe('Model Settings Defaults', () => {
+  it('should default maxOutputTokens when using model: "default"', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: 'default',
+      observation: { messageTokens: 50000 },
+      reflection: { observationTokens: 20000 },
+    });
+
+    expect((om as any).observationConfig.modelSettings.maxOutputTokens).toBe(100_000);
+    expect((om as any).reflectionConfig.modelSettings.maxOutputTokens).toBe(100_000);
+  });
+
+  it('should not default maxOutputTokens for non-default models', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: 'openai/gpt-5.1-codex-mini',
+      observation: { messageTokens: 50000 },
+      reflection: { observationTokens: 20000 },
+    });
+
+    expect((om as any).observationConfig.modelSettings.maxOutputTokens).toBeUndefined();
+    expect((om as any).reflectionConfig.modelSettings.maxOutputTokens).toBeUndefined();
   });
 });
 
@@ -4122,7 +4792,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           shareTokenBudget: true,
           observation: {
             messageTokens: 50000,
@@ -4142,7 +4812,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           shareTokenBudget: true,
           observation: { messageTokens: 50000 },
           reflection: { observationTokens: 20000 },
@@ -4154,7 +4824,7 @@ describe('Async Buffering Config Validation', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       shareTokenBudget: true,
       observation: { messageTokens: 50000, bufferTokens: false },
       reflection: { observationTokens: 20000 },
@@ -4169,7 +4839,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -4189,7 +4859,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -4209,7 +4879,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -4229,7 +4899,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -4250,7 +4920,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -4270,7 +4940,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 10000,
             bufferTokens: 15000,
@@ -4290,7 +4960,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -4310,7 +4980,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -4330,7 +5000,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -4354,7 +5024,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 50000 },
       reflection: { observationTokens: 20000 },
     });
@@ -4367,7 +5037,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 50000 },
       reflection: { observationTokens: 20000 },
     });
@@ -4391,7 +5061,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 50000, bufferTokens: false },
       reflection: { observationTokens: 20000 },
     });
@@ -4413,7 +5083,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'resource',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 50000 },
       reflection: { observationTokens: 20000 },
     });
@@ -4428,7 +5098,7 @@ describe('Async Buffering Defaults & Disabling', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'resource',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -4442,7 +5112,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 50000, bufferTokens: 5000 },
       reflection: { observationTokens: 20000 },
     });
@@ -4456,7 +5126,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 50000, bufferActivation: 0.7 },
       reflection: { observationTokens: 20000, bufferActivation: 0.3 },
     });
@@ -4472,7 +5142,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 100000, bufferTokens: 0.1 },
       reflection: { observationTokens: 20000 },
     });
@@ -4493,7 +5163,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage,
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4544,7 +5214,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage,
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4567,7 +5237,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage,
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4629,7 +5299,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4642,7 +5312,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4655,7 +5325,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4673,7 +5343,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4686,7 +5356,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4701,7 +5371,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4714,7 +5384,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4726,7 +5396,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4738,7 +5408,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4757,7 +5427,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000, bufferTokens: false },
         reflection: { observationTokens: 20000 },
       });
@@ -4769,7 +5439,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4789,7 +5459,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4807,7 +5477,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4835,7 +5505,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4864,7 +5534,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 40000,
           bufferTokens: 4000,
@@ -4904,7 +5574,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 40000,
           bufferTokens: 4000,
@@ -4931,7 +5601,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000, bufferTokens: false },
         reflection: { observationTokens: 20000 },
       });
@@ -4943,7 +5613,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4966,7 +5636,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4986,7 +5656,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -5007,7 +5677,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -5038,7 +5708,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -5050,7 +5720,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -5065,7 +5735,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -5092,7 +5762,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -5111,7 +5781,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -5140,7 +5810,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -5310,7 +5980,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage,
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -5326,7 +5996,7 @@ describe('Async Buffering Processor Logic', () => {
         config: {},
       });
 
-      const result = await (om as any).tryActivateBufferedObservations(record, 'thread:thread-1');
+      const result = await (om as any).tryActivateBufferedObservations(record, 'thread:thread-1', 1000);
 
       expect(result.success).toBe(false);
     });
@@ -5336,7 +6006,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage,
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -5358,14 +6028,14 @@ describe('Async Buffering Processor Logic', () => {
           observations: '- Important observation',
           tokenCount: 100,
           messageIds: ['msg-1', 'msg-2'],
-          messageTokens: 8000,
+          messageTokens: 45000,
           lastObservedAt: new Date('2026-02-05T10:00:00Z'),
           cycleId: 'cycle-1',
         },
       });
 
       const updatedRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
-      const result = await (om as any).tryActivateBufferedObservations(updatedRecord!, 'thread:thread-1');
+      const result = await (om as any).tryActivateBufferedObservations(updatedRecord!, 'thread:thread-1', 50000);
 
       expect(result.success).toBe(true);
       expect(result.updatedRecord).toBeDefined();
@@ -5373,12 +6043,78 @@ describe('Async Buffering Processor Logic', () => {
       expect(result.updatedRecord.bufferedObservationChunks).toBeUndefined();
     });
 
+    it('should skip activation when projected remaining is far above retention floor', async () => {
+      const storage = createInMemoryStorage();
+      const om = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 30000,
+          bufferTokens: 6000,
+          bufferActivation: 2000,
+        },
+        reflection: { observationTokens: 20000, bufferActivation: 0.5 },
+      });
+
+      const record = await storage.initializeObservationalMemory({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateBufferedObservations({
+        id: record.id,
+        chunk: {
+          observations: '- Chunk 1',
+          tokenCount: 50,
+          messageIds: ['msg-1'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+        },
+      });
+
+      await storage.updateBufferedObservations({
+        id: record.id,
+        chunk: {
+          observations: '- Chunk 2',
+          tokenCount: 50,
+          messageIds: ['msg-2'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T10:01:00Z'),
+          cycleId: 'cycle-2',
+        },
+      });
+
+      await storage.updateBufferedObservations({
+        id: record.id,
+        chunk: {
+          observations: '- Chunk 3',
+          tokenCount: 50,
+          messageIds: ['msg-3'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T10:02:00Z'),
+          cycleId: 'cycle-3',
+        },
+      });
+
+      const updatedRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
+      const result = await (om as any).tryActivateBufferedObservations(updatedRecord!, 'thread:thread-1', 30000);
+
+      expect(result.success).toBe(false);
+      const finalRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
+      expect(finalRecord?.bufferedObservationChunks).toHaveLength(3);
+      expect(finalRecord?.activeObservations).toBeFalsy();
+    });
+
     it('should not reset lastBufferedBoundary after activation (callers set it)', async () => {
       const storage = createInMemoryStorage();
       const om = new ObservationalMemory({
         storage,
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -5413,7 +6149,7 @@ describe('Async Buffering Processor Logic', () => {
       (ObservationalMemory as any).lastBufferedBoundary.set(bufferKey, 15000);
 
       const updatedRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
-      await (om as any).tryActivateBufferedObservations(updatedRecord!, lockKey);
+      await (om as any).tryActivateBufferedObservations(updatedRecord!, lockKey, 50000);
 
       // After activation, the boundary should NOT be cleared by tryActivateBufferedObservations.
       // Callers are responsible for setting it to the post-activation context size.
@@ -5442,6 +6178,8 @@ describe('Full Async Buffering Flow', () => {
     blockAfter?: number;
     /** Number of messages to pre-save (each ~200 tokens via repeated filler text) */
     messageCount?: number;
+    /** Optional fixed observer responses in call order */
+    observerResponses?: string[];
   }) {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
@@ -5461,7 +6199,7 @@ describe('Full Async Buffering Flow', () => {
     const observerCalls: { input: string }[] = [];
     const reflectorCalls: { input: string }[] = [];
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = createStreamCapableMockModel({
       doGenerate: async ({ prompt }) => {
         const promptText = JSON.stringify(prompt);
 
@@ -5485,6 +6223,9 @@ describe('Full Async Buffering Flow', () => {
 
         // Observer call
         observerCalls.push({ input: promptText.slice(0, 200) });
+        const observerResponse =
+          opts.observerResponses?.[observerCalls.length - 1] ??
+          `<observations>\nDate: Jan 1, 2025\n* 🔴 Observed at call ${observerCalls.length}\n* User discussed topic ${observerCalls.length}\n</observations>`;
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop' as const,
@@ -5492,7 +6233,7 @@ describe('Full Async Buffering Flow', () => {
           content: [
             {
               type: 'text' as const,
-              text: `<observations>\nDate: Jan 1, 2025\n* 🔴 Observed at call ${observerCalls.length}\n* User discussed topic ${observerCalls.length}\n</observations>`,
+              text: observerResponse,
             },
           ],
           warnings: [],
@@ -5898,13 +6639,141 @@ describe('Full Async Buffering Flow', () => {
     expect(lastCall.input.length).toBeGreaterThan(0);
   });
 
+  it('should clear stale thread continuation hints on sync observation when latest output omits them', async () => {
+    // Use enough messages and a low threshold so that two activation rounds can
+    // succeed sequentially.  The first observer response includes continuation
+    // hints; the second omits them.  After the second activation, the stale
+    // hints from the first round must be cleared (written as undefined).
+    const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
+      messageTokens: 1000,
+      bufferTokens: 500,
+      bufferActivation: 0.7,
+      reflectionObservationTokens: 50000,
+      messageCount: 10,
+      observerResponses: [
+        // Call 1 (async buffering from step 0): hints are parsed from the mock
+        // response and stored in the buffered chunk.
+        // Note: closing tags must be on their own line — the parser regex
+        // requires `^<\/current-task>` (start-of-line anchor with /m flag).
+        '<observations>\n- 🔴 Initial observation\n</observations>\n<current-task>\nImplement sync path\n</current-task>\n<suggested-response>\nContinue with step 2\n</suggested-response>',
+        // Call 2 (async buffering from step 2): no hints → activation clears them.
+        '<observations>\n- 🟡 Follow-up observation without hints\n</observations>',
+      ],
+    });
+
+    // Step 0 triggers async buffering; step 1 activates the buffered chunk,
+    // propagating the continuation hints to thread metadata.
+    await step(0);
+    await waitForAsyncOps();
+    await step(1);
+    await waitForAsyncOps();
+    const threadAfterFirstObservation = await storage.getThreadById({ threadId });
+    const firstOM = ((threadAfterFirstObservation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(firstOM.currentTask).toBe('Implement sync path');
+    expect(firstOM.suggestedResponse).toBe('Continue with step 2');
+
+    // Save fresh messages so the threshold is exceeded again on the next round.
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    const freshMessages = Array.from({ length: 10 }, (_, i) => ({
+      id: `sync-clear-msg-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Follow-up ${i}: ${filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 13, i)),
+    }));
+    await storage.saveMessages({ messages: freshMessages });
+
+    // Step 2 starts a new async buffering round (observer call 2, no hints).
+    // Step 3 activates the new chunk, clearing the stale hints.
+    await step(2, { freshState: true });
+    await waitForAsyncOps();
+    await step(3);
+    await waitForAsyncOps();
+    const threadAfterSecondObservation = await storage.getThreadById({ threadId });
+    const secondOM = ((threadAfterSecondObservation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(secondOM.currentTask).toBeUndefined();
+    expect(secondOM.suggestedResponse).toBeUndefined();
+  });
+
+  it('should clear stale thread continuation hints after buffered activation when latest activated chunk has no hints', async () => {
+    // Use enough messages so that pending tokens exceed blockAfter (1.2 × 1000 = 1200).
+    // With 20 messages at ~112 tokens each ≈ 2240 tokens, forceMaxActivation triggers.
+    const { storage, threadId, resourceId, step, om, waitForAsyncOps } = await setupAsyncBufferingScenario({
+      messageTokens: 1000,
+      bufferTokens: 200,
+      bufferActivation: 1,
+      reflectionObservationTokens: 50000,
+      messageCount: 20,
+    });
+
+    // Create the OM record (the helper does not initialize one automatically).
+    const record = await (om as any).getOrCreateRecord(threadId, resourceId);
+    expect(record).toBeDefined();
+
+    await storage.updateBufferedObservations({
+      id: record!.id,
+      chunk: {
+        observations: '- 🔴 Older chunk with hints',
+        tokenCount: 30,
+        messageIds: ['buf-msg-1'],
+        messageTokens: 600,
+        lastObservedAt: new Date('2025-01-01T10:00:00Z'),
+        cycleId: 'buf-cycle-1',
+        currentTask: 'Old buffered task',
+        suggestedContinuation: 'Old buffered suggestion',
+      },
+    });
+
+    await storage.updateBufferedObservations({
+      id: record!.id,
+      chunk: {
+        observations: '- 🟡 Latest chunk without hints',
+        tokenCount: 30,
+        messageIds: ['buf-msg-2'],
+        messageTokens: 600,
+        lastObservedAt: new Date('2025-01-01T10:05:00Z'),
+        cycleId: 'buf-cycle-2',
+      },
+    });
+
+    const existingThread = await storage.getThreadById({ threadId });
+    await storage.updateThread({
+      id: threadId,
+      title: existingThread?.title ?? 'Test Thread',
+      metadata: {
+        ...(existingThread?.metadata ?? {}),
+        mastra: {
+          ...((existingThread?.metadata as any)?.mastra ?? {}),
+          om: {
+            ...((existingThread?.metadata as any)?.mastra?.om ?? {}),
+            currentTask: 'Stale task before activation',
+            suggestedResponse: 'Stale suggestion before activation',
+          },
+        },
+      },
+    });
+
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    const threadAfterActivation = await storage.getThreadById({ threadId });
+    const omAfterActivation = ((threadAfterActivation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(omAfterActivation.currentTask).toBeUndefined();
+    expect(omAfterActivation.suggestedResponse).toBeUndefined();
+  });
+
   it('should default reflection.bufferActivation when observation.bufferTokens is set', () => {
     // reflection.bufferActivation defaults to 0.5 so this should not throw
     expect(() => {
       new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 10000,
           bufferTokens: 5000,
@@ -5923,7 +6792,7 @@ describe('Full Async Buffering Flow', () => {
       new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 10000,
           bufferTokens: 5000,
@@ -5937,7 +6806,7 @@ describe('Full Async Buffering Flow', () => {
       new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 10000,
           bufferTokens: 5000,
@@ -5953,7 +6822,7 @@ describe('Full Async Buffering Flow', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: {
         messageTokens: 20000,
         bufferTokens: 0.25,
@@ -5969,7 +6838,7 @@ describe('Full Async Buffering Flow', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: {
         messageTokens: 20000,
         bufferTokens: 5000,
@@ -6446,7 +7315,7 @@ describe('Full Async Buffering Flow', () => {
       });
 
       let _reflectorCallCount = 0;
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = createStreamCapableMockModel({
         doGenerate: async ({ prompt }) => {
           const promptText = JSON.stringify(prompt);
           const isReflection = promptText.includes('consolidat') || promptText.includes('reflect');
@@ -6922,14 +7791,13 @@ describe('Full Async Buffering Flow', () => {
       expect(remaining).toHaveLength(0);
     });
 
-    it('forceMaxActivation: bypasses overshoot safeguard to aggressively reduce context', async () => {
+    it('forceMaxActivation: still respects minimum remaining tokens', async () => {
       // Same scenario as the safeguard test below, but with forceMaxActivation=true.
       // threshold=30k, absolute retention=1000 → ratio ≈ 0.967
       // retentionFloor=1000, currentPending=48000, target=47000
       // Chunk 1: 2k (under)
       // Chunk 2: 46k → cumulative 48k (over, overshoot=1k > maxOvershoot=950)
-      // Without forceMaxActivation: safeguard triggers, falls back to chunk 1.
-      // With forceMaxActivation: bypasses safeguard, activates both chunks.
+      // Remaining after over boundary would be 0, so we still avoid dropping below 1k tokens.
       const chunks = [
         { cycleId: 'c-0', messageTokens: 2000, observationTokens: 50, obs: 'Chunk 0: small messages' },
         { cycleId: 'c-1', messageTokens: 46000, observationTokens: 600, obs: 'Chunk 1: large web search result' },
@@ -6945,11 +7813,11 @@ describe('Full Async Buffering Flow', () => {
         forceMaxActivation: true,
       });
 
-      // forceMaxActivation bypasses the safeguard — activates both chunks
-      expect(result.chunksActivated).toBe(2);
-      expect(result.messageTokensActivated).toBe(48000);
-      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1']);
-      expect(remaining).toHaveLength(0);
+      // Still falls back to the under boundary when over would leave < 1000 tokens
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(2000);
+      expect(result.activatedCycleIds).toEqual(['c-0']);
+      expect(remaining).toHaveLength(1);
     });
 
     it('large message scenario: safeguard falls back to small chunk when oversized message dominates', async () => {
@@ -6983,13 +7851,13 @@ describe('Full Async Buffering Flow', () => {
       expect(remaining[0].cycleId).toBe('c-1');
     });
 
-    it('low retention floor: falls back to under boundary when over would leave < 1000 tokens', async () => {
+    it('low retention floor: falls back to under boundary when over would leave < min(1000, retentionFloor)', async () => {
       // threshold=5000, ratio=0.9 → retentionFloor=500, target=4500
       // currentPending=5000
       // Chunk 1: 2k (under, distance=2.5k)
       // Chunk 2: 2.8k → cumulative 4.8k (over, overshoot=300)
       // maxOvershoot = 500 * 0.95 = 475. overshoot 300 <= 475 → overshoot safeguard allows it
-      // BUT remainingAfterOver = 5000 - 4800 = 200 < 1000 → low-retention floor triggers
+      // BUT remainingAfterOver = 5000 - 4800 = 200 < min(1000, 500)=500 → low-retention floor triggers
       // Falls back to under boundary (chunk 1, 2k)
       const chunks = [
         { cycleId: 'c-0', messageTokens: 2000, observationTokens: 50, obs: 'Chunk 0: early messages' },
@@ -7010,28 +7878,28 @@ describe('Full Async Buffering Flow', () => {
       expect(remaining[0].cycleId).toBe('c-1');
     });
 
-    it('low retention floor: allows over boundary when remaining >= 1000 tokens', async () => {
-      // threshold=10000, ratio=0.9 → retentionFloor=1000, target=9000
-      // currentPending=10000
-      // Chunk 1: 4k (under)
-      // Chunk 2: 4.5k → cumulative 8.5k (under)
-      // Chunk 3: 0.5k → cumulative 9k (over, exactly on target, overshoot=0)
-      // remainingAfterOver = 10000 - 9000 = 1000 >= 1000 → allowed
+    it('low retention floor: allows activation at target boundary when remaining >= retention floor', async () => {
+      // threshold=1024, ratio=31/32 → retentionFloor=32, target=992
+      // currentPending=1024
+      // Chunk 1: 400 (under)
+      // Chunk 2: 450 → cumulative 850 (under)
+      // Chunk 3: 142 → cumulative 992 (over, exactly on target, overshoot=0)
+      // remainingAfterOver = 1024 - 992 = 32 >= min(1000, 32) → allowed
       const chunks = [
-        { cycleId: 'c-0', messageTokens: 4000, observationTokens: 50, obs: 'Chunk 0' },
-        { cycleId: 'c-1', messageTokens: 4500, observationTokens: 60, obs: 'Chunk 1' },
-        { cycleId: 'c-2', messageTokens: 500, observationTokens: 20, obs: 'Chunk 2' },
+        { cycleId: 'c-0', messageTokens: 400, observationTokens: 50, obs: 'Chunk 0' },
+        { cycleId: 'c-1', messageTokens: 450, observationTokens: 60, obs: 'Chunk 1' },
+        { cycleId: 'c-2', messageTokens: 142, observationTokens: 20, obs: 'Chunk 2' },
       ];
 
       const { result, remaining } = await setupAndActivate({
         chunks,
-        activationRatio: 0.9,
-        messageTokensThreshold: 10000,
+        activationRatio: 0.96875,
+        messageTokensThreshold: 1024,
       });
 
-      // Over boundary leaves exactly 1000 tokens — allowed
+      // Over boundary leaves exactly the retention floor — allowed
       expect(result.chunksActivated).toBe(3);
-      expect(result.messageTokensActivated).toBe(9000);
+      expect(result.messageTokensActivated).toBe(992);
       expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2']);
       expect(remaining).toHaveLength(0);
     });
@@ -7050,8 +7918,9 @@ describe('Full Async Buffering Flow', () => {
     const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
       messageTokens: 3000,
       bufferTokens: 500,
-      bufferActivation: 1.0,
+      bufferActivation: 2000,
       reflectionObservationTokens: 50000,
+      reflectionAsyncActivation: 0.5,
       messageCount: 10, // ~2200 tokens, below 3000 threshold
     });
 
@@ -7134,8 +8003,9 @@ describe('Full Async Buffering Flow', () => {
     const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
       messageTokens: 3000,
       bufferTokens: 500,
-      bufferActivation: 1.0,
+      bufferActivation: 2000,
       reflectionObservationTokens: 50000,
+      reflectionAsyncActivation: 0.5,
       messageCount: 10, // ~2200 tokens, below 3000 threshold → triggers buffering
     });
 
@@ -7246,7 +8116,8 @@ describe('Full Async Buffering Flow', () => {
     // Lower thresholds so step 1 crosses them → triggers handleThresholdReached
     (om as any).observationConfig.messageTokens = 1000;
     (om as any).observationConfig.bufferTokens = 500;
-    (om as any).observationConfig.blockAfter = 1200;
+    // Lower blockAfter so activation still runs after refreshed pending-token recount
+    (om as any).observationConfig.blockAfter = 1100;
 
     const msgCountBefore = contextMsgs.length;
 
@@ -7288,8 +8159,9 @@ describe('Full Async Buffering Flow', () => {
     const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
       messageTokens: 3000,
       bufferTokens: 500,
-      bufferActivation: 1.0,
+      bufferActivation: 2000,
       reflectionObservationTokens: 50000,
+      reflectionAsyncActivation: 0.5,
       messageCount: 10, // ~2200 tokens, below 3000 threshold → buffers first
     });
 
@@ -7334,6 +8206,73 @@ describe('Full Async Buffering Flow', () => {
     // The key assertion is that new buffering was triggered (observer called again).
     const callsAfterActivation = observerCalls.length;
     expect(callsAfterActivation).toBeGreaterThan(1); // buffered once before, buffered again after activation
+  });
+
+  it('should retain at least the configured absolute bufferActivation floor after chunk activation', async () => {
+    const { storage, threadId, resourceId, step, waitForAsyncOps, om } = await setupAsyncBufferingScenario({
+      messageTokens: 999999,
+      bufferTokens: 999998,
+      bufferActivation: 0.5,
+      reflectionObservationTokens: 50000,
+      reflectionAsyncActivation: 0.5,
+      messageCount: 20,
+    });
+
+    const messageListAfterStep0 = await step(0);
+    await waitForAsyncOps();
+
+    const contextMsgs = messageListAfterStep0.get.all.db();
+    const tokensBeforeActivation = new TokenCounter().countMessages(contextMsgs);
+    expect(tokensBeforeActivation).toBeGreaterThan(0);
+
+    const chunkMsgIds = contextMsgs.slice(0, 6).map((m: any) => m.id);
+    expect(chunkMsgIds.length).toBe(6);
+
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    const recordId = record!.id;
+
+    await storage.updateBufferedObservations({
+      id: recordId,
+      chunk: {
+        observations: 'Manual chunk floor observations',
+        tokenCount: 80,
+        messageIds: chunkMsgIds,
+        messageTokens: 1200,
+        lastObservedAt: new Date(Date.UTC(2025, 0, 1, 11, 0)),
+        cycleId: 'manual-cycle-floor',
+      },
+    });
+
+    (om as any).observationConfig.messageTokens = 1000;
+    (om as any).observationConfig.bufferTokens = 500;
+    (om as any).observationConfig.blockAfter = 1200;
+    (om as any).observationConfig.bufferActivation = 2000;
+
+    const originalCleanup = (om as any).cleanupAfterObservation.bind(om);
+    let capturedMinRemaining: number | undefined;
+    (om as any).cleanupAfterObservation = async (...args: any[]) => {
+      capturedMinRemaining = args[6];
+      return originalCleanup(...args);
+    };
+
+    const messageListAfterStep1 = await step(1);
+    await waitForAsyncOps();
+
+    const recordAfterStep1 = await storage.getObservationalMemory(threadId, resourceId);
+    expect(recordAfterStep1!.activeObservations).toContain('Manual chunk floor observations');
+
+    const expectedFloor = resolveRetentionFloor(
+      (om as any).observationConfig.bufferActivation,
+      (om as any).observationConfig.messageTokens,
+    );
+    expect(capturedMinRemaining).toBe(expectedFloor);
+
+    const remainingMessages = messageListAfterStep1.get.all.db();
+    const remainingTokens = new TokenCounter().countMessages(remainingMessages);
+    expect(remainingTokens).toBeGreaterThanOrEqual(Math.floor(expectedFloor * 0.9));
+
+    const remainingIds = new Set(remainingMessages.map((m: any) => m.id));
+    expect(chunkMsgIds.some(id => !remainingIds.has(id))).toBe(true);
   });
 
   it('should use lastBufferedAtTime cursor to prevent re-observing same messages', async () => {
@@ -7483,8 +8422,10 @@ describe('Full Async Buffering Flow', () => {
       await setupAsyncBufferingScenario({
         messageTokens: 2000,
         bufferTokens: 300,
-        bufferActivation: 1.0,
+        bufferActivation: 1500,
+        blockAfter: 1.1,
         reflectionObservationTokens: 50000,
+        reflectionAsyncActivation: 0.5,
         messageCount: 5, // ~1100 tokens, below 2000 threshold
       });
 
@@ -7601,5 +8542,1023 @@ describe('threadId validation in thread scope', () => {
     expect(record).toBeDefined();
     expect(record.threadId).toBeNull();
     expect(record.resourceId).toBe('resource-1');
+  });
+});
+
+// =============================================================================
+// Per-step save: sealed message deduplication
+// =============================================================================
+describe('Per-step save deduplication', () => {
+  async function setupMultiStepScenario(opts: { messageTokens: number }) {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    (ObservationalMemory as any).asyncBufferingOps.clear();
+    (ObservationalMemory as any).lastBufferedBoundary.clear();
+    (ObservationalMemory as any).lastBufferedAtTime.clear();
+    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    (ObservationalMemory as any).sealedMessageIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'dedup-thread';
+    const resourceId = 'dedup-resource';
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [
+          {
+            type: 'text' as const,
+            text: '<observations>\nDate: Jan 1, 2025\n* Observed user request\n</observations>',
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: opts.messageTokens },
+      reflection: { observationTokens: 200000 },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    const state: Record<string, unknown> = {};
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const makeCtx = () => {
+      const ctx = new RequestContext();
+      ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+      return ctx;
+    };
+
+    const abort = (() => {
+      throw new Error('aborted');
+    }) as any;
+
+    const runStep = async (stepNumber: number) => {
+      await om.processInputStep({
+        messageList,
+        messages: [],
+        requestContext: makeCtx(),
+        stepNumber,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: mockModel as any,
+        retryCount: 0,
+        abort,
+      });
+    };
+
+    const addToolResponse = (id: string, toolName: string, callId: string, ms: number) => {
+      messageList.add(
+        {
+          id,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'result', toolName, toolCallId: callId, args: {}, result: {} },
+              },
+            ],
+          },
+          createdAt: new Date(`2025-01-01T10:00:0${ms}Z`),
+        } as any,
+        'response',
+      );
+    };
+
+    const finalize = async () => {
+      await om.processOutputResult({
+        messageList,
+        messages: messageList.get.response.db(),
+        requestContext: makeCtx(),
+        state,
+        abort,
+      });
+    };
+
+    async function waitForAsyncOps(timeoutMs = 5000) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const ops = (ObservationalMemory as any).asyncBufferingOps as Map<string, Promise<void>>;
+        if (ops.size === 0) return;
+        await Promise.allSettled([...ops.values()]);
+        await new Promise(r => setTimeout(r, 50));
+      }
+    }
+
+    return {
+      storage,
+      threadId,
+      resourceId,
+      om,
+      state,
+      messageList,
+      runStep,
+      addToolResponse,
+      finalize,
+      waitForAsyncOps,
+    };
+  }
+
+  it('should save each user message exactly once across a multi-step turn', async () => {
+    const { storage, threadId, messageList, runStep, addToolResponse, finalize } = await setupMultiStepScenario({
+      messageTokens: 100000,
+    });
+
+    messageList.add(
+      {
+        id: 'user-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Help me with something' }] },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+      } as any,
+      'input',
+    );
+
+    await runStep(0);
+    addToolResponse('resp-0', 'search', 'c1', 1);
+    await runStep(1);
+    addToolResponse('resp-1', 'lookup', 'c2', 2);
+    await runStep(2);
+
+    messageList.add(
+      {
+        id: 'resp-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Done.' }] },
+        createdAt: new Date('2025-01-01T10:00:03Z'),
+      } as any,
+      'response',
+    );
+
+    await finalize();
+
+    const { messages } = await storage.listMessages({
+      threadId,
+      perPage: 100,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    const userMessages = messages.filter(m => m.role === 'user');
+
+    expect(userMessages.length).toBe(1);
+    expect(userMessages[0]!.id).toBe('user-1');
+  });
+
+  it('should not duplicate sealed-for-buffering messages during per-step save', async () => {
+    // Low threshold triggers async buffering at step 0, which seals the user message.
+    // handlePerStepSave at step 1 must skip the already-persisted sealed message.
+    const { storage, threadId, messageList, runStep, addToolResponse, finalize, waitForAsyncOps } =
+      await setupMultiStepScenario({ messageTokens: 50 });
+
+    messageList.add(
+      {
+        id: 'user-1',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'text',
+              text: 'Help me debug a distributed system issue involving multiple microservices communicating over gRPC.',
+            },
+          ],
+        },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+      } as any,
+      'input',
+    );
+
+    await runStep(0);
+    await waitForAsyncOps();
+    addToolResponse('resp-0', 'debug_service', 'c1', 1);
+    await runStep(1);
+    await waitForAsyncOps();
+    addToolResponse('resp-1', 'check_network', 'c2', 2);
+    await runStep(2);
+
+    messageList.add(
+      {
+        id: 'resp-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'The root cause is DNS resolution.' }] },
+        createdAt: new Date('2025-01-01T10:00:03Z'),
+      } as any,
+      'response',
+    );
+
+    await finalize();
+
+    const { messages } = await storage.listMessages({
+      threadId,
+      perPage: 100,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    const userMessages = messages.filter(m => m.role === 'user');
+
+    expect(userMessages.length).toBe(1);
+    expect(userMessages[0]!.id).toBe('user-1');
+  });
+
+  it('should not insert the same logical user message with different IDs across steps', async () => {
+    const { storage, threadId, messageList, runStep, addToolResponse, finalize, waitForAsyncOps } =
+      await setupMultiStepScenario({ messageTokens: 50 });
+
+    messageList.add(
+      {
+        id: 'user-1',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Track this exact user message identity across agent steps' }],
+        },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+      } as any,
+      'input',
+    );
+
+    await runStep(0);
+    await waitForAsyncOps();
+    addToolResponse('resp-0', 'debug_service', 'c1', 1);
+    await runStep(1);
+    await waitForAsyncOps();
+    addToolResponse('resp-1', 'check_network', 'c2', 2);
+    await runStep(2);
+
+    messageList.add(
+      {
+        id: 'resp-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Finished analysis.' }] },
+        createdAt: new Date('2025-01-01T10:00:03Z'),
+      } as any,
+      'response',
+    );
+
+    await finalize();
+
+    const { messages } = await storage.listMessages({
+      threadId,
+      perPage: 100,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+
+    const logicalUserKey = (m: any) => {
+      const text = m?.content?.parts?.find((p: any) => p?.type === 'text')?.text ?? '';
+      const createdAt = new Date(m.createdAt).toISOString();
+      return `${m.role}|${createdAt}|${text}`;
+    };
+
+    const matchingUserMessages = messages.filter(
+      m =>
+        logicalUserKey(m) === 'user|2025-01-01T10:00:00.000Z|Track this exact user message identity across agent steps',
+    );
+
+    expect(matchingUserMessages.length).toBe(1);
+    expect(new Set(matchingUserMessages.map(m => m.id)).size).toBe(1);
+    expect(matchingUserMessages[0]!.id).toBe('user-1');
+  });
+
+  it('should upsert sealed messages with completed boundaries instead of inserting new IDs', async () => {
+    const { storage, threadId, resourceId, om, state } = await setupMultiStepScenario({ messageTokens: 50 });
+
+    const messageWithCompletedBoundary = {
+      id: 'user-1',
+      threadId,
+      role: 'user',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'same logical message' },
+          { type: 'data-om-observation-end', data: { cycleId: 'c1' } },
+        ],
+      },
+      createdAt: new Date('2025-01-01T10:00:00Z'),
+      resourceId,
+    } as any;
+
+    state.sealedIds = new Set(['user-1']);
+
+    await (om as any).saveMessagesWithSealedIdTracking(
+      [{ ...messageWithCompletedBoundary }],
+      state.sealedIds,
+      threadId,
+      resourceId,
+      state,
+    );
+
+    await (om as any).saveMessagesWithSealedIdTracking(
+      [{ ...messageWithCompletedBoundary }],
+      state.sealedIds,
+      threadId,
+      resourceId,
+      state,
+    );
+
+    const { messages } = await storage.listMessages({
+      threadId,
+      perPage: 100,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+
+    const sameLogical = messages.filter(
+      m =>
+        m.role === 'user' &&
+        new Date(m.createdAt).toISOString() === '2025-01-01T10:00:00.000Z' &&
+        m.content?.parts?.some((p: any) => p?.type === 'text' && p?.text === 'same logical message'),
+    );
+
+    expect(sameLogical.length).toBe(1);
+    expect(sameLogical[0]!.id).toBe('user-1');
+  });
+});
+
+describe('Single-thread replay red tests', () => {
+  async function createReplayFixture() {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const storage = createInMemoryStorage();
+    const threadId = 'single-thread-replay';
+    const resourceId = 'single-thread-replay-resource';
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: new MockLanguageModelV2({}) as any,
+      observation: { messageTokens: 5_000 },
+      reflection: { observationTokens: 200_000 },
+    });
+
+    const messageList = new MessageList({ threadId, resourceId });
+
+    return { om, messageList, threadId, resourceId };
+  }
+
+  function getModelTextParts(message: any): string[] {
+    if (typeof message?.content === 'string') return [message.content];
+    if (Array.isArray(message?.content)) {
+      return message.content.filter((p: any) => p?.type === 'text').map((p: any) => p.text);
+    }
+    return [];
+  }
+
+  function getModelVisibleText(messageList: any): string {
+    return messageList.get.all.aiV5
+      .model()
+      .flatMap((m: any) => getModelTextParts(m))
+      .join(' | ');
+  }
+
+  it('T1-A: messages at exact lastObservedAt boundary should not replay on next turn', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date(t0.getTime() + 1);
+
+    messageList.add(
+      {
+        id: 'boundary-old',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'old-at-boundary' }] },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'boundary-new',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'new-after-boundary' }] },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    await (om as any).filterAlreadyObservedMessages(messageList, {
+      lastObservedAt: t0,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).not.toContain('old-at-boundary');
+    expect(remainingText).toContain('new-after-boundary');
+  });
+
+  it('T2-B: marker-bearing mixed message should be trimmed to post-marker parts only', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    messageList.add(
+      {
+        id: 'pre-marker',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'fully-observed-before-marker' }] },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'marker-msg',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'observed-prefix-in-marker-message' },
+            { type: 'data-om-observation-end', data: { cycleId: 'marker-cycle' } },
+            { type: 'text', text: 'fresh-post-marker-tail' },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    await (om as any).filterAlreadyObservedMessages(messageList, {
+      lastObservedAt: t1,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remaining.map((m: any) => m.id)).toEqual(['marker-msg']);
+    expect(remainingText).not.toContain('fully-observed-before-marker');
+    expect(remainingText).not.toContain('observed-prefix-in-marker-message');
+    expect(remainingText).toContain('fresh-post-marker-tail');
+  });
+
+  it('T3-A: sealed remint (id=A->id=B) should not replay sealed prefix', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mastra: { sealed: true } },
+          parts: [
+            { type: 'text', text: 'sealed-prefix', metadata: { mastra: { sealedAt: t0.getTime() } } },
+            { type: 'data-om-observation-end', data: { cycleId: 'c1' } },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'sealed-prefix' },
+            { type: 'data-om-observation-end', data: { cycleId: 'c1' } },
+            { type: 'text', text: 'fresh-tail' },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    const messagesAfterRemint = messageList.get.all.db();
+    const reminted = messagesAfterRemint.find((m: any) => m.id !== 'A');
+    expect(reminted).toBeDefined();
+
+    await (om as any).filterAlreadyObservedMessages(messageList, {
+      observedMessageIds: ['A'],
+      lastObservedAt: t0,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).not.toContain('sealed-prefix');
+    expect(remainingText).toContain('fresh-tail');
+  });
+
+  it('T1-B: reminted +1ms boundary should not leak observed prefix on next turn', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mastra: { sealed: true } },
+          parts: [{ type: 'text', text: 'already-observed', metadata: { mastra: { sealedAt: t0.getTime() } } }],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'already-observed' },
+            { type: 'text', text: 'new-content-after-seal' },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    const reminted = messageList.get.all.db().find((m: any) => m.id !== 'A');
+    expect(reminted).toBeDefined();
+    expect(reminted!.createdAt.getTime()).toBe(t0.getTime() + 1);
+
+    await (om as any).filterAlreadyObservedMessages(messageList, {
+      observedMessageIds: ['A'],
+      lastObservedAt: t0,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).not.toContain('already-observed');
+    expect(remainingText).toContain('new-content-after-seal');
+  });
+
+  it('T4-B: post-activation step>0 should still prune already observed content before model sees it', async () => {
+    const { RequestContext } = await import('@mastra/core/di');
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    await (om as any).storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'replay',
+        metadata: {},
+        createdAt: new Date('2025-01-01T09:00:00.000Z'),
+        updatedAt: new Date('2025-01-01T09:00:00.000Z'),
+      },
+    });
+
+    const record = await (om as any).storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    await (om as any).storage.updateActiveObservations({
+      id: record.id,
+      observations: '- observed',
+      tokenCount: 10,
+      lastObservedAt: t0,
+      observedMessageIds: ['old-1'],
+    });
+
+    messageList.add(
+      {
+        id: 'old-1',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'already-observed' }] },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'new-1',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'fresh-after-activation' }] },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    const ctx = new RequestContext();
+    ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: ctx,
+      stepNumber: 6,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: new MockLanguageModelV2({}) as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).toContain('fresh-after-activation');
+    expect(remainingText).not.toContain('already-observed');
+  });
+
+  it('T4-C: post-activation step>0 should not replay sealed-split prefix when ID A is reused', async () => {
+    const { RequestContext } = await import('@mastra/core/di');
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    await (om as any).storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'replay',
+        metadata: {},
+        createdAt: new Date('2025-01-01T09:00:00.000Z'),
+        updatedAt: new Date('2025-01-01T09:00:00.000Z'),
+      },
+    });
+
+    const record = await (om as any).storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    await (om as any).storage.updateActiveObservations({
+      id: record.id,
+      observations: '- observed',
+      tokenCount: 10,
+      lastObservedAt: t0,
+      observedMessageIds: ['A'],
+    });
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mastra: { sealed: true } },
+          parts: [{ type: 'text', text: 'already-observed', metadata: { mastra: { sealedAt: t0.getTime() } } }],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'already-observed' },
+            { type: 'text', text: 'fresh-after-split' },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    const reminted = messageList.get.all.db().find((m: any) => m.id !== 'A');
+    expect(reminted).toBeDefined();
+
+    const ctx = new RequestContext();
+    ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: ctx,
+      stepNumber: 6,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: new MockLanguageModelV2({}) as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).toContain('fresh-after-split');
+    expect(remainingText).not.toContain('already-observed');
+  });
+
+  it('T4-D: repeated loop re-add of id A should not replay observed prefix across reminted tails on step>0', async () => {
+    const { RequestContext } = await import('@mastra/core/di');
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    await (om as any).storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'replay',
+        metadata: {},
+        createdAt: new Date('2025-01-01T09:00:00.000Z'),
+        updatedAt: new Date('2025-01-01T09:00:00.000Z'),
+      },
+    });
+
+    const record = await (om as any).storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    await (om as any).storage.updateActiveObservations({
+      id: record.id,
+      observations: '- observed',
+      tokenCount: 10,
+      lastObservedAt: t0,
+      observedMessageIds: ['A'],
+    });
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mastra: { sealed: true } },
+          parts: [{ type: 'text', text: 'already-observed', metadata: { mastra: { sealedAt: t0.getTime() } } }],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    for (let i = 1; i <= 3; i++) {
+      messageList.add(
+        {
+          id: 'A',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'already-observed' },
+              { type: 'text', text: `fresh-${i}` },
+            ],
+          },
+          createdAt: new Date(t0.getTime() + i),
+        } as any,
+        'response',
+      );
+    }
+
+    const reminted = messageList.get.all.db().filter((m: any) => m.id !== 'A');
+    expect(reminted.length).toBeGreaterThan(0);
+
+    const ctx = new RequestContext();
+    ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: ctx,
+      stepNumber: 6,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: new MockLanguageModelV2({}) as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).toContain('fresh-3');
+    expect(remainingText).not.toContain('already-observed');
+  });
+
+  it('T4-A: activation/save ordering race should not replay previously observed content', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'race-old',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'already-observed-race' }] },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    messageList.add(
+      {
+        id: 'race-fresh',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'fresh-next-turn' }] },
+        createdAt: new Date(t0.getTime() + 1),
+      } as any,
+      'input',
+    );
+
+    const originalSave = (om as any).saveMessagesWithSealedIdTracking.bind(om);
+    const saveStarted: { value: boolean } = { value: false };
+    (om as any).saveMessagesWithSealedIdTracking = async (...args: any[]) => {
+      saveStarted.value = true;
+      await new Promise(resolve => setTimeout(resolve, 25));
+      return originalSave(...args);
+    };
+
+    const cleanupPromise = (om as any).cleanupAfterObservation(
+      messageList,
+      new Set<string>(),
+      threadId,
+      resourceId,
+      {},
+      undefined,
+      undefined,
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 5));
+    expect(saveStarted.value).toBe(true);
+
+    await (om as any).filterAlreadyObservedMessages(
+      messageList,
+      {
+        observedMessageIds: ['race-old'],
+        lastObservedAt: t0,
+      },
+      { useMarkerBoundaryPruning: true },
+    );
+
+    const duringRaceText = getModelVisibleText(messageList);
+
+    expect(duringRaceText).not.toContain('already-observed-race');
+
+    await cleanupPromise;
+  });
+
+  it('T4-A-debug: activation/save ordering sample can drop fresh-next-turn during race window', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'race-old-debug',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'already-observed-race' }] },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    messageList.add(
+      {
+        id: 'race-fresh-debug',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'fresh-next-turn' }] },
+        createdAt: new Date(t0.getTime() + 1),
+      } as any,
+      'input',
+    );
+
+    const originalSave = (om as any).saveMessagesWithSealedIdTracking.bind(om);
+    let releaseSave!: () => void;
+    const saveBlocked = new Promise<void>(resolve => {
+      releaseSave = resolve;
+    });
+    (om as any).saveMessagesWithSealedIdTracking = async (...args: any[]) => {
+      await saveBlocked;
+      return originalSave(...args);
+    };
+
+    const cleanupPromise = (om as any).cleanupAfterObservation(
+      messageList,
+      new Set<string>(),
+      threadId,
+      resourceId,
+      {},
+      undefined,
+      undefined,
+    );
+
+    // Assert intermediate state before save completes.
+    const duringRaceText = getModelVisibleText(messageList);
+
+    // Keep this assertion as a debug signal for post-activation under-inclusion windows.
+    expect(duringRaceText).toContain('fresh-next-turn');
+
+    releaseSave();
+    await cleanupPromise;
+  });
+
+  it('T5-A: part excluded by getUnobservedMessages should not survive step-0 filter', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const observed = {
+      id: 'obs-1',
+      threadId,
+      resourceId,
+      role: 'assistant',
+      content: { format: 2, parts: [{ type: 'text', text: 'already-seen' }] },
+      createdAt: t0,
+    } as any;
+    const fresh = {
+      id: 'obs-2',
+      threadId,
+      resourceId,
+      role: 'assistant',
+      content: { format: 2, parts: [{ type: 'text', text: 'new-seen' }] },
+      createdAt: new Date(t0.getTime() + 1),
+    } as any;
+
+    const record = {
+      observedMessageIds: ['obs-1'],
+      lastObservedAt: t0,
+      bufferedObservations: [],
+    } as any;
+
+    const unobserved = (om as any).getUnobservedMessages([observed, fresh], record);
+    const unobservedIds = unobserved.map((m: any) => m.id);
+    expect(unobservedIds).toEqual(['obs-2']);
+
+    messageList.add(observed, 'memory');
+    messageList.add(fresh, 'memory');
+    await (om as any).filterAlreadyObservedMessages(messageList, record);
+
+    const remainingIds = messageList.get.all.db().map((m: any) => m.id);
+    expect(remainingIds).toEqual(unobservedIds);
   });
 });

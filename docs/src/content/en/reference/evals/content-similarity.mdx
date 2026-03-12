@@ -1,12 +1,12 @@
 ---
-title: "Reference: Content Similarity Scorer | Evals"
+title: "Reference: Content similarity scorer | Evals"
 description: Documentation for the Content Similarity Scorer in Mastra, which measures textual similarity between strings and provides a matching score.
 packages:
   - "@mastra/core"
   - "@mastra/evals"
 ---
 
-# Content Similarity Scorer
+# Content similarity scorer
 
 The `createContentSimilarityScorer()` function measures the textual similarity between two strings, providing a score that indicates how closely they match. It supports configurable options for case sensitivity and whitespace handling.
 
@@ -16,55 +16,53 @@ The `createContentSimilarityScorer()` function accepts a single options object w
 
 <PropertiesTable
   content={[
-{
-name: "ignoreCase",
-type: "boolean",
-required: false,
-defaultValue: "true",
-description: "Whether to ignore case differences when comparing strings.",
-},
-{
-name: "ignoreWhitespace",
-type: "boolean",
-required: false,
-defaultValue: "true",
-description: "Whether to normalize whitespace when comparing strings.",
-},
+  {
+    name: 'ignoreCase',
+    type: 'boolean',
+    required: false,
+    defaultValue: 'true',
+    description: 'Whether to ignore case differences when comparing strings.',
+  },
+  {
+    name: 'ignoreWhitespace',
+    type: 'boolean',
+    required: false,
+    defaultValue: 'true',
+    description: 'Whether to normalize whitespace when comparing strings.',
+  },
 ]}
 />
 
 This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
 
-## .run() Returns
+## `.run()` returns
 
 <PropertiesTable
   content={[
-{
-name: "runId",
-type: "string",
-description: "The id of the run (optional).",
-},
-{
-name: "preprocessStepResult",
-type: "object",
-description:
-"Object with processed input and output: { processedInput: string, processedOutput: string }",
-},
-{
-name: "analyzeStepResult",
-type: "object",
-description: "Object with similarity: { similarity: number }",
-},
-{
-name: "score",
-type: "number",
-description:
-"Similarity score (0-1) where 1 indicates perfect similarity.",
-},
+  {
+    name: 'runId',
+    type: 'string',
+    description: 'The id of the run (optional).',
+  },
+  {
+    name: 'preprocessStepResult',
+    type: 'object',
+    description: 'Object with processed input and output: { processedInput: string, processedOutput: string }',
+  },
+  {
+    name: 'analyzeStepResult',
+    type: 'object',
+    description: 'Object with similarity: { similarity: number }',
+  },
+  {
+    name: 'score',
+    type: 'number',
+    description: 'Similarity score (0-1) where 1 indicates perfect similarity.',
+  },
 ]}
 />
 
-## Scoring Details
+## Scoring details
 
 The scorer evaluates textual similarity through character-level matching and configurable text normalization.
 

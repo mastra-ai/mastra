@@ -1,5 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { describe, it, expect } from 'vitest';
+import { createLLMMock } from '@internal/test-utils';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { TestCase } from '../../utils';
 import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createAnswerSimilarityScorer } from '.';
@@ -118,7 +119,11 @@ const missingGroundTruthCase = {
 
 describe('Answer Similarity Scorer', () => {
   const model = createOpenAI({ apiKey: process.env.OPENAI_API_KEY || '' })('gpt-4o-mini');
+  const mock = createLLMMock(model);
   const scorer = createAnswerSimilarityScorer({ model });
+
+  beforeAll(() => mock.start());
+  afterAll(() => mock.saveAndStop());
 
   it.each(testCases)(
     'should score "$input" with ground truth correctly',

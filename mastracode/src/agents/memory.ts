@@ -24,7 +24,7 @@ function getHarnessState(requestContext: RequestContext) {
  */
 function getObserverModel({ requestContext }: { requestContext: RequestContext }) {
   const state = getHarnessState(requestContext);
-  return resolveModel(state?.observerModelId ?? DEFAULT_OM_MODEL_ID);
+  return resolveModel(state?.observerModelId ?? DEFAULT_OM_MODEL_ID, { remapForCodexOAuth: true });
 }
 
 /**
@@ -33,7 +33,7 @@ function getObserverModel({ requestContext }: { requestContext: RequestContext }
  */
 function getReflectorModel({ requestContext }: { requestContext: RequestContext }) {
   const state = getHarnessState(requestContext);
-  return resolveModel(state?.reflectorModelId ?? DEFAULT_OM_MODEL_ID);
+  return resolveModel(state?.reflectorModelId ?? DEFAULT_OM_MODEL_ID, { remapForCodexOAuth: true });
 }
 
 /**
@@ -44,7 +44,7 @@ function getReflectorModel({ requestContext }: { requestContext: RequestContext 
 export function getDynamicMemory(storage: MastraCompositeStore) {
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const state = getHarnessState(requestContext);
-    const omScope = getOmScope(state?.projectPath);
+    const omScope = state?.omScope ?? getOmScope(state?.projectPath);
 
     const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
     const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
@@ -54,6 +54,9 @@ export function getDynamicMemory(storage: MastraCompositeStore) {
       return cachedMemory;
     }
 
+    // Async buffering is not supported with resource scope — disable it
+    const isResourceScope = omScope === 'resource';
+
     cachedMemory = new Memory({
       storage,
       options: {
@@ -61,23 +64,17 @@ export function getDynamicMemory(storage: MastraCompositeStore) {
           enabled: true,
           scope: omScope,
           observation: {
-            bufferTokens: 1 / 10,
-            bufferActivation: 4000,
+            bufferTokens: isResourceScope ? false : 1 / 5,
+            bufferActivation: isResourceScope ? undefined : 2000,
             model: getObserverModel,
             messageTokens: obsThreshold,
-            blockAfter: 1.2,
-            modelSettings: {
-              maxOutputTokens: 60000,
-            },
+            blockAfter: 2,
           },
           reflection: {
-            bufferActivation: 1 / 2,
+            bufferActivation: isResourceScope ? undefined : 1 / 2,
             blockAfter: 1.1,
             model: getReflectorModel,
             observationTokens: refThreshold,
-            modelSettings: {
-              maxOutputTokens: 60000,
-            },
           },
         },
       },

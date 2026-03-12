@@ -19,16 +19,16 @@ new CloudExporter(config?: CloudExporterConfig)
 
 <PropertiesTable
   props={[
-{
-name: "config",
-type: "CloudExporterConfig",
-description: "Configuration options",
-required: false,
-},
+  {
+    name: 'config',
+    type: 'CloudExporterConfig',
+    description: 'Configuration options',
+    required: false,
+  },
 ]}
 />
 
-## CloudExporterConfig
+## `CloudExporterConfig`
 
 ```typescript
 interface CloudExporterConfig extends BaseExporterConfig {
@@ -54,7 +54,7 @@ Extends `BaseExporterConfig`, which includes:
 - `logger?: IMastraLogger` - Logger instance
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 
-## Environment Variables
+## Environment variables
 
 The exporter reads these environment variables if not provided in config:
 
@@ -69,7 +69,7 @@ readonly name = 'mastra-cloud-observability-exporter';
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -79,12 +79,12 @@ Processes tracing events. Only exports SPAN\_ENDED events to Cloud.
 
 <PropertiesTable
   props={[
-{
-name: "event",
-type: "TracingEvent",
-description: "The tracing event to export",
-required: true,
-},
+  {
+    name: 'event',
+    type: 'TracingEvent',
+    description: 'The tracing event to export',
+    required: true,
+  },
 ]}
 />
 
@@ -121,7 +121,7 @@ The exporter batches spans for efficient network usage:
 - Flushes when `maxBatchWaitMs` elapsed since first span in batch
 - Flushes on `shutdown()`
 
-### Error Handling
+### Error handling
 
 - Uses exponential backoff retry with `maxRetries` attempts
 - Drops batches after all retries fail
@@ -133,7 +133,7 @@ The exporter batches spans for efficient network usage:
 - Ignores `SPAN_STARTED` and `SPAN_UPDATED` events
 - Formats spans to MastraCloudSpanRecord format
 
-## MastraCloudSpanRecord
+## `MastraCloudSpanRecord`
 
 Internal format for cloud spans:
 
@@ -174,7 +174,7 @@ const customExporter = new CloudExporter({
 })
 ```
 
-## See Also
+## See also
 
 ### Documentation
 

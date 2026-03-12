@@ -19,13 +19,14 @@ import type { SandboxTestConfig, SandboxCapabilities } from './types';
  */
 const DEFAULT_CAPABILITIES: Required<SandboxCapabilities> = {
   supportsMounting: false,
-  supportsReconnection: false,
+  supportsReconnection: true,
   supportsConcurrency: true,
   supportsEnvVars: true,
   supportsWorkingDirectory: true,
   supportsTimeout: true,
   defaultCommandTimeout: 30000,
   supportsStreaming: true,
+  supportsStdin: true,
 };
 
 /**
@@ -53,12 +54,14 @@ export function createSandboxTestSuite(config: SandboxTestConfig): void {
   const {
     suiteName,
     createSandbox,
+    createInvalidSandbox,
     cleanupSandbox,
     capabilities: userCapabilities = {},
     testDomains = {},
     testTimeout = 30000,
     fastOnly = false,
     createMountableFilesystem,
+    killSandboxExternally,
   } = config;
 
   // Merge capabilities with defaults
@@ -91,7 +94,9 @@ export function createSandboxTestSuite(config: SandboxTestConfig): void {
       testTimeout,
       fastOnly,
       createSandbox,
+      createInvalidSandbox,
       createMountableFilesystem,
+      killSandboxExternally,
     });
 
     // Register domain tests

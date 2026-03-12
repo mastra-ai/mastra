@@ -15,11 +15,15 @@ interface TestContext {
   fastOnly: boolean;
   /** Factory to create additional sandbox instances for uniqueness/lifecycle tests */
   createSandbox: (options?: CreateSandboxOptions) => Promise<MastraSandbox> | MastraSandbox;
+  /** Optional factory to create a sandbox with intentionally invalid config */
+  createInvalidSandbox?: () => Promise<MastraSandbox> | MastraSandbox;
 }
 
 export function createSandboxLifecycleTests(getContext: () => TestContext): void {
   describe('Lifecycle', () => {
     describe('Identification', () => {
+      const { fastOnly } = getContext();
+
       it('has required identification properties', () => {
         const { sandbox } = getContext();
 
@@ -33,13 +37,10 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
         expect(typeof sandbox.status).toBe('string');
       });
 
-      it(
+      it.skipIf(fastOnly)(
         'id is unique per instance',
         async () => {
-          const { sandbox, createSandbox, fastOnly } = getContext();
-
-          // Skip in fast mode - creating additional sandbox is slow
-          if (fastOnly) return;
+          const { sandbox, createSandbox } = getContext();
 
           const sandbox2 = await createSandbox();
           try {
@@ -54,13 +55,12 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
     });
 
     describe('Status Transitions', () => {
-      it(
+      const { fastOnly } = getContext();
+
+      it.skipIf(fastOnly)(
         'status starts as pending or stopped before start()',
         async () => {
-          const { createSandbox, fastOnly } = getContext();
-
-          // Skip in fast mode - creating additional sandbox is slow
-          if (fastOnly) return;
+          const { createSandbox } = getContext();
 
           const freshSandbox = await createSandbox();
           try {
@@ -95,13 +95,10 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
         getContext().testTimeout,
       );
 
-      it(
+      it.skipIf(fastOnly)(
         'stop() changes status to stopped',
         async () => {
-          const { createSandbox, fastOnly } = getContext();
-
-          // Skip in fast mode - creating additional sandbox is slow
-          if (fastOnly) return;
+          const { createSandbox } = getContext();
 
           const freshSandbox = await createSandbox();
           try {
@@ -121,34 +118,16 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
     });
 
     describe('Readiness', () => {
-      it(
-        'isReady returns true when running',
+      const { fastOnly } = getContext();
+
+      it.skipIf(fastOnly)(
+        'status is not running before start',
         async () => {
-          const { sandbox } = getContext();
-
-          if (!sandbox.isReady) return;
-
-          const ready = await sandbox.isReady();
-          expect(ready).toBe(true);
-        },
-        getContext().testTimeout,
-      );
-
-      it(
-        'isReady returns false when stopped',
-        async () => {
-          const { createSandbox, fastOnly } = getContext();
-
-          // Skip in fast mode - creating additional sandbox is slow
-          if (fastOnly) return;
+          const { createSandbox } = getContext();
 
           const freshSandbox = await createSandbox();
           try {
-            // Before start, should not be ready
-            if (freshSandbox.isReady) {
-              const ready = await freshSandbox.isReady();
-              expect(ready).toBe(false);
-            }
+            expect(freshSandbox.status).not.toBe('running');
           } finally {
             await freshSandbox._destroy();
           }
@@ -187,6 +166,64 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
           expect(info.status).toBe(sandbox.status);
         },
         getContext().testTimeout,
+      );
+    });
+
+    describe('Error Recovery', () => {
+      const { createInvalidSandbox } = getContext();
+
+      it.skipIf(!createInvalidSandbox)(
+        'start() with invalid config rejects cleanly',
+        async () => {
+          const { createInvalidSandbox } = getContext();
+
+          const badSandbox = await createInvalidSandbox!();
+          try {
+            await expect(badSandbox._start()).rejects.toThrow();
+          } finally {
+            try {
+              await badSandbox._destroy();
+            } catch {
+              // Cleanup may fail for invalid sandboxes — that's OK
+            }
+          }
+        },
+        getContext().testTimeout * 2,
+      );
+
+      it.skipIf(!createInvalidSandbox)(
+        'valid sandbox works after invalid config failure',
+        async () => {
+          const { createInvalidSandbox, createSandbox } = getContext();
+
+          // First: attempt to start with invalid config (should fail)
+          const badSandbox = await createInvalidSandbox!();
+          try {
+            await badSandbox._start();
+          } catch {
+            // Expected to fail
+          } finally {
+            try {
+              await badSandbox._destroy();
+            } catch {
+              // Cleanup may fail — that's OK
+            }
+          }
+
+          // Then: verify a fresh sandbox with valid config still works
+          const goodSandbox = await createSandbox();
+          try {
+            await goodSandbox._start();
+            expect(goodSandbox.status).toBe('running');
+
+            const result = await goodSandbox.executeCommand!('echo', ['recovery']);
+            expect(result.exitCode).toBe(0);
+            expect(result.stdout).toContain('recovery');
+          } finally {
+            await goodSandbox._destroy();
+          }
+        },
+        getContext().testTimeout * 3,
       );
     });
   });

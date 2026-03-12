@@ -9,7 +9,7 @@ packages:
 
 The `.getThreadById()` method retrieves a specific thread by its ID.
 
-## Usage Example
+## Usage example
 
 ```typescript
 await memory?.getThreadById({ threadId: 'thread-123' })
@@ -19,12 +19,12 @@ await memory?.getThreadById({ threadId: 'thread-123' })
 
 <PropertiesTable
   content={[
-{
-name: "threadId",
-type: "string",
-description: "The ID of the thread to be retrieved.",
-isOptional: false,
-},
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'The ID of the thread to be retrieved.',
+    isOptional: false,
+  },
 ]}
 />
 
@@ -32,12 +32,11 @@ isOptional: false,
 
 <PropertiesTable
   content={[
-{
-name: "thread",
-type: "Promise<StorageThreadType | null>",
-description:
-"A promise that resolves to the thread associated with the given ID, or null if not found.",
-},
+  {
+    name: 'thread',
+    type: 'Promise<StorageThreadType | null>',
+    description: 'A promise that resolves to the thread associated with the given ID, or null if not found.',
+  },
 ]}
 />
 

@@ -13,6 +13,7 @@
  */
 
 import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
+import { SandboxNotReadyError } from '@mastra/core/workspace';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { BlaxelSandbox } from './index';
@@ -124,7 +125,7 @@ describe('BlaxelSandbox', () => {
     it('uses default image and memory', () => {
       const sandbox = new BlaxelSandbox();
 
-      expect((sandbox as any).image).toBe('blaxel/py-app:latest');
+      expect((sandbox as any).image).toBe('blaxel/ts-app:latest');
       expect((sandbox as any).memory).toBe(4096);
     });
 
@@ -263,17 +264,15 @@ describe('BlaxelSandbox', () => {
   });
 
   describe('Environment Variables', () => {
-    it('env vars passed as envs array to SandboxInstance.create', async () => {
+    it('env vars are not baked into sandbox creation (applied per-command instead)', async () => {
       const { SandboxInstance } = await import('@blaxel/core');
       const sandbox = new BlaxelSandbox({ env: { KEY: 'value' } });
 
       await sandbox._start();
 
-      expect(SandboxInstance.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          envs: expect.arrayContaining([{ name: 'KEY', value: 'value' }]),
-        }),
-      );
+      // Env should NOT be passed at creation time — it's merged per-command
+      // so that reconnecting to an existing sandbox picks up current env
+      expect(SandboxInstance.create).toHaveBeenCalledWith(expect.not.objectContaining({ envs: expect.anything() }));
     });
 
     it('env vars merged and passed per-command', async () => {
@@ -326,7 +325,6 @@ describe('BlaxelSandbox', () => {
       const instructions = sandbox.getInstructions();
 
       expect(instructions).toContain('sandbox');
-      expect(instructions).toContain('/home/user');
     });
   });
 
@@ -342,25 +340,36 @@ describe('BlaxelSandbox', () => {
     });
   });
 
-  describe('instance accessor', () => {
+  describe('blaxel accessor', () => {
     it('throws SandboxNotReadyError if not started', () => {
       const sandbox = new BlaxelSandbox();
 
-      expect(() => sandbox.instance).toThrow();
+      expect(() => sandbox.blaxel).toThrow(SandboxNotReadyError);
     });
 
     it('returns Blaxel SandboxInstance when started', async () => {
       const sandbox = new BlaxelSandbox();
       await sandbox._start();
 
-      const instance = sandbox.instance;
+      const instance = sandbox.blaxel;
 
       expect(instance).toBe(mockSandbox);
+    });
+
+    it('deprecated instance getter delegates to blaxel', async () => {
+      const sandbox = new BlaxelSandbox();
+      await sandbox._start();
+
+      expect(sandbox.instance).toBe(sandbox.blaxel);
     });
   });
 
   describe('Command Execution', () => {
     it('executes command and returns result', async () => {
+      const sandbox = new BlaxelSandbox();
+      await sandbox._start();
+
+      // Set mock after start() to isolate from startup operations
       mockSandbox.process.exec.mockResolvedValueOnce({
         exitCode: 0,
         stdout: 'hello\n',
@@ -375,9 +384,6 @@ describe('BlaxelSandbox', () => {
         workingDir: '',
       });
 
-      const sandbox = new BlaxelSandbox();
-      await sandbox._start();
-
       const result = await sandbox.executeCommand('echo', ['hello']);
 
       expect(result.exitCode).toBe(0);
@@ -386,6 +392,10 @@ describe('BlaxelSandbox', () => {
     });
 
     it('captures stderr', async () => {
+      const sandbox = new BlaxelSandbox();
+      await sandbox._start();
+
+      // Set mock after start() to isolate from startup operations
       mockSandbox.process.exec.mockResolvedValueOnce({
         exitCode: 1,
         stdout: '',
@@ -400,15 +410,16 @@ describe('BlaxelSandbox', () => {
         workingDir: '',
       });
 
-      const sandbox = new BlaxelSandbox();
-      await sandbox._start();
-
       const result = await sandbox.executeCommand('sh', ['-c', 'echo error >&2']);
 
       expect(result.stderr).toContain('error message');
     });
 
     it('returns non-zero exit code for failing command', async () => {
+      const sandbox = new BlaxelSandbox();
+      await sandbox._start();
+
+      // Set mock after start() to isolate from startup operations
       mockSandbox.process.exec.mockResolvedValueOnce({
         exitCode: 1,
         stdout: '',
@@ -422,9 +433,6 @@ describe('BlaxelSandbox', () => {
         completedAt: '',
         workingDir: '',
       });
-
-      const sandbox = new BlaxelSandbox();
-      await sandbox._start();
 
       const result = await sandbox.executeCommand('exit', ['1']);
 
@@ -456,6 +464,20 @@ describe('BlaxelSandbox', () => {
           timeout: 5, // converted from ms to seconds
         }),
       );
+    });
+
+    it('enforces client-side timeout when server does not', async () => {
+      const sandbox = new BlaxelSandbox();
+      await sandbox._start();
+
+      // Set mock after start() to isolate from startup operations
+      // Simulate a command that never completes (server timeout not enforced)
+      mockSandbox.process.exec.mockImplementation(() => new Promise(() => {}));
+
+      const result = await sandbox.executeCommand('sleep', ['600'], { timeout: 100 });
+
+      expect(result.success).toBe(false);
+      expect(result.stderr).toContain('timed out');
     });
   });
 });
@@ -902,10 +924,10 @@ describe('BlaxelSandbox Error Handling', () => {
     (SandboxInstance.get as any).mockRejectedValue(new Error('not found'));
   });
 
-  it('SandboxNotReadyError thrown if instance accessed before start', () => {
+  it('SandboxNotReadyError thrown if blaxel accessed before start', () => {
     const sandbox = new BlaxelSandbox();
 
-    expect(() => sandbox.instance).toThrow(/not started|not ready|Sandbox/i);
+    expect(() => sandbox.blaxel).toThrow(SandboxNotReadyError);
   });
 
   it('executeCommand auto-starts sandbox if not running', async () => {
@@ -1526,6 +1548,13 @@ describe('BlaxelSandbox Internal Methods', () => {
       expect((sandbox as any).isSandboxDeadError(new Error('Sandbox not found'))).toBe(true);
     });
 
+    it('returns true for Blaxel 404 JSON response', () => {
+      const sandbox = new BlaxelSandbox();
+      // Blaxel API returns this when a sandbox has expired/been deleted
+      const blaxel404 = { error: 'Not Found', status: 404, statusText: 'Not Found' };
+      expect((sandbox as any).isSandboxDeadError(blaxel404)).toBe(true);
+    });
+
     it('returns false for generic "not found" errors', () => {
       const sandbox = new BlaxelSandbox();
       expect((sandbox as any).isSandboxDeadError(new Error('File not found'))).toBe(false);
@@ -1678,6 +1707,9 @@ describe('BlaxelSandbox Internal Methods', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('not empty');
+
+      // Reset mocks so the custom mockImplementation doesn't leak into subsequent tests
+      resetMockDefaults();
     });
   });
 });

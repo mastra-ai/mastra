@@ -1,11 +1,11 @@
 ---
-title: "Using Tools | Agents"
+title: "Using tools | Agents"
 description: Learn how to create tools and add them to agents to extend capabilities beyond text generation.
 packages:
   - "@mastra/core"
 ---
 
-# Using Tools
+# Using tools
 
 Agents use tools to call APIs, query databases, or run custom functions from your codebase. Tools give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](/docs/mcp/overview) to expand an agent's capabilities.
 
@@ -15,7 +15,7 @@ Use tools when an agent needs additional context or information from remote reso
 
 ## Creating a tool
 
-When creating tools, keep descriptions simple and focused on what the tool does, emphasizing its primary use case. Descriptive schema names can also help guide the agent on how to use the tool.
+When creating tools, keep descriptions concise and focused on what the tool does, emphasizing its primary use case. Descriptive schema names can also help guide the agent on how to use the tool.
 
 This example shows how to create a tool that fetches weather data from an API. When the agent calls the tool, it provides the required input as defined by the tool's `inputSchema`. The tool accesses this data through its `inputData` parameter, which in this example includes the `location` used in the weather API query.
 
@@ -39,6 +39,40 @@ export const weatherTool = createTool({
     const weather = await response.text()
 
     return { weather }
+  },
+})
+```
+
+## Shaping output for the model
+
+Use `toModelOutput` when your tool returns rich structured data for your application, but you want the model to receive a smaller or multimodal representation. This keeps model context focused while preserving the full tool result in your app.
+
+```typescript title="src/mastra/tools/weather-tool.ts"
+export const weatherTool = createTool({
+  // ...other config
+  execute: async ({ location }) => {
+    const response = await fetch(`https://wttr.in/${location}?format=j1`)
+    const data = await response.json()
+
+    return {
+      location,
+      temperature: data.current_condition[0].temp_F,
+      condition: data.current_condition[0].weatherDesc[0].value,
+      weatherIconUrl: data.current_condition[0].weatherIconUrl[0].value,
+      source: data,
+    }
+  },
+  toModelOutput: output => {
+    return {
+      type: 'content',
+      value: [
+        {
+          type: 'text',
+          text: `${output.location}: ${output.temperature}F and ${output.condition}`,
+        },
+        { type: 'image-url', url: output.weatherIconUrl },
+      ],
+    }
   },
 })
 ```
@@ -81,7 +115,7 @@ export const weatherAgent = new Agent({
 
 ## Using agents as tools
 
-Agents can be added to other agents through the `agents` configuration. When you add a subagent, Mastra automatically converts it to a tool that the parent agent can call. The generated tool is named `agent-<agentName>`.
+Agents can be added to other agents through the `agents` configuration. When you add subagents, the parent agent becomes a supervisor. A supervisor can delegate tasks to subagents using the [supervisor pattern](/docs/agents/supervisor-agents), with support for delegation hooks, message filtering, iteration monitoring, and task completion scoring. Mastra automatically converts each subagent to a tool that the parent agent can call, named `agent-<agentName>`.
 
 ```typescript title="src/mastra/agents/parent-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -188,7 +222,7 @@ This lets you specify how tools are identified in the stream. If you want the `t
 
 ### Subagents and workflows as tools
 
-Subagents and workflows follow the same pattern. They are converted to tools with a prefix followed by your object key:
+Subagents and workflows follow the same pattern. They're converted to tools with a prefix followed by your object key:
 
 | Property | Prefix | Example key | `toolName` |
 | - | - | - | - |
@@ -221,4 +255,5 @@ When using tools with [structured output](/docs/agents/structured-output), some 
 - [Dynamic Tool Search](/reference/processors/tool-search-processor) - Load tools on demand for agents with large tool libraries
 - [Structured Output](/docs/agents/structured-output)
 - [Agent Memory](/docs/agents/agent-memory)
+- [Supervisor Agents](/docs/agents/supervisor-agents)
 - [Request Context](/docs/server/request-context)

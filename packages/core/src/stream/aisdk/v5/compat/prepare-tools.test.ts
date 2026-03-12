@@ -1,3 +1,4 @@
+import { jsonSchema } from '@internal/ai-sdk-v5';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { createTool } from '../../../../tools/tool';
@@ -395,6 +396,44 @@ describe('prepareToolsAndToolChoice', () => {
           `Property '${propName}' in agent tool schema must have a 'type', '$ref', 'anyOf', 'oneOf', or 'allOf' key. Got: ${JSON.stringify(schema)}`,
         ).toBe(true);
       }
+
+      const resumeDataSchema = properties.resumeData as Record<string, any>;
+      expect(Array.isArray(resumeDataSchema.type)).toBe(true);
+      expect(resumeDataSchema.type).not.toContain('array');
+      expect(resumeDataSchema.items).toBeUndefined();
+    });
+
+    it('should drop items for typeless properties when applying non-array fallback type', () => {
+      const toolWithTypelessItems = {
+        description: 'A tool with a typeless schema property that incorrectly includes items',
+        parameters: jsonSchema({
+          type: 'object',
+          properties: {
+            resumeData: {
+              description: 'Typeless schema with items that Gemini rejects',
+              items: {
+                type: 'string',
+              },
+            },
+          },
+        }),
+        execute: async () => 'ok',
+      };
+
+      const result = prepareToolsAndToolChoice({
+        tools: { testTool: toolWithTypelessItems as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v2',
+      });
+
+      const toolDef = result.tools![0] as { type: string; inputSchema: Record<string, any> };
+      expect(toolDef.type).toBe('function');
+
+      const resumeDataSchema = toolDef.inputSchema.properties.resumeData as Record<string, any>;
+      expect(Array.isArray(resumeDataSchema.type)).toBe(true);
+      expect(resumeDataSchema.type).not.toContain('array');
+      expect(resumeDataSchema.items).toBeUndefined();
     });
   });
 

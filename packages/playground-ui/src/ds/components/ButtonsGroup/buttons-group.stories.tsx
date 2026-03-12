@@ -18,15 +18,9 @@ type Story = StoryObj<typeof ButtonsGroup>;
 export const Default: Story = {
   render: () => (
     <ButtonsGroup>
-      <Button size="default" variant="cta">
-        Button 1
-      </Button>
-      <Button size="default" variant="cta">
-        Button 2
-      </Button>
-      <Button size="default" variant="cta">
-        Button 3
-      </Button>
+      <Button>Button 1</Button>
+      <Button>Button 2</Button>
+      <Button>Button 3</Button>
     </ButtonsGroup>
   ),
 };
@@ -34,12 +28,8 @@ export const Default: Story = {
 export const DefaultSpacing: Story = {
   render: () => (
     <ButtonsGroup>
-      <Button size="default" variant="cta">
-        Cancel
-      </Button>
-      <Button size="default" variant="cta">
-        Save
-      </Button>
+      <Button>Cancel</Button>
+      <Button>Save</Button>
     </ButtonsGroup>
   ),
 };
@@ -47,12 +37,8 @@ export const DefaultSpacing: Story = {
 export const CloseSpacing: Story = {
   render: () => (
     <ButtonsGroup spacing="close">
-      <Button size="default" variant="cta">
-        Cancel
-      </Button>
-      <Button size="default" variant="cta">
-        Save
-      </Button>
+      <Button>Cancel</Button>
+      <Button>Save</Button>
     </ButtonsGroup>
   ),
 };
@@ -60,10 +46,8 @@ export const CloseSpacing: Story = {
 export const AsSplitButton: Story = {
   render: () => (
     <ButtonsGroup spacing="close">
-      <Button size="default" variant="cta">
-        Cancel
-      </Button>
-      <Button size="default" variant="cta" aria-label="Open Menu">
+      <Button>Cancel</Button>
+      <Button aria-label="Open Menu">
         <ChevronDownIcon />
       </Button>
     </ButtonsGroup>

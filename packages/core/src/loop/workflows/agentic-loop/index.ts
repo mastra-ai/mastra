@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
+import type { MastraDBMessage } from '../../../memory';
 import { InternalSpans } from '../../../observability';
 import { safeEnqueue } from '../../../stream/base';
 import type { ChunkType } from '../../../stream/types';
@@ -35,6 +37,8 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
   const accumulatedSteps: StepResult<Tools>[] = [];
   // Track previous content to determine what's new in each step
   let previousContentLength = 0;
+  // When continue:false + feedback, allow one more LLM turn then stop
+  let pendingFeedbackStop = false;
 
   const agenticExecutionWorkflow = createAgenticExecutionWorkflow<Tools, OUTPUT>({
     messageId: messageId!,
@@ -68,6 +72,11 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
     .dowhile(agenticExecutionWorkflow, async ({ inputData }) => {
       const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
       let hasFinishedSteps = false;
+
+      if (pendingFeedbackStop) {
+        hasFinishedSteps = true;
+        pendingFeedbackStop = false;
+      }
 
       const allContent: StepResult<Tools>['content'] = typedInputData.messages.nonUser.flatMap(
         message => message.content as unknown as StepResult<Tools>['content'],
@@ -124,7 +133,97 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         );
 
         const hasStopped = conditions.some(condition => condition);
-        hasFinishedSteps = hasStopped;
+        hasFinishedSteps = hasFinishedSteps || hasStopped;
+      }
+
+      // Call onIterationComplete hook if provided (call for every iteration, not just continued ones)
+      if (rest.onIterationComplete) {
+        const isFinal = !typedInputData.stepResult?.isContinued || hasFinishedSteps;
+        const iterationContext = {
+          iteration: accumulatedSteps.length,
+          maxIterations: rest.maxSteps,
+          text: typedInputData.output.text || '',
+          toolCalls: (typedInputData.output.toolCalls || []).map((tc: any) => ({
+            id: tc.toolCallId || tc.id || '',
+            name: tc.toolName || tc.name || '',
+            args: (tc.args || {}) as Record<string, unknown>,
+          })),
+          toolResults: (typedInputData.output.toolResults || []).map((tr: any) => ({
+            id: tr.toolCallId || tr.id || '',
+            name: tr.toolName || tr.name || '',
+            result: tr.result,
+            error: tr.error,
+          })),
+          isFinal,
+          finishReason: typedInputData.stepResult?.reason || 'unknown',
+          runId: runId,
+          threadId: _internal?.threadId,
+          resourceId: _internal?.resourceId,
+          agentId: rest.agentId,
+          agentName: rest.agentName || rest.agentId,
+          messages: messageList.get.all.db(),
+        };
+
+        try {
+          const iterationResult = await rest.onIterationComplete(iterationContext);
+
+          if (iterationResult) {
+            if (iterationResult.feedback && typedInputData.stepResult?.isContinued) {
+              messageList.add(
+                {
+                  id: rest.mastra?.generateId() || randomUUID(),
+                  createdAt: new Date(),
+                  type: 'text',
+                  role: 'assistant',
+                  content: {
+                    parts: [
+                      {
+                        type: 'text',
+                        text: iterationResult.feedback,
+                      },
+                    ],
+                    metadata: {
+                      mode: 'stream',
+                      completionResult: {
+                        suppressFeedback: true,
+                      },
+                    },
+                    format: 2,
+                  },
+                } as MastraDBMessage,
+                'response',
+              );
+
+              if (iterationResult.continue === false) {
+                pendingFeedbackStop = true;
+              } else if (!hasFinishedSteps && rest.maxSteps && accumulatedSteps.length < rest.maxSteps) {
+                hasFinishedSteps = false;
+                typedInputData.stepResult.isContinued = true;
+              }
+            } else if (iterationResult.continue === false && !hasFinishedSteps) {
+              hasFinishedSteps = true;
+            } else if (
+              iterationResult.continue === true &&
+              (hasFinishedSteps || !typedInputData.stepResult?.isContinued)
+            ) {
+              if ((rest.maxSteps && accumulatedSteps.length < rest.maxSteps) || !rest.maxSteps) {
+                hasFinishedSteps = false;
+                if (typedInputData.stepResult) {
+                  typedInputData.stepResult.isContinued = true;
+                }
+              }
+            }
+          }
+        } catch (error) {
+          // Log error but don't fail the iteration
+          rest.logger?.error('Error in onIterationComplete hook:', error);
+        }
+      }
+
+      // Check if a delegation hook called ctx.bail() — stop the loop after this iteration
+      if (!hasFinishedSteps && _internal?._delegationBailed) {
+        hasFinishedSteps = true;
+        _internal._delegationBailed = false;
       }
 
       if (typedInputData.stepResult) {

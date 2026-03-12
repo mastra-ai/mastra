@@ -18,7 +18,7 @@ Sends Tracing data to Langfuse for observability.
 new LangfuseExporter(config: LangfuseExporterConfig)
 ```
 
-## LangfuseExporterConfig
+## `LangfuseExporterConfig`
 
 ```typescript
 interface LangfuseExporterConfig extends BaseExporterConfig {
@@ -37,48 +37,48 @@ Extends `BaseExporterConfig`, which includes:
 
 <PropertiesTable
   props={[
-{
-name: "publicKey",
-type: "string",
-description: "Langfuse API key. Falls back to LANGFUSE_PUBLIC_KEY env var.",
-required: false,
-},
-{
-name: "secretKey",
-type: "string",
-description: "Langfuse secret key. Falls back to LANGFUSE_SECRET_KEY env var.",
-required: false,
-},
-{
-name: "baseUrl",
-type: "string",
-description: "Langfuse host URL. Falls back to LANGFUSE_BASE_URL env var.",
-required: false,
-},
-{
-name: "realtime",
-type: "boolean",
-description: "Enable realtime mode - flushes after each event",
-required: false,
-},
-{
-name: "logLevel",
-type: "'debug' | 'info' | 'warn' | 'error'",
-description: "Logger level (default: 'warn')",
-required: false,
-},
-{
-name: "options",
-type: "any",
-description: "Additional Langfuse client options",
-required: false,
-},
+  {
+    name: 'publicKey',
+    type: 'string',
+    description: 'Langfuse API key. Falls back to LANGFUSE_PUBLIC_KEY env var.',
+    required: false,
+  },
+  {
+    name: 'secretKey',
+    type: 'string',
+    description: 'Langfuse secret key. Falls back to LANGFUSE_SECRET_KEY env var.',
+    required: false,
+  },
+  {
+    name: 'baseUrl',
+    type: 'string',
+    description: 'Langfuse host URL. Falls back to LANGFUSE_BASE_URL env var.',
+    required: false,
+  },
+  {
+    name: 'realtime',
+    type: 'boolean',
+    description: 'Enable realtime mode - flushes after each event',
+    required: false,
+  },
+  {
+    name: 'logLevel',
+    type: "'debug' | 'info' | 'warn' | 'error'",
+    description: "Logger level (default: 'warn')",
+    required: false,
+  },
+  {
+    name: 'options',
+    type: 'any',
+    description: 'Additional Langfuse client options',
+    required: false,
+  },
 ]}
 />
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -134,14 +134,14 @@ const exporter = new LangfuseExporter({
 })
 ```
 
-## Span Mapping
+## Span mapping
 
 - Root spans → Langfuse traces
 - `MODEL_GENERATION` spans → Langfuse generations
 - All other spans → Langfuse spans
 - Event spans → Langfuse events
 
-## Prompt Linking
+## Prompt linking
 
 Link LLM generations to [Langfuse Prompt Management](https://langfuse.com/docs/prompt-management) using the `withLangfusePrompt` helper:
 

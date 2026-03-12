@@ -17,7 +17,7 @@ import { showError, showInfo } from './display.js';
 import { addUserMessage } from './render-messages.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
-import { fg } from './theme.js';
+import { theme } from './theme.js';
 
 // =============================================================================
 // Keyboard Shortcuts
@@ -45,12 +45,14 @@ export function setupKeyboardShortcuts(
       state.pendingApprovalDismiss();
       state.activeInlinePlanApproval = undefined;
       state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
       state.userInitiatedAbort = true;
       state.harness.abort();
     } else if (state.harness.isRunning()) {
       // Clean up active inline components on abort
       state.activeInlinePlanApproval = undefined;
       state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
       state.userInitiatedAbort = true;
       state.harness.abort();
     } else {
@@ -63,7 +65,30 @@ export function setupKeyboardShortcuts(
     }
   });
 
-  // Ctrl+Z - undo last clear (restore editor text)
+  // Ctrl+Z - suspend process (SIGTSTP)
+  state.editor.onAction('suspend', () => {
+    if (process.platform === 'win32') {
+      showInfo(state, 'Suspend is not supported on Windows');
+      return;
+    }
+
+    state.ui.stop();
+    const onContinue = () => {
+      state.ui.start();
+      state.ui.requestRender();
+    };
+    process.once('SIGCONT', onContinue);
+    try {
+      process.kill(process.pid, 'SIGTSTP');
+    } catch {
+      process.off('SIGCONT', onContinue);
+      state.ui.start();
+      state.ui.requestRender();
+      showError(state, 'Unable to suspend in the current terminal');
+    }
+  });
+
+  // Alt+Z - undo last clear (restore editor text)
   state.editor.onAction('undo', () => {
     if (state.lastClearedText && state.editor.getText().length === 0) {
       state.editor.setText(state.lastClearedText);
@@ -171,15 +196,15 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
     `User: ${getUserId(state.projectInfo.rootPath)}`,
   ]
     .filter(Boolean)
-    .map(line => fg('muted', line as string))
+    .map(line => theme.fg('muted', line as string))
     .join('\n');
 
-  const sep = fg('dim', ' · ');
+  const sep = theme.fg('dim', ' · ');
   const hintParts: string[] = [];
   if (state.harness.listModes().length > 1) {
-    hintParts.push(`${fg('accent', '⇧+Tab')} ${fg('muted', 'cycle modes')}`);
+    hintParts.push(`${theme.fg('accent', '⇧+Tab')} ${theme.fg('muted', 'cycle modes')}`);
   }
-  hintParts.push(`${fg('accent', '/help')} ${fg('muted', 'info & shortcuts')}`);
+  hintParts.push(`${theme.fg('accent', '/help')} ${theme.fg('muted', 'info & shortcuts')}`);
   const instructions = `  ${hintParts.join(sep)}`;
 
   state.ui.addChild(new Spacer(1));
@@ -233,12 +258,13 @@ function detectFdPath(): string | null {
 export function setupAutocomplete(state: TUIState): void {
   const slashCommands: SlashCommand[] = [
     { name: 'new', description: 'Start a new thread' },
+    { name: 'clone', description: 'Clone the current thread' },
     { name: 'threads', description: 'Switch between threads' },
-    { name: 'models', description: 'Configure model (global/thread/mode)' },
-    { name: 'models:pack', description: 'Switch model pack' },
+    { name: 'models', description: 'Switch model pack' },
+    { name: 'custom-providers', description: 'Manage custom providers and models' },
     { name: 'subagents', description: 'Configure subagent model defaults' },
     { name: 'om', description: 'Configure Observational Memory models' },
-    { name: 'think', description: 'Set thinking level (Anthropic)' },
+    { name: 'think', description: 'Set thinking (off|low|medium|high|xhigh|status)' },
     { name: 'login', description: 'Login with OAuth provider' },
     { name: 'skills', description: 'List available skills' },
     { name: 'cost', description: 'Show token usage and estimated costs' },
@@ -272,7 +298,10 @@ export function setupAutocomplete(state: TUIState): void {
       description: 'Toggle YOLO mode (auto-approve all tools)',
     },
     { name: 'review', description: 'Review a GitHub pull request' },
+    { name: 'report-issue', description: 'Open or browse mastracode issues' },
     { name: 'setup', description: 'Re-run the setup wizard' },
+    { name: 'theme', description: 'Switch color theme (auto/dark/light)' },
+    { name: 'update', description: 'Check for and install updates' },
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },
   ];
@@ -348,6 +377,9 @@ export function setupKeyHandlers(
     if (state.pendingApprovalDismiss) {
       state.pendingApprovalDismiss();
     }
+    state.activeInlinePlanApproval = undefined;
+    state.activeInlineQuestion = undefined;
+    state.pendingInlineQuestions.length = 0;
     state.userInitiatedAbort = true;
     state.harness.abort();
   });
@@ -411,26 +443,46 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
 
   // Sort by most recent
   const sortedThreads = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-  const mostRecent = sortedThreads[0]!;
-  // Auto-resume the most recent thread for this directory
-  try {
-    await state.harness.switchThread({ threadId: mostRecent.id });
-    // Retroactively tag untagged legacy threads
-    if (!mostRecent.metadata?.projectPath) {
-      await state.harness.setThreadSetting({ key: 'projectPath', value: currentPath });
-    }
-  } catch (error) {
-    if (error instanceof ThreadLockError) {
-      // Defer the lock conflict prompt until after the TUI is started
-      state.pendingNewThread = true;
-      state.pendingLockConflict = {
-        threadTitle: mostRecent.title || mostRecent.id,
-        ownerPid: error.ownerPid,
-      };
+
+  // If there's only one thread, auto-resume it directly
+  if (sortedThreads.length === 1) {
+    const thread = sortedThreads[0]!;
+    try {
+      await state.harness.switchThread({ threadId: thread.id });
+      if (!thread.metadata?.projectPath) {
+        await state.harness.setThreadSetting({ key: 'projectPath', value: currentPath });
+      }
       return;
+    } catch (error) {
+      if (error instanceof ThreadLockError) {
+        // Thread is locked by another process — silently start a new thread.
+        // The lock prompt only appears when the user intentionally picks a
+        // locked thread from the /threads selector.
+        state.pendingNewThread = true;
+        return;
+      }
+      throw error;
     }
-    throw error;
   }
+
+  // Multiple threads — try each in order until one is unlocked
+  for (const thread of sortedThreads) {
+    try {
+      await state.harness.switchThread({ threadId: thread.id });
+      if (!thread.metadata?.projectPath) {
+        await state.harness.setThreadSetting({ key: 'projectPath', value: currentPath });
+      }
+      return;
+    } catch (error) {
+      if (error instanceof ThreadLockError) {
+        continue; // Try the next one
+      }
+      throw error;
+    }
+  }
+
+  // All directory threads are locked — silently start a new thread
+  state.pendingNewThread = true;
 }
 
 // =============================================================================

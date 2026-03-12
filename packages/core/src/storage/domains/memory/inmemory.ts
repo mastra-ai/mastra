@@ -719,8 +719,10 @@ export class InMemoryMemory extends MemoryStorage {
 
     // Clone messages with new IDs
     const clonedMessages: MastraDBMessage[] = [];
+    const messageIdMap: Record<string, string> = {};
     for (const sourceMsg of sourceMessages) {
       const newMessageId = crypto.randomUUID();
+      messageIdMap[sourceMsg.id] = newMessageId;
       const parsedContent = safelyParseJSON(sourceMsg.content);
 
       // Create storage message
@@ -755,6 +757,7 @@ export class InMemoryMemory extends MemoryStorage {
     return {
       thread: newThread,
       clonedMessages,
+      messageIdMap,
     };
   }
 
@@ -854,6 +857,22 @@ export class InMemoryMemory extends MemoryStorage {
     return record;
   }
 
+  async insertObservationalMemoryRecord(record: ObservationalMemoryRecord): Promise<void> {
+    const key = this.getObservationalMemoryKey(record.threadId, record.resourceId);
+    const existing = this.db.observationalMemory.get(key) ?? [];
+    // Insert in order by generationCount descending (newest first)
+    let inserted = false;
+    for (let i = 0; i < existing.length; i++) {
+      if (record.generationCount >= existing[i]!.generationCount) {
+        existing.splice(i, 0, record);
+        inserted = true;
+        break;
+      }
+    }
+    if (!inserted) existing.push(record);
+    this.db.observationalMemory.set(key, existing);
+  }
+
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
     const { id, observations, tokenCount, lastObservedAt, observedMessageIds } = input;
     const record = this.findObservationalMemoryRecordById(id);
@@ -916,7 +935,11 @@ export class InMemoryMemory extends MemoryStorage {
       throw new Error(`Observational memory record not found: ${id}`);
     }
 
-    const chunks = Array.isArray(record.bufferedObservationChunks) ? record.bufferedObservationChunks : [];
+    // Use caller-provided refreshed chunks (with up-to-date token weights) for
+    // activation math, falling back to persisted chunks otherwise.
+    // Keep refreshed chunks local — don't overwrite the stored buffer.
+    const persistedChunks = Array.isArray(record.bufferedObservationChunks) ? record.bufferedObservationChunks : [];
+    const chunks = Array.isArray(input.bufferedChunks) ? input.bufferedChunks : persistedChunks;
     if (chunks.length === 0) {
       return {
         chunksActivated: 0,
@@ -966,24 +989,22 @@ export class InMemoryMemory extends MemoryStorage {
     // Safeguard: if the over boundary would eat into more than 95% of the
     // retention floor, fall back to the best under boundary instead.
     // This prevents edge cases where a large chunk overshoots dramatically.
-    // When forceMaxActivation is set (above blockAfter), skip the safeguard
-    // and always prefer the over boundary to aggressively reduce context.
-    // Additionally, never bias over if it would leave fewer than 1000 tokens
-    // remaining — at that level the agent may lose all meaningful context.
+    // When forceMaxActivation is set (above blockAfter), still prefer the over
+    // boundary, but never if it would leave fewer than the smaller of 1000
+    // tokens or the retention floor remaining.
     const maxOvershoot = retentionFloor * 0.95;
     const overshoot = bestOverTokens - targetMessageTokens;
     const remainingAfterOver = input.currentPendingTokens - bestOverTokens;
+    const remainingAfterUnder = input.currentPendingTokens - bestUnderTokens;
+    // When activationRatio ≈ 1.0, retentionFloor is 0 and minRemaining becomes 0 — intentional for "activate everything" configs.
+    const minRemaining = Math.min(1000, retentionFloor);
 
     let chunksToActivate: number;
-    if (input.forceMaxActivation && bestOverBoundary > 0) {
+    if (input.forceMaxActivation && bestOverBoundary > 0 && remainingAfterOver >= minRemaining) {
       chunksToActivate = bestOverBoundary;
-    } else if (
-      bestOverBoundary > 0 &&
-      overshoot <= maxOvershoot &&
-      (remainingAfterOver >= 1000 || retentionFloor === 0)
-    ) {
+    } else if (bestOverBoundary > 0 && overshoot <= maxOvershoot && remainingAfterOver >= minRemaining) {
       chunksToActivate = bestOverBoundary;
-    } else if (bestUnderBoundary > 0) {
+    } else if (bestUnderBoundary > 0 && remainingAfterUnder >= minRemaining) {
       chunksToActivate = bestUnderBoundary;
     } else if (bestOverBoundary > 0) {
       // All boundaries are over and exceed the safeguard — still activate

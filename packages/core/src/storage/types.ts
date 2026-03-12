@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import type { z } from 'zod/v4';
 import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import type { SerializedError } from '../error';
 import type { ScoringSamplingConfig } from '../evals/types';
@@ -236,6 +236,8 @@ export type StorageCloneThreadOutput = {
   thread: StorageThreadType;
   /** The messages that were copied to the new thread */
   clonedMessages: MastraDBMessage[];
+  /** Map from source message IDs to cloned message IDs (used for OM remapping) */
+  messageIdMap?: Record<string, string>;
 };
 
 export type StorageResourceType = {
@@ -1212,9 +1214,8 @@ export interface SwapBufferedToActiveInput {
    */
   currentPendingTokens: number;
   /**
-   * When true, bypass the overshoot safeguard and always prefer removing more chunks.
-   * Set when pending tokens are above `blockAfter` — in this "emergency" mode,
-   * aggressively reducing context is more important than preserving the retention floor.
+   * When true, prefer removing more chunks (above `blockAfter`), while still respecting
+   * the minimum remaining tokens safeguard (min(1000, retention floor)).
    */
   forceMaxActivation?: boolean;
   /**
@@ -1222,6 +1223,13 @@ export interface SwapBufferedToActiveInput {
    * If not provided, the adapter will use the lastObservedAt from the latest activated chunk.
    */
   lastObservedAt?: Date;
+  /**
+   * Refreshed buffered chunks with up-to-date messageTokens.
+   * When provided, the storage layer uses these instead of the persisted chunks
+   * for activation boundary selection, so stale token weights don't cause
+   * over- or under-activation.
+   */
+  bufferedChunks?: BufferedObservationChunk[];
 }
 
 /**
@@ -1985,6 +1993,16 @@ export interface UpdateWorkflowStateOptions {
   suspendedPaths?: Record<string, number[]>;
   waitingPaths?: Record<string, number[]>;
   resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
+  /**
+   * Tracing context for span continuity during suspend/resume.
+   * Persisted when workflow suspends to enable linking resumed spans
+   * as children of the original suspended span.
+   */
+  tracingContext?: {
+    traceId?: string;
+    spanId?: string;
+    parentSpanId?: string;
+  };
 }
 
 function unwrapSchema(schema: z.ZodTypeAny): { base: z.ZodTypeAny; nullable: boolean } {
@@ -2009,18 +2027,56 @@ function unwrapSchema(schema: z.ZodTypeAny): { base: z.ZodTypeAny; nullable: boo
 
 /**
  * Extract checks array from Zod schema, compatible with both Zod 3 and Zod 4.
- * Zod 3 uses _def.checks, Zod 4 uses _zod.def.checks.
+ * Zod 3 uses _def.checks with {kind: "..."} objects
+ * Zod 4 uses _zod.def.checks with {def: {check: "...", format: "..."}} objects
  */
 function getZodChecks(schema: z.ZodTypeAny): Array<{ kind: string }> {
-  const schemaAny = schema as any;
-  // Zod 4 structure
-  if (schemaAny._zod?.def?.checks) {
-    return schemaAny._zod.def.checks;
+  // Zod 4 structure: checks have def.check instead of kind
+  if ('_zod' in schema) {
+    const zodV4 = schema as { _zod?: { def?: { checks?: unknown[] } } };
+    const checks = zodV4._zod?.def?.checks;
+
+    if (checks && Array.isArray(checks)) {
+      return checks.map((check: unknown) => {
+        // Type guard for Zod v4 check structure
+        if (
+          typeof check === 'object' &&
+          check !== null &&
+          'def' in check &&
+          typeof check.def === 'object' &&
+          check.def !== null
+        ) {
+          const def = check.def as Record<string, unknown>;
+
+          // For number checks in Zod 4, format:"safeint" means int()
+          if (def.check === 'number_format' && def.format === 'safeint') {
+            return { kind: 'int' };
+          }
+
+          // For string checks in Zod 4, check type is the format name
+          if (def.check === 'string_format' && typeof def.format === 'string') {
+            return { kind: def.format }; // e.g., "uuid", "email", etc.
+          }
+
+          // Generic mapping: use the check type as kind
+          return { kind: typeof def.check === 'string' ? def.check : 'unknown' };
+        }
+
+        return { kind: 'unknown' };
+      });
+    }
   }
-  // Zod 3 structure
-  if (schemaAny._def?.checks) {
-    return schemaAny._def.checks;
+
+  // Zod 3 structure: checks already have kind property
+  if ('_def' in schema) {
+    const zodV3 = schema as { _def?: { checks?: Array<{ kind: string }> } };
+    const checks = zodV3._def?.checks;
+
+    if (checks && Array.isArray(checks)) {
+      return checks;
+    }
   }
+
   return [];
 }
 
@@ -2043,7 +2099,8 @@ function zodToStorageType(schema: z.ZodTypeAny): StorageColumnType {
     const checks = getZodChecks(schema);
     return checks.some(c => c.kind === 'int') ? 'integer' : 'float';
   }
-  if (typeName === 'ZodBigInt') {
+  // Both ZodBigInt (v3) and ZodBigint (v4) should map to bigint
+  if (typeName === 'ZodBigInt' || typeName === 'ZodBigint') {
     return 'bigint';
   }
   if (typeName === 'ZodDate') {
@@ -2091,6 +2148,7 @@ export interface DatasetRecord {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown>;
   groundTruthSchema?: Record<string, unknown>;
+  requestContextSchema?: Record<string, unknown>;
   version: number;
   createdAt: Date;
   updatedAt: Date;
@@ -2102,6 +2160,7 @@ export interface DatasetItem {
   datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
@@ -2115,6 +2174,7 @@ export interface DatasetItemRow {
   isDeleted: boolean;
   input: unknown;
   groundTruth?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
@@ -2135,6 +2195,7 @@ export interface CreateDatasetInput {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
+  requestContextSchema?: Record<string, unknown> | null;
 }
 
 export interface UpdateDatasetInput {
@@ -2144,12 +2205,14 @@ export interface UpdateDatasetInput {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
+  requestContextSchema?: Record<string, unknown> | null;
 }
 
 export interface AddDatasetItemInput {
   datasetId: string;
   input: unknown;
   groundTruth?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }
 
@@ -2158,6 +2221,7 @@ export interface UpdateDatasetItemInput {
   datasetId: string;
   input?: unknown;
   groundTruth?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }
 
@@ -2197,6 +2261,7 @@ export interface BatchInsertItemsInput {
   items: Array<{
     input: unknown;
     groundTruth?: unknown;
+    requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
   }>;
 }
@@ -2266,6 +2331,7 @@ export interface UpdateExperimentInput {
   description?: string;
   metadata?: Record<string, unknown>;
   status?: ExperimentStatus;
+  totalItems?: number;
   succeededCount?: number;
   failedCount?: number;
   skippedCount?: number;

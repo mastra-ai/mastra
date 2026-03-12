@@ -921,6 +921,67 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
             },
             "warnings": [],
           },
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
+            "providerMetadata": undefined,
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "output": {
+                        "type": "text",
+                        "value": "value-result",
+                      },
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-result",
+                    },
+                  ],
+                  "role": "tool",
+                },
+                {
+                  "content": [
+                    {
+                      "text": "Done",
+                      "type": "text",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
+          },
         ],
         "text": "",
         "toolCalls": [
@@ -943,13 +1004,51 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
-        "isContinued": false,
+        "isContinued": true,
         "reason": "stop",
         "warnings": undefined,
       },
     },
     "runId": "test-run-id",
     "type": "step-finish",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "messageId": "id-0",
+      "request": {},
+      "warnings": [],
+    },
+    "runId": "test-run-id",
+    "type": "step-start",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "id": "text-1",
+      "providerMetadata": undefined,
+    },
+    "runId": "test-run-id",
+    "type": "text-start",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "id": "text-1",
+      "providerMetadata": undefined,
+      "text": "Done",
+    },
+    "runId": "test-run-id",
+    "type": "text-delta",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "id": "text-1",
+      "type": "text-end",
+    },
+    "runId": "test-run-id",
+    "type": "text-end",
   },
   {
     "from": "AGENT",
@@ -997,6 +1096,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
             ],
             "role": "tool",
           },
+          {
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
         ],
         "nonUser": [
           {
@@ -1029,6 +1137,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
               },
             ],
             "role": "tool",
+          },
+          {
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
           },
         ],
         "user": [
@@ -1097,23 +1214,319 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
             },
             "warnings": [],
           },
-        ],
-        "text": "",
-        "toolCalls": [
-          {
-            "args": {
-              "value": "value",
-            },
-            "providerExecuted": undefined,
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
             "providerMetadata": undefined,
-            "toolCallId": "call-1",
-            "toolName": "tool1",
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "output": {
+                        "type": "text",
+                        "value": "value-result",
+                      },
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-result",
+                    },
+                  ],
+                  "role": "tool",
+                },
+                {
+                  "content": [
+                    {
+                      "text": "Done",
+                      "type": "text",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
           },
         ],
+        "text": "Done",
+        "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 6,
+          "outputTokens": 20,
+          "totalTokens": 26,
+        },
+      },
+      "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
+      "stepResult": {
+        "isContinued": false,
+        "reason": "stop",
+        "warnings": undefined,
+      },
+    },
+    "runId": "test-run-id",
+    "type": "step-finish",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "messageId": "id-0",
+      "messages": {
+        "all": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+            ],
+            "role": "assistant",
+          },
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
+            "role": "tool",
+          },
+          {
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
+        ],
+        "nonUser": [
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+            ],
+            "role": "assistant",
+          },
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
+            "role": "tool",
+          },
+          {
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
+        ],
+        "user": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+      },
+      "metadata": {
+        "headers": undefined,
+        "id": "id-0",
+        "modelId": "mock-model-id",
+        "modelMetadata": {
+          "modelId": "mock-model-id",
+          "modelProvider": "mock-provider",
+          "modelVersion": "v2",
+        },
+        "providerMetadata": undefined,
+        "request": {},
+        "timestamp": 1970-01-01T00:00:00.000Z,
+      },
+      "output": {
+        "steps": [
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
+            "providerMetadata": undefined,
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [],
+                  "role": "tool",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
+          },
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
+            "providerMetadata": undefined,
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "output": {
+                        "type": "text",
+                        "value": "value-result",
+                      },
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-result",
+                    },
+                  ],
+                  "role": "tool",
+                },
+                {
+                  "content": [
+                    {
+                      "text": "Done",
+                      "type": "text",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
+          },
+        ],
+        "text": "Done",
+        "toolCalls": [],
+        "usage": {
+          "inputTokens": 6,
+          "outputTokens": 20,
+          "totalTokens": 26,
         },
       },
       "processorRetryCount": 0,
@@ -2912,6 +3325,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
   {
     "from": "AGENT",
     "payload": {
+      "dynamic": undefined,
       "providerExecuted": undefined,
       "providerMetadata": undefined,
       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -3012,6 +3426,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
       "args": {
         "value": "Sparkle Day",
       },
+      "dynamic": undefined,
       "providerExecuted": undefined,
       "providerMetadata": undefined,
       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -3149,6 +3564,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
             "args": {
               "value": "Sparkle Day",
             },
+            "dynamic": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -3303,6 +3719,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
             "args": {
               "value": "Sparkle Day",
             },
+            "dynamic": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -3907,6 +4324,67 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
             },
             "warnings": [],
           },
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
+            "providerMetadata": undefined,
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "output": {
+                        "type": "text",
+                        "value": "value-result",
+                      },
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-result",
+                    },
+                  ],
+                  "role": "tool",
+                },
+                {
+                  "content": [
+                    {
+                      "text": "Done",
+                      "type": "text",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
+          },
         ],
         "text": "",
         "toolCalls": [
@@ -3929,13 +4407,51 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
-        "isContinued": false,
+        "isContinued": true,
         "reason": "stop",
         "warnings": undefined,
       },
     },
     "runId": "test-run-id",
     "type": "step-finish",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "messageId": "id-0",
+      "request": {},
+      "warnings": [],
+    },
+    "runId": "test-run-id",
+    "type": "step-start",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "id": "text-1",
+      "providerMetadata": undefined,
+    },
+    "runId": "test-run-id",
+    "type": "text-start",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "id": "text-1",
+      "providerMetadata": undefined,
+      "text": "Done",
+    },
+    "runId": "test-run-id",
+    "type": "text-delta",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "id": "text-1",
+      "type": "text-end",
+    },
+    "runId": "test-run-id",
+    "type": "text-end",
   },
   {
     "from": "AGENT",
@@ -3983,6 +4499,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
             ],
             "role": "tool",
           },
+          {
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
         ],
         "nonUser": [
           {
@@ -4015,6 +4540,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
               },
             ],
             "role": "tool",
+          },
+          {
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
           },
         ],
         "user": [
@@ -4083,23 +4617,319 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
             },
             "warnings": [],
           },
-        ],
-        "text": "",
-        "toolCalls": [
-          {
-            "args": {
-              "value": "value",
-            },
-            "providerExecuted": undefined,
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
             "providerMetadata": undefined,
-            "toolCallId": "call-1",
-            "toolName": "tool1",
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "output": {
+                        "type": "text",
+                        "value": "value-result",
+                      },
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-result",
+                    },
+                  ],
+                  "role": "tool",
+                },
+                {
+                  "content": [
+                    {
+                      "text": "Done",
+                      "type": "text",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
           },
         ],
+        "text": "Done",
+        "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 6,
+          "outputTokens": 20,
+          "totalTokens": 26,
+        },
+      },
+      "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
+      "stepResult": {
+        "isContinued": false,
+        "reason": "stop",
+        "warnings": undefined,
+      },
+    },
+    "runId": "test-run-id",
+    "type": "step-finish",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "messageId": "id-0",
+      "messages": {
+        "all": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+            ],
+            "role": "assistant",
+          },
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
+            "role": "tool",
+          },
+          {
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
+        ],
+        "nonUser": [
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+            ],
+            "role": "assistant",
+          },
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
+            "role": "tool",
+          },
+          {
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
+        ],
+        "user": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+      },
+      "metadata": {
+        "headers": undefined,
+        "id": "id-0",
+        "modelId": "mock-model-id",
+        "modelMetadata": {
+          "modelId": "mock-model-id",
+          "modelProvider": "mock-provider",
+          "modelVersion": "v2",
+        },
+        "providerMetadata": undefined,
+        "request": {},
+        "timestamp": 1970-01-01T00:00:00.000Z,
+      },
+      "output": {
+        "steps": [
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
+            "providerMetadata": undefined,
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [],
+                  "role": "tool",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
+          },
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
+            "providerMetadata": undefined,
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "output": {
+                        "type": "text",
+                        "value": "value-result",
+                      },
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-result",
+                    },
+                  ],
+                  "role": "tool",
+                },
+                {
+                  "content": [
+                    {
+                      "text": "Done",
+                      "type": "text",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
+          },
+        ],
+        "text": "Done",
+        "toolCalls": [],
+        "usage": {
+          "inputTokens": 6,
+          "outputTokens": 20,
+          "totalTokens": 26,
         },
       },
       "processorRetryCount": 0,
@@ -4501,6 +5331,26 @@ exports[`Loop Tests > AISDK v5 > result.reasoningText > should contain reasoning
 
 exports[`Loop Tests > AISDK v5 > result.response > should resolve with response information 1`] = `
 {
+  "dbMessages": [
+    {
+      "content": {
+        "content": "Hello",
+        "format": 2,
+        "metadata": {
+          "modelId": "mock-model-id",
+        },
+        "parts": [
+          {
+            "text": "Hello",
+            "type": "text",
+          },
+        ],
+      },
+      "createdAt": 2024-01-01T00:00:00.001Z,
+      "id": "msg-0",
+      "role": "assistant",
+    },
+  ],
   "headers": {
     "call": "2",
   },
@@ -4528,6 +5378,7 @@ exports[`Loop Tests > AISDK v5 > result.response > should resolve with response 
       "id": "msg-0",
       "metadata": {
         "createdAt": 2024-01-01T00:00:00.001Z,
+        "modelId": "mock-model-id",
       },
       "parts": [
         {
@@ -4657,6 +5508,46 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
     "reasoningText": "",
     "request": {},
     "response": {
+      "dbMessages": [
+        {
+          "content": {
+            "content": "Hello!",
+            "format": 2,
+            "metadata": {
+              "modelId": "mock-model-id",
+            },
+            "parts": [
+              {
+                "data": "Hello World",
+                "mimeType": "text/plain",
+                "type": "file",
+              },
+              {
+                "text": "Hello!",
+                "type": "text",
+              },
+              {
+                "data": "QkFVRw==",
+                "mimeType": "image/jpeg",
+                "type": "file",
+              },
+              {
+                "data": "data:text/plain;base64,Hello World",
+                "mimeType": "text/plain",
+                "type": "file",
+              },
+              {
+                "data": "data:image/jpeg;base64,QkFVRw==",
+                "mimeType": "image/jpeg",
+                "type": "file",
+              },
+            ],
+          },
+          "createdAt": 2024-01-01T00:00:00.001Z,
+          "id": "msg-0",
+          "role": "assistant",
+        },
+      ],
       "headers": undefined,
       "id": "id-0",
       "messages": [
@@ -4696,6 +5587,7 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
           "id": "msg-0",
           "metadata": {
             "createdAt": 2024-01-01T00:00:00.001Z,
+            "modelId": "mock-model-id",
           },
           "parts": [
             {
@@ -6755,6 +7647,67 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
             },
             "warnings": [],
           },
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
+            "providerMetadata": undefined,
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "output": {
+                        "type": "text",
+                        "value": "value-result",
+                      },
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-result",
+                    },
+                  ],
+                  "role": "tool",
+                },
+                {
+                  "content": [
+                    {
+                      "text": "Done",
+                      "type": "text",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
+          },
         ],
         "text": "",
         "toolCalls": [
@@ -6777,13 +7730,51 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
-        "isContinued": false,
+        "isContinued": true,
         "reason": "stop",
         "warnings": undefined,
       },
     },
     "runId": "test-run-id",
     "type": "step-finish",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "messageId": "id-0",
+      "request": {},
+      "warnings": [],
+    },
+    "runId": "test-run-id",
+    "type": "step-start",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "id": "text-1",
+      "providerMetadata": undefined,
+    },
+    "runId": "test-run-id",
+    "type": "text-start",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "id": "text-1",
+      "providerMetadata": undefined,
+      "text": "Done",
+    },
+    "runId": "test-run-id",
+    "type": "text-delta",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "id": "text-1",
+      "type": "text-end",
+    },
+    "runId": "test-run-id",
+    "type": "text-end",
   },
   {
     "from": "AGENT",
@@ -6831,6 +7822,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
             ],
             "role": "tool",
           },
+          {
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
         ],
         "nonUser": [
           {
@@ -6863,6 +7863,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
               },
             ],
             "role": "tool",
+          },
+          {
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
           },
         ],
         "user": [
@@ -6931,23 +7940,319 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
             },
             "warnings": [],
           },
-        ],
-        "text": "",
-        "toolCalls": [
-          {
-            "args": {
-              "value": "value",
-            },
-            "providerExecuted": undefined,
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
             "providerMetadata": undefined,
-            "toolCallId": "call-1",
-            "toolName": "tool1",
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "output": {
+                        "type": "text",
+                        "value": "value-result",
+                      },
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-result",
+                    },
+                  ],
+                  "role": "tool",
+                },
+                {
+                  "content": [
+                    {
+                      "text": "Done",
+                      "type": "text",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
           },
         ],
+        "text": "Done",
+        "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 6,
+          "outputTokens": 20,
+          "totalTokens": 26,
+        },
+      },
+      "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
+      "stepResult": {
+        "isContinued": false,
+        "reason": "stop",
+        "warnings": undefined,
+      },
+    },
+    "runId": "test-run-id",
+    "type": "step-finish",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "messageId": "id-0",
+      "messages": {
+        "all": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+            ],
+            "role": "assistant",
+          },
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
+            "role": "tool",
+          },
+          {
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
+        ],
+        "nonUser": [
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+            ],
+            "role": "assistant",
+          },
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
+            "role": "tool",
+          },
+          {
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
+        ],
+        "user": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+      },
+      "metadata": {
+        "headers": undefined,
+        "id": "id-0",
+        "modelId": "mock-model-id",
+        "modelMetadata": {
+          "modelId": "mock-model-id",
+          "modelProvider": "mock-provider",
+          "modelVersion": "v3",
+        },
+        "providerMetadata": undefined,
+        "request": {},
+        "timestamp": 1970-01-01T00:00:00.000Z,
+      },
+      "output": {
+        "steps": [
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
+            "providerMetadata": undefined,
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [],
+                  "role": "tool",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
+          },
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
+            "providerMetadata": undefined,
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "output": {
+                        "type": "text",
+                        "value": "value-result",
+                      },
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-result",
+                    },
+                  ],
+                  "role": "tool",
+                },
+                {
+                  "content": [
+                    {
+                      "text": "Done",
+                      "type": "text",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
+          },
+        ],
+        "text": "Done",
+        "toolCalls": [],
+        "usage": {
+          "inputTokens": 6,
+          "outputTokens": 20,
+          "totalTokens": 26,
         },
       },
       "processorRetryCount": 0,
@@ -8746,6 +10051,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   {
     "from": "AGENT",
     "payload": {
+      "dynamic": undefined,
       "providerExecuted": undefined,
       "providerMetadata": undefined,
       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -8846,6 +10152,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "args": {
         "value": "Sparkle Day",
       },
+      "dynamic": undefined,
       "providerExecuted": undefined,
       "providerMetadata": undefined,
       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -8983,6 +10290,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "args": {
               "value": "Sparkle Day",
             },
+            "dynamic": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -9137,6 +10445,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "args": {
               "value": "Sparkle Day",
             },
+            "dynamic": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -9741,6 +11050,67 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             },
             "warnings": [],
           },
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
+            "providerMetadata": undefined,
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "output": {
+                        "type": "text",
+                        "value": "value-result",
+                      },
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-result",
+                    },
+                  ],
+                  "role": "tool",
+                },
+                {
+                  "content": [
+                    {
+                      "text": "Done",
+                      "type": "text",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
+          },
         ],
         "text": "",
         "toolCalls": [
@@ -9763,13 +11133,51 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
-        "isContinued": false,
+        "isContinued": true,
         "reason": "stop",
         "warnings": undefined,
       },
     },
     "runId": "test-run-id",
     "type": "step-finish",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "messageId": "id-0",
+      "request": {},
+      "warnings": [],
+    },
+    "runId": "test-run-id",
+    "type": "step-start",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "id": "text-1",
+      "providerMetadata": undefined,
+    },
+    "runId": "test-run-id",
+    "type": "text-start",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "id": "text-1",
+      "providerMetadata": undefined,
+      "text": "Done",
+    },
+    "runId": "test-run-id",
+    "type": "text-delta",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "id": "text-1",
+      "type": "text-end",
+    },
+    "runId": "test-run-id",
+    "type": "text-end",
   },
   {
     "from": "AGENT",
@@ -9817,6 +11225,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             ],
             "role": "tool",
           },
+          {
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
         ],
         "nonUser": [
           {
@@ -9849,6 +11266,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
               },
             ],
             "role": "tool",
+          },
+          {
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
           },
         ],
         "user": [
@@ -9917,23 +11343,319 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             },
             "warnings": [],
           },
-        ],
-        "text": "",
-        "toolCalls": [
-          {
-            "args": {
-              "value": "value",
-            },
-            "providerExecuted": undefined,
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
             "providerMetadata": undefined,
-            "toolCallId": "call-1",
-            "toolName": "tool1",
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "output": {
+                        "type": "text",
+                        "value": "value-result",
+                      },
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-result",
+                    },
+                  ],
+                  "role": "tool",
+                },
+                {
+                  "content": [
+                    {
+                      "text": "Done",
+                      "type": "text",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
           },
         ],
+        "text": "Done",
+        "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 6,
+          "outputTokens": 20,
+          "totalTokens": 26,
+        },
+      },
+      "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
+      "stepResult": {
+        "isContinued": false,
+        "reason": "stop",
+        "warnings": undefined,
+      },
+    },
+    "runId": "test-run-id",
+    "type": "step-finish",
+  },
+  {
+    "from": "AGENT",
+    "payload": {
+      "messageId": "id-0",
+      "messages": {
+        "all": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+            ],
+            "role": "assistant",
+          },
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
+            "role": "tool",
+          },
+          {
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
+        ],
+        "nonUser": [
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "providerExecuted": undefined,
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-call",
+              },
+            ],
+            "role": "assistant",
+          },
+          {
+            "content": [
+              {
+                "input": {
+                  "value": "value",
+                },
+                "output": {
+                  "type": "text",
+                  "value": "value-result",
+                },
+                "toolCallId": "call-1",
+                "toolName": "tool1",
+                "type": "tool-result",
+              },
+            ],
+            "role": "tool",
+          },
+          {
+            "content": [
+              {
+                "text": "Done",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
+        ],
+        "user": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+      },
+      "metadata": {
+        "headers": undefined,
+        "id": "id-0",
+        "modelId": "mock-model-id",
+        "modelMetadata": {
+          "modelId": "mock-model-id",
+          "modelProvider": "mock-provider",
+          "modelVersion": "v3",
+        },
+        "providerMetadata": undefined,
+        "request": {},
+        "timestamp": 1970-01-01T00:00:00.000Z,
+      },
+      "output": {
+        "steps": [
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
+            "providerMetadata": undefined,
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [],
+                  "role": "tool",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
+          },
+          DefaultStepResult {
+            "content": [],
+            "finishReason": undefined,
+            "providerMetadata": undefined,
+            "request": {},
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+                {
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "output": {
+                        "type": "text",
+                        "value": "value-result",
+                      },
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-result",
+                    },
+                  ],
+                  "role": "tool",
+                },
+                {
+                  "content": [
+                    {
+                      "text": "Done",
+                      "type": "text",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+              ],
+              "modelId": "mock-model-id",
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "tripwire": undefined,
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "warnings": [],
+          },
+        ],
+        "text": "Done",
+        "toolCalls": [],
+        "usage": {
+          "inputTokens": 6,
+          "outputTokens": 20,
+          "totalTokens": 26,
         },
       },
       "processorRetryCount": 0,
@@ -10335,6 +12057,26 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.reasoningText > should conta
 
 exports[`Loop Tests > AISDK v6 (V3 models) > result.response > should resolve with response information 1`] = `
 {
+  "dbMessages": [
+    {
+      "content": {
+        "content": "Hello",
+        "format": 2,
+        "metadata": {
+          "modelId": "mock-model-id",
+        },
+        "parts": [
+          {
+            "text": "Hello",
+            "type": "text",
+          },
+        ],
+      },
+      "createdAt": 2024-01-01T00:00:00.001Z,
+      "id": "msg-0",
+      "role": "assistant",
+    },
+  ],
   "headers": {
     "call": "2",
   },
@@ -10362,6 +12104,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.response > should resolve wi
       "id": "msg-0",
       "metadata": {
         "createdAt": 2024-01-01T00:00:00.001Z,
+        "modelId": "mock-model-id",
       },
       "parts": [
         {
@@ -10491,6 +12234,46 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
     "reasoningText": "",
     "request": {},
     "response": {
+      "dbMessages": [
+        {
+          "content": {
+            "content": "Hello!",
+            "format": 2,
+            "metadata": {
+              "modelId": "mock-model-id",
+            },
+            "parts": [
+              {
+                "data": "Hello World",
+                "mimeType": "text/plain",
+                "type": "file",
+              },
+              {
+                "text": "Hello!",
+                "type": "text",
+              },
+              {
+                "data": "QkFVRw==",
+                "mimeType": "image/jpeg",
+                "type": "file",
+              },
+              {
+                "data": "data:text/plain;base64,Hello World",
+                "mimeType": "text/plain",
+                "type": "file",
+              },
+              {
+                "data": "data:image/jpeg;base64,QkFVRw==",
+                "mimeType": "image/jpeg",
+                "type": "file",
+              },
+            ],
+          },
+          "createdAt": 2024-01-01T00:00:00.001Z,
+          "id": "msg-0",
+          "role": "assistant",
+        },
+      ],
       "headers": undefined,
       "id": "id-0",
       "messages": [
@@ -10530,6 +12313,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
           "id": "msg-0",
           "metadata": {
             "createdAt": 2024-01-01T00:00:00.001Z,
+            "modelId": "mock-model-id",
           },
           "parts": [
             {

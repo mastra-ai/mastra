@@ -4,7 +4,6 @@ import { EmptyState } from '@/ds/components/EmptyState';
 import { ItemList } from '@/ds/components/ItemList';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Plus, Upload, FileJson } from 'lucide-react';
-import { isToday } from 'date-fns';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 
 export interface DatasetItemsListProps {
@@ -72,8 +71,6 @@ export function DatasetItemsList({
   }
 
   const allIds = items.map(i => i.id);
-  const itemsListColumnsWithCheckbox = [{ name: 'checkbox', label: 'c', size: '1.25rem' }, ...columns];
-  const columnsToRender = isSelectionActive ? itemsListColumnsWithCheckbox : columns;
 
   // Select all state
   const selectedCount = selectedIds.size;
@@ -104,48 +101,41 @@ export function DatasetItemsList({
 
   return (
     <ItemList>
-      <ItemList.Header columns={columnsToRender}>
-        {columnsToRender?.map(col => (
-          <>
-            {col.name === 'checkbox' ? (
-              <ItemList.Cell key={col.name}>
-                {!maxSelection && (
-                  <Checkbox
-                    checked={isIndeterminate ? 'indeterminate' : isAllSelected}
-                    onCheckedChange={handleSelectAllToggle}
-                    aria-label="Select all items"
-                  />
-                )}
-              </ItemList.Cell>
-            ) : (
-              <ItemList.HeaderCol key={col.name}>{col.label || col.name}</ItemList.HeaderCol>
-            )}
-          </>
-        ))}
-      </ItemList.Header>
-
       <ItemList.Scroller>
+        <ItemList.Header columns={columns} isSelectionActive={isSelectionActive}>
+          {isSelectionActive && !maxSelection && (
+            <ItemList.LabelCell>
+              <Checkbox
+                checked={isIndeterminate ? 'indeterminate' : isAllSelected}
+                onCheckedChange={handleSelectAllToggle}
+                aria-label="Select all items"
+              />
+            </ItemList.LabelCell>
+          )}
+          {columns?.map(col => (
+            <ItemList.HeaderCol key={col.name}>{col.label || col.name}</ItemList.HeaderCol>
+          ))}
+        </ItemList.Header>
+
         <ItemList.Items>
           {items.length === 0 && searchQuery ? (
             <div className="flex items-center justify-center py-12 text-neutral4">No items match your search</div>
           ) : (
             items.map(item => {
               const createdAtDate = new Date(item.createdAt);
-              const isTodayDate = isToday(createdAtDate);
 
               const listItem = {
                 id: item.id,
                 input: truncateValue(item.input, 60),
                 groundTruth: item.groundTruth ? truncateValue(item.groundTruth, 40) : '-',
                 metadata: item.metadata ? Object.keys(item.metadata).length + ' keys' : '-',
-                // date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
                 date: createdAtDate,
               };
 
               return (
                 <ItemList.Row key={item.id} isSelected={selectedIds.has(item.id)}>
                   {isSelectionActive && (
-                    <ItemList.Cell className="w-12 pl-4">
+                    <ItemList.LabelCell>
                       <Checkbox
                         checked={selectedIds.has(item.id)}
                         onCheckedChange={() => {}}
@@ -155,7 +145,7 @@ export function DatasetItemsList({
                         }}
                         aria-label={`Select item ${item.id}`}
                       />
-                    </ItemList.Cell>
+                    </ItemList.LabelCell>
                   )}
                   <ItemList.RowButton
                     item={listItem}
@@ -188,27 +178,6 @@ export function DatasetItemsList({
   );
 }
 
-function DatasetItemListSkeleton({ columns = [] }: { columns?: { name: string; label: string; size: string }[] }) {
-  return (
-    <ItemList>
-      <ItemList.Header columns={columns} />
-      <ItemList.Items>
-        {Array.from({ length: 5 }).map((_, index) => (
-          <ItemList.Row key={index}>
-            <ItemList.RowButton columns={columns}>
-              {columns.map((col, colIndex) => (
-                <ItemList.TextCell key={colIndex} isLoading>
-                  Loading...
-                </ItemList.TextCell>
-              ))}
-            </ItemList.RowButton>
-          </ItemList.Row>
-        ))}
-      </ItemList.Items>
-    </ItemList>
-  );
-}
-
 interface EmptyDatasetItemListProps {
   onAddClick: () => void;
   onImportClick?: () => void;
@@ -223,26 +192,24 @@ function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: 
         titleSlot="No items yet"
         descriptionSlot="Add items to this dataset to use them in experiment runs."
         actionSlot={
-          <div className="flex flex-col gap-2">
-            <ButtonsGroup spacing="close">
-              <Button size="default" variant="standard" onClick={onAddClick}>
-                <Plus />
-                Add Single Item
+          <ButtonsGroup>
+            <Button onClick={onAddClick} size="md">
+              <Plus />
+              Add Single Item
+            </Button>
+            {onImportClick && (
+              <Button onClick={onImportClick} size="md">
+                <Upload />
+                Import CSV
               </Button>
-              {onImportClick && (
-                <Button size="default" variant="standard" onClick={onImportClick}>
-                  <Upload />
-                  Import CSV
-                </Button>
-              )}
-              {onImportJsonClick && (
-                <Button size="default" variant="standard" onClick={onImportJsonClick}>
-                  <FileJson />
-                  Import JSON
-                </Button>
-              )}
-            </ButtonsGroup>
-          </div>
+            )}
+            {onImportJsonClick && (
+              <Button onClick={onImportJsonClick} size="md">
+                <FileJson />
+                Import JSON
+              </Button>
+            )}
+          </ButtonsGroup>
         }
       />
     </div>
