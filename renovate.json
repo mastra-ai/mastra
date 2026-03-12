@@ -213,12 +213,7 @@
       "groupName": "Vector Databases",
       "commitMessageTopic": "Vector Databases",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": [
-        "@qdrant/js-client-rest",
-        "chromadb",
-        "lancedb",
-        "turbopuffer"
-      ],
+      "matchPackageNames": ["@qdrant/js-client-rest", "chromadb", "lancedb", "turbopuffer"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
@@ -226,11 +221,7 @@
       "groupName": "Workflow Platforms",
       "commitMessageTopic": "Workflow Platforms",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": [
-        "convex",
-        "@daytona-io/sdk",
-        "electrodb"
-      ],
+      "matchPackageNames": ["convex", "@daytona-io/sdk", "electrodb"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     }
