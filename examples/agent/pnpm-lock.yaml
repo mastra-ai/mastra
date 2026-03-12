@@ -18,6 +18,7 @@ overrides:
   '@mastra/libsql': link:../../stores/libsql
   '@mastra/observability': link:../../observability/mastra
   '@mastra/evals': link:../../packages/evals
+  '@mastra/schema-compat': link:../../packages/schema-compat
   mastra: link:../../packages/cli
 
 importers:
@@ -72,6 +73,9 @@ importers:
       '@mastra/observability':
         specifier: link:../../observability/mastra
         version: link:../../observability/mastra
+      '@mastra/schema-compat':
+        specifier: link:../../packages/schema-compat
+        version: link:../../packages/schema-compat
       '@mastra/voice-openai':
         specifier: link:../../voice/openai
         version: link:../../voice/openai
