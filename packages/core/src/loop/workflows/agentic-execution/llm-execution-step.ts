@@ -1144,6 +1144,46 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         messageList.add(message, 'response');
       }
 
+      // Handle deferred provider-executed tool results (e.g. Anthropic web_search).
+      // When a provider-executed tool is requested alongside a client tool, the provider
+      // returns stop_reason:tool_use without executing the server tool. On the next API call
+      // (after client tool results are sent back), the provider executes the deferred server
+      // tool and returns a tool-result with no matching tool-call in this turn.
+      // Find these orphaned results and update the existing state:'call' parts in the messageList.
+      const matchedToolCallIds = new Set(
+        toolCalls.filter(tc => tc.providerExecuted && tc.output != null).map(tc => tc.toolCallId),
+      );
+      const orphanedResults = toolResultChunks.filter(
+        chunk => chunk.payload.providerExecuted && !matchedToolCallIds.has(chunk.payload.toolCallId),
+      );
+
+      if (orphanedResults.length > 0) {
+        const allMessages = messageList.get.all.db();
+        for (const orphan of orphanedResults) {
+          for (const msg of allMessages) {
+            if (msg.role !== 'assistant' || !msg.content?.parts) continue;
+            for (let i = 0; i < msg.content.parts.length; i++) {
+              const part = msg.content.parts[i] as any;
+              if (
+                part?.type === 'tool-invocation' &&
+                part.toolInvocation?.toolCallId === orphan.payload.toolCallId &&
+                part.toolInvocation?.state === 'call'
+              ) {
+                // Update in place: call → result
+                msg.content.parts[i] = {
+                  ...part,
+                  toolInvocation: {
+                    ...part.toolInvocation,
+                    state: 'result' as const,
+                    result: orphan.payload.result,
+                  },
+                };
+              }
+            }
+          }
+        }
+      }
+
       // Call processOutputStep for processors (runs AFTER LLM response, BEFORE tool execution)
       // This allows processors to validate/modify the response and trigger retries if needed
       let processOutputStepTripwire: TripWire | null = null;
