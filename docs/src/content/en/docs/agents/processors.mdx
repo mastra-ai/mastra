@@ -95,20 +95,13 @@ Custom processors implement the `Processor` interface:
 ### Transform input messages
 
 ```typescript title="src/mastra/processors/custom-input.ts"
-import type { Processor, MastraDBMessage, RequestContext } from '@mastra/core'
+import type { Processor, ProcessInputArgs } from '@mastra/core/processors'
+import type { MastraDBMessage } from '@mastra/core/memory'
 
 export class CustomInputProcessor implements Processor {
   id = 'custom-input'
 
-  async processInput({
-    messages,
-    systemMessages,
-    context,
-  }: {
-    messages: MastraDBMessage[]
-    systemMessages: CoreMessage[]
-    context: RequestContext
-  }): Promise<MastraDBMessage[]> {
+  async processInput({ messages }: ProcessInputArgs): Promise<MastraDBMessage[]> {
     // Transform messages before they reach the LLM
     return messages.map(msg => ({
       ...msg,
@@ -130,7 +123,11 @@ See the [`Processor` reference](/reference/processors/processor-interface#proces
 While `processInput` runs once at the start of agent execution, `processInputStep` runs at **each step** of the agentic loop (including tool call continuations). This enables per-step configuration changes like dynamic model switching or tool choice modifications.
 
 ```typescript title="src/mastra/processors/step-processor.ts"
-import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from '@mastra/core'
+import type {
+  Processor,
+  ProcessInputStepArgs,
+  ProcessInputStepResult,
+} from '@mastra/core/processors'
 
 export class DynamicModelProcessor implements Processor {
   id = 'dynamic-model'
@@ -181,7 +178,8 @@ await agent.generate('Complex task', {
 ### Transform output messages
 
 ```typescript title="src/mastra/processors/custom-output.ts"
-import type { Processor, MastraDBMessage } from '@mastra/core'
+import type { Processor } from '@mastra/core/processors'
+import type { MastraDBMessage } from '@mastra/core/memory'
 
 export class CustomOutputProcessor implements Processor {
   id = 'custom-output'
@@ -196,7 +194,7 @@ export class CustomOutputProcessor implements Processor {
 The method also receives a `result` object with the full generation data — `text`, `usage` (token counts), `finishReason`, and `steps` (each containing `toolCalls`, `toolResults`, etc.). Use it to track usage or inspect tool calls:
 
 ```typescript title="src/mastra/processors/usage-tracker.ts"
-import type { Processor } from '@mastra/core'
+import type { Processor } from '@mastra/core/processors'
 
 export class UsageTracker implements Processor {
   id = 'usage-tracker'
@@ -214,7 +212,8 @@ export class UsageTracker implements Processor {
 The `processOutputStream` method transforms or filters streaming chunks before they reach the client:
 
 ```typescript title="src/mastra/processors/stream-filter.ts"
-import type { Processor, ChunkType } from '@mastra/core'
+import type { Processor } from '@mastra/core/processors'
+import type { ChunkType } from '@mastra/core/stream'
 
 export class StreamFilter implements Processor {
   id = 'stream-filter'
@@ -233,7 +232,7 @@ To also receive custom `data-*` chunks emitted by tools via `writer.custom()`, s
 The `processOutputStep` method runs after each LLM step, allowing you to validate the response and optionally request a retry:
 
 ```typescript title="src/mastra/processors/response-validator.ts"
-import type { Processor } from '@mastra/core'
+import type { Processor } from '@mastra/core/processors'
 
 export class ResponseValidator implements Processor {
   id = 'response-validator'
@@ -295,7 +294,11 @@ See the [`ToolSearchProcessor` reference](/reference/processors/tool-search-proc
 When using `maxSteps` to limit agent execution, the agent may return an empty response if it attempts a tool call on the final step. Use `processInputStep` to force a text response on the last step:
 
 ```typescript title="src/mastra/processors/ensure-final-response.ts"
-import { Processor, ProcessInputStepArgs, ProcessInputStepResult } from '@mastra/core/processors'
+import type {
+  Processor,
+  ProcessInputStepArgs,
+  ProcessInputStepResult,
+} from '@mastra/core/processors'
 
 export class EnsureFinalResponseProcessor implements Processor {
   readonly id = 'ensure-final-response'
@@ -348,7 +351,7 @@ await agent.generate('Your prompt', { maxSteps: MAX_STEPS })
 Output processors receive a `writer` object that lets you emit custom data chunks back to the client during streaming. This is useful for use cases like streaming moderation results or sending UI update signals without blocking the original stream.
 
 ```typescript title="src/mastra/processors/moderation-processor.ts" {6,18-25}
-import type { Processor, ChunkType, MastraDBMessage } from '@mastra/core'
+import type { Processor } from '@mastra/core/processors'
 
 export class ModerationProcessor implements Processor {
   id = 'moderation'
@@ -400,7 +403,8 @@ Custom chunk types must use the `data-` prefix (e.g., `data-moderation-update`, 
 You can add custom metadata to messages in `processOutputResult`. This metadata is accessible via the response object:
 
 ```typescript title="src/mastra/processors/metadata-processor.ts"
-import type { Processor, MastraDBMessage } from '@mastra/core'
+import type { Processor } from '@mastra/core/processors'
+import type { MastraDBMessage } from '@mastra/core/memory'
 
 export class MetadataProcessor implements Processor {
   id = 'metadata-processor'
@@ -480,7 +484,7 @@ When an agent is registered with Mastra, processor workflows are automatically r
 Processors can request that the LLM retry its response with feedback. This is useful for implementing quality checks, output validation, or iterative refinement:
 
 ```typescript title="src/mastra/processors/quality-checker.ts"
-import type { Processor } from '@mastra/core'
+import type { Processor } from '@mastra/core/processors'
 
 export class QualityChecker implements Processor {
   id = 'quality-checker'
