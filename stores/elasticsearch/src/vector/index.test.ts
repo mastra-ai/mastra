@@ -18,7 +18,7 @@ describe('ElasticSearchVector', () => {
     console.log(`🚀 Running tests against Elasticsearch: ${url}`);
     console.log(`Using API Key: ${api_key ? '****' + api_key.slice(-4) : 'None'}`);
 
-    vectorDB = new ElasticSearchVector({ url, id: 'elasticsearch-test', auth: { apiKey: api_key || undefined } });
+    vectorDB = new ElasticSearchVector({ url, id: 'elasticsearch-test', ...(api_key ? { auth: { apiKey: api_key } } : {}) });
   });
 
   describe('Error Handling', () => {
@@ -79,14 +79,16 @@ describe('ElasticSearchVector', () => {
   });
 
   describe('Constructor', () => {
-    it('should throw error if both client , url are not passed', async () => {
+    it('should throw error if neither client nor url is passed', async () => {
       expect(() => {
+        // @ts-expect-error - testing runtime validation for JS callers
         new ElasticSearchVector({
           id: 'elasticsearch-shared-test',
           auth: { apiKey: process.env.ELASTICSEARCH_API_KEY ?? '' },
         });
-      }).toThrowError('Either url or client is required');
+      }).toThrowError('Invalid config: provide either { client } or { url }.');
     });
+
     it('should initialize with url', async () => {
       expect(() => {
         new ElasticSearchVector({
@@ -111,10 +113,11 @@ describe('ElasticSearchVector', () => {
 });
 
 // Shared vector store test suite
+const elasticSearchApiKey = process.env.ELASTICSEARCH_API_KEY;
 const elasticSearchVector = new ElasticSearchVector({
   url: process.env.ELASTICSEARCH_URL || 'http://localhost:9200',
   id: 'elasticsearch-shared-test',
-  auth: { apiKey: process.env.ELASTICSEARCH_API_KEY || undefined },
+  ...(elasticSearchApiKey ? { auth: { apiKey: elasticSearchApiKey } } : {}),
 });
 
 createVectorTestSuite({

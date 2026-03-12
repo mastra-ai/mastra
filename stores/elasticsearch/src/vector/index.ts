@@ -35,41 +35,39 @@ type ElasticSearchVectorParams = QueryVectorParams<ElasticSearchVectorFilter>;
 
 export type ElasticSearchAuth = { apiKey: string } | { username: string; password: string } | { bearer: string };
 
+export type ElasticSearchVectorConfig =
+  | { id: string; client: ElasticSearchClient; url?: never; auth?: never }
+  | { id: string; url: string; auth?: ElasticSearchAuth; client?: never };
+
 export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter> {
   private client: ElasticSearchClient;
 
   /**
    * Creates a new ElasticSearchVector client.
    *
-   * @param {string} url - The url of the ElasticSearch node.
-   * @param {ElasticSearchAuth} [auth] - The authentication credentials for ElasticSearch.
-   * @param {ElasticSearchClient} [client] - ElasticSearchClient client
+   * Accepts either a pre-configured ElasticSearch client or connection parameters:
+   * - `{ id, client }` - Use an existing ElasticSearch client
+   * - `{ id, url, auth? }` - Create a new client from connection parameters
    */
-  constructor({
-    url,
-    id,
-    auth,
-    client,
-  }: ({ id: string } & { url?: string; auth?: ElasticSearchAuth }) & { client?: ElasticSearchClient }) {
-    super({ id });
-    if (client) {
-      this.client = client;
-      return;
-    }
-    if (!url) {
+  constructor(config: ElasticSearchVectorConfig) {
+    super({ id: config.id });
+    if ('client' in config && config.client) {
+      this.client = config.client;
+    } else if ('url' in config && config.url) {
+      this.client = new ElasticSearchClient({
+        node: config.url,
+        ...(config.auth && { auth: config.auth }),
+        name: 'mastra-elasticsearch',
+        headers: { 'user-agent': `mastra-es/${packageJson.version}` },
+      });
+    } else {
       throw new MastraError({
         id: 'ELASTIC_SEARCH_CONSTRUCTOR_ERROR',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
-        text: 'Either url or client is required',
+        text: 'Invalid config: provide either { client } or { url }.',
       });
     }
-    this.client = new ElasticSearchClient({
-      node: url,
-      ...(auth && { auth }),
-      name: 'mastra-elasticsearch',
-      headers: { 'user-agent': `mastra-es/${packageJson.version}` },
-    });
   }
 
   /**
