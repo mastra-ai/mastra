@@ -110,6 +110,7 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/agent-builder": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/schema-compat": "workspace:*",
     "@types/node": "22.19.13",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
@@ -133,7 +134,6 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@mastra/schema-compat": "workspace:*",
     "hono": "^4.11.9"
   }
 }
