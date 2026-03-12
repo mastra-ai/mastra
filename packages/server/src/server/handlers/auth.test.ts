@@ -11,7 +11,7 @@ import { Mastra } from '@mastra/core';
 import type { MastraAuthProvider, MastraServerConfig } from '@mastra/core/server';
 import { describe, it, expect, vi } from 'vitest';
 
-import { GET_AUTH_CAPABILITIES_ROUTE, GET_SSO_LOGIN_ROUTE, GET_SSO_CALLBACK_ROUTE, getPublicOrigin } from './auth';
+import { GET_AUTH_CAPABILITIES_ROUTE, GET_SSO_LOGIN_ROUTE, GET_SSO_CALLBACK_ROUTE } from './auth';
 import { createTestServerContext } from './test-utils';
 
 // =============================================================================
