@@ -4286,6 +4286,7 @@ export class Agent<
             const textPart = userMessage.parts.find((p): p is TextPart => p.type === 'text');
             if (textPart?.text) {
               const raw = textPart.text.trim();
+              if (!raw) return;
               const title = raw.length > 100 ? raw.substring(0, 100) + '…' : raw;
               await memory.createThread({
                 threadId: thread.id,
