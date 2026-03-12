@@ -163,6 +163,10 @@ export async function runScorerOnTarget({
   await attachScoreToSpan({ storage, span, scoreRecord: savedScoreRecord });
 }
 
+/**
+ * Saves the score to the legacy ScoresStorage domain.
+ * TODO: Remove once all consumers migrate to observability scores (see attachScoreToSpan).
+ */
 async function validateAndSaveScore({ storage, scorerResult }: { storage: MastraStorage; scorerResult: ScorerRun }) {
   const scoresStore = await storage.getStore('scores');
   if (!scoresStore) {
@@ -195,6 +199,22 @@ function buildScorerRun({
   return { input: targetSpan.input, output: targetSpan.output, ...observabilityContext };
 }
 
+/**
+ * Writes the score to the observability domain via two paths, each wrapped in
+ * a try/catch so that one failing doesn't block the other:
+ *
+ * 1. **updateSpan** — attaches a score link to the span record. Works for
+ *    traditional CRUD stores (libsql, pg, etc.) but fails for event-sourced /
+ *    append-only stores (DuckDB) that don't support arbitrary span updates.
+ *
+ * 2. **createScore** — inserts a row into the observability scores table so
+ *    it can be queried via listScores() with traceId/spanId filters. Works for
+ *    stores that implement the new observability scores domain.
+ *
+ * TODO: Once all stores implement createScore and all consumers migrate to
+ * the observability scores domain, remove the updateSpan path (and the old
+ * ScoresStorage.saveScore() call in validateAndSaveScore above).
+ */
 async function attachScoreToSpan({
   storage,
   span,
@@ -213,19 +233,44 @@ async function attachScoreToSpan({
       text: 'Observability storage domain is not available',
     });
   }
-  const existingLinks = span.links || [];
-  const link = {
-    type: 'score',
-    scoreId: scoreRecord.id,
-    scorerName: scoreRecord.scorer.id,
-    score: scoreRecord.score,
-    createdAt: scoreRecord.createdAt,
-  };
-  await observabilityStore.updateSpan({
-    spanId: span.spanId,
-    traceId: span.traceId,
-    updates: { links: [...existingLinks, link] },
-  });
+
+  // Path 1: Legacy — attach score link to span (fails silently on append-only stores)
+  try {
+    const existingLinks = span.links || [];
+    const link = {
+      type: 'score',
+      scoreId: scoreRecord.id,
+      scorerId: scoreRecord.scorerId ?? scoreRecord.scorer?.id,
+      score: scoreRecord.score,
+      createdAt: scoreRecord.createdAt,
+    };
+    await observabilityStore.updateSpan({
+      spanId: span.spanId,
+      traceId: span.traceId,
+      updates: { links: [...existingLinks, link] },
+    });
+  } catch {
+    // Expected for event-sourced stores (e.g. DuckDB) that don't support updateSpan
+  }
+
+  // Path 2: New — write to observability scores table (fails silently on stores that don't implement it yet)
+  try {
+    await observabilityStore.createScore({
+      score: {
+        timestamp: scoreRecord.createdAt ? new Date(scoreRecord.createdAt) : new Date(),
+        traceId: span.traceId,
+        spanId: span.spanId,
+        scorerId: scoreRecord.scorerId ?? (scoreRecord.scorer?.id as string),
+        score: scoreRecord.score,
+        reason: scoreRecord.reason ?? null,
+        experimentId: null,
+        scoreTraceId: null,
+        metadata: scoreRecord.metadata ?? null,
+      },
+    });
+  } catch {
+    // Expected for stores that haven't implemented observability createScore yet
+  }
 }
 
 export const scoreTracesWorkflow = createWorkflow({

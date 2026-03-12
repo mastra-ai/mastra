@@ -48,7 +48,6 @@ import type {
   ExportedScore,
   ExportedFeedback,
   LogLevel,
-  MetricType,
 } from '@mastra/core/observability';
 import { TracingEventType as EventType } from '@mastra/core/observability';
 
@@ -99,8 +98,6 @@ export interface TestExporterStats {
   logsByLevel: Record<string, number>;
   /** Total number of metric events collected */
   totalMetrics: number;
-  /** Breakdown of metrics by type */
-  metricsByType: Record<string, number>;
   /** Breakdown of metrics by name */
   metricsByName: Record<string, number>;
   /** Total number of score events collected */
@@ -406,7 +403,7 @@ export class TestExporter extends BaseExporter {
       const labelsStr = Object.entries(metric.labels)
         .map(([k, v]) => `${k}=${v}`)
         .join(', ');
-      const logMessage = `[TestExporter] metric.${metric.metricType}: ${metric.name}=${metric.value}${labelsStr ? ` {${labelsStr}}` : ''}`;
+      const logMessage = `[TestExporter] metric: ${metric.name}=${metric.value}${labelsStr ? ` {${labelsStr}}` : ''}`;
       this.#debugLogs.push(logMessage);
     }
 
@@ -421,7 +418,7 @@ export class TestExporter extends BaseExporter {
 
     if (this.#config.storeLogs) {
       const score = event.score;
-      const logMessage = `[TestExporter] score: ${score.scorerName}=${score.score} (trace: ${score.traceId.slice(-8)}${score.spanId ? `, span: ${score.spanId.slice(-8)}` : ''})`;
+      const logMessage = `[TestExporter] score: ${score.scorerId}=${score.score} (trace: ${score.traceId.slice(-8)}${score.spanId ? `, span: ${score.spanId.slice(-8)}` : ''})`;
       this.#debugLogs.push(logMessage);
     }
 
@@ -690,10 +687,13 @@ export class TestExporter extends BaseExporter {
   }
 
   /**
-   * Get metrics filtered by type
+   * @deprecated MetricType is no longer stored. Use getMetricsByName() instead.
    */
-  getMetricsByType(metricType: MetricType): ExportedMetric[] {
-    return this.#metricEvents.filter(e => e.metric.metricType === metricType).map(e => e.metric);
+  getMetricsByType(_metricType: string): ExportedMetric[] {
+    throw new Error(
+      'getMetricsByType() has been removed: metricType is no longer stored. ' +
+        'Use getMetricsByName(metricName) instead to filter metrics by name.',
+    );
   }
 
   // ============================================================================
@@ -715,10 +715,10 @@ export class TestExporter extends BaseExporter {
   }
 
   /**
-   * Get scores filtered by scorer name
+   * Get scores filtered by scorer id
    */
-  getScoresByScorer(scorerName: string): ExportedScore[] {
-    return this.#scoreEvents.filter(e => e.score.scorerName === scorerName).map(e => e.score);
+  getScoresByScorer(scorerId: string): ExportedScore[] {
+    return this.#scoreEvents.filter(e => e.score.scorerId === scorerId).map(e => e.score);
   }
 
   /**
@@ -793,11 +793,8 @@ export class TestExporter extends BaseExporter {
     }
 
     // Metric breakdowns
-    const metricsByType: Record<string, number> = {};
     const metricsByName: Record<string, number> = {};
     for (const event of this.#metricEvents) {
-      const mType = event.metric.metricType;
-      metricsByType[mType] = (metricsByType[mType] || 0) + 1;
       const mName = event.metric.name;
       metricsByName[mName] = (metricsByName[mName] || 0) + 1;
     }
@@ -805,7 +802,7 @@ export class TestExporter extends BaseExporter {
     // Score breakdown by scorer
     const scoresByScorer: Record<string, number> = {};
     for (const event of this.#scoreEvents) {
-      const scorer = event.score.scorerName;
+      const scorer = event.score.scorerId;
       scoresByScorer[scorer] = (scoresByScorer[scorer] || 0) + 1;
     }
 
@@ -832,7 +829,6 @@ export class TestExporter extends BaseExporter {
       totalLogs: this.#logEvents.length,
       logsByLevel,
       totalMetrics: this.#metricEvents.length,
-      metricsByType,
       metricsByName,
       totalScores: this.#scoreEvents.length,
       scoresByScorer,

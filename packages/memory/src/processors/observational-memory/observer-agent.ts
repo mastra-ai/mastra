@@ -622,6 +622,12 @@ function formatObserverMessage(
         }
 
         const partType = (part as { type?: string }).type;
+        if (partType === 'reasoning') {
+          // Include reasoning content only when it's not obscured/encrypted
+          const reasoning = (part as { reasoning?: string }).reasoning;
+          if (reasoning) return maybeTruncate(reasoning, maxLen);
+          return '';
+        }
         if (partType === 'image' || partType === 'file') {
           const attachment = part as ObserverAttachmentPart;
           const inputAttachment = toObserverInputAttachmentPart(attachment);
@@ -639,6 +645,11 @@ function formatObserverMessage(
     content = maybeTruncate(msg.content.content, maxLen);
   }
 
+  // Skip messages that produced no visible content (e.g. only data-* or encrypted reasoning parts)
+  if (!content && attachments.length === 0) {
+    return { text: '', attachments };
+  }
+
   return {
     text: `**${role}${timestampStr}:**\n${content}`,
     attachments,
@@ -647,20 +658,26 @@ function formatObserverMessage(
 
 export function formatMessagesForObserver(messages: MastraDBMessage[], options?: { maxPartLength?: number }): string {
   const counter = { nextImageId: 1, nextFileId: 1 };
-  return messages.map(msg => formatObserverMessage(msg, counter, options).text).join('\n\n---\n\n');
+  return messages
+    .map(msg => formatObserverMessage(msg, counter, options).text)
+    .filter(Boolean)
+    .join('\n\n---\n\n');
 }
 
 export function buildObserverHistoryMessage(messages: MastraDBMessage[]): CoreMessage {
   const counter = { nextImageId: 1, nextFileId: 1 };
   const content: any[] = [{ type: 'text', text: '## New Message History to Observe\n\n' }];
 
-  messages.forEach((message, index) => {
+  let visibleCount = 0;
+  messages.forEach(message => {
     const formatted = formatObserverMessage(message, counter);
-    content.push({ type: 'text', text: formatted.text });
-    content.push(...formatted.attachments);
-    if (index < messages.length - 1) {
+    if (!formatted.text && formatted.attachments.length === 0) return;
+    if (visibleCount > 0) {
       content.push({ type: 'text', text: '\n\n---\n\n' });
     }
+    content.push({ type: 'text', text: formatted.text });
+    content.push(...formatted.attachments);
+    visibleCount++;
   });
 
   return {
@@ -714,17 +731,23 @@ export function buildMultiThreadObserverHistoryMessage(
     const messages = messagesByThread.get(threadId);
     if (!messages || messages.length === 0) return;
 
-    content.push({ type: 'text', text: `<thread id="${threadId}">\n` });
-
-    messages.forEach((message, messageIndex) => {
+    const threadContent: any[] = [];
+    let visibleCount = 0;
+    messages.forEach(message => {
       const formatted = formatObserverMessage(message, counter);
-      content.push({ type: 'text', text: formatted.text });
-      content.push(...formatted.attachments);
-      if (messageIndex < messages.length - 1) {
-        content.push({ type: 'text', text: '\n\n---\n\n' });
+      if (!formatted.text && formatted.attachments.length === 0) return;
+      if (visibleCount > 0) {
+        threadContent.push({ type: 'text', text: '\n\n---\n\n' });
       }
+      threadContent.push({ type: 'text', text: formatted.text });
+      threadContent.push(...formatted.attachments);
+      visibleCount++;
     });
 
+    if (visibleCount === 0) return;
+
+    content.push({ type: 'text', text: `<thread id="${threadId}">\n` });
+    content.push(...threadContent);
     content.push({ type: 'text', text: '\n</thread>' });
     if (threadIndex < threadOrder.length - 1) {
       content.push({ type: 'text', text: '\n\n' });
@@ -737,13 +760,47 @@ export function buildMultiThreadObserverHistoryMessage(
   } as CoreMessage;
 }
 
-export function buildMultiThreadObserverTaskPrompt(existingObservations: string | undefined): string {
+export function buildMultiThreadObserverTaskPrompt(
+  existingObservations: string | undefined,
+  threadOrder?: string[],
+  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string }>,
+  wasTruncated?: boolean,
+): string {
   let prompt = '';
 
   if (existingObservations) {
     prompt += `## Previous Observations\n\n${existingObservations}\n\n---\n\n`;
     prompt +=
       'Do not repeat these existing observations. Your new observations will be appended to the existing observations.\n\n';
+  }
+
+  const hasTruncatedObservations = wasTruncated ?? false;
+  const threadMetadataLines = threadOrder
+    ?.map(threadId => {
+      const metadata = priorMetadataByThread?.get(threadId);
+      if (!metadata?.currentTask && !metadata?.suggestedResponse) {
+        return '';
+      }
+
+      const lines = [`- thread ${threadId}`];
+      if (metadata.currentTask) {
+        lines.push(`  - prior current-task: ${metadata.currentTask}`);
+      }
+      if (metadata.suggestedResponse) {
+        lines.push(`  - prior suggested-response: ${metadata.suggestedResponse}`);
+      }
+      return lines.join('\n');
+    })
+    .filter(Boolean)
+    .join('\n');
+
+  if (threadMetadataLines) {
+    prompt += `## Prior Thread Metadata\n\n${threadMetadataLines}\n\n`;
+    if (hasTruncatedObservations) {
+      prompt += `Previous observations were truncated for context budget reasons.\n`;
+      prompt += `The main agent still has full memory context outside this observer window.\n`;
+    }
+    prompt += `Use each thread's prior current-task and suggested-response as continuity hints, then update them based on that thread's new messages.\n\n---\n\n`;
   }
 
   prompt += `## Your Task\n\n`;
@@ -774,9 +831,11 @@ export function buildMultiThreadObserverPrompt(
   existingObservations: string | undefined,
   messagesByThread: Map<string, MastraDBMessage[]>,
   threadOrder: string[],
+  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string }>,
+  wasTruncated?: boolean,
 ): string {
   const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder);
-  return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(existingObservations)}`;
+  return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(existingObservations, threadOrder, priorMetadataByThread, wasTruncated)}`;
 }
 
 /**
@@ -857,7 +916,12 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
 
 export function buildObserverTaskPrompt(
   existingObservations: string | undefined,
-  options?: { skipContinuationHints?: boolean },
+  options?: {
+    skipContinuationHints?: boolean;
+    priorCurrentTask?: string;
+    priorSuggestedResponse?: string;
+    wasTruncated?: boolean;
+  },
 ): string {
   let prompt = '';
 
@@ -865,6 +929,24 @@ export function buildObserverTaskPrompt(
     prompt += `## Previous Observations\n\n${existingObservations}\n\n---\n\n`;
     prompt +=
       'Do not repeat these existing observations. Your new observations will be appended to the existing observations.\n\n';
+  }
+
+  const hasTruncatedObservations = options?.wasTruncated ?? false;
+  const priorMetadataLines: string[] = [];
+  if (options?.priorCurrentTask) {
+    priorMetadataLines.push(`- prior current-task: ${options.priorCurrentTask}`);
+  }
+  if (options?.priorSuggestedResponse) {
+    priorMetadataLines.push(`- prior suggested-response: ${options.priorSuggestedResponse}`);
+  }
+
+  if (priorMetadataLines.length > 0) {
+    prompt += `## Prior Thread Metadata\n\n${priorMetadataLines.join('\n')}\n\n`;
+    if (hasTruncatedObservations) {
+      prompt += `Previous observations were truncated for context budget reasons.\n`;
+      prompt += `The main agent still has full memory context outside this observer window.\n`;
+    }
+    prompt += `Use the prior current-task and suggested-response as continuity hints, then update them based on the new messages.\n\n---\n\n`;
   }
 
   prompt += `## Your Task\n\n`;
@@ -884,7 +966,12 @@ export function buildObserverTaskPrompt(
 export function buildObserverPrompt(
   existingObservations: string | undefined,
   messagesToObserve: MastraDBMessage[],
-  options?: { skipContinuationHints?: boolean },
+  options?: {
+    skipContinuationHints?: boolean;
+    priorCurrentTask?: string;
+    priorSuggestedResponse?: string;
+    wasTruncated?: boolean;
+  },
 ): string {
   const formattedMessages = formatMessagesForObserver(messagesToObserve);
   return `## New Message History to Observe\n\n${formattedMessages}\n\n---\n\n${buildObserverTaskPrompt(existingObservations, options)}`;

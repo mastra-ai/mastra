@@ -253,6 +253,29 @@ Async buffering isn't supported with `scope: 'resource'`. It's automatically dis
 
 :::
 
+## Observer Context Optimization
+
+By default, the Observer receives the full observation history as context when processing new messages. The Observer also receives prior `current-task` and `suggested-response` metadata (when available), so it can stay oriented even when observation context is truncated. For long-running conversations where observations grow large, you can opt into context optimization to reduce Observer input costs.
+
+Set `observation.previousObserverTokens` to limit how many tokens of previous observations are sent to the Observer. Observations are tail-truncated, keeping the most recent entries. When a buffered reflection is pending, the already-reflected lines are automatically replaced with the reflection summary before truncation is applied.
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      observation: {
+        previousObserverTokens: 10_000, // keep only ~10k tokens of recent observations
+      },
+    },
+  },
+})
+```
+
+- `previousObserverTokens: 2000` → default; keeps \~2k tokens of recent observations.
+- `previousObserverTokens: 0` → omit previous observations completely.
+- `previousObserverTokens: false` → disable truncation and keep full previous observations.
+
 ## Migrating existing threads
 
 No manual migration needed. OM reads existing messages and observes them lazily when thresholds are exceeded.
