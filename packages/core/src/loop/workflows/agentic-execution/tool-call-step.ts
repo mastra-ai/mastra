@@ -270,7 +270,34 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           resumeDataFromArgs = resumeDataFromInput;
         }
 
-        const resumeData = resumeDataFromArgs ?? workflowResumeData;
+        // Normalize empty objects to undefined — LLMs sometimes hallucinate `resumeData: {}`
+        // which is truthy and incorrectly triggers resume paths instead of fresh execution.
+        // When resumeData is hallucinated, suspendedToolRunId is typically also hallucinated
+        // (a stale ID from conversation history), so strip it from args too.
+        if (
+          resumeDataFromArgs &&
+          typeof resumeDataFromArgs === 'object' &&
+          Object.keys(resumeDataFromArgs).length === 0
+        ) {
+          resumeDataFromArgs = undefined;
+          if (args && typeof args === 'object' && 'suspendedToolRunId' in args) {
+            const { suspendedToolRunId: _stale, ...cleanArgs } = args;
+            args = cleanArgs;
+          }
+        }
+
+        const normalizedWorkflowResumeData =
+          workflowResumeData && typeof workflowResumeData === 'object' && Object.keys(workflowResumeData).length === 0
+            ? undefined
+            : workflowResumeData;
+
+        const resumeData = resumeDataFromArgs ?? normalizedWorkflowResumeData;
+
+        // Defensive: never forward suspendedToolRunId for fresh calls
+        if (!resumeData && args && typeof args === 'object' && 'suspendedToolRunId' in args) {
+          const { suspendedToolRunId: _stale, ...cleanArgs } = args;
+          args = cleanArgs;
+        }
 
         const isResumeToolCall = !!resumeDataFromArgs;
 
