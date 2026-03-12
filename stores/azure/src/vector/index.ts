@@ -950,7 +950,27 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       });
 
       // Merge documents (update operation)
-      await searchClient.mergeDocuments(updatedDocs);
+      const mergeResult = await searchClient.mergeDocuments(updatedDocs);
+
+      // Check for per-document failures
+      const mergeFailures = mergeResult.results.filter(result => !result.succeeded);
+      if (mergeFailures.length > 0) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_AZURE_AI_SEARCH_UPDATE_PARTIAL_FAILURE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              indexName,
+              totalDocuments: mergeResult.results.length,
+              failedCount: mergeFailures.length,
+              firstFailedKey: mergeFailures[0]?.key || 'unknown',
+              firstFailedError: mergeFailures[0]?.errorMessage || 'No error message',
+            },
+          },
+          new Error(`${mergeFailures.length} of ${mergeResult.results.length} documents failed to update`),
+        );
+      }
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
@@ -1022,7 +1042,27 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       }
 
       const searchClient = this.getSearchClient(indexName);
-      await searchClient.deleteDocuments(idsToDelete.map(id => ({ id })) as any);
+      const deleteResult = await searchClient.deleteDocuments(idsToDelete.map(id => ({ id })) as any);
+
+      // Check for per-document failures
+      const deleteFailures = deleteResult.results.filter(result => !result.succeeded);
+      if (deleteFailures.length > 0) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_AZURE_AI_SEARCH_DELETE_PARTIAL_FAILURE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              indexName,
+              totalDocuments: deleteResult.results.length,
+              failedCount: deleteFailures.length,
+              firstFailedKey: deleteFailures[0]?.key || 'unknown',
+              firstFailedError: deleteFailures[0]?.errorMessage || 'No error message',
+            },
+          },
+          new Error(`${deleteFailures.length} of ${deleteResult.results.length} documents failed to delete`),
+        );
+      }
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
