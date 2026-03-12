@@ -16,6 +16,7 @@ import type {
 } from '../evals';
 import { runScorer } from '../evals/hooks';
 import { resolveModelConfig } from '../llm';
+import type { CoreMessage } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
 import type {
   GenerateObjectResult,
@@ -3037,7 +3038,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                      context: filteredContextMessages as any,
+                      context: filteredContextMessages as unknown as CoreMessage[],
                       ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                         ? {
                             memory: {
@@ -3053,7 +3054,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                      context: filteredContextMessages as any,
+                      context: filteredContextMessages as unknown as CoreMessage[],
                       ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                         ? {
                             memory: {
@@ -3126,7 +3127,7 @@ export class Agent<
                 const generateResult = await agent.generateLegacy(messagesForSubAgent, {
                   requestContext,
                   ...resolveObservabilityContext(context ?? {}),
-                  context: filteredContextMessages as any,
+                  context: filteredContextMessages as unknown as CoreMessage[],
                 });
                 result = { text: generateResult.text };
               } else if (
