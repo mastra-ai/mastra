@@ -6,10 +6,15 @@ import { sanitizeV5UIMessages } from './output-converter';
  * Tests for provider-executed tool handling in sanitizeV5UIMessages.
  *
  * Provider-executed tools (e.g. Anthropic web_search_20250305) are executed
- * server-side by the provider API. They remain in 'input-available' state
- * because no client-side result is added. The sanitization filter must keep
- * these parts so the provider API sees the server_tool_use block and can
- * execute the deferred tool on the next continuation request.
+ * server-side by the provider API. Both completed (output-available) and
+ * pending (input-available) provider-executed tools are kept in the output:
+ *
+ * - output-available: convertToModelMessages emits both server_tool_use and
+ *   the tool result (e.g. web_search_tool_result) in the same assistant
+ *   message, which the provider API expects for conversation history.
+ *
+ * - input-available: kept so the provider API sees the server_tool_use block
+ *   and can execute the deferred tool on the next request.
  */
 describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
   const makeToolPart = (
@@ -117,7 +122,7 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
     expect(toolCallIds).not.toContain('call-3');
   });
 
-  it('should strip output-available provider-executed tool parts so completed server_tool_use blocks are not sent back to the LLM', () => {
+  it('should keep output-available provider-executed tool parts — convertToModelMessages emits both server_tool_use and result in the same assistant message', () => {
     const msg = makeMessage([
       makeToolPart({
         type: 'tool-web_search_20250305',
@@ -131,11 +136,13 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
 
     const result = sanitizeV5UIMessages([msg], true);
 
-    // Entire message dropped — its only part was a completed provider-executed tool
-    expect(result).toHaveLength(0);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.parts).toHaveLength(1);
+    expect((result[0]!.parts[0] as any).toolCallId).toBe('call-1');
+    expect((result[0]!.parts[0] as any).providerExecuted).toBe(true);
   });
 
-  it('should strip output-error provider-executed tool parts', () => {
+  it('should keep output-error provider-executed tool parts', () => {
     const msg = makeMessage([
       makeToolPart({
         type: 'tool-web_search_20250305',
@@ -148,12 +155,13 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
 
     const result = sanitizeV5UIMessages([msg], true);
 
-    expect(result).toHaveLength(0);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.parts).toHaveLength(1);
   });
 
-  it('should handle resume scenario: keep client output-available, strip completed provider output-available', () => {
+  it('should keep both client and provider output-available tool parts on resume', () => {
     const msg = makeMessage([
-      // Client-executed tool with result — keep (needs to go back in prompt)
+      // Client-executed tool with result — keep
       makeToolPart({
         type: 'tool-get_company_info',
         toolCallId: 'call-1',
@@ -161,7 +169,7 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
         input: { name: 'test' },
         output: { company: 'Acme' },
       }),
-      // Provider-executed tool already completed — strip (provider handles internally)
+      // Provider-executed tool already completed — keep (convertToModelMessages handles it)
       makeToolPart({
         type: 'tool-web_search_20250305',
         toolCallId: 'call-2',
@@ -175,11 +183,11 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
     const result = sanitizeV5UIMessages([msg], true);
 
     expect(result).toHaveLength(1);
-    expect(result[0]!.parts).toHaveLength(1);
+    expect(result[0]!.parts).toHaveLength(2);
 
     const toolCallIds = result[0]!.parts.map((p: any) => p.toolCallId);
     expect(toolCallIds).toContain('call-1');
-    expect(toolCallIds).not.toContain('call-2');
+    expect(toolCallIds).toContain('call-2');
   });
 
   it('should not filter provider-executed tools when filterIncompleteToolCalls is false', () => {

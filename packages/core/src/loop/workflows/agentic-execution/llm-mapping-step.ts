@@ -240,31 +240,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               rest.messageList.add(successMessage, 'response');
             }
 
-            if (successfulResults.some(tc => tc.providerExecuted)) {
-              const providerResults = successfulResults.filter(tc => tc.providerExecuted);
-              const providerMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
-              const providerMessage: MastraDBMessage = {
-                id: providerMessageId || '',
-                role: 'assistant' as const,
-                content: {
-                  format: 2,
-                  parts: providerResults.map(toolCall => ({
-                    type: 'tool-invocation' as const,
-                    toolInvocation: {
-                      state: 'result' as const,
-                      toolCallId: toolCall.toolCallId,
-                      toolName: sanitizeToolName(toolCall.toolName),
-                      args: toolCall.args,
-                      result: toolCall.result,
-                    },
-                    ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
-                    providerExecuted: true as const,
-                  })),
-                },
-                createdAt: new Date(),
-              };
-              rest.messageList.add(providerMessage, 'response');
-            }
+            // Provider-executed tool results are already stored as state:"result"
+            // in llm-execution-step, so no separate messageList.add is needed.
           }
 
           // Continue the loop — the error messages are already in the messageList,
@@ -353,34 +330,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           rest.messageList.add(toolResultMessage, 'response');
         }
 
-        // Persist provider-executed tool results (e.g. Anthropic web_search) so
-        // MessageMerger updates their invocations from state:"call" to state:"result".
-        // Without this, they stay at "call" in the DB and cause HTTP 400 on resume.
-        const providerExecutedToolCalls = inputData.filter(toolCall => toolCall.providerExecuted);
-        if (providerExecutedToolCalls.length > 0) {
-          const providerResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
-          const providerResultMessage: MastraDBMessage = {
-            id: providerResultMessageId || '',
-            role: 'assistant' as const,
-            content: {
-              format: 2,
-              parts: providerExecutedToolCalls.map(toolCall => ({
-                type: 'tool-invocation' as const,
-                toolInvocation: {
-                  state: 'result' as const,
-                  toolCallId: toolCall.toolCallId,
-                  toolName: sanitizeToolName(toolCall.toolName),
-                  args: toolCall.args,
-                  result: toolCall.result,
-                },
-                ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
-                providerExecuted: true as const,
-              })),
-            },
-            createdAt: new Date(),
-          };
-          rest.messageList.add(providerResultMessage, 'response');
-        }
+        // Provider-executed tool results (e.g. Anthropic web_search) are already stored
+        // as state:"result" in llm-execution-step, so no separate messageList.add is needed.
 
         // Check if any delegation hook called ctx.bail() — signal the loop to stop.
         // The bail flag is communicated via requestContext because Zod output validation

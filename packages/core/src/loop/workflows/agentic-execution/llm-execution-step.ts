@@ -1108,6 +1108,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           content: {
             format: 2,
             parts: toolCalls.map(toolCall => {
+              // Provider-executed tools (e.g. Anthropic web_search) already have their
+              // result from the provider. Store them directly as state:'result' so they
+              // don't need a separate merge step in llm-mapping-step via MessageMerger.
+              if (toolCall.providerExecuted && toolCall.output != null) {
+                return {
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'result' as const,
+                    toolCallId: toolCall.toolCallId,
+                    toolName: toolCall.toolName,
+                    args: toolCall.args,
+                    result: toolCall.output,
+                  },
+                  providerMetadata: toolCall.providerMetadata,
+                  providerExecuted: toolCall.providerExecuted,
+                };
+              }
               return {
                 type: 'tool-invocation' as const,
                 toolInvocation: {
