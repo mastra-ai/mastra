@@ -199,20 +199,6 @@ export async function createHonoServer(
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), cors(corsConfig));
   }
 
-  // Enable gzip/deflate compression for all responses (except SSE endpoints)
-  app.use('*', async (c, next) => {
-    if (c.req.path.endsWith('/refresh-events')) {
-      return next();
-    }
-    return compress()(c, next);
-  });
-  // Ensure Vary: Accept-Encoding is set for proper caching behavior
-  app.use('*', async (c, next) => {
-    await next();
-    if (c.res.headers.get('Content-Encoding')) {
-      c.res.headers.append('Vary', 'Accept-Encoding');
-    }
-  });
 
   // Health check endpoint (before auth middleware so it's publicly accessible)
   app.get(
@@ -347,6 +333,9 @@ export async function createHonoServer(
         });
       },
     );
+
+    // Enable gzip/deflate compression for studio static assets only
+    app.use(`${studioBasePath}/assets/*`, compress());
 
     // Studio routes - these should come after API routes
     // Serve static assets from studio directory
