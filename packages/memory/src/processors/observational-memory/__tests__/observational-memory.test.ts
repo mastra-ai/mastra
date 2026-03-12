@@ -9647,3 +9647,761 @@ describe('Single-thread replay red tests', () => {
     expect(remainingIds).toEqual(unobservedIds);
   });
 });
+
+// =============================================================================
+// Processor Behavioral Regression Tests
+// =============================================================================
+// These tests verify that the refactored processor matches the original behavior.
+// Each test targets a specific behavioral difference found during the refactor.
+
+describe('Processor behavioral regressions', () => {
+  it('should not load fully-observed messages (completed boundary, no unobserved parts) into context', async () => {
+    // Bug #1: Messages with a completed observation boundary and no remaining
+    // unobserved parts should be excluded during history loading (step 0).
+    // The old code filtered them; the refactored code loads all non-system messages.
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    (ObservationalMemory as any).asyncBufferingOps.clear();
+    (ObservationalMemory as any).lastBufferedBoundary.clear();
+    (ObservationalMemory as any).lastBufferedAtTime.clear();
+    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    (ObservationalMemory as any).sealedMessageIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'observed-filter-thread';
+    const resourceId = 'observed-filter-resource';
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: 500000 },
+      reflection: { observationTokens: 200000 },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    // Save a fully-observed message to storage: has start+end markers but no unobserved content after them
+    const fullyObservedMsg: MastraDBMessage = {
+      id: 'fully-observed-1',
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'I helped with something' },
+          { type: 'data-om-observation-start' } as any,
+          { type: 'data-om-observation-end' } as any,
+        ],
+      },
+      createdAt: new Date('2025-01-01T09:00:00Z'),
+      threadId,
+      resourceId,
+    } as any;
+
+    // Save a normal (unobserved) message
+    const normalMsg: MastraDBMessage = {
+      id: 'normal-1',
+      role: 'user',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'Hello, new question' }],
+      },
+      createdAt: new Date('2025-01-01T10:00:00Z'),
+      threadId,
+      resourceId,
+    } as any;
+
+    await storage.saveMessages({ messages: [fullyObservedMsg, normalMsg] });
+
+    const state: Record<string, unknown> = {};
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const ctx = new RequestContext();
+    ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    const abort = (() => {
+      throw new Error('aborted');
+    }) as any;
+
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: ctx,
+      stepNumber: 0,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort,
+    });
+
+    // The fully-observed message should NOT be in the context
+    const allIds = messageList.get.all.db().map(m => m.id);
+    expect(allIds).not.toContain('fully-observed-1');
+    // The normal message should still be present
+    expect(allIds).toContain('normal-1');
+  });
+
+  it('should sanitize messages (strip working memory tags, filter partial-calls) on final save', async () => {
+    // Verify that messages persisted through processOutputResult are sanitized:
+    // - working_memory tags stripped
+    // - partial-call tool invocations filtered
+    // - updateWorkingMemory invocations filtered
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    (ObservationalMemory as any).asyncBufferingOps.clear();
+    (ObservationalMemory as any).lastBufferedBoundary.clear();
+    (ObservationalMemory as any).lastBufferedAtTime.clear();
+    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    (ObservationalMemory as any).sealedMessageIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'sanitize-test-thread';
+    const resourceId = 'sanitize-test-resource';
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: 500000 },
+      reflection: { observationTokens: 200000 },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    const state: Record<string, unknown> = {};
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const makeCtx = () => {
+      const ctx = new RequestContext();
+      ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+      return ctx;
+    };
+
+    const abort = (() => {
+      throw new Error('aborted');
+    }) as any;
+
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+
+    // Add a user message with working memory tags
+    messageList.add(
+      {
+        id: 'user-wm',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Hello there <working_memory>secret state data</working_memory> how are you?' },
+          ],
+        },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'input',
+    );
+
+    // Add an assistant message with mixed parts
+    messageList.add(
+      {
+        id: 'assistant-mixed',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Response <working_memory>updated state</working_memory> and more' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'partial-call', toolName: 'someTool', toolCallId: 'call-partial', args: {} },
+            },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolName: 'updateWorkingMemory',
+                toolCallId: 'call-wm',
+                args: { memory: 'stuff' },
+                result: { ok: true },
+              },
+            },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolName: 'normalTool',
+                toolCallId: 'call-normal',
+                args: {},
+                result: { data: 'fine' },
+              },
+            },
+          ],
+        },
+        createdAt: new Date('2025-01-01T10:00:01Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'response',
+    );
+
+    // Run step 0
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: makeCtx(),
+      stepNumber: 0,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort,
+    });
+
+    // Run processOutputResult — triggers the final save
+    await processor.processOutputResult({
+      messageList,
+      messages: messageList.get.response.db(),
+      requestContext: makeCtx(),
+      state,
+      abort,
+      result: {
+        text: 'ok',
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        finishReason: 'stop',
+        steps: [],
+      } as any,
+      retryCount: 0,
+    });
+
+    // Read persisted messages
+    const { messages: saved } = await storage.listMessages({
+      threadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+
+    expect(saved.length).toBeGreaterThan(0);
+
+    // Working memory tags should be stripped from the user message
+    const userMsg = saved.find(m => m.id === 'user-wm');
+    expect(userMsg).toBeDefined();
+    const userText = (userMsg!.content as any).parts?.find((p: any) => p.type === 'text')?.text ?? '';
+    expect(userText).not.toContain('<working_memory>');
+    expect(userText).not.toContain('secret state data');
+    expect(userText).toContain('Hello there');
+
+    // Assistant message: check sanitization
+    const assistantMsg = saved.find(m => m.id === 'assistant-mixed');
+    expect(assistantMsg).toBeDefined();
+    const parts = (assistantMsg!.content as any).parts as any[];
+
+    // Text part: working memory tags stripped
+    const textPart = parts.find((p: any) => p.type === 'text');
+    expect(textPart).toBeDefined();
+    expect(textPart.text).not.toContain('<working_memory>');
+    expect(textPart.text).not.toContain('updated state');
+
+    // partial-call should be filtered out
+    expect(
+      parts.filter((p: any) => p.type === 'tool-invocation' && p.toolInvocation?.state === 'partial-call'),
+    ).toHaveLength(0);
+
+    // updateWorkingMemory should be filtered out
+    expect(
+      parts.filter((p: any) => p.type === 'tool-invocation' && p.toolInvocation?.toolName === 'updateWorkingMemory'),
+    ).toHaveLength(0);
+
+    // normalTool should be kept
+    expect(
+      parts.filter((p: any) => p.type === 'tool-invocation' && p.toolInvocation?.toolName === 'normalTool'),
+    ).toHaveLength(1);
+  });
+
+  it('should reset stale step-0 boundary when only small unobserved context remains', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    (ObservationalMemory as any).asyncBufferingOps.clear();
+    (ObservationalMemory as any).lastBufferedBoundary.clear();
+    (ObservationalMemory as any).lastBufferedAtTime.clear();
+    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    (ObservationalMemory as any).sealedMessageIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'step0-boundary-thread';
+    const resourceId = 'step0-boundary-resource';
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: 500000, bufferTokens: 5000, bufferActivation: 0.8 },
+      reflection: { observationTokens: 200000 },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    const seeded = await om.getStatus({ threadId, resourceId });
+    await storage.setBufferingObservationFlag(seeded.record.id, false, 300);
+
+    const veryLargeFullyObservedMsg: MastraDBMessage = {
+      id: 'fully-observed-huge',
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: `Large observed payload ${'x '.repeat(2500)}` },
+          { type: 'data-om-observation-start' } as any,
+          { type: 'data-om-observation-end' } as any,
+        ],
+      },
+      createdAt: new Date('2025-01-01T09:00:00Z'),
+      threadId,
+      resourceId,
+    } as any;
+
+    const tinyUnobservedMsg: MastraDBMessage = {
+      id: 'tiny-unobserved',
+      role: 'user',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'small tail' }],
+      },
+      createdAt: new Date('2025-01-01T10:00:00Z'),
+      threadId,
+      resourceId,
+    } as any;
+
+    await storage.saveMessages({ messages: [veryLargeFullyObservedMsg, tinyUnobservedMsg] });
+
+    const state: Record<string, unknown> = {};
+    const messageList = new MessageList({ threadId, resourceId });
+    const ctx = new RequestContext();
+    ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: ctx,
+      stepNumber: 0,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const updatedRecord = await storage.getObservationalMemory(threadId, resourceId);
+    expect(updatedRecord).toBeDefined();
+    expect(updatedRecord!.lastBufferedAtTokens).toBe(0);
+  });
+
+  it('should refresh otherThreadsContext between steps in resource scope', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    (ObservationalMemory as any).asyncBufferingOps.clear();
+    (ObservationalMemory as any).lastBufferedBoundary.clear();
+    (ObservationalMemory as any).lastBufferedAtTime.clear();
+    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    (ObservationalMemory as any).sealedMessageIds.clear();
+
+    const storage = createInMemoryStorage();
+    const resourceId = 'resource-refresh-test';
+    const activeThreadId = 'thread-active';
+    const otherThreadId = 'thread-other';
+
+    await storage.saveThread({
+      thread: {
+        id: activeThreadId,
+        resourceId,
+        title: 'Active',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+    await storage.saveThread({
+      thread: {
+        id: otherThreadId,
+        resourceId,
+        title: 'Other',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    await storage.saveMessages({
+      messages: [
+        {
+          id: 'other-step0-msg',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'other-thread-initial-context' }] },
+          createdAt: new Date('2025-01-01T09:00:00Z'),
+          threadId: otherThreadId,
+          resourceId,
+        } as any,
+      ],
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [
+          {
+            type: 'text' as const,
+            text: `<observations>\n* Existing observations\n<current-task>\n- Primary: Continue\n</current-task>\n<suggested-response>\nKeep going\n</suggested-response>\n</observations>`,
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'resource',
+      model: mockModel as any,
+      observation: { messageTokens: 500000 },
+      reflection: { observationTokens: 200000 },
+    });
+
+    const seeded = await om.getStatus({ threadId: activeThreadId, resourceId });
+    await storage.updateActiveObservations({
+      id: seeded.record.id,
+      observations: '<observations>baseline</observations>',
+      tokenCount: 50,
+      lastObservedAt: new Date('2025-01-01T08:30:00Z'),
+      observedMessageIds: [],
+    });
+
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+    const messageList = new MessageList({ threadId: activeThreadId, resourceId });
+    const state: Record<string, unknown> = {};
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: activeThreadId }, resourceId });
+    requestContext.set('currentDate', new Date('2025-01-01T10:00:00Z').toISOString());
+
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    await storage.saveMessages({
+      messages: [
+        {
+          id: 'other-step1-msg',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'other-thread-new-step1-context' }] },
+          createdAt: new Date('2025-01-01T10:01:00Z'),
+          threadId: otherThreadId,
+          resourceId,
+        } as any,
+      ],
+    });
+
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 1,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const omSystemMessages = messageList.getSystemMessages('observational-memory');
+    expect(omSystemMessages.length).toBeGreaterThan(0);
+    const latestSystemMessage = omSystemMessages[omSystemMessages.length - 1]!;
+    const systemText =
+      typeof latestSystemMessage.content === 'string'
+        ? latestSystemMessage.content
+        : JSON.stringify(latestSystemMessage.content);
+
+    expect(systemText).toContain('other-thread-new-step1-context');
+  });
+
+  it('should use static sealed IDs during final save when state sealedIds is empty', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    (ObservationalMemory as any).asyncBufferingOps.clear();
+    (ObservationalMemory as any).lastBufferedBoundary.clear();
+    (ObservationalMemory as any).lastBufferedAtTime.clear();
+    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    (ObservationalMemory as any).sealedMessageIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'sealed-static-thread';
+    const resourceId = 'sealed-static-resource';
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    await storage.saveMessages({
+      messages: [
+        {
+          id: 'sealed-no-boundary',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'persisted-before-final-save' }] },
+          createdAt: new Date('2025-01-01T09:00:00Z'),
+          threadId,
+          resourceId,
+        } as any,
+      ],
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: 500000 },
+      reflection: { observationTokens: 200000 },
+    });
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+
+    (ObservationalMemory as any).sealedMessageIds.set(threadId, new Set(['sealed-no-boundary']));
+
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add(
+      {
+        id: 'sealed-no-boundary',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'should-not-overwrite-persisted-copy' }] },
+        createdAt: new Date('2025-01-01T09:00:00Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'response',
+    );
+
+    const ctx = new RequestContext();
+    ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await processor.processOutputResult({
+      messageList,
+      messages: messageList.get.response.db(),
+      requestContext: ctx,
+      state: {},
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+      result: {
+        text: 'ok',
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        finishReason: 'stop',
+        steps: [],
+      } as any,
+      retryCount: 0,
+    });
+
+    const { messages: saved } = await storage.listMessages({
+      threadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+    const target = saved.find(m => m.id === 'sealed-no-boundary');
+    expect(target).toBeDefined();
+    const text = ((target!.content as any).parts ?? []).find((p: any) => p.type === 'text')?.text ?? '';
+    expect(text).toContain('persisted-before-final-save');
+    expect(text).not.toContain('should-not-overwrite-persisted-copy');
+  });
+
+  it('should map threshold observation errors through abort instead of bubbling raw errors', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    (ObservationalMemory as any).asyncBufferingOps.clear();
+    (ObservationalMemory as any).lastBufferedBoundary.clear();
+    (ObservationalMemory as any).lastBufferedAtTime.clear();
+    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    (ObservationalMemory as any).sealedMessageIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'abort-mapping-thread';
+    const resourceId = 'abort-mapping-resource';
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: 1, bufferTokens: false },
+      reflection: { observationTokens: 200000 },
+    });
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+
+    const engine = (processor as any).engine;
+    const originalObserveWithActivation = engine.observeWithActivation.bind(engine);
+    engine.observeWithActivation = async () => {
+      throw new Error('raw-observe-error');
+    };
+
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add(
+      {
+        id: 'needs-observation',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'force threshold observation path' }] },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'input',
+    );
+
+    const state: Record<string, unknown> = {};
+    const ctx = new RequestContext();
+    ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    let abortCalled = false;
+    const abort = ((message: string) => {
+      abortCalled = true;
+      throw new Error(`abort-called:${message}`);
+    }) as any;
+
+    try {
+      await processor.processInputStep({
+        messageList,
+        messages: [],
+        requestContext: ctx,
+        stepNumber: 1,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: mockModel as any,
+        retryCount: 0,
+        abort,
+      });
+      throw new Error('expected abort to throw');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      expect(msg).toContain('abort-called:');
+      expect(abortCalled).toBe(true);
+    } finally {
+      engine.observeWithActivation = originalObserveWithActivation;
+    }
+  });
+});

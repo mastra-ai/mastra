@@ -54,7 +54,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
   // ─── Processor lifecycle hooks ──────────────────────────────────────────
 
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, requestContext, stepNumber, state: _state, writer, abortSignal, model } = args;
+    const { messageList, requestContext, stepNumber, state: _state, writer, abortSignal, abort, model } = args;
     const state = _state ?? ({} as Record<string, unknown>);
 
     omDebug(
@@ -113,18 +113,28 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       }
 
       const cachedContext = state.__omContext as Awaited<ReturnType<MemoryContextProvider['getContext']>> | undefined;
-      const otherThreadsContext = cachedContext?.otherThreadsContext;
+      let otherThreadsContext = cachedContext?.otherThreadsContext;
+
+      // In resource scope, refresh cross-thread context on every step so
+      // threshold checks and injected system context stay current.
+      if (this.engine.scope === 'resource' && resourceId) {
+        otherThreadsContext = await this.engine.getOtherThreadsContext(resourceId, threadId);
+        if (cachedContext) {
+          cachedContext.otherThreadsContext = otherThreadsContext;
+        }
+      }
 
       // ════════════════════════════════════════════════════════════════════════
       // STEP 1c: ACTIVATE BUFFERED OBSERVATIONS (step 0 only)
       // ════════════════════════════════════════════════════════════════════════
       if (stepNumber === 0 && !readOnly) {
+        const step0Messages = this.engine.getUnobservedMessages(messageList.get.all.db(), record);
         const step0Result = await this.engine.tryStep0Activation({
           messageList,
           record,
           threadId,
           resourceId,
-          messages: messageList.get.all.db(),
+          messages: step0Messages,
           otherThreadContext: otherThreadsContext,
           currentObservationTokens: record.observationTokenCount ?? 0,
           writer,
@@ -172,7 +182,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         effectiveObservationTokensThreshold = status.effectiveObservationTokensThreshold;
 
         // Sealed IDs track messages frozen for buffering so incremental saves skip them
-        const sealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
+        const stateSealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
+        const staticSealedIds: Set<string> = this.engine.getSealedIds(threadId, resourceId) ?? new Set<string>();
+        const sealedIds = new Set<string>([...staticSealedIds, ...stateSealedIds]);
         state.sealedIds = sealedIds;
 
         omDebug(
@@ -224,17 +236,31 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
               `[OM:threshold] step=${stepNumber}: totalPending=${totalPendingTokens} >= threshold=${threshold}, triggering observation`,
             );
 
-            const obsResult = await this.engine.observeWithActivation({
-              threadId,
-              resourceId,
-              messages: messageList.get.all.db(),
-              messageList,
-              threshold,
-              otherThreadContext: otherThreadsContext,
-              writer,
-              abortSignal,
-              requestContext,
-            });
+            let obsResult: Awaited<ReturnType<ObservationalMemory['observeWithActivation']>>;
+            try {
+              obsResult = await this.engine.observeWithActivation({
+                threadId,
+                resourceId,
+                messages: messageList.get.all.db(),
+                messageList,
+                threshold,
+                otherThreadContext: otherThreadsContext,
+                writer,
+                abortSignal,
+                requestContext,
+              });
+            } catch (error) {
+              const err = error instanceof Error ? error : new Error(String(error));
+              const abortMessage = abortSignal?.aborted
+                ? 'Agent execution was aborted'
+                : `Encountered error during memory observation: ${err.message}`;
+
+              if (typeof abort === 'function') {
+                abort(abortMessage);
+              }
+
+              throw err;
+            }
 
             if (obsResult.succeeded) {
               didThresholdCleanup = true;
@@ -393,7 +419,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         const memoryContext = parseMemoryRequestContext(requestContext);
         if (memoryContext?.memoryConfig?.readOnly) return messageList;
 
-        const sealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
+        const stateSealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
+        const staticSealedIds: Set<string> = this.engine.getSealedIds(threadId, resourceId) ?? new Set<string>();
+        const sealedIds = new Set<string>([...staticSealedIds, ...stateSealedIds]);
+        state.sealedIds = sealedIds;
 
         await this.engine.saveFinalMessages({
           messageList,

@@ -1230,11 +1230,6 @@ export class ObservationalMemory {
       }
     }
 
-    if (!lastObservedAt && observedMessageIds.size === 0) {
-      // No observations yet - all messages are unobserved
-      return allMessages;
-    }
-
     const result: MastraDBMessage[] = [];
 
     for (const msg of allMessages) {
@@ -4680,10 +4675,8 @@ ${formattedMessages}
   /**
    * Get the set of sealed message IDs for a buffer key.
    */
-  getSealedIds(threadId: string, resourceId?: string): Set<string> | undefined {
-    const lockKey = this.getLockKey(threadId, resourceId);
-    const bufKey = this.getObservationBufferKey(lockKey);
-    return ObservationalMemory.sealedMessageIds.get(bufKey);
+  getSealedIds(threadId: string, _resourceId?: string): Set<string> | undefined {
+    return ObservationalMemory.sealedMessageIds.get(threadId);
   }
 
   /**
