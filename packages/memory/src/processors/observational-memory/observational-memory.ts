@@ -1741,7 +1741,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    *
    * Strategy:
    * 1. Keep a raw tail of recent observations (end of block).
-   * 2. Add a truncation marker: [X hidden observations], placed at the hidden gap.
+   * 2. Add a truncation marker: [X observations truncated here], placed at the hidden gap.
    * 3. Try to preserve important observations (🔴) from older context, newest-first.
    * 4. Enforce that at least 50% of kept observations remain raw tail observations.
    */
@@ -1784,7 +1784,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       ].sort((a, b) => a - b);
 
       if (keptIndexes.length === 0) {
-        return `[${totalCount} hidden observations]`;
+        return `[${totalCount} observations truncated here]`;
       }
 
       const outputLines: string[] = [];
@@ -1796,7 +1796,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           // Keep the original line — the marker would cost more tokens than the line itself
           outputLines.push(lines[previousKeptIndex + 1]!);
         } else if (hiddenCount > 1) {
-          outputLines.push(`[${hiddenCount} hidden observations]`);
+          outputLines.push(`[${hiddenCount} observations truncated here]`);
         }
         outputLines.push(lines[keptIndex]!);
         previousKeptIndex = keptIndex;
@@ -1806,7 +1806,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       if (trailingHiddenCount === 1) {
         outputLines.push(lines[totalCount - 1]!);
       } else if (trailingHiddenCount > 1) {
-        outputLines.push(`[${trailingHiddenCount} hidden observations]`);
+        outputLines.push(`[${trailingHiddenCount} observations truncated here]`);
       }
 
       return outputLines.join('\n');
@@ -1866,7 +1866,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     if (!bestCandidate) {
-      return `[${totalCount} hidden observations]`;
+      return `[${totalCount} observations truncated here]`;
     }
 
     return bestCandidate;

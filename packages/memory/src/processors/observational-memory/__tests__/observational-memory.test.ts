@@ -8961,7 +8961,7 @@ describe('Observer Context Optimization', () => {
       const result = prepareObserverContext(om, observations);
       expect(result).toBeDefined();
       expect(tc.countObservations(result!)).toBeLessThanOrEqual(20);
-      expect(result!).toMatch(/\[\d+ hidden observations\]/);
+      expect(result!).toMatch(/\[\d+ observations truncated here\]/);
       expect(result!).toContain('Observation line 20');
       expect(result!).not.toContain('- Observation line 1\n');
     });
@@ -8976,7 +8976,7 @@ describe('Observer Context Optimization', () => {
       ].join('\n');
       const desired = [
         '- 🔴 Critical early item 3',
-        '[10 hidden observations]',
+        '[10 observations truncated here]',
         '- Observation line 12',
         '- Observation line 13',
         '- Observation line 14',
@@ -8991,10 +8991,10 @@ describe('Observer Context Optimization', () => {
 
       const result = prepareObserverContext(om, observations)!;
       const lines = result.split('\n').filter(Boolean);
-      const kept = lines.filter(line => !/^\[\d+ hidden observations\]$/.test(line));
+      const kept = lines.filter(line => !/^\[\d+ observations truncated here\]$/.test(line));
       const tailKept = kept.filter(line => /^- Observation line \d+$/.test(line));
 
-      expect(result).toMatch(/\[\d+ hidden observations\]/);
+      expect(result).toMatch(/\[\d+ observations truncated here\]/);
       expect(result).toContain('🔴 Critical early item 3');
       expect(tc.countObservations(result)).toBeLessThanOrEqual(budget);
       expect(tailKept.length).toBeGreaterThanOrEqual(Math.ceil(kept.length / 2));
@@ -9005,9 +9005,9 @@ describe('Observer Context Optimization', () => {
       // Budget just large enough to keep the newest important line + a small tail,
       // but not all three important lines.
       const desired = [
-        '[2 hidden observations]',
+        '[2 observations truncated here]',
         '- 🔴 Newer critical 3',
-        '[19 hidden observations]',
+        '[19 observations truncated here]',
         '- Observation line 20',
       ].join('\n');
       const budget = tc.countObservations(desired) + 2;
@@ -9020,7 +9020,7 @@ describe('Observer Context Optimization', () => {
       ].join('\n');
 
       const result = prepareObserverContext(om, observations)!;
-      expect(result).toMatch(/\[\d+ hidden observations\]/);
+      expect(result).toMatch(/\[\d+ observations truncated here\]/);
       expect(result).toContain('🔴 Newer critical 3');
       expect(result).not.toContain('🔴 Very old critical 1');
     });
@@ -9035,7 +9035,7 @@ describe('Observer Context Optimization', () => {
       const om = createOM({ previousObserverTokens: 1 });
       const observations = 'Line one\nLine two\nLine three';
       const result = prepareObserverContext(om, observations);
-      expect(result).toBe('[3 hidden observations]');
+      expect(result).toBe('[3 observations truncated here]');
     });
 
     it('should fully truncate context when observation.previousObserverTokens is 0', () => {
@@ -9204,20 +9204,28 @@ describe('Observer Context Optimization', () => {
     it('should preserve recent lines, drop oldest, and include truncation marker', () => {
       const om = createOM();
       const tc = new TokenCounter();
-      const lines = ['Line A', 'Line B', 'Line C', 'Line D', 'Line E'];
+      // Use longer lines so that dropping even one line frees meaningful space
+      const lines = [
+        'Line A with extra content',
+        'Line B with extra content',
+        'Line C with extra content',
+        'Line D with extra content',
+        'Line E with extra content',
+      ];
       const observations = lines.join('\n');
-      const budget = tc.countObservations(observations) - 1;
+      // Budget allows most but not all lines, forcing truncation
+      const budget = tc.countObservations(observations) - tc.countString(lines[0]!);
       const result = truncate(om, observations, budget);
-      expect(result).toMatch(/\[\d+ hidden observations\]/);
-      expect(result).toContain('Line E');
-      expect(result).not.toContain('Line A');
+      expect(result).toMatch(/\[\d+ observations truncated here\]/);
+      expect(result).toContain('Line E with extra content');
+      expect(result).not.toContain('Line A with extra content');
     });
 
     it('should return truncation marker when budget is very small', () => {
       const om = createOM();
       const observations = 'First line\nSecond line\nThird line';
       const result = truncate(om, observations, 1);
-      expect(result).toBe('[3 hidden observations]');
+      expect(result).toBe('[3 observations truncated here]');
     });
 
     it('should return full observations when budget exceeds total tokens', () => {
