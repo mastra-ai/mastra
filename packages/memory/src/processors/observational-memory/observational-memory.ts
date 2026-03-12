@@ -1757,15 +1757,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const lines = observations.split('\n');
     const totalCount = lines.length;
 
-    // Distribute the known total token count proportionally by character length
-    // to get a cheap per-line estimate without calling the tokenizer per line.
-    const totalChars = lines.reduce((sum, line) => sum + line.length + 1, 0);
-    const tokensPerChar = totalTokens / totalChars;
-
+    // tokenx is lightweight (regex-based), so measure each line directly.
     const lineTokens: number[] = new Array(totalCount);
     const isImportant: boolean[] = new Array(totalCount);
     for (let i = 0; i < totalCount; i++) {
-      lineTokens[i] = (lines[i]!.length + 1) * tokensPerChar;
+      lineTokens[i] = this.tokenCounter.countString(lines[i]!);
       isImportant[i] = lines[i]!.includes('🔴');
     }
 
@@ -1810,8 +1806,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       return outputLines.join('\n');
     };
 
-    // Optimistic lower-bound estimate of kept-content cost (excludes markers).
-    // Used to quickly skip candidates whose content alone exceeds the budget.
+    // Lower-bound cost of kept content (excludes marker lines).
+    // Used for fast rejection — the final countObservations call is the real gatekeeper.
     const estimateKeptContentCost = (tailStart: number, selectedImportantIndexes: number[]): number => {
       let cost = suffixTokens[tailStart]!;
       for (const idx of selectedImportantIndexes) {
@@ -1837,7 +1833,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       const getSelectedImportant = (count: number) =>
         count > 0 ? headImportantIndexes.slice(Math.max(0, headImportantIndexes.length - count)) : [];
 
-      // Fast rejection: if even the kept content (without markers) exceeds budget, drop important lines.
+      // Fast rejection: drop important lines if even the kept content exceeds budget.
       while (
         importantToKeep > 0 &&
         estimateKeptContentCost(tailStart, getSelectedImportant(importantToKeep)) > budget
@@ -1849,7 +1845,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         continue;
       }
 
-      // Only build + tokenize when this candidate could beat the current best.
+      // Only build + verify when this candidate could beat the current best.
       if (
         importantToKeep > bestImportantCount ||
         (importantToKeep === bestImportantCount && rawTailLength > bestRawTailLength)
