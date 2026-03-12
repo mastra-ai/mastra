@@ -182,6 +182,35 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
     expect(toolCallIds).not.toContain('call-2');
   });
 
+  it('should not replay stale provider-executed input-available parts after a later assistant message', () => {
+    const firstAssistant = makeMessage([
+      makeToolPart({
+        type: 'tool-web_search_20250305',
+        toolCallId: 'call-1',
+        state: 'input-available',
+        input: { query: 'initial query' },
+        providerExecuted: true,
+      }),
+    ]);
+
+    const laterAssistant = {
+      ...makeMessage([
+        {
+          type: 'text',
+          text: 'Here is the latest answer',
+        } as any,
+      ]),
+      id: 'msg-2',
+    } as AIV5Type.UIMessage;
+
+    const result = sanitizeV5UIMessages([firstAssistant, laterAssistant], true);
+
+    // First message is dropped because its only provider-executed input-available part is stale.
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe('msg-2');
+    expect(result[0]!.parts).toEqual([{ type: 'text', text: 'Here is the latest answer' }]);
+  });
+
   it('should not filter provider-executed tools when filterIncompleteToolCalls is false', () => {
     const msg = makeMessage([
       makeToolPart({

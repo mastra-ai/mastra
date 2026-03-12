@@ -53,8 +53,10 @@ export function sanitizeV5UIMessages(
   filterIncompleteToolCalls = false,
 ): AIV5Type.UIMessage[] {
   const msgs = messages
-    .map(m => {
+    .map((m, messageIndex) => {
       if (m.parts.length === 0) return false;
+
+      const hasLaterAssistantMessage = messages.slice(messageIndex + 1).some(next => next.role === 'assistant');
 
       // When building a prompt TO the LLM (filterIncompleteToolCalls=true),
       // check if this message contains OpenAI reasoning parts (rs_* itemIds).
@@ -114,9 +116,12 @@ export function sanitizeV5UIMessages(
             return true;
           }
           // Provider-executed tools (e.g. Anthropic web_search) remain in input-available state
-          // because no client-side result is added. Keep them so the provider API sees the
-          // server_tool_use block and can execute the deferred tool on the next request.
-          if (p.state === 'input-available' && p.providerExecuted) return true;
+          // because no client-side result is added. Keep them only for the latest assistant turn;
+          // once there's a later assistant message, replaying older server_tool_use parts is stale
+          // and can cause provider API errors due to mismatched tool/result history.
+          if (p.state === 'input-available' && p.providerExecuted) {
+            return !hasLaterAssistantMessage;
+          }
           return false;
         }
 
