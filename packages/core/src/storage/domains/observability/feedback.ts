@@ -81,10 +81,10 @@ export type FeedbackInput = z.infer<typeof feedbackInputSchema>;
 // Create Feedback Schemas
 // ============================================================================
 
-/** Schema for creating a feedback record (without db timestamps) */
+/** Schema for creating a feedback record */
 export const createFeedbackRecordSchema = feedbackRecordSchema;
 
-/** Feedback record for creation (excludes db timestamps) */
+/** Feedback record for creation */
 export type CreateFeedbackRecord = z.infer<typeof createFeedbackRecordSchema>;
 
 /** Schema for createFeedback operation arguments */
@@ -96,6 +96,16 @@ export const createFeedbackArgsSchema = z
 
 /** Arguments for creating feedback */
 export type CreateFeedbackArgs = z.infer<typeof createFeedbackArgsSchema>;
+
+/** Schema for createFeedback operation body in client/server */
+export const createFeedbackBodySchema = z
+  .object({
+    feedback: createFeedbackRecordSchema.omit({ timestamp: true }),
+  })
+  .describe('Arguments for creating feedback');
+
+/** Body for creating feedback in client/server */
+export type CreateFeedbackBody = z.infer<typeof createFeedbackBodySchema>;
 
 /** Schema for createFeedback operation response */
 export const createFeedbackResponseSchema = z
