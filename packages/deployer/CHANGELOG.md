@@ -6,12 +6,7 @@
 
 - Improved Studio load times by serving compressed static assets in both deploy and dev. Large bundles now download much faster and use significantly less bandwidth. ([#13945](https://github.com/mastra-ai/mastra/pull/13945))
 
-- --- ([#14162](https://github.com/mastra-ai/mastra/pull/14162))
-  `@mastra/deployer`: patch
-
-  ***
-
-  Fixed deployment dependency resolution so required schema compatibility packages are resolved automatically.
+- Fixed deployment dependency resolution so required schema compatibility packages are resolved automatically. ([#14162](https://github.com/mastra-ai/mastra/pull/14162))
 
 - Fixed gzip compression being applied globally to all API routes, causing JSON responses to be unreadable by clients that don't auto-decompress. Compression is now scoped to studio static assets only. ([#14190](https://github.com/mastra-ai/mastra/pull/14190))
 
