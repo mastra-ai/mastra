@@ -217,6 +217,68 @@ describe('MastraModelOutput', () => {
       const args = await collectToolCallArgs([JSON.stringify(expected)]);
       expect(args).toEqual(expected);
     });
+
+    it('should backfill args from final tool-call chunk when delta parsing fails', async () => {
+      const runId = 'test-run';
+      const toolCallId = 'call-backfill';
+      const toolName = 'edit_files';
+      const expected = { summary: 'fix', files: [] };
+
+      // Malformed deltas that will fail parsing
+      const truncated = '{"summary":"fix","files":[';
+      const deltaChunks: ChunkType[] = [
+        {
+          type: 'tool-call-input-streaming-start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, toolName, providerExecuted: false },
+        } as ChunkType,
+        {
+          type: 'tool-call-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, argsTextDelta: truncated },
+        } as ChunkType,
+        {
+          type: 'tool-call-input-streaming-end',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId },
+        } as ChunkType,
+      ];
+
+      // Final tool-call chunk from AI SDK with correctly assembled args
+      const finalToolCall: ChunkType = {
+        type: 'tool-call',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: { toolCallId, toolName, args: expected, providerExecuted: false },
+      } as ChunkType;
+
+      const stream = createChunkStream([
+        ...deltaChunks,
+        finalToolCall,
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const chunks: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        chunks.push(chunk);
+      }
+
+      const toolCallChunks = chunks.filter(c => c.type === 'tool-call');
+      expect(toolCallChunks.length).toBe(1);
+      expect((toolCallChunks[0] as any).payload.args).toEqual(expected);
+    });
   });
 
   describe('writer in output processors (outer context)', () => {

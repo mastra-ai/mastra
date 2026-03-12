@@ -549,6 +549,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 // Merge properties from the real tool-call onto the synthetic one.
                 // The AI SDK's streaming path emits tool-input-start without providerMetadata
                 // but includes it on the final tool-call chunk (e.g., OpenAI's fc_* itemId).
+                if (chunk.payload.args != null && existingSynthetic.payload.args == null) {
+                  existingSynthetic.payload.args = chunk.payload.args;
+                }
                 if (chunk.payload.providerMetadata && !existingSynthetic.payload.providerMetadata) {
                   existingSynthetic.payload.providerMetadata = chunk.payload.providerMetadata;
                 }
