@@ -418,7 +418,6 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       // Check if index already exists
       if (error?.statusCode === 409 || error?.message?.includes('already exists')) {
         // Index already exists, that's fine
-        // Index already exists, that's fine
         return;
       }
 
