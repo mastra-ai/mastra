@@ -654,6 +654,11 @@
       "source": "/reference/mastra-code/createMastraCode",
       "destination": "https://code.mastra.ai/",
       "permanent": true
+    },
+    {
+      "source": "/docs/agents/network-approval",
+      "destination": "/docs/agents/networks",
+      "permanent": true
     }
   ]
 }

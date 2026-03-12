@@ -78,11 +78,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/networks',
-          label: 'Networks',
-        },
-        {
-          type: 'doc',
           id: 'agents/processors',
           label: 'Processors',
         },
@@ -98,13 +93,13 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/network-approval',
-          label: 'Network Approval',
+          id: 'agents/adding-voice',
+          label: 'Voice',
         },
         {
           type: 'doc',
-          id: 'agents/adding-voice',
-          label: 'Voice',
+          id: 'agents/networks',
+          label: 'Networks',
         },
       ],
     },

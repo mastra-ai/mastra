@@ -44,10 +44,10 @@ import { ModerationProcessor } from '@mastra/core/processors'
 export const moderatedAgent = new Agent({
   name: 'moderated-agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
   inputProcessors: [
     new ModerationProcessor({
-      model: 'openai/gpt-4.1-nano',
+      model: 'openai/gpt-5-mini',
       categories: ['hate', 'harassment', 'violence'],
       threshold: 0.7,
       strategy: 'block',
@@ -185,7 +185,7 @@ export class DynamicModelProcessor implements Processor {
   }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
     // Use a fast model for initial response
     if (stepNumber === 0) {
-      return { model: 'openai/gpt-4o-mini' }
+      return { model: 'openai/gpt-5-mini' }
     }
 
     // Disable tools after 5 steps to force completion
@@ -277,7 +277,7 @@ const MAX_STEPS = 5
 const agent = new Agent({
   id: 'bounded-agent',
   name: 'Bounded Agent',
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
   tools: {
     /* your tools */
   },
@@ -298,7 +298,7 @@ For simpler per-step logic, you can use the `prepareStep` callback on `generate(
 await agent.generate('Complex task', {
   prepareStep: async ({ stepNumber, model }) => {
     if (stepNumber === 0) {
-      return { model: 'openai/gpt-4o-mini' }
+      return { model: 'openai/gpt-5-mini' }
     }
     if (stepNumber > 5) {
       return { toolChoice: 'none' }
@@ -490,7 +490,7 @@ import { TokenLimiter } from '@mastra/core/processors'
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   inputProcessors: [
     // Ensure the total tokens don't exceed ~127k
     new TokenLimiter(127000),
@@ -524,7 +524,7 @@ import { ToolCallFilter, TokenLimiter } from '@mastra/core/processors'
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   inputProcessors: [
     // Example 1: Remove all tool calls/results
     new ToolCallFilter(),
@@ -554,7 +554,7 @@ import { ToolSearchProcessor } from '@mastra/core/processors'
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   inputProcessors: [
     new ToolSearchProcessor({
       tools: {
@@ -596,7 +596,7 @@ const moderationWorkflow = createWorkflow({
 const agent = new Agent({
   id: 'moderated-agent',
   name: 'Moderated Agent',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   inputProcessors: [moderationWorkflow],
 })
 ```
@@ -631,7 +631,7 @@ export class QualityChecker implements Processor {
 const agent = new Agent({
   id: 'quality-agent',
   name: 'Quality Agent',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   outputProcessors: [new QualityChecker()],
   maxProcessorRetries: 3, // Maximum retry attempts (default: 3)
 })
