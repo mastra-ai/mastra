@@ -65,7 +65,6 @@ function createMetricEvent(): MetricEvent {
     metric: {
       timestamp: new Date(),
       name: 'mastra_test_counter',
-      metricType: 'counter',
       value: 1,
       labels: { env: 'test' },
     },

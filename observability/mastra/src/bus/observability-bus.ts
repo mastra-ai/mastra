@@ -14,9 +14,9 @@ import type {
   ObservabilityExporter,
   ObservabilityBridge,
   TracingEvent,
-  ScoreEvent,
-  FeedbackEvent,
   ObservabilityEvent,
+  ExportedMetric,
+  MetricEvent,
 } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
 
@@ -37,10 +37,16 @@ function isTracingEvent(event: ObservabilityEvent): event is TracingEvent {
   );
 }
 
+/**
+ * Unified event bus for all observability signals (tracing, logs, metrics, scores, feedback).
+ * Routes events to registered exporters and an optional bridge, with support for
+ * auto-extracted metrics from tracing spans.
+ */
 export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEvent> {
   private exporters: ObservabilityExporter[] = [];
   private bridge?: ObservabilityBridge;
   private autoExtractor?: AutoExtractedMetrics;
+  private cardinalityFilter?: CardinalityFilter;
 
   /** In-flight handler promises from routeToHandler. Self-cleaning via .finally(). */
   private pendingHandlers: Set<Promise<void>> = new Set();
@@ -51,18 +57,39 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
 
   /**
    * Enable auto-extraction of metrics from tracing, score, and feedback events.
-   * When enabled, span lifecycle events automatically generate counter/histogram
-   * metrics (e.g., mastra_agent_runs_started, mastra_model_duration_ms).
+   * When enabled, span lifecycle events automatically generate
+   * metrics (e.g., mastra_agent_duration_ms, mastra_model_duration_ms).
    *
    * No-ops if auto-extraction is already enabled.
    *
-   * @param cardinalityFilter - Optional filter applied to auto-extracted metric labels.
+   * @param cardinalityFilter - Optional filter applied to metric labels.
    */
   enableAutoExtractedMetrics(cardinalityFilter?: CardinalityFilter): void {
     if (this.autoExtractor) {
       return;
     }
-    this.autoExtractor = new AutoExtractedMetrics(this, cardinalityFilter);
+    this.cardinalityFilter = cardinalityFilter;
+    this.autoExtractor = new AutoExtractedMetrics(this);
+  }
+
+  /**
+   * Emit a metric event with validation and cardinality filtering.
+   * Non-finite or negative values are silently dropped.
+   * This is the single entry point for all metric emission (auto-extracted and user-defined).
+   */
+  emitMetric(name: string, value: number, labels: Record<string, string>): void {
+    if (!Number.isFinite(value) || value < 0) return;
+
+    const filteredLabels = this.cardinalityFilter ? this.cardinalityFilter.filterLabels(labels) : labels;
+    const exportedMetric: ExportedMetric = {
+      timestamp: new Date(),
+      name,
+      value,
+      labels: filteredLabels,
+    };
+
+    const event: MetricEvent = { type: 'metric', metric: exportedMetric };
+    this.emit(event);
   }
 
   /**
@@ -152,17 +179,11 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
       this.trackPromise(routeToHandler(this.bridge, event, this.logger));
     }
 
-    // Auto-extract metrics from tracing, score, and feedback events.
+    // Auto-extract metrics from tracing events (duration, token usage).
     // Wrapped in try-catch so a failing extractor never prevents subscriber delivery.
-    if (this.autoExtractor) {
+    if (this.autoExtractor && isTracingEvent(event)) {
       try {
-        if (isTracingEvent(event)) {
-          this.autoExtractor.processTracingEvent(event);
-        } else if (event.type === 'score') {
-          this.autoExtractor.processScoreEvent(event as ScoreEvent);
-        } else if (event.type === 'feedback') {
-          this.autoExtractor.processFeedbackEvent(event as FeedbackEvent);
-        }
+        this.autoExtractor.processTracingEvent(event);
       } catch (err) {
         this.logger.error('[ObservabilityBus] Auto-extraction error:', err);
       }

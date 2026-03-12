@@ -529,8 +529,7 @@ function createMockMetricEvent(overrides: Partial<ExportedMetric> = {}): MetricE
     type: 'metric',
     metric: {
       timestamp: new Date(),
-      name: 'mastra_test_counter',
-      metricType: 'counter',
+      name: 'mastra_test_metric',
       value: 1,
       labels: { env: 'test' },
       ...overrides,
@@ -636,44 +635,29 @@ describe('TestExporter - Metric Events', () => {
 
   it('should collect metric events', async () => {
     await exporter.onMetricEvent(createMockMetricEvent());
-    await exporter.onMetricEvent(
-      createMockMetricEvent({ name: 'mastra_agent_duration_ms', metricType: 'histogram', value: 1500 }),
-    );
+    await exporter.onMetricEvent(createMockMetricEvent({ name: 'mastra_agent_duration_ms', value: 1500 }));
 
     expect(exporter.getMetricEvents()).toHaveLength(2);
     expect(exporter.getAllMetrics()).toHaveLength(2);
   });
 
   it('should filter metrics by name', async () => {
-    await exporter.onMetricEvent(createMockMetricEvent({ name: 'mastra_agent_runs_started' }));
-    await exporter.onMetricEvent(
-      createMockMetricEvent({ name: 'mastra_agent_duration_ms', metricType: 'histogram', value: 1500 }),
-    );
-    await exporter.onMetricEvent(createMockMetricEvent({ name: 'mastra_agent_runs_started' }));
+    await exporter.onMetricEvent(createMockMetricEvent({ name: 'mastra_agent_duration_ms', value: 1500 }));
+    await exporter.onMetricEvent(createMockMetricEvent({ name: 'mastra_agent_duration_ms', value: 2000 }));
+    await exporter.onMetricEvent(createMockMetricEvent({ name: 'mastra_model_duration_ms', value: 500 }));
 
-    const startedMetrics = exporter.getMetricsByName('mastra_agent_runs_started');
-    expect(startedMetrics).toHaveLength(2);
-  });
-
-  it('should filter metrics by type', async () => {
-    await exporter.onMetricEvent(createMockMetricEvent({ metricType: 'counter' }));
-    await exporter.onMetricEvent(createMockMetricEvent({ metricType: 'histogram', name: 'duration', value: 100 }));
-    await exporter.onMetricEvent(createMockMetricEvent({ metricType: 'counter' }));
-    await exporter.onMetricEvent(createMockMetricEvent({ metricType: 'gauge', name: 'active', value: 5 }));
-
-    expect(exporter.getMetricsByType('counter')).toHaveLength(2);
-    expect(exporter.getMetricsByType('histogram')).toHaveLength(1);
-    expect(exporter.getMetricsByType('gauge')).toHaveLength(1);
+    const agentMetrics = exporter.getMetricsByName('mastra_agent_duration_ms');
+    expect(agentMetrics).toHaveLength(2);
   });
 
   it('should store debug logs for metric events', async () => {
     await exporter.onMetricEvent(
-      createMockMetricEvent({ name: 'mastra_test', metricType: 'counter', value: 42, labels: { agent: 'test-agent' } }),
+      createMockMetricEvent({ name: 'mastra_test', value: 42, labels: { agent: 'test-agent' } }),
     );
 
     const debugLogs = exporter.getLogs();
     expect(debugLogs).toHaveLength(1);
-    expect(debugLogs[0]).toContain('metric.counter');
+    expect(debugLogs[0]).toContain('metric:');
     expect(debugLogs[0]).toContain('mastra_test=42');
     expect(debugLogs[0]).toContain('agent=test-agent');
   });
@@ -915,8 +899,8 @@ describe('TestExporter - Statistics with All Signals', () => {
     await exporter.onLogEvent(createMockLogEvent({ level: 'error' }));
     await exporter.onLogEvent(createMockLogEvent({ level: 'info' }));
 
-    await exporter.onMetricEvent(createMockMetricEvent({ name: 'counter_a', metricType: 'counter' }));
-    await exporter.onMetricEvent(createMockMetricEvent({ name: 'hist_a', metricType: 'histogram', value: 100 }));
+    await exporter.onMetricEvent(createMockMetricEvent({ name: 'metric_a' }));
+    await exporter.onMetricEvent(createMockMetricEvent({ name: 'metric_b', value: 100 }));
 
     await exporter.onScoreEvent(createMockScoreEvent({ scorerName: 'relevance' }));
     await exporter.onScoreEvent(createMockScoreEvent({ scorerName: 'factuality' }));
@@ -940,10 +924,8 @@ describe('TestExporter - Statistics with All Signals', () => {
 
     // Metric stats
     expect(stats.totalMetrics).toBe(2);
-    expect(stats.metricsByType.counter).toBe(1);
-    expect(stats.metricsByType.histogram).toBe(1);
-    expect(stats.metricsByName.counter_a).toBe(1);
-    expect(stats.metricsByName.hist_a).toBe(1);
+    expect(stats.metricsByName.metric_a).toBe(1);
+    expect(stats.metricsByName.metric_b).toBe(1);
 
     // Score stats
     expect(stats.totalScores).toBe(3);
