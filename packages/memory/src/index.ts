@@ -132,7 +132,7 @@ export class Memory extends MastraMemory {
       (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
       config.semanticRecall === true;
 
-    const thread = await this.getThreadById({ threadId });
+    const thread = await this.getThreadById({ threadId, resourceId });
 
     // For resource-scoped semantic recall, we don't need to validate that the specific thread exists
     // because we're searching across all threads for the resource
