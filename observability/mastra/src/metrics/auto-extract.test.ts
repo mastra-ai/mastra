@@ -31,7 +31,6 @@ describe('AutoExtractedMetrics', () => {
 
   function setup() {
     bus = new ObservabilityBus();
-    // Capture only metric events emitted by the extractor
     bus.emit = (event: any) => {
       if (event.type === 'metric') {
         emittedMetrics.push(event as MetricEvent);
@@ -45,71 +44,12 @@ describe('AutoExtractedMetrics', () => {
     await bus?.shutdown();
   });
 
-  describe('SPAN_STARTED metrics', () => {
-    it('should emit mastra_agent_runs_started for agent spans', () => {
+  describe('SPAN_STARTED - no metrics emitted', () => {
+    it('should NOT emit metrics for SPAN_STARTED events', () => {
       setup();
       extractor.processTracingEvent({
         type: TracingEventType.SPAN_STARTED,
         exportedSpan: createMockSpan({ type: SpanType.AGENT_RUN, entityName: 'my-agent' }),
-      });
-
-      expect(emittedMetrics).toHaveLength(1);
-      expect(emittedMetrics[0]!.metric.name).toBe('mastra_agent_runs_started');
-      expect(emittedMetrics[0]!.metric.metricType).toBe('counter');
-      expect(emittedMetrics[0]!.metric.value).toBe(1);
-      expect(emittedMetrics[0]!.metric.labels).toEqual({ entity_type: 'agent', entity_name: 'my-agent' });
-    });
-
-    it('should emit mastra_tool_calls_started for tool spans', () => {
-      setup();
-      extractor.processTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: createMockSpan({ type: SpanType.TOOL_CALL, entityType: EntityType.TOOL, entityName: 'my-tool' }),
-      });
-
-      expect(emittedMetrics).toHaveLength(1);
-      expect(emittedMetrics[0]!.metric.name).toBe('mastra_tool_calls_started');
-      expect(emittedMetrics[0]!.metric.labels).toEqual({ entity_type: 'tool', entity_name: 'my-tool' });
-    });
-
-    it('should emit mastra_workflow_runs_started for workflow spans', () => {
-      setup();
-      extractor.processTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: createMockSpan({
-          type: SpanType.WORKFLOW_RUN,
-          entityType: EntityType.WORKFLOW_RUN,
-          entityName: 'my-workflow',
-        }),
-      });
-
-      expect(emittedMetrics).toHaveLength(1);
-      expect(emittedMetrics[0]!.metric.name).toBe('mastra_workflow_runs_started');
-      expect(emittedMetrics[0]!.metric.labels).toEqual({ entity_type: 'workflow_run', entity_name: 'my-workflow' });
-    });
-
-    it('should emit mastra_model_requests_started for model generation spans', () => {
-      setup();
-      extractor.processTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: createMockSpan({
-          type: SpanType.MODEL_GENERATION,
-          entityType: undefined,
-          entityName: undefined,
-          attributes: { model: 'gpt-4', provider: 'openai' },
-        }),
-      });
-
-      expect(emittedMetrics).toHaveLength(1);
-      expect(emittedMetrics[0]!.metric.name).toBe('mastra_model_requests_started');
-      expect(emittedMetrics[0]!.metric.labels).toEqual({ model: 'gpt-4', provider: 'openai' }); // no entity_type/name since entityName is undefined
-    });
-
-    it('should NOT emit metrics for unsupported span types', () => {
-      setup();
-      extractor.processTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: createMockSpan({ type: SpanType.GENERIC }),
       });
 
       expect(emittedMetrics).toHaveLength(0);
@@ -117,7 +57,7 @@ describe('AutoExtractedMetrics', () => {
   });
 
   describe('SPAN_ENDED metrics', () => {
-    it('should emit ended counter and duration histogram for agent spans', () => {
+    it('should emit duration metric for agent spans', () => {
       setup();
       extractor.processTracingEvent({
         type: TracingEventType.SPAN_ENDED,
@@ -129,19 +69,47 @@ describe('AutoExtractedMetrics', () => {
         }),
       });
 
-      expect(emittedMetrics).toHaveLength(2);
+      expect(emittedMetrics).toHaveLength(1);
+      const m = emittedMetrics[0]!;
+      expect(m.metric.name).toBe('mastra_agent_duration_ms');
+      expect(m.metric.value).toBe(1500);
+      expect(m.metric.labels).toEqual({ entity_type: 'agent', entity_name: 'my-agent', status: 'ok' });
+    });
 
-      // Ended counter
-      const endedMetric = emittedMetrics.find(m => m.metric.name === 'mastra_agent_runs_ended');
-      expect(endedMetric).toBeDefined();
-      expect(endedMetric!.metric.metricType).toBe('counter');
-      expect(endedMetric!.metric.labels).toEqual({ entity_type: 'agent', entity_name: 'my-agent', status: 'ok' });
+    it('should emit duration metric for tool spans', () => {
+      setup();
+      extractor.processTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: createMockSpan({
+          type: SpanType.TOOL_CALL,
+          entityType: EntityType.TOOL,
+          entityName: 'my-tool',
+          startTime: new Date('2026-01-01T00:00:00Z'),
+          endTime: new Date('2026-01-01T00:00:00.200Z'),
+        }),
+      });
 
-      // Duration histogram
-      const durationMetric = emittedMetrics.find(m => m.metric.name === 'mastra_agent_duration_ms');
-      expect(durationMetric).toBeDefined();
-      expect(durationMetric!.metric.metricType).toBe('histogram');
-      expect(durationMetric!.metric.value).toBe(1500);
+      expect(emittedMetrics).toHaveLength(1);
+      expect(emittedMetrics[0]!.metric.name).toBe('mastra_tool_duration_ms');
+      expect(emittedMetrics[0]!.metric.value).toBe(200);
+    });
+
+    it('should emit duration metric for workflow spans', () => {
+      setup();
+      extractor.processTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: createMockSpan({
+          type: SpanType.WORKFLOW_RUN,
+          entityType: EntityType.WORKFLOW_RUN,
+          entityName: 'my-workflow',
+          startTime: new Date('2026-01-01T00:00:00Z'),
+          endTime: new Date('2026-01-01T00:00:05Z'),
+        }),
+      });
+
+      expect(emittedMetrics).toHaveLength(1);
+      expect(emittedMetrics[0]!.metric.name).toBe('mastra_workflow_duration_ms');
+      expect(emittedMetrics[0]!.metric.value).toBe(5000);
     });
 
     it('should set status=error when span has errorInfo', () => {
@@ -150,6 +118,7 @@ describe('AutoExtractedMetrics', () => {
         type: TracingEventType.SPAN_ENDED,
         exportedSpan: createMockSpan({
           type: SpanType.TOOL_CALL,
+          entityType: EntityType.TOOL,
           entityName: 'my-tool',
           startTime: new Date('2026-01-01T00:00:00Z'),
           endTime: new Date('2026-01-01T00:00:00.200Z'),
@@ -157,8 +126,7 @@ describe('AutoExtractedMetrics', () => {
         }),
       });
 
-      const endedMetric = emittedMetrics.find(m => m.metric.name === 'mastra_tool_calls_ended');
-      expect(endedMetric!.metric.labels.status).toBe('error');
+      expect(emittedMetrics[0]!.metric.labels.status).toBe('error');
     });
 
     it('should extract token usage metrics for model generation', () => {
@@ -185,17 +153,99 @@ describe('AutoExtractedMetrics', () => {
       });
 
       const metricNames = emittedMetrics.map(m => m.metric.name);
-      expect(metricNames).toContain('mastra_model_requests_ended');
       expect(metricNames).toContain('mastra_model_duration_ms');
-      expect(metricNames).toContain('mastra_model_input_tokens');
-      expect(metricNames).toContain('mastra_model_output_tokens');
-      expect(metricNames).toContain('mastra_model_cache_read_tokens');
-      expect(metricNames).toContain('mastra_model_cache_write_tokens');
+      expect(metricNames).toContain('mastra_model_total_input_tokens');
+      expect(metricNames).toContain('mastra_model_total_output_tokens');
+      expect(metricNames).toContain('mastra_model_input_cache_read_tokens');
+      expect(metricNames).toContain('mastra_model_input_cache_write_tokens');
 
-      const inputTokens = emittedMetrics.find(m => m.metric.name === 'mastra_model_input_tokens');
+      const inputTokens = emittedMetrics.find(m => m.metric.name === 'mastra_model_total_input_tokens');
       expect(inputTokens!.metric.value).toBe(100);
-      const outputTokens = emittedMetrics.find(m => m.metric.name === 'mastra_model_output_tokens');
+      const outputTokens = emittedMetrics.find(m => m.metric.name === 'mastra_model_total_output_tokens');
       expect(outputTokens!.metric.value).toBe(50);
+    });
+
+    it('should extract all InputTokenDetails and OutputTokenDetails', () => {
+      setup();
+      extractor.processTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: createMockSpan({
+          type: SpanType.MODEL_GENERATION,
+          startTime: new Date('2026-01-01T00:00:00Z'),
+          endTime: new Date('2026-01-01T00:00:01Z'),
+          attributes: {
+            model: 'gpt-4o',
+            provider: 'openai',
+            usage: {
+              inputTokens: 500,
+              outputTokens: 200,
+              inputDetails: {
+                text: 400,
+                cacheRead: 50,
+                cacheWrite: 30,
+                audio: 15,
+                image: 5,
+              },
+              outputDetails: {
+                text: 150,
+                reasoning: 30,
+                audio: 10,
+                image: 10,
+              },
+            },
+          },
+        }),
+      });
+
+      const byName = (name: string) => emittedMetrics.find(m => m.metric.name === name);
+
+      // Top-level
+      expect(byName('mastra_model_total_input_tokens')!.metric.value).toBe(500);
+      expect(byName('mastra_model_total_output_tokens')!.metric.value).toBe(200);
+
+      // Input details
+      expect(byName('mastra_model_input_text_tokens')!.metric.value).toBe(400);
+      expect(byName('mastra_model_input_cache_read_tokens')!.metric.value).toBe(50);
+      expect(byName('mastra_model_input_cache_write_tokens')!.metric.value).toBe(30);
+      expect(byName('mastra_model_input_audio_tokens')!.metric.value).toBe(15);
+      expect(byName('mastra_model_input_image_tokens')!.metric.value).toBe(5);
+
+      // Output details
+      expect(byName('mastra_model_output_text_tokens')!.metric.value).toBe(150);
+      expect(byName('mastra_model_output_reasoning_tokens')!.metric.value).toBe(30);
+      expect(byName('mastra_model_output_audio_tokens')!.metric.value).toBe(10);
+      expect(byName('mastra_model_output_image_tokens')!.metric.value).toBe(10);
+    });
+
+    it('should skip undefined token detail fields silently', () => {
+      setup();
+      extractor.processTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: createMockSpan({
+          type: SpanType.MODEL_GENERATION,
+          startTime: new Date('2026-01-01T00:00:00Z'),
+          endTime: new Date('2026-01-01T00:00:01Z'),
+          attributes: {
+            model: 'claude-3',
+            provider: 'anthropic',
+            usage: {
+              inputTokens: 100,
+              outputTokens: 50,
+              // no inputDetails or outputDetails
+            },
+          },
+        }),
+      });
+
+      const metricNames = emittedMetrics.map(m => m.metric.name);
+      // Should have duration + input + output = 3 metrics
+      expect(metricNames).toContain('mastra_model_duration_ms');
+      expect(metricNames).toContain('mastra_model_total_input_tokens');
+      expect(metricNames).toContain('mastra_model_total_output_tokens');
+      // Should NOT have any detail metrics
+      expect(metricNames).not.toContain('mastra_model_input_text_tokens');
+      expect(metricNames).not.toContain('mastra_model_input_cache_read_tokens');
+      expect(metricNames).not.toContain('mastra_model_output_reasoning_tokens');
     });
 
     it('should NOT emit metrics for SPAN_UPDATED events', () => {
@@ -207,121 +257,82 @@ describe('AutoExtractedMetrics', () => {
 
       expect(emittedMetrics).toHaveLength(0);
     });
-  });
 
-  describe('Score auto-extraction', () => {
-    it('should emit mastra_scores_total for score events', () => {
+    it('should NOT emit metrics for unsupported span types', () => {
       setup();
-      extractor.processScoreEvent({
-        type: 'score',
-        score: {
-          timestamp: new Date(),
-          traceId: 'trace-1',
-          scorerName: 'relevance',
-          score: 0.85,
-        },
+      extractor.processTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: createMockSpan({
+          type: SpanType.GENERIC,
+          startTime: new Date('2026-01-01T00:00:00Z'),
+          endTime: new Date('2026-01-01T00:00:01Z'),
+        }),
       });
 
-      expect(emittedMetrics).toHaveLength(1);
-      expect(emittedMetrics[0]!.metric.name).toBe('mastra_scores_total');
-      expect(emittedMetrics[0]!.metric.metricType).toBe('counter');
-      expect(emittedMetrics[0]!.metric.value).toBe(1);
-      expect(emittedMetrics[0]!.metric.labels).toEqual({ scorer: 'relevance' });
+      expect(emittedMetrics).toHaveLength(0);
     });
 
-    it('should include experiment label when present', () => {
+    it('should drop negative values from emit', () => {
       setup();
-      extractor.processScoreEvent({
-        type: 'score',
-        score: {
-          timestamp: new Date(),
-          traceId: 'trace-1',
-          scorerName: 'quality',
-          score: 0.9,
-          experimentId: 'exp-1',
-        },
+      // This tests the guard in emit() — a span with endTime before startTime
+      extractor.processTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: createMockSpan({
+          type: SpanType.AGENT_RUN,
+          startTime: new Date('2026-01-01T00:00:01Z'),
+          endTime: new Date('2026-01-01T00:00:00Z'),
+        }),
       });
 
-      expect(emittedMetrics[0]!.metric.labels).toEqual({
-        scorer: 'quality',
-        experiment: 'exp-1',
-      });
-    });
-  });
-
-  describe('Feedback auto-extraction', () => {
-    it('should emit mastra_feedback_total for feedback events', () => {
-      setup();
-      extractor.processFeedbackEvent({
-        type: 'feedback',
-        feedback: {
-          timestamp: new Date(),
-          traceId: 'trace-1',
-          source: 'user',
-          feedbackType: 'thumbs',
-          value: 1,
-        },
-      });
-
-      expect(emittedMetrics).toHaveLength(1);
-      expect(emittedMetrics[0]!.metric.name).toBe('mastra_feedback_total');
-      expect(emittedMetrics[0]!.metric.labels).toEqual({
-        feedback_type: 'thumbs',
-        source: 'user',
-      });
-    });
-
-    it('should include experiment label when present', () => {
-      setup();
-      extractor.processFeedbackEvent({
-        type: 'feedback',
-        feedback: {
-          timestamp: new Date(),
-          traceId: 'trace-1',
-          source: 'user',
-          feedbackType: 'rating',
-          value: 5,
-          experimentId: 'exp-2',
-        },
-      });
-
-      expect(emittedMetrics[0]!.metric.labels).toEqual({
-        feedback_type: 'rating',
-        source: 'user',
-        experiment: 'exp-2',
-      });
+      expect(emittedMetrics).toHaveLength(0);
     });
   });
 
   describe('CardinalityFilter integration', () => {
-    it('should filter auto-extracted labels through CardinalityFilter when provided', () => {
-      bus = new ObservabilityBus();
+    it('should filter auto-extracted labels through CardinalityFilter on the bus', () => {
+      const filter = new CardinalityFilter({ blockedLabels: ['entity_name'] });
+      bus = new ObservabilityBus({ cardinalityFilter: filter });
+      // Override emit so emitMetric -> emit is captured
+      const originalEmit = bus.emit.bind(bus);
       bus.emit = (event: any) => {
         if (event.type === 'metric') {
           emittedMetrics.push(event as MetricEvent);
         }
+        originalEmit(event);
       };
-      const filter = new CardinalityFilter({ blockedLabels: ['entity_name'] });
-      extractor = new AutoExtractedMetrics(bus, filter);
+      extractor = new AutoExtractedMetrics(bus);
 
       extractor.processTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: createMockSpan({ type: SpanType.AGENT_RUN, entityName: 'my-agent' }),
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: createMockSpan({
+          type: SpanType.AGENT_RUN,
+          entityName: 'my-agent',
+          startTime: new Date('2026-01-01T00:00:00Z'),
+          endTime: new Date('2026-01-01T00:00:01Z'),
+        }),
       });
 
       expect(emittedMetrics).toHaveLength(1);
-      // entity_name should be filtered out, entity_type should remain
-      expect(emittedMetrics[0]!.metric.labels).toEqual({ entity_type: 'agent' });
+      expect(emittedMetrics[0]!.metric.labels).toEqual({ entity_type: 'agent', status: 'ok' });
     });
 
     it('should pass all labels through when no CardinalityFilter is provided', () => {
       setup();
       extractor.processTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: createMockSpan({ type: SpanType.AGENT_RUN, entityName: 'my-agent' }),
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: createMockSpan({
+          type: SpanType.AGENT_RUN,
+          entityName: 'my-agent',
+          startTime: new Date('2026-01-01T00:00:00Z'),
+          endTime: new Date('2026-01-01T00:00:01Z'),
+        }),
       });
 
-      expect(emittedMetrics[0]!.metric.labels).toEqual({ entity_type: 'agent', entity_name: 'my-agent' });
+      expect(emittedMetrics[0]!.metric.labels).toEqual({
+        entity_type: 'agent',
+        entity_name: 'my-agent',
+        status: 'ok',
+      });
     });
   });
 });

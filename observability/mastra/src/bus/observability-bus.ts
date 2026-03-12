@@ -14,14 +14,14 @@ import type {
   ObservabilityExporter,
   ObservabilityBridge,
   TracingEvent,
-  ScoreEvent,
-  FeedbackEvent,
   ObservabilityEvent,
+  ExportedMetric,
+  MetricEvent,
 } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
 
 import { AutoExtractedMetrics } from '../metrics/auto-extract';
-import type { CardinalityFilter } from '../metrics/cardinality';
+import { CardinalityFilter } from '../metrics/cardinality';
 import { BaseObservabilityEventBus } from './base';
 import { routeToHandler } from './route-event';
 
@@ -37,32 +37,54 @@ function isTracingEvent(event: ObservabilityEvent): event is TracingEvent {
   );
 }
 
+/** Configuration for the ObservabilityBus. */
+export interface ObservabilityBusConfig {
+  /** Cardinality filter applied to all metric labels. When omitted, a default filter is used. */
+  cardinalityFilter?: CardinalityFilter;
+  /** Whether to auto-extract metrics from tracing spans (duration, token usage). Defaults to true. */
+  autoExtractMetrics?: boolean;
+}
+
+/**
+ * Unified event bus for all observability signals (tracing, logs, metrics, scores, feedback).
+ * Routes events to registered exporters and an optional bridge, with support for
+ * auto-extracted metrics from tracing spans.
+ */
 export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEvent> {
   private exporters: ObservabilityExporter[] = [];
   private bridge?: ObservabilityBridge;
   private autoExtractor?: AutoExtractedMetrics;
+  private cardinalityFilter: CardinalityFilter;
 
   /** In-flight handler promises from routeToHandler. Self-cleaning via .finally(). */
   private pendingHandlers: Set<Promise<void>> = new Set();
 
-  constructor() {
+  constructor(config?: ObservabilityBusConfig) {
     super({ name: 'ObservabilityBus' });
+    this.cardinalityFilter = config?.cardinalityFilter ?? new CardinalityFilter();
+    if (config?.autoExtractMetrics !== false) {
+      this.autoExtractor = new AutoExtractedMetrics(this);
+    }
   }
 
   /**
-   * Enable auto-extraction of metrics from tracing, score, and feedback events.
-   * When enabled, span lifecycle events automatically generate counter/histogram
-   * metrics (e.g., mastra_agent_runs_started, mastra_model_duration_ms).
-   *
-   * No-ops if auto-extraction is already enabled.
-   *
-   * @param cardinalityFilter - Optional filter applied to auto-extracted metric labels.
+   * Emit a metric event with validation and cardinality filtering.
+   * Non-finite or negative values are silently dropped.
+   * This is the single entry point for all metric emission (auto-extracted and user-defined).
    */
-  enableAutoExtractedMetrics(cardinalityFilter?: CardinalityFilter): void {
-    if (this.autoExtractor) {
-      return;
-    }
-    this.autoExtractor = new AutoExtractedMetrics(this, cardinalityFilter);
+  emitMetric(name: string, value: number, labels: Record<string, string>): void {
+    if (!Number.isFinite(value) || value < 0) return;
+
+    const filteredLabels = this.cardinalityFilter.filterLabels(labels);
+    const exportedMetric: ExportedMetric = {
+      timestamp: new Date(),
+      name,
+      value,
+      labels: filteredLabels,
+    };
+
+    const event: MetricEvent = { type: 'metric', metric: exportedMetric };
+    this.emit(event);
   }
 
   /**
@@ -152,17 +174,11 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
       this.trackPromise(routeToHandler(this.bridge, event, this.logger));
     }
 
-    // Auto-extract metrics from tracing, score, and feedback events.
+    // Auto-extract metrics from tracing events (duration, token usage).
     // Wrapped in try-catch so a failing extractor never prevents subscriber delivery.
-    if (this.autoExtractor) {
+    if (this.autoExtractor && isTracingEvent(event)) {
       try {
-        if (isTracingEvent(event)) {
-          this.autoExtractor.processTracingEvent(event);
-        } else if (event.type === 'score') {
-          this.autoExtractor.processScoreEvent(event as ScoreEvent);
-        } else if (event.type === 'feedback') {
-          this.autoExtractor.processFeedbackEvent(event as FeedbackEvent);
-        }
+        this.autoExtractor.processTracingEvent(event);
       } catch (err) {
         this.logger.error('[ObservabilityBus] Auto-extraction error:', err);
       }

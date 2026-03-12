@@ -12,11 +12,16 @@ describe('MetricsContextImpl', () => {
   let bus: ObservabilityBus;
   const emittedEvents: MetricEvent[] = [];
 
-  function captureEvents() {
+  function setupBus(cardinalityFilter?: CardinalityFilter) {
+    bus = new ObservabilityBus({ cardinalityFilter });
+    // Capture metric events emitted through emitMetric -> emit
+    const originalEmit = bus.emit.bind(bus);
     bus.emit = (event: any) => {
       if (event.type === 'metric') {
         emittedEvents.push(event as MetricEvent);
       }
+      // Still route to exporters/bridge via original emit
+      originalEmit(event);
     };
   }
 
@@ -25,73 +30,32 @@ describe('MetricsContextImpl', () => {
     await bus?.shutdown();
   });
 
-  it('should emit counter metric', () => {
-    bus = new ObservabilityBus();
-    captureEvents();
+  it('should emit metric via emit()', () => {
+    setupBus();
 
     const metrics = new MetricsContextImpl({
       labels: { agent: 'test-agent' },
       observabilityBus: bus,
-      cardinalityFilter: new CardinalityFilter(),
     });
 
-    metrics.counter('mastra_agent_runs').add(1);
+    metrics.emit('mastra_agent_runs', 1);
 
     expect(emittedEvents).toHaveLength(1);
     const m = emittedEvents[0]!.metric;
     expect(m.name).toBe('mastra_agent_runs');
-    expect(m.metricType).toBe('counter');
     expect(m.value).toBe(1);
     expect(m.labels).toEqual({ agent: 'test-agent' });
   });
 
-  it('should emit gauge metric', () => {
-    bus = new ObservabilityBus();
-    captureEvents();
-
-    const metrics = new MetricsContextImpl({
-      observabilityBus: bus,
-      cardinalityFilter: new CardinalityFilter(),
-    });
-
-    metrics.gauge('active_connections').set(42);
-
-    expect(emittedEvents).toHaveLength(1);
-    const m = emittedEvents[0]!.metric;
-    expect(m.name).toBe('active_connections');
-    expect(m.metricType).toBe('gauge');
-    expect(m.value).toBe(42);
-  });
-
-  it('should emit histogram metric', () => {
-    bus = new ObservabilityBus();
-    captureEvents();
-
-    const metrics = new MetricsContextImpl({
-      observabilityBus: bus,
-      cardinalityFilter: new CardinalityFilter(),
-    });
-
-    metrics.histogram('request_duration_ms').record(150);
-
-    expect(emittedEvents).toHaveLength(1);
-    const m = emittedEvents[0]!.metric;
-    expect(m.name).toBe('request_duration_ms');
-    expect(m.metricType).toBe('histogram');
-    expect(m.value).toBe(150);
-  });
-
   it('should merge base labels with additional labels', () => {
-    bus = new ObservabilityBus();
-    captureEvents();
+    setupBus();
 
     const metrics = new MetricsContextImpl({
       labels: { agent: 'test-agent' },
       observabilityBus: bus,
-      cardinalityFilter: new CardinalityFilter(),
     });
 
-    metrics.counter('calls').add(1, { status: 'ok' });
+    metrics.emit('calls', 1, { status: 'ok' });
 
     expect(emittedEvents[0]!.metric.labels).toEqual({
       agent: 'test-agent',
@@ -99,16 +63,14 @@ describe('MetricsContextImpl', () => {
     });
   });
 
-  it('should apply cardinality filter to labels', () => {
-    bus = new ObservabilityBus();
-    captureEvents();
+  it('should apply cardinality filter from bus', () => {
+    setupBus(new CardinalityFilter()); // blocks trace_id, user_id, etc.
 
     const metrics = new MetricsContextImpl({
       observabilityBus: bus,
-      cardinalityFilter: new CardinalityFilter(), // blocks trace_id, user_id, etc.
     });
 
-    metrics.counter('calls').add(1, {
+    metrics.emit('calls', 1, {
       status: 'ok',
       trace_id: 'should-be-filtered',
       user_id: 'should-be-filtered',
@@ -117,17 +79,41 @@ describe('MetricsContextImpl', () => {
     expect(emittedEvents[0]!.metric.labels).toEqual({ status: 'ok' });
   });
 
+  it('should drop non-finite values', () => {
+    setupBus();
+
+    const metrics = new MetricsContextImpl({
+      observabilityBus: bus,
+    });
+
+    metrics.emit('calls', NaN);
+    metrics.emit('calls', Infinity);
+    metrics.emit('calls', -Infinity);
+
+    expect(emittedEvents).toHaveLength(0);
+  });
+
+  it('should drop negative values', () => {
+    setupBus();
+
+    const metrics = new MetricsContextImpl({
+      observabilityBus: bus,
+    });
+
+    metrics.emit('calls', -1);
+
+    expect(emittedEvents).toHaveLength(0);
+  });
+
   it('should not include metadata on emitted metrics', () => {
-    bus = new ObservabilityBus();
-    captureEvents();
+    setupBus();
 
     const metrics = new MetricsContextImpl({
       labels: { service_name: 'my-service' },
       observabilityBus: bus,
-      cardinalityFilter: new CardinalityFilter(),
     });
 
-    metrics.counter('calls').add(1);
+    metrics.emit('calls', 1);
 
     expect(emittedEvents[0]!.metric.metadata).toBeUndefined();
     expect(emittedEvents[0]!.metric.labels).toEqual({ service_name: 'my-service' });
@@ -146,12 +132,11 @@ describe('MetricsContextImpl', () => {
 
     const metrics = new MetricsContextImpl({
       observabilityBus: bus,
-      cardinalityFilter: new CardinalityFilter(),
     });
 
-    metrics.counter('test_counter').add(5);
+    metrics.emit('test_metric', 5);
 
     expect(onMetricEvent).toHaveBeenCalledTimes(1);
-    expect(onMetricEvent.mock.calls[0]![0].metric.name).toBe('test_counter');
+    expect(onMetricEvent.mock.calls[0]![0].metric.name).toBe('test_metric');
   });
 });
