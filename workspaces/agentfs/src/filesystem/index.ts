@@ -64,6 +64,10 @@ function resolveDbPath(p: string): string {
 // ---------------------------------------------------------------------------
 
 function normalizePath(input: string): string {
+  // Treat "." and "" as root — consistent with how CompositeFilesystem
+  // and the Studio UI use "." to mean "filesystem root".
+  if (input === '' || input === '.') return '/';
+
   let path = input.startsWith('/') ? input : '/' + input;
 
   let result = '';
