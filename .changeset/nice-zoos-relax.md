@@ -2,4 +2,6 @@
 '@mastra/core': patch
 ---
 
-Fixed workspace tools (e.g. `mastra_workspace_list_files`, `mastra_workspace_read_file`) throwing `WorkspaceNotAvailableError` when the workspace context was not provided at runtime. Workspace is now baked into tool options at build time, so workspace tools work reliably in all execution paths.
+Fixed workspace tools such as `mastra_workspace_list_files` and `mastra_workspace_read_file` failing with `WorkspaceNotAvailableError` in some execution paths.
+
+Workspace tools now work consistently across execution paths.
