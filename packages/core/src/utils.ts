@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
 import { ErrorCategory, ErrorDomain, MastraError } from './error';
@@ -638,7 +638,7 @@ export async function fetchWithRetry(
         break;
       }
 
-      const delay = Math.min(1000 * Math.pow(2, retryCount) * 1000, 10000);
+      const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }

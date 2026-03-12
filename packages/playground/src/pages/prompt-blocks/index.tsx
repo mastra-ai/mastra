@@ -42,14 +42,13 @@ export default function PromptBlocks() {
             </Button>
           )}
           <Button
-            variant="outline"
             as={Link}
             to="https://mastra.ai/en/docs/agents/agent-instructions#prompt-blocks"
             target="_blank"
+            variant="ghost"
+            size="md"
           >
-            <Icon>
-              <DocsIcon />
-            </Icon>
+            <DocsIcon />
             Documentation
           </Button>
         </HeaderAction>

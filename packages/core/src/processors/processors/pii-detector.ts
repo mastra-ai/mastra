@@ -1,6 +1,6 @@
 import * as crypto from 'node:crypto';
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import z from 'zod';
+import z from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
@@ -8,6 +8,8 @@ import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ObservabilityContext } from '../../observability';
 import { resolveObservabilityContext } from '../../observability';
+import type { PublicSchema } from '../../schema';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
@@ -309,12 +311,12 @@ export class PIIDetector implements Processor<'pii-detector'> {
             })
           : baseSchema;
 
-      let response;
+      let result: PIIDetectionResult;
       if (isSupportedLanguageModel(model)) {
-        response = await this.detectionAgent.generate(prompt, {
+        const response = await this.detectionAgent.generate(prompt, {
           structuredOutput: {
-            schema,
             ...(this.structuredOutputOptions ?? {}),
+            schema,
           },
           modelSettings: {
             temperature: 0,
@@ -322,16 +324,22 @@ export class PIIDetector implements Processor<'pii-detector'> {
           providerOptions: this.providerOptions,
           ...observabilityContext,
         });
+        if (!response.object) {
+          throw new Error('Structured output returned no object');
+        }
+        result = response.object;
       } else {
-        response = await this.detectionAgent.generateLegacy(prompt, {
-          output: schema,
+        const standardSchema = toStandardSchema(schema as PublicSchema);
+        const response = await this.detectionAgent.generateLegacy(prompt, {
+          output: standardSchemaToJSONSchema(standardSchema),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
           ...observabilityContext,
         });
+
+        result = response.object as PIIDetectionResult;
       }
 
-      const result = response.object as PIIDetectionResult;
       // Apply redaction method if not already provided and we have detections
       if (this.strategy === 'redact') {
         if (!result.redacted_content && result.detections && result.detections.length > 0) {

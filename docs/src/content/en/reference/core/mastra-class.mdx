@@ -1,5 +1,5 @@
 ---
-title: "Reference: Mastra Class | Core"
+title: "Reference: Mastra class | Core"
 description: "Documentation for the `Mastra` class in Mastra, the core entry point for managing agents, workflows, MCP servers, and server endpoints."
 packages:
   - "@mastra/core"
@@ -7,7 +7,7 @@ packages:
   - "@mastra/loggers"
 ---
 
-# Mastra Class
+# Mastra class
 
 The `Mastra` class is the central orchestrator in any Mastra application, managing agents, workflows, storage, logging, observability, and more. Typically, you create a single instance of `Mastra` to coordinate your application.
 
@@ -79,9 +79,9 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
   },
   {
     name: 'idGenerator',
-    type: '() => string',
+    type: '(context?: IdGeneratorContext) => string',
     description:
-      'Custom ID generator function. Used by agents, workflows, memory, and other components to generate unique identifiers.',
+      'Custom ID generator function. Used by agents, workflows, memory, and other components to generate unique identifiers. Receives optional context such as idType, source, entityId, and threadId to support context-aware ID formats.',
     isOptional: true,
   },
   {

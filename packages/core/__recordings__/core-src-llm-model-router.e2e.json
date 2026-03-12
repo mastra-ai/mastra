@@ -1,0 +1,1713 @@
+{
+  "meta": {
+    "name": "core-src-llm-model-router.e2e",
+    "testFile": "packages/core/src/llm/model/router.e2e.test.ts",
+    "model": "claude-haiku-4-5",
+    "createdAt": "2026-03-09T19:12:58.331Z"
+  },
+  "recordings": [
+    {
+      "hash": "5e165da45481bac2",
+      "request": {
+        "url": "https://api.anthropic.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "claude-haiku-4-5",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is 2+2?"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "type": "string",
+                      "description": "The city and state, e.g. San Francisco, CA"
+                    }
+                  },
+                  "required": ["location"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773083563331
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c648f9847df65-BRU",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:12:44 GMT",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "vary": "Accept-Encoding",
+          "x-envoy-upstream-service-time": "594",
+          "x-ratelimit-remaining-requests": "3999",
+          "x-ratelimit-remaining-tokens": "4800000",
+          "x-ratelimit-requests": "4000",
+          "x-ratelimit-reset-requests": "0s",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-ratelimit-tokens": "4800000",
+          "x-request-id": "req_011CYt39qS38woCV83mGSehU",
+          "x-robots-tag": "none"
+        },
+        "body": {
+          "id": "msg_01ADGHAaDqXBTNFAHfDc3cT2",
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "2 + 2 = 4\n\nThis is a simple arithmetic problem. Two plus two equals four."
+              }
+            }
+          ],
+          "created": 1773083564,
+          "model": "claude-haiku-4-5-20251001",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 27,
+            "prompt_tokens": 616,
+            "total_tokens": 643
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "3f93378b8b4ce045",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is the capital of France?"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "type": "string",
+                      "description": "The city and state, e.g. San Francisco, CA"
+                    }
+                  },
+                  "required": ["location"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773083564144
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c64945a1e28a9-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:12:44 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "407",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999982",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_ed8ca5f3954f4745b21a9dcad89625c3"
+        },
+        "body": {
+          "id": "chatcmpl-DHaJwsashlhWiqUZbJszJMuiR23PD",
+          "object": "chat.completion",
+          "created": 1773083564,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "The capital of France is Paris.",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 71,
+            "completion_tokens": 8,
+            "total_tokens": 79,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_687f94b198"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "1c833dde2d5cfff2",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Say \"Hello from Mastra!\" and nothing else."
+                }
+              ]
+            }
+          ],
+          "temperature": 0
+        },
+        "timestamp": 1773083564761
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c6497fb9428a9-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:12:45 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "495",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999953",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_4d448add3ce14cd3947ea21464e72c73"
+        },
+        "body": {
+          "id": "resp_035df545428ba80d0069af1bace3488197ba4215c059f07e5f",
+          "object": "response",
+          "created_at": 1773083564,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1773083565,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "output": [
+            {
+              "id": "msg_035df545428ba80d0069af1bad2ccc8197b766de4915a178de",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Hello from Mastra!"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 28,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 6,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 34
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "b7069852731336db",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is the weather in San Francisco?"
+                }
+              ]
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "location": {
+                    "type": "string",
+                    "description": "The city and state, e.g. San Francisco, CA"
+                  }
+                },
+                "required": ["location"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "required"
+        },
+        "timestamp": 1773083565425
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c649c2eed28a9-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:12:46 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "490",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999704",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "1ms",
+          "x-request-id": "req_9fd2fb74bfa8404abdd26b9b3178202e"
+        },
+        "body": {
+          "id": "resp_05112268409775470069af1bad8c2c8197ab31b120f7312d06",
+          "object": "response",
+          "created_at": 1773083565,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1773083565,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "output": [
+            {
+              "id": "fc_05112268409775470069af1badc820819788292302f8976376",
+              "type": "function_call",
+              "status": "completed",
+              "arguments": "{\"location\":\"San Francisco, CA\"}",
+              "call_id": "call_kfe7uOLEzpHdLMQoy5w6ldSE",
+              "name": "get_weather"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "required",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "location": {
+                    "type": "string",
+                    "description": "The city and state, e.g. San Francisco, CA"
+                  }
+                },
+                "required": ["location"],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 79,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 9,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 88
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "91841ccfcfbdb77f",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a pirate. Always respond like a pirate."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Say hello"
+                }
+              ]
+            }
+          ],
+          "temperature": 0
+        },
+        "timestamp": 1773083566074
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c64a0395228a9-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:12:47 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1067",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999957",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_a3c713b8011b4d2383f4e3f3af8e99ff"
+        },
+        "body": {
+          "id": "resp_0976ce3ee18e94d10069af1bae31ac8193bfc0d2c1bf272673",
+          "object": "response",
+          "created_at": 1773083566,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1773083567,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "output": [
+            {
+              "id": "msg_0976ce3ee18e94d10069af1bae8bb88193bf2b028df18196f0",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Ahoy, matey! Greetings to ye on this fine day! What be ye seekin' on the high seas? Arrr!"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 24,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 29,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 53
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "c91ca85f8e42b127",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Count from 1 to 3"
+                }
+              ]
+            }
+          ],
+          "temperature": 0,
+          "stream": true
+        },
+        "timestamp": 1773083567290
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c64a7cf5428a9-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Mon, 09 Mar 2026 19:12:47 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "85",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "req_7baac6ace77b4668b307c3ffde5f5ebb"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0227bb754287967b0069af1baf696c8190829b6d81d5b1a08d\",\"object\":\"response\",\"created_at\":1773083567,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0227bb754287967b0069af1baf696c8190829b6d81d5b1a08d\",\"object\":\"response\",\"created_at\":1773083567,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_0227bb754287967b0069af1bafd300819082bedf423faed399\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\nevent: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_0227bb754287967b0069af1bafd300819082bedf423faed399\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"1\",\"item_id\":\"msg_0227bb754287967b0069af1bafd300819082bedf423faed399\",\"logprobs\":[],\"obfuscation\":\"FHlH8e8N44B2lOH\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_0227bb754287967b0069af1bafd300819082bedf423faed399\",\"logprobs\":[],\"obfuscation\":\"uWGMKhhJD5bzl4x\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_0227bb754287967b0069af1bafd300819082bedf423faed399\",\"logprobs\":[],\"obfuscation\":\"XZnHSaQNQo9OwAq\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"2\",\"item_id\":\"msg_0227bb754287967b0069af1bafd300819082bedf423faed399\",\"logprobs\":[],\"obfuscation\":\"n9iMTdeDKtJSS2w\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_0227bb754287967b0069af1bafd300819082bedf423faed399\",\"logprobs\":[],\"obfuscation\":\"g9jUjCWXd28TjXr\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_0227bb754287967b0069af1bafd300819082bedf423faed399\",\"logprobs\":[],\"obfuscation\":\"xw0rB6VSpTppQef\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"3\",\"item_id\":\"msg_0227bb754287967b0069af1bafd300819082bedf423faed399\",\"logprobs\":[],\"obfuscation\":\"yll80Ahu6UZvF3t\",\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_0227bb754287967b0069af1bafd300819082bedf423faed399\",\"logprobs\":[],\"obfuscation\":\"q2Cgq9qRj2skStK\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_0227bb754287967b0069af1bafd300819082bedf423faed399\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":12,\"text\":\"1, 2, 3.\"}\n\n",
+          "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_0227bb754287967b0069af1bafd300819082bedf423faed399\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"1, 2, 3.\"},\"sequence_number\":13}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_0227bb754287967b0069af1bafd300819082bedf423faed399\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"1, 2, 3.\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":14}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0227bb754287967b0069af1baf696c8190829b6d81d5b1a08d\",\"object\":\"response\",\"created_at\":1773083567,\"status\":\"completed\",\"background\":false,\"completed_at\":1773083567,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[{\"id\":\"msg_0227bb754287967b0069af1bafd300819082bedf423faed399\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"1, 2, 3.\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":24,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":9,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":33},\"user\":null,\"metadata\":{}},\"sequence_number\":15}\n\n"
+        ],
+        "chunkTimings": [2, 8, 325, 18, 2, 18, 1, 19, 3, 32, 2, 31, 1, 1, 72],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "0775da06112f9ed5",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-haiku-4-5",
+          "max_tokens": 64000,
+          "temperature": 0,
+          "system": [
+            {
+              "type": "text",
+              "text": "You are a helpful assistant."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Say \"Hello from Mastra!\" and nothing else."
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1773083568081
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
+          "anthropic-ratelimit-input-tokens-limit": "4000000",
+          "anthropic-ratelimit-input-tokens-remaining": "4000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-03-09T19:12:48Z",
+          "anthropic-ratelimit-output-tokens-limit": "800000",
+          "anthropic-ratelimit-output-tokens-remaining": "800000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-03-09T19:12:48Z",
+          "anthropic-ratelimit-requests-limit": "4000",
+          "anthropic-ratelimit-requests-remaining": "3999",
+          "anthropic-ratelimit-requests-reset": "2026-03-09T19:12:48Z",
+          "anthropic-ratelimit-tokens-limit": "4800000",
+          "anthropic-ratelimit-tokens-remaining": "4800000",
+          "anthropic-ratelimit-tokens-reset": "2026-03-09T19:12:48Z",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c64acbfd9df65-BRU",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:12:48 GMT",
+          "request-id": "req_011CYt3ABQLEtLiJXdUEeBnC",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "vary": "Accept-Encoding",
+          "x-envoy-upstream-service-time": "417",
+          "x-robots-tag": "none"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_01CJsFR5g1M6Dq6YydpywPfW",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Hello from Mastra!"
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "usage": {
+            "input_tokens": 25,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 9,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "60eeff4213f23d79",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-haiku-4-5",
+          "max_tokens": 64000,
+          "temperature": 0,
+          "system": [
+            {
+              "type": "text",
+              "text": "You are a helpful assistant."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "What is the weather in San Francisco?"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "name": "get_weather",
+              "description": "Get the weather for a location",
+              "input_schema": {
+                "type": "object",
+                "properties": {
+                  "location": {
+                    "type": "string",
+                    "description": "The city and state, e.g. San Francisco, CA"
+                  }
+                },
+                "required": ["location"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": {
+            "type": "any"
+          }
+        },
+        "timestamp": 1773083568621
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
+          "anthropic-ratelimit-input-tokens-limit": "4000000",
+          "anthropic-ratelimit-input-tokens-remaining": "4000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-03-09T19:12:49Z",
+          "anthropic-ratelimit-output-tokens-limit": "800000",
+          "anthropic-ratelimit-output-tokens-remaining": "800000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-03-09T19:12:49Z",
+          "anthropic-ratelimit-requests-limit": "4000",
+          "anthropic-ratelimit-requests-remaining": "3999",
+          "anthropic-ratelimit-requests-reset": "2026-03-09T19:12:48Z",
+          "anthropic-ratelimit-tokens-limit": "4800000",
+          "anthropic-ratelimit-tokens-remaining": "4800000",
+          "anthropic-ratelimit-tokens-reset": "2026-03-09T19:12:49Z",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c64b0189edf65-BRU",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:12:49 GMT",
+          "request-id": "req_011CYt3ADgzo14Ys4yAwtX6W",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "vary": "Accept-Encoding",
+          "x-envoy-upstream-service-time": "502",
+          "x-robots-tag": "none"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_018P3EnJKSwrXupEaEYteSV6",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "toolu_017mvBPH7VSuM6BaHU4W89s5",
+              "name": "get_weather",
+              "input": {
+                "location": "San Francisco, CA"
+              },
+              "caller": {
+                "type": "direct"
+              }
+            }
+          ],
+          "stop_reason": "tool_use",
+          "stop_sequence": null,
+          "usage": {
+            "input_tokens": 709,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 41,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "bdcdc4eff212a2ce",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-haiku-4-5",
+          "max_tokens": 64000,
+          "temperature": 0,
+          "system": [
+            {
+              "type": "text",
+              "text": "You are a pirate. Always respond like a pirate."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Say hello"
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1773083569242
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
+          "anthropic-ratelimit-input-tokens-limit": "4000000",
+          "anthropic-ratelimit-input-tokens-remaining": "4000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-03-09T19:12:50Z",
+          "anthropic-ratelimit-output-tokens-limit": "800000",
+          "anthropic-ratelimit-output-tokens-remaining": "800000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-03-09T19:12:51Z",
+          "anthropic-ratelimit-requests-limit": "4000",
+          "anthropic-ratelimit-requests-remaining": "3999",
+          "anthropic-ratelimit-requests-reset": "2026-03-09T19:12:49Z",
+          "anthropic-ratelimit-tokens-limit": "4800000",
+          "anthropic-ratelimit-tokens-remaining": "4800000",
+          "anthropic-ratelimit-tokens-reset": "2026-03-09T19:12:50Z",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c64b409d9df65-BRU",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:12:51 GMT",
+          "request-id": "req_011CYt3AGTSMuUpZmEZCxYRy",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "vary": "Accept-Encoding",
+          "x-envoy-upstream-service-time": "2369",
+          "x-robots-tag": "none"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_01DKEHV3DmNyLYmWEF8xcWMr",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Ahoy there, matey! *adjusts tricorn hat* \n\nWelcome aboard! 'Tis a fine day on the high seas, it be! What brings ye to these waters, eh? 🏴‍☠️"
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "usage": {
+            "input_tokens": 22,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 57,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "60513d3c6c97ea66",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-haiku-4-5",
+          "max_tokens": 64000,
+          "temperature": 0,
+          "system": [
+            {
+              "type": "text",
+              "text": "You are a helpful assistant."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Count from 1 to 3"
+                }
+              ]
+            }
+          ],
+          "stream": true
+        },
+        "timestamp": 1773083571738
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
+          "anthropic-ratelimit-input-tokens-limit": "4000000",
+          "anthropic-ratelimit-input-tokens-remaining": "4000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-03-09T19:12:51Z",
+          "anthropic-ratelimit-output-tokens-limit": "800000",
+          "anthropic-ratelimit-output-tokens-remaining": "800000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-03-09T19:12:51Z",
+          "anthropic-ratelimit-requests-limit": "4000",
+          "anthropic-ratelimit-requests-remaining": "3999",
+          "anthropic-ratelimit-requests-reset": "2026-03-09T19:12:51Z",
+          "anthropic-ratelimit-tokens-limit": "4800000",
+          "anthropic-ratelimit-tokens-remaining": "4800000",
+          "anthropic-ratelimit-tokens-reset": "2026-03-09T19:12:51Z",
+          "cache-control": "no-cache",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c64c398fedf65-BRU",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Mon, 09 Mar 2026 19:12:52 GMT",
+          "request-id": "req_011CYt3AT2RoFsxAAHNgXxpp",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "vary": "Accept-Encoding",
+          "x-envoy-upstream-service-time": "283",
+          "x-robots-tag": "none"
+        },
+        "chunks": [
+          "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-haiku-4-5-20251001\",\"id\":\"msg_013jFNj7jBoZnkoY9m9",
+          "GRgPF\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":21,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"}}      }\n\n",
+          "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}  }\n\n",
+          "event: ping\ndata: {\"type\": \"ping\"}\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"1\"}}\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"\\n2\\n3\"}            }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+          "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":21,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":9}     }\n\n",
+          "event: message_stop\ndata: {\"type\":\"message_stop\"     }\n\n"
+        ],
+        "chunkTimings": [1, 0, 60, 2, 1, 17, 0, 12, 0],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "8e8ad8213892ec64",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "temperature": 0
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Say \"Hello from Mastra!\" and nothing else."
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You are a helpful assistant."
+              }
+            ]
+          }
+        },
+        "timestamp": 1773083572237
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Mon, 09 Mar 2026 19:12:52 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=537",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "Hello from Mastra!\n"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "avgLogprobs": -0.00001383251704586049
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 17,
+            "candidatesTokenCount": 6,
+            "totalTokenCount": 23,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 17
+              }
+            ],
+            "candidatesTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 6
+              }
+            ]
+          },
+          "modelVersion": "gemini-2.0-flash",
+          "responseId": "tBuvaY6UFtqFkdUPosjRsQI"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "d00aa5db1c9065d9",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "temperature": 0
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "What is the weather in San Francisco?"
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You are a helpful assistant."
+              }
+            ]
+          },
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "get_weather",
+                  "description": "Get the weather for a location",
+                  "parameters": {
+                    "required": ["location"],
+                    "type": "object",
+                    "properties": {
+                      "location": {
+                        "description": "The city and state, e.g. San Francisco, CA",
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "ANY"
+            }
+          }
+        },
+        "timestamp": 1773083572847
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Mon, 09 Mar 2026 19:12:53 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=554",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "functionCall": {
+                      "name": "get_weather",
+                      "args": {
+                        "location": "San Francisco, CA"
+                      }
+                    }
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "avgLogprobs": 0.0000011251831892877817
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 40,
+            "candidatesTokenCount": 8,
+            "totalTokenCount": 48,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 40
+              }
+            ],
+            "candidatesTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 8
+              }
+            ]
+          },
+          "modelVersion": "gemini-2.0-flash",
+          "responseId": "tBuvafW6Oa7i7M8Px9vRsQw"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "082053b5b95fa295",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "temperature": 0
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Say hello"
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You are a pirate. Always respond like a pirate."
+              }
+            ]
+          }
+        },
+        "timestamp": 1773083573432
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Mon, 09 Mar 2026 19:12:54 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=743",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "Ahoy there, matey! A hearty \"Ahoy!\" to ye from this ol' sea dog!\n"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "avgLogprobs": -0.11318475267161494
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 13,
+            "candidatesTokenCount": 23,
+            "totalTokenCount": 36,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 13
+              }
+            ],
+            "candidatesTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 23
+              }
+            ]
+          },
+          "modelVersion": "gemini-2.0-flash",
+          "responseId": "tRuvabT2H9zzkdUPtdPk-Q0"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "8f3a5b665f0e072d",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "temperature": 0
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Count from 1 to 3"
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You are a helpful assistant."
+              }
+            ]
+          }
+        },
+        "timestamp": 1773083574196
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-disposition": "attachment",
+          "content-type": "text/event-stream",
+          "date": "Mon, 09 Mar 2026 19:12:54 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=331",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "chunks": [
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"1\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 14,\"totalTokenCount\": 14,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 14}]},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"thuvaZO_Eu_izeYPtOD-8Ao\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \",\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 14,\"totalTokenCount\": 14,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 14}]},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"thuvaZO_Eu_izeYPtOD-8Ao\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" 2, 3\\n\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 13,\"candidatesTokenCount\": 8,\"totalTokenCount\": 21,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 13}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 8}]},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"thuvaZO_Eu_izeYPtOD-8Ao\"}\r\n\r\n"
+        ],
+        "chunkTimings": [0, 1, 0],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "b830f2c08125d8c7",
+      "request": {
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "openai/gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "Say \"Hello from Mastra!\" and nothing else."
+            }
+          ]
+        },
+        "timestamp": 1773083574561
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-allow-origin": "*",
+          "cf-ray": "9d9c64d57aaab721-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:12:55 GMT",
+          "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+          "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+          "server": "cloudflare",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "id": "gen-1773083574-SeKKnLleQms21VS5GjDA",
+          "object": "chat.completion",
+          "created": 1773083574,
+          "model": "openai/gpt-4o-mini",
+          "provider": "OpenAI",
+          "system_fingerprint": "fp_664ed7a1cd",
+          "choices": [
+            {
+              "index": 0,
+              "logprobs": null,
+              "finish_reason": "stop",
+              "native_finish_reason": "stop",
+              "message": {
+                "role": "assistant",
+                "content": "Hello from Mastra!",
+                "refusal": null,
+                "reasoning": null
+              }
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 28,
+            "completion_tokens": 5,
+            "total_tokens": 33,
+            "cost": 0.0000072,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.0000072,
+              "upstream_inference_prompt_cost": 0.0000042,
+              "upstream_inference_completions_cost": 0.000003
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "6c7ae943e4b00d5e",
+      "request": {
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "openai/gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "What is the weather in San Francisco?"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "type": "string",
+                      "description": "The city and state, e.g. San Francisco, CA"
+                    }
+                  },
+                  "required": ["location"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "required"
+        },
+        "timestamp": 1773083575355
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-allow-origin": "*",
+          "cf-ray": "9d9c64da3f4bb721-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:12:55 GMT",
+          "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+          "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+          "server": "cloudflare",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "id": "gen-1773083575-qmvk77pG2ivf6teZUkkG",
+          "object": "chat.completion",
+          "created": 1773083575,
+          "model": "openai/gpt-4o-mini",
+          "provider": "OpenAI",
+          "system_fingerprint": "fp_373a14eb6f",
+          "choices": [
+            {
+              "index": 0,
+              "logprobs": null,
+              "finish_reason": "tool_calls",
+              "native_finish_reason": "tool_calls",
+              "message": {
+                "role": "assistant",
+                "content": null,
+                "refusal": null,
+                "reasoning": null,
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "index": 0,
+                    "id": "call_IBt0simSvy52bWPD1ON6LqoJ",
+                    "function": {
+                      "name": "get_weather",
+                      "arguments": "{\"location\":\"San Francisco, CA\"}"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 72,
+            "completion_tokens": 17,
+            "total_tokens": 89,
+            "cost": 0.000021,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.000021,
+              "upstream_inference_prompt_cost": 0.0000108,
+              "upstream_inference_completions_cost": 0.0000102
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "b4184beb55fcf230",
+      "request": {
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "openai/gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a pirate. Always respond like a pirate."
+            },
+            {
+              "role": "user",
+              "content": "Say hello"
+            }
+          ]
+        },
+        "timestamp": 1773083576125
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-allow-origin": "*",
+          "cf-ray": "9d9c64df0c6fb721-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:12:56 GMT",
+          "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+          "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+          "server": "cloudflare",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "id": "gen-1773083576-YUvxVaXMUotvqFEOsI6f",
+          "object": "chat.completion",
+          "created": 1773083576,
+          "model": "openai/gpt-4o-mini",
+          "provider": "OpenAI",
+          "system_fingerprint": "fp_664ed7a1cd",
+          "choices": [
+            {
+              "index": 0,
+              "logprobs": null,
+              "finish_reason": "stop",
+              "native_finish_reason": "stop",
+              "message": {
+                "role": "assistant",
+                "content": "Ahoy, matey! Greetings to ye on this fine day upon the high seas! What be ye seekin', eh?",
+                "refusal": null,
+                "reasoning": null
+              }
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 24,
+            "completion_tokens": 26,
+            "total_tokens": 50,
+            "cost": 0.0000192,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.0000192,
+              "upstream_inference_prompt_cost": 0.0000036,
+              "upstream_inference_completions_cost": 0.0000156
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "5c8e3ffe600cd83f",
+      "request": {
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "openai/gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": "Count from 1 to 3"
+            }
+          ],
+          "stream": true
+        },
+        "timestamp": 1773083577423
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-allow-origin": "*",
+          "cache-control": "no-cache",
+          "cf-ray": "9d9c64e72d85b721-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream",
+          "date": "Mon, 09 Mar 2026 19:12:58 GMT",
+          "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+          "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+          "server": "cloudflare",
+          "x-content-type-options": "nosniff"
+        },
+        "chunks": [
+          ": OPENROUTER PROCESSING\n\n",
+          "data: {\"id\":\"gen-1773083577-sRg452mCwjeCehNDUeNy\",\"object\":\"chat.completion.chunk\",\"created\":1773083577,\"model\":\"openai/gpt-4o-mini\",\"provider\":\"OpenAI\",\"system_fingerprint\":\"fp_664ed7a1cd\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"1\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\n",
+          "data: {\"id\":\"gen-1773083577-sRg452mCwjeCehNDUeNy\",\"object\":\"chat.completion.chunk\",\"created\":1773083577,\"model\":\"openai/gpt-4o-mini\",\"provider\":\"OpenAI\",\"system_fingerprint\":\"fp_664ed7a1cd\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\",\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\n",
+          "data: {\"id\":\"gen-1773083577-sRg452mCwjeCehNDUeNy\",\"object\":\"chat.completion.chunk\",\"created\":1773083577,\"model\":\"openai/gpt-4o-mini\",\"provider\":\"OpenAI\",\"system_fingerprint\":\"fp_664ed7a1cd\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" \",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\n",
+          "data: {\"id\":\"gen-1773083577-sRg452mCwjeCehNDUeNy\",\"object\":\"chat.completion.chunk\",\"created\":1773083577,\"model\":\"openai/gpt-4o-mini\",\"provider\":\"OpenAI\",\"system_fingerprint\":\"fp_664ed7a1cd\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"2\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\n",
+          "data: {\"id\":\"gen-1773083577-sRg452mCwjeCehNDUeNy\",\"object\":\"chat.completion.chunk\",\"created\":1773083577,\"model\":\"openai/gpt-4o-mini\",\"provider\":\"OpenAI\",\"system_fingerprint\":\"fp_664ed7a1cd\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\",\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\n",
+          "data: {\"id\":\"gen-1773083577-sRg452mCwjeCehNDUeNy\",\"object\":\"chat.completion.chunk\",\"created\":1773083577,\"model\":\"openai/gpt-4o-mini\",\"provider\":\"OpenAI\",\"system_fingerprint\":\"fp_664ed7a1cd\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" \",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\n",
+          "data: {\"id\":\"gen-1773083577-sRg452mCwjeCehNDUeNy\",\"object\":\"chat.completion.chunk\",\"created\":1773083577,\"model\":\"openai/gpt-4o-mini\",\"provider\":\"OpenAI\",\"system_fingerprint\":\"fp_664ed7a1cd\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"3\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\n",
+          "data: {\"id\":\"gen-1773083577-sRg452mCwjeCehNDUeNy\",\"object\":\"chat.completion.chunk\",\"created\":1773083577,\"model\":\"openai/gpt-4o-mini\",\"provider\":\"OpenAI\",\"system_fingerprint\":\"fp_664ed7a1cd\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\".\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\n",
+          "data: {\"id\":\"gen-1773083577-sRg452mCwjeCehNDUeNy\",\"object\":\"chat.completion.chunk\",\"created\":1773083577,\"model\":\"openai/gpt-4o-mini\",\"provider\":\"OpenAI\",\"system_fingerprint\":\"fp_664ed7a1cd\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"stop\",\"native_finish_reason\":\"stop\"}]}\n\ndata: {\"id\":\"gen-1773083577-sRg452mCwjeCehNDUeNy\",\"object\":\"chat.completion.chunk\",\"created\":1773083577,\"model\":\"openai/gpt-4o-mini\",\"provider\":\"OpenAI\",\"system_fingerprint\":\"fp_664ed7a1cd\",\"choices\":[],\"usage\":{\"prompt_tokens\":24,\"completion_tokens\":8,\"total_tokens\":32,\"cost\":0.0000084,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":0.0000084,\"upstream_inference_prompt_cost\":0.0000036,\"upstream_inference_completions_cost\":0.0000048},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"image_tokens\":0,\"audio_tokens\":0}}}\n\ndata: [DONE]\n\n"
+        ],
+        "chunkTimings": [0, 33, 0, 36, 0, 3, 1, 35, 0, 24],
+        "isStreaming": true
+      }
+    }
+  ]
+}

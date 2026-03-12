@@ -40,17 +40,13 @@ function Agents() {
 
         <HeaderAction>
           {canCreateAgent && (
-            <Button variant="light" as={Link} to="/cms/agents/create">
-              <Icon>
-                <Plus />
-              </Icon>
+            <Button as={Link} to="/cms/agents/create">
+              <Plus />
               Create an agent
             </Button>
           )}
-          <Button variant="outline" as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
+          <Button variant="ghost" size="md" as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
+            <DocsIcon />
             Agents documentation
           </Button>
         </HeaderAction>

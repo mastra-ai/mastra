@@ -1932,12 +1932,12 @@ describe('MastraEditor with LibSQL Integration', () => {
       expect(result).toContain('Be friendly in your responses.'); // fallback used
     });
 
-    it('should skip unpublished prompt blocks', async () => {
+    it('should include unpublished prompt blocks in preview (includeDrafts)', async () => {
       // Create a draft block (default status)
       await editor.prompt.create({
         id: 'draft-block',
         name: 'Draft Block',
-        content: 'This is a draft block that should not appear.',
+        content: 'This is a draft block.',
       });
       // Do NOT publish it
 
@@ -1948,6 +1948,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       });
       await editor.prompt.update({ id: 'published-block', status: 'published' });
 
+      // Preview mode includes drafts so users can see what they're configuring
       const result = await editor.prompt.preview(
         [
           { type: 'prompt_block_ref', id: 'draft-block' },
@@ -1956,7 +1957,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         {},
       );
 
-      expect(result).not.toContain('draft block');
+      expect(result).toContain('This is a draft block.');
       expect(result).toContain('This is a published block.');
     });
 
