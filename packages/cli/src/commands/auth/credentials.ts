@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { MASTRA_CLOUD_API_URL } from './client.js';
+import { createApiClient, MASTRA_CLOUD_API_URL } from './client.js';
 
 const CREDENTIALS_DIR = join(homedir(), '.mastra');
 const CREDENTIALS_FILE = join(CREDENTIALS_DIR, 'credentials.json');
@@ -67,14 +67,12 @@ async function tryRefreshToken(creds: Credentials): Promise<string | null> {
   if (!creds.refreshToken) return null;
 
   try {
-    const resp = await fetch(`${MASTRA_CLOUD_API_URL}/v1/auth/refresh-token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: creds.refreshToken }),
+    const client = createApiClient(creds.token);
+    const { data, error } = await client.POST('/v1/auth/refresh-token', {
+      body: { refreshToken: creds.refreshToken },
     });
-    if (!resp.ok) return null;
+    if (error) return null;
 
-    const data = (await resp.json()) as { accessToken: string; refreshToken: string };
     creds.token = data.accessToken;
     creds.refreshToken = data.refreshToken;
     await saveCredentials(creds);
@@ -177,11 +175,9 @@ export async function getToken(): Promise<string> {
 
   // Try a quick verify to see if the token is still valid
   try {
-    const resp = await fetch(`${MASTRA_CLOUD_API_URL}/v1/auth/verify`, {
-      headers: { Authorization: `Bearer ${creds.token}` },
-    });
-
-    if (resp.ok) return creds.token;
+    const client = createApiClient(creds.token);
+    const { error } = await client.GET('/v1/auth/verify');
+    if (!error) return creds.token;
   } catch {
     // Network error — try refresh
   }

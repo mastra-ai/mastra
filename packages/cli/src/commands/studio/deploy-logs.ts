@@ -1,23 +1,18 @@
-import { MASTRA_CLOUD_API_URL, authHeaders } from '../auth/client.js';
+import { authHeaders, createApiClient, MASTRA_CLOUD_API_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 
 async function getLogs(deployId: string, tail: string | undefined, token: string, orgId: string) {
-  const params = new URLSearchParams();
-  if (tail) params.set('tail', tail);
-
-  const qs = params.toString();
-  const url = `${MASTRA_CLOUD_API_URL}/v1/studio/deploys/${deployId}/logs${qs ? `?${qs}` : ''}`;
-
-  const resp = await fetch(url, {
-    headers: authHeaders(token, orgId),
+  const client = createApiClient(token, orgId);
+  const { data, error } = await client.GET('/v1/studio/deploys/{id}/logs', {
+    params: {
+      path: { id: deployId },
+      query: tail ? { tail } : undefined,
+    },
   });
 
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`Failed to fetch logs: ${resp.status} — ${text}`);
+  if (error) {
+    throw new Error(`Failed to fetch logs: ${error.error}`);
   }
-
-  const data = (await resp.json()) as { logs: string | null };
 
   if (data.logs) {
     process.stdout.write(data.logs);

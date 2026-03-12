@@ -1,4 +1,4 @@
-import { MASTRA_CLOUD_API_URL, authHeaders } from './client.js';
+import { createApiClient } from './client.js';
 
 export interface Org {
   id: string;
@@ -8,17 +8,15 @@ export interface Org {
 }
 
 export async function fetchOrgs(token: string): Promise<Org[]> {
-  const resp = await fetch(`${MASTRA_CLOUD_API_URL}/v1/auth/orgs`, {
-    headers: authHeaders(token),
-  });
+  const client = createApiClient(token);
+  const { data, error, response } = await client.GET('/v1/auth/orgs');
 
-  if (!resp.ok) {
-    if (resp.status === 401) {
+  if (error) {
+    if (response.status === 401) {
       throw new Error('Session expired. Please run: mastra auth login');
     }
-    throw new Error(`Failed to fetch orgs: ${resp.status}`);
+    throw new Error(`Failed to fetch orgs: ${response.status}`);
   }
 
-  const data = (await resp.json()) as { organizations: Org[] };
   return data.organizations;
 }

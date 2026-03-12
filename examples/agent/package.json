@@ -57,6 +57,7 @@
     "mastra:build": "mastra build -s",
     "mastra:start": "mastra start",
     "mastra:studio": "mastra studio",
+    "mastra": "mastra",
     "dev:ui": "mastra dev & pnpm --dir ../.. dev:playground & wait"
   },
   "keywords": [],

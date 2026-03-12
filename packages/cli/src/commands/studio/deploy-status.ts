@@ -1,30 +1,6 @@
-import { MASTRA_CLOUD_API_URL, authHeaders } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
-
-interface DeployInfo {
-  id: string;
-  projectId: string;
-  organizationId: string;
-  projectName: string;
-  status: string;
-  instanceUrl: string | null;
-  error: string | null;
-  createdAt: string | null;
-}
-
-async function fetchStatus(deployId: string, token: string, orgId: string): Promise<DeployInfo> {
-  const resp = await fetch(`${MASTRA_CLOUD_API_URL}/v1/studio/deploys/${deployId}`, {
-    headers: authHeaders(token, orgId),
-  });
-
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`Failed to fetch status: ${resp.status} — ${text}`);
-  }
-
-  const data = (await resp.json()) as { deploy: DeployInfo };
-  return data.deploy;
-}
+import type { DeployInfo } from './cloud-api.js';
+import { fetchDeployStatus } from './cloud-api.js';
 
 function printDeploy(deploy: DeployInfo) {
   const statusIcon: Record<string, string> = {
@@ -38,7 +14,9 @@ function printDeploy(deploy: DeployInfo) {
 
   console.info(`${icon} Deploy ${deploy.id}`);
   console.info(`   Status:   ${deploy.status}`);
-  console.info(`   Project:  ${deploy.projectName} (${deploy.projectId})`);
+  if (deploy.projectName) {
+    console.info(`   Project:  ${deploy.projectName}`);
+  }
   if (deploy.instanceUrl) {
     console.info(`   URL:      ${deploy.instanceUrl}`);
   }
@@ -63,7 +41,7 @@ export async function statusAction(deployId: string, opts: { watch?: boolean }) 
     console.info(`Watching deploy ${deployId}...\n`);
 
     while (true) {
-      const deploy = await fetchStatus(deployId, token, orgId);
+      const deploy = await fetchDeployStatus(deployId, token, orgId);
 
       if (deploy.status !== lastStatus) {
         printDeploy(deploy);
@@ -78,7 +56,7 @@ export async function statusAction(deployId: string, opts: { watch?: boolean }) 
       await new Promise(r => setTimeout(r, 1000));
     }
   } else {
-    const deploy = await fetchStatus(deployId, token, orgId);
+    const deploy = await fetchDeployStatus(deployId, token, orgId);
     printDeploy(deploy);
   }
 }
