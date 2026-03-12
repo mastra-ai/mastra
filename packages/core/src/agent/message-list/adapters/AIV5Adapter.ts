@@ -168,13 +168,32 @@ export class AIV5Adapter {
 
         // Handle reasoning parts
         if (part.type === 'reasoning') {
-          const text =
+          let text =
             part.reasoning ||
             (part.details?.reduce((p: string, c) => {
               if (c.type === `text` && c.text) return p + c.text;
               return p;
             }, '') ??
               '');
+
+          // Fallback: recover reasoning text from providerMetadata when primary sources are empty
+          // This handles OpenRouter models where reasoning is only preserved in provider-specific metadata
+          if (!text && part.providerMetadata) {
+            for (const provider of Object.values(part.providerMetadata)) {
+              const details = (provider as Record<string, unknown>)?.reasoning_details;
+              if (Array.isArray(details)) {
+                text = details
+                  .map((d: Record<string, unknown>) => {
+                    if (d.type === 'reasoning.text' && typeof d.text === 'string') return d.text;
+                    if (d.type === 'reasoning.summary' && typeof d.summary === 'string') return d.summary;
+                    return '';
+                  })
+                  .filter(Boolean)
+                  .join('\n');
+                if (text) break;
+              }
+            }
+          }
           if (text || part.details?.length) {
             const v5UIPart: AIV5Type.ReasoningUIPart = {
               type: 'reasoning' as const,
