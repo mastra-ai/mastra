@@ -1627,6 +1627,19 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         continue;
       }
 
+      // Stop at the first message with a pending tool call (state: 'call').
+      // Provider-executed tools (e.g. Anthropic web_search) may have their result
+      // arrive in a later turn. We return everything up to that point and defer
+      // the rest — this preserves message ordering and ensures the completed
+      // result will be observed once the tool finishes.
+      if (
+        msg.content?.parts?.some(part => {
+          return part?.type === 'tool-invocation' && part.toolInvocation?.state === 'call';
+        })
+      ) {
+        break;
+      }
+
       // Check if this message has a completed observation
       const endMarkerIndex = this.findLastCompletedObservationBoundary(msg);
       const inProgress = this.hasInProgressObservation(msg);
@@ -4098,10 +4111,7 @@ ${formattedMessages}
       const bufferActivation = this.observationConfig.bufferActivation;
       if (bufferActivation && bufferActivation < 1 && unobservedMessages.length >= 1) {
         const newestMsg = unobservedMessages[unobservedMessages.length - 1];
-        const hasPendingToolCall = newestMsg?.content?.parts?.some((part: any) => {
-          return part?.type === 'tool-invocation' && part.toolInvocation?.state === 'call';
-        });
-        if (newestMsg?.content?.parts?.length && !hasPendingToolCall) {
+        if (newestMsg?.content?.parts?.length) {
           this.sealMessagesForBuffering([newestMsg]);
           omDebug(
             `[OM:sync-obs] sealed newest message (${newestMsg.role}, ${newestMsg.content.parts.length} parts) for ratio-aware observation`,
@@ -4383,18 +4393,6 @@ ${formattedMessages}
     omDebug(
       `[OM:bufferCursor] cursor=${bufferCursor?.toISOString() ?? 'null'}, unobserved=${unobservedMessages.length}, afterExcludeBuffered=${preFilterCount}, afterCursorFilter=${candidateMessages.length}`,
     );
-
-    // Exclude messages with pending tool calls (state: 'call').
-    // Provider-executed tools (e.g. Anthropic web_search) may have their result
-    // arrive in a later turn. If we buffer/seal now, the result would be added
-    // via in-place mutation but OM would have already observed the message with
-    // the incomplete call — the completed result would never be observed.
-    candidateMessages = candidateMessages.filter(msg => {
-      if (!msg.content?.parts?.length) return true;
-      return !msg.content.parts.some((part: any) => {
-        return part?.type === 'tool-invocation' && part.toolInvocation?.state === 'call';
-      });
-    });
 
     // Check if there's enough content to buffer
     const bufferTokens = this.observationConfig.bufferTokens ?? 5000;
