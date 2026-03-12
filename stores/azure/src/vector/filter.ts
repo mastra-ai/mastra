@@ -183,10 +183,12 @@ export class AzureAISearchFilterTranslator {
     // Note: any/all require raw OData lambda predicates with proper variable scoping
     // Example: { any: { collection: 'stores', predicate: 's: s/name eq \'Flagship\'' } }
     if (filter.any) {
+      this.validateCollectionName(filter.any.collection);
       conditions.push(`${filter.any.collection}/any(${filter.any.predicate})`);
     }
 
     if (filter.all) {
+      this.validateCollectionName(filter.all.collection);
       conditions.push(`${filter.all.collection}/all(${filter.all.predicate})`);
     }
 
@@ -322,6 +324,12 @@ export class AzureAISearchFilterTranslator {
     }
 
     return String(value);
+  }
+
+  private validateCollectionName(collection: string): void {
+    if (!/^[a-zA-Z_][\w/]*$/.test(collection)) {
+      throw new Error(`Invalid collection name for OData lambda: '${collection}'`);
+    }
   }
 
   private escapeFieldName(field: string): string {
