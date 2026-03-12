@@ -230,7 +230,7 @@ export class AzureAISearchFilterTranslator {
       }
 
       if (key.startsWith('$')) {
-        continue;
+        throw new Error(`Unsupported filter operator '${key}'. Azure AI Search supports $and, $or, and $not.`);
       }
 
       conditions.push(...this.translateMastraFieldCondition(key, value));
