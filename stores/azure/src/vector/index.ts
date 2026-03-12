@@ -875,15 +875,33 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
   async updateVector({ indexName, id, filter, update }: AzureAISearchUpdateParams): Promise<void> {
     try {
       if (!update.vector && !update.metadata) {
-        throw new Error('No updates provided');
+        throw new MastraError({
+          id: 'STORAGE_AZURE_AI_SEARCH_NO_UPDATES',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: 'No updates provided',
+        });
       }
 
       if (!id && !filter) {
-        throw new Error('Either id or filter must be provided');
+        throw new MastraError({
+          id: 'STORAGE_AZURE_AI_SEARCH_MISSING_ID_OR_FILTER',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: 'Either id or filter must be provided',
+        });
       }
 
       if (id && filter) {
-        throw new Error('Cannot provide both id and filter');
+        throw new MastraError({
+          id: 'STORAGE_AZURE_AI_SEARCH_ID_AND_FILTER',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: 'Cannot provide both id and filter',
+        });
       }
 
       const searchClient = this.getSearchClient(indexName);
@@ -902,7 +920,13 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
         targetIds = [id];
       } else {
         if (!filter || Object.keys(filter).length === 0) {
-          throw new Error('Filter cannot be empty');
+          throw new MastraError({
+            id: 'STORAGE_AZURE_AI_SEARCH_EMPTY_FILTER',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName },
+            text: 'Filter cannot be empty',
+          });
         }
         targetIds = await this.findIdsByFilter(indexName, filter);
       }
@@ -928,12 +952,15 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       // Merge documents (update operation)
       await searchClient.mergeDocuments(updatedDocs);
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: 'STORAGE_AZURE_AI_SEARCH_UPDATE_VECTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: { indexName, ...(id ? { id } : {}) },
         },
         error,
       );
@@ -946,22 +973,46 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
   async deleteVectors({ indexName, ids, filter }: AzureAISearchDeleteVectorsParams): Promise<void> {
     try {
       if (ids && filter) {
-        throw new Error('Cannot specify both ids and filter');
+        throw new MastraError({
+          id: 'STORAGE_AZURE_AI_SEARCH_IDS_AND_FILTER',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: 'Cannot specify both ids and filter',
+        });
       }
 
       if (!ids && !filter) {
-        throw new Error('Either ids or filter must be provided');
+        throw new MastraError({
+          id: 'STORAGE_AZURE_AI_SEARCH_MISSING_IDS_OR_FILTER',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: 'Either ids or filter must be provided',
+        });
       }
 
       let idsToDelete: string[];
       if (ids) {
         if (ids.length === 0) {
-          throw new Error('Cannot delete with empty ids array');
+          throw new MastraError({
+            id: 'STORAGE_AZURE_AI_SEARCH_EMPTY_IDS',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName },
+            text: 'Cannot delete with empty ids array',
+          });
         }
         idsToDelete = ids;
       } else {
         if (!filter || Object.keys(filter).length === 0) {
-          throw new Error('Cannot delete with empty filter');
+          throw new MastraError({
+            id: 'STORAGE_AZURE_AI_SEARCH_EMPTY_FILTER',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName },
+            text: 'Cannot delete with empty filter',
+          });
         }
         idsToDelete = await this.findIdsByFilter(indexName, filter);
       }
@@ -973,6 +1024,9 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       const searchClient = this.getSearchClient(indexName);
       await searchClient.deleteDocuments(idsToDelete.map(id => ({ id })) as any);
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: 'STORAGE_AZURE_AI_SEARCH_DELETE_VECTORS_FAILED',
