@@ -19,13 +19,8 @@ declare global {
 }
 
 import type { LinkComponentProviderProps } from '@mastra/playground-ui';
-import {
-  LinkComponentProvider,
-  PlaygroundConfigGuard,
-  PlaygroundQueryClient,
-  StudioConfigProvider,
-  useStudioConfig,
-} from '@mastra/playground-ui';
+import { LinkComponentProvider, PlaygroundQueryClient } from '@mastra/playground-ui';
+import { PlaygroundConfigGuard, StudioConfigProvider, useStudioConfig } from '@mastra/playground-ui/configuration';
 import { MastraReactProvider } from '@mastra/react';
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';

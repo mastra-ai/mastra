@@ -4,15 +4,17 @@ import {
   Crumb,
   Header,
   MainContentLayout,
+  ToolsIcon,
+  AgentIcon,
+  Icon,
+} from '@mastra/playground-ui';
+import {
   TemplateInfo,
   TemplateForm,
   TemplateInstallation,
   TemplateSuccess,
-  ToolsIcon,
-  AgentIcon,
   TemplateFailure,
-  Icon,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/templates';
 import { BrainIcon, PackageIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';

@@ -48,6 +48,102 @@
         "default": "./dist/utils.cjs.js"
       }
     },
+    "./agents": {
+      "import": {
+        "types": "./dist/agents.d.ts",
+        "default": "./dist/agents.es.js"
+      }
+    },
+    "./workflows": {
+      "import": {
+        "types": "./dist/workflows.d.ts",
+        "default": "./dist/workflows.es.js"
+      }
+    },
+    "./datasets": {
+      "import": {
+        "types": "./dist/datasets.d.ts",
+        "default": "./dist/datasets.es.js"
+      }
+    },
+    "./observability": {
+      "import": {
+        "types": "./dist/observability.d.ts",
+        "default": "./dist/observability.es.js"
+      }
+    },
+    "./tools": {
+      "import": {
+        "types": "./dist/tools.d.ts",
+        "default": "./dist/tools.es.js"
+      }
+    },
+    "./mcps": {
+      "import": {
+        "types": "./dist/mcps.d.ts",
+        "default": "./dist/mcps.es.js"
+      }
+    },
+    "./scores": {
+      "import": {
+        "types": "./dist/scores.d.ts",
+        "default": "./dist/scores.es.js"
+      }
+    },
+    "./processors": {
+      "import": {
+        "types": "./dist/processors.d.ts",
+        "default": "./dist/processors.es.js"
+      }
+    },
+    "./templates": {
+      "import": {
+        "types": "./dist/templates.d.ts",
+        "default": "./dist/templates.es.js"
+      }
+    },
+    "./workspace": {
+      "import": {
+        "types": "./dist/workspace.d.ts",
+        "default": "./dist/workspace.es.js"
+      }
+    },
+    "./prompt-blocks": {
+      "import": {
+        "types": "./dist/prompt-blocks.d.ts",
+        "default": "./dist/prompt-blocks.es.js"
+      }
+    },
+    "./cms": {
+      "import": {
+        "types": "./dist/cms.d.ts",
+        "default": "./dist/cms.es.js"
+      }
+    },
+    "./configuration": {
+      "import": {
+        "types": "./dist/configuration.d.ts",
+        "default": "./dist/configuration.es.js"
+      }
+    },
+    "./request-context": {
+      "import": {
+        "types": "./dist/request-context.d.ts",
+        "default": "./dist/request-context.es.js"
+      }
+    },
+    "./auth": {
+      "import": {
+        "types": "./dist/auth.d.ts",
+        "default": "./dist/auth.es.js"
+      }
+    },
+    "./llm": {
+      "import": {
+        "types": "./dist/llm.d.ts",
+        "default": "./dist/llm.es.js"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

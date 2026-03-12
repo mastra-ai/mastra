@@ -5,14 +5,16 @@ import {
   Breadcrumb,
   Crumb,
   Spinner,
+  PermissionDenied,
+  is403ForbiddenError,
+} from '@mastra/playground-ui';
+import {
   useDataset,
   useDatasetExperiment,
   useDatasetExperimentResults,
   ExperimentPageContent,
   ExperimentPageHeader,
-  PermissionDenied,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/datasets';
 import { Database } from 'lucide-react';
 import { useParams, Link } from 'react-router';
 

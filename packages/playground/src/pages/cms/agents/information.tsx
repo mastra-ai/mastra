@@ -1,4 +1,4 @@
-import { InformationPage } from '@mastra/playground-ui';
+import { InformationPage } from '@mastra/playground-ui/agents';
 
 export default function CmsAgentInformationPage() {
   return <InformationPage />;

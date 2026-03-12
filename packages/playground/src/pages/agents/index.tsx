@@ -8,12 +8,11 @@ import {
   HeaderAction,
   useLinkComponent,
   DocsIcon,
-  useAgents,
-  AgentsTable,
   AgentIcon,
-  useIsCmsAvailable,
-  usePermissions,
 } from '@mastra/playground-ui';
+import { useAgents, AgentsTable } from '@mastra/playground-ui/agents';
+import { useIsCmsAvailable } from '@mastra/playground-ui/cms';
+import { usePermissions } from '@mastra/playground-ui/auth';
 import { Plus } from 'lucide-react';
 
 function Agents() {

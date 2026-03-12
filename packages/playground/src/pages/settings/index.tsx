@@ -1,6 +1,4 @@
 import {
-  useStudioConfig,
-  StudioConfigForm,
   MainContentLayout,
   Header,
   HeaderTitle,
@@ -8,6 +6,7 @@ import {
   SettingsIcon,
   MainContentContent,
 } from '@mastra/playground-ui';
+import { useStudioConfig, StudioConfigForm } from '@mastra/playground-ui/configuration';
 
 export const StudioSettingsPage = () => {
   const { baseUrl, headers } = useStudioConfig();

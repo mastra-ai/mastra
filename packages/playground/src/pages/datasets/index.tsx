@@ -6,12 +6,10 @@ import {
   Icon,
   Button,
   HeaderAction,
-  useDatasets,
-  DatasetsTable,
-  CreateDatasetDialog,
   useLinkComponent,
   DocsIcon,
 } from '@mastra/playground-ui';
+import { useDatasets, DatasetsTable, CreateDatasetDialog } from '@mastra/playground-ui/datasets';
 import { Plus, Database } from 'lucide-react';
 import { useState } from 'react';
 

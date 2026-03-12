@@ -6,11 +6,10 @@ import {
   Header,
   MainContentContent,
   MainContentLayout,
-  MCPTable,
   HeaderTitle,
   McpServerIcon,
-  useMCPServers,
 } from '@mastra/playground-ui';
+import { MCPTable, useMCPServers } from '@mastra/playground-ui/mcps';
 
 import { Link } from 'react-router';
 

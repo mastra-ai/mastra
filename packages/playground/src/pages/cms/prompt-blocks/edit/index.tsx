@@ -2,15 +2,6 @@ import type { UpdateStoredPromptBlockParams } from '@mastra/client-js';
 import {
   toast,
   useLinkComponent,
-  useStoredPromptBlock,
-  useStoredPromptBlockMutations,
-  usePromptBlockVersions,
-  usePromptBlockVersion,
-  PromptBlockEditMain,
-  PromptBlockEditSidebar,
-  PromptBlockVersionCombobox,
-  AgentEditLayout,
-  usePromptBlockEditForm,
   Header,
   HeaderTitle,
   HeaderAction,
@@ -23,7 +14,18 @@ import {
   AlertTitle,
   AlertDescription,
 } from '@mastra/playground-ui';
-import type { PromptBlockFormValues } from '@mastra/playground-ui';
+import {
+  useStoredPromptBlock,
+  useStoredPromptBlockMutations,
+  usePromptBlockVersions,
+  usePromptBlockVersion,
+  PromptBlockEditMain,
+  PromptBlockEditSidebar,
+  PromptBlockVersionCombobox,
+  usePromptBlockEditForm,
+} from '@mastra/playground-ui/prompt-blocks';
+import { AgentEditLayout } from '@mastra/playground-ui/agents';
+import type { PromptBlockFormValues } from '@mastra/playground-ui/prompt-blocks';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { BookIcon } from 'lucide-react';

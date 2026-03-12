@@ -7,14 +7,16 @@ import {
   DocsIcon,
   Breadcrumb,
   Crumb,
+  PermissionDenied,
+  is403ForbiddenError,
+} from '@mastra/playground-ui';
+import {
   SkillDetail,
   ReferenceViewerDialog,
   useWorkspaceSkill,
   useWorkspaceSkillReference,
   useWorkspaceFile,
-  PermissionDenied,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/workspace';
 import { Bot, Folder, Wand2 } from 'lucide-react';
 import { useState } from 'react';
 

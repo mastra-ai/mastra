@@ -3,30 +3,32 @@ import type { ScoreRowData } from '@mastra/core/evals';
 import {
   Breadcrumb,
   Crumb,
-  ScoresList,
   Header,
   MainContentLayout,
   PageHeader,
-  ScoresTools,
-  ScoreDialog,
   KeyValueList,
-  useScorer,
-  useScoresByScorerId,
   Icon,
   HeaderAction,
   Button,
   DocsIcon,
   getToNextEntryFn,
   getToPreviousEntryFn,
-  useAgents,
-  useWorkflows,
-  ScorerCombobox,
   toast,
   Spinner,
   PermissionDenied,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import type { ScoreEntityOption as EntityOptions } from '@mastra/playground-ui';
+import {
+  ScoresList,
+  ScoresTools,
+  ScoreDialog,
+  useScorer,
+  useScoresByScorerId,
+  ScorerCombobox,
+} from '@mastra/playground-ui/scores';
+import { useAgents } from '@mastra/playground-ui/agents';
+import { useWorkflows } from '@mastra/playground-ui/workflows';
+import type { ScoreEntityOption as EntityOptions } from '@mastra/playground-ui/scores';
 import { GaugeIcon, PencilIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router';
