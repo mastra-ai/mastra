@@ -347,8 +347,11 @@ export class AzureAISearchFilterTranslator {
   }
 
   private escapeFieldName(field: string): string {
-    // Azure AI Search OData uses unquoted field paths (e.g., Address/City, not 'Address/City')
-    // Field names should be valid identifiers or slash-separated paths without quoting
+    // Azure AI Search OData uses unquoted field paths (e.g., Address/City)
+    // Validate field names to prevent OData injection
+    if (!/^[a-zA-Z_][\w/]*$/.test(field)) {
+      throw new Error(`Invalid field name for OData filter: '${field}'`);
+    }
     return field;
   }
 }
