@@ -31,6 +31,33 @@ import {
   WorkspaceReadOnlyError,
 } from '@mastra/core/workspace';
 import { AgentFS } from 'agentfs-sdk';
+import nodePath from 'node:path';
+import os from 'node:os';
+import { mkdirSync } from 'node:fs';
+
+// ---------------------------------------------------------------------------
+// Database path resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Expand a leading `~` to the user's home directory.
+ * Node.js path APIs don't handle tilde — only the shell does.
+ */
+function expandTilde(p: string): string {
+  if (p === '~') return os.homedir();
+  if (p.startsWith('~/') || p.startsWith('~\\')) {
+    return nodePath.join(os.homedir(), p.slice(2));
+  }
+  return p;
+}
+
+/**
+ * Resolve a database path to an absolute path.
+ * Expands tilde and resolves relative paths against cwd (at construction time).
+ */
+function resolveDbPath(p: string): string {
+  return nodePath.resolve(expandTilde(p));
+}
 
 // ---------------------------------------------------------------------------
 // Path utilities (POSIX-style with leading slash)
@@ -194,7 +221,7 @@ export class AgentFSFilesystem extends MastraFilesystem {
     super({ ...options, name: 'AgentFSFilesystem' });
     this.id = options.id ?? `agentfs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     this._agentId = options.agentId;
-    this._path = options.path;
+    this._path = options.path ? resolveDbPath(options.path) : undefined;
     this.readOnly = options.readOnly;
 
     if (options.agent) {
@@ -252,7 +279,12 @@ export class AgentFSFilesystem extends MastraFilesystem {
 
     const openOptions: { id?: string; path?: string } = {};
     if (this._agentId) openOptions.id = this._agentId;
-    if (this._path) openOptions.path = this._path;
+    if (this._path) {
+      openOptions.path = this._path;
+      // Ensure parent directory exists — the SDK only auto-creates `.agentfs/`
+      // for the agentId-only case, not for explicit paths.
+      mkdirSync(nodePath.dirname(this._path), { recursive: true });
+    }
 
     this._agent = await AgentFS.open(openOptions);
   }

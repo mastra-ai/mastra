@@ -15,6 +15,8 @@ import {
   WorkspaceReadOnlyError,
 } from '@mastra/core/workspace';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import nodePath from 'node:path';
+import os from 'node:os';
 
 import { AgentFSFilesystem } from './index';
 
@@ -79,6 +81,42 @@ describe('AgentFSFilesystem', () => {
       const fsDef = new AgentFSFilesystem({ agentId: 'test' });
       expect(fsRO.readOnly).toBe(true);
       expect(fsDef.readOnly).toBeUndefined();
+    });
+  });
+
+  describe('Path resolution', () => {
+    it('resolves relative path to absolute', () => {
+      const fs = new AgentFSFilesystem({ path: './data/test.db' });
+      const info = fs.getInfo();
+      expect(info.metadata?.dbPath).toBe(nodePath.resolve('./data/test.db'));
+    });
+
+    it('expands tilde in path', () => {
+      const fs = new AgentFSFilesystem({ path: '~/agentfs/test.db' });
+      const info = fs.getInfo();
+      expect(info.metadata?.dbPath).toBe(nodePath.join(os.homedir(), 'agentfs/test.db'));
+    });
+
+    it('keeps absolute path as-is', () => {
+      const fs = new AgentFSFilesystem({ path: '/tmp/test.db' });
+      expect(fs.getInfo().metadata?.dbPath).toBe('/tmp/test.db');
+    });
+
+    it('resolves bare filename to absolute', () => {
+      const fs = new AgentFSFilesystem({ path: 'mydb.db' });
+      expect(fs.getInfo().metadata?.dbPath).toBe(nodePath.resolve('mydb.db'));
+    });
+
+    it('resolves parent traversal', () => {
+      const fs = new AgentFSFilesystem({ path: '../sibling/test.db' });
+      expect(fs.getInfo().metadata?.dbPath).toBe(nodePath.resolve('../sibling/test.db'));
+    });
+
+    it('does not resolve agentId (left to SDK)', () => {
+      const fs = new AgentFSFilesystem({ agentId: 'my-agent' });
+      const info = fs.getInfo();
+      expect(info.metadata?.dbPath).toBeUndefined();
+      expect(info.metadata?.agentId).toBe('my-agent');
     });
   });
 
