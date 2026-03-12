@@ -174,7 +174,7 @@ export class NetlifyDeployer extends Deployer {
     if (hasLibsql) {
       this.logger?.error(
         `Netlify Deployer does not support @libsql/client (which may have been installed by @mastra/libsql) as a dependency.
-        LibSQL with file URLs uses native Node.js bindings that cannot run in ${this.target} environments. Use other Mastra Storage options instead.`,
+        LibSQL with file URLs uses native Node.js bindings that cannot run in Netlify serverless or edge environments. Use other Mastra Storage options instead.`,
       );
       process.exit(1);
     }
