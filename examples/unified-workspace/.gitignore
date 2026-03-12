@@ -7,3 +7,4 @@ node_modules
 .sandbox-profiles/
 
 .agents/
+.agentfs/

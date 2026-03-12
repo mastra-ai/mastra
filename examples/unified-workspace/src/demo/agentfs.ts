@@ -2,7 +2,7 @@
 /**
  * AgentFS Workspace Demo
  *
- * Run with: npx tsx src/demo/index.ts [--type <type>]
+ * Run with: npx tsx src/demo/agentfs.ts [--type <type>]
  *
  * Types:
  *   filesystem  - Filesystem API (write, read, list, stat, delete)
@@ -10,7 +10,7 @@
  *   all         - Run all demos (default)
  */
 
-import { mastra, agentfsWorkspace, readonlyWorkspace } from '../mastra';
+import { mastra, agentfsWorkspace, readonlyAgentfsWorkspace } from '../mastra';
 
 const args = process.argv.slice(2);
 const typeIndex = args.indexOf('--type');
@@ -99,9 +99,9 @@ async function demoFilesystem() {
 
   // Read-only demo
   section('Read-Only Filesystem');
-  await readonlyWorkspace.init();
+  await readonlyAgentfsWorkspace.init();
   try {
-    await readonlyWorkspace.filesystem!.writeFile('/nope.txt', 'should fail');
+    await readonlyAgentfsWorkspace.filesystem!.writeFile('/nope.txt', 'should fail');
     console.log('  ERROR: Write should have been blocked!');
   } catch (error) {
     console.log(`  Write blocked: ${(error as Error).message}`);
@@ -115,7 +115,7 @@ async function demoFilesystem() {
   console.log('  Cleaned up test files');
 
   await agentfsWorkspace.destroy();
-  await readonlyWorkspace.destroy();
+  await readonlyAgentfsWorkspace.destroy();
 }
 
 // =============================================================================
