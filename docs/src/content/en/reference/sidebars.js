@@ -180,7 +180,14 @@ const sidebars = {
       type: 'category',
       label: 'Harness',
       collapsed: true,
-      items: [{ type: 'doc', id: 'harness/harness-class', label: 'Harness Class', customProps: { tags: ['alpha'] } }],
+      items: [
+        {
+          type: 'doc',
+          id: 'harness/harness-class',
+          label: 'Harness Class',
+          customProps: { tags: ['alpha'] },
+        },
+      ],
     },
     {
       type: 'category',
@@ -370,6 +377,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'storage/overview', label: 'Overview' },
+        { type: 'doc', id: 'storage/dsql', label: 'Aurora DSQL Storage' },
         { type: 'doc', id: 'storage/cloudflare-d1', label: 'Cloudflare D1 Storage' },
         { type: 'doc', id: 'storage/cloudflare', label: 'Cloudflare KV Storage' },
         { type: 'doc', id: 'storage/composite', label: 'Composite Storage' },
