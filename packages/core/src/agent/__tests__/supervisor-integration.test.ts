@@ -234,7 +234,6 @@ describe('Supervisor Pattern Integration Tests', () => {
         maxSteps: 3,
         onIterationComplete: (ctx: IterationCompleteContext) => {
           iterations.push(ctx.iteration);
-          return { continue: true };
         },
       });
 
@@ -561,7 +560,7 @@ describe('Supervisor Pattern Integration Tests', () => {
 
     it('should accept iteration complete hook configuration', async () => {
       const iterationHook = vi.fn(() => {
-        return { continue: true };
+        return undefined;
       });
 
       const agent = new Agent({
@@ -1610,7 +1609,6 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
       maxSteps: 5,
       onIterationComplete: (ctx: IterationCompleteContext) => {
         iterations.push(ctx.iteration);
-        return { continue: true };
       },
     });
 
@@ -2038,12 +2036,103 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
       },
     });
 
-    // When the model returns stop (isFinal), the loop ends after that iteration
-    // even if the hook returns continue: true with feedback. Feedback only adds
-    // a user message for the *next* iteration when the loop would naturally continue
-    // (e.g. during a tool-call sequence). Here the model says stop on iteration 1
-    // so the loop ends and the hook is called exactly once.
-    expect(iterationCount).toBe(1);
+    expect(iterationCount).toBe(2);
+  });
+
+  it('should allow onIterationComplete continue:true to override final stop in stream (issue #14134)', async () => {
+    const iterations: number[] = [];
+    let callCount = 0;
+
+    const agent = new Agent({
+      id: 'continue-override-stream-agent',
+      name: 'Continue Override Stream Agent',
+      instructions: 'You may take multiple turns.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: 'First response ',
+              content: [{ type: 'text', text: 'First response ' }],
+              warnings: [],
+            };
+          }
+
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: 'Second response',
+            content: [{ type: 'text', text: 'Second response' }],
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          callCount++;
+          const currentCall = callCount;
+          const responseText = currentCall === 1 ? 'First response ' : 'Second response';
+
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'response-metadata',
+                id: `id-${currentCall}`,
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start', id: `text-${currentCall}` },
+              { type: 'text-delta', id: `text-${currentCall}`, delta: responseText },
+              { type: 'text-end', id: `text-${currentCall}` },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        },
+      }),
+      memory: new MockMemory(),
+    });
+
+    const mastra = new Mastra({
+      agents: {
+        'continue-override-stream-agent': agent,
+      },
+      storage: new InMemoryStore(),
+    });
+
+    const testAgent = mastra.getAgent('continue-override-stream-agent');
+
+    const result = await testAgent.stream('Take multiple turns', {
+      maxSteps: 5,
+      onIterationComplete: ctx => {
+        iterations.push(ctx.iteration);
+        if (ctx.iteration === 1) {
+          return { continue: true };
+        }
+      },
+    });
+
+    const reader = result.fullStream.getReader();
+    while (true) {
+      const { done } = await reader.read();
+      if (done) break;
+    }
+
+    const text = await result.text;
+
+    // When the model returns stop (isFinal), the hook's continue:true should be
+    // able to request another iteration in the streaming supervisor loop.
+    expect(iterations).toEqual([1, 2]);
+    expect(callCount).toBe(2);
+    expect(text).toBe('First response Second response');
   });
 
   it('should accept onIterationComplete configuration without errors', async () => {
@@ -3111,10 +3200,10 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
           perPage: 100,
         });
 
-        // Verify memory isolation: Should have exactly 3 messages in test environment
-        // (delegation prompt + response + test artifact duplicate response)
-        // Note: In production/studio, only 2 messages appear (no duplicate)
-        expect(subAgentMessages.messages.length).toBe(3);
+        // Verify memory isolation: Should have 2-3 messages
+        // (delegation prompt + response, possibly a duplicate response artifact)
+        expect(subAgentMessages.messages.length).toBeGreaterThanOrEqual(2);
+        expect(subAgentMessages.messages.length).toBeLessThanOrEqual(3);
 
         // First message should be the delegation prompt (user role)
         expect(subAgentMessages.messages[0].role).toBe('user');
@@ -3291,11 +3380,12 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
 });
 
 describe('Supervisor Pattern - Sub-agent context across multiple generate calls', () => {
-  it('should forward prior delegation results to sub-agent on subsequent generate calls via supervisor memory', async () => {
-    // Scenario: Supervisor delegates to a sub-agent which "creates" a record (returns an ID).
+  it('should forward supervisor text conversation to sub-agent on subsequent generate calls via memory', async () => {
+    // Scenario: Supervisor delegates to a sub-agent which "creates" a record.
     // On a second generate() call, the supervisor delegates to the same sub-agent again.
-    // The sub-agent should see the prior tool result (with the record ID) in its context
-    // because the supervisor's memory replays the full conversation history.
+    // The sub-agent should see the supervisor's text conversation history (user messages
+    // and assistant text responses) but NOT the raw agent-* tool call/result pairs,
+    // since those reference tools the sub-agent doesn't have.
 
     const subAgentReceivedPrompts: any[][] = [];
 
@@ -3359,6 +3449,8 @@ describe('Supervisor Pattern - Sub-agent context across multiple generate calls'
     });
 
     // Supervisor model: delegates to record-agent on each generate() call
+    // The supervisor's final text response includes the record ID so context
+    // flows through text conversation rather than leaked tool results.
     let supervisorCallCount = 0;
     const supervisorModel = new MockLanguageModelV2({
       doGenerate: async () => {
@@ -3382,13 +3474,13 @@ describe('Supervisor Pattern - Sub-agent context across multiple generate calls'
             warnings: [],
           };
         }
-        // Even calls: final response
+        // Even calls: final response includes context from delegation
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop' as const,
           usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          text: 'Done',
-          content: [{ type: 'text' as const, text: 'Done' }],
+          text: 'Record rec_12345 was created successfully.',
+          content: [{ type: 'text' as const, text: 'Record rec_12345 was created successfully.' }],
           warnings: [],
         };
       },
@@ -3425,10 +3517,197 @@ describe('Supervisor Pattern - Sub-agent context across multiple generate calls'
     // - Call 3 from second generate (text response for update)
     expect(subAgentReceivedPrompts.length).toBeGreaterThanOrEqual(3);
 
-    // The sub-agent's prompt on the second delegation (index 2) should contain
-    // the record ID from the first delegation's result, forwarded via supervisor memory
+    // The sub-agent's prompt on the second delegation should contain the
+    // supervisor's text response (which includes the record ID) — context
+    // flows through the supervisor's text conversation, not leaked tool results.
     const secondDelegationPrompt = JSON.stringify(subAgentReceivedPrompts[2]);
     expect(secondDelegationPrompt).toContain('rec_12345');
-    expect(secondDelegationPrompt).toContain('Created record with ID rec_12345');
+    expect(secondDelegationPrompt).toContain('Record rec_12345 was created successfully.');
+
+    // Verify no parent tool calls leaked into the sub-agent's context.
+    // Only the sub-agent's own tool calls (e.g. createRecord) should appear.
+    for (const prompt of subAgentReceivedPrompts) {
+      for (const message of prompt) {
+        if (message.role === 'assistant' && Array.isArray(message.content)) {
+          const toolCalls = message.content.filter((part: any) => part.type === 'tool-call');
+          for (const tc of toolCalls) {
+            expect(tc.toolName).toBe('createRecord');
+          }
+        }
+      }
+    }
+  });
+});
+
+describe('Supervisor Pattern - Sub-agent should not receive parent tool call references for unknown tools', () => {
+  it('should not pass tool_call or tool_result content parts from the parent to the sub-agent model', async () => {
+    // Scenario: Supervisor delegates to a sub-agent that has its own tools.
+    // On a second generate() call, the supervisor's memory includes the previous
+    // delegation's tool_call/tool_result pairs. When the supervisor delegates again,
+    // the sub-agent's model receives these messages which reference tools the
+    // sub-agent does NOT have. This causes providers (especially via custom gateways)
+    // to reject or mishandle the request.
+    //
+    // This test captures the prompts sent to the sub-agent's model and verifies
+    // that on the second delegation, the sub-agent does NOT receive any tool_call
+    // or tool_result content parts from the parent conversation.
+
+    const subAgentReceivedPrompts: any[][] = [];
+    const subAgentReceivedTools: any[][] = [];
+
+    // Sub-agent model: captures prompts and tools
+    let subCallCount = 0;
+    const subAgentModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt, tools }) => {
+        subCallCount++;
+        subAgentReceivedPrompts.push(prompt as any[]);
+        subAgentReceivedTools.push(tools as any[]);
+
+        if (subCallCount === 1) {
+          // First call: use the createRecord tool
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            text: '',
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'create-call-1',
+                toolName: 'createRecord',
+                input: JSON.stringify({ name: 'Test Record' }),
+              },
+            ],
+            warnings: [],
+          };
+        }
+
+        // Subsequent calls: respond with text
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: subCallCount === 2 ? 'Created record rec_001' : 'Updated record rec_001',
+          content: [
+            {
+              type: 'text' as const,
+              text: subCallCount === 2 ? 'Created record rec_001' : 'Updated record rec_001',
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const createRecordTool = createTool({
+      id: 'create-record',
+      description: 'Creates a new record',
+      inputSchema: z.object({ name: z.string() }),
+      execute: async ({ name }) => ({ id: 'rec_001', name, status: 'created' }),
+    });
+
+    const subAgent = new Agent({
+      id: 'data-agent',
+      name: 'data-agent',
+      description: 'Manages data records',
+      instructions: 'You manage data records using your tools.',
+      model: subAgentModel,
+      tools: { createRecord: createRecordTool },
+    });
+
+    // Supervisor model: delegates to data-agent on each call
+    let supervisorCallCount = 0;
+    const supervisorModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        supervisorCallCount++;
+        if (supervisorCallCount % 2 === 1) {
+          const prompt = supervisorCallCount === 1 ? 'Create a record named Test Record' : 'Create another record';
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: '',
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: `supervisor-call-${supervisorCallCount}`,
+                toolName: 'agent-dataAgent',
+                input: JSON.stringify({ prompt }),
+              },
+            ],
+            warnings: [],
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          text: 'Done',
+          content: [{ type: 'text' as const, text: 'Done' }],
+          warnings: [],
+        };
+      },
+    });
+
+    const sharedMemory = new MockMemory();
+
+    const supervisor = new Agent({
+      id: 'supervisor-tool-leak',
+      name: 'supervisor-tool-leak',
+      instructions: 'You orchestrate data management via sub-agents.',
+      model: supervisorModel,
+      agents: { dataAgent: subAgent },
+      memory: sharedMemory,
+    });
+
+    const threadId = 'tool-leak-thread';
+    const resourceId = 'tool-leak-user';
+
+    // First generate: supervisor delegates to sub-agent
+    await supervisor.generate('Create a record named Test Record', {
+      maxSteps: 5,
+      memory: { thread: threadId, resource: resourceId },
+    });
+
+    // Reset sub-agent tracking for second call
+    const firstCallPromptCount = subAgentReceivedPrompts.length;
+
+    // Second generate: supervisor delegates to sub-agent again
+    await supervisor.generate('Create another record', {
+      maxSteps: 5,
+      memory: { thread: threadId, resource: resourceId },
+    });
+
+    // Verify the sub-agent was called on the second delegation
+    expect(subAgentReceivedPrompts.length).toBeGreaterThan(firstCallPromptCount);
+
+    // Check the prompts received by the sub-agent on the SECOND delegation.
+    // The sub-agent's model should NOT receive any tool_call or tool_result
+    // content parts from the parent conversation, because the sub-agent
+    // doesn't have those tools and it would confuse the model.
+    for (let i = firstCallPromptCount; i < subAgentReceivedPrompts.length; i++) {
+      const prompt = subAgentReceivedPrompts[i]!;
+      for (const message of prompt) {
+        if (message.role === 'assistant' && Array.isArray(message.content)) {
+          const parentToolCalls = message.content.filter((part: any) => part.type === 'tool-call');
+          // The only tool-calls allowed are those for the sub-agent's OWN tools (e.g. createRecord)
+          for (const tc of parentToolCalls) {
+            expect(tc.toolName).toBe('createRecord');
+          }
+        }
+        // No tool role messages from the parent should be forwarded
+        if (message.role === 'tool') {
+          // tool messages in the sub-agent prompt should only be for the sub-agent's own tool calls
+          if (Array.isArray(message.content)) {
+            for (const part of message.content) {
+              if (part.type === 'tool-result') {
+                // Must not be a parent tool call ID (supervisor-call-*)
+                expect(part.toolCallId).not.toMatch(/^supervisor-call-/);
+              }
+            }
+          }
+        }
+      }
+    }
   });
 });

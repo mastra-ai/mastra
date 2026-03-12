@@ -1,6 +1,6 @@
 {
   "name": "@internal/llm-recorder",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "LLM response recording and replay for tests",
   "type": "module",
   "private": true,
@@ -41,19 +41,18 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@mastra/core": "workspace:*",
     "@types/node": "22.19.13",
     "@types/string-similarity": "^4.0.2",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.36.0",
+    "eslint": "^9.39.4",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "dependencies": {
     "diff": "^8.0.3",
-    "msw": "^2.8.4",
+    "msw": "^2.12.10",
     "string-similarity": "^4.0.4"
   },
   "homepage": "https://mastra.ai",

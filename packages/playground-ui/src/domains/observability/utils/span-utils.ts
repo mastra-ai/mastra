@@ -1,5 +1,56 @@
 import { SpanRecord } from '@mastra/core/storage';
 
+type MessageLike = { role?: string; content?: unknown };
+
+/**
+ * Extract a truncated text preview from a span's input field.
+ * Agent traces store `input` as an array of message objects.
+ * Returns the text content of all user messages joined, truncated to maxLength.
+ */
+export function getInputPreview(input: unknown, maxLength = 100): string {
+  if (input == null) return '';
+
+  if (Array.isArray(input)) {
+    const messages = input as MessageLike[];
+    const userMessages = messages
+      .filter(m => m?.role === 'user')
+      .map(m => {
+        if (typeof m.content === 'string') return m.content;
+        if (Array.isArray(m.content)) {
+          return m.content
+            .map((part: any) => {
+              if (typeof part === 'string') return part;
+              if (part?.type === 'text' && typeof part.text === 'string') return part.text;
+              return '';
+            })
+            .filter(Boolean)
+            .join(' ');
+        }
+        return '';
+      })
+      .filter(Boolean);
+
+    const joined = userMessages.join(' | ');
+    if (joined.length > maxLength) {
+      return joined.slice(0, maxLength) + '…';
+    }
+    return joined;
+  }
+
+  if (typeof input === 'string') {
+    if (input.length > maxLength) {
+      return input.slice(0, maxLength) + '…';
+    }
+    return input;
+  }
+
+  const str = JSON.stringify(input);
+  if (str.length > maxLength) {
+    return str.slice(0, maxLength) + '…';
+  }
+  return str;
+}
+
 type TokenUsage = {
   inputTokens?: number;
   outputTokens?: number;

@@ -100,6 +100,17 @@ export interface AgentRunAttributes extends AIBaseAttributes {
   availableTools?: string[];
   /** Maximum steps allowed */
   maxSteps?: number;
+  /** Tripwire abort details when a processor triggered a tripwire */
+  tripwireAbort?: {
+    /** Abort reason */
+    reason?: string;
+    /** Processor that triggered the tripwire */
+    processorId?: string;
+    /** Whether retry was requested */
+    retry?: boolean;
+    /** Additional metadata */
+    metadata?: unknown;
+  };
 }
 
 /**
@@ -235,6 +246,8 @@ export interface MCPToolCallAttributes extends AIBaseAttributes {
   mcpServer: string;
   /** MCP server version */
   serverVersion?: string;
+  /** Tool description */
+  toolDescription?: string;
   /** Whether tool execution was successful */
   success?: boolean;
 }
@@ -257,6 +270,15 @@ export interface ProcessorRunAttributes extends AIBaseAttributes {
     tag?: string;
     message?: any;
   }>;
+  /** Tripwire abort details when a processor triggered a tripwire */
+  tripwireAbort?: {
+    /** Abort reason */
+    reason?: string;
+    /** Whether retry was requested */
+    retry?: boolean;
+    /** Additional metadata */
+    metadata?: unknown;
+  };
 }
 
 /**
@@ -420,6 +442,8 @@ interface BaseSpan<TType extends SpanType> {
   output?: any;
   /** Error information if span failed */
   errorInfo?: SpanErrorInfo;
+  /** Snapshot of the RequestContext */
+  requestContext?: Record<string, any>;
   /** Is an event span? (event occurs at startTime, has no endTime) */
   isEvent: boolean;
 }

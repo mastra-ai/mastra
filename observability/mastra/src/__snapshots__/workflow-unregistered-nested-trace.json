@@ -50,6 +50,9 @@
               "loopType": "dowhile",
               "totalIterations": 1
             },
+            "metadata": {
+              "runId": "<runId-1>"
+            },
             "input": {
               "input": "test unregistered workflow as step"
             },
@@ -72,6 +75,9 @@
                 "entityId": "simple-workflow",
                 "attributes": {
                   "status": "success"
+                },
+                "metadata": {
+                  "runId": "<runId-1>"
                 },
                 "input": {
                   "input": "test unregistered workflow as step"
@@ -122,6 +128,9 @@
                         "attributes": {
                           "status": "success"
                         },
+                        "metadata": {
+                          "runId": "<runId-1>"
+                        },
                         "input": {
                           "input": "test unregistered workflow as step"
                         },
@@ -149,6 +158,9 @@
                 "attributes": {
                   "conditionIndex": 0
                 },
+                "metadata": {
+                  "runId": "<runId-1>"
+                },
                 "input": {},
                 "output": false
               }
@@ -169,6 +181,9 @@
             "entityId": "mapping_<mapping-1>",
             "attributes": {
               "status": "success"
+            },
+            "metadata": {
+              "runId": "<runId-1>"
             },
             "input": {
               "output": "test unregistered workflow as step processed"

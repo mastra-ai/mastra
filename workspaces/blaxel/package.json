@@ -1,6 +1,6 @@
 {
   "name": "@mastra/blaxel",
-  "version": "0.1.0",
+  "version": "0.2.0-alpha.0",
   "description": "Blaxel cloud sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -30,7 +30,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@blaxel/core": "^0.2.66"
+    "@blaxel/core": "^0.2.71"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -43,13 +43,13 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.3.1",
-    "eslint": "^9.37.0",
+    "eslint": "^9.39.4",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.3.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.12.0-0 <2.0.0-0"
   },
   "files": [
     "dist",

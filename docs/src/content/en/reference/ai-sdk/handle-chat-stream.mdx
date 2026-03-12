@@ -76,6 +76,13 @@ export async function POST(req: Request) {
     isOptional: true,
   },
   {
+    name: 'params.providerOptions',
+    type: 'Record<string, Record<string, unknown>>',
+    description:
+      'Provider-specific options passed to the language model (e.g. `{ openai: { reasoningEffort: "high" } }`). Merged with `defaultOptions.providerOptions`, with `params` taking precedence.',
+    isOptional: true,
+  },
+  {
     name: 'params.requestContext',
     type: 'RequestContext',
     description: 'Request context to pass to the agent execution.',

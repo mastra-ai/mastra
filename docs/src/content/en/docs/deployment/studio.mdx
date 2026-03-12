@@ -1,5 +1,5 @@
 ---
-title: "Deploying Studio | Deployment"
+title: "Deploying studio | Deployment"
 description: "Learn how to deploy and use Studio on your own infrastructure."
 packages:
   - "mastra"
@@ -8,11 +8,11 @@ packages:
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Deploying Studio
+# Deploying studio
 
 [Studio](/docs/getting-started/studio) provides an interactive UI for building and testing your agents. It's a React-based Single Page Application (SPA) that runs in the browser and connects to a running [Mastra server](/docs/deployment/mastra-server).
 
-There are two primary ways of deploying Studio:
+You can deploy Studio in two primary ways:
 
 - [Mastra Cloud](/docs/mastra-cloud/overview) hosts Studio for you and allows you to share access with your team via link
 - You can self-host Studio on your own infrastructure, either alongside your Mastra server or separately as a standalone SPA
@@ -51,7 +51,7 @@ The command uses Node's built-in `http` module and [`serve-handler`](https://www
 
 ## Running a server
 
-Running `mastra studio` as a long-running process is no different from running any other Node.js service. All the best practices, tools, and options for deployment apply here as well. You can use process managers like PM2, use Docker, or cloud services that support Node.js applications. You'll need to ensure CORS is configured correctly and errors are monitored, just like with any web service.
+Running `mastra studio` as a long-running process is no different from running any other Node.js service. All the best practices, tools, and options for deployment apply here as well. You can use process managers like PM2, use Docker, or cloud services that support Node.js applications. You'll need to ensure CORS is configured correctly and errors are monitored, as with any web service.
 
 :::warning
 
