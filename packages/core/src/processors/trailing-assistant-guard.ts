@@ -58,10 +58,7 @@ export class TrailingAssistantGuard implements Processor<'trailing-assistant-gua
     const lastMessage = messages[messages.length - 1];
     if (!lastMessage || lastMessage.role !== 'assistant') return;
 
-    const willUseResponseFormat =
-      structuredOutput?.schema && !structuredOutput?.model && !structuredOutput?.jsonPromptInjection;
-
-    const promptText = willUseResponseFormat ? 'Generate the structured response.' : 'Continue.';
+    const promptText = structuredOutput?.schema ? 'Generate the structured response.' : 'Continue.';
 
     return {
       messages: [
