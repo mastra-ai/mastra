@@ -5,6 +5,9 @@
  * Follows the same pattern as S3Filesystem.
  */
 
+import { mkdirSync } from 'node:fs';
+import os from 'node:os';
+import nodePath from 'node:path';
 import type {
   FileContent,
   FileStat,
@@ -31,9 +34,6 @@ import {
   WorkspaceReadOnlyError,
 } from '@mastra/core/workspace';
 import { AgentFS } from 'agentfs-sdk';
-import nodePath from 'node:path';
-import os from 'node:os';
-import { mkdirSync } from 'node:fs';
 
 // ---------------------------------------------------------------------------
 // Database path resolution
