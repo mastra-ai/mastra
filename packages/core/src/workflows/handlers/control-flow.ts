@@ -979,8 +979,8 @@ export async function executeForeach(
         delete resumeLabels[indexResumeLabel];
       }
 
-      if ((result as any)?.output) {
-        results[k] = (result as any)?.output;
+      if ((result as any)?.output !== undefined) {
+        results[k] = (result as any).output;
       }
 
       prevForeachOutput[k] = { ...result, suspendPayload: {} } as any;
