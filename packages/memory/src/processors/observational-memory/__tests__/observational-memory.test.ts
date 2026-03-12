@@ -8961,15 +8961,13 @@ describe('Observer Context Optimization', () => {
       expect(result).toBe('');
     });
 
-    it('should return buffered reflection even when observer.previousObservationTokens is 0', () => {
+    it('should fully truncate everything when observer.previousObservationTokens is 0 even with buffered reflection', () => {
       const om = createOM({ previousObservationTokens: 0, useBufferedReflection: true });
       const observations = '- User likes TypeScript\n- User prefers dark mode';
       const record = { bufferedReflection: '- Condensed reflection content' };
       const result = prepareObserverContext(om, observations, record);
-      // Observations are fully truncated, but buffered reflection is preserved outside the budget
-      expect(result).toContain('BUFFERED REFLECTION');
-      expect(result).toContain('- Condensed reflection content');
-      expect(result).not.toContain('- User likes TypeScript');
+      // Budget is 0 so everything is truncated — reflection is inside the budget
+      expect(result).toBe('');
     });
 
     it('should disable truncation when observer.previousObservationTokens is false', () => {
@@ -8989,14 +8987,27 @@ describe('Observer Context Optimization', () => {
       expect(result).toBe(observations);
     });
 
-    it('should include buffered reflection when enabled and present', () => {
+    it('should replace reflected lines with buffered reflection when reflectedObservationLineCount is set', () => {
+      const om = createOM({ useBufferedReflection: true });
+      const observations = '- Old observation 1\n- Old observation 2\n- Recent observation 3';
+      const record = {
+        bufferedReflection: '- Summary of old observations',
+        reflectedObservationLineCount: 2,
+      };
+      const result = prepareObserverContext(om, observations, record);
+      // Reflected lines (first 2) are replaced by the summary
+      expect(result).toContain('- Summary of old observations');
+      expect(result).toContain('- Recent observation 3');
+      expect(result).not.toContain('- Old observation 1');
+      expect(result).not.toContain('- Old observation 2');
+    });
+
+    it('should ignore buffered reflection when no reflectedObservationLineCount exists', () => {
       const om = createOM({ useBufferedReflection: true });
       const observations = '- User likes TypeScript';
       const record = { bufferedReflection: '- Condensed reflection content' };
       const result = prepareObserverContext(om, observations, record);
-      expect(result).toContain('- User likes TypeScript');
-      expect(result).toContain('--- BUFFERED REFLECTION (pending activation) ---');
-      expect(result).toContain('- Condensed reflection content');
+      expect(result).toBe(observations);
     });
 
     it('should not append anything when enabled but no buffered reflection exists', () => {
@@ -9017,51 +9028,88 @@ describe('Observer Context Optimization', () => {
   });
 
   describe('prepareObserverContext - combined optimizations', () => {
-    it('should truncate observations within budget and append buffered reflection outside budget', () => {
+    it('should replace reflected lines and truncate assembled result to fit budget', () => {
       const tc = new TokenCounter();
-      const lines = Array.from({ length: 40 }, (_, i) => `- Observation line ${i + 1}`);
-      const observations = lines.join('\n');
-      const reflectionContent = '- Condensed user preferences and history';
+      // 10 old lines (reflected) + 30 new lines
+      const oldLines = Array.from({ length: 10 }, (_, i) => `- Old observation ${i + 1}`);
+      const newLines = Array.from({ length: 30 }, (_, i) => `- New observation ${i + 11}`);
+      const observations = [...oldLines, ...newLines].join('\n');
+      const reflectionContent = '- Summary of first 10 observations';
 
-      // Budget smaller than observations alone, so truncation will happen
       const budget = 50;
       const om = createOM({ previousObservationTokens: budget, useBufferedReflection: true });
-      const record = { bufferedReflection: reflectionContent };
+      const record = {
+        bufferedReflection: reflectionContent,
+        reflectedObservationLineCount: 10,
+      };
 
       const result = prepareObserverContext(om, observations, record);
       expect(result).toBeDefined();
-      // Buffered reflection is appended outside the budget
-      expect(result!).toContain('BUFFERED REFLECTION');
-      expect(result!).toContain(reflectionContent);
-      // Most recent observations should be preserved (tail truncation)
-      expect(result!).toContain('Observation line 40');
-
-      // The observation portion (before the buffered reflection separator) should fit within budget
-      const observationPart = result!.split('--- BUFFERED REFLECTION')[0].trim();
-      expect(tc.countObservations(observationPart)).toBeLessThanOrEqual(budget);
+      // Reflected lines are replaced, not present as raw lines
+      expect(result!).not.toContain('Old observation 1');
+      // Most recent observations preserved (tail)
+      expect(result!).toContain('New observation 40');
+      // Total fits within budget — truncation applies to the full assembled string
+      expect(tc.countObservations(result!)).toBeLessThanOrEqual(budget);
     });
 
-    it('should apply both: reflection inclusion + truncation (reflection outside budget)', () => {
+    it('should preserve reflection when budget fits assembled result', () => {
       const tc = new TokenCounter();
-      const lines = Array.from({ length: 50 }, (_, i) => `- Observation line ${i + 1}`);
-      const observations = lines.join('\n');
-      const totalTokens = tc.countObservations(observations);
+      // 20 old lines (reflected) + 5 new lines — small enough that reflection + new lines fit in budget
+      const oldLines = Array.from({ length: 20 }, (_, i) => `- Old line ${i + 1}`);
+      const newLines = Array.from({ length: 5 }, (_, i) => `- New line ${i + 21}`);
+      const observations = [...oldLines, ...newLines].join('\n');
+      const reflectionContent = '- Reflection summary';
 
-      const budget = Math.floor(totalTokens / 3);
+      // Budget generous enough for reflection + all 5 new lines
+      const assembled = `${reflectionContent}\n\n${newLines.join('\n')}`;
+      const budget = tc.countObservations(assembled) + 5;
       const om = createOM({
         previousObservationTokens: budget,
         useBufferedReflection: true,
       });
-      const record = { bufferedReflection: '- Reflection summary' };
+      const record = {
+        bufferedReflection: reflectionContent,
+        reflectedObservationLineCount: 20,
+      };
 
       const result = prepareObserverContext(om, observations, record);
-      expect(result).not.toBe(observations);
-      // Buffered reflection is appended outside the budget and survives truncation
-      expect(result!).toContain('BUFFERED REFLECTION');
+      // Old lines replaced
+      expect(result!).not.toContain('Old line 1');
+      // Reflection present (budget is generous)
       expect(result!).toContain('- Reflection summary');
-      // The observation portion should fit within budget
-      const observationPart = result!.split('--- BUFFERED REFLECTION')[0].trim();
-      expect(tc.countObservations(observationPart)).toBeLessThanOrEqual(budget);
+      // All new lines present
+      expect(result!).toContain('New line 25');
+      // Total fits within budget
+      expect(tc.countObservations(result!)).toBeLessThanOrEqual(budget);
+    });
+
+    it('should truncate reflection when budget is too tight for assembled result', () => {
+      const tc = new TokenCounter();
+      // 10 old lines (reflected) + 30 new lines — assembled result exceeds budget
+      const oldLines = Array.from({ length: 10 }, (_, i) => `- Old line ${i + 1}`);
+      const newLines = Array.from({ length: 30 }, (_, i) => `- New line ${i + 11}`);
+      const observations = [...oldLines, ...newLines].join('\n');
+
+      // Budget only fits ~8 lines — reflection is at the start so it gets truncated
+      const budget = 50;
+      const om = createOM({
+        previousObservationTokens: budget,
+        useBufferedReflection: true,
+      });
+      const record = {
+        bufferedReflection: '- Summary of first 10 observations',
+        reflectedObservationLineCount: 10,
+      };
+
+      const result = prepareObserverContext(om, observations, record);
+      expect(result).toBeDefined();
+      // Old raw lines are not present (were replaced)
+      expect(result!).not.toContain('Old line 1');
+      // Most recent observations preserved (tail)
+      expect(result!).toContain('New line 40');
+      // Total fits within budget
+      expect(tc.countObservations(result!)).toBeLessThanOrEqual(budget);
     });
   });
 

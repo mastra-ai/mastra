@@ -1709,29 +1709,36 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     const bufferedReflection =
-      useBufferedReflection && record?.bufferedReflection
-        ? `--- BUFFERED REFLECTION (pending activation) ---\n\n${record.bufferedReflection}`
-        : undefined;
+      useBufferedReflection && record?.bufferedReflection ? record.bufferedReflection : undefined;
 
     if (!existingObservations) {
       return bufferedReflection;
     }
 
-    // 1. Apply tail truncation to observations only (buffered reflection stays outside the budget)
-    let optimized = existingObservations;
+    // 1. Replace reflected observation lines with the buffered reflection summary.
+    //    reflectedObservationLineCount tracks how many of the oldest lines
+    //    were already summarized by the reflection — swap those out.
+    let observations = existingObservations;
+    if (bufferedReflection && record?.reflectedObservationLineCount) {
+      const allLines = observations.split('\n');
+      const unreflectedLines = allLines.slice(record.reflectedObservationLineCount);
+      const unreflectedContent = unreflectedLines.join('\n').trim();
+      observations = unreflectedContent ? `${bufferedReflection}\n\n${unreflectedContent}` : bufferedReflection;
+    }
+
+    // 2. Truncate the assembled result to fit within budget
     if (tokenBudget !== undefined) {
       if (tokenBudget === 0) {
-        return bufferedReflection ?? '';
+        return '';
       }
 
-      const currentTokens = this.tokenCounter.countObservations(optimized);
+      const currentTokens = this.tokenCounter.countObservations(observations);
       if (currentTokens > tokenBudget) {
-        optimized = this.truncateObservationsToTokenBudget(optimized, tokenBudget);
+        observations = this.truncateObservationsToTokenBudget(observations, tokenBudget);
       }
     }
 
-    // 2. Append buffered reflection after truncation so it's never truncated away
-    return bufferedReflection ? `${optimized}\n\n${bufferedReflection}` : optimized;
+    return observations;
   }
 
   /**
