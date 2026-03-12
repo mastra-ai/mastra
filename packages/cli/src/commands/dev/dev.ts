@@ -486,17 +486,18 @@ export async function dev({
   });
 
   const handleShutdown = async () => {
-    if (serverStartTime) {
+    const analytics = getAnalytics();
+    if (analytics && serverStartTime) {
       const durationMs = Date.now() - serverStartTime;
-      const analytics = getAnalytics();
-      if (analytics) {
-        analytics.trackEvent('cli_dev_session_end', {
-          durationMs,
-          durationMinutes: Math.round(durationMs / 60000),
-        });
-        await analytics.shutdown();
-      }
+      analytics.trackEvent('cli_dev_session_end', {
+        durationMs,
+        durationMinutes: Math.round(durationMs / 60000),
+      });
     }
+    if (analytics) {
+      await analytics.shutdown();
+    }
+  }
 
     devLogger.shutdown();
 
