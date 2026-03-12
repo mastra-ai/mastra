@@ -207,8 +207,8 @@ await azureVector.createIndex({
 const vectorIds = await azureVector.upsert({
   indexName: 'products',
   vectors: [
-    [0.1, 0.2, 0.3, ...], // Vector 1 (1536 dimensions)
-    [0.4, 0.5, 0.6, ...], // Vector 2 (1536 dimensions)
+    [0.1, 0.2, 0.3 /* ...1536 dimensions */], // Vector 1
+    [0.4, 0.5, 0.6 /* ...1536 dimensions */], // Vector 2
   ],
   metadata: [
     { 
@@ -237,7 +237,7 @@ console.log('Inserted vector IDs:', vectorIds);
 ```typescript
 const results = await azureVector.query({
   indexName: 'products',
-  queryVector: [0.1, 0.2, 0.3, ...], // Query vector (1536 dimensions)
+  queryVector: [0.1, 0.2, 0.3 /* ...1536 dimensions */],
   topK: 5, // Return top 5 similar results
   includeVector: false // Set to true if you want the vectors in results
 });
@@ -252,7 +252,7 @@ console.log('Search results:', results);
 // Using structured filter syntax
 const results = await azureVector.query({
   indexName: 'products',
-  queryVector: [0.1, 0.2, 0.3, ...],
+  queryVector: [0.1, 0.2, 0.3 /* ...1536 dimensions */],
   topK: 10,
   filter: {
     and: [
@@ -324,7 +324,7 @@ Significantly improves result relevance using advanced language models:
 // Basic semantic search
 const results = await azureVector.query({
   indexName: 'my-index',
-  queryVector: [0.1, 0.2, ...],
+  queryVector: [0.1, 0.2 /* ...more dimensions */],
   topK: 10,
   useSemanticSearch: true,
   semanticOptions: {
@@ -359,7 +359,7 @@ const results = await azureVector.query({
 ```typescript
 const results = await azureVector.query({
   indexName: 'my-index',
-  queryVector: [0.1, 0.2, ...],
+  queryVector: [0.1, 0.2 /* ...more dimensions */],
   topK: 10,
   exhaustiveSearch: true,    // Exact k-NN search for precision
   weight: 2.0,              // Relative weight in hybrid searches
@@ -440,7 +440,7 @@ The implementation automatically detects vector fields in existing indexes:
 // Works with any existing index regardless of vector field name
 const results = await azureVector.query({
   indexName: 'legacy-index', // May use 'vector', 'embedding', etc.
-  queryVector: [0.1, 0.2, ...],
+  queryVector: [0.1, 0.2 /* ...more dimensions */],
   topK: 5
 });
 // Automatically detects and uses the correct vector field
@@ -471,7 +471,7 @@ await azureVector.updateVector({
   indexName: 'products',
   id: 'iphone-15-pro',
   update: {
-    vector: [0.2, 0.3, 0.4, ...], // New vector
+    vector: [0.2, 0.3, 0.4 /* ...more dimensions */], // New vector
     metadata: { 
       category: 'electronics',
       brand: 'Apple',
