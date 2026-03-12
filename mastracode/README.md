@@ -136,11 +136,16 @@ The SQLite database is stored in your system's application data directory:
 For **Anthropic** models, mastracode supports two authentication methods:
 
 1. **Claude Max OAuth (primary)** — Use `/login` to authenticate with a Claude Pro/Max subscription. This is the recommended approach.
-2. **API key (fallback)** — Set the `ANTHROPIC_API_KEY` environment variable for direct API access. This is used when not logged in via OAuth.
+2. **API key (fallback)** — Store an Anthropic API key in mastracode or set `ANTHROPIC_API_KEY` for direct API access.
 
-When both are available, Claude Max OAuth takes priority.
+If you use direct Anthropic API access, you can optionally set `ANTHROPIC_BASE_URL` to point at an Anthropic-compatible endpoint.
 
-For **other providers** (OpenAI, Google, etc.), set the corresponding environment variable (e.g., `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`) or use OAuth where supported.
+When both OAuth and a direct API key are available, Claude Max OAuth takes priority.
+
+For **OpenAI** models, you can authenticate with OpenAI OAuth or use a direct API key via mastracode or `OPENAI_API_KEY`.
+If you use direct OpenAI API access, you can optionally set `OPENAI_BASE_URL` to point at an OpenAI-compatible endpoint.
+
+For **other providers** (Google, etc.), set the corresponding environment variable (for example `GOOGLE_GENERATIVE_AI_API_KEY`) or use OAuth where supported.
 
 Credentials are stored alongside the database in `auth.json`.
 

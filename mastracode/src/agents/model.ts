@@ -15,6 +15,8 @@ import type { stateSchema } from '../schema.js';
 const authStorage = new AuthStorage();
 
 const OPENAI_PREFIX = 'openai/';
+const ANTHROPIC_BASE_URL_ENV_VAR = 'ANTHROPIC_BASE_URL';
+const OPENAI_BASE_URL_ENV_VAR = 'OPENAI_BASE_URL';
 
 const CODEX_OPENAI_MODEL_REMAPS: Record<string, string> = {
   'gpt-5.3': 'gpt-5.3-codex',
@@ -80,8 +82,14 @@ export function getOpenAIApiKey(): string | undefined {
  * Applies prompt caching but NOT the Claude Code identity middleware
  * (which is only required for Claude Max OAuth).
  */
+function getEnvBaseUrl(envVarName: typeof ANTHROPIC_BASE_URL_ENV_VAR | typeof OPENAI_BASE_URL_ENV_VAR): string | undefined {
+  const value = process.env[envVarName]?.trim();
+  return value ? value : undefined;
+}
+
 function anthropicApiKeyProvider(modelId: string, apiKey: string): LanguageModelV1 {
-  const anthropic = createAnthropic({ apiKey });
+  const baseURL = getEnvBaseUrl(ANTHROPIC_BASE_URL_ENV_VAR);
+  const anthropic = createAnthropic(baseURL ? { apiKey, baseURL } : { apiKey });
   return wrapLanguageModel({
     model: anthropic(modelId),
     middleware: [promptCacheMiddleware],
@@ -92,7 +100,8 @@ function anthropicApiKeyProvider(modelId: string, apiKey: string): LanguageModel
  * Create an OpenAI model using a direct API key from AuthStorage.
  */
 function openaiApiKeyProvider(modelId: string, apiKey: string): LanguageModelV1 {
-  const openai = createOpenAI({ apiKey });
+  const baseURL = getEnvBaseUrl(OPENAI_BASE_URL_ENV_VAR);
+  const openai = createOpenAI(baseURL ? { apiKey, baseURL } : { apiKey });
   return wrapLanguageModel({
     model: openai.responses(modelId),
   });
@@ -103,7 +112,9 @@ function openaiApiKeyProvider(modelId: string, apiKey: string): LanguageModelV1 
  * Shared by the main agent, observer, and reflector.
  *
  * - For anthropic/* models: Uses stored OAuth credentials when present, otherwise direct API key
+ *   with an optional ANTHROPIC_BASE_URL override
  * - For openai/* models: Uses OAuth when configured, otherwise direct API key from AuthStorage
+ *   with an optional OPENAI_BASE_URL override
  * - For moonshotai/* models: Uses Moonshot AI Anthropic-compatible endpoint
  * - For all other providers: Uses Mastra's model router (models.dev gateway)
  */

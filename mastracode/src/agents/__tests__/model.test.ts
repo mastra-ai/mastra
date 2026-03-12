@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
 
 // Clear the module registry so vi.mock factories take effect even when
 // a previous test file (running under isolate:false) already cached the real modules.
@@ -76,6 +78,8 @@ describe('resolveModel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_BASE_URL;
+    delete process.env.OPENAI_BASE_URL;
     delete process.env.MOONSHOT_AI_API_KEY;
   });
 
@@ -131,6 +135,18 @@ describe('resolveModel', () => {
       expect(opencodeClaudeMaxProvider).not.toHaveBeenCalled();
     });
 
+    it('passes ANTHROPIC_BASE_URL to direct Anthropic API key provider', () => {
+      process.env.ANTHROPIC_BASE_URL = 'https://anthropic.example.com/v1';
+      mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-stored-key-456' });
+
+      resolveModel('anthropic/claude-sonnet-4-20250514');
+
+      expect(createAnthropic).toHaveBeenCalledWith({
+        apiKey: 'sk-stored-key-456',
+        baseURL: 'https://anthropic.example.com/v1',
+      });
+    });
+
     it('falls back to OAuth provider when no auth is configured (to prompt login)', () => {
       mockAuthStorageInstance.get.mockReturnValue(undefined);
 
@@ -165,6 +181,18 @@ describe('resolveModel', () => {
       expect(result.__provider).toBe('openai-direct');
       expect(result.__wrapped).toBe(true);
       expect(result.modelId).toBe('gpt-4o');
+    });
+
+    it('passes OPENAI_BASE_URL to direct OpenAI API key provider', () => {
+      process.env.OPENAI_BASE_URL = 'https://openai.example.com/v1';
+      mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-openai-key' });
+
+      resolveModel('openai/gpt-4o');
+
+      expect(createOpenAI).toHaveBeenCalledWith({
+        apiKey: 'sk-openai-key',
+        baseURL: 'https://openai.example.com/v1',
+      });
     });
 
     it('uses model router when no OpenAI auth is configured', () => {
