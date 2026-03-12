@@ -183,8 +183,9 @@ AI agents are the next platform shift. Understanding how to build them is now a 
     {
       slug: 'build-a-workflow',
       title: 'Build a Workflow',
-      durationMin: 5,
-      status: 'comingSoon',
+      durationMin: 7.5,
+      youtubeId: 'Xu0N43frgMs',
+      status: 'published',
       module: 'Workflows',
       preview: {
         intro:
@@ -199,8 +200,9 @@ AI agents are the next platform shift. Understanding how to build them is now a 
     {
       slug: 'agents-vs-workflows',
       title: 'Agents vs. Workflows',
-      durationMin: 3,
-      status: 'comingSoon',
+      durationMin: 9,
+      youtubeId: 'hHtUcuDqFrY',
+      status: 'published',
       module: 'Workflows',
       preview: {
         intro: 'Before we keep building, get a clear mental model for when to use an agent vs. when to use a workflow.',
@@ -212,10 +214,11 @@ AI agents are the next platform shift. Understanding how to build them is now a 
       },
     },
     {
-      slug: 'connect-agents-and-workflows',
-      title: 'Connect Agent to a Workflow',
-      durationMin: 5,
-      status: 'comingSoon',
+      slug: 'agents-in-workflows',
+      title: 'Agents in Workflows',
+      durationMin: 9,
+      youtubeId: 'hHtUcuDqFrY',
+      status: 'published',
       module: 'Workflows',
       preview: {
         intro:
