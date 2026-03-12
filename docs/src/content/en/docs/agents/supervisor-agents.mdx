@@ -73,10 +73,10 @@ Delegation hooks let you intercept, modify, or reject delegations as they happen
 
 Called before the supervisor delegates to a subagent. Return an object to control the delegation:
 
-- `proceed: true` — allow the delegation (default behavior)
-- `proceed: false` — reject the delegation with a `rejectionReason`
-- `modifiedPrompt` — rewrite the prompt sent to the subagent
-- `modifiedMaxSteps` — limit the subagent's iteration count
+- `proceed: true`: Allow the delegation (default behavior)
+- `proceed: false`: Reject the delegation with a `rejectionReason`
+- `modifiedPrompt`: Rewrite the prompt sent to the subagent
+- `modifiedMaxSteps`: Limit the subagent's iteration count
 
 ```typescript title="src/mastra/agents/supervisor.ts"
 const stream = await supervisor.stream('Research AI trends', {
@@ -120,8 +120,8 @@ The `context` object includes:
 
 Called after a delegation finishes. Use it to inspect results, provide feedback, or stop execution:
 
-- `context.bail()` — stop the supervisor loop immediately
-- Return `{ feedback: '...' }` — add feedback that gets saved to the supervisor's memory and is visible to subsequent iterations
+- `context.bail()`: Stop the supervisor loop immediately
+- Return `{ feedback: '...' }`: Add feedback that gets saved to the supervisor's memory and is visible to subsequent iterations
 
 ```typescript title="src/mastra/agents/supervisor.ts"
 const stream = await supervisor.stream('Research AI trends', {
@@ -208,13 +208,13 @@ Return `{ continue: true }` to keep iterating, or `{ continue: false }` to stop.
 
 ## Memory isolation
 
-The supervisor pattern implements memory isolation — subagents receive the full conversation context for better decision-making, but only their specific delegation prompt and response are saved to their memory.
+The supervisor pattern implements memory isolation. Subagents receive the full conversation context for better decision-making, but only their specific delegation prompt and response are saved to their memory.
 
 How it works:
 
-1. **Full context forwarded** — When the supervisor delegates, the subagent receives all messages from the supervisor's conversation
-1. **Scoped memory saves** — Only the delegation prompt and the subagent's response are saved to the subagent's memory
-1. **Fresh thread per invocation** — Each delegation uses a unique thread ID, ensuring clean separation
+1. **Full context forwarded**: When the supervisor delegates, the subagent receives all messages from the supervisor's conversation
+1. **Scoped memory saves**: Only the delegation prompt and the subagent's response are saved to the subagent's memory
+1. **Fresh thread per invocation**: Each delegation uses a unique thread ID, ensuring clean separation
 
 This ensures subagents have the context they need without cluttering their memory with the entire supervisor conversation.
 
@@ -308,9 +308,7 @@ Success criteria:
 
 ## Related
 
-- [Agent Networks](./networks)
-- [Migration: .network() to Supervisor Pattern](/guides/migrations/network-to-supervisor)
-- [Guide: Research Coordinator](/guides/guide/research-coordinator)
-- [Agent.stream() Reference](/reference/streaming/agents/stream)
-- [Agent.generate() Reference](/reference/agents/generate)
-- [Agent Approval](./agent-approval)
+- [Guide: Research coordinator](/guides/guide/research-coordinator)
+- [Agent.stream() reference](/reference/streaming/agents/stream)
+- [Agent.generate() reference](/reference/agents/generate)
+- [Agent approval](./agent-approval)
