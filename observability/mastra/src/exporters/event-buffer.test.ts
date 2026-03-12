@@ -52,7 +52,7 @@ function createLogEvent(): LogEvent {
 function createScoreEvent(): ScoreEvent {
   return {
     type: 'score',
-    score: { timestamp: new Date(), traceId: 'trace-1', scorerName: 'test', score: 0.5 },
+    score: { timestamp: new Date(), traceId: 'trace-1', scorerId: 'test', score: 0.5 },
   };
 }
 

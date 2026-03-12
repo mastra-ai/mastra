@@ -1029,7 +1029,7 @@ describe('DefaultExporter', () => {
           score: {
             timestamp: new Date('2026-01-01T00:00:00Z'),
             traceId: 'trace-1',
-            scorerName: 'relevance',
+            scorerId: 'relevance',
             score: 0.85,
             experimentId: 'exp-1',
           },
@@ -1042,7 +1042,7 @@ describe('DefaultExporter', () => {
           scores: [
             expect.objectContaining({
               traceId: 'trace-1',
-              scorerName: 'relevance',
+              scorerId: 'relevance',
               score: 0.85,
               experimentId: 'exp-1',
             }),

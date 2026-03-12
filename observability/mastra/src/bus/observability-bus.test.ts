@@ -77,7 +77,7 @@ function createScoreEvent(): ScoreEvent {
     score: {
       timestamp: new Date(),
       traceId: 'trace-1',
-      scorerName: 'relevance',
+      scorerId: 'relevance',
       score: 0.85,
       reason: 'Relevant response',
     },
