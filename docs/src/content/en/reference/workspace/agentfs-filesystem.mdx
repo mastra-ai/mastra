@@ -17,13 +17,13 @@ For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/
 
 ## Installation
 
-```bash
+```bash npm2yarn
 npm install @mastra/agentfs
 ```
 
 ## Usage
 
-Add an `AgentFSFilesystem` to a workspace and assign it to an agent:
+Add an `AgentFSFilesystem` to a workspace and assign it to an agent. You must provide at least one of `agentId`, `path`, or `agent` when instantiating the `AgentFSFilesystem` class.
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
@@ -32,18 +32,20 @@ import { AgentFSFilesystem } from '@mastra/agentfs'
 
 const workspace = new Workspace({
   filesystem: new AgentFSFilesystem({
-    agentId: 'my-agent', // stores at .agentfs/my-agent.db
+    agentId: 'my-agent',
   }),
 })
 
 const agent = new Agent({
   name: 'file-agent',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   workspace,
 })
 ```
 
 ### Using an explicit database path
+
+By default, databases are stored inside the `.agentfs` directory with the `agentId` as filename. You can specify a custom database path:
 
 ```typescript
 import { AgentFSFilesystem } from '@mastra/agentfs'
@@ -69,6 +71,8 @@ const filesystem = new AgentFSFilesystem({
 ```
 
 ## Constructor parameters
+
+You must provide at least one of `agentId`, `path`, or `agent`.
 
 <PropertiesTable
   content={[
