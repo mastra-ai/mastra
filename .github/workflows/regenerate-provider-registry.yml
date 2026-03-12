@@ -50,6 +50,9 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
+      - name: Build vendored ai-v6 package
+        run: pnpm --filter @internal/ai-v6 build
+
       - name: Generate provider registry
         run: pnpm --filter @mastra/core generate:providers
 

@@ -1,7 +1,7 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { TemplateInstallationRequest } from '@mastra/client-js';
+import type { TemplateInstallationRequest } from '@mastra/client-js';
 import { RequestContext } from '@mastra/core/request-context';
 import { useMastraClient } from '@mastra/react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 
 export interface Template {
@@ -408,139 +408,6 @@ const saveTemplateStateToLocalStorage = (runId: string, state: any) => {
   }
 };
 
-const restoreTemplateStateFromLocalStorage = (runId: string) => {
-  try {
-    const key = `template-install-${runId}`;
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      const { state, timestamp } = JSON.parse(saved);
-      const age = Date.now() - timestamp;
-      const maxAge = 60 * 60 * 1000; // 1 hour
-      // Only restore if saved within last hour (prevent stale data)
-      if (age < maxAge) {
-        return state;
-      } else {
-        localStorage.removeItem(key);
-      }
-    }
-  } catch (error) {
-    console.warn('Failed to restore template state from localStorage:', error);
-  }
-  return null;
-};
-
-const useWatchTemplateInstall = (workflowInfo?: any) => {
-  const client = useMastraClient();
-  const [streamResult, setStreamResult] = useState<any>({});
-
-  // Use debouncing like workflows (prevents excessive re-renders)
-  // Process each record immediately - no debouncing for watch events
-  // (Watch events are already discrete and we can't afford to lose step completion events)
-  const processTemplateRecord = (record: { type: string; payload: any; runId?: string; eventTimestamp?: string }) => {
-    setStreamResult((currentState: any) => {
-      const { newState } = processTemplateInstallRecord(record, currentState, workflowInfo);
-
-      // Save to localStorage for refresh recovery
-      if (record.runId) {
-        saveTemplateStateToLocalStorage(record.runId, newState);
-      }
-
-      return newState;
-    });
-  };
-
-  const initializeState = async (runId: string) => {
-    // 1. Instantly restore from localStorage for immediate UI
-    const cachedState = restoreTemplateStateFromLocalStorage(runId);
-    if (cachedState) {
-      setStreamResult(cachedState);
-    } else {
-      // Fallback: Initialize with pending steps
-      setStreamResult({
-        runId,
-        eventTimestamp: new Date().toISOString(),
-        phase: 'running',
-        payload: {
-          workflowState: {
-            steps: workflowInfo?.allSteps
-              ? Object.keys(workflowInfo.allSteps).reduce((acc, stepId) => {
-                  acc[stepId] = {
-                    id: stepId,
-                    description: workflowInfo.allSteps[stepId].description,
-                    status: 'pending',
-                  };
-                  return acc;
-                }, {} as any)
-              : {},
-          },
-          currentStep: null,
-        },
-      });
-    }
-  };
-
-  const watchInstall = useMutation({
-    mutationFn: async ({ runId }: { runId: string }) => {
-      const maxRetries = 3;
-      const retryDelay = 2000; // 2 seconds
-
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-          // Initialize state with hybrid approach
-          await initializeState(runId);
-
-          const template = client.getAgentBuilderAction('merge-template');
-
-          // Use correct callback API (fix the TypeScript issue when possible)
-          await template.watch(
-            { runId, eventType: 'watch' },
-            (record: { type: string; payload: any; runId?: string; eventTimestamp?: string }) => {
-              try {
-                processTemplateRecord(record);
-              } catch (err) {
-                console.error('💥 [watchInstall] Error processing template record:', err);
-                // Set minimal error state if processing fails (graceful degradation)
-                setStreamResult((prev: any) => ({ ...prev, error: err }));
-              }
-            },
-          );
-
-          // If we get here, the watch completed successfully
-          return;
-        } catch (error: any) {
-          console.error(`💥 [watchInstall] Attempt ${attempt} failed:`, error);
-          const isNetworkError =
-            error?.message?.includes('Failed to fetch') ||
-            error?.message?.includes('NetworkError') ||
-            error?.message?.includes('network error') ||
-            error?.message?.includes('fetch') ||
-            error?.code === 'NETWORK_ERROR' ||
-            error?.name === 'TypeError';
-
-          console.warn(`Watch attempt ${attempt}/${maxRetries} failed:`, error);
-
-          if (isNetworkError && attempt < maxRetries) {
-            console.log(
-              `🔄 Watch network error detected (likely hot reload), retrying in ${retryDelay}ms... (attempt ${attempt + 1}/${maxRetries})`,
-            );
-            await new Promise(resolve => setTimeout(resolve, retryDelay));
-            continue; // Retry
-          }
-
-          // If it's not a network error or we've exhausted retries, throw
-          console.error('❌ [watchInstall] Non-network error or max retries reached, throwing:', error);
-          throw error;
-        }
-      }
-    },
-  });
-
-  return {
-    watchInstall,
-    streamResult,
-  };
-};
-
 // Shared helper for processing template installation streams (streamlined)
 const useTemplateStreamProcessor = (workflowInfo?: any, runId?: string) => {
   const [streamResult, setStreamResult] = useState<any>({});
@@ -707,7 +574,7 @@ export const useObserveStreamTemplateInstall = (workflowInfo?: any) => {
           console.warn(`ObserveStream attempt ${attempt}/${maxRetries} failed:`, error);
 
           if (isNetworkError && attempt < maxRetries) {
-            console.log(
+            console.info(
               `🔄 ObserveStream network error detected (likely hot reload), retrying in ${retryDelay}ms... (attempt ${attempt + 1}/${maxRetries})`,
             );
             await new Promise(resolve => setTimeout(resolve, retryDelay));

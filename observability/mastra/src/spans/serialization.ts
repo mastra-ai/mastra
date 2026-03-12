@@ -41,7 +41,7 @@ export const DEFAULT_KEYS_TO_STRIP = new Set([
 ]);
 
 export interface DeepCleanOptions {
-  keysToStrip: Set<string>;
+  keysToStrip: Set<string> | string[] | Record<string, unknown>;
   maxDepth: number;
   maxStringLength: number;
   maxArrayLength: number;
@@ -196,6 +196,14 @@ function compressJsonSchema(schema: any, depth: number = 0): any {
 export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_CLEAN_OPTIONS): any {
   const { keysToStrip, maxDepth, maxStringLength, maxArrayLength, maxObjectKeys } = options;
 
+  // Normalize to a Set once so lookups are always O(1).
+  // Bundlers can transform `new Set([...])` into a plain object or array,
+  // so we accept all three forms and coerce up front.
+  const stripSet =
+    keysToStrip instanceof Set
+      ? keysToStrip
+      : new Set(Array.isArray(keysToStrip) ? keysToStrip : Object.keys(keysToStrip));
+
   const seen = new WeakSet<any>();
 
   function helper(val: any, depth: number): any {
@@ -294,7 +302,7 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
     let keyCount = 0;
 
     for (const [key, v] of entries) {
-      if (keysToStrip.has(key)) {
+      if (stripSet.has(key)) {
         continue;
       }
 

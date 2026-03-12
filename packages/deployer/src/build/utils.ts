@@ -2,6 +2,7 @@ import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { builtinModules } from 'node:module';
 import { basename, join, relative } from 'node:path';
+import type { RollupNodeResolveOptions } from '@rollup/plugin-node-resolve';
 
 /** The detected JavaScript runtime environment */
 export type RuntimePlatform = 'node' | 'bun';
@@ -13,6 +14,29 @@ export type RuntimePlatform = 'node' | 'bun';
  * - 'neutral': Runtime-agnostic, preserves all globals as-is (used for Bun)
  */
 export type BundlerPlatform = 'node' | 'browser' | 'neutral';
+
+/**
+ * Get nodeResolve plugin options based on the target platform.
+ *
+ * For 'browser' platform (e.g., Cloudflare Workers), uses browser-compatible
+ * export conditions so packages like the Cloudflare SDK resolve to their
+ * web runtime instead of Node.js-specific code.
+ *
+ * For 'node' and 'neutral' (Bun) platforms, uses Node.js module resolution.
+ */
+export function getNodeResolveOptions(platform: BundlerPlatform): RollupNodeResolveOptions {
+  if (platform === 'browser') {
+    return {
+      preferBuiltins: false,
+      browser: true,
+      exportConditions: ['browser', 'worker', 'default'],
+    };
+  }
+  return {
+    preferBuiltins: true,
+    exportConditions: ['node'],
+  };
+}
 
 /**
  * Detect the current JavaScript runtime environment.
@@ -186,6 +210,56 @@ export function normalizeStudioBase(studioBase: string): string {
   }
 
   return studioBase;
+}
+
+/**
+ * Configuration values for Studio's index.html placeholder injection.
+ *
+ * Each value is the **exact JavaScript expression** that replaces the
+ * corresponding `'%%PLACEHOLDER%%'` token (including surrounding quotes).
+ *
+ * For literal strings pass `"'value'"` (quoted).
+ * For runtime expressions pass the raw JS, e.g. `"window.location.hostname"`.
+ */
+export interface StudioInjectionConfig {
+  host: string;
+  port: string;
+  protocol: string;
+  apiPrefix: string;
+  basePath: string;
+  hideCloudCta: string;
+  cloudApiEndpoint: string;
+  experimentalFeatures: string;
+  telemetryDisabled: string;
+  requestContextPresets: string;
+  autoDetectUrl?: string;
+}
+
+/**
+ * Replace all `%%MASTRA_*%%` placeholders in the Studio `index.html` with the
+ * supplied configuration values.
+ *
+ * The `<base href>` tag and the `window.MASTRA_STUDIO_BASE_PATH` assignment
+ * use `basePath` as a plain string (no surrounding quotes), while all other
+ * placeholders replace `'%%TOKEN%%'` (with surrounding single-quotes in the
+ * source HTML) with the provided expression verbatim.
+ */
+export function injectStudioHtmlConfig(html: string, config: StudioInjectionConfig): string {
+  html = html.replace(`'%%MASTRA_SERVER_HOST%%'`, config.host);
+  html = html.replace(`'%%MASTRA_SERVER_PORT%%'`, config.port);
+  html = html.replace(`'%%MASTRA_SERVER_PROTOCOL%%'`, config.protocol);
+  html = html.replace(`'%%MASTRA_API_PREFIX%%'`, config.apiPrefix);
+  html = html.replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, config.hideCloudCta);
+  html = html.replace(`'%%MASTRA_CLOUD_API_ENDPOINT%%'`, config.cloudApiEndpoint);
+  html = html.replace(`'%%MASTRA_EXPERIMENTAL_FEATURES%%'`, config.experimentalFeatures);
+  html = html.replace(`'%%MASTRA_TELEMETRY_DISABLED%%'`, config.telemetryDisabled);
+  html = html.replace(`'%%MASTRA_REQUEST_CONTEXT_PRESETS%%'`, config.requestContextPresets);
+  if (config.autoDetectUrl) {
+    html = html.replace(`'%%MASTRA_AUTO_DETECT_URL%%'`, config.autoDetectUrl);
+  }
+  html = html.replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', config.basePath);
+
+  return html;
 }
 
 /**

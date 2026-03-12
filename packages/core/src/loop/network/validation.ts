@@ -26,7 +26,7 @@
  * ```
  */
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import type { MastraDBMessage, Agent } from '../../agent';
 import type { StructuredOutputOptions } from '../../agent/types';
@@ -132,6 +132,15 @@ export interface CompletionConfig {
    * Called after scorers run with results
    */
   onComplete?: (results: CompletionRunResult) => void | Promise<void>;
+
+  /**
+   * Suppress the completion feedback message from being saved to memory.
+   * When true, the "#### Completion Check Results" message will not be
+   * persisted, preventing it from appearing in subsequent iterations or
+   * history. Useful for cleaner conversation threads.
+   * Default: false
+   */
+  suppressFeedback?: boolean;
 }
 
 /**
@@ -689,3 +698,117 @@ export async function generateStructuredFinalResult<OUTPUT extends {}>(
 
 // Re-export for users who want to create custom scorers
 export { createScorer } from '../../evals/base';
+
+// ============================================================================
+// Stream Completion Scoring
+// ============================================================================
+
+/**
+ * Runtime context passed to stream/generate completion scoring.
+ * This is a simplified version of CompletionContext for tool-based supervisor patterns.
+ */
+export interface StreamCompletionContext {
+  /** Current iteration number (1-based) */
+  iteration: number;
+  /** Maximum iterations allowed (maxSteps) */
+  maxIterations?: number;
+  /** The original user message/task that started this execution */
+  originalTask: string;
+  /** Current output text from the LLM */
+  currentText: string;
+  /** Tool calls made in this iteration */
+  toolCalls: Array<{ name: string; args: Record<string, unknown> }>;
+  /** Tool results from this iteration */
+  toolResults: Array<{ name: string; result: unknown }>;
+  /** ID of the current run */
+  runId: string;
+  /** Current thread ID (if using memory) */
+  threadId?: string;
+  /** Resource ID (if using memory) */
+  resourceId?: string;
+  /** Agent ID */
+  agentId?: string;
+  /** Agent name */
+  agentName?: string;
+  /** Custom context from the request */
+  customContext?: Record<string, unknown>;
+  messages: MastraDBMessage[];
+}
+
+/**
+ * Runs completion scorers for stream/generate execution.
+ * Adapts the StreamCompletionContext to work with existing scorers.
+ */
+export async function runStreamCompletionScorers(
+  scorers: MastraScorer<any, any, any, any>[],
+  context: StreamCompletionContext,
+  options?: {
+    strategy?: 'all' | 'any';
+    parallel?: boolean;
+    timeout?: number;
+  },
+): Promise<CompletionRunResult> {
+  // Adapt StreamCompletionContext to CompletionContext for scorer compatibility
+  const adaptedContext: CompletionContext = {
+    iteration: context.iteration,
+    maxIterations: context.maxIterations,
+    messages: context.messages,
+    originalTask: context.originalTask,
+    selectedPrimitive: {
+      id: 'stream',
+      type: 'agent',
+    },
+    primitivePrompt: context.originalTask,
+    primitiveResult: context.currentText,
+    networkName: context.agentName || context.agentId || 'stream',
+    runId: context.runId,
+    threadId: context.threadId,
+    resourceId: context.resourceId,
+    customContext: {
+      ...context.customContext,
+      // Include stream-specific data in custom context for scorers that need it
+      toolCalls: context.toolCalls,
+      toolResults: context.toolResults,
+      agentId: context.agentId,
+      agentName: context.agentName,
+    },
+  };
+
+  return runCompletionScorers(scorers, adaptedContext, options);
+}
+
+/**
+ * Formats stream completion feedback for the LLM.
+ * Similar to formatCompletionFeedback but tailored for stream context.
+ */
+export function formatStreamCompletionFeedback(result: CompletionRunResult, maxIterationReached: boolean): string {
+  const lines: string[] = [];
+
+  lines.push('#### Completion Check Results');
+  lines.push('');
+  lines.push(`Overall: ${result.complete ? '✅ COMPLETE' : '❌ NOT COMPLETE'}`);
+  lines.push(`Duration: ${result.totalDuration}ms`);
+  if (result.timedOut) {
+    lines.push('⚠️ Scoring timed out');
+  }
+  lines.push('');
+
+  for (const scorer of result.scorers) {
+    lines.push(`**${scorer.scorerName}** (${scorer.scorerId})`);
+    lines.push(`Score: ${scorer.score} ${scorer.passed ? '✅' : '❌'}`);
+    if (scorer.reason) {
+      lines.push(`Reason: ${scorer.reason}`);
+    }
+    lines.push('');
+  }
+
+  if (result.complete) {
+    lines.push('✅ The task is complete.');
+  } else if (maxIterationReached) {
+    lines.push('⚠️ Max iterations reached.');
+  } else {
+    lines.push('🔄 The task is not yet complete. Please continue working based on the feedback above.');
+  }
+
+  return lines.join('\n');
+}

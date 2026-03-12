@@ -6,11 +6,13 @@
   "scripts": {
     "support": "tsx src/support-agent.ts",
     "interview": "tsx src/forgetful-interviewer.ts",
-    "tokens": "tsx src/processor-example.ts"
+    "tokens": "tsx src/processor-example.ts",
+    "observe": "tsx src/standalone-observe.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
     "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
     "@mastra/memory": "latest",
     "ai": "^4.3.19",
     "chalk": "^5.4.1",
@@ -23,6 +25,7 @@
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../packages/core",
+      "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/memory": "link:../../packages/memory"
     }
   },

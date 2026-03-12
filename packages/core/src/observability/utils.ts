@@ -24,6 +24,7 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
       attributes,
       ...rest,
       metadata,
+      requestContext,
     });
   }
 

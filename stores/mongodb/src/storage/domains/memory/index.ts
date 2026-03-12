@@ -28,9 +28,18 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
+  StorageCloneThreadInput,
+  StorageCloneThreadOutput,
+  ThreadCloneMetadata,
   ObservationalMemoryRecord,
+  BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
+  UpdateBufferedObservationsInput,
+  SwapBufferedToActiveInput,
+  SwapBufferedToActiveResult,
+  UpdateBufferedReflectionInput,
+  SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
@@ -167,35 +176,66 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     return result;
   }
 
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    return messages.sort((a, b) => {
+      const isDateField = field === 'createdAt' || field === 'updatedAt';
+      const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+      const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
+      return direction === 'ASC'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    });
+  }
+
   private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
     if (!include || include.length === 0) return null;
 
     const collection = await this.getCollection(TABLE_MESSAGES);
+
+    // Phase 1: Batch-fetch metadata for all target messages in a single query.
+    // This replaces per-include findOne + full thread load with one batched lookup.
+    const targetIds = include.map(inc => inc.id).filter(Boolean);
+    if (targetIds.length === 0) return null;
+
+    const targetDocs = await collection
+      .find({ id: { $in: targetIds } }, { projection: { id: 1, thread_id: 1, createdAt: 1 } })
+      .toArray();
+
+    if (targetDocs.length === 0) return null;
+
+    const targetMap = new Map(
+      targetDocs.map((doc: any) => [doc.id, { threadId: doc.thread_id, createdAt: doc.createdAt }]),
+    );
+
+    // Phase 2: Use cursor-based range queries with limits instead of loading entire threads.
+    // For each include, fetch only the needed context window using createdAt range + limit.
     const includedMessages: any[] = [];
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
+      const target = targetMap.get(id);
+      if (!target) continue;
 
-      // Step 1: Get the target message by ID (globally unique)
-      const targetMessage = await collection.findOne({ id });
-      if (!targetMessage) continue;
+      // Fetch the target message + previous messages (createdAt <= target, ordered DESC, limited)
+      const prevMessages = await collection
+        .find({ thread_id: target.threadId, createdAt: { $lte: target.createdAt } })
+        .sort({ createdAt: -1, id: -1 })
+        .limit(withPreviousMessages + 1)
+        .toArray();
+      includedMessages.push(...prevMessages);
 
-      // Step 2: Get the threadId from the message itself
-      const messageThreadId = targetMessage.thread_id;
-
-      // Step 3: Get all messages for that thread ordered by creation date
-      const allMessages = await collection.find({ thread_id: messageThreadId }).sort({ createdAt: 1 }).toArray();
-
-      // Step 4: Find the target message index
-      const targetIndex = allMessages.findIndex((msg: any) => msg.id === id);
-      if (targetIndex === -1) continue;
-
-      // Step 5: Get surrounding context
-      const startIndex = Math.max(0, targetIndex - withPreviousMessages);
-      const endIndex = Math.min(allMessages.length - 1, targetIndex + withNextMessages);
-
-      for (let i = startIndex; i <= endIndex; i++) {
-        includedMessages.push(allMessages[i]);
+      // Fetch messages after the target (only if requested)
+      if (withNextMessages > 0) {
+        const nextMessages = await collection
+          .find({ thread_id: target.threadId, createdAt: { $gt: target.createdAt } })
+          .sort({ createdAt: 1, id: 1 })
+          .limit(withNextMessages)
+          .toArray();
+        includedMessages.push(...nextMessages);
       }
     }
 
@@ -294,6 +334,24 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         query.createdAt = { ...query.createdAt, [endOp]: formatDateForMongoDB(filter.dateRange.end) };
       }
 
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
+      // When perPage is 0, we only need included messages — skip COUNT and data queries
+      if (perPage === 0 && include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        const list = new MessageList().add(includeMessages ?? [], 'memory');
+        return {
+          messages: this._sortMessages(list.get.all.db(), field, direction),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       // Get total count
       const total = await collection.countDocuments(query);
 
@@ -342,22 +400,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       // Use MessageList for proper deduplication and format conversion to V2
       const list = new MessageList().add(messages, 'memory');
-      let finalMessages = list.get.all.db();
-
-      // Sort all messages (paginated + included) for final output
-      finalMessages = finalMessages.sort((a, b) => {
-        const isDateField = field === 'createdAt' || field === 'updatedAt';
-        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
-        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
-
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        }
-        // Fallback to string comparison for non-numeric fields
-        return direction === 'ASC'
-          ? String(aValue).localeCompare(String(bValue))
-          : String(bValue).localeCompare(String(aValue));
-      });
+      const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
@@ -456,6 +499,27 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         query.createdAt = { ...query.createdAt, [endOp]: formatDateForMongoDB(filter.dateRange.end) };
       }
 
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
+      // Fast path: when perPage is 0 and include is provided, skip COUNT and data queries.
+      if (perPage === 0 && include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        if (!includeMessages || includeMessages.length === 0) {
+          return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+        }
+        const list = new MessageList().add(includeMessages, 'memory');
+        return {
+          messages: this._sortMessages(list.get.all.db(), field, direction),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       // Get total count
       const total = await collection.countDocuments(query);
 
@@ -504,22 +568,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       // Use MessageList for proper deduplication and format conversion to V2
       const list = new MessageList().add(messages, 'memory');
-      let finalMessages = list.get.all.db();
-
-      // Sort all messages (paginated + included) for final output
-      finalMessages = finalMessages.sort((a, b) => {
-        const isDateField = field === 'createdAt' || field === 'updatedAt';
-        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
-        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
-
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        }
-        // Fallback to string comparison for non-numeric fields
-        return direction === 'ASC'
-          ? String(aValue).localeCompare(String(bValue))
-          : String(bValue).localeCompare(String(aValue));
-      });
+      const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
       // Calculate hasMore based on pagination window
       const hasMore = perPageInput !== false && offset + perPage < total;
@@ -589,8 +638,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
                 content: typeof message.content === 'object' ? JSON.stringify(message.content) : message.content,
                 role: message.role,
                 type: message.type || 'v2',
-                createdAt: formatDateForMongoDB(time),
                 resourceId: message.resourceId,
+              },
+              $setOnInsert: {
+                createdAt: formatDateForMongoDB(time),
               },
             },
             upsert: true,
@@ -1105,6 +1156,179 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
+  async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
+    const { sourceThreadId, newThreadId: providedThreadId, resourceId, title, metadata, options } = args;
+
+    const sourceThread = await this.getThreadById({ threadId: sourceThreadId });
+    if (!sourceThread) {
+      throw new MastraError({
+        id: createStorageErrorId('MONGODB', 'CLONE_THREAD', 'SOURCE_NOT_FOUND'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Source thread with id ${sourceThreadId} not found`,
+        details: { sourceThreadId },
+      });
+    }
+
+    const newThreadId = providedThreadId || randomUUID();
+
+    const existingThread = await this.getThreadById({ threadId: newThreadId });
+    if (existingThread) {
+      throw new MastraError({
+        id: createStorageErrorId('MONGODB', 'CLONE_THREAD', 'THREAD_EXISTS'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Thread with id ${newThreadId} already exists`,
+        details: { newThreadId },
+      });
+    }
+
+    try {
+      const messagesCollection = await this.getCollection(TABLE_MESSAGES);
+
+      // Build query filter
+      const filter: Record<string, any> = { thread_id: sourceThreadId };
+
+      if (options?.messageFilter?.startDate) {
+        filter.createdAt = filter.createdAt || {};
+        filter.createdAt.$gte =
+          options.messageFilter.startDate instanceof Date
+            ? options.messageFilter.startDate
+            : new Date(options.messageFilter.startDate);
+      }
+      if (options?.messageFilter?.endDate) {
+        filter.createdAt = filter.createdAt || {};
+        filter.createdAt.$lte =
+          options.messageFilter.endDate instanceof Date
+            ? options.messageFilter.endDate
+            : new Date(options.messageFilter.endDate);
+      }
+      if (options?.messageFilter?.messageIds && options.messageFilter.messageIds.length > 0) {
+        filter.id = { $in: options.messageFilter.messageIds };
+      }
+
+      let query = messagesCollection.find(filter).sort({ createdAt: 1 });
+
+      // Apply message limit (from most recent)
+      let sourceMessages: any[];
+      if (options?.messageLimit && options.messageLimit > 0) {
+        // Get all matching, sort desc, limit, then reverse
+        const limited = await messagesCollection
+          .find(filter)
+          .sort({ createdAt: -1 })
+          .limit(options.messageLimit)
+          .toArray();
+        sourceMessages = limited.reverse();
+      } else {
+        sourceMessages = await query.toArray();
+      }
+
+      const now = new Date();
+      const targetResourceId = resourceId || sourceThread.resourceId;
+
+      const lastMessageId = sourceMessages.length > 0 ? sourceMessages[sourceMessages.length - 1]!.id : undefined;
+
+      const cloneMetadata: ThreadCloneMetadata = {
+        sourceThreadId,
+        clonedAt: now,
+        ...(lastMessageId && { lastMessageId }),
+      };
+
+      const newThread: StorageThreadType = {
+        id: newThreadId,
+        resourceId: targetResourceId,
+        title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : ''),
+        metadata: {
+          ...metadata,
+          clone: cloneMetadata,
+        },
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      // Save the new thread
+      const threadsCollection = await this.getCollection(TABLE_THREADS);
+      await threadsCollection.insertOne({ ...newThread });
+
+      // Clone messages with new IDs
+      const clonedMessages: MastraDBMessage[] = [];
+      const messageIdMap: Record<string, string> = {};
+
+      if (sourceMessages.length > 0) {
+        const messageDocs: any[] = [];
+        for (const sourceMsg of sourceMessages) {
+          const newMessageId = randomUUID();
+          messageIdMap[sourceMsg.id] = newMessageId;
+
+          let parsedContent = sourceMsg.content;
+          if (typeof parsedContent === 'string') {
+            try {
+              parsedContent = JSON.parse(parsedContent);
+            } catch {
+              parsedContent = { format: 2, parts: [{ type: 'text', text: parsedContent }] };
+            }
+          }
+
+          const newDoc = {
+            id: newMessageId,
+            thread_id: newThreadId,
+            content: sourceMsg.content,
+            role: sourceMsg.role,
+            type: sourceMsg.type || 'v2',
+            createdAt: sourceMsg.createdAt,
+            resourceId: targetResourceId,
+          };
+          messageDocs.push(newDoc);
+
+          clonedMessages.push({
+            id: newMessageId,
+            threadId: newThreadId,
+            content: parsedContent,
+            role: sourceMsg.role as MastraDBMessage['role'],
+            type: sourceMsg.type || 'v2',
+            createdAt: formatDateForMongoDB(sourceMsg.createdAt),
+            resourceId: targetResourceId,
+          });
+        }
+        try {
+          await messagesCollection.insertMany(messageDocs);
+        } catch (msgError) {
+          // Compensating rollback: remove partially-inserted messages and the thread
+          try {
+            await messagesCollection.deleteMany({ thread_id: newThreadId });
+          } catch {
+            // best-effort cleanup
+          }
+          try {
+            await threadsCollection.deleteOne({ id: newThreadId });
+          } catch {
+            // best-effort cleanup
+          }
+          throw msgError;
+        }
+      }
+
+      return {
+        thread: newThread,
+        clonedMessages,
+        messageIdMap,
+      };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'CLONE_THREAD', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { sourceThreadId, newThreadId },
+        },
+        error,
+      );
+    }
+  }
+
   // ============================================
   // Observational Memory Methods
   // ============================================
@@ -1129,12 +1353,34 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       originType: doc.originType || 'initial',
       generationCount: Number(doc.generationCount || 0),
       activeObservations: doc.activeObservations || '',
+      // Handle new chunk-based structure
+      bufferedObservationChunks: Array.isArray(doc.bufferedObservationChunks)
+        ? doc.bufferedObservationChunks
+        : undefined,
+      // Deprecated fields (for backward compatibility)
       bufferedObservations: doc.activeObservationsPendingUpdate || undefined,
+      bufferedObservationTokens: doc.bufferedObservationTokens ? Number(doc.bufferedObservationTokens) : undefined,
+      bufferedMessageIds: undefined, // Use bufferedObservationChunks instead
+      bufferedReflection: doc.bufferedReflection || undefined,
+      bufferedReflectionTokens: doc.bufferedReflectionTokens ? Number(doc.bufferedReflectionTokens) : undefined,
+      bufferedReflectionInputTokens: doc.bufferedReflectionInputTokens
+        ? Number(doc.bufferedReflectionInputTokens)
+        : undefined,
+      reflectedObservationLineCount: doc.reflectedObservationLineCount
+        ? Number(doc.reflectedObservationLineCount)
+        : undefined,
       totalTokensObserved: Number(doc.totalTokensObserved || 0),
       observationTokenCount: Number(doc.observationTokenCount || 0),
       pendingMessageTokens: Number(doc.pendingMessageTokens || 0),
       isReflecting: Boolean(doc.isReflecting),
       isObserving: Boolean(doc.isObserving),
+      isBufferingObservation: Boolean(doc.isBufferingObservation),
+      isBufferingReflection: Boolean(doc.isBufferingReflection),
+      lastBufferedAtTokens:
+        typeof doc.lastBufferedAtTokens === 'number'
+          ? doc.lastBufferedAtTokens
+          : parseInt(String(doc.lastBufferedAtTokens ?? '0'), 10) || 0,
+      lastBufferedAtTime: doc.lastBufferedAtTime ? new Date(doc.lastBufferedAtTime) : null,
       config: doc.config || {},
       metadata: doc.metadata || undefined,
       observedMessageIds: doc.observedMessageIds || undefined,
@@ -1207,6 +1453,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         pendingMessageTokens: 0,
         isReflecting: false,
         isObserving: false,
+        isBufferingObservation: false,
+        isBufferingReflection: false,
+        lastBufferedAtTokens: 0,
+        lastBufferedAtTime: null,
         config: input.config,
         observedTimezone: input.observedTimezone,
       };
@@ -1230,6 +1480,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         observationTokenCount: 0,
         isObserving: false,
         isReflecting: false,
+        isBufferingObservation: false,
+        isBufferingReflection: false,
+        lastBufferedAtTokens: 0,
+        lastBufferedAtTime: null,
         observedTimezone: input.observedTimezone || null,
         createdAt: now,
         updatedAt: now,
@@ -1243,6 +1497,58 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: input.threadId, resourceId: input.resourceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async insertObservationalMemoryRecord(record: ObservationalMemoryRecord): Promise<void> {
+    try {
+      const lookupKey = this.getOMKey(record.threadId, record.resourceId);
+      const collection = await this.getCollection(OM_TABLE);
+      await collection.insertOne({
+        id: record.id,
+        lookupKey,
+        scope: record.scope,
+        resourceId: record.resourceId,
+        threadId: record.threadId || null,
+        activeObservations: record.activeObservations || '',
+        activeObservationsPendingUpdate: null,
+        originType: record.originType || 'initial',
+        config: record.config || null,
+        generationCount: record.generationCount || 0,
+        lastObservedAt: record.lastObservedAt || null,
+        lastReflectionAt: null,
+        pendingMessageTokens: record.pendingMessageTokens || 0,
+        totalTokensObserved: record.totalTokensObserved || 0,
+        observationTokenCount: record.observationTokenCount || 0,
+        observedMessageIds: record.observedMessageIds || null,
+        bufferedObservationChunks: Array.isArray(record.bufferedObservationChunks)
+          ? record.bufferedObservationChunks
+          : [],
+        bufferedReflection: record.bufferedReflection || null,
+        bufferedReflectionTokens: record.bufferedReflectionTokens ?? null,
+        bufferedReflectionInputTokens: record.bufferedReflectionInputTokens ?? null,
+        reflectedObservationLineCount: record.reflectedObservationLineCount ?? null,
+        isObserving: record.isObserving || false,
+        isReflecting: record.isReflecting || false,
+        isBufferingObservation: record.isBufferingObservation || false,
+        isBufferingReflection: record.isBufferingReflection || false,
+        lastBufferedAtTokens: record.lastBufferedAtTokens || 0,
+        lastBufferedAtTime: record.lastBufferedAtTime || null,
+        observedTimezone: record.observedTimezone || null,
+        metadata: record.metadata || null,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'INSERT_OBSERVATIONAL_MEMORY_RECORD', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: record.id, threadId: record.threadId, resourceId: record.resourceId },
         },
         error,
       );
@@ -1319,6 +1625,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         pendingMessageTokens: 0,
         isReflecting: false,
         isObserving: false,
+        isBufferingObservation: false,
+        isBufferingReflection: false,
+        lastBufferedAtTokens: 0,
+        lastBufferedAtTime: null,
         config: input.currentRecord.config,
         metadata: input.currentRecord.metadata,
         observedTimezone: input.currentRecord.observedTimezone,
@@ -1343,6 +1653,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         observationTokenCount: record.observationTokenCount,
         isObserving: false,
         isReflecting: false,
+        isBufferingObservation: false,
+        isBufferingReflection: false,
+        lastBufferedAtTokens: 0,
+        lastBufferedAtTime: null,
         observedTimezone: record.observedTimezone || null,
         createdAt: now,
         updatedAt: now,
@@ -1423,6 +1737,78 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
+  async setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+      const updateDoc: any = {
+        isBufferingObservation: isBuffering,
+        updatedAt: new Date(),
+      };
+
+      if (lastBufferedAtTokens !== undefined) {
+        updateDoc.lastBufferedAtTokens = lastBufferedAtTokens;
+      }
+
+      const result = await collection.updateOne({ id }, { $set: updateDoc });
+
+      if (result.matchedCount === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'SET_BUFFERING_OBSERVATION_FLAG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isBuffering, lastBufferedAtTokens: lastBufferedAtTokens ?? null },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'SET_BUFFERING_OBSERVATION_FLAG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isBuffering, lastBufferedAtTokens: lastBufferedAtTokens ?? null },
+        },
+        error,
+      );
+    }
+  }
+
+  async setBufferingReflectionFlag(id: string, isBuffering: boolean): Promise<void> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+      const result = await collection.updateOne(
+        { id },
+        { $set: { isBufferingReflection: isBuffering, updatedAt: new Date() } },
+      );
+
+      if (result.matchedCount === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'SET_BUFFERING_REFLECTION_FLAG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isBuffering },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'SET_BUFFERING_REFLECTION_FLAG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isBuffering },
+        },
+        error,
+      );
+    }
+  }
+
   async clearObservationalMemory(threadId: string | null, resourceId: string): Promise<void> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
@@ -1441,11 +1827,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  async addPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
-    // Validate tokenCount before using in $inc
+  async setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
+    // Validate tokenCount before using in $set
     if (typeof tokenCount !== 'number' || !Number.isFinite(tokenCount) || tokenCount < 0) {
       throw new MastraError({
-        id: createStorageErrorId('MONGODB', 'ADD_PENDING_MESSAGE_TOKENS', 'INVALID_INPUT'),
+        id: createStorageErrorId('MONGODB', 'SET_PENDING_MESSAGE_TOKENS', 'INVALID_INPUT'),
         text: `Invalid tokenCount: must be a finite non-negative number, got ${tokenCount}`,
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -1458,14 +1844,13 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const result = await collection.updateOne(
         { id },
         {
-          $inc: { pendingMessageTokens: tokenCount },
-          $set: { updatedAt: new Date() },
+          $set: { pendingMessageTokens: tokenCount, updatedAt: new Date() },
         },
       );
 
       if (result.matchedCount === 0) {
         throw new MastraError({
-          id: createStorageErrorId('MONGODB', 'ADD_PENDING_MESSAGE_TOKENS', 'NOT_FOUND'),
+          id: createStorageErrorId('MONGODB', 'SET_PENDING_MESSAGE_TOKENS', 'NOT_FOUND'),
           text: `Observational memory record not found: ${id}`,
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
@@ -1478,10 +1863,395 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       }
       throw new MastraError(
         {
-          id: createStorageErrorId('MONGODB', 'ADD_PENDING_MESSAGE_TOKENS', 'FAILED'),
+          id: createStorageErrorId('MONGODB', 'SET_PENDING_MESSAGE_TOKENS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { id, tokenCount },
+        },
+        error,
+      );
+    }
+  }
+
+  // ============================================
+  // Async Buffering Methods
+  // ============================================
+
+  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+
+      // Create new chunk with ID and timestamp
+      const newChunk: BufferedObservationChunk = {
+        id: `ombuf-${randomUUID()}`,
+        cycleId: input.chunk.cycleId,
+        observations: input.chunk.observations,
+        tokenCount: input.chunk.tokenCount,
+        messageIds: input.chunk.messageIds,
+        messageTokens: input.chunk.messageTokens,
+        lastObservedAt: input.chunk.lastObservedAt,
+        createdAt: new Date(),
+        suggestedContinuation: input.chunk.suggestedContinuation,
+        currentTask: input.chunk.currentTask,
+      };
+
+      // Use an update pipeline so legacy null/missing fields are coerced to arrays atomically
+      const now = new Date();
+      const setStage: Record<string, any> = {
+        updatedAt: now,
+        bufferedObservationChunks: {
+          $concatArrays: [{ $ifNull: ['$bufferedObservationChunks', []] }, [newChunk as any]],
+        },
+      };
+      if (input.lastBufferedAtTime) {
+        setStage.lastBufferedAtTime = input.lastBufferedAtTime;
+      }
+
+      const result = await collection.updateOne({ id: input.id }, [{ $set: setStage }]);
+
+      if (result.matchedCount === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'UPDATE_BUFFERED_OBSERVATIONS', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'UPDATE_BUFFERED_OBSERVATIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+
+      // Get current record
+      const doc = await collection.findOne({ id: input.id });
+      if (!doc) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'SWAP_BUFFERED_TO_ACTIVE', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+
+      // Parse buffered chunks safely
+      const chunks: BufferedObservationChunk[] = Array.isArray(doc.bufferedObservationChunks)
+        ? doc.bufferedObservationChunks
+        : [];
+
+      if (chunks.length === 0) {
+        return {
+          chunksActivated: 0,
+          messageTokensActivated: 0,
+          observationTokensActivated: 0,
+          messagesActivated: 0,
+          activatedCycleIds: [],
+          activatedMessageIds: [],
+        };
+      }
+
+      // Calculate target message tokens to activate based on new formula:
+      // retentionFloor = threshold * (1 - ratio) represents tokens to keep as raw messages
+      // targetMessageTokens = max(0, currentPending - retentionFloor) represents tokens to activate
+      const retentionFloor = input.messageTokensThreshold * (1 - input.activationRatio);
+      const targetMessageTokens = Math.max(0, input.currentPendingTokens - retentionFloor);
+
+      // Find the closest chunk boundary to the target, biased over (prefer removing
+      // slightly more than the target so remaining context lands at or below retentionFloor).
+      // Track both best-over and best-under boundaries so we can fall back to under
+      // if the over boundary would overshoot by too much.
+      let cumulativeMessageTokens = 0;
+      let bestOverBoundary = 0;
+      let bestOverTokens = 0;
+      let bestUnderBoundary = 0;
+      let bestUnderTokens = 0;
+
+      for (let i = 0; i < chunks.length; i++) {
+        cumulativeMessageTokens += chunks[i]!.messageTokens ?? 0;
+        const boundary = i + 1;
+
+        if (cumulativeMessageTokens >= targetMessageTokens) {
+          // Over or equal — track the closest (lowest) over boundary
+          if (bestOverBoundary === 0 || cumulativeMessageTokens < bestOverTokens) {
+            bestOverBoundary = boundary;
+            bestOverTokens = cumulativeMessageTokens;
+          }
+        } else {
+          // Under — track the closest (highest) under boundary
+          if (cumulativeMessageTokens > bestUnderTokens) {
+            bestUnderBoundary = boundary;
+            bestUnderTokens = cumulativeMessageTokens;
+          }
+        }
+      }
+
+      // Safeguard: if the over boundary would eat into more than 95% of the
+      // retention floor, fall back to the best under boundary instead.
+      // This prevents edge cases where a large chunk overshoots dramatically.
+      // When forceMaxActivation is set (above blockAfter), still prefer the over
+      // boundary, but never if it would leave fewer than the smaller of 1000
+      // tokens or the retention floor remaining.
+      const maxOvershoot = retentionFloor * 0.95;
+      const overshoot = bestOverTokens - targetMessageTokens;
+      const remainingAfterOver = input.currentPendingTokens - bestOverTokens;
+      const remainingAfterUnder = input.currentPendingTokens - bestUnderTokens;
+      // When activationRatio ≈ 1.0, retentionFloor is 0 and minRemaining becomes 0 — intentional for "activate everything" configs.
+      const minRemaining = Math.min(1000, retentionFloor);
+
+      let chunksToActivate: number;
+      if (input.forceMaxActivation && bestOverBoundary > 0 && remainingAfterOver >= minRemaining) {
+        chunksToActivate = bestOverBoundary;
+      } else if (bestOverBoundary > 0 && overshoot <= maxOvershoot && remainingAfterOver >= minRemaining) {
+        chunksToActivate = bestOverBoundary;
+      } else if (bestUnderBoundary > 0 && remainingAfterUnder >= minRemaining) {
+        chunksToActivate = bestUnderBoundary;
+      } else if (bestOverBoundary > 0) {
+        // All boundaries are over and exceed the safeguard — still activate
+        // the closest over boundary (better than nothing)
+        chunksToActivate = bestOverBoundary;
+      } else {
+        chunksToActivate = 1;
+      }
+
+      // Split chunks
+      const activatedChunks = chunks.slice(0, chunksToActivate);
+      const remainingChunks = chunks.slice(chunksToActivate);
+
+      // Combine activated observations
+      const activatedContent = activatedChunks.map(c => c.observations).join('\n\n');
+      const activatedTokens = activatedChunks.reduce((sum, c) => sum + c.tokenCount, 0);
+      const activatedMessageTokens = activatedChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
+      const activatedMessageCount = activatedChunks.reduce((sum, c) => sum + c.messageIds.length, 0);
+      const activatedCycleIds = activatedChunks.map(c => c.cycleId).filter((id): id is string => !!id);
+      const activatedMessageIds = activatedChunks.flatMap(c => c.messageIds ?? []);
+
+      // Derive lastObservedAt from the latest activated chunk, or use provided value
+      const latestChunk = activatedChunks[activatedChunks.length - 1];
+      const lastObservedAt =
+        input.lastObservedAt ?? (latestChunk?.lastObservedAt ? new Date(latestChunk.lastObservedAt) : new Date());
+
+      // Get existing values
+      const existingActive = (doc.activeObservations as string) || '';
+      const existingTokenCount = Number(doc.observationTokenCount || 0);
+
+      // Calculate new values
+      const newActive = existingActive ? `${existingActive}\n\n${activatedContent}` : activatedContent;
+      const newTokenCount = existingTokenCount + activatedTokens;
+
+      // NOTE: We intentionally do NOT add message IDs to observedMessageIds during buffered activation.
+      // Buffered chunks represent observations of messages as they were at buffering time.
+      // With streaming, messages grow after buffering, so we rely on lastObservedAt for filtering.
+      // New content after lastObservedAt will be picked up in subsequent observations.
+
+      // Decrement pending message tokens (clamped to zero)
+      const existingPending = Number(doc.pendingMessageTokens || 0);
+      const newPending = Math.max(0, existingPending - activatedMessageTokens);
+
+      await collection.updateOne(
+        { id: input.id },
+        {
+          $set: {
+            activeObservations: newActive,
+            observationTokenCount: newTokenCount,
+            pendingMessageTokens: newPending,
+            bufferedObservationChunks: remainingChunks,
+            lastObservedAt,
+            updatedAt: new Date(),
+          },
+        },
+      );
+
+      // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
+      const latestChunkHints = activatedChunks[activatedChunks.length - 1];
+
+      return {
+        chunksActivated: activatedChunks.length,
+        messageTokensActivated: activatedMessageTokens,
+        observationTokensActivated: activatedTokens,
+        messagesActivated: activatedMessageCount,
+        activatedCycleIds,
+        activatedMessageIds,
+        observations: activatedContent,
+        perChunk: activatedChunks.map(c => ({
+          cycleId: c.cycleId ?? '',
+          messageTokens: c.messageTokens ?? 0,
+          observationTokens: c.tokenCount,
+          messageCount: c.messageIds.length,
+          observations: c.observations,
+        })),
+        suggestedContinuation: latestChunkHints?.suggestedContinuation ?? undefined,
+        currentTask: latestChunkHints?.currentTask ?? undefined,
+      };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'SWAP_BUFFERED_TO_ACTIVE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async updateBufferedReflection(input: UpdateBufferedReflectionInput): Promise<void> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+
+      // First get current record to merge buffered content
+      const doc = await collection.findOne({ id: input.id });
+      if (!doc) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'UPDATE_BUFFERED_REFLECTION', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+
+      const existingContent = (doc.bufferedReflection as string) || '';
+      const existingTokens = Number(doc.bufferedReflectionTokens || 0);
+      const existingInputTokens = Number(doc.bufferedReflectionInputTokens || 0);
+
+      // Merge content
+      const newContent = existingContent ? `${existingContent}\n\n${input.reflection}` : input.reflection;
+      const newTokens = existingTokens + input.tokenCount;
+      const newInputTokens = existingInputTokens + input.inputTokenCount;
+
+      const result = await collection.updateOne(
+        { id: input.id },
+        {
+          $set: {
+            bufferedReflection: newContent,
+            bufferedReflectionTokens: newTokens,
+            bufferedReflectionInputTokens: newInputTokens,
+            reflectedObservationLineCount: input.reflectedObservationLineCount,
+            updatedAt: new Date(),
+          },
+        },
+      );
+
+      if (result.matchedCount === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'UPDATE_BUFFERED_REFLECTION', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'UPDATE_BUFFERED_REFLECTION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+
+      // Get current record
+      const doc = await collection.findOne({ id: input.currentRecord.id });
+      if (!doc) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.currentRecord.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.currentRecord.id },
+        });
+      }
+
+      const bufferedReflection = (doc.bufferedReflection as string) || '';
+      const reflectedLineCount = Number(doc.reflectedObservationLineCount || 0);
+
+      if (!bufferedReflection) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NO_CONTENT'),
+          text: 'No buffered reflection to swap',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { id: input.currentRecord.id },
+        });
+      }
+
+      // Split current activeObservations by the recorded boundary.
+      // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
+      // Lines after reflectedLineCount were added after reflection started → kept as-is.
+      const currentObservations = (doc.activeObservations as string) || '';
+      const allLines = currentObservations.split('\n');
+      const unreflectedLines = allLines.slice(reflectedLineCount);
+      const unreflectedContent = unreflectedLines.join('\n').trim();
+
+      // New activeObservations = bufferedReflection + unreflected observations
+      const newObservations = unreflectedContent
+        ? `${bufferedReflection}\n\n${unreflectedContent}`
+        : bufferedReflection;
+
+      // Create new generation with the merged content.
+      // tokenCount is computed by the processor using its token counter on the combined content.
+      const newRecord = await this.createReflectionGeneration({
+        currentRecord: input.currentRecord,
+        reflection: newObservations,
+        tokenCount: input.tokenCount,
+      });
+
+      // Clear buffered state on old record
+      await collection.updateOne(
+        { id: input.currentRecord.id },
+        {
+          $set: {
+            bufferedReflection: null,
+            bufferedReflectionTokens: null,
+            bufferedReflectionInputTokens: null,
+            reflectedObservationLineCount: null,
+            updatedAt: new Date(),
+          },
+        },
+      );
+
+      return newRecord;
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.currentRecord.id },
         },
         error,
       );

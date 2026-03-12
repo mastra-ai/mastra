@@ -1,9 +1,9 @@
 ---
-title: "Mastra Class | v1 Migration Guide"
+title: "Mastra class | v1 Migration Guide"
 description: "Learn how to migrate Mastra class changes when upgrading to v1."
 ---
 
-# Mastra Class
+# Mastra class
 
 The Mastra class has been restructured to restrict top-level imports and replace direct property access with getter methods.
 
@@ -137,8 +137,8 @@ npx @mastra/codemod@latest v1/mastra-plural-apis .
 ### Each primitive has a `getById` and a `get` function
 
 ```typescript
-mastra.getMCPServer('myServer');          // Works (registry key)
-mastra.getMCPServerById('my-mcp-server'); // Works (intrinsic ID)
+mastra.getMCPServer('myServer') // Works (registry key)
+mastra.getMCPServerById('my-mcp-server') // Works (intrinsic ID)
 ```
 
 ### Tool registration now uses intrinsic IDs

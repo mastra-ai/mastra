@@ -1,10 +1,10 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
+import { useMergedRequestContext } from '@/domains/request-context';
 
 export const useAgent = (agentId?: string) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
+  const requestContext = useMergedRequestContext();
 
   return useQuery({
     queryKey: ['agent', agentId, requestContext],

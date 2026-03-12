@@ -11,6 +11,7 @@ import type {
   MCPServerSSEOptions,
 } from '@mastra/core/mcp';
 import { RequestContext } from '@mastra/core/request-context';
+import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/core/schema';
 import { createTool } from '@mastra/core/tools';
 import type { InternalCoreTool, MCPToolType, MastraToolInvocationOptions } from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
@@ -48,7 +49,7 @@ import type {
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
-import { z } from 'zod';
+
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
 import type { MCPServerPrompts, MCPServerResources, ElicitationActions } from './types';
@@ -417,10 +418,10 @@ export class MCPServer extends MCPServerBase {
           const toolSpec: any = {
             name: tool.id || 'unknown',
             description: tool.description,
-            inputSchema: tool.parameters.jsonSchema,
+            inputSchema: this.convertSchema(tool.parameters),
           };
           if (tool.outputSchema) {
-            toolSpec.outputSchema = tool.outputSchema.jsonSchema;
+            toolSpec.outputSchema = this.convertSchema(tool.outputSchema);
           }
           // Include MCP tool annotations if present
           if (tool.mcp?.annotations) {
@@ -551,23 +552,30 @@ export class MCPServer extends MCPServerBase {
         return response;
       } catch (error) {
         const duration = Date.now() - startTime;
-        if (error instanceof z.ZodError) {
+        if (error instanceof Error && 'issues' in error && Array.isArray((error as any).issues)) {
+          const issues: Array<{ path: string[]; message: string }> = (error as any).issues;
           this.logger.warn('Invalid tool arguments', {
             tool: request.params.name,
-            errors: error.errors,
+            errors: issues,
             duration: `${duration}ms`,
           });
           return {
             content: [
               {
                 type: 'text',
-                text: `Invalid arguments: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
+                text: `Invalid arguments: ${issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
               },
             ],
             isError: true,
           };
         }
         this.logger.error(`Tool execution failed: ${request.params.name}`, { error });
+        if (error instanceof MastraError) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(error.toJSON()) }],
+            isError: true,
+          };
+        }
         return {
           content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
           isError: true,
@@ -829,12 +837,18 @@ export class MCPServer extends MCPServerBase {
       const agentToolDefinition = createTool({
         id: agentToolName,
         description: `Ask agent '${agent.name}' a question. Agent description: ${agentDescription}`,
-        inputSchema: z.object({
-          message: z.string().describe('The question or input for the agent.'),
-        }),
+        inputSchema: {
+          type: 'object' as const,
+          properties: {
+            message: { type: 'string', description: 'The question or input for the agent.' },
+          },
+          required: ['message'],
+          additionalProperties: false,
+        },
         execute: async (inputData, context) => {
+          const { message } = inputData as { message: string };
           this.logger.debug(
-            `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${inputData.message}"`,
+            `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${message}"`,
           );
           try {
             const proxiedContext = context?.requestContext || new RequestContext();
@@ -845,7 +859,7 @@ export class MCPServer extends MCPServerBase {
               });
             }
 
-            const response = await agent.generate(inputData.message, {
+            const response = await agent.generate(message, {
               ...(context ?? {}),
               requestContext: proxiedContext,
             });
@@ -1810,6 +1824,13 @@ export class MCPServer extends MCPServerBase {
     };
   }
 
+  private convertSchema(schema: any) {
+    if (isStandardSchemaWithJSON(schema)) {
+      return standardSchemaToJSONSchema(schema);
+    }
+    return schema?.jsonSchema || schema;
+  }
+
   /**
    * Gets a list of all tools provided by this MCP server with their schemas.
    *
@@ -1836,8 +1857,8 @@ export class MCPServer extends MCPServerBase {
         id: toolId,
         name: tool.id || toolId,
         description: tool.description,
-        inputSchema: tool.parameters?.jsonSchema || tool.parameters,
-        outputSchema: tool.outputSchema?.jsonSchema || tool.outputSchema,
+        inputSchema: this.convertSchema(tool.parameters),
+        outputSchema: this.convertSchema(tool.parameters),
         toolType: tool.mcp?.toolType,
       })),
     };
@@ -1873,8 +1894,8 @@ export class MCPServer extends MCPServerBase {
     return {
       name: tool.id || toolId,
       description: tool.description,
-      inputSchema: tool.parameters?.jsonSchema || tool.parameters,
-      outputSchema: tool.outputSchema?.jsonSchema || tool.outputSchema,
+      inputSchema: this.convertSchema(tool.parameters),
+      outputSchema: this.convertSchema(tool.outputSchema),
       toolType: tool.mcp?.toolType,
     };
   }
@@ -1916,23 +1937,42 @@ export class MCPServer extends MCPServerBase {
 
       this.logger.debug(`ExecuteTool: Invoking '${toolId}' with arguments:`, args);
 
-      if (tool.parameters instanceof z.ZodType && typeof tool.parameters.safeParse === 'function') {
-        const validation = tool.parameters.safeParse(args ?? {});
-        if (!validation.success) {
-          const errorMessages = validation.error.errors
-            .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+      const paramsSchema = tool.parameters as {
+        validate?: (value: unknown) => any;
+        safeParse?: (value: unknown) => any;
+      };
+
+      const validation =
+        typeof paramsSchema?.validate === 'function'
+          ? paramsSchema.validate(args ?? {})
+          : typeof paramsSchema?.safeParse === 'function'
+            ? paramsSchema.safeParse(args ?? {})
+            : null;
+
+      if (validation) {
+        const success = typeof validation.success === 'boolean' ? validation.success : !validation.issues?.length;
+
+        if (!success) {
+          const issues = validation.error?.issues ?? validation.error?.errors ?? validation.issues ?? [];
+          const errorMessages = issues
+            .map(
+              (e: { path?: (string | number)[]; message: string }) => `- ${e.path?.join('.') || 'root'}: ${e.message}`,
+            )
             .join('\n');
+          const validationErrors = validation.error?.format?.() ?? validation.error ?? validation.issues;
+
           this.logger.warn(`ExecuteTool: Invalid tool arguments for '${toolId}': ${errorMessages}`, {
-            errors: validation.error.format(),
+            errors: validationErrors,
           });
           // Return validation error as a result instead of throwing
           return {
             error: true,
-            message: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(args, null, 2)}`,
-            validationErrors: validation.error.format(),
+            message: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages || 'Validation failed'}\n\nProvided arguments: ${JSON.stringify(args, null, 2)}`,
+            validationErrors,
           };
         }
-        validatedArgs = validation.data;
+
+        validatedArgs = validation.data ?? validation.value ?? args;
       } else {
         this.logger.debug(
           `ExecuteTool: Tool '${toolId}' parameters is not a Zod schema with safeParse or is undefined. Skipping validation.`,

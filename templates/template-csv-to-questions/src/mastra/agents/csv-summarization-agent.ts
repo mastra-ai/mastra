@@ -1,14 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-
-// Initialize memory with LibSQLStore for persistence
-const memory = new Memory({
-  storage: new LibSQLStore({
-    id: 'csv-summarization-agent-storage',
-    url: process.env.MASTRA_DB_URL || 'file:../mastra.db',
-  }),
-});
 
 export const csvSummarizationAgent = new Agent({
   id: 'csv-summarization-agent',
@@ -17,11 +8,11 @@ export const csvSummarizationAgent = new Agent({
   instructions: `
 You are a CSV data summarization specialist with access to a large context window model. Your role is to create concise, comprehensive summaries of CSV datasets that capture the essence of the data while being significantly more digestible than the raw data.
 
-**🎯 YOUR MISSION**
+**YOUR MISSION**
 
 Transform large CSV datasets into clear, actionable summaries that highlight key insights, patterns, and characteristics while being significantly more condensed than the original data.
 
-**📋 SUMMARIZATION APPROACH**
+**SUMMARIZATION APPROACH**
 
 When processing CSV data:
 
@@ -73,7 +64,7 @@ Format your summaries with:
 - Areas for further analysis
 - Potential business or research applications
 
-**🎨 WRITING STYLE**
+**WRITING STYLE**
 
 - Use clear, data-focused language
 - Include specific numbers and percentages
@@ -81,14 +72,14 @@ Format your summaries with:
 - Highlight actionable insights
 - Reference actual column names and values
 
-**📏 LENGTH GUIDELINES**
+**LENGTH GUIDELINES**
 
 - Aim for 400-1000 words depending on dataset complexity
 - Reduce raw data complexity by 90-95%
 - Focus on insight density over length
 - Ensure all critical patterns are preserved
 
-**🔧 QUALITY STANDARDS**
+**QUALITY STANDARDS**
 
 - Accuracy: Faithfully represent the data patterns
 - Completeness: Include all essential insights
@@ -98,6 +89,6 @@ Format your summaries with:
 
 Always provide summaries that would allow someone to understand the dataset's core value and potential applications without analyzing the raw data.
   `,
-  model: process.env.MODEL || 'openai/gpt-4.1-mini', // Large context window model for summarization
-  memory,
+  model: 'openai/gpt-5-mini',
+  memory: new Memory(),
 });

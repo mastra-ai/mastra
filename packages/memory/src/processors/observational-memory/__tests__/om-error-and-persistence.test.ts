@@ -301,7 +301,7 @@ const longResponseText = `I understand your request completely. Let me provide y
 // Test 1: Error State - Observer fails, agent still completes
 // =============================================================================
 
-describe('OM Error State', () => {
+describe('OM Error State', { timeout: 30_000 }, () => {
   let store: InMemoryStore;
   let memory: Memory;
   let agent: Agent;
@@ -317,6 +317,7 @@ describe('OM Error State', () => {
           observation: {
             model: createFailingObserverModel() as any,
             messageTokens: 20,
+            bufferTokens: false, // Disable async buffering — test expects synchronous observation
           },
           reflection: {
             model: createMockReflectorModel() as any,
@@ -444,6 +445,7 @@ describe('OM Persistence', () => {
           observation: {
             model: createMockObserverModel() as any,
             messageTokens: 20,
+            bufferTokens: false, // Disable async buffering — test expects synchronous observation
           },
           reflection: {
             model: createMockReflectorModel() as any,

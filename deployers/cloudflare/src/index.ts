@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { Deployer } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
 import type { BundlerOptions } from '@mastra/deployer/bundler';
@@ -8,7 +8,7 @@ import type { Unstable_RawConfig } from 'wrangler'; // Unstable_RawConfig is uns
 import { mastraInstanceWrapper } from './plugins/mastra-instance-wrapper';
 import { postgresStoreInstanceChecker } from './plugins/postgres-store-instance-checker';
 
-/** @deprecated TODO remove deprecated fields in next major version */
+/** @deprecated */
 interface D1DatabaseBinding {
   binding: string;
   database_name: string;
@@ -16,30 +16,36 @@ interface D1DatabaseBinding {
   preview_database_id?: string;
 }
 
-/** @deprecated TODO remove deprecated fields in next major version */
+/** @deprecated */
 interface KVNamespaceBinding {
   binding: string;
   id: string;
 }
 
 export class CloudflareDeployer extends Deployer {
-  readonly userConfig: Omit<Unstable_RawConfig, 'main'>;
+  readonly userConfig: Omit<Unstable_RawConfig, 'main' | '$schema'>;
 
   constructor(
-    userConfig: Omit<Unstable_RawConfig, 'main'> &
-      // TODO remove deprecated fields in next major version
+    userConfig: Omit<Unstable_RawConfig, 'main' | '$schema'> &
+      // TODO: Remove deprecated fields in next major version, and update type to just Omit<Unstable_RawConfig, 'main' | '$schema'>.
       {
-        /** @deprecated `name` instead. */
+        /** @deprecated Use `name` instead. */
         projectName?: string;
-        /** @deprecated this parameter is not used internally. */
+        /** @deprecated This parameter is not used internally. */
         workerNamespace?: string;
-        /** @deprecated use `d1_databases` instead. */
+        /** @deprecated Use `d1_databases` instead. */
         d1Databases?: D1DatabaseBinding[];
-        /** @deprecated use `kv_namespaces` instead. */
+        /** @deprecated Use `kv_namespaces` instead. */
         kvNamespaces?: KVNamespaceBinding[];
       },
   ) {
     super({ name: 'CLOUDFLARE' });
+
+    // Use 'browser' platform for Workers-compatible module resolution.
+    // This ensures packages with conditional exports (like the Cloudflare SDK)
+    // resolve to browser/worker implementations instead of Node.js-specific code
+    // that depends on unavailable modules like 'https'.
+    this.platform = 'browser';
 
     this.userConfig = { ...userConfig };
 
@@ -61,7 +67,21 @@ export class CloudflareDeployer extends Deployer {
   }
 
   async writeFiles(outputDirectory: string): Promise<void> {
-    const { vars: userVars, alias: userAlias, ...userConfig } = this.userConfig;
+    const {
+      vars: userVars,
+      alias: userAlias,
+      // Remove deprecated fields so they don't leak into wrangler.json
+      projectName: _projectName,
+      workerNamespace: _workerNamespace,
+      d1Databases: _d1Databases,
+      kvNamespaces: _kvNamespaces,
+      ...userConfig
+    } = this.userConfig as typeof this.userConfig & {
+      projectName?: string;
+      workerNamespace?: string;
+      d1Databases?: unknown;
+      kvNamespaces?: unknown;
+    };
     const loadedEnvVars = await this.loadEnvVars();
 
     // Merge env vars from .env files with user-provided vars
@@ -93,6 +113,19 @@ export const sys = {
 
     await writeFile(join(outputDirectory, this.outputDir, typescriptStubPath), typescriptStub);
 
+    // Write execa stub — execa is used by @mastra/core's local sandbox process manager
+    // but is not available/needed in Cloudflare Workers
+    const execaStubPath = 'execa-stub.mjs';
+    const execaStub = `// Stub for execa - not available at runtime in Cloudflare Workers
+export const execa = () => { throw new Error('execa is not available in Cloudflare Workers'); };
+export const execaNode = execa;
+export const execaSync = execa;
+export const execaCommand = execa;
+export const execaCommandSync = execa;
+export const $ = execa;
+`;
+    await writeFile(join(outputDirectory, this.outputDir, execaStubPath), execaStub);
+
     const wranglerConfig: Unstable_RawConfig = {
       name: 'mastra',
       compatibility_date: '2025-04-01',
@@ -105,14 +138,38 @@ export const sys = {
       ...userConfig,
       main: './index.mjs',
       vars: envsAsObject,
-      // Alias TypeScript to stub to prevent wrangler from bundling the full library
+      // Alias stubs to prevent wrangler from bundling unavailable libraries
       alias: {
         typescript: `./${typescriptStubPath}`,
+        execa: `./${execaStubPath}`,
         ...userAlias,
       },
     };
 
-    await writeFile(join(outputDirectory, this.outputDir, 'wrangler.json'), JSON.stringify(wranglerConfig));
+    // TODO: Remove writing this file in the next major version, it should only be written to the root of the project
+    await writeFile(join(outputDirectory, this.outputDir, 'wrangler.json'), JSON.stringify(wranglerConfig, null, 2));
+
+    const projectRoot = join(outputDirectory, '../');
+    const jsoncFilePath = join(projectRoot, 'wrangler.jsonc');
+    const mainFilePath = join(outputDirectory, this.outputDir, 'index.mjs');
+    const tsStubFilePath = join(outputDirectory, this.outputDir, typescriptStubPath);
+
+    const wranglerJsoncConfig: Unstable_RawConfig & { placeholder: string } = {
+      placeholder: 'PLACEHOLDER',
+      $schema: './node_modules/wrangler/config-schema.json',
+      ...wranglerConfig,
+      main: `./${relative(projectRoot, mainFilePath)}`,
+      alias: {
+        ...wranglerConfig.alias,
+        typescript: `./${relative(projectRoot, tsStubFilePath)}`,
+      },
+    };
+
+    const jsonc = JSON.stringify(wranglerJsoncConfig, null, 2).replace(
+      /"placeholder": "PLACEHOLDER",/,
+      '/* This file was auto-generated through Mastra. Edit the CloudflareDeployer() instance directly. */',
+    );
+    await writeFile(jsoncFilePath, jsonc);
   }
 
   private getEntry(): string {
@@ -188,6 +245,11 @@ process.versions.node = '${process.versions.node}';
     this.logger?.info('Deploying to Cloudflare failed. Please use the Cloudflare dashboard to deploy.');
   }
 
+  /**
+   * TODO: Remove this method in the next major version
+   *
+   * @deprecated
+   */
   async tagWorker(): Promise<void> {
     throw new Error('tagWorker method is no longer supported. Use the Cloudflare dashboard or API directly.');
   }

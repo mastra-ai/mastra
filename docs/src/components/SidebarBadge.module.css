@@ -44,3 +44,14 @@
   background-color: rgba(251, 146, 60, 0.2);
   color: rgb(254, 215, 170);
 }
+
+/* Alpha badge - Purple */
+.badge--alpha {
+  background-color: rgba(168, 85, 247, 0.1);
+  color: rgb(168, 85, 247);
+}
+
+[data-theme='dark'] .badge--alpha {
+  background-color: rgba(168, 85, 247, 0.2);
+  color: rgb(192, 132, 252);
+}

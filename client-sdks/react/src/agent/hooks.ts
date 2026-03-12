@@ -1,23 +1,23 @@
-import { type ModelSettings } from './types';
-import { useMastraClient } from '@/mastra-client-context';
-import { type UIMessage } from '@ai-sdk/react';
-import { type ExtendedMastraUIMessage, type MastraUIMessage } from '../lib/ai-sdk';
-import { MastraClient } from '@mastra/client-js';
-import { type CoreUserMessage } from '@mastra/core/llm';
-import { type RequestContext } from '@mastra/core/request-context';
-import { type ChunkType, type NetworkChunkType } from '@mastra/core/stream';
-import { useRef, useState } from 'react';
-import { toUIMessage } from '@/lib/ai-sdk';
-import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
-import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
-import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
+import type { UIMessage } from '@ai-sdk/react';
 import { v4 as uuid } from '@lukeed/uuid';
-import { type TracingOptions } from '@mastra/core/observability';
+import { MastraClient } from '@mastra/client-js';
+import type { CoreUserMessage } from '@mastra/core/llm';
+import type { TracingOptions } from '@mastra/core/observability';
+import type { RequestContext } from '@mastra/core/request-context';
+import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
+import { useEffect, useRef, useState } from 'react';
+import type { ExtendedMastraUIMessage, MastraUIMessage } from '../lib/ai-sdk';
+import type { ModelSettings } from './types';
+import { toUIMessage } from '@/lib/ai-sdk';
+import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
+import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
+import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
+import { useMastraClient } from '@/mastra-client-context';
 
 export interface MastraChatProps {
   agentId: string;
   resourceId?: string;
-  initializeMessages?: () => MastraUIMessage[];
+  initialMessages?: MastraUIMessage[];
 }
 
 interface SharedArgs {
@@ -46,29 +46,26 @@ export type NetworkArgs = SharedArgs & {
   onNetworkChunk?: (chunk: NetworkChunkType) => Promise<void>;
 };
 
-export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatProps) => {
-  // Extract runId from any pending suspensions in initial messages
-  const extractRunIdFromMessages = (messages: ExtendedMastraUIMessage[]): string | undefined => {
-    for (const message of messages) {
-      const pendingToolApprovals = message.metadata?.pendingToolApprovals as Record<string, any> | undefined;
-      if (pendingToolApprovals && typeof pendingToolApprovals === 'object') {
-        const suspensionData = Object.values(pendingToolApprovals)[0];
-        if (suspensionData?.runId) {
-          return suspensionData.runId;
-        }
+// Extract runId from any pending suspensions in initial messages
+const extractRunIdFromMessages = (messages: ExtendedMastraUIMessage[]): string | undefined => {
+  for (const message of messages) {
+    const pendingToolApprovals = message.metadata?.pendingToolApprovals as Record<string, any> | undefined;
+    if (pendingToolApprovals && typeof pendingToolApprovals === 'object') {
+      const suspensionData = Object.values(pendingToolApprovals)[0];
+      if (suspensionData?.runId) {
+        return suspensionData.runId;
       }
     }
-    return undefined;
-  };
+  }
+  return undefined;
+};
 
-  const initialMessages = initializeMessages?.() || [];
-  const initialRunId = extractRunIdFromMessages(initialMessages);
-
-  const _currentRunId = useRef<string | undefined>(initialRunId);
+export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProps) => {
+  const _currentRunId = useRef<string | undefined>(undefined);
   const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
   const _networkRunId = useRef<string | undefined>(undefined);
   const _onNetworkChunk = useRef<((chunk: NetworkChunkType) => Promise<void>) | undefined>(undefined);
-  const [messages, setMessages] = useState<MastraUIMessage[]>(() => resolveInitialMessages(initialMessages));
+  const [messages, setMessages] = useState<MastraUIMessage[]>([]);
   const [toolCallApprovals, setToolCallApprovals] = useState<{
     [toolCallId: string]: { status: 'approved' | 'declined' };
   }>({});
@@ -78,6 +75,12 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
 
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
+
+  useEffect(() => {
+    const formattedMessages = resolveInitialMessages(initialMessages || []);
+    setMessages(formattedMessages);
+    _currentRunId.current = extractRunIdFromMessages(formattedMessages);
+  }, [initialMessages]);
 
   const generate = async ({
     coreUserMessages,
@@ -167,7 +170,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     setIsRunning(false);
 
     if (response && 'uiMessages' in response.response && response.response.uiMessages) {
-      onFinish?.(response.response.uiMessages);
+      void onFinish?.(response.response.uiMessages);
       const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map(message => ({
         ...message,
         metadata: {
@@ -244,7 +247,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
 
         setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
-        onChunk?.(chunk);
+        void onChunk?.(chunk);
       },
     });
 
@@ -301,7 +304,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
         setMessages(prev => transformer.transform({ chunk, conversation: prev, metadata: { mode: 'network' } }));
-        onNetworkChunk?.(chunk);
+        void onNetworkChunk?.(chunk);
       },
     });
 
@@ -335,7 +338,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
 
         setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
-        onChunk?.(chunk);
+        void onChunk?.(chunk);
       },
     });
     setIsRunning(false);
@@ -359,7 +362,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
 
         setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
-        onChunk?.(chunk);
+        void onChunk?.(chunk);
       },
     });
     setIsRunning(false);
@@ -444,7 +447,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
         setMessages(prev => transformer.transform({ chunk, conversation: prev, metadata: { mode: 'network' } }));
-        onNetworkChunk?.(chunk);
+        void onNetworkChunk?.(chunk);
       },
     });
 
@@ -474,7 +477,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
         setMessages(prev => transformer.transform({ chunk, conversation: prev, metadata: { mode: 'network' } }));
-        onNetworkChunk?.(chunk);
+        void onNetworkChunk?.(chunk);
       },
     });
 

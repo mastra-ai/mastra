@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { type SidebarState } from './main-sidebar-context';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { CircleAlertIcon } from 'lucide-react';
 
 export type NavLink = {
   name: string;
@@ -13,6 +14,7 @@ export type NavLink = {
   variant?: 'default' | 'featured';
   tooltipMsg?: string;
   isOnMastraPlatform: boolean;
+  isExperimental?: boolean;
 };
 
 export type MainSidebarNavLinkProps = {
@@ -87,6 +89,16 @@ export function MainSidebarNavLink({
             <Link href={link.url} {...linkParams}>
               {link.icon && link.icon}
               {isCollapsed ? <VisuallyHidden>{link.name}</VisuallyHidden> : link.name} {children}
+              {link.isExperimental && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <CircleAlertIcon className="ml-auto stroke-accent5" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right" align="center" className="ml-4">
+                    Experimental Feature
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </Link>
           )}
         </>

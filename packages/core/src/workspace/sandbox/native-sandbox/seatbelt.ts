@@ -155,18 +155,13 @@ export function generateSeatbeltProfile(workspacePath: string, config: NativeSan
  * Uses `-p` (inline profile) instead of `-f` (file) because
  * `-f` doesn't work reliably with path filters on modern macOS.
  *
- * @param command - The command to run
- * @param args - Arguments for the command
+ * @param command - The full shell command string to run
  * @param profile - The SBPL profile content (not a file path)
  * @returns Wrapped command and arguments for sandbox-exec
  */
-export function buildSeatbeltCommand(
-  command: string,
-  args: string[],
-  profile: string,
-): { command: string; args: string[] } {
+export function buildSeatbeltCommand(command: string, profile: string): { command: string; args: string[] } {
   return {
     command: 'sandbox-exec',
-    args: ['-p', profile, command, ...args],
+    args: ['-p', profile, 'sh', '-c', command],
   };
 }

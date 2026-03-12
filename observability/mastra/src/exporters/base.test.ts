@@ -171,15 +171,11 @@ describe('BaseExporter', () => {
     });
 
     it('should apply async customSpanFormatter to exported spans', async () => {
-      const asyncFormatter: CustomSpanFormatter = async span => {
-        // Simulate async operation
-        await new Promise(resolve => setTimeout(resolve, 10));
-        return {
-          ...span,
-          input: 'async-formatted-input',
-          output: 'async-formatted-output',
-        };
-      };
+      const asyncFormatter: CustomSpanFormatter = async span => ({
+        ...span,
+        input: 'async-formatted-input',
+        output: 'async-formatted-output',
+      });
 
       const exporter = new TestExporter({ customSpanFormatter: asyncFormatter });
       const span = createMockSpan();
@@ -194,7 +190,6 @@ describe('BaseExporter', () => {
 
     it('should handle async formatter errors gracefully and use original span', async () => {
       const errorAsyncFormatter: CustomSpanFormatter = async () => {
-        await new Promise(resolve => setTimeout(resolve, 5));
         throw new Error('Async formatter error');
       };
 
@@ -335,20 +330,14 @@ describe('chainFormatters', () => {
   });
 
   it('should chain async formatters in order', async () => {
-    const asyncFormatter1: CustomSpanFormatter = async span => {
-      await new Promise(resolve => setTimeout(resolve, 5));
-      return {
-        ...span,
-        input: `${span.input}-async1`,
-      };
-    };
-    const asyncFormatter2: CustomSpanFormatter = async span => {
-      await new Promise(resolve => setTimeout(resolve, 5));
-      return {
-        ...span,
-        input: `${span.input}-async2`,
-      };
-    };
+    const asyncFormatter1: CustomSpanFormatter = async span => ({
+      ...span,
+      input: `${span.input}-async1`,
+    });
+    const asyncFormatter2: CustomSpanFormatter = async span => ({
+      ...span,
+      input: `${span.input}-async2`,
+    });
 
     const chained = chainFormatters([asyncFormatter1, asyncFormatter2]);
     const exporter = new TestExporter({ customSpanFormatter: chained });
@@ -364,13 +353,10 @@ describe('chainFormatters', () => {
       ...span,
       input: `${span.input}-sync`,
     });
-    const asyncFormatter: CustomSpanFormatter = async span => {
-      await new Promise(resolve => setTimeout(resolve, 5));
-      return {
-        ...span,
-        input: `${span.input}-async`,
-      };
-    };
+    const asyncFormatter: CustomSpanFormatter = async span => ({
+      ...span,
+      input: `${span.input}-async`,
+    });
     const anotherSyncFormatter: CustomSpanFormatter = span => ({
       ...span,
       input: `${span.input}-sync2`,
@@ -386,17 +372,10 @@ describe('chainFormatters', () => {
   });
 
   it('should handle async formatter enrichment use case', async () => {
-    // Simulate an async enrichment formatter that fetches external data
-    const enrichmentFormatter: CustomSpanFormatter = async span => {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 10));
-      // Simulate enriched data from external source
-      const enrichedData = { userName: 'John Doe', department: 'Engineering' };
-      return {
-        ...span,
-        metadata: { ...span.metadata, ...enrichedData },
-      };
-    };
+    const enrichmentFormatter: CustomSpanFormatter = async span => ({
+      ...span,
+      metadata: { ...span.metadata, userName: 'John Doe', department: 'Engineering' },
+    });
 
     const exporter = new TestExporter({ customSpanFormatter: enrichmentFormatter });
     const span = createMockSpan({

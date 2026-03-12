@@ -42,9 +42,9 @@ npx mastra@latest init
 
 This creates a `src/mastra` folder with an example weather agent and the following files:
 
--	`index.ts` - Mastra config, including memory
+- `index.ts` - Mastra config, including memory
 - `tools/weather-tool.ts` - a tool to fetch weather for a given location
--	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+- `agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
 
 You'll call `weather-agent.ts` from your SvelteKit routes in the next steps.
 
@@ -61,20 +61,20 @@ npm install @mastra/ai-sdk@latest @ai-sdk/svelte ai
 Create `src/routes/api/chat/+server.ts`:
 
 ```ts title="src/routes/api/chat/+server.ts"
-import type { RequestHandler } from "./$types";
-import { handleChatStream } from "@mastra/ai-sdk";
-import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
-import { createUIMessageStreamResponse } from "ai";
-import { mastra } from "../../../mastra";
+import type { RequestHandler } from './$types'
+import { handleChatStream } from '@mastra/ai-sdk'
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui'
+import { createUIMessageStreamResponse } from 'ai'
+import { mastra } from '../../../mastra'
 
-const THREAD_ID = "example-user-id";
-const RESOURCE_ID = "weather-chat";
+const THREAD_ID = 'example-user-id'
+const RESOURCE_ID = 'weather-chat'
 
 export const POST: RequestHandler = async ({ request }) => {
-  const params = await request.json();
+  const params = await request.json()
   const stream = await handleChatStream({
     mastra,
-    agentId: "weather-agent",
+    agentId: 'weather-agent',
     params: {
       ...params,
       memory: {
@@ -83,28 +83,28 @@ export const POST: RequestHandler = async ({ request }) => {
         resource: RESOURCE_ID,
       },
     },
-  });
+  })
 
-  return createUIMessageStreamResponse({ stream });
-};
+  return createUIMessageStreamResponse({ stream })
+}
 
 export const GET: RequestHandler = async () => {
-  const memory = await mastra.getAgentById("weather-agent").getMemory();
-  let response = null;
+  const memory = await mastra.getAgentById('weather-agent').getMemory()
+  let response = null
 
   try {
     response = await memory?.recall({
       threadId: THREAD_ID,
       resourceId: RESOURCE_ID,
-    });
+    })
   } catch {
-    console.log("No previous messages found.");
+    console.log('No previous messages found.')
   }
 
-  const uiMessages = toAISdkV5Messages(response?.messages || []);
+  const uiMessages = toAISdkV5Messages(response?.messages || [])
 
-  return Response.json(uiMessages);
-};
+  return Response.json(uiMessages)
+}
 ```
 
 The `POST` route accepts a prompt and streams the agent's response back in AI SDK format, while the `GET` route fetches message history from memory so the UI can be hydrated when the client reloads.
@@ -112,25 +112,21 @@ The `POST` route accepts a prompt and streams the agent's response back in AI SD
 In order for the `GET` handler to be called, you need to create a `src/routes/+page.ts` file. Its `load()` function runs alongside `+page.svelte`.
 
 ```ts title="src/routes/+page.ts"
-import type { UIDataTypes, UIMessage, UITools } from "ai";
-import type { PageLoad } from "./$types";
+import type { UIDataTypes, UIMessage, UITools } from 'ai'
+import type { PageLoad } from './$types'
 
 export const load: PageLoad = async ({ fetch }) => {
-  const response = await fetch("/api/chat");
-  const initialMessages = (await response.json()) as UIMessage<
-    unknown,
-    UIDataTypes,
-    UITools
-  >[];
-  return { initialMessages };
-};
+  const response = await fetch('/api/chat')
+  const initialMessages = (await response.json()) as UIMessage<unknown, UIDataTypes, UITools>[]
+  return { initialMessages }
+}
 ```
 
 ## Add the chat UI
 
 Replace `src/routes/+page.svelte` with the following.
 
-```html title="src/routes/+page.svelte"
+```svelte title="src/routes/+page.svelte"
 <script lang="ts">
   import { Chat } from '@ai-sdk/svelte';
   import { DefaultChatTransport, type ToolUIPart } from 'ai';
@@ -225,8 +221,8 @@ It renders the response text using custom message and tool components.
 ## Test your agent
 
 1. Run your SvelteKit app with `npm run dev`
-2. Open the chat at http://localhost:5173
-3. Try asking about the weather. If your API key is set up correctly, you'll get a response
+1. Open the chat at [http://localhost:5173](http://localhost:5173)
+1. Try asking about the weather. If your API key is set up correctly, you'll get a response
 
 ## Next steps
 

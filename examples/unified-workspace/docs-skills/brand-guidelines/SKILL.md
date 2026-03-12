@@ -62,7 +62,7 @@ Mastra's documentation is written for **engineers, not marketers**. Focus on imp
 
 **✅ Formatting rules:**
 
-- All H1 headings use title case (e.g., "Getting Started", "Human In-the-Loop Workflow")
+- All H1 headings use sentence case (e.g., "Getting started", "Human in-the-loop workflow")
 - Code examples should be practical and runnable
 - Keep explanations concise and specific
 

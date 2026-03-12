@@ -6,6 +6,7 @@ settings:
 
 overrides:
   '@mastra/core': link:../../packages/core
+  '@mastra/libsql': link:../../stores/libsql
   '@mastra/memory': link:../../packages/memory
 
 importers:
@@ -18,6 +19,9 @@ importers:
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
+      '@mastra/libsql':
+        specifier: link:../../stores/libsql
+        version: link:../../stores/libsql
       '@mastra/memory':
         specifier: link:../../packages/memory
         version: link:../../packages/memory

@@ -22,9 +22,13 @@ describe('Tool Input Validation Integration Tests', () => {
       // Test missing required fields - pass raw data as first arg
       const result = await tool.execute({} as any);
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
-      expect(result.message).toContain('- name: Required');
-      expect(result.message).toContain('- age: Required');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for test-tool. Please fix the following errors and try again:
+        - name: Invalid input: expected string, received undefined
+        - age: Invalid input: expected number, received undefined
+
+        Provided arguments: {}"
+      `);
     });
 
     it('should validate field types', async () => {
@@ -46,7 +50,16 @@ describe('Tool Input Validation Integration Tests', () => {
       } as any);
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for type-test. Please fix the following errors and try again:
+        - count: Invalid input: expected number, received string
+        - active: Invalid input: expected boolean, received string
+
+        Provided arguments: {
+          "count": "not a number",
+          "active": "not a boolean"
+        }"
+      `);
       expect(result.validationErrors).toBeDefined();
     });
 
@@ -76,9 +89,18 @@ describe('Tool Input Validation Integration Tests', () => {
       });
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Invalid email format');
-      expect(result.message).toContain('String must contain at least 3 character(s)');
-      expect(result.message).toContain('Password must be at least 8 characters');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for string-test. Please fix the following errors and try again:
+        - email: Invalid email format
+        - username: Too small: expected string to have >=3 characters
+        - password: Password must be at least 8 characters with letters and numbers
+
+        Provided arguments: {
+          "email": "not-an-email",
+          "username": "ab",
+          "password": "weak"
+        }"
+      `);
     });
 
     it('should validate arrays and objects', async () => {
@@ -105,8 +127,18 @@ describe('Tool Input Validation Integration Tests', () => {
       });
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('At least one tag required');
-      expect(result.message).toContain("Invalid enum value. Expected 'low' | 'medium' | 'high'");
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for complex-test. Please fix the following errors and try again:
+        - tags: At least one tag required
+        - metadata.priority: Invalid option: expected one of "low"|"medium"|"high"
+
+        Provided arguments: {
+          "tags": [],
+          "metadata": {
+            "priority": "urgent"
+          }
+        }"
+      `);
     });
 
     it('should pass validation with valid data', async () => {
@@ -184,8 +216,16 @@ describe('Tool Input Validation Integration Tests', () => {
       });
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Invalid email');
-      expect(result.message).toContain('Must be 18 or older');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for validate-user. Please fix the following errors and try again:
+        - email: Invalid email address
+        - age: Must be 18 or older
+
+        Provided arguments: {
+          "email": "invalid-email",
+          "age": 16
+        }"
+      `);
     });
 
     it('should include tool ID in validation error messages', async () => {
@@ -203,7 +243,14 @@ describe('Tool Input Validation Integration Tests', () => {
       const result = await tool.execute({ username: 'ab' });
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed for user-registration');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for user-registration. Please fix the following errors and try again:
+        - username: Too small: expected string to have >=3 characters
+
+        Provided arguments: {
+          "username": "ab"
+        }"
+      `);
     });
   });
 
@@ -377,8 +424,15 @@ describe('Tool Input Validation Integration Tests', () => {
       });
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
-      expect(result.message).toContain('Expected string, received number');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for context-validation-fail. Please fix the following errors and try again:
+        - context: Invalid input: expected string, received number
+
+        Provided arguments: {
+          "context": 123,
+          "other": 456
+        }"
+      `);
     });
 
     it('should fail validation when schema expects inputData but input has wrong structure', async () => {
@@ -402,8 +456,15 @@ describe('Tool Input Validation Integration Tests', () => {
       });
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
-      expect(result.message).toContain('Expected object, received string');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for inputdata-validation-fail. Please fix the following errors and try again:
+        - inputData: Invalid input: expected object, received string
+
+        Provided arguments: {
+          "inputData": "should-be-object",
+          "metadata": "valid-string"
+        }"
+      `);
     });
   });
 
@@ -508,7 +569,14 @@ describe('Tool Input Validation Integration Tests', () => {
       const result = await tool.execute!({ limit: 'not-a-number' } as any);
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for optional-type-check. Please fix the following errors and try again:
+        - limit: Invalid input: expected number, received string
+
+        Provided arguments: {
+          "limit": "not-a-number"
+        }"
+      `);
     });
 
     it('should reject array input when object schema is expected', async () => {
@@ -527,7 +595,15 @@ describe('Tool Input Validation Integration Tests', () => {
       const result = await tool.execute!(['item1', 'item2'] as any);
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for object-not-array. Please fix the following errors and try again:
+        - root: Invalid input: expected object, received array
+
+        Provided arguments: [
+          "item1",
+          "item2"
+        ]"
+      `);
     });
 
     it('should reject string input when object schema is expected', async () => {
@@ -546,7 +622,12 @@ describe('Tool Input Validation Integration Tests', () => {
       const result = await tool.execute!('some string' as any);
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for object-not-string. Please fix the following errors and try again:
+        - root: Invalid input: expected object, received string
+
+        Provided arguments: "some string""
+      `);
     });
 
     it('should reject number input when object schema is expected', async () => {
@@ -565,7 +646,12 @@ describe('Tool Input Validation Integration Tests', () => {
       const result = await tool.execute!(42 as any);
 
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for object-not-number. Please fix the following errors and try again:
+        - root: Invalid input: expected object, received number
+
+        Provided arguments: 42"
+      `);
     });
 
     it('should accept undefined input when schema is an array', async () => {
@@ -639,8 +725,12 @@ describe('Tool Input Validation Integration Tests', () => {
 
       const result = await tool.execute({} as any);
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
-      expect(result.message).toContain('Required');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for empty-context. Please fix the following errors and try again:
+        - required: Invalid input: expected string, received undefined
+
+        Provided arguments: {}"
+      `);
     });
 
     it('should preserve additional properties when using passthrough', async () => {
@@ -759,9 +849,15 @@ describe('Tool Output Validation Tests', () => {
 
     if ('error' in result) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool output validation failed');
-      expect(result.message).toContain('- name: Required');
-      expect(result.message).toContain('- email: Required');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool output validation failed for invalid-output. The tool returned invalid output:
+        - name: Invalid input: expected string, received undefined
+        - email: Invalid input: expected string, received undefined
+
+        Returned output: {
+          "id": "123"
+        }"
+      `);
     } else {
       throw new Error('Result is not a validation error');
     }
@@ -785,9 +881,16 @@ describe('Tool Output Validation Tests', () => {
 
     if ('error' in result) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool output validation failed');
-      expect(result.message).toContain('- count: Expected number, received string');
-      expect(result.message).toContain('- active: Expected boolean, received string');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool output validation failed for type-mismatch. The tool returned invalid output:
+        - count: Invalid input: expected number, received string
+        - active: Invalid input: expected boolean, received string
+
+        Returned output: {
+          "count": "not-a-number",
+          "active": "not-a-boolean"
+        }"
+      `);
     } else {
       throw new Error('Result is not a validation error');
     }
@@ -820,10 +923,24 @@ describe('Tool Output Validation Tests', () => {
 
     if ('error' in result) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool output validation failed');
-      expect(result.message).toContain('- user.age');
-      expect(result.message).toContain('- metadata.createdAt');
-      expect(result.message).toContain('- metadata.tags');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool output validation failed for nested-output. The tool returned invalid output:
+        - user.age: Too small: expected number to be >=0
+        - metadata.createdAt: Invalid ISO datetime
+        - metadata.tags: Too small: expected array to have >=1 items
+
+        Returned output: {
+          "user": {
+            "id": "123",
+            "name": "John",
+            "age": -5
+          },
+          "metadata": {
+            "createdAt": "invalid-date",
+            "tags": []
+          }
+        }"
+      `);
     } else {
       throw new Error('Result is not a validation error');
     }
@@ -887,8 +1004,14 @@ describe('Tool Output Validation Tests', () => {
 
     if ('error' in result) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool output validation failed for user-service');
-      expect(result.message).toContain('Invalid uuid');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool output validation failed for user-service. The tool returned invalid output:
+        - userId: Invalid UUID
+
+        Returned output: {
+          "userId": "not-a-uuid"
+        }"
+      `);
     } else {
       throw new Error('Result is not a validation error');
     }
@@ -919,7 +1042,14 @@ describe('Tool Output Validation Tests', () => {
     const invalidInputResult = await tool.execute({ email: 'not-an-email' });
     if ('error' in invalidInputResult) {
       expect(invalidInputResult.error).toBe(true);
-      expect(invalidInputResult.message).toContain('Tool input validation failed');
+      expect(invalidInputResult.message).toMatchInlineSnapshot(`
+        "Tool input validation failed for full-validation. Please fix the following errors and try again:
+        - email: Invalid email address
+
+        Provided arguments: {
+          "email": "not-an-email"
+        }"
+      `);
     } else {
       throw new Error('Result is not a validation error');
     }
@@ -947,8 +1077,14 @@ describe('Tool Output Validation Tests', () => {
 
     if ('error' in result) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool output validation failed');
-      expect(result.message).toContain('- count: Required');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool output validation failed for input-pass-output-fail. The tool returned invalid output:
+        - count: Invalid input: expected number, received undefined
+
+        Returned output: {
+          "result": "success"
+        }"
+      `);
     } else {
       throw new Error('Result is not a validation error');
     }
@@ -991,8 +1127,14 @@ describe('Tool Output Validation Tests', () => {
 
     if ('error' in result) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool output validation failed');
-      expect(result.message).toContain("Invalid enum value. Expected 'pending' | 'approved' | 'rejected'");
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool output validation failed for enum-output. The tool returned invalid output:
+        - status: Invalid option: expected one of "pending"|"approved"|"rejected"
+
+        Returned output: {
+          "status": "unknown"
+        }"
+      `);
     } else {
       throw new Error('Result is not a validation error');
     }
@@ -1025,8 +1167,23 @@ describe('Tool Output Validation Tests', () => {
 
     if ('error' in result) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool output validation failed');
-      expect(result.message).toContain('... (truncated)');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool output validation failed for large-output. The tool returned invalid output:
+        - status: Invalid input: expected "success"
+
+        Returned output: {
+          "users": [
+            {
+              "id": 0,
+              "name": "User 0",
+              "email": "user0@example.com",
+              "sensitiveData": "This could contain PII"
+            },
+            {
+              "id": 1,
+              "name": "User 1",
+            ... (truncated)"
+      `);
       // Ensure the full large data is NOT in the error message
       expect(result.message.length).toBeLessThan(500); // Should be much smaller than full output
       // Ensure sensitive data is not exposed
@@ -1056,7 +1213,12 @@ describe('Tool Output Validation Tests', () => {
 
     if ('error' in result) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool output validation failed');
+      expect(result.message).toMatchInlineSnapshot(`
+        "Tool output validation failed for non-serializable. The tool returned invalid output:
+        - value: Invalid input: expected string, received undefined
+
+        Returned output: [Unable to serialize data]"
+      `);
       expect(result.message).toContain('[Unable to serialize data]');
     } else {
       throw new Error('Result is not a validation error');
@@ -1157,17 +1319,12 @@ describe('validateToolInput - Null Stripping for Optional Fields (GitHub #12362)
 
     // First try: { name: 'test', bio: null, status: null }
     //   bio fails (.optional() doesn't accept null), status passes (.nullable() accepts null)
-    // Retry with stripped: { name: 'test' }
-    //   bio passes (absent = undefined for .optional()), status fails (required field missing)
-    // Neither attempt fully succeeds, so this should fail
-    // ...unless the schema allows status to be absent too
-
-    // Actually, status is required (not optional), so stripping null from it makes it missing.
-    // The first attempt fails because bio: null is invalid for .optional().
-    // The retry fails because status is missing (it's required).
-    // This IS the expected behavior - the schema design is contradictory with null input for bio.
-    // The user should use .nullable().optional() for bio or .nullable() for both.
-    expect(result.error).toBeDefined();
+    // Retry with targeted stripping: { name: 'test', status: null }
+    //   bio passes (absent = undefined for .optional()), status passes (.nullable() accepts null)
+    // Targeted null stripping only removes nulls for fields that caused validation errors,
+    // preserving null for .nullable() fields that are valid.
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'test', status: null });
   });
 
   it('should handle .nullable().optional() fields receiving null', () => {
@@ -1197,7 +1354,7 @@ describe('validateToolInput - Null Stripping for Optional Fields (GitHub #12362)
     const result = validateToolInput(schema, input);
 
     expect(result.error).toBeDefined();
-    expect(result.error?.message).toContain('Expected string, received number');
+    expect(result.error?.message).toContain('Invalid input: expected string, received number');
   });
 
   it('should handle deeply nested null values', () => {
@@ -1595,5 +1752,231 @@ describe('validateToolInput - Built-in Object Preservation (GitHub #11502)', () 
     expect((result.data as any).nested.date).toBeInstanceOf(Date);
     expect((result.data as any).nested.map).toBeInstanceOf(Map);
     expect((result.data as any).nested.map.get('key')).toBe('value');
+  });
+});
+
+describe('validateToolInput - Stringified JSON Coercion (GitHub #12757)', () => {
+  // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/12757
+  // Some LLMs (e.g., GLM4.7) generate tool arguments where array or object
+  // parameters are returned as stringified JSON strings instead of actual
+  // arrays/objects, causing Zod validation to fail.
+
+  it('should coerce a stringified JSON array to an actual array', () => {
+    const schema = z.object({
+      command: z.string(),
+      args: z.array(z.string()).nullish().default([]),
+      timeout: z.number().nullish().default(30000),
+    });
+
+    const input = {
+      command: 'python3',
+      args: '["parse_excel.py"]',
+      timeout: 60000,
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      command: 'python3',
+      args: ['parse_excel.py'],
+      timeout: 60000,
+    });
+  });
+
+  it('should coerce a stringified JSON array with multiple items', () => {
+    const schema = z.object({
+      items: z.array(z.string()),
+    });
+
+    const input = {
+      items: '["item1", "item2", "item3"]',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      items: ['item1', 'item2', 'item3'],
+    });
+  });
+
+  it('should coerce a stringified numeric array', () => {
+    const schema = z.object({
+      values: z.array(z.number()),
+    });
+
+    const input = {
+      values: '[1, 2, 3]',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      values: [1, 2, 3],
+    });
+  });
+
+  it('should coerce a stringified empty array', () => {
+    const schema = z.object({
+      tags: z.array(z.string()).default([]),
+    });
+
+    const input = {
+      tags: '[]',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      tags: [],
+    });
+  });
+
+  it('should coerce a stringified JSON object to an actual object', () => {
+    const schema = z.object({
+      name: z.string(),
+      metadata: z.object({
+        key: z.string(),
+        value: z.string(),
+      }),
+    });
+
+    const input = {
+      name: 'test',
+      metadata: '{"key": "color", "value": "blue"}',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      name: 'test',
+      metadata: { key: 'color', value: 'blue' },
+    });
+  });
+
+  it('should handle the exact GLM4.7 output for mastra_workspace_execute_command', () => {
+    const schema = z.object({
+      command: z.string().describe('The command to execute (e.g., "ls", "npm", "python")'),
+      args: z.array(z.string()).nullish().default([]).describe('Arguments to pass to the command'),
+      timeout: z.number().nullish().default(30000).describe('Maximum execution time in milliseconds.'),
+      cwd: z.string().nullish().describe('Working directory for the command'),
+    });
+
+    const input = {
+      command: 'python3',
+      args: '["parse_excel.py"]',
+      timeout: 60000,
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      command: 'python3',
+      args: ['parse_excel.py'],
+      timeout: 60000,
+    });
+  });
+
+  it('should work end-to-end with createTool when LLM sends stringified array', async () => {
+    const tool = createTool({
+      id: 'mastra_workspace_execute_command',
+      description: 'Execute a command',
+      inputSchema: z.object({
+        command: z.string(),
+        args: z.array(z.string()).nullish().default([]),
+        timeout: z.number().nullish().default(30000),
+      }),
+      execute: async ({ command, args, timeout }) => {
+        return { command, args: args ?? [], timeout: timeout ?? 30000 };
+      },
+    });
+
+    const result = await tool.execute({
+      command: 'python3',
+      args: '["parse_excel.py"]' as any,
+      timeout: 60000,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result).toEqual({
+      command: 'python3',
+      args: ['parse_excel.py'],
+      timeout: 60000,
+    });
+  });
+
+  it('should NOT coerce regular strings that are not valid JSON', () => {
+    const schema = z.object({
+      name: z.string(),
+      tags: z.array(z.string()),
+    });
+
+    const input = {
+      name: 'test',
+      tags: 'not-json-at-all',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeDefined();
+  });
+
+  it('should NOT coerce a string that parses to wrong type', () => {
+    const schema = z.object({
+      items: z.array(z.string()),
+    });
+
+    const input = {
+      items: '42',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeDefined();
+  });
+
+  it('should still accept actual arrays (no regression)', () => {
+    const schema = z.object({
+      command: z.string(),
+      args: z.array(z.string()).nullish().default([]),
+    });
+
+    const input = {
+      command: 'python3',
+      args: ['parse_excel.py'],
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      command: 'python3',
+      args: ['parse_excel.py'],
+    });
+  });
+
+  it('should still accept actual objects (no regression)', () => {
+    const schema = z.object({
+      name: z.string(),
+      config: z.object({ key: z.string() }),
+    });
+
+    const input = {
+      name: 'test',
+      config: { key: 'value' },
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      name: 'test',
+      config: { key: 'value' },
+    });
   });
 });

@@ -1810,4 +1810,176 @@ describe('ProcessorRunner', () => {
       expect(allMessages[1].role).toBe('assistant');
     });
   });
+
+  describe('writer availability in output processors', () => {
+    it('should pass writer to processOutputResult when provided', async () => {
+      let receivedWriter: unknown = 'NOT_CALLED';
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'writer-test',
+          name: 'Writer Test',
+          processOutputResult: async ({ messages, writer }) => {
+            receivedWriter = writer;
+            return messages;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('response', 'assistant')], 'response');
+
+      const mockWriter = { custom: vi.fn() };
+      await runner.runOutputProcessors(messageList, undefined, undefined, 0, mockWriter);
+
+      expect(receivedWriter).toBe(mockWriter);
+    });
+
+    it('should pass writer to processOutputStream when provided', async () => {
+      let receivedWriter: unknown = 'NOT_CALLED';
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'writer-test',
+          name: 'Writer Test',
+          processOutputStream: async ({ part, writer }) => {
+            receivedWriter = writer;
+            return part;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+      const mockWriter = { custom: vi.fn() };
+      await runner.processPart(
+        { type: 'text-delta', payload: { text: 'hello', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
+        processorStates,
+        undefined,
+        undefined,
+        undefined,
+        0,
+        mockWriter,
+      );
+
+      expect(receivedWriter).toBe(mockWriter);
+    });
+  });
+
+  describe('State sharing between processOutputStream and processOutputResult', () => {
+    it('should share customState from processOutputStream in processOutputResult', async () => {
+      const stateInOutputResult: Record<string, unknown> = {};
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'stateShareProcessor',
+          name: 'State Share Processor',
+          processOutputStream: async ({ part, state }) => {
+            if (part.type === 'finish') {
+              state.usageData = { inputTokens: 100, outputTokens: 50 };
+              state.finishReason = 'stop';
+            }
+            return part;
+          },
+          processOutputResult: ({ state, messages }) => {
+            // Should be able to access state set during processOutputStream
+            Object.assign(stateInOutputResult, state);
+            return messages;
+          },
+        },
+      ];
+
+      const processorStates = new Map();
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+        processorStates,
+      });
+
+      // 1. Process stream chunks through processOutputStream
+      await runner.processPart(
+        { type: 'text-delta', payload: { text: 'hello' }, runId: '1', from: ChunkFrom.AGENT },
+        processorStates,
+      );
+      await runner.processPart(
+        {
+          type: 'finish',
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } },
+          },
+          runId: '1',
+          from: ChunkFrom.AGENT,
+        } as ChunkType,
+        processorStates,
+      );
+
+      // 2. Run processOutputResult - should see state from processOutputStream
+      messageList.add(createMessage('test response', 'assistant'), 'response');
+      await runner.runOutputProcessors(messageList);
+
+      expect(stateInOutputResult.usageData).toEqual({ inputTokens: 100, outputTokens: 50 });
+      expect(stateInOutputResult.finishReason).toBe('stop');
+    });
+
+    it('should provide result in processOutputResult', async () => {
+      let receivedResult: any;
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'resultProcessor',
+          name: 'Result Processor',
+          processOutputStream: async ({ part }) => {
+            return part;
+          },
+          processOutputResult: ({ result, messages }) => {
+            receivedResult = result;
+            return messages;
+          },
+        },
+      ];
+
+      const processorStates = new Map();
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+        processorStates,
+      });
+
+      const mockResult = {
+        text: 'hello world',
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        finishReason: 'stop',
+        steps: [],
+      };
+
+      // Run processOutputResult - should receive result
+      messageList.add(createMessage('test response', 'assistant'), 'response');
+      await runner.runOutputProcessors(messageList, undefined, undefined, 0, undefined, mockResult);
+
+      expect(receivedResult).toBeDefined();
+      expect(receivedResult.text).toBe('hello world');
+      expect(receivedResult.usage).toEqual({ inputTokens: 10, outputTokens: 5, totalTokens: 15 });
+      expect(receivedResult.finishReason).toBe('stop');
+      expect(receivedResult.steps).toEqual([]);
+    });
+  });
 });

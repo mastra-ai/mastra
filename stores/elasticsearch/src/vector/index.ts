@@ -14,6 +14,8 @@ import type {
   DeleteVectorsParams,
 } from '@mastra/core/vector';
 import { MastraVector, validateUpsert, validateTopK } from '@mastra/core/vector';
+
+import packageJson from '../../package.json';
 import { ElasticSearchFilterTranslator } from './filter';
 import type { ElasticSearchVectorFilter } from './filter';
 
@@ -62,7 +64,12 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
         text: 'Either url or client is required',
       });
     }
-    this.client = new ElasticSearchClient({ node: url, ...(auth && { auth }) });
+    this.client = new ElasticSearchClient({
+      node: url,
+      ...(auth && { auth }),
+      name: 'mastra-elasticsearch',
+      headers: { 'user-agent': `mastra-es/${packageJson.version}` },
+    });
   }
 
   /**
@@ -382,6 +389,16 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     topK = 10,
     includeVector = false,
   }: ElasticSearchVectorParams): Promise<QueryResult[]> {
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('ELASTICSEARCH', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for Elasticsearch queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     // Validate topK parameter
     validateTopK('ELASTICSEARCH', topK);
 

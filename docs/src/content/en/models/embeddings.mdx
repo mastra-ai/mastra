@@ -1,15 +1,15 @@
 ---
-title: "Embedding Models"
+title: "Embedding models"
 sidebar_position: 2
 sidebar_label: "Embeddings"
 description: "Use embedding models through Mastra's model router for semantic search and RAG."
 ---
 
-# Embedding Models
+# Embedding models
 
 Mastra's model router supports embedding models using the same `provider/model` string format as language models. This provides a unified interface for both chat and embedding models with TypeScript autocomplete support.
 
-## Quick Start
+## Quick start
 
 ```typescript
 import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
@@ -22,7 +22,7 @@ const { embeddings } = await embedMany({
 });
 ```
 
-## Supported Models
+## Supported models
 
 ### OpenAI
 
@@ -138,7 +138,7 @@ const modelId: EmbeddingModelId = "openai/text-embedding-3-small";
 const embedder = new ModelRouterEmbeddingModel(modelId);
 ```
 
-## Error Handling
+## Error handling
 
 The model router validates provider and model IDs at construction time:
 

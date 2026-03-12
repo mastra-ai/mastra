@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientConfig, QueryClientProvider } from '@tanstack/react-query';
+import { shouldRetryQuery } from './query-utils';
 
 export interface PlaygroundQueryClientProps {
   children: React.ReactNode;
@@ -6,8 +7,16 @@ export interface PlaygroundQueryClientProps {
 }
 
 export const PlaygroundQueryClient = ({ children, options }: PlaygroundQueryClientProps) => {
-  // QueryClient is created once since this component is high in the tree and won't re-render
-  const queryClient = new QueryClient(options);
+  const queryClient = new QueryClient({
+    ...options,
+    defaultOptions: {
+      ...options?.defaultOptions,
+      queries: {
+        retry: shouldRetryQuery,
+        ...options?.defaultOptions?.queries,
+      },
+    },
+  });
 
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 };

@@ -4,6 +4,7 @@ export const Colors = {
   surface3: '#18181B',
   surface4: '#212124',
   surface5: 'rgba(39, 39, 42, 0.9)',
+  surface6: '#3B3B40',
   accent1: '#22C55E',
   accent2: '#EF4444',
   accent3: '#3B82F6',

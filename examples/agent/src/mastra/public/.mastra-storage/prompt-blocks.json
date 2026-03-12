@@ -1,0 +1,11 @@
+{
+  "test": {
+    "name": "test",
+    "description": "testest",
+    "content": "testest",
+    "requestContextSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  }
+}

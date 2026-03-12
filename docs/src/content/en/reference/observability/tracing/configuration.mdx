@@ -9,183 +9,172 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Configuration
 
-## ObservabilityRegistryConfig
+## `ObservabilityRegistryConfig`
 
 ```typescript
 interface ObservabilityRegistryConfig {
-  default?: { enabled?: boolean };
-  configs?: Record<string, Omit<ObservabilityInstanceConfig, "name"> | ObservabilityInstance>;
-  configSelector?: ConfigSelector;
+  default?: { enabled?: boolean }
+  configs?: Record<string, Omit<ObservabilityInstanceConfig, 'name'> | ObservabilityInstance>
+  configSelector?: ConfigSelector
 }
 ```
 
 <PropertiesTable
-  props={[
-    {
-      name: "default",
-      type: "{ enabled?: boolean }",
-      description: "Enable default configuration with DefaultExporter and CloudExporter",
-      required: false,
-    },
-    {
-      name: "configs",
-      type: "Record<string, Omit<ObservabilityInstanceConfig, 'name'> | ObservabilityInstance>",
-      description: "Named observability instance configurations or pre-instantiated instances",
-      required: false,
-    },
-    {
-      name: "configSelector",
-      type: "ConfigSelector",
-      description: "Runtime configuration selector function",
-      required: false,
-    },
-  ]}
+  content={[
+  {
+    name: 'default',
+    type: '{ enabled?: boolean }',
+    description: 'Enable default configuration with DefaultExporter and CloudExporter',
+    required: false,
+  },
+  {
+    name: 'configs',
+    type: "Record<string, Omit<ObservabilityInstanceConfig, 'name'> | ObservabilityInstance>",
+    description: 'Named observability instance configurations or pre-instantiated instances',
+    required: false,
+  },
+  {
+    name: 'configSelector',
+    type: 'ConfigSelector',
+    description: 'Runtime configuration selector function',
+    required: false,
+  },
+]}
 />
 
-## ObservabilityInstanceConfig
+## `ObservabilityInstanceConfig`
 
 ```typescript
 interface ObservabilityInstanceConfig {
-  name: string;
-  serviceName: string;
-  sampling?: SamplingStrategy;
-  exporters?: ObservabilityExporter[];
-  spanOutputProcessors?: SpanOutputProcessor[];
-  includeInternalSpans?: boolean;
-  requestContextKeys?: string[];
-  serializationOptions?: SerializationOptions;
+  name: string
+  serviceName: string
+  sampling?: SamplingStrategy
+  exporters?: ObservabilityExporter[]
+  spanOutputProcessors?: SpanOutputProcessor[]
+  includeInternalSpans?: boolean
+  requestContextKeys?: string[]
+  serializationOptions?: SerializationOptions
 }
 ```
 
 <PropertiesTable
-  props={[
-    {
-      name: "name",
-      type: "string",
-      description: "Configuration identifier",
-      required: true,
-    },
-    {
-      name: "serviceName",
-      type: "string",
-      description: "Service name in traces",
-      required: true,
-    },
-    {
-      name: "sampling",
-      type: "SamplingStrategy",
-      description: "Sampling configuration (defaults to ALWAYS)",
-      required: false,
-    },
-    {
-      name: "exporters",
-      type: "ObservabilityExporter[]",
-      description: "Trace data exporters",
-      required: false,
-    },
-    {
-      name: "spanOutputProcessors",
-      type: "SpanOutputProcessor[]",
-      description: "Span output processors",
-      required: false,
-    },
-    {
-      name: "includeInternalSpans",
-      type: "boolean",
-      description: "Include spans internal to Mastra operations",
-      required: false,
-    },
-    {
-      name: "requestContextKeys",
-      type: "string[]",
-      description: "RequestContext keys to extract as metadata (supports dot notation)",
-      required: false,
-    },
-    {
-      name: "serializationOptions",
-      type: "SerializationOptions",
-      description: "Options for controlling serialization of span data (input/output/attributes)",
-      required: false,
-    },
-  ]}
+  content={[
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Configuration identifier',
+    required: true,
+  },
+  {
+    name: 'serviceName',
+    type: 'string',
+    description: 'Service name in traces',
+    required: true,
+  },
+  {
+    name: 'sampling',
+    type: 'SamplingStrategy',
+    description: 'Sampling configuration (defaults to ALWAYS)',
+    required: false,
+  },
+  {
+    name: 'exporters',
+    type: 'ObservabilityExporter[]',
+    description: 'Trace data exporters',
+    required: false,
+  },
+  {
+    name: 'spanOutputProcessors',
+    type: 'SpanOutputProcessor[]',
+    description: 'Span output processors',
+    required: false,
+  },
+  {
+    name: 'includeInternalSpans',
+    type: 'boolean',
+    description: 'Include spans internal to Mastra operations',
+    required: false,
+  },
+  {
+    name: 'requestContextKeys',
+    type: 'string[]',
+    description: 'RequestContext keys to extract as metadata (supports dot notation)',
+    required: false,
+  },
+  {
+    name: 'serializationOptions',
+    type: 'SerializationOptions',
+    description: 'Options for controlling serialization of span data (input/output/attributes)',
+    required: false,
+    properties: [
+      {
+        type: 'SerializationOptions',
+        parameters: [
+          {
+            name: 'maxStringLength',
+            type: 'number',
+            description: 'Maximum length for string values (default: 1024)',
+            isOptional: true,
+          },
+          {
+            name: 'maxDepth',
+            type: 'number',
+            description: 'Maximum depth for nested objects (default: 6)',
+            isOptional: true,
+          },
+          {
+            name: 'maxArrayLength',
+            type: 'number',
+            description: 'Maximum number of items in arrays (default: 50)',
+            isOptional: true,
+          },
+          {
+            name: 'maxObjectKeys',
+            type: 'number',
+            description: 'Maximum number of keys in objects (default: 50)',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
 />
 
-## SerializationOptions
-
-Options for controlling how span data is serialized before export. Use these to customize truncation limits for large payloads.
-
-```typescript
-interface SerializationOptions {
-  maxStringLength?: number;
-  maxDepth?: number;
-  maxArrayLength?: number;
-  maxObjectKeys?: number;
-}
-```
-
-<PropertiesTable
-  props={[
-    {
-      name: "maxStringLength",
-      type: "number",
-      description: "Maximum length for string values (default: 1024)",
-      required: false,
-    },
-    {
-      name: "maxDepth",
-      type: "number",
-      description: "Maximum depth for nested objects (default: 6)",
-      required: false,
-    },
-    {
-      name: "maxArrayLength",
-      type: "number",
-      description: "Maximum number of items in arrays (default: 50)",
-      required: false,
-    },
-    {
-      name: "maxObjectKeys",
-      type: "number",
-      description: "Maximum number of keys in objects (default: 50)",
-      required: false,
-    },
-  ]}
-/>
-
-## SamplingStrategy
+## `SamplingStrategy`
 
 ```typescript
 type SamplingStrategy =
-  | { type: "always" }
-  | { type: "never" }
-  | { type: "ratio"; probability: number }
-  | { type: "custom"; sampler: (options?: TracingOptions) => boolean };
+  | { type: 'always' }
+  | { type: 'never' }
+  | { type: 'ratio'; probability: number }
+  | { type: 'custom'; sampler: (options?: TracingOptions) => boolean }
 ```
 
-## ConfigSelector
+## `ConfigSelector`
 
 ```typescript
 type ConfigSelector = (
   options: ConfigSelectorOptions,
   availableConfigs: ReadonlyMap<string, ObservabilityInstance>,
-) => string | undefined;
+) => string | undefined
 ```
 
-## ConfigSelectorOptions
+## `ConfigSelectorOptions`
 
 ```typescript
 interface ConfigSelectorOptions {
-  requestContext?: RequestContext;
+  requestContext?: RequestContext
 }
 ```
 
-# Registry Methods
+## Registry methods
 
 The Observability class provides methods for managing observability instances:
 
-## registerInstance
+### `registerInstance`
 
-```typescript
+```typescript prettier:false
 registerInstance(
   name: string,
   instance: ObservabilityInstance,
@@ -195,25 +184,25 @@ registerInstance(
 
 Registers an observability instance in the registry.
 
-## getInstance
+### `getInstance`
 
-```typescript
+```typescript prettier:false
 getInstance(name: string): ObservabilityInstance | undefined;
 ```
 
 Retrieves an observability instance by name.
 
-## getDefaultInstance
+### `getDefaultInstance`
 
-```typescript
+```typescript prettier:false
 getDefaultInstance(): ObservabilityInstance | undefined;
 ```
 
 Returns the default observability instance.
 
-## getSelectedInstance
+### `getSelectedInstance`
 
-```typescript
+```typescript prettier:false
 getSelectedInstance(
   options: ConfigSelectorOptions
 ): ObservabilityInstance | undefined;
@@ -221,55 +210,55 @@ getSelectedInstance(
 
 Returns the observability instance selected by the config selector or default.
 
-## listInstances
+### `listInstances`
 
-```typescript
+```typescript prettier:false
 listInstances(): ReadonlyMap<string, ObservabilityInstance>;
 ```
 
 Returns all registered observability instances.
 
-## hasInstance
+### `hasInstance`
 
-```typescript
+```typescript prettier:false
 hasInstance(name: string): boolean;
 ```
 
 Checks if an observability instance exists.
 
-## setConfigSelector
+### `setConfigSelector`
 
-```typescript
+```typescript prettier:false
 setConfigSelector(selector: ConfigSelector): void;
 ```
 
 Sets the config selector function.
 
-## unregisterInstance
+### `unregisterInstance`
 
-```typescript
+```typescript prettier:false
 unregisterInstance(name: string): boolean;
 ```
 
 Removes an observability instance from the registry.
 
-## clear
+### clear
 
-```typescript
+```typescript prettier:false
 clear(): void;
 ```
 
 Clears all instances without shutdown.
 
-## shutdown
+### shutdown
 
-```typescript
+```typescript prettier:false
 async shutdown(): Promise<void>;
 ```
 
 Shuts down all observability instances and clears the registry.
 
-## See Also
+## See also
 
 ### Documentation
 

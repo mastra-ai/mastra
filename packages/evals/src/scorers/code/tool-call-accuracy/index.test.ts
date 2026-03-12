@@ -230,7 +230,9 @@ describe('createToolCallAccuracyScorerCode', () => {
       output: [createTestMessage({ content: 'test', role: 'assistant', id: 'output-1' })],
     });
 
-    await expect(scorer.run(run)).rejects.toThrow('Input and output messages cannot be null or empty');
+    await expect(scorer.run(run)).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: Scorer Run Failed: Input and output messages cannot be null or empty]`,
+    );
   });
 
   test('should throw error for empty output', async () => {
@@ -238,7 +240,9 @@ describe('createToolCallAccuracyScorerCode', () => {
     const inputMessages = [createTestMessage({ content: 'What is the weather?', role: 'user', id: 'input-1' })];
     const run = createAgentTestRun({ inputMessages, output: [] });
 
-    await expect(scorer.run(run)).rejects.toThrow('Input and output messages cannot be null or empty');
+    await expect(scorer.run(run)).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: Scorer Run Failed: Input and output messages cannot be null or empty]`,
+    );
   });
 
   // Order checking tests

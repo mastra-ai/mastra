@@ -62,6 +62,10 @@ export function createOnScorerHook(mastra: Mastra) {
         scorerId: scorerId,
         spanId,
         traceId,
+        scorer: {
+          ...rest.scorer,
+          hasJudge: !!scorerToUse.scorer.judge,
+        },
         metadata: {
           structuredOutput: !!structuredOutput,
         },
@@ -144,7 +148,7 @@ async function findScorer(mastra: Mastra, entityId: string, entityType: string, 
     } catch {
       // Agent not found in code-defined agents, try stored agents via editor
       try {
-        const storedAgent = (await mastra.getEditor()?.getStoredAgentById(entityId)) ?? null;
+        const storedAgent = (await mastra.getEditor()?.agent.getById(entityId)) ?? null;
         if (storedAgent) {
           const scorers = await storedAgent.listScorers();
           for (const [_, scorer] of Object.entries(scorers) as [string, any][]) {

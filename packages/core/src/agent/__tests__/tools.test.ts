@@ -1046,6 +1046,158 @@ function toolsTest(version: 'v1' | 'v2' | 'v3') {
       expect(capturedValue).toBe('requestContext-value');
     });
   });
+
+  // v1 uses a different streaming format (simulateReadableStream) which doesn't apply here
+  describe.skipIf(version === 'v1')(`tool calls with finishReason stop ${version}`, () => {
+    it('should continue the agent loop when tool calls are present but finishReason is stop', async () => {
+      const mockExecute = vi.fn().mockResolvedValue({ result: 'success' });
+
+      const testTool = createTool({
+        id: 'testTool',
+        description: 'A test tool',
+        inputSchema: z.object({
+          input: z.string(),
+        }),
+        execute: mockExecute,
+      });
+
+      let callCount = 0;
+
+      let stopFinishModel: MockLanguageModelV2 | MockLanguageModelV3;
+
+      if (version === 'v2') {
+        stopFinishModel = new MockLanguageModelV2({
+          doStream: async () => {
+            callCount++;
+            if (callCount === 1) {
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                warnings: [],
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                  { type: 'text-start', id: 'text-0' },
+                  { type: 'text-delta', id: 'text-0', delta: 'Calling the tool now. ' },
+                  { type: 'text-end', id: 'text-0' },
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-1',
+                    toolName: 'testTool',
+                    input: '{"input":"hello"}',
+                    providerExecuted: false,
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  },
+                ]),
+              };
+            } else {
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                warnings: [],
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'The tool returned success.' },
+                  { type: 'text-end', id: 'text-1' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  },
+                ]),
+              };
+            }
+          },
+        });
+      } else {
+        // v3
+        stopFinishModel = new MockLanguageModelV3({
+          doStream: async () => {
+            callCount++;
+            if (callCount === 1) {
+              return {
+                stream: convertArrayToReadableStreamV3([
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                  { type: 'text-start', id: 'text-0' },
+                  { type: 'text-delta', id: 'text-0', delta: 'Calling the tool now. ' },
+                  { type: 'text-end', id: 'text-0' },
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-1',
+                    toolName: 'testTool',
+                    input: '{"input":"hello"}',
+                    providerExecuted: false,
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: { unified: 'stop', raw: 'stop' },
+                    usage: {
+                      inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                      outputTokens: { total: 20, text: 20, reasoning: undefined },
+                    },
+                  },
+                ]),
+              };
+            } else {
+              return {
+                stream: convertArrayToReadableStreamV3([
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'The tool returned success.' },
+                  { type: 'text-end', id: 'text-1' },
+                  {
+                    type: 'finish',
+                    finishReason: { unified: 'stop', raw: 'stop' },
+                    usage: {
+                      inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                      outputTokens: { total: 20, text: 20, reasoning: undefined },
+                    },
+                  },
+                ]),
+              };
+            }
+          },
+        });
+      }
+
+      const testAgent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'You are a test agent.',
+        model: stopFinishModel,
+        tools: { testTool },
+      });
+
+      const mastra = new Mastra({
+        agents: { 'test-agent': testAgent },
+        logger: false,
+      });
+
+      const agent = mastra.getAgent('test-agent');
+      const response = await agent.stream('Call the test tool with input hello');
+
+      for await (const _chunk of response.fullStream) {
+        // consume the stream
+      }
+
+      // The tool should have been executed
+      expect(mockExecute).toHaveBeenCalledTimes(1);
+
+      // The model should have been called twice:
+      // 1. Returns tool call with finishReason 'stop'
+      // 2. Returns final text after processing tool results
+      expect(callCount).toBe(2);
+
+      const text = await response.text;
+      expect(text).toContain('The tool returned success.');
+    });
+  });
 }
 
 toolsTest('v1');

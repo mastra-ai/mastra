@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: ankane/pgvector:v0.5.1
+    image: pgvector/pgvector:pg18-trixie
     ports:
       - '5434:5432'
     environment:
@@ -8,10 +8,10 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: mastra
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresq
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U postgres']
-      interval: 5s
+      interval: 2s
       timeout: 5s
       retries: 5
   redis:
@@ -35,5 +35,43 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+  # Performance test services (separate ports for parallel execution)
+  perf-postgres:
+    image: pgvector/pgvector:pg18-trixie
+    ports:
+      - '5435:5432'
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mastra
+    volumes:
+      - perf_pg_data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 2s
+      timeout: 5s
+      retries: 5
+  perf-redis:
+    image: redis:8-alpine
+    ports:
+      - '6371:6379'
+    command: redis-server --requirepass redis_password
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  perf-serverless-redis-http:
+    image: hiett/serverless-redis-http:latest
+    ports:
+      - '8080:80'
+    environment:
+      SRH_MODE: env
+      SRH_TOKEN: test_token
+      SRH_CONNECTION_STRING: 'redis://:redis_password@perf-redis:6379'
+    depends_on:
+      perf-redis:
+        condition: service_healthy
 volumes:
   pg_data:
+  perf_pg_data:

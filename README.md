@@ -50,13 +50,13 @@ If you're new to AI agents, check out our [templates](https://mastra.ai/docs/get
 
 Visit our [official documentation](https://mastra.ai/docs).
 
-## MCP Servers
+## Build with AI
 
-Learn how to make your IDE a Mastra expert by following the [`@mastra/mcp-docs-server` guide](https://mastra.ai/docs/getting-started/mcp-docs-server).
+Learn how to make your agent a Mastra expert by following the [Build with AI guide](https://mastra.ai/docs/getting-started/build-with-ai).
 
 ## Contributing
 
-Looking to contribute? All types of help are appreciated, from coding to testing and feature specification.
+Looking to contribute? All types of help are appreciated, from coding to testing and feature specification. Read [CONTRIBUTING.md](./CONTRIBUTING.md) for more details on how to get involved.
 
 If you are a developer and would like to contribute with code, please open an issue to discuss before opening a Pull Request.
 
@@ -68,8 +68,15 @@ We have an [open community Discord](https://discord.gg/BTYqqHKUrf). Come and say
 
 It's also super helpful if you leave the project a star here at the [top of the page](https://github.com/mastra-ai/mastra)
 
+## Licensing
+
+This repository uses a dual-license model:
+
+- **Apache License 2.0** — The core framework and the vast majority of this codebase is open source under Apache-2.0.
+- **Mastra Enterprise License** — Code in any directory named `ee/` (e.g., `packages/core/src/auth/ee/`) is source-available under the Mastra Enterprise License. These features require a valid enterprise license for production use but can be freely used for development and testing.
+
+See [LICENSE.md](./LICENSE.md) for the full license mapping and [ee/LICENSE](./ee/LICENSE) for the enterprise license terms.
+
 ## Security
 
-We are committed to maintaining the security of this repo and of Mastra as a whole. If you discover a security finding
-we ask you to please responsibly disclose this to us at [security@mastra.ai](mailto:security@mastra.ai) and we will get
-back to you.
+We are committed to maintaining the security of this repo and of Mastra as a whole. If you discover a security finding we ask you to please responsibly disclose this to us at [security@mastra.ai](mailto:security@mastra.ai) and we will get back to you.

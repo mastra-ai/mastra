@@ -8,7 +8,7 @@ import type {
   ObservabilityInstance,
   ExportedSpan,
 } from '@mastra/core/observability';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
 
 // Custom matchers for OpenTelemetry ID validation
@@ -70,6 +70,10 @@ const mockConsole = {
 
 vi.stubGlobal('console', mockConsole);
 
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
+
 // Test exporter for capturing events
 class TestExporter implements ObservabilityExporter {
   name = 'test-exporter';
@@ -80,6 +84,10 @@ class TestExporter implements ObservabilityExporter {
   }
 
   async shutdown(): Promise<void> {
+    // no-op
+  }
+
+  async flush(): Promise<void> {
     // no-op
   }
 
@@ -519,8 +527,8 @@ describe('Tracing', () => {
         attributes: {},
       });
 
-      // Wait for async export to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      // Wait for fire-and-forget async export to complete
+      await Promise.resolve();
 
       // Should continue with other exporters despite failure
       expect(testExporter.events).toHaveLength(1);
@@ -531,6 +539,7 @@ describe('Tracing', () => {
       const mockExporter = {
         name: 'mock-exporter',
         exportTracingEvent: vi.fn(),
+        flush: vi.fn().mockResolvedValue(undefined),
         shutdown: vi.fn().mockResolvedValue(undefined),
       };
 
@@ -1695,8 +1704,11 @@ describe('Tracing', () => {
         },
       });
 
-      // This child should NOT have extracted metadata
-      expect(childSpanNoContext.metadata).toBeUndefined();
+      // This child should inherit metadata from parent (even without requestContext)
+      expect(childSpanNoContext.metadata).toEqual({
+        userId: 'user-123',
+        sessionId: 'session-456',
+      });
       expect(childSpanNoContext.traceState).toEqual(rootSpan.traceState);
 
       rootSpan.end();
@@ -1782,6 +1794,180 @@ describe('Tracing', () => {
       // Should only include userId
       expect(span.metadata).toEqual({
         userId: 'user-123',
+      });
+
+      span.end();
+    });
+  });
+
+  describe('RequestContext Snapshot on Spans', () => {
+    it('should store serialized requestContext on root span', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+      requestContext.set('tenantId', 'tenant-456');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+        requestContext,
+      });
+
+      expect(span.requestContext).toEqual({
+        userId: 'user-123',
+        tenantId: 'tenant-456',
+      });
+
+      span.end();
+    });
+
+    it('should include requestContext in exported span', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+        requestContext,
+      });
+
+      const exported = span.exportSpan();
+      expect(exported?.requestContext).toEqual({
+        userId: 'user-123',
+      });
+
+      span.end();
+    });
+
+    it('should store requestContext on child spans when passed', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+        requestContext,
+      });
+
+      // Mutate requestContext before creating child
+      requestContext.set('stepData', 'step-specific');
+
+      const childSpan = rootSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'tool-call',
+        attributes: {},
+        requestContext,
+      });
+
+      // Child should capture the mutated state
+      expect(childSpan.requestContext).toEqual({
+        userId: 'user-123',
+        stepData: 'step-specific',
+      });
+
+      // Root should still have the original snapshot
+      expect(rootSpan.requestContext).toEqual({
+        userId: 'user-123',
+      });
+
+      rootSpan.end();
+    });
+
+    it('should not include requestContext on child spans when not passed', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+        requestContext,
+      });
+
+      const childSpan = rootSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'llm-call',
+        attributes: {},
+        // No requestContext passed
+      });
+
+      expect(childSpan.requestContext).toBeUndefined();
+
+      rootSpan.end();
+    });
+
+    it('should not include requestContext when empty', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const requestContext = new RequestContext();
+      // Empty requestContext
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+        requestContext,
+      });
+
+      expect(span.requestContext).toBeUndefined();
+
+      span.end();
+    });
+
+    it('should filter non-serializable values from requestContext', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+      requestContext.set('callback', () => {});
+      requestContext.set('nested', { data: 'value' });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+        requestContext,
+      });
+
+      // Functions should be replaced with '[Function]' by deepClean
+      expect(span.requestContext).toEqual({
+        userId: 'user-123',
+        callback: '[Function]',
+        nested: { data: 'value' },
       });
 
       span.end();

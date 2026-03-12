@@ -1,6 +1,3 @@
-import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '@mastra/core/stream';
-import type { DataChunkType, ChunkType, MastraFinishReason } from '@mastra/core/stream';
-
 import type {
   InferUIMessageChunk,
   LanguageModelUsage as AISDKLanguageModelUsage,
@@ -9,7 +6,10 @@ import type {
   ToolSet,
   UIMessage,
   FinishReason,
-} from 'ai';
+} from '@internal/ai-sdk-v5';
+import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '@mastra/core/stream';
+import type { DataChunkType, ChunkType, MastraFinishReason } from '@mastra/core/stream';
+
 import { isDataChunkType } from './utils';
 
 /**
@@ -155,6 +155,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         type: 'data-tool-call-approval',
         id: chunk.payload.toolCallId,
         data: {
+          state: 'data-tool-call-approval',
           runId: chunk.runId,
           toolCallId: chunk.payload.toolCallId,
           toolName: chunk.payload.toolName,
@@ -167,6 +168,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         type: 'data-tool-call-suspended',
         id: chunk.payload.toolCallId,
         data: {
+          state: 'data-tool-call-suspended',
           runId: chunk.runId,
           toolCallId: chunk.payload.toolCallId,
           toolName: chunk.payload.toolName,

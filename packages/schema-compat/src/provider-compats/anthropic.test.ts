@@ -628,10 +628,10 @@ describe('AnthropicSchemaCompatLayer', () => {
       };
 
       let metadataSchema;
-      // @ts-expect-error - zod v3 does have _zod property
       if ('_zod' in z.object()) {
         metadataSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]));
       } else {
+        // @ts-expect-error - zod v3 does have _zod property
         metadataSchema = z.record(z.union([z.string(), z.number(), z.boolean()]));
       }
 
@@ -770,6 +770,32 @@ describe('AnthropicSchemaCompatLayer', () => {
       const jsonSchema = layer.toJSONSchema(schema);
 
       expect(jsonSchema).toMatchSnapshot();
+    });
+  });
+
+  describe('processZodType - ZodNull', () => {
+    const modelInfo: ModelInformation = {
+      provider: 'anthropic',
+      modelId: 'claude-3-5-sonnet',
+      supportsStructuredOutputs: false,
+    };
+
+    it('should handle standalone z.null() without throwing', () => {
+      const schema = z.object({
+        value: z.null(),
+      });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      expect(() => layer.toJSONSchema(schema)).not.toThrow();
+    });
+
+    it('should handle z.null() inside a union', () => {
+      const schema = z.object({
+        name: z.union([z.string(), z.null()]),
+      });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      expect(() => layer.toJSONSchema(schema)).not.toThrow();
     });
   });
 });

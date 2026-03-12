@@ -36,16 +36,6 @@ function filePathToUrlPath(filePath) {
     urlPath = urlPath.replace(/\/index$/, '');
   }
 
-  // Add /v1 prefix for paths that use routeBasePath with /v1
-  // (docs, models, guides, examples, reference all use /v1)
-  const v1Paths = ['docs', 'models', 'guides', 'examples', 'reference'];
-  for (const pathPrefix of v1Paths) {
-    if (urlPath.startsWith(`${pathPrefix}/`)) {
-      urlPath = urlPath.replace(new RegExp(`^${pathPrefix}/`), `${pathPrefix}/v1/`);
-      break;
-    }
-  }
-
   // Add leading slash
   urlPath = '/' + urlPath;
 

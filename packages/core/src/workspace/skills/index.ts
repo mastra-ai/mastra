@@ -11,4 +11,8 @@ export * from './types';
 export * from './schemas';
 export * from './skill-source';
 export * from './local-skill-source';
+export * from './versioned-skill-source';
+export * from './composite-versioned-skill-source';
 export * from './workspace-skills';
+export * from './publish';
+export { createSkillTools } from './tools';

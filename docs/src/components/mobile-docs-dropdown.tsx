@@ -32,10 +32,11 @@ const docsTabs = [
     basePath: '/reference',
   },
   {
-    id: 'Showcase',
-    label: 'Showcase',
-    href: '/showcase',
-    basePath: '/showcase',
+    id: 'Learn',
+    label: 'Learn',
+    href: '/learn/',
+    basePath: '/learn',
+    badge: 'new',
   },
 ]
 
@@ -62,7 +63,10 @@ export function MobileDocsDropdown({ className }: { className?: string }) {
             className,
           )}
         >
-          <span>{activeTab.label}</span>
+          <span className="flex items-center gap-1.5">
+            {activeTab.label}
+            {'badge' in activeTab && activeTab.badge && <span className="learn-tab-badge">{activeTab.badge}</span>}
+          </span>
           <ChevronDown
             className={cn(
               'size-4 text-(--mastra-text-quaternary) transition-transform duration-200',
@@ -87,7 +91,10 @@ export function MobileDocsDropdown({ className }: { className?: string }) {
                   isActive && 'font-medium text-(--mastra-text-primary)',
                 )}
               >
-                <span>{tab.label}</span>
+                <span className="flex items-center gap-1.5">
+                  {tab.label}
+                  {'badge' in tab && tab.badge && <span className="learn-tab-badge">{tab.badge}</span>}
+                </span>
                 {isActive && <Check className="size-4 text-(--mastra-green-accent-2)" />}
               </Link>
             </DropdownMenuItem>

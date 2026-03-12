@@ -4,7 +4,8 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { SerializedError } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { PubSub } from '../events/pubsub';
-import type { Span, SpanType, TracingContext, TracingPolicy } from '../observability';
+import type { ObservabilityContext, Span, SpanType, TracingPolicy } from '../observability';
+import { createObservabilityContext } from '../observability';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type {
@@ -211,27 +212,28 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @param params - Parameters for nested workflow execution
    * @returns StepResult if handled, null if should use default execution
    */
-  async executeWorkflowStep(_params: {
-    step: Step<string, any, any>;
-    stepResults: Record<string, StepResult<any, any, any, any>>;
-    executionContext: ExecutionContext;
-    resume?: {
-      steps: string[];
-      resumePayload: any;
-      runId?: string;
-    };
-    timeTravel?: TimeTravelExecutionParams;
-    prevOutput: any;
-    inputData: any;
-    pubsub: PubSub;
-    startedAt: number;
-    abortController: AbortController;
-    requestContext: RequestContext;
-    tracingContext: TracingContext;
-    outputWriter?: OutputWriter;
-    stepSpan?: Span<SpanType.WORKFLOW_STEP>;
-    perStep?: boolean;
-  }): Promise<StepResult<any, any, any, any> | null> {
+  async executeWorkflowStep(
+    _params: ObservabilityContext & {
+      step: Step<string, any, any>;
+      stepResults: Record<string, StepResult<any, any, any, any>>;
+      executionContext: ExecutionContext;
+      resume?: {
+        steps: string[];
+        resumePayload: any;
+        runId?: string;
+      };
+      timeTravel?: TimeTravelExecutionParams;
+      prevOutput: any;
+      inputData: any;
+      pubsub: PubSub;
+      startedAt: number;
+      abortController: AbortController;
+      requestContext: RequestContext;
+      outputWriter?: OutputWriter;
+      stepSpan?: Span<SpanType.WORKFLOW_STEP>;
+      perStep?: boolean;
+    },
+  ): Promise<StepResult<any, any, any, any> | null> {
     // Default: return null to use standard execution
     // Subclasses (like Inngest) override to use platform-specific invocation
     return null;
@@ -263,6 +265,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       entityType?: string;
       entityId?: string;
       tracingPolicy?: TracingPolicy;
+      requestContext?: RequestContext;
     };
     executionContext: ExecutionContext;
   }): Promise<Span<SpanType> | undefined> {
@@ -489,6 +492,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     stepResults: Record<string, StepResult<any, any, any, any>>,
     lastOutput: StepResult<any, any, any, any>,
     error?: Error | unknown,
+    stepExecutionPath?: string[],
   ): Promise<TOutput> {
     // Strip nestedRunId from metadata (internal tracking for nested workflow retrieval)
     const cleanStepResults: Record<string, StepResult<any, any, any, any>> = {};
@@ -515,6 +519,52 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       steps: cleanStepResults,
       input: cleanStepResults.input,
     };
+
+    if (stepExecutionPath) {
+      base.stepExecutionPath = stepExecutionPath;
+
+      // Create a shallow copy of steps to modify without affecting the original reference
+      const optimizedSteps: Record<string, StepResult<any, any, any, any>> = { ...cleanStepResults };
+
+      let previousOutput: unknown;
+      let hasPreviousOutput = 'input' in cleanStepResults;
+      if (hasPreviousOutput) {
+        previousOutput = cleanStepResults.input;
+      }
+
+      for (const stepId of stepExecutionPath) {
+        const originalStep = cleanStepResults[stepId];
+        if (!originalStep) continue;
+
+        // Clone step result to avoid mutating the original object in memory
+        const optimizedStep = { ...originalStep };
+
+        // Remove payload if it matches the output of the previous step (structural comparison
+        // handles deserialized data where reference equality would fail)
+        let payloadMatchesPrevious = false;
+        if (hasPreviousOutput) {
+          try {
+            payloadMatchesPrevious =
+              optimizedStep.payload === previousOutput ||
+              JSON.stringify(optimizedStep.payload) === JSON.stringify(previousOutput);
+          } catch {
+            // non-serializable payload — treat as not matching
+          }
+        }
+        if (payloadMatchesPrevious) {
+          delete optimizedStep.payload;
+        }
+
+        if (optimizedStep.status === 'success') {
+          previousOutput = optimizedStep.output;
+          hasPreviousOutput = true;
+        }
+
+        optimizedSteps[stepId] = optimizedStep;
+      }
+
+      base.steps = optimizedSteps;
+    }
 
     if (lastOutput.status === 'success') {
       base.result = lastOutput.output;
@@ -628,11 +678,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     restart?: RestartExecutionParams;
     timeTravel?: TimeTravelExecutionParams;
     resume?: {
-      // TODO: add execute path
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
+      stepExecutionPath?: string[];
       label?: string;
       forEachIndex?: number;
     };
@@ -705,6 +755,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const stepResults: Record<string, any> = timeTravel?.stepResults ||
       restart?.stepResults ||
       resume?.stepResults || { input };
+    let stepExecutionPath: string[] =
+      timeTravel?.stepExecutionPath || restart?.stepExecutionPath || resume?.stepExecutionPath || [];
     let lastOutput: any;
     let lastState: Record<string, any> = timeTravel?.state ?? restart?.state ?? initialState ?? {};
     let lastExecutionContext: ExecutionContext | undefined;
@@ -716,6 +768,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         workflowId,
         runId,
         executionPath: [i],
+        stepExecutionPath,
         activeStepsPath: {},
         suspendedPaths: {},
         resumeLabels: {},
@@ -739,9 +792,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resume,
         timeTravel,
         restart,
-        tracingContext: {
-          currentSpan: workflowSpan,
-        },
+        ...createObservabilityContext({ currentSpan: workflowSpan }),
         abortController: params.abortController,
         pubsub: params.pubsub,
         requestContext: currentRequestContext,
@@ -765,7 +816,24 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           lastOutput.result.status = 'success';
         }
 
-        const result = (await this.fmtReturnValue(params.pubsub, stepResults, lastOutput.result)) as any;
+        const result = (await this.fmtReturnValue(
+          params.pubsub,
+          stepResults,
+          lastOutput.result,
+          undefined,
+          stepExecutionPath,
+        )) as any;
+
+        // Capture tracing context for suspend to enable span linking on resume
+        const persistTracingContext =
+          result.status === 'suspended' && workflowSpan
+            ? {
+                traceId: workflowSpan.traceId,
+                spanId: workflowSpan.id,
+                parentSpanId: workflowSpan.getParentSpanId(),
+              }
+            : {};
+
         await this.persistStepUpdate({
           workflowId,
           runId,
@@ -777,6 +845,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           result: result.result,
           error: result.error,
           requestContext: currentRequestContext,
+          tracingContext: persistTracingContext,
         });
 
         if (result.error) {
@@ -809,6 +878,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             input,
             requestContext: currentRequestContext,
             state: lastState,
+            stepExecutionPath,
           });
         }
 
@@ -830,7 +900,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
 
       if (perStep) {
-        const result = (await this.fmtReturnValue(params.pubsub, stepResults, lastOutput.result)) as any;
+        const result = (await this.fmtReturnValue(
+          params.pubsub,
+          stepResults,
+          lastOutput.result,
+          undefined,
+          stepExecutionPath,
+        )) as any;
         await this.persistStepUpdate({
           workflowId,
           runId,
@@ -861,7 +937,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     // after all steps are successful, return result
-    const result = (await this.fmtReturnValue(params.pubsub, stepResults, lastOutput.result)) as any;
+    const result = (await this.fmtReturnValue(
+      params.pubsub,
+      stepResults,
+      lastOutput.result,
+      undefined,
+      stepExecutionPath,
+    )) as any;
     await this.persistStepUpdate({
       workflowId,
       runId,
@@ -894,6 +976,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       input,
       requestContext: currentRequestContext,
       state: lastState,
+      stepExecutionPath,
     });
 
     if (params.outputOptions?.includeState) {

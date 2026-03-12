@@ -1,9 +1,11 @@
 import type { JSONSchema7 } from 'json-schema';
+import { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 import { isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ZodType } from '../schema.types';
 import type { ModelInformation } from '../types';
+import { isNull } from '../zodTypes';
 
 export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
@@ -38,6 +40,11 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
       } else {
         return value;
       }
+    } else if (isNull(z)(value)) {
+      return z
+        .any()
+        .refine(v => v === null, { message: 'must be null' })
+        .describe(value.description || 'must be null');
     }
 
     return this.defaultUnsupportedZodTypeHandler(value);

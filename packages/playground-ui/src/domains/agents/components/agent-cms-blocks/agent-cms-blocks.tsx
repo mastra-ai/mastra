@@ -1,9 +1,19 @@
+import { useState } from 'react';
 import { ContentBlocks } from '@/ds/components/ContentBlocks';
 import { cn } from '@/lib/utils';
 
 import { AgentCMSBlock } from './agent-cms-block';
 import type { JsonSchema } from '@/lib/rule-engine';
-import { createInstructionBlock, type InstructionBlock } from '../agent-edit-page/utils/form-validation';
+import {
+  createInstructionBlock,
+  createRefInstructionBlock,
+  type InstructionBlock,
+} from '../agent-edit-page/utils/form-validation';
+import { ChevronDownIcon, FileText, PenLine, PlusIcon } from 'lucide-react';
+import { Icon } from '@/ds/icons';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { PromptBlockPickerDialog } from './prompt-block-picker-dialog';
+import { Button } from '@/ds/components/Button';
 
 export interface AgentCMSBlocksProps {
   items: Array<InstructionBlock>;
@@ -14,13 +24,19 @@ export interface AgentCMSBlocksProps {
 }
 
 export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema }: AgentCMSBlocksProps) => {
+  const [pickerOpen, setPickerOpen] = useState(false);
+
   const handleDelete = (index: number) => {
     const newItems = items.filter((_, idx) => idx !== index);
     onChange(newItems);
   };
 
-  const handleAdd = () => {
+  const handleAddInline = () => {
     onChange([...items, createInstructionBlock()]);
+  };
+
+  const handleAddRef = (blockId: string) => {
+    onChange([...items, createRefInstructionBlock(blockId)]);
   };
 
   const handleBlockChange = (index: number, updatedBlock: InstructionBlock) => {
@@ -48,15 +64,36 @@ export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={handleAdd}
-        className={cn(
-          'border border-border1 text-neutral6 text-ui-sm py-2 rounded-md bg-surface1 hover:bg-surface2 active:bg-surface3',
-        )}
-      >
-        Add Instruction block
-      </button>
+      <DropdownMenu>
+        <DropdownMenu.Trigger asChild>
+          <Button
+            type="button"
+            className="flex items-center gap-2 text-ui-sm py-1.5 px-2 rounded-md bg-transparent border-transparent hover:bg-surface2 text-neutral3 hover:text-neutral6 w-fit focus-visible:outline-none focus-visible:ring-0"
+          >
+            <Icon>
+              <PlusIcon />
+            </Icon>
+            Add Instruction block
+            <ChevronDownIcon />
+          </Button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="start" className="w-[240px]">
+          <DropdownMenu.Item onSelect={handleAddInline}>
+            <Icon>
+              <PenLine />
+            </Icon>
+            Write inline block
+          </DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => setPickerOpen(true)}>
+            <Icon>
+              <FileText />
+            </Icon>
+            Reference saved prompt block
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>
+
+      <PromptBlockPickerDialog open={pickerOpen} onOpenChange={setPickerOpen} onSelect={handleAddRef} />
     </div>
   );
 };

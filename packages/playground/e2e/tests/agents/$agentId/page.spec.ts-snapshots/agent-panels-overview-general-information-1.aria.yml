@@ -14,7 +14,7 @@
     - list:
         - listitem:
             - link "Sub Agent":
-                - /url: /agents/subAgent
+                - /url: /agents/subAgent/chat/new
                 - img
                 - text: ''
     - heading "Tools" [level=3]:
@@ -25,12 +25,12 @@
     - list:
         - listitem:
             - link "weatherInfo":
-                - /url: /agents/weatherAgent/tools/weatherInfo
+                - /url: /agents/weather-agent/tools/weatherInfo
                 - img
                 - text: ''
         - listitem:
             - link "simpleMcpTool":
-                - /url: /agents/weatherAgent/tools/simpleMcpTool
+                - /url: /agents/weather-agent/tools/simpleMcpTool
                 - img
                 - text: ''
     - heading "Workflows" [level=3]:
@@ -44,12 +44,13 @@
                 - /url: /workflows/lessComplexWorkflow
                 - img
                 - text: ''
+    - heading "Skills" [level=3]:
+        - text: ''
+        - link:
+            - /url: https://mastra.ai/en/docs/workspace/skills
+            - img
+    - paragraph: No skills
     - heading "Scorers" [level=3]
     - paragraph: No Scorers
     - heading "System Prompt" [level=3]
     - textbox
-    - textbox "Enter your comment here..." [disabled]
-    - text: No model with a configured API key found.
-    - button "Enhance prompt" [disabled]:
-        - img
-        - text: ''
