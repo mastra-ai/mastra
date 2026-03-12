@@ -227,9 +227,12 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
       }
 
       case 'tool-result': {
-        if (role === `assistant` || role === `user`) {
+        if (role === `user`) {
           throw new Error(incompatibleMessage);
         }
+        // tool-result is valid on assistant messages for provider-executed tools
+        // (e.g. Anthropic web_search) — convertToModelMessages places both the
+        // tool-call and its tool-result on the assistant message.
         roleContent[role].push({
           ...part,
           toolName: sanitizeToolName(part.toolName),
