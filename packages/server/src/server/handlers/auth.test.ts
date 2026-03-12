@@ -11,7 +11,7 @@ import { Mastra } from '@mastra/core';
 import type { MastraAuthProvider, MastraServerConfig } from '@mastra/core/server';
 import { describe, it, expect, vi } from 'vitest';
 
-import { GET_AUTH_CAPABILITIES_ROUTE, GET_SSO_LOGIN_ROUTE, GET_SSO_CALLBACK_ROUTE, getPublicOrigin } from './auth';
+import { GET_AUTH_CAPABILITIES_ROUTE, GET_SSO_LOGIN_ROUTE, GET_SSO_CALLBACK_ROUTE } from './auth';
 import { createTestServerContext } from './test-utils';
 
 // =============================================================================
@@ -261,33 +261,35 @@ describe('GET /auth/capabilities — SSO URL respects routePrefix', () => {
     const result = (await GET_AUTH_CAPABILITIES_ROUTE.handler(ctx as any)) as any;
 
     expect(result.enabled).toBe(true);
+    expect(result.login).not.toBeNull();
     expect(result.login.sso.url).toBe('/api/auth/sso/login');
   });
 });
 
 // =============================================================================
-// getPublicOrigin — X-Forwarded-Host parsing
+// Capabilities: no auth provider configured
 // =============================================================================
 
-describe('getPublicOrigin', () => {
-  it('returns origin from x-forwarded-host when present', () => {
-    const request = new Request('http://internal:3000/api/auth/sso/login', {
-      headers: { 'X-Forwarded-Host': 'app.example.com' },
-    });
-    expect(getPublicOrigin(request)).toBe('https://app.example.com');
-  });
+describe('GET /auth/capabilities — no auth provider', () => {
+  it('should return enabled: false when no auth provider is configured', async () => {
+    const mockMastra = {
+      getServer: () => ({
+        auth: {
+          // No authenticateToken — not a provider
+          protected: ['/api/*'],
+        },
+      }),
+    };
 
-  it('uses only the first value from a multi-value x-forwarded-host', () => {
-    const request = new Request('http://internal:3000/api/auth/sso/login', {
-      headers: {
-        'X-Forwarded-Host': 'my-project.studio.mastra.cloud, 3000-abc123.daytonaproxy01.net',
-      },
-    });
-    expect(getPublicOrigin(request)).toBe('https://my-project.studio.mastra.cloud');
-  });
+    const mockRequest = {
+      headers: new Headers(),
+    };
 
-  it('falls back to request.url origin when x-forwarded-host is absent', () => {
-    const request = new Request('http://localhost:3000/api/auth/sso/login');
-    expect(getPublicOrigin(request)).toBe('http://localhost:3000');
+    const result = await GET_AUTH_CAPABILITIES_ROUTE.handler({
+      mastra: mockMastra,
+      request: mockRequest,
+    } as any);
+
+    expect(result).toEqual({ enabled: false, login: null });
   });
 });

@@ -36,6 +36,8 @@ The `observationalMemory` option accepts `true`, a configuration object, or `fal
 
 Observer input is multimodal-aware. OM keeps text placeholders like `[Image #1: screenshot.png]` in the transcript it builds for the Observer, and also sends the underlying image parts when possible. This applies to both single-thread observation and batched multi-thread observation. Non-image files appear as placeholders only.
 
+OM performs thresholding with fast local token estimation. Text uses `tokenx`, and image-like inputs use provider-aware heuristics plus deterministic fallbacks when metadata is incomplete.
+
 <PropertiesTable
   content={[
   {
@@ -97,7 +99,7 @@ Observer input is multimodal-aware. OM keeps text placeholders like `[Image #1: 
             name: 'messageTokens',
             type: 'number',
             description:
-              'Token count of unobserved messages that triggers observation. When unobserved message tokens exceed this threshold, the Observer agent is called. Image parts are included with model-aware estimates when possible, with deterministic fallbacks when image metadata is incomplete. Image-like `file` parts are counted the same way when uploads are normalized as files.',
+              'Token count of unobserved messages that triggers observation. When unobserved message tokens exceed this threshold, the Observer agent is called. Text is estimated locally with `tokenx`. Image parts are included with model-aware heuristics when possible, with deterministic fallbacks when image metadata is incomplete. Image-like `file` parts are counted the same way when uploads are normalized as files.',
             isOptional: true,
             defaultValue: '30000',
           },
@@ -249,7 +251,7 @@ Observer input is multimodal-aware. OM keeps text placeholders like `[Image #1: 
 
 ### Token estimate metadata cache
 
-OM persists token payload estimates so repeated counting can reuse prior tiktoken work.
+OM persists token payload estimates so repeated counting can reuse prior token estimation work.
 
 - Part-level cache: `part.providerMetadata.mastra`.
 - String-content fallback cache: message-level metadata when no parts exist.

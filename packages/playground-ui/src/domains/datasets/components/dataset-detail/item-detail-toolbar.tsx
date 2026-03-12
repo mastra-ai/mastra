@@ -41,14 +41,14 @@ export function ItemDetailToolbar({
       <ButtonsGroup>
         {!isEditing && (
           <>
-            <Button variant="standard" size="default" href={`/datasets/${datasetId}/items/${itemId}`} as={Link}>
+            <Button href={`/datasets/${datasetId}/items/${itemId}`} as={Link}>
               <History />
               Versions
             </Button>
 
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
-                <Button variant="standard" size="default" aria-label="Actions menu">
+                <Button aria-label="Actions menu">
                   <EllipsisVerticalIcon />
                 </Button>
               </DropdownMenu.Trigger>
@@ -66,7 +66,7 @@ export function ItemDetailToolbar({
           </>
         )}
 
-        <Button variant="standard" size="default" onClick={onClose} aria-label="Close detail panel">
+        <Button onClick={onClose} aria-label="Close detail panel">
           <XIcon />
         </Button>
       </ButtonsGroup>

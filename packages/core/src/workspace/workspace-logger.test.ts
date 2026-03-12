@@ -303,7 +303,7 @@ describe('Workspace Logger Integration', () => {
       const filesystem = new TestFilesystem();
       filesystem.__setLogger(mockLogger);
 
-      await filesystem.readFile('/test.txt');
+      await filesystem.readFile('test.txt');
 
       expect(mockLogger.debug).toHaveBeenCalledWith('TestFilesystem.readFile called');
     });
@@ -408,9 +408,9 @@ describe('Workspace Logger Integration', () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       filesystem.__setLogger(mockLogger);
 
-      await filesystem.readFile('/test.txt');
+      await filesystem.readFile('test.txt');
 
-      expect(mockLogger.debug).toHaveBeenCalledWith('Reading file', expect.objectContaining({ path: '/test.txt' }));
+      expect(mockLogger.debug).toHaveBeenCalledWith('Reading file', expect.objectContaining({ path: 'test.txt' }));
     });
 
     it('should log when writing file', async () => {
@@ -418,9 +418,9 @@ describe('Workspace Logger Integration', () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       filesystem.__setLogger(mockLogger);
 
-      await filesystem.writeFile('/test.txt', 'hello world');
+      await filesystem.writeFile('test.txt', 'hello world');
 
-      expect(mockLogger.debug).toHaveBeenCalledWith('Writing file', expect.objectContaining({ path: '/test.txt' }));
+      expect(mockLogger.debug).toHaveBeenCalledWith('Writing file', expect.objectContaining({ path: 'test.txt' }));
     });
 
     it('should log when deleting file', async () => {
@@ -430,9 +430,9 @@ describe('Workspace Logger Integration', () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       filesystem.__setLogger(mockLogger);
 
-      await filesystem.deleteFile('/test.txt');
+      await filesystem.deleteFile('test.txt');
 
-      expect(mockLogger.debug).toHaveBeenCalledWith('Deleting file', expect.objectContaining({ path: '/test.txt' }));
+      expect(mockLogger.debug).toHaveBeenCalledWith('Deleting file', expect.objectContaining({ path: 'test.txt' }));
     });
 
     it('should log when creating directory', async () => {
@@ -440,9 +440,9 @@ describe('Workspace Logger Integration', () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       filesystem.__setLogger(mockLogger);
 
-      await filesystem.mkdir('/newdir');
+      await filesystem.mkdir('newdir');
 
-      expect(mockLogger.debug).toHaveBeenCalledWith('Creating directory', expect.objectContaining({ path: '/newdir' }));
+      expect(mockLogger.debug).toHaveBeenCalledWith('Creating directory', expect.objectContaining({ path: 'newdir' }));
     });
 
     it('should log when reading directory', async () => {
@@ -450,9 +450,9 @@ describe('Workspace Logger Integration', () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       filesystem.__setLogger(mockLogger);
 
-      await filesystem.readdir('/');
+      await filesystem.readdir('.');
 
-      expect(mockLogger.debug).toHaveBeenCalledWith('Reading directory', expect.objectContaining({ path: '/' }));
+      expect(mockLogger.debug).toHaveBeenCalledWith('Reading directory', expect.objectContaining({ path: '.' }));
     });
 
     it('should log errors on init failure', async () => {
@@ -564,7 +564,7 @@ describe('Workspace Logger Integration', () => {
       expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Starting sandbox', expect.any(Object));
 
       // Filesystem operations should log
-      await workspace.filesystem!.writeFile('/test.txt', 'hello');
+      await workspace.filesystem!.writeFile('test.txt', 'hello');
       expect(mockLogger.debug).toHaveBeenCalledWith('Writing file', expect.any(Object));
 
       // Sandbox operations should log
@@ -686,7 +686,7 @@ describe('Workspace Logger Integration', () => {
       expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Starting sandbox', expect.any(Object));
 
       // Filesystem operations should use the Mastra logger
-      await mastraWorkspace!.filesystem!.writeFile('/mastra-test.txt', 'hello from mastra');
+      await mastraWorkspace!.filesystem!.writeFile('mastra-test.txt', 'hello from mastra');
       expect(mockLogger.debug).toHaveBeenCalledWith('Writing file', expect.any(Object));
 
       // Sandbox operations should use the Mastra logger
