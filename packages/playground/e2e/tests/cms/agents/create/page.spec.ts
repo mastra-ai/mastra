@@ -315,20 +315,21 @@ test.describe('Agent Creation Persistence - Tools', () => {
     // Navigate to tools page via sidebar
     await clickSidebarLink(page, 'Tools');
 
-    // Wait for tools to load
-    await expect(page.getByText('weatherInfo')).toBeVisible({ timeout: 10000 });
+    // Click "Add Tools" to open the popover with available tools
+    await expect(page.getByRole('button', { name: 'Add Tools' })).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Add Tools' }).click();
 
-    // Toggle the first tool switch
-    const firstSwitch = page.getByRole('switch').first();
-    await firstSwitch.click();
+    // Select weatherInfo from the popover
+    await expect(page.getByText('weatherInfo')).toBeVisible({ timeout: 5000 });
+    await page.getByText('weatherInfo').click();
 
     const agentId = await createAgentAndGetId(page);
 
-    // Verify on edit page
+    // Verify on edit page — selected tool should appear as an entity
     await page.goto(`/cms/agents/${agentId}/edit/tools`);
     await page.waitForTimeout(2000);
 
-    await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
+    await expect(page.getByText('weatherInfo')).toBeVisible({ timeout: 10000 });
   });
 });
 
@@ -699,9 +700,14 @@ test.describe('Comprehensive Persistence Test', () => {
     // === Tools ===
     await clickSidebarLink(page, 'Tools');
     await page.waitForTimeout(1000);
-    const toolSwitches = page.getByRole('switch');
-    if ((await toolSwitches.count()) > 0) {
-      await toolSwitches.first().click();
+    // Tools use add/remove pattern — click "Add Tools" and select the first tool
+    const addToolsBtn = page.getByRole('button', { name: 'Add Tools' });
+    if (await addToolsBtn.isVisible()) {
+      await addToolsBtn.click();
+      const firstToolOption = page.getByRole('button').filter({ hasText: 'weatherInfo' });
+      if (await firstToolOption.isVisible()) {
+        await firstToolOption.click();
+      }
     }
 
     // === Workflows ===
@@ -747,7 +753,7 @@ test.describe('Comprehensive Persistence Test', () => {
     // === Verify Tools ===
     await page.goto(`/cms/agents/${agentId}/edit/tools`);
     await page.waitForTimeout(2000);
-    await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
+    await expect(page.getByText('weatherInfo')).toBeVisible({ timeout: 10000 });
 
     // === Verify Workflows ===
     await page.goto(`/cms/agents/${agentId}/edit/workflows`);
