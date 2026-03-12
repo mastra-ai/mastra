@@ -596,16 +596,16 @@ For production use, store sensitive configuration in environment variables:
 
 ```bash
 # .env file
-AZURE_SEARCH_ENDPOINT=https://your-service.search.windows.net
-AZURE_SEARCH_API_KEY=your-api-key
+AZURE_AI_SEARCH_ENDPOINT=https://your-service.search.windows.net
+AZURE_AI_SEARCH_CREDENTIAL=your-api-key
 ```
 
 ```typescript
 // Configuration
 const azureVector = new AzureAISearchVector({
   id: 'azure-search',
-  endpoint: process.env.AZURE_SEARCH_ENDPOINT!,
-  credential: process.env.AZURE_SEARCH_API_KEY!
+  endpoint: process.env.AZURE_AI_SEARCH_ENDPOINT!,
+  credential: process.env.AZURE_AI_SEARCH_CREDENTIAL!
 });
 ```
 
