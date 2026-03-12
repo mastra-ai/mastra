@@ -3874,7 +3874,8 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
     });
     await storage.updateActiveObservations({
       id: record.id,
-      observations: '<thread id="thread-A">\n- 🔴 User\'s favorite color is blue\n</thread>',
+      observations:
+        '<thread id="thread-A">\n- 🔴 User\'s favorite color is blue\n</thread>\n\n--- message boundary ---\n\n<thread id="thread-A">\n- 🔴 User is debugging observational memory prompt ordering\n</thread>',
       tokenCount: 50,
       lastObservedAt: threadAObservedAt, // Resource-level cursor set to Thread A's observation time
     });
@@ -3929,13 +3930,23 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
       }) as any,
     });
 
-    // Extract the OM system message (tagged as 'observational-memory')
+    // Extract the OM system messages (tagged as 'observational-memory')
     const omSystemMessages = messageList.getSystemMessages('observational-memory');
-    expect(omSystemMessages.length).toBeGreaterThan(0);
+    expect(omSystemMessages.length).toBeGreaterThan(1);
 
-    const omSystemMessage = omSystemMessages[0]!;
-    const omContent =
-      typeof omSystemMessage.content === 'string' ? omSystemMessage.content : JSON.stringify(omSystemMessage.content);
+    const omContents = omSystemMessages.map(message =>
+      typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+    );
+    const omContent = omContents.join('\n\n');
+
+    expect(omContents[0]).toContain(
+      'The following observations block contains your memory of past conversations with this user.',
+    );
+    expect(omContents).toContain('<observations>');
+    expect(omContents).toContain(`<thread id="thread-A">\n- 🔴 User's favorite color is blue\n</thread>`);
+    expect(omContents).toContain(
+      `<thread id="thread-A">\n- 🔴 User is debugging observational memory prompt ordering\n</thread>`,
+    );
 
     // KEY ASSERTION: Thread A's messages should appear as <other-conversation> blocks
     // even though Thread A was already observed (its messages are older than resource-level lastObservedAt).

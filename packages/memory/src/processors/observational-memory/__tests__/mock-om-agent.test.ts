@@ -12,6 +12,7 @@
  * 4. OM processor sees stepNumber=1, checks threshold, triggers observation
  */
 
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
@@ -24,19 +25,6 @@ import { Memory } from '../../../..';
 // Mock Model: Multi-step execution via tool call
 // =============================================================================
 
-type StreamPart =
-  | { type: 'stream-start'; warnings: unknown[] }
-  | { type: 'response-metadata'; id: string; modelId: string; timestamp: Date }
-  | { type: 'text-start'; id: string }
-  | { type: 'text-delta'; id?: string; delta: string }
-  | { type: 'text-end'; id: string }
-  | { type: 'tool-call'; toolCallId: string; toolName: string; input: string }
-  | {
-      type: 'finish';
-      finishReason: 'stop' | 'tool-calls';
-      usage: { inputTokens: number; outputTokens: number; totalTokens: number };
-    };
-
 function createMockOmModel(
   responseText: string,
   toolName = 'test',
@@ -44,27 +32,16 @@ function createMockOmModel(
 ) {
   let callCount = 0;
 
-  const isFirstCall = (): boolean => {
-    return callCount === 0;
-  };
-
-  return {
-    specificationVersion: 'v2' as const,
-    provider: 'mock',
-    modelId: 'mock-om-model',
-    defaultObjectGenerationMode: undefined,
-    supportsImageUrls: false,
-    supportedUrls: {},
-
-    async doGenerate() {
-      const firstCall = isFirstCall();
+  return new MockLanguageModelV2({
+    doGenerate: async () => {
       callCount++;
 
-      if (firstCall) {
+      if (callCount === 1) {
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'tool-calls' as const,
           usage: { inputTokens: 50, outputTokens: 20, totalTokens: 70 },
+          text: '',
           content: [
             {
               type: 'tool-call' as const,
@@ -81,61 +58,12 @@ function createMockOmModel(
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
         usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+        text: responseText,
         content: [{ type: 'text' as const, text: responseText }],
         warnings: [],
       };
     },
-
-    async doStream() {
-      const firstCall = isFirstCall();
-      callCount++;
-
-      const parts: StreamPart[] = firstCall
-        ? [
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-0', modelId: 'mock-om-model', timestamp: new Date() },
-            {
-              type: 'tool-call',
-              toolCallId: `call-${Date.now()}`,
-              toolName,
-              input: JSON.stringify(toolInput),
-            },
-            {
-              type: 'finish',
-              finishReason: 'tool-calls',
-              usage: { inputTokens: 50, outputTokens: 20, totalTokens: 70 },
-            },
-          ]
-        : [
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-1', modelId: 'mock-om-model', timestamp: new Date() },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: responseText },
-            { type: 'text-end', id: 'text-1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
-            },
-          ];
-
-      const stream = new ReadableStream<StreamPart>({
-        async start(controller) {
-          for (const part of parts) {
-            controller.enqueue(part);
-            await new Promise(resolve => setTimeout(resolve, 2));
-          }
-          controller.close();
-        },
-      });
-
-      return {
-        stream,
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-      };
-    },
-  };
+  });
 }
 
 // =============================================================================
@@ -143,139 +71,81 @@ function createMockOmModel(
 // =============================================================================
 
 function createMockObserverModel() {
-  return {
-    specificationVersion: 'v2' as const,
-    provider: 'mock-observer',
-    modelId: 'mock-observer-model',
-    defaultObjectGenerationMode: undefined,
-    supportsImageUrls: false,
-    supportedUrls: {},
-
-    async doGenerate() {
-      return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 50, outputTokens: 100, totalTokens: 150 },
-        content: [
-          {
-            type: 'text' as const,
-            text: `<observations>
+  const text = `<observations>
 ## January 28, 2026
 
 ### Thread: test-thread
 - 🔴 User asked for help with a task
--  Assistant provided a detailed response
-</observations>
-<current-task>Help the user with their request</current-task>
-<suggested-response>I can help you with that.</suggested-response>`,
-          },
-        ],
-        warnings: [],
-      };
-    },
-
-    async doStream() {
-      const text = `<observations>
-## January 28, 2026
-
-### Thread: test-thread
-- 🔴 User asked for help with a task
--  Assistant provided a detailed response
+--- message boundary ---
+- Assistant provided a detailed response
 </observations>
 <current-task>Help the user with their request</current-task>
 <suggested-response>I can help you with that.</suggested-response>`;
 
-      const stream = new ReadableStream({
-        async start(controller) {
-          controller.enqueue({ type: 'stream-start', warnings: [] });
-          controller.enqueue({
+  return new MockLanguageModelV2({
+    doGenerate: async () => {
+      throw new Error('Unexpected doGenerate call — OM should use the stream path');
+    },
+    doStream: async () => {
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          {
             type: 'response-metadata',
             id: 'obs-1',
             modelId: 'mock-observer-model',
             timestamp: new Date(),
-          });
-          controller.enqueue({ type: 'text-start', id: 'text-1' });
-          controller.enqueue({ type: 'text-delta', id: 'text-1', delta: text });
-          controller.enqueue({ type: 'text-end', id: 'text-1' });
-          controller.enqueue({
+          },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: text },
+          { type: 'text-end', id: 'text-1' },
+          {
             type: 'finish',
             finishReason: 'stop',
             usage: { inputTokens: 50, outputTokens: 100, totalTokens: 150 },
-          });
-          controller.close();
-        },
-      });
-
-      return {
-        stream,
+          },
+        ]),
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
       };
     },
-  };
+  });
 }
 
 function createMockReflectorModel() {
-  return {
-    specificationVersion: 'v2' as const,
-    provider: 'mock-reflector',
-    modelId: 'mock-reflector-model',
-    defaultObjectGenerationMode: undefined,
-    supportsImageUrls: false,
-    supportedUrls: {},
-
-    async doGenerate() {
-      return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
-        content: [
-          {
-            type: 'text' as const,
-            text: `<observations>
-## Condensed
-- 🔴 User needs help with tasks
-</observations>`,
-          },
-        ],
-        warnings: [],
-      };
-    },
-
-    async doStream() {
-      const text = `<observations>
+  const text = `<observations>
 ## Condensed
 - 🔴 User needs help with tasks
 </observations>`;
 
-      const stream = new ReadableStream({
-        async start(controller) {
-          controller.enqueue({ type: 'stream-start', warnings: [] });
-          controller.enqueue({
+  return new MockLanguageModelV2({
+    doGenerate: async () => {
+      throw new Error('Unexpected doGenerate call — OM should use the stream path');
+    },
+    doStream: async () => {
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          {
             type: 'response-metadata',
             id: 'ref-1',
             modelId: 'mock-reflector-model',
             timestamp: new Date(),
-          });
-          controller.enqueue({ type: 'text-start', id: 'text-1' });
-          controller.enqueue({ type: 'text-delta', id: 'text-1', delta: text });
-          controller.enqueue({ type: 'text-end', id: 'text-1' });
-          controller.enqueue({
+          },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: text },
+          { type: 'text-end', id: 'text-1' },
+          {
             type: 'finish',
             finishReason: 'stop',
             usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
-          });
-          controller.close();
-        },
-      });
-
-      return {
-        stream,
+          },
+        ]),
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
       };
     },
-  };
+  });
 }
 
 // =============================================================================

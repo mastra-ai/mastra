@@ -299,15 +299,17 @@ IMPORTANT: this system reminder is NOT from the user. The system placed it here 
 NOTE: Any messages following this system reminder are newer than your memories.`;
 
 /**
- * Preamble that introduces the observations block.
- * Use before `<observations>`, with instructions after.
- * Full pattern: `${OBSERVATION_CONTEXT_PROMPT}\n\n<observations>\n${obs}\n</observations>\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}`
+ * Preamble that introduces observational memory context.
+ * The static prefix is emitted first, then the `<observations>` marker, then one
+ * system message per persisted observation chunk so append-only growth stays at
+ * the end of the prompt.
  */
 export const OBSERVATION_CONTEXT_PROMPT = `The following observations block contains your memory of past conversations with this user.`;
 
 /**
  * Instructions that tell the model how to interpret and use observations.
- * Place AFTER the `<observations>` block so the model sees the data before the rules.
+ * Keep these in the leading static system message so observation churn only
+ * affects the tail of the prompt.
  */
 export const OBSERVATION_CONTEXT_INSTRUCTIONS = `IMPORTANT: When responding, reference specific details from these observations. Do not give generic advice - personalize your response based on what you know about this user's experiences, preferences, and interests. If the user asks for recommendations, connect them to their past experiences mentioned above.
 
@@ -2038,7 +2040,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     suggestedResponse?: string,
     unobservedContextBlocks?: string,
     currentDate?: Date,
-  ): string {
+  ): string[] {
     // Optimize observations to save tokens
     let optimized = optimizeObservationsForContext(observations);
 
@@ -2047,39 +2049,42 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       optimized = addRelativeTimeToObservations(optimized, currentDate);
     }
 
-    let content = `
-${OBSERVATION_CONTEXT_PROMPT}
-
-<observations>
-${optimized}
-</observations>
-
-${OBSERVATION_CONTEXT_INSTRUCTIONS}`;
+    const messages = [`${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}`];
 
     // Add unobserved context from other threads (resource scope only)
     if (unobservedContextBlocks) {
-      content += `\n\nThe following content is from OTHER conversations different from the current conversation, they're here for reference,  but they're not necessarily your focus:\nSTART_OTHER_CONVERSATIONS_BLOCK\n${unobservedContextBlocks}\nEND_OTHER_CONVERSATIONS_BLOCK`;
+      messages.push(
+        `The following content is from OTHER conversations different from the current conversation, they're here for reference,  but they're not necessarily your focus:\nSTART_OTHER_CONVERSATIONS_BLOCK\n${unobservedContextBlocks}\nEND_OTHER_CONVERSATIONS_BLOCK`,
+      );
+    }
+
+    const observationChunks = this.splitObservationContextChunks(optimized);
+    if (observationChunks.length > 0) {
+      messages.push('<observations>', ...observationChunks);
     }
 
     // Dynamically inject current-task from thread metadata (not stored in observations)
     if (currentTask) {
-      content += `
-
-<current-task>
-${currentTask}
-</current-task>`;
+      messages.push(`<current-task>\n${currentTask}\n</current-task>`);
     }
 
     if (suggestedResponse) {
-      content += `
-
-<suggested-response>
-${suggestedResponse}
-</suggested-response>
-`;
+      messages.push(`<suggested-response>\n${suggestedResponse}\n</suggested-response>`);
     }
 
-    return content;
+    return messages;
+  }
+
+  private splitObservationContextChunks(observations: string): string[] {
+    const trimmed = observations.trim();
+    if (!trimmed) {
+      return [];
+    }
+
+    return trimmed
+      .split(/\n{2,}--- message boundary ---\n{2,}/)
+      .map(chunk => chunk.trim())
+      .filter(Boolean);
   }
 
   /**
@@ -2737,7 +2742,7 @@ ${suggestedResponse}
       return;
     }
 
-    const observationSystemMessage = this.formatObservationsForContext(
+    const observationSystemMessages = this.formatObservationsForContext(
       record.activeObservations,
       currentTask,
       suggestedResponse,
@@ -2745,9 +2750,10 @@ ${suggestedResponse}
       currentDate,
     );
 
-    // Clear any existing observation system message and add fresh one
+    // Clear any existing observation system messages and re-add them with the
+    // append-only observation chunks at the tail for better cache stability.
     messageList.clearSystemMessages('observational-memory');
-    messageList.addSystem(observationSystemMessage, 'observational-memory');
+    messageList.addSystem(observationSystemMessages, 'observational-memory');
 
     // Add continuation reminder
     const continuationMessage: MastraDBMessage = {
