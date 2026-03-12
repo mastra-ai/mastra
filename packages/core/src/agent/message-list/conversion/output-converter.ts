@@ -52,6 +52,26 @@ export function sanitizeV5UIMessages(
   messages: AIV5Type.UIMessage[],
   filterIncompleteToolCalls = false,
 ): AIV5Type.UIMessage[] {
+  // Two-pass fix for provider-executed tools (e.g. Anthropic web_search):
+  // Collect tool call IDs where the provider-executed result exists (output-available/output-error).
+  // When call and result end up in separate messages (due to sealing or other splits),
+  // we must strip BOTH the call AND the result — otherwise the call becomes an orphaned
+  // server_tool_use block that triggers a 400 "tool use without corresponding result" error.
+  const completedProviderToolIds = new Set<string>();
+  if (filterIncompleteToolCalls) {
+    for (const m of messages) {
+      for (const p of m.parts) {
+        if (
+          AIV5.isToolUIPart(p) &&
+          p.providerExecuted &&
+          (p.state === 'output-available' || p.state === 'output-error')
+        ) {
+          completedProviderToolIds.add(p.toolCallId);
+        }
+      }
+    }
+  }
+
   const msgs = messages
     .map(m => {
       if (m.parts.length === 0) return false;
@@ -116,7 +136,12 @@ export function sanitizeV5UIMessages(
           // Provider-executed tools (e.g. Anthropic web_search) remain in input-available state
           // because no client-side result is added. Keep them so the provider API sees the
           // server_tool_use block and can execute the deferred tool on the next request.
-          if (p.state === 'input-available' && p.providerExecuted) return true;
+          // BUT: if the result already exists in a different message (completedProviderToolIds),
+          // the call must also be stripped to avoid an orphaned server_tool_use block.
+          if (p.state === 'input-available' && p.providerExecuted) {
+            if (completedProviderToolIds.has(p.toolCallId)) return false;
+            return true;
+          }
           return false;
         }
 

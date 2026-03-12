@@ -182,6 +182,104 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
     expect(toolCallIds).not.toContain('call-2');
   });
 
+  it('should strip orphaned provider-executed call when its result exists in a different message', () => {
+    // This reproduces the bug where OM sealing (or any other mechanism) splits
+    // a provider-executed tool call and its result into separate messages.
+    // Message 1: call (input-available, providerExecuted)
+    // Message 2: result (output-available, providerExecuted)
+    // Without the fix, the call is kept and the result is stripped → orphaned server_tool_use → 400
+    const msg1 = makeMessage([
+      makeToolPart({
+        type: 'tool-web_search_20250305',
+        toolCallId: 'srvtoolu_split1',
+        state: 'input-available',
+        input: { query: 'test' },
+        providerExecuted: true,
+      }),
+    ]);
+
+    const msg2: AIV5Type.UIMessage = {
+      id: 'msg-2',
+      role: 'assistant',
+      parts: [
+        makeToolPart({
+          type: 'tool-web_search_20250305',
+          toolCallId: 'srvtoolu_split1',
+          state: 'output-available',
+          input: { query: 'test' },
+          output: { results: ['result1'] },
+          providerExecuted: true,
+        }),
+      ],
+    };
+
+    const result = sanitizeV5UIMessages([msg1, msg2], true);
+
+    // Both messages should be dropped — the call AND result are stripped
+    const allToolCallIds = result.flatMap(m => m.parts.filter((p: any) => p.toolCallId).map((p: any) => p.toolCallId));
+    expect(allToolCallIds).not.toContain('srvtoolu_split1');
+  });
+
+  it('should strip orphaned call but keep other parts in the same message', () => {
+    // Message 1 has both a text part and a provider-executed call
+    const msg1: AIV5Type.UIMessage = {
+      id: 'msg-1',
+      role: 'assistant',
+      parts: [
+        { type: 'text', text: 'Let me search for that.' },
+        makeToolPart({
+          type: 'tool-web_search_20250305',
+          toolCallId: 'srvtoolu_split2',
+          state: 'input-available',
+          input: { query: 'test' },
+          providerExecuted: true,
+        }),
+      ],
+    };
+
+    const msg2: AIV5Type.UIMessage = {
+      id: 'msg-2',
+      role: 'assistant',
+      parts: [
+        makeToolPart({
+          type: 'tool-web_search_20250305',
+          toolCallId: 'srvtoolu_split2',
+          state: 'output-available',
+          input: { query: 'test' },
+          output: { results: ['result1'] },
+          providerExecuted: true,
+        }),
+      ],
+    };
+
+    const result = sanitizeV5UIMessages([msg1, msg2], true);
+
+    // msg1 should still exist with just the text part
+    expect(result).toHaveLength(1);
+    expect(result[0]!.parts).toHaveLength(1);
+    expect(result[0]!.parts[0]!.type).toBe('text');
+  });
+
+  it('should keep provider-executed call when no result exists anywhere (normal in-flight case)', () => {
+    // Only a call, no result in any message — this is the normal case during streaming
+    const msg1 = makeMessage([
+      makeToolPart({
+        type: 'tool-web_search_20250305',
+        toolCallId: 'srvtoolu_inflight',
+        state: 'input-available',
+        input: { query: 'test' },
+        providerExecuted: true,
+      }),
+    ]);
+
+    const result = sanitizeV5UIMessages([msg1], true);
+
+    // Call should be kept — no completed result exists
+    expect(result).toHaveLength(1);
+    expect(result[0]!.parts).toHaveLength(1);
+    expect((result[0]!.parts[0] as any).toolCallId).toBe('srvtoolu_inflight');
+  });
+
   it('should not filter provider-executed tools when filterIncompleteToolCalls is false', () => {
     const msg = makeMessage([
       makeToolPart({
