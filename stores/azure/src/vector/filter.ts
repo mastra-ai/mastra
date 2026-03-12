@@ -112,8 +112,14 @@ export class AzureAISearchFilterTranslator {
     return translated.length > 0 ? translated : undefined;
   }
 
+  private static readonly LEGACY_OPERATOR_KEYS = new Set([
+    'and', 'or', 'not', 'eq', 'ne', 'gt', 'ge', 'lt', 'le',
+    'contains', 'startsWith', 'endsWith', 'any', 'all', '$filter',
+  ]);
+
   private isMastraFilterSyntax(filter: Record<string, any>): boolean {
-    return Object.keys(filter).some(key => key.startsWith('$') && key !== '$filter');
+    const keys = Object.keys(filter);
+    return !keys.some(key => AzureAISearchFilterTranslator.LEGACY_OPERATOR_KEYS.has(key));
   }
 
   private translateLegacyFilter(filter: AzureAISearchLegacyFilter): string {
