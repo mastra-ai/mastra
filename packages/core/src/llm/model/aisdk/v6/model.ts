@@ -5,6 +5,30 @@ import { createStreamFromGenerateResult } from '../generate-to-stream';
 type StreamResult = Awaited<ReturnType<LanguageModelV3['doStream']>>;
 
 /**
+ * Remaps tool types from V2 format ('provider-defined') to V3 format ('provider').
+ * Tools may arrive in V2 format when prepared upstream (e.g., by ToolBuilder or
+ * prepareToolsAndToolChoice) without knowing the final model version. This ensures
+ * provider tools (like openai.tools.webSearch()) work correctly with V3 models.
+ */
+function remapToolsToV3(options: LanguageModelV3CallOptions): LanguageModelV3CallOptions {
+  if (!options.tools?.length) {
+    return options;
+  }
+
+  const remappedTools = options.tools.map((tool: Record<string, unknown>) => {
+    if (tool.type === 'provider-defined') {
+      return { ...tool, type: 'provider' as const };
+    }
+    return tool;
+  });
+
+  return {
+    ...options,
+    tools: remappedTools as typeof options.tools,
+  };
+}
+
+/**
  * Wrapper class for AI SDK V6 (LanguageModelV3) that converts doGenerate to return
  * a stream format for consistency with Mastra's streaming architecture.
  */
@@ -42,7 +66,7 @@ export class AISDKV6LanguageModel implements MastraLanguageModelV3 {
   }
 
   async doGenerate(options: LanguageModelV3CallOptions) {
-    const result = await this.#model.doGenerate(options);
+    const result = await this.#model.doGenerate(remapToolsToV3(options));
 
     return {
       request: result.request!,
@@ -52,6 +76,6 @@ export class AISDKV6LanguageModel implements MastraLanguageModelV3 {
   }
 
   async doStream(options: LanguageModelV3CallOptions) {
-    return await this.#model.doStream(options);
+    return await this.#model.doStream(remapToolsToV3(options));
   }
 }
