@@ -13,7 +13,15 @@ import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotoc
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import type { GetPromptResult, ListPromptsResult, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+import type {
+  EmptyResult,
+  GetPromptResult,
+  ListPromptsResult,
+  ListResourcesResult,
+  ListResourceTemplatesResult,
+  LoggingLevel,
+  ReadResourceResult,
+} from '@modelcontextprotocol/sdk/types.js';
 import {
   CallToolResultSchema,
   ListResourcesResultSchema,
@@ -543,35 +551,35 @@ export class InternalMastraMCPClient extends MastraBase {
     this.log('debug', 'Successfully reconnected to MCP server');
   }
 
-  async listResources() {
+  async listResources(): Promise<ListResourcesResult> {
     this.log('debug', `Requesting resources from MCP server`);
     return await this.client.request({ method: 'resources/list' }, ListResourcesResultSchema, {
       timeout: this.timeout,
     });
   }
 
-  async readResource(uri: string) {
+  async readResource(uri: string): Promise<ReadResourceResult> {
     this.log('debug', `Reading resource from MCP server: ${uri}`);
     return await this.client.request({ method: 'resources/read', params: { uri } }, ReadResourceResultSchema, {
       timeout: this.timeout,
     });
   }
 
-  async subscribeResource(uri: string) {
+  async subscribeResource(uri: string): Promise<EmptyResult> {
     this.log('debug', `Subscribing to resource on MCP server: ${uri}`);
     return await this.client.request({ method: 'resources/subscribe', params: { uri } }, EmptyResultSchema, {
       timeout: this.timeout,
     });
   }
 
-  async unsubscribeResource(uri: string) {
+  async unsubscribeResource(uri: string): Promise<EmptyResult> {
     this.log('debug', `Unsubscribing from resource on MCP server: ${uri}`);
     return await this.client.request({ method: 'resources/unsubscribe', params: { uri } }, EmptyResultSchema, {
       timeout: this.timeout,
     });
   }
 
-  async listResourceTemplates() {
+  async listResourceTemplates(): Promise<ListResourceTemplatesResult> {
     this.log('debug', `Requesting resource templates from MCP server`);
     return await this.client.request({ method: 'resources/templates/list' }, ListResourceTemplatesResultSchema, {
       timeout: this.timeout,
