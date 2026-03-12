@@ -2,4 +2,4 @@
 '@mastra/mcp': patch
 ---
 
-Added explicit return type annotations to MCP resource methods to fix TypeScript declaration emit errors (TS2742) when resolving `zod` types from `.pnpm` paths.
+Fixed TypeScript compilation errors when using MCP resource methods in projects with pnpm workspaces.

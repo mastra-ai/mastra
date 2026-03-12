@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed `onStepFinish` and `onFinish` callback type parameters to use `Tools` (ToolSet) instead of `inferOutput<Output>`, and added a type cast for `createOpenRouter()` return to bridge structurally equivalent `LanguageModelV2` types across AI SDK versions.
+Fixed TypeScript type errors in `onStepFinish` and `onFinish` callbacks, and resolved compatibility issues with `createOpenRouter()` across different AI SDK versions.
