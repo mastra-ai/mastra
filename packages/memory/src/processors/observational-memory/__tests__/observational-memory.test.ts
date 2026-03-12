@@ -8917,7 +8917,17 @@ describe('Observer Context Optimization', () => {
     });
 
     it('should drop oldest important observations first when still over budget', () => {
-      const om = createOM({ previousObservationTokens: 25 });
+      const tc = new TokenCounter();
+      // Budget just large enough to keep the newest important line + a small tail,
+      // but not all three important lines.
+      const desired = [
+        '[2 hidden observations]',
+        '- 🔴 Newer critical 3',
+        '[19 hidden observations]',
+        '- Observation line 20',
+      ].join('\n');
+      const budget = tc.countObservations(desired) + 2;
+      const om = createOM({ previousObservationTokens: budget });
       const observations = [
         '- 🔴 Very old critical 1',
         '- 🔴 Very old critical 2',

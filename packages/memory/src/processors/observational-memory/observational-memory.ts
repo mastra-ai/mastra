@@ -1749,29 +1749,41 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       return '';
     }
 
-    if (this.tokenCounter.countObservations(observations) <= budget) {
+    const totalTokens = this.tokenCounter.countObservations(observations);
+    if (totalTokens <= budget) {
       return observations;
     }
 
     const lines = observations.split('\n');
     const totalCount = lines.length;
 
-    const buildCandidate = (tailStart: number, importantFromHeadCount: number) => {
-      const headImportantIndexes: number[] = [];
-      for (let i = 0; i < tailStart; i++) {
-        if (lines[i]?.includes('🔴')) {
-          headImportantIndexes.push(i);
-        }
-      }
+    // Distribute the known total token count proportionally by character length
+    // to get a cheap per-line estimate without calling the tokenizer per line.
+    const totalChars = lines.reduce((sum, line) => sum + line.length + 1, 0);
+    const tokensPerChar = totalTokens / totalChars;
 
-      const selectedImportantIndexes =
-        importantFromHeadCount > 0
-          ? headImportantIndexes.slice(Math.max(0, headImportantIndexes.length - importantFromHeadCount))
-          : [];
+    const lineTokens: number[] = new Array(totalCount);
+    const isImportant: boolean[] = new Array(totalCount);
+    for (let i = 0; i < totalCount; i++) {
+      lineTokens[i] = (lines[i]!.length + 1) * tokensPerChar;
+      isImportant[i] = lines[i]!.includes('🔴');
+    }
 
+    // Precompute suffix sums so tail cost is O(1).
+    const suffixTokens: number[] = new Array(totalCount + 1);
+    suffixTokens[totalCount] = 0;
+    for (let i = totalCount - 1; i >= 0; i--) {
+      suffixTokens[i] = suffixTokens[i + 1]! + lineTokens[i]!;
+    }
+
+    // Collect important-line indexes from the head region.
+    // Built incrementally as tailStart advances.
+    const headImportantIndexes: number[] = [];
+
+    const buildCandidateString = (tailStart: number, selectedImportantIndexes: number[]) => {
       const keptIndexes = [
         ...selectedImportantIndexes,
-        ...Array.from({ length: lines.length - tailStart }, (_, i) => tailStart + i),
+        ...Array.from({ length: totalCount - tailStart }, (_, i) => tailStart + i),
       ].sort((a, b) => a - b);
 
       if (keptIndexes.length === 0) {
@@ -1786,12 +1798,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         if (hiddenCount > 0) {
           outputLines.push(`[${hiddenCount} hidden observations]`);
         }
-
         outputLines.push(lines[keptIndex]!);
         previousKeptIndex = keptIndex;
       }
 
-      const trailingHiddenCount = lines.length - previousKeptIndex - 1;
+      const trailingHiddenCount = totalCount - previousKeptIndex - 1;
       if (trailingHiddenCount > 0) {
         outputLines.push(`[${trailingHiddenCount} hidden observations]`);
       }
@@ -1799,37 +1810,56 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       return outputLines.join('\n');
     };
 
-    // Evaluate possible raw tails and choose one that preserves important observations best,
-    // while still keeping at least 50% raw-tail observations.
+    // Optimistic lower-bound estimate of kept-content cost (excludes markers).
+    // Used to quickly skip candidates whose content alone exceeds the budget.
+    const estimateKeptContentCost = (tailStart: number, selectedImportantIndexes: number[]): number => {
+      let cost = suffixTokens[tailStart]!;
+      for (const idx of selectedImportantIndexes) {
+        cost += lineTokens[idx]!;
+      }
+      return cost;
+    };
+
     let bestCandidate: string | undefined;
     let bestImportantCount = -1;
     let bestRawTailLength = -1;
 
-    for (let tailStart = 1; tailStart < lines.length; tailStart++) {
-      const rawTailLength = lines.length - tailStart;
-      const headImportantCount = lines.slice(0, tailStart).filter(line => line.includes('🔴')).length;
-      const maxImportantByRatio = rawTailLength;
-
-      let importantToKeep = Math.min(headImportantCount, maxImportantByRatio);
-      let candidate = buildCandidate(tailStart, importantToKeep);
-
-      // If over budget, drop important observations from the beginning (oldest first).
-      while (importantToKeep > 0 && this.tokenCounter.countObservations(candidate) > budget) {
-        importantToKeep -= 1;
-        candidate = buildCandidate(tailStart, importantToKeep);
+    for (let tailStart = 1; tailStart < totalCount; tailStart++) {
+      // Incrementally track important lines in the head region.
+      if (isImportant[tailStart - 1]) {
+        headImportantIndexes.push(tailStart - 1);
       }
 
-      if (this.tokenCounter.countObservations(candidate) > budget) {
+      const rawTailLength = totalCount - tailStart;
+      const maxImportantByRatio = rawTailLength;
+      let importantToKeep = Math.min(headImportantIndexes.length, maxImportantByRatio);
+
+      const getSelectedImportant = (count: number) =>
+        count > 0 ? headImportantIndexes.slice(Math.max(0, headImportantIndexes.length - count)) : [];
+
+      // Fast rejection: if even the kept content (without markers) exceeds budget, drop important lines.
+      while (
+        importantToKeep > 0 &&
+        estimateKeptContentCost(tailStart, getSelectedImportant(importantToKeep)) > budget
+      ) {
+        importantToKeep -= 1;
+      }
+
+      if (estimateKeptContentCost(tailStart, getSelectedImportant(importantToKeep)) > budget) {
         continue;
       }
 
+      // Only build + tokenize when this candidate could beat the current best.
       if (
         importantToKeep > bestImportantCount ||
         (importantToKeep === bestImportantCount && rawTailLength > bestRawTailLength)
       ) {
-        bestCandidate = candidate;
-        bestImportantCount = importantToKeep;
-        bestRawTailLength = rawTailLength;
+        const candidate = buildCandidateString(tailStart, getSelectedImportant(importantToKeep));
+        if (this.tokenCounter.countObservations(candidate) <= budget) {
+          bestCandidate = candidate;
+          bestImportantCount = importantToKeep;
+          bestRawTailLength = rawTailLength;
+        }
       }
     }
 
