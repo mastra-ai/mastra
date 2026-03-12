@@ -1,5 +1,65 @@
 # @mastra/core
 
+## 1.12.0-alpha.1
+
+### Minor Changes
+
+- **Absolute paths now resolve to real filesystem locations instead of being treated as workspace-relative.** ([#13804](https://github.com/mastra-ai/mastra/pull/13804))
+
+  Previously, `LocalFilesystem` in contained mode treated absolute paths like `/file.txt` as shorthand for `basePath/file.txt` (a "virtual-root" convention). This could silently resolve paths to unexpected locations — for example, `/home/user/.config/file.txt` would resolve to `basePath/home/user/.config/file.txt` instead of the real path.
+
+  Now:
+  - **Absolute paths** (starting with `/`) are real filesystem paths, subject to containment checks
+  - **Relative paths** (e.g., `file.txt`, `src/index.ts`) resolve against `basePath`
+  - **Tilde paths** (e.g., `~/Documents`) expand to the home directory
+
+  ### Migration
+
+  If your code passes paths like `/file.txt` to workspace filesystem methods expecting them to resolve relative to `basePath`, change them to relative paths:
+
+  ```ts
+  // Before
+  await filesystem.readFile('/src/index.ts');
+
+  // After
+  await filesystem.readFile('src/index.ts');
+  ```
+
+  Also fixed:
+  - `allowedPaths` resolving against the working directory instead of `basePath`, causing unexpected permission errors when `basePath` differed from `cwd`
+  - Permission errors when accessing paths under `allowedPaths` directories that don't exist yet (e.g., during skills discovery)
+
+- Changed `ProcessHandle.pid` type from `number` to `string` to support sandbox providers that use non-numeric process identifiers (e.g., session IDs). ([#13591](https://github.com/mastra-ai/mastra/pull/13591))
+
+  **Before:**
+
+  ```typescript
+  const handle = await sandbox.processes.spawn('node server.js');
+  handle.pid; // number
+  await sandbox.processes.get(42);
+  ```
+
+  **After:**
+
+  ```typescript
+  const handle = await sandbox.processes.spawn('node server.js');
+  handle.pid; // string (e.g., '1234' for local, 'session-abc' for Daytona)
+  await sandbox.processes.get('1234');
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`9cede11`](https://github.com/mastra-ai/mastra/commit/9cede110abac9d93072e0521bb3c8bcafb9fdadf))
+
+- Fixed processor-triggered aborts not appearing in traces. Processor spans now include abort details (reason, retry flag, metadata) and agent-level spans capture the same information when an abort short-circuits the agent run. This makes guardrail and processor aborts fully visible in tracing dashboards. ([#14038](https://github.com/mastra-ai/mastra/pull/14038))
+
+- Fixed exponential token growth during multi-step agent workflows by implementing `processInputStep` on `TokenLimiterProcessor` and removing the redundant `processInput` method. Token-based message pruning now runs at every step of the agentic loop (including tool call continuations), keeping the in-memory message list within budget before each LLM call. Also refactored Tiktoken encoder to use the shared global singleton from `getTiktoken()` instead of creating a new instance per processor. ([#13929](https://github.com/mastra-ai/mastra/pull/13929))
+
+- Fixed listConfiguredInputProcessors() and listConfiguredOutputProcessors() returning a combined workflow instead of individual processors. Previously, these methods wrapped all configured processors into a single committed workflow, making it impossible to inspect or look up processors by ID. Now they return the raw flat array of configured processors as intended. ([#14158](https://github.com/mastra-ai/mastra/pull/14158))
+
+- Updated dependencies [[`709362d`](https://github.com/mastra-ai/mastra/commit/709362d67b80d8832729bbf9e449cad27640a5d2)]:
+  - @mastra/schema-compat@1.2.1-alpha.1
+
 ## 1.12.0-alpha.0
 
 ### Minor Changes
