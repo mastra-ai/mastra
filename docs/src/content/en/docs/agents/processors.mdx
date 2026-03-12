@@ -33,7 +33,7 @@ Use processors to:
 
 Mastra includes several processors for common use cases. You can also create custom processors for application-specific requirements.
 
-## Adding processors to an agent
+## Quickstart
 
 Import and instantiate the processor, then pass it to the agent's `inputProcessors` or `outputProcessors` array:
 
@@ -88,7 +88,7 @@ Your processors run first, then memory persists messages.
 
 This ordering ensures that if your output guardrail calls `abort()`, memory processors are skipped and no messages are saved. See [Memory Processors](/docs/memory/memory-processors#processor-execution-order) for details.
 
-## Creating custom processors
+## Create custom processors
 
 Custom processors implement the `Processor` interface:
 
@@ -136,7 +136,7 @@ The method can return:
 
 The framework handles both return formats, so modifying system messages is optional and existing processors continue to work.
 
-### Modifying system messages
+### Modify system messages
 
 To modify system messages (e.g., trim verbose prompts for smaller models), return an object with both `messages` and `systemMessages`:
 
@@ -167,7 +167,7 @@ This is useful for:
 - Filtering or modifying semantic recall content to prevent "prompt too long" errors
 - Dynamically adjusting system instructions based on the conversation
 
-### Per-step processing with `processInputStep`
+### Process each step with `processInputStep`
 
 While `processInput` runs once at the start of agent execution, `processInputStep` runs at **each step** of the agentic loop (including tool call continuations). This enables per-step configuration changes like dynamic model switching or tool choice modifications.
 
@@ -226,7 +226,7 @@ The method can return any combination of:
 - `modelSettings`: Modify model settings
 - `structuredOutput`: Modify structured output configuration
 
-#### Ensuring a final response with `maxSteps`
+#### Ensure a final response with `maxSteps`
 
 When using `maxSteps` to limit agent execution, the agent may return an empty response if it attempts a tool call on the final step. Use `processInputStep` to force a text response on the last step:
 
@@ -290,7 +290,7 @@ const result = await agent.generate('Your prompt', { maxSteps: MAX_STEPS })
 
 This ensures that on the final allowed step (step 4 when `maxSteps` is 5, since steps are 0-indexed), the LLM generates a summary instead of attempting another tool call, and clearly indicates if the task is incomplete.
 
-#### Using `prepareStep` callback
+#### Use the `prepareStep` callback
 
 For simpler per-step logic, you can use the `prepareStep` callback on `generate()` or `stream()` instead of creating a full processor:
 
@@ -329,7 +329,7 @@ export class CustomOutputProcessor implements Processor {
 
 The `processOutputStream` method receives all streaming chunks. To also receive custom `data-*` chunks emitted by tools via `writer.custom()`, set `processDataParts = true` on your processor. This lets you inspect, modify, or block tool-emitted data chunks before they reach the client.
 
-#### Accessing generation result data
+#### Access generation result data
 
 The `processOutputResult` method receives a `result` object containing the resolved generation data — the same information available in the `onFinish` callback. This lets you access token usage, generated text, finish reason, and step details.
 
@@ -357,7 +357,7 @@ export class UsageTracker implements Processor {
 }
 ```
 
-#### Emitting custom stream events with writer
+#### Emit custom stream events with writer
 
 Output processors receive a `writer` object that lets you emit custom data chunks back to the client during streaming. This is useful for use cases like streaming moderation results or sending UI update signals without blocking the original stream.
 
@@ -409,7 +409,7 @@ for await (const chunk of stream.fullStream) {
 
 Custom chunk types must use the `data-` prefix (e.g., `data-moderation-update`, `data-status`).
 
-#### Adding metadata in output processors
+#### Add metadata in output processors
 
 You can add custom metadata to messages in `processOutputResult`. This metadata is accessible via the response object:
 
@@ -570,7 +570,7 @@ const agent = new Agent({
 
 The processor gives the agent two meta-tools: `search_tools` to find tools by keyword and `load_tool` to add a tool to the conversation. Loaded tools persist within the thread. See the [ToolSearchProcessor reference](/reference/processors/tool-search-processor) for full configuration options.
 
-## Using workflows as processors
+## Use workflows as processors
 
 You can use Mastra workflows as processors to create complex processing pipelines with parallel execution, conditional branching, and error handling:
 
