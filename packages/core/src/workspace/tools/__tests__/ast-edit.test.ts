@@ -3,11 +3,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-import { WORKSPACE_TOOLS } from '../constants';
-import { LocalFilesystem } from '../filesystem';
-import { Workspace } from '../workspace';
-import { isAstGrepAvailable } from './ast-edit';
-import { createWorkspaceTools } from './tools';
+import { WORKSPACE_TOOLS } from '../../constants';
+import { LocalFilesystem } from '../../filesystem';
+import { Workspace } from '../../workspace';
+import { isAstGrepAvailable } from '../ast-edit';
+import { createWorkspaceTools } from '../tools';
 
 // Skip all tests if @ast-grep/napi is not installed
 const describeIfAstGrep = isAstGrepAvailable() ? describe : describe.skip;
@@ -80,7 +80,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.ts',
+          path: 'test.ts',
           pattern: 'console.log($ARG)',
           replacement: 'logger.debug($ARG)',
         },
@@ -106,7 +106,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.ts',
+          path: 'test.ts',
           pattern: 'console.log($ARG)',
           replacement: 'logger.debug($ARG)',
         },
@@ -127,7 +127,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.ts',
+          path: 'test.ts',
         },
         { workspace },
       );
@@ -151,7 +151,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.ts',
+          path: 'test.ts',
           transform: 'add-import',
           importSpec: { module: 'react', names: ['useState', 'useEffect'] },
         },
@@ -176,7 +176,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.ts',
+          path: 'test.ts',
           transform: 'add-import',
           importSpec: { module: 'react', names: ['React'], isDefault: true },
         },
@@ -200,7 +200,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.ts',
+          path: 'test.ts',
           transform: 'add-import',
           importSpec: { module: 'react', names: ['useState'] },
         },
@@ -221,7 +221,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.ts',
+          path: 'test.ts',
           transform: 'add-import',
           importSpec: { module: 'utils', names: ['baz'] },
         },
@@ -246,7 +246,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.ts',
+          path: 'test.ts',
           transform: 'add-import',
           importSpec: { module: 'express', names: ['express', 'Router', 'Request'], isDefault: true },
         },
@@ -270,7 +270,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.ts',
+          path: 'test.ts',
           transform: 'add-import',
           importSpec: { module: 'utils', names: ['bar'] },
         },
@@ -296,7 +296,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.ts',
+          path: 'test.ts',
           transform: 'add-import',
           importSpec: { module: 'utils', names: ['bar'] },
         },
@@ -321,7 +321,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.ts',
+          path: 'test.ts',
           transform: 'add-import',
         },
         { workspace },
@@ -346,7 +346,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.ts',
+          path: 'test.ts',
           transform: 'remove-import',
           targetName: 'zod',
         },
@@ -371,7 +371,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.ts',
+          path: 'test.ts',
           transform: 'remove-import',
         },
         { workspace },
@@ -396,7 +396,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.ts',
+          path: 'test.ts',
           transform: 'rename',
           targetName: 'greet',
           newName: 'sayHello',
@@ -425,7 +425,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.ts',
+          path: 'test.ts',
           transform: 'rename',
           targetName: 'count',
           newName: 'counter',
@@ -454,7 +454,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.ts',
+          path: 'test.ts',
           transform: 'rename',
           targetName: 'foo',
         },
@@ -480,7 +480,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.js',
+          path: 'test.js',
           pattern: 'console.log($ARG)',
           replacement: 'logger.info($ARG)',
         },
@@ -501,7 +501,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.tsx',
+          path: 'test.tsx',
           transform: 'rename',
           targetName: 'App',
           newName: 'MyApp',
@@ -525,7 +525,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.jsx',
+          path: 'test.jsx',
           transform: 'rename',
           targetName: 'App',
           newName: 'MyApp',
@@ -548,7 +548,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.css',
+          path: 'test.css',
           pattern: '.foo {}',
           replacement: '.bar {}',
         },
@@ -570,7 +570,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.html',
+          path: 'test.html',
           pattern: '<div class="foo">$CONTENT</div>',
           replacement: '<section class="foo">$CONTENT</section>',
         },
@@ -592,7 +592,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/test.py',
+          path: 'test.py',
           pattern: 'print($ARG)',
           replacement: 'log($ARG)',
         },
@@ -615,7 +615,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: '/nonexistent.ts',
+          path: 'nonexistent.ts',
           pattern: 'foo',
           replacement: 'bar',
         },
