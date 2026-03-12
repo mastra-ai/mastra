@@ -1098,18 +1098,33 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
   private async findIdsByFilter(indexName: string, filter: AzureAISearchVectorFilter): Promise<string[]> {
     const searchClient = this.getSearchClient(indexName);
     const odataFilter = this.transformFilter(filter);
-    const searchResults = await searchClient.search('*', {
-      filter: odataFilter,
-      top: 1000,
-      select: ['id'],
-    } as any);
 
     const ids: string[] = [];
-    for await (const result of searchResults.results) {
-      if (result.document?.id) {
-        ids.push(result.document.id);
+    let skip = 0;
+    const pageSize = 1000;
+
+    while (true) {
+      const searchResults = await searchClient.search('*', {
+        filter: odataFilter,
+        top: pageSize,
+        skip,
+        select: ['id'],
+      } as any);
+
+      let count = 0;
+      for await (const result of searchResults.results) {
+        if (result.document?.id) {
+          ids.push(result.document.id);
+        }
+        count++;
       }
+
+      if (count < pageSize) {
+        break;
+      }
+      skip += pageSize;
     }
+
     return ids;
   }
 
