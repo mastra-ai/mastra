@@ -43,7 +43,10 @@
     },
     {
       "groupName": "Hono",
-      "matchSourceUrls": ["https://github.com/honojs/hono"]
+      "matchSourceUrls": ["https://github.com/honojs/hono"],
+      "matchPackageNames": ["@hono/*", "hono"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
     },
     {
       "groupName": "AI SDK",
@@ -51,7 +54,9 @@
     },
     {
       "groupName": "Assistant UI",
-      "matchSourceUrls": ["https://github.com/assistant-ui/assistant-ui"]
+      "matchSourceUrls": ["https://github.com/assistant-ui/assistant-ui"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
     },
     {
       "groupName": "Radix UI",
@@ -62,7 +67,9 @@
       "matchSourceUrls": [
         "https://github.com/open-telemetry/opentelemetry-js-contrib",
         "https://github.com/open-telemetry/opentelemetry-js"
-      ]
+      ],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
     },
     {
       "groupName": "React",
@@ -118,6 +125,7 @@
         "@microsoft/api-extractor",
         "tsup",
         "rollup",
+        "@rollup/*",
         "@types/node",
         "dotenv",
         "vitest",
@@ -150,6 +158,36 @@
       "commitMessageTopic": "AWS SDK",
       "matchFileNames": ["+(package.json)", "**/package.json"],
       "matchSourceUrls": ["https://github.com/aws/aws-sdk-js-v3"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    },
+    {
+      "groupName": "Upstash",
+      "commitMessageTopic": "Upstash",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@upstash/*"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    },
+    {
+      "groupName": "CodeMirror",
+      "commitMessageTopic": "CodeMirror",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@uiw/*", "codemirror", "@codemirror/*"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    },
+    {
+      "groupName": "Serve",
+      "commitMessageTopic": "Serve",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["serve", "serve-handler"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false,
