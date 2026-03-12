@@ -958,6 +958,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     scope: 'resource' | 'thread';
     observation: {
       messageTokens: number | ThresholdRange;
+      observer: { previousObservationTokens: number | false | undefined };
     };
     reflection: {
       observationTokens: number | ThresholdRange;
@@ -967,6 +968,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       scope: this.scope,
       observation: {
         messageTokens: this.observationConfig.messageTokens,
+        observer: { previousObservationTokens: this.observationConfig.observer.previousObservationTokens },
       },
       reflection: {
         observationTokens: this.reflectionConfig.observationTokens,
@@ -1056,6 +1058,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     observation: {
       messageTokens: number | ThresholdRange;
       model: string;
+      observer: { previousObservationTokens: number | false | undefined };
     };
     reflection: {
       observationTokens: number | ThresholdRange;
@@ -1082,6 +1085,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       observation: {
         messageTokens: this.observationConfig.messageTokens,
         model: observationModelName,
+        observer: { previousObservationTokens: this.observationConfig.observer.previousObservationTokens },
       },
       reflection: {
         observationTokens: this.reflectionConfig.observationTokens,
