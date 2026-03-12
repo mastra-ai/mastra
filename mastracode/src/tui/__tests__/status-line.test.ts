@@ -1,6 +1,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
-const visibleWidthMock = vi.fn((value: string) => value.length);
+const { visibleWidthMock } = vi.hoisted(() => ({
+  visibleWidthMock: vi.fn((value: string) => value.length),
+}));
 
 vi.mock('@mariozechner/pi-tui', () => ({
   visibleWidth: visibleWidthMock,
@@ -95,7 +97,7 @@ describe('updateStatusLine', () => {
     process.stdout.columns = originalColumns;
   });
 
-  it('shows queued message count in the status line', () => {
+  it('shows queued count in the status line', () => {
     const state = createState();
     state.pendingQueuedActions = ['message', 'slash'];
     state.harness.getFollowUpCount.mockReturnValue(1);
@@ -103,16 +105,16 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('3 queued messages');
+    expect(rendered).toContain('3 queued');
     expect(state.memoryStatusLine.setText).toHaveBeenCalledWith('');
   });
 
-  it('omits the queued message count when nothing is queued', () => {
+  it('omits the queued count when nothing is queued', () => {
     const state = createState();
 
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).not.toContain('queued message');
+    expect(rendered).not.toContain('queued');
   });
 });

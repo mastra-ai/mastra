@@ -57,6 +57,15 @@ describe('CustomEditor image paste handling', () => {
     mocks.readFileSync.mockReturnValue(Buffer.from('dragged-image-binary'));
   });
 
+  it('highlights the first visible slash-command match when autocomplete opens', () => {
+    const editor = new CustomEditor({} as any, {} as any);
+
+    const items = [{ value: 'new' }, { value: 'diff' }, { value: '/deploy' }];
+
+    expect((editor as any).getBestAutocompleteMatchIndex(items, '/')).toBe(0);
+    expect((editor as any).getBestAutocompleteMatchIndex(items, '/d')).toBe(1);
+  });
+
   it('submits a selected slash command on Enter after autocomplete inserts it', () => {
     mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'enter');
 

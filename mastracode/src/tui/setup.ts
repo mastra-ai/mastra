@@ -301,10 +301,11 @@ export function setupAutocomplete(state: TUIState): void {
     slashCommands.push({ name: 'mode', description: 'Switch agent mode' });
   }
 
-  // Add custom slash commands to the list
+  // Add custom slash commands to the list with // prefixes so they remain
+  // visually distinct from built-in slash commands in autocomplete.
   for (const customCmd of state.customSlashCommands) {
     slashCommands.push({
-      name: customCmd.name,
+      name: `/${customCmd.name}`,
       description: customCmd.description || `Custom: ${customCmd.name}`,
     });
   }

@@ -126,8 +126,7 @@ export function updateStatusLine(state: TUIState): void {
   }
   const branch = state.projectInfo.gitBranch;
   const queuedCount = state.pendingQueuedActions.length + state.harness.getFollowUpCount();
-  const queuedLabel =
-    queuedCount > 0 ? `${queuedCount} queued ${queuedCount === 1 ? 'message' : 'messages'}` : null;
+  const queuedLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
   // Build progressively shorter directory strings for layout fallback
   const dirFull = branch ? `${displayPath} (${branch})` : displayPath;
   const dirBranchOnly = branch || null;

@@ -47,6 +47,34 @@ export class CustomEditor extends Editor {
 
   constructor(tui: TUI, theme: EditorTheme) {
     super(tui, theme);
+    (this as any).getBestAutocompleteMatchIndex = (
+      items: Array<{ value: string }>,
+      prefix: string,
+    ): number => {
+      if (!prefix) {
+        return -1;
+      }
+
+      const normalizeSlashCommandValue = (value: string) => value.replace(/^\/+/, '');
+      const shouldNormalizeSlashCommand = prefix.startsWith('/');
+      const normalizedPrefix = shouldNormalizeSlashCommand ? normalizeSlashCommandValue(prefix) : prefix;
+
+      let firstPrefixIndex = -1;
+      for (let i = 0; i < items.length; i++) {
+        const value = items[i]?.value ?? '';
+        const comparableValue = shouldNormalizeSlashCommand ? normalizeSlashCommandValue(value) : value;
+
+        if (comparableValue === normalizedPrefix) {
+          return i;
+        }
+
+        if (firstPrefixIndex === -1 && comparableValue.startsWith(normalizedPrefix)) {
+          firstPrefixIndex = i;
+        }
+      }
+
+      return firstPrefixIndex;
+    };
   }
 
   onAction(action: AppAction, handler: () => unknown): void {

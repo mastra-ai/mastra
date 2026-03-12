@@ -49,17 +49,20 @@ export async function dispatchSlashCommand(
 ): Promise<boolean> {
   const trimmedInput = input.trim();
 
-  // Strip leading slashes — pi-tui may pass /command or command depending
-  // on how the user invoked it.  Try custom commands first, then built-in.
-  const withoutSlashes = trimmedInput.replace(/^\/+/, '');
-  if (trimmedInput.startsWith('/')) {
+  const slashMatch = trimmedInput.match(/^(\/\/?)(.*)$/);
+  const slashPrefix = slashMatch?.[1] ?? '';
+  const withoutSlashes = slashMatch?.[2] ?? trimmedInput;
+
+  if (slashPrefix === '//') {
     const [cmdName, ...cmdArgs] = withoutSlashes.split(' ');
     const customCommand = state.customSlashCommands.find(cmd => cmd.name === cmdName);
     if (customCommand) {
       await handleCustomSlashCommand(state, customCommand, cmdArgs);
       return true;
     }
-    // Not a custom command — fall through to built-in routing
+
+    showError(state, `Unknown custom command: ${cmdName}`);
+    return true;
   }
 
   const [command, ...args] = withoutSlashes.split(' ');

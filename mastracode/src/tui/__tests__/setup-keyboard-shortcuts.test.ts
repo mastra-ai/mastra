@@ -98,8 +98,8 @@ describe('setupKeyboardShortcuts', () => {
 
     const commandNames = autocompleteProviders[0]?.commands.map(command => command.name) ?? [];
     expect(commandNames[0]).toBe('new');
-    expect(commandNames.indexOf('deploy')).toBeGreaterThan(commandNames.indexOf('help'));
-    expect(commandNames.slice(-2)).toEqual(['deploy', 'ship']);
+    expect(commandNames.indexOf('/deploy')).toBeGreaterThan(commandNames.indexOf('help'));
+    expect(commandNames.slice(-2)).toEqual(['/deploy', '/ship']);
   });
 
   it('submits immediately on Enter when the harness is idle', () => {

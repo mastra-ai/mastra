@@ -99,7 +99,7 @@ export function buildHelpText(options: HelpTextOptions): string {
 
   if (options.customSlashCommands.length > 0) {
     const customEntries = options.customSlashCommands.map(cmd => ({
-      key: `/${cmd.name}`,
+      key: `//${cmd.name}`,
       description: cmd.description || 'No description',
     }));
     sections.push(renderSection('Custom Commands', customEntries));

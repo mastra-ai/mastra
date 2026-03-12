@@ -45,12 +45,12 @@ describe('buildHelpText', () => {
     expect(text).not.toMatch(/\/mode\s+Switch/);
   });
 
-  it('shows custom slash commands', () => {
+  it('shows custom slash commands with double-slash prefixes', () => {
     const text = buildHelpText({
       ...baseOpts,
       customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: '', sourcePath: '' }],
     });
-    expect(text).toContain('/deploy');
+    expect(text).toContain('//deploy');
     expect(text).toContain('Deploy to prod');
   });
 });
