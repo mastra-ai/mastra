@@ -18,6 +18,7 @@ import { ScorerSelector } from '@/domains/datasets/components/experiment-trigger
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useDatasetExperimentResults, useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { LLMProviders, LLMModels } from '@/domains/llm';
 import { useAgentExperiments } from '../../hooks/use-agent-experiments';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import type { AgentExperiment } from '../../hooks/use-agent-experiments';
@@ -402,6 +403,9 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
 
   const { form } = useAgentEditFormContext();
   const isDirty = form.formState.isDirty;
+
+  const [experimentProvider, setExperimentProvider] = useState(() => form.getValues('model.provider') || '');
+  const [experimentModel, setExperimentModel] = useState(() => form.getValues('model.name') || '');
   const mergedRequestContext = useMergedRequestContext();
 
   const queryClient = useQueryClient();
@@ -419,6 +423,12 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
     isStartingExperimentRef.current = true;
     setIsRunning(true);
     try {
+      // Apply experiment model override to form before saving
+      if (experimentProvider) {
+        form.setValue('model.provider', experimentProvider);
+        form.setValue('model.name', experimentModel);
+      }
+
       // Save draft first to persist current config
       await onSaveDraft();
 
@@ -440,7 +450,18 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
       isStartingExperimentRef.current = false;
       setIsRunning(false);
     }
-  }, [selectedDatasetId, selectedScorers, agentId, onSaveDraft, triggerExperiment, mergedRequestContext, queryClient]);
+  }, [
+    selectedDatasetId,
+    selectedScorers,
+    agentId,
+    onSaveDraft,
+    triggerExperiment,
+    mergedRequestContext,
+    queryClient,
+    experimentProvider,
+    experimentModel,
+    form,
+  ]);
 
   const selectedExperiment = selectedExperimentId ? experiments?.find(e => e.id === selectedExperimentId) : null;
 
@@ -452,6 +473,12 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
   return (
     <div className="flex flex-col h-full">
       <div className="p-4 space-y-4 border-b border-border1">
+        <Txt variant="ui-sm" className="text-neutral3">
+          Run your agent against a dataset to evaluate its performance. Select a dataset, choose scorers to grade the
+          results, and optionally override the model. Any request context values you've set will be included
+          automatically.
+        </Txt>
+
         {/* Dataset selector */}
         <div className="grid gap-2">
           <Label>Dataset</Label>
@@ -470,27 +497,47 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
           disabled={isRunning}
         />
 
+        {/* Provider + Model selector (local state, not persisted to agent form) */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="grid gap-1">
+            <Label>Provider</Label>
+            <LLMProviders
+              value={experimentProvider}
+              onValueChange={value => {
+                setExperimentProvider(value);
+                setExperimentModel('');
+              }}
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label>Model</Label>
+            <LLMModels llmId={experimentProvider} value={experimentModel} onValueChange={setExperimentModel} />
+          </div>
+        </div>
+
         {/* Run button */}
-        <Button
-          variant="primary"
-          className="w-full"
-          onClick={handleRunExperiment}
-          disabled={!selectedDatasetId || isRunning}
-        >
-          {isRunning ? (
-            <>
-              <Spinner className="h-4 w-4" />
-              Running...
-            </>
-          ) : (
-            <>
-              <Icon>
-                <Play />
-              </Icon>
-              {isDirty ? 'Save Version and Run Experiment' : 'Run Experiment'}
-            </>
+        <div className="flex items-center justify-end gap-3">
+          {isDirty && !isRunning && (
+            <Txt variant="ui-xs" className="text-neutral3">
+              Current changes will be saved before running
+            </Txt>
           )}
-        </Button>
+          <Button variant="cta" onClick={handleRunExperiment} disabled={!selectedDatasetId || isRunning}>
+            {isRunning ? (
+              <>
+                <Spinner className="h-4 w-4" />
+                Running...
+              </>
+            ) : (
+              <>
+                <Icon>
+                  <Play />
+                </Icon>
+                Run Experiment
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Past runs */}

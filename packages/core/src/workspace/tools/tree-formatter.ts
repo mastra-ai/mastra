@@ -152,7 +152,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
     // Filter by gitignore rules (paths must be relative to workspace root, not listing root)
     if (ignoreFilter) {
       filtered = filtered.filter(e => {
-        const relativePath = getRelativePath('/', currentPath, e.name);
+        const relativePath = getRelativePath('', currentPath, e.name);
         // Append trailing slash for directories so gitignore dir patterns match
         const checkPath = e.type === 'directory' ? `${relativePath}/` : relativePath;
         return !ignoreFilter!(checkPath);
@@ -309,10 +309,16 @@ export function formatEntriesAsTree(entries: Array<{ name: string; type: 'file' 
 // =============================================================================
 
 function getRelativePath(rootPath: string, currentPath: string, entryName: string): string {
-  const entryPath = currentPath === rootPath ? entryName : `${currentPath === '/' ? '' : currentPath}/${entryName}`;
+  const isRootEquivalent = (p: string) => p === '/' || p === '' || p === '.';
+  const entryPath =
+    currentPath === rootPath || (isRootEquivalent(currentPath) && isRootEquivalent(rootPath))
+      ? entryName
+      : `${currentPath === '/' ? '' : currentPath}/${entryName}`;
 
-  if (rootPath === '/' || rootPath === '') {
-    return entryPath.startsWith('/') ? entryPath.slice(1) : entryPath;
+  if (isRootEquivalent(rootPath)) {
+    // Strip leading './' or '/' so callers always get a clean relative path
+    const cleaned = entryPath.replace(/^\.\//, '');
+    return cleaned.startsWith('/') ? cleaned.slice(1) : cleaned;
   }
 
   const relativePath = entryPath.startsWith(rootPath + '/') ? entryPath.slice(rootPath.length + 1) : entryPath;
@@ -323,7 +329,10 @@ function getRelativePath(rootPath: string, currentPath: string, entryName: strin
  * Join path segments, handling root paths correctly
  */
 function joinPath(base: string, name: string): string {
-  if (base === '/' || base === '') {
+  if (base === '' || base === './' || base === '.') {
+    return name;
+  }
+  if (base === '/') {
     return `/${name}`;
   }
   return `${base}/${name}`;

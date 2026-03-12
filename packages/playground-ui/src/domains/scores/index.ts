@@ -3,7 +3,7 @@ export * from './components/score-dialog';
 export * from './components/score-as-item-dialog';
 export * from './components/scores-tools';
 export * from './components/scorer-combobox';
-export * from './components/scorers-table/scorers-table';
+export * from './components/scorers-list/scorers-list';
 export * from './components/scorer-edit-page';
 export * from './components/scorer-create-content';
 export * from './hooks/use-trace-span-scores';
