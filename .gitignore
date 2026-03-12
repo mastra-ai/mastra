@@ -59,5 +59,3 @@ om-debug.log
 om-reflector-fixture.json
 .notion
 .dev/lima
-/.mastra-observer-debug
-/packages/memory/.mastra-observer-debug
