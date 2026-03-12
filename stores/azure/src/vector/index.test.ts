@@ -870,7 +870,7 @@ describe('AzureAISearchVector Memory Integration Tests', () => {
     // Setup Azure SDK mocks
     mockIndexClient = {
       createIndex: vi.fn().mockResolvedValue({ name: 'memory-index' }),
-      listIndexes: vi.fn().mockResolvedValue([]),
+      listIndexes: vi.fn().mockReturnValue([]),
       getIndex: vi.fn().mockResolvedValue({
         name: 'memory-index',
         fields: [
