@@ -14,7 +14,7 @@ Processors are configured as:
 - **`inputProcessors`**: Run before messages reach the language model.
 - **`outputProcessors`**: Run after the language model generates a response, but before it's returned to users.
 
-You can use individual `Processor` objects or compose them into workflows using Mastra's workflow primitives. Workflows give you advanced control over processor execution order, parallel processing, and conditional logic.
+You can use individual [`Processor`](/reference/processors/processor-interface) objects or compose them into workflows using Mastra's workflow primitives. Workflows give you advanced control over processor execution order, parallel processing, and conditional logic.
 
 Some processors implement both input and output logic and can be used in either array depending on where the transformation should occur.
 
@@ -37,7 +37,7 @@ Mastra includes several processors for common use cases. You can also create cus
 
 Import and instantiate the processor, then pass it to the agent's `inputProcessors` or `outputProcessors` array:
 
-```typescript {2,8-14} title="src/mastra/agents/moderated-agent.ts"
+```typescript {2,8-15} title="src/mastra/agents/moderated-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { ModerationProcessor } from '@mastra/core/processors'
 
@@ -92,7 +92,7 @@ This ordering ensures that if your output guardrail calls `abort()`, memory proc
 
 Custom processors implement the `Processor` interface:
 
-### Custom input processor
+### Transform input messages
 
 ```typescript title="src/mastra/processors/custom-input.ts"
 import type { Processor, MastraDBMessage, RequestContext } from '@mastra/core'
@@ -132,42 +132,11 @@ The `processInput` method receives:
 The method can return:
 
 - `MastraDBMessage[]` — Transformed messages array (backward compatible)
-- `{ messages: MastraDBMessage[]; systemMessages: CoreMessage[] }` — Both messages and modified system messages
+- `{ messages, systemMessages }` — Both messages and modified system messages. Use this to trim verbose system prompts, filter semantic-recall content, or adjust instructions per conversation.
 
 The framework handles both return formats, so modifying system messages is optional and existing processors continue to work.
 
-### Modify system messages
-
-To modify system messages (e.g., trim verbose prompts for smaller models), return an object with both `messages` and `systemMessages`:
-
-```typescript title="src/mastra/processors/system-trimmer.ts"
-import type { Processor, CoreMessage, MastraDBMessage } from '@mastra/core'
-
-export class SystemTrimmer implements Processor {
-  id = 'system-trimmer'
-
-  async processInput({
-    messages,
-    systemMessages,
-  }): Promise<{ messages: MastraDBMessage[]; systemMessages: CoreMessage[] }> {
-    // Trim system messages for smaller models
-    const trimmedSystemMessages = systemMessages.map(msg => ({
-      ...msg,
-      content: typeof msg.content === 'string' ? msg.content.substring(0, 500) : msg.content,
-    }))
-
-    return { messages, systemMessages: trimmedSystemMessages }
-  }
-}
-```
-
-This is useful for:
-
-- Trimming verbose system prompts for models with smaller context windows
-- Filtering or modifying semantic recall content to prevent "prompt too long" errors
-- Dynamically adjusting system instructions based on the conversation
-
-### Process each step with `processInputStep`
+### Control each step
 
 While `processInput` runs once at the start of agent execution, `processInputStep` runs at **each step** of the agentic loop (including tool call continuations). This enables per-step configuration changes like dynamic model switching or tool choice modifications.
 
@@ -226,73 +195,9 @@ The method can return any combination of:
 - `modelSettings`: Modify model settings
 - `structuredOutput`: Modify structured output configuration
 
-#### Ensure a final response with `maxSteps`
+### Use the `prepareStep` callback
 
-When using `maxSteps` to limit agent execution, the agent may return an empty response if it attempts a tool call on the final step. Use `processInputStep` to force a text response on the last step:
-
-```typescript title="src/mastra/processors/ensure-final-response.ts"
-import { Processor, ProcessInputStepArgs, ProcessInputStepResult } from '@mastra/core/processors'
-
-export class EnsureFinalResponseProcessor implements Processor {
-  readonly id = 'ensure-final-response'
-
-  private maxSteps: number
-
-  constructor(maxSteps: number) {
-    this.maxSteps = maxSteps
-  }
-
-  async processInputStep({
-    stepNumber,
-    systemMessages,
-  }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
-    // On the last step, prevent tool calls and instruct the LLM to summarize
-    if (stepNumber === this.maxSteps - 1) {
-      return {
-        tools: {},
-        toolChoice: 'none',
-        systemMessages: [
-          ...systemMessages,
-          {
-            role: 'system',
-            content:
-              'You have reached the maximum number of steps. Summarize your progress so far and provide a best-effort response. If the task is incomplete, clearly indicate what remains to be done.',
-          },
-        ],
-      }
-    }
-    return {}
-  }
-}
-```
-
-Use it with your agent:
-
-```typescript title="src/mastra/agents/bounded-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { EnsureFinalResponseProcessor } from '../processors/ensure-final-response'
-
-const MAX_STEPS = 5
-
-const agent = new Agent({
-  id: 'bounded-agent',
-  name: 'Bounded Agent',
-  model: 'openai/gpt-5-mini',
-  tools: {
-    /* your tools */
-  },
-  inputProcessors: [new EnsureFinalResponseProcessor(MAX_STEPS)],
-})
-
-// Pass maxSteps when calling generate/stream
-const result = await agent.generate('Your prompt', { maxSteps: MAX_STEPS })
-```
-
-This ensures that on the final allowed step (step 4 when `maxSteps` is 5, since steps are 0-indexed), the LLM generates a summary instead of attempting another tool call, and clearly indicates if the task is incomplete.
-
-#### Use the `prepareStep` callback
-
-For simpler per-step logic, you can use the `prepareStep` callback on `generate()` or `stream()` instead of creating a full processor:
+For simpler per-step logic, use the `prepareStep` callback on `generate()` or `stream()` instead of creating a full processor:
 
 ```typescript
 await agent.generate('Complex task', {
@@ -307,10 +212,10 @@ await agent.generate('Complex task', {
 })
 ```
 
-### Custom output processor
+### Transform output messages
 
 ```typescript title="src/mastra/processors/custom-output.ts"
-import type { Processor, MastraDBMessage, ChunkType } from '@mastra/core'
+import type { Processor, MastraDBMessage } from '@mastra/core'
 
 export class CustomOutputProcessor implements Processor {
   id = 'custom-output'
@@ -319,19 +224,10 @@ export class CustomOutputProcessor implements Processor {
     // Transform messages after the LLM generates them
     return messages.filter(msg => msg.role !== 'system')
   }
-
-  async processOutputStream({ part }): Promise<ChunkType | null> {
-    // Transform or filter streaming chunks
-    return part
-  }
 }
 ```
 
-The `processOutputStream` method receives all streaming chunks. To also receive custom `data-*` chunks emitted by tools via `writer.custom()`, set `processDataParts = true` on your processor. This lets you inspect, modify, or block tool-emitted data chunks before they reach the client.
-
-#### Access generation result data
-
-The `processOutputResult` method receives a `result` object containing the resolved generation data — the same information available in the `onFinish` callback. This lets you access token usage, generated text, finish reason, and step details.
+The `result` object contains the resolved generation data — token usage, text, finish reason, and steps. Access it to track usage or inspect tool calls:
 
 ```typescript title="src/mastra/processors/usage-tracker.ts"
 import type { Processor } from '@mastra/core'
@@ -357,121 +253,48 @@ export class UsageTracker implements Processor {
 }
 ```
 
-#### Emit custom stream events with writer
+### Filter streamed output
 
-Output processors receive a `writer` object that lets you emit custom data chunks back to the client during streaming. This is useful for use cases like streaming moderation results or sending UI update signals without blocking the original stream.
+The `processOutputStream` method transforms or filters streaming chunks before they reach the client:
 
-```typescript title="src/mastra/processors/moderation-processor.ts" {6,18-25}
-import type { Processor, ChunkType, MastraDBMessage } from '@mastra/core'
+```typescript title="src/mastra/processors/stream-filter.ts"
+import type { Processor, ChunkType } from '@mastra/core'
 
-export class ModerationProcessor implements Processor {
-  id = 'moderation'
+export class StreamFilter implements Processor {
+  id = 'stream-filter'
 
-  async processOutputResult({ messages, writer }) {
-    // Run moderation on the final output
-    const text = messages
-      .filter(m => m.role === 'assistant')
-      .flatMap(m => m.content.parts?.filter(p => p.type === 'text'))
-      .map(p => p.text)
-      .join(' ')
+  async processOutputStream({ part }): Promise<ChunkType | null> {
+    // Transform or filter streaming chunks
+    return part
+  }
+}
+```
 
-    const result = await runModeration(text)
+To also receive custom `data-*` chunks emitted by tools via `writer.custom()`, set `processDataParts = true` on your processor. This lets you inspect, modify, or block tool-emitted data chunks before they reach the client.
 
-    if (result.requiresChange) {
-      // Emit a custom event to the client with the moderated text
-      await writer?.custom({
-        type: 'data-moderation-update',
-        data: {
-          originalText: text,
-          moderatedText: result.moderatedText,
-          reason: result.reason,
-        },
-      })
+### Validate each response
+
+The `processOutputStep` method runs after each LLM step, allowing you to validate the response and optionally request a retry:
+
+```typescript title="src/mastra/processors/response-validator.ts"
+import type { Processor } from '@mastra/core'
+
+export class ResponseValidator implements Processor {
+  id = 'response-validator'
+
+  async processOutputStep({ text, abort, retryCount }) {
+    const isValid = await validateResponse(text)
+
+    if (!isValid && retryCount < 3) {
+      abort('Response did not meet requirements. Try again.', { retry: true })
     }
 
-    return messages
+    return []
   }
 }
 ```
 
-On the client, listen for the custom chunk type in the stream:
-
-```typescript
-const stream = await agent.stream('Hello')
-
-for await (const chunk of stream.fullStream) {
-  if (chunk.type === 'data-moderation-update') {
-    // Update the UI with moderated text
-    updateDisplayedMessage(chunk.data.moderatedText)
-  }
-}
-```
-
-Custom chunk types must use the `data-` prefix (e.g., `data-moderation-update`, `data-status`).
-
-#### Add metadata in output processors
-
-You can add custom metadata to messages in `processOutputResult`. This metadata is accessible via the response object:
-
-```typescript title="src/mastra/processors/metadata-processor.ts"
-import type { Processor, MastraDBMessage } from '@mastra/core'
-
-export class MetadataProcessor implements Processor {
-  id = 'metadata-processor'
-
-  async processOutputResult({
-    messages,
-  }: {
-    messages: MastraDBMessage[]
-  }): Promise<MastraDBMessage[]> {
-    return messages.map(msg => {
-      if (msg.role === 'assistant') {
-        return {
-          ...msg,
-          content: {
-            ...msg.content,
-            metadata: {
-              ...msg.content.metadata,
-              processedAt: new Date().toISOString(),
-              customData: 'your data here',
-            },
-          },
-        }
-      }
-      return msg
-    })
-  }
-}
-```
-
-Access the metadata with `generate()`:
-
-```typescript
-const result = await agent.generate('Hello')
-
-// The response includes uiMessages with processor-added metadata
-const assistantMessage = result.response?.uiMessages?.find(m => m.role === 'assistant')
-console.log(assistantMessage?.metadata?.customData)
-```
-
-Access the metadata when streaming:
-
-```typescript
-const stream = await agent.stream('Hello')
-
-for await (const chunk of stream.fullStream) {
-  if (chunk.type === 'finish') {
-    // Access response with processor-added metadata from the finish chunk
-    const uiMessages = chunk.payload.response?.uiMessages
-    const assistantMessage = uiMessages?.find(m => m.role === 'assistant')
-    console.log(assistantMessage?.metadata?.customData)
-  }
-}
-
-// Or via the response promise after consuming the stream
-const response = await stream.response
-console.log(response.uiMessages)
-```
+For more on retry behavior, see [Retry mechanism](#retry-mechanism) in Advanced patterns.
 
 ## Built-in utility processors
 
@@ -505,6 +328,7 @@ import cl100k_base from 'js-tiktoken/ranks/cl100k_base'
 
 const agent = new Agent({
   name: 'my-agent',
+  model: 'openai/gpt-5.4',
   inputProcessors: [
     new TokenLimiter({
       limit: 16000, // Example limit for a 16k context model
@@ -570,7 +394,172 @@ const agent = new Agent({
 
 The processor gives the agent two meta-tools: `search_tools` to find tools by keyword and `load_tool` to add a tool to the conversation. Loaded tools persist within the thread. See the [ToolSearchProcessor reference](/reference/processors/tool-search-processor) for full configuration options.
 
-## Use workflows as processors
+## Advanced patterns
+
+### Ensure a final response with `maxSteps`
+
+When using `maxSteps` to limit agent execution, the agent may return an empty response if it attempts a tool call on the final step. Use `processInputStep` to force a text response on the last step:
+
+```typescript title="src/mastra/processors/ensure-final-response.ts"
+import { Processor, ProcessInputStepArgs, ProcessInputStepResult } from '@mastra/core/processors'
+
+export class EnsureFinalResponseProcessor implements Processor {
+  readonly id = 'ensure-final-response'
+
+  private maxSteps: number
+
+  constructor(maxSteps: number) {
+    this.maxSteps = maxSteps
+  }
+
+  async processInputStep({
+    stepNumber,
+    systemMessages,
+  }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
+    // On the last step, prevent tool calls and instruct the LLM to summarize
+    if (stepNumber === this.maxSteps - 1) {
+      return {
+        tools: {},
+        toolChoice: 'none',
+        systemMessages: [
+          ...systemMessages,
+          {
+            role: 'system',
+            content:
+              'You have reached the maximum number of steps. Summarize your progress so far and provide a best-effort response. If the task is incomplete, clearly indicate what remains to be done.',
+          },
+        ],
+      }
+    }
+    return {}
+  }
+}
+```
+
+Use it with your agent:
+
+```typescript title="src/mastra/agents/bounded-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { EnsureFinalResponseProcessor } from '../processors/ensure-final-response'
+
+const MAX_STEPS = 5
+
+const agent = new Agent({
+  id: 'bounded-agent',
+  name: 'Bounded Agent',
+  model: 'openai/gpt-5-mini',
+  tools: {
+    /* your tools */
+  },
+  inputProcessors: [new EnsureFinalResponseProcessor(MAX_STEPS)],
+})
+
+// Pass maxSteps when calling generate/stream
+const result = await agent.generate('Your prompt', { maxSteps: MAX_STEPS })
+```
+
+This ensures that on the final allowed step (step 4 when `maxSteps` is 5, since steps are 0-indexed), the LLM generates a summary instead of attempting another tool call, and clearly indicates if the task is incomplete.
+
+### Emit custom stream events
+
+Output processors receive a `writer` object that lets you emit custom data chunks back to the client during streaming. This is useful for use cases like streaming moderation results or sending UI update signals without blocking the original stream.
+
+```typescript title="src/mastra/processors/moderation-processor.ts" {6,18-25}
+import type { Processor, ChunkType, MastraDBMessage } from '@mastra/core'
+
+export class ModerationProcessor implements Processor {
+  id = 'moderation'
+
+  async processOutputResult({ messages, writer }) {
+    // Run moderation on the final output
+    const text = messages
+      .filter(m => m.role === 'assistant')
+      .flatMap(m => m.content.parts?.filter(p => p.type === 'text'))
+      .map(p => p.text)
+      .join(' ')
+
+    const result = await runModeration(text)
+
+    if (result.requiresChange) {
+      // Emit a custom event to the client with the moderated text
+      await writer?.custom({
+        type: 'data-moderation-update',
+        data: {
+          originalText: text,
+          moderatedText: result.moderatedText,
+          reason: result.reason,
+        },
+      })
+    }
+
+    return messages
+  }
+}
+```
+
+On the client, listen for the custom chunk type in the stream:
+
+```typescript
+const stream = await agent.stream('Hello')
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'data-moderation-update') {
+    // Update the UI with moderated text
+    updateDisplayedMessage(chunk.data.moderatedText)
+  }
+}
+```
+
+Custom chunk types must use the `data-` prefix (e.g., `data-moderation-update`, `data-status`).
+
+### Add metadata to messages
+
+You can add custom metadata to messages in `processOutputResult`. This metadata is accessible via the response object:
+
+```typescript title="src/mastra/processors/metadata-processor.ts"
+import type { Processor, MastraDBMessage } from '@mastra/core'
+
+export class MetadataProcessor implements Processor {
+  id = 'metadata-processor'
+
+  async processOutputResult({
+    messages,
+  }: {
+    messages: MastraDBMessage[]
+  }): Promise<MastraDBMessage[]> {
+    return messages.map(msg => {
+      if (msg.role === 'assistant') {
+        return {
+          ...msg,
+          content: {
+            ...msg.content,
+            metadata: {
+              ...msg.content.metadata,
+              processedAt: new Date().toISOString(),
+              customData: 'your data here',
+            },
+          },
+        }
+      }
+      return msg
+    })
+  }
+}
+```
+
+Access the metadata with `generate()`:
+
+```typescript
+const result = await agent.generate('Hello')
+
+// The response includes uiMessages with processor-added metadata
+const assistantMessage = result.response?.uiMessages?.find(m => m.role === 'assistant')
+console.log(assistantMessage?.metadata?.customData)
+```
+
+For streaming, access metadata from the `finish` chunk payload or the `stream.response` promise.
+
+### Use workflows as processors
 
 You can use Mastra workflows as processors to create complex processing pipelines with parallel execution, conditional branching, and error handling:
 
@@ -603,7 +592,7 @@ const agent = new Agent({
 
 When an agent is registered with Mastra, processor workflows are automatically registered as workflows, allowing you to view and debug them in the [Studio](/docs/getting-started/studio).
 
-## Retry mechanism
+### Retry mechanism
 
 Processors can request that the LLM retry its response with feedback. This is useful for implementing quality checks, output validation, or iterative refinement:
 
