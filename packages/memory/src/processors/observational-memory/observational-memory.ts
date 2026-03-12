@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/agent';
@@ -60,10 +60,8 @@ import {
 import {
   buildObserverSystemPrompt,
   buildObserverTaskPrompt,
-  buildObserverPrompt,
   buildObserverHistoryMessage,
   buildMultiThreadObserverTaskPrompt,
-  buildMultiThreadObserverPrompt,
   buildMultiThreadObserverHistoryMessage,
   parseObserverOutput,
   parseMultiThreadObserverOutput,
@@ -1881,55 +1879,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     return bestCandidate;
   }
 
-  private isObserverDebugEnabled(): boolean {
-    return process.env.OBSERVER_DEBUG === '1' || process.env.OBSERVER_DEBUG === 'true';
-  }
-
-  private writeObserverDebugArtifacts(params: {
-    mode: 'single' | 'multi-thread';
-    systemPrompt: string;
-    userPrompt: string;
-    output: string;
-    messages: unknown;
-    metadata?: Record<string, unknown>;
-  }): void {
-    if (!this.isObserverDebugEnabled()) return;
-
-    try {
-      const timestamp = new Date().toISOString().replace(/[.:]/g, '-');
-      const suffix = Math.random().toString(36).slice(2, 8);
-      const debugDir = join(process.cwd(), '.mastra-observer-debug', `${timestamp}-${suffix}`);
-
-      mkdirSync(debugDir, { recursive: true });
-
-      writeFileSync(
-        join(debugDir, 'messages.json'),
-        `${JSON.stringify(
-          {
-            mode: params.mode,
-            metadata: params.metadata,
-            messages: params.messages,
-          },
-          null,
-          2,
-        )}\n`,
-      );
-
-      writeFileSync(join(debugDir, 'observation-system-prompt.md'), `${params.systemPrompt}\n`);
-
-      writeFileSync(
-        join(debugDir, 'observation-input.md'),
-        `# Observer Input\n\n## User Prompt\n\n${params.userPrompt}\n`,
-      );
-
-      writeFileSync(join(debugDir, 'observation-output.md'), `${params.output}\n`);
-    } catch (error) {
-      omDebug(
-        `[OM:OBSERVER_DEBUG] Failed to write observer debug artifacts: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
   /**
    * Call the Observer agent to extract observations.
    */
@@ -1951,13 +1900,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     const agent = this.getObserverAgent();
-    const systemPrompt = buildObserverSystemPrompt(false, this.observationConfig.instruction);
-    const prompt = buildObserverPrompt(existingObservations, messagesToObserve, {
-      skipContinuationHints: options?.skipContinuationHints,
-      priorCurrentTask: options?.priorCurrentTask,
-      priorSuggestedResponse: options?.priorSuggestedResponse,
-      wasTruncated: options?.wasTruncated,
-    });
     const observerMessages = [
       {
         role: 'user' as const,
@@ -1984,22 +1926,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
         return streamResult.getFullOutput();
       }, abortSignal);
-
-      this.writeObserverDebugArtifacts({
-        mode: 'single',
-        systemPrompt,
-        userPrompt: prompt,
-        output: result.text,
-        messages: messagesToObserve,
-        metadata: {
-          existingObservations,
-          priorCurrentTask: options?.priorCurrentTask,
-          priorSuggestedResponse: options?.priorSuggestedResponse,
-          observerConfig: {
-            previousObservationTokens: this.observationConfig.observer.previousObservationTokens,
-          },
-        },
-      });
 
       return result;
     };
@@ -2069,13 +1995,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       instructions: systemPrompt,
     });
 
-    const prompt = buildMultiThreadObserverPrompt(
-      existingObservations,
-      messagesByThread,
-      threadOrder,
-      priorMetadataByThread,
-      wasTruncated,
-    );
     const observerMessages = [
       {
         role: 'user' as const,
@@ -2113,24 +2032,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
         return streamResult.getFullOutput();
       }, abortSignal);
-
-      this.writeObserverDebugArtifacts({
-        mode: 'multi-thread',
-        systemPrompt,
-        userPrompt: prompt,
-        output: result.text,
-        messages: Object.fromEntries(Array.from(messagesByThread.entries())),
-        metadata: {
-          threadOrder,
-          existingObservations,
-          priorMetadataByThread: priorMetadataByThread
-            ? Object.fromEntries(Array.from(priorMetadataByThread.entries()))
-            : {},
-          observerConfig: {
-            previousObservationTokens: this.observationConfig.observer.previousObservationTokens,
-          },
-        },
-      });
 
       return result;
     };
