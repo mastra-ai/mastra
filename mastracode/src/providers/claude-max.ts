@@ -11,6 +11,13 @@ import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
 import { AuthStorage } from '../auth/storage.js';
 
+const ANTHROPIC_BASE_URL_ENV_VAR = 'ANTHROPIC_BASE_URL';
+
+function getAnthropicBaseUrl(): string | undefined {
+  const value = process.env[ANTHROPIC_BASE_URL_ENV_VAR]?.trim();
+  return value ? value : undefined;
+}
+
 // Required for Claude Max plan OAuth - the endpoint checks for this system message
 const claudeCodeIdentity = "You are Claude Code, Anthropic's official CLI for Claude.";
 
@@ -137,9 +144,8 @@ export const promptCacheMiddleware: LanguageModelMiddleware = {
 export function opencodeClaudeMaxProvider(modelId: string = 'claude-sonnet-4-20250514'): MastraModelConfig {
   // Test environment: use API key
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
-    const anthropic = createAnthropic({
-      apiKey: 'test-api-key',
-    });
+    const baseURL = getAnthropicBaseUrl();
+    const anthropic = createAnthropic(baseURL ? { apiKey: 'test-api-key', baseURL } : { apiKey: 'test-api-key' });
     return wrapLanguageModel({
       model: anthropic(modelId),
       middleware: [claudeCodeMiddleware, promptCacheMiddleware],
@@ -179,10 +185,12 @@ export function opencodeClaudeMaxProvider(modelId: string = 'claude-sonnet-4-202
     });
   };
 
+  const baseURL = getAnthropicBaseUrl();
   const anthropic = createAnthropic({
     // Provide a dummy API key - the actual auth is handled via OAuth in oauthFetch
     // This prevents the SDK from throwing "API key is missing" at model creation time
     apiKey: 'oauth-placeholder',
+    ...(baseURL ? { baseURL } : {}),
     fetch: oauthFetch as any,
   });
 

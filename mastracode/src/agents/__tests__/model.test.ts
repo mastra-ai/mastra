@@ -79,6 +79,7 @@ describe('resolveModel', () => {
     vi.clearAllMocks();
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_BASE_URL;
+    delete process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_BASE_URL;
     delete process.env.MOONSHOT_AI_API_KEY;
   });
@@ -113,14 +114,17 @@ describe('resolveModel', () => {
       expect(opencodeClaudeMaxProvider).not.toHaveBeenCalled();
     });
 
-    it('does not use env API key when no stored Anthropic credential exists', () => {
+    it('uses env API key when no stored Anthropic credential exists', () => {
       process.env.ANTHROPIC_API_KEY = 'sk-test-key-123';
       mockAuthStorageInstance.get.mockReturnValue(undefined);
 
       const result = resolveModel('anthropic/claude-sonnet-4-20250514') as Record<string, unknown>;
 
-      expect(result.__provider).toBe('claude-max-oauth');
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514');
+      expect(result.__provider).toBe('anthropic-direct');
+      expect(result.__wrapped).toBe(true);
+      expect(result.modelId).toBe('claude-sonnet-4-20250514');
+      expect(createAnthropic).toHaveBeenCalledWith({ apiKey: 'sk-test-key-123' });
+      expect(opencodeClaudeMaxProvider).not.toHaveBeenCalled();
     });
 
     it('uses stored API key credential when not logged in via OAuth', () => {
@@ -195,6 +199,19 @@ describe('resolveModel', () => {
       });
     });
 
+    it('uses env API key when no stored OpenAI credential exists', () => {
+      process.env.OPENAI_API_KEY = 'sk-openai-env-key';
+      mockAuthStorageInstance.get.mockReturnValue(undefined);
+
+      const result = resolveModel('openai/gpt-4o') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('openai-direct');
+      expect(result.__wrapped).toBe(true);
+      expect(result.modelId).toBe('gpt-4o');
+      expect(createOpenAI).toHaveBeenCalledWith({ apiKey: 'sk-openai-env-key' });
+      expect(openaiCodexProvider).not.toHaveBeenCalled();
+    });
+
     it('uses model router when no OpenAI auth is configured', () => {
       mockAuthStorageInstance.get.mockReturnValue(undefined);
       const result = resolveModel('openai/gpt-4o') as Record<string, unknown>;
@@ -227,36 +244,55 @@ describe('getAnthropicApiKey', () => {
     expect(getAnthropicApiKey()).toBe('sk-stored-key');
   });
 
+  it('returns env API key when no stored API key is available', () => {
+    process.env.ANTHROPIC_API_KEY = 'sk-env-key';
+    mockAuthStorageInstance.get.mockReturnValue(undefined);
+    expect(getAnthropicApiKey()).toBe('sk-env-key');
+  });
+
   it('returns undefined when no API key is available', () => {
     mockAuthStorageInstance.get.mockReturnValue(undefined);
     expect(getAnthropicApiKey()).toBeUndefined();
   });
 
-  it('returns undefined when stored credential is OAuth type', () => {
-    mockAuthStorageInstance.get.mockReturnValue({ type: 'oauth', access: 'token', refresh: 'r', expires: 0 });
-    expect(getAnthropicApiKey()).toBeUndefined();
-  });
-
-  it('ignores env var when no stored credential exists', () => {
+  it('returns env API key when stored credential is OAuth type', () => {
     process.env.ANTHROPIC_API_KEY = 'sk-env-key';
-    mockAuthStorageInstance.get.mockReturnValue(undefined);
-    expect(getAnthropicApiKey()).toBeUndefined();
+    mockAuthStorageInstance.get.mockReturnValue({ type: 'oauth', access: 'token', refresh: 'r', expires: 0 });
+    expect(getAnthropicApiKey()).toBe('sk-env-key');
   });
 });
 
 describe('getOpenAIApiKey', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.OPENAI_API_KEY;
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
   it('returns stored API key when set', () => {
     mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-openai-key' });
     expect(getOpenAIApiKey()).toBe('sk-openai-key');
   });
 
+  it('returns env API key when no stored API key is available', () => {
+    process.env.OPENAI_API_KEY = 'sk-openai-env-key';
+    mockAuthStorageInstance.get.mockReturnValue(undefined);
+    expect(getOpenAIApiKey()).toBe('sk-openai-env-key');
+  });
+
   it('returns undefined when no API key is available', () => {
     mockAuthStorageInstance.get.mockReturnValue(undefined);
     expect(getOpenAIApiKey()).toBeUndefined();
   });
 
-  it('returns undefined when stored credential is OAuth type', () => {
+  it('returns env API key when stored credential is OAuth type', () => {
+    process.env.OPENAI_API_KEY = 'sk-openai-env-key';
     mockAuthStorageInstance.get.mockReturnValue({ type: 'oauth', access: 'token', refresh: 'r', expires: 0 });
-    expect(getOpenAIApiKey()).toBeUndefined();
+    expect(getOpenAIApiKey()).toBe('sk-openai-env-key');
   });
 });

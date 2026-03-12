@@ -15,6 +15,8 @@ import type { stateSchema } from '../schema.js';
 const authStorage = new AuthStorage();
 
 const OPENAI_PREFIX = 'openai/';
+const ANTHROPIC_API_KEY_ENV_VAR = 'ANTHROPIC_API_KEY';
+const OPENAI_API_KEY_ENV_VAR = 'OPENAI_API_KEY';
 const ANTHROPIC_BASE_URL_ENV_VAR = 'ANTHROPIC_BASE_URL';
 const OPENAI_BASE_URL_ENV_VAR = 'OPENAI_BASE_URL';
 
@@ -52,29 +54,35 @@ export function remapOpenAIModelForCodexOAuth(modelId: string): string {
   return `${OPENAI_PREFIX}${codexModelId}`;
 }
 
+function getEnvValue(envVarName: string): string | undefined {
+  const value = process.env[envVarName]?.trim();
+  return value ? value : undefined;
+}
+
 /**
- * Resolve the Anthropic API key from stored credentials.
- * Returns the key if available, undefined otherwise.
+ * Resolve the Anthropic API key from stored credentials or environment.
+ * Stored credentials take precedence over ANTHROPIC_API_KEY.
  */
 export function getAnthropicApiKey(): string | undefined {
-  // Check stored API key credential (set via /apikey or UI prompt)
   const storedCred = authStorage.get('anthropic');
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
     return storedCred.key.trim();
   }
-  return undefined;
+
+  return getEnvValue(ANTHROPIC_API_KEY_ENV_VAR);
 }
 
 /**
- * Resolve the OpenAI API key from stored credentials.
- * Returns the key if available, undefined otherwise.
+ * Resolve the OpenAI API key from stored credentials or environment.
+ * Stored credentials take precedence over OPENAI_API_KEY.
  */
 export function getOpenAIApiKey(): string | undefined {
   const storedCred = authStorage.get('openai-codex');
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
     return storedCred.key.trim();
   }
-  return undefined;
+
+  return getEnvValue(OPENAI_API_KEY_ENV_VAR);
 }
 
 /**
@@ -85,8 +93,7 @@ export function getOpenAIApiKey(): string | undefined {
 function getEnvBaseUrl(
   envVarName: typeof ANTHROPIC_BASE_URL_ENV_VAR | typeof OPENAI_BASE_URL_ENV_VAR,
 ): string | undefined {
-  const value = process.env[envVarName]?.trim();
-  return value ? value : undefined;
+  return getEnvValue(envVarName);
 }
 
 function anthropicApiKeyProvider(modelId: string, apiKey: string): LanguageModelV1 {
@@ -99,7 +106,7 @@ function anthropicApiKeyProvider(modelId: string, apiKey: string): LanguageModel
 }
 
 /**
- * Create an OpenAI model using a direct API key from AuthStorage.
+ * Create an OpenAI model using a direct API key.
  */
 function openaiApiKeyProvider(modelId: string, apiKey: string): LanguageModelV1 {
   const baseURL = getEnvBaseUrl(OPENAI_BASE_URL_ENV_VAR);
@@ -114,9 +121,9 @@ function openaiApiKeyProvider(modelId: string, apiKey: string): LanguageModelV1 
  * Shared by the main agent, observer, and reflector.
  *
  * - For anthropic/* models: Uses stored OAuth credentials when present, otherwise direct API key
- *   with an optional ANTHROPIC_BASE_URL override
- * - For openai/* models: Uses OAuth when configured, otherwise direct API key from AuthStorage
- *   with an optional OPENAI_BASE_URL override
+ *   from storage or ANTHROPIC_API_KEY with an optional ANTHROPIC_BASE_URL override
+ * - For openai/* models: Uses OAuth when configured, otherwise direct API key from storage or
+ *   OPENAI_API_KEY with an optional OPENAI_BASE_URL override
  * - For moonshotai/* models: Uses Moonshot AI Anthropic-compatible endpoint
  * - For all other providers: Uses Mastra's model router (models.dev gateway)
  */

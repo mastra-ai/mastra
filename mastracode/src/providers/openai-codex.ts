@@ -16,6 +16,7 @@ import { AuthStorage } from '../auth/storage.js';
 
 // Codex API endpoint (not standard OpenAI API)
 const CODEX_API_ENDPOINT = 'https://chatgpt.com/backend-api/codex/responses';
+const OPENAI_BASE_URL_ENV_VAR = 'OPENAI_BASE_URL';
 
 // Singleton auth storage instance (shared with claude-max.ts)
 let authStorageInstance: AuthStorage | null = null;
@@ -46,6 +47,20 @@ IMPORTANT: You should be concise, direct, and helpful. Focus on solving the user
 export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
 
 const GPT5_MODEL_RE = /^gpt-5(?:\.|-|$)/;
+
+function getOpenAIBaseUrl(): string | undefined {
+  const value = process.env[OPENAI_BASE_URL_ENV_VAR]?.trim();
+  return value ? value : undefined;
+}
+
+function getCodexApiEndpoint(): string {
+  const baseURL = getOpenAIBaseUrl();
+  if (!baseURL) {
+    return CODEX_API_ENDPOINT;
+  }
+
+  return new URL('/backend-api/codex/responses', baseURL).toString();
+}
 
 export function getEffectiveThinkingLevel(modelId: string, level: ThinkingLevel): ThinkingLevel {
   // GPT-5.* models on Codex require at least low reasoning.
@@ -120,9 +135,8 @@ export function openaiCodexProvider(
 
   // Test environment: use API key
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
-    const openai = createOpenAI({
-      apiKey: 'test-api-key',
-    });
+    const baseURL = getOpenAIBaseUrl();
+    const openai = createOpenAI(baseURL ? { apiKey: 'test-api-key', baseURL } : { apiKey: 'test-api-key' });
     return wrapLanguageModel({
       model: openai.responses(modelId),
       middleware: [middleware],
@@ -195,7 +209,7 @@ export function openaiCodexProvider(
     const parsed = url instanceof URL ? url : new URL(typeof url === 'string' ? url : (url as Request).url);
 
     const shouldRewrite = parsed.pathname.includes('/v1/responses') || parsed.pathname.includes('/chat/completions');
-    const finalUrl = shouldRewrite ? new URL(CODEX_API_ENDPOINT) : parsed;
+    const finalUrl = shouldRewrite ? new URL(getCodexApiEndpoint()) : parsed;
 
     return fetch(finalUrl, {
       ...init,
@@ -203,9 +217,11 @@ export function openaiCodexProvider(
     });
   };
 
+  const baseURL = getOpenAIBaseUrl();
   const openai = createOpenAI({
     // Use a dummy API key since we're using OAuth
     apiKey: 'oauth-dummy-key',
+    ...(baseURL ? { baseURL } : {}),
     fetch: oauthFetch as any,
   });
 
