@@ -690,8 +690,10 @@ export class TestExporter extends BaseExporter {
    * @deprecated MetricType is no longer stored. Use getMetricsByName() instead.
    */
   getMetricsByType(_metricType: string): ExportedMetric[] {
-    console.warn('getMetricsByType() is deprecated: metricType was removed. Use getMetricsByName(name) instead.');
-    return [];
+    throw new Error(
+      'getMetricsByType() has been removed: metricType is no longer stored. ' +
+        'Use getMetricsByName(metricName) instead to filter metrics by name.',
+    );
   }
 
   // ============================================================================

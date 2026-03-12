@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import {
   commonFilterFields,
   contextFields,
@@ -99,7 +99,7 @@ export type BatchCreateMetricsArgs = z.infer<typeof batchCreateMetricsArgsSchema
 // ============================================================================
 
 /** Aggregation type schema */
-export const aggregationTypeSchema = z.enum(['sum', 'avg', 'min', 'max', 'count', 'last', 'rate']);
+export const aggregationTypeSchema = z.enum(['sum', 'avg', 'min', 'max', 'count', 'last']);
 export type AggregationType = z.infer<typeof aggregationTypeSchema>;
 
 /** Aggregation interval schema */

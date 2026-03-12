@@ -29,7 +29,6 @@ describe('Log Schemas', () => {
   describe('logRecordSchema', () => {
     it('accepts a complete log record', () => {
       const record = logRecordSchema.parse({
-        id: 'log-1',
         timestamp: now,
         level: 'info',
         message: 'Hello world',
@@ -41,14 +40,13 @@ describe('Log Schemas', () => {
         createdAt: now,
         updatedAt: now,
       });
-      expect(record.id).toBe('log-1');
       expect(record.level).toBe('info');
       expect(record.message).toBe('Hello world');
+      expect(record.traceId).toBe('trace-1');
     });
 
     it('accepts a minimal log record', () => {
       const record = logRecordSchema.parse({
-        id: 'log-2',
         timestamp: now,
         level: 'error',
         message: 'Something failed',
@@ -60,8 +58,8 @@ describe('Log Schemas', () => {
     });
 
     it('rejects missing required fields', () => {
-      expect(() => logRecordSchema.parse({ id: 'log-3' })).toThrow();
-      expect(() => logRecordSchema.parse({ id: 'log-3', timestamp: now, level: 'info' })).toThrow();
+      expect(() => logRecordSchema.parse({})).toThrow();
+      expect(() => logRecordSchema.parse({ timestamp: now, level: 'info' })).toThrow();
     });
   });
 
@@ -89,7 +87,6 @@ describe('Log Schemas', () => {
   describe('createLogRecordSchema', () => {
     it('omits db timestamps', () => {
       const record = createLogRecordSchema.parse({
-        id: 'log-1',
         timestamp: now,
         level: 'info',
         message: 'Test',
@@ -103,8 +100,8 @@ describe('Log Schemas', () => {
     it('accepts an array of log records', () => {
       const args = batchCreateLogsArgsSchema.parse({
         logs: [
-          { id: 'log-1', timestamp: now, level: 'info', message: 'First' },
-          { id: 'log-2', timestamp: now, level: 'error', message: 'Second' },
+          { timestamp: now, level: 'info', message: 'First' },
+          { timestamp: now, level: 'error', message: 'Second' },
         ],
       });
       expect(args.logs).toHaveLength(2);

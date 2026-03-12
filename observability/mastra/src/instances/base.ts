@@ -75,11 +75,14 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       serializationOptions: config.serializationOptions,
     };
 
-    // Initialize cardinality filter for metrics
-    this.cardinalityFilter = new CardinalityFilter();
+    // Initialize cardinality filter for metrics (uses user config or defaults)
+    this.cardinalityFilter = new CardinalityFilter(config.cardinality);
 
-    // Initialize the unified ObservabilityBus and register all exporters
-    this.observabilityBus = new ObservabilityBus();
+    // Initialize the unified ObservabilityBus with cardinality filter and auto-extracted metrics
+    this.observabilityBus = new ObservabilityBus({
+      cardinalityFilter: this.cardinalityFilter,
+    });
+
     for (const exporter of this.exporters) {
       this.observabilityBus.registerExporter(exporter);
     }
@@ -88,9 +91,6 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     if (this.config.bridge) {
       this.observabilityBus.registerBridge(this.config.bridge);
     }
-
-    // Enable auto-extracted metrics (TracingEvent → MetricEvent cross-emission)
-    this.observabilityBus.enableAutoExtractedMetrics(this.cardinalityFilter);
 
     // Initialize bridge if present
     if (this.config.bridge?.init) {

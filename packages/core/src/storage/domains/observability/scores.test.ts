@@ -99,14 +99,15 @@ describe('Score Schemas', () => {
     it('wraps a score record', () => {
       const args = createScoreArgsSchema.parse({
         score: {
-          id: 'score-1',
           timestamp: now,
           traceId: 'trace-1',
           scorerId: 'test',
           score: 0.5,
         },
       });
-      expect(args.score.id).toBe('score-1');
+      expect(args.score.traceId).toBe('trace-1');
+      expect(args.score.scorerId).toBe('test');
+      expect(args.score.score).toBe(0.5);
     });
   });
 

@@ -538,10 +538,6 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         return values.length;
       case 'last':
         return values[values.length - 1]!;
-      case 'rate': {
-        if (values.length < 2) return 0;
-        return values[values.length - 1]! - values[0]!;
-      }
       default:
         return values.reduce((a, b) => a + b, 0);
     }

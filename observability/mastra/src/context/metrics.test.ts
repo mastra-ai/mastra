@@ -13,9 +13,7 @@ describe('MetricsContextImpl', () => {
   const emittedEvents: MetricEvent[] = [];
 
   function setupBus(cardinalityFilter?: CardinalityFilter) {
-    bus = new ObservabilityBus();
-    // Enable auto-extraction to set up cardinality filter on the bus
-    bus.enableAutoExtractedMetrics(cardinalityFilter);
+    bus = new ObservabilityBus({ cardinalityFilter });
     // Capture metric events emitted through emitMetric -> emit
     const originalEmit = bus.emit.bind(bus);
     bus.emit = (event: any) => {
@@ -123,7 +121,6 @@ describe('MetricsContextImpl', () => {
 
   it('should route metric events to exporters via bus', () => {
     bus = new ObservabilityBus();
-    bus.enableAutoExtractedMetrics();
     const onMetricEvent = vi.fn();
     bus.registerExporter({
       name: 'test-exporter',

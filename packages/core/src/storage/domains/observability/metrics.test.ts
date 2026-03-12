@@ -10,7 +10,7 @@ import {
 import {
   aggregationIntervalSchema,
   aggregationTypeSchema,
-  batchRecordMetricsArgsSchema,
+  batchCreateMetricsArgsSchema,
   createMetricRecordSchema,
   getMetricAggregateArgsSchema,
   getMetricAggregateResponseSchema,
@@ -115,9 +115,9 @@ describe('Metric Schemas', () => {
     });
   });
 
-  describe('batchRecordMetricsArgsSchema', () => {
+  describe('batchCreateMetricsArgsSchema', () => {
     it('accepts an array of metric records', () => {
-      const args = batchRecordMetricsArgsSchema.parse({
+      const args = batchCreateMetricsArgsSchema.parse({
         metrics: [
           { id: 'm1', timestamp: now, name: 'test', value: 1 },
           { id: 'm2', timestamp: now, name: 'test', value: 2 },
@@ -128,8 +128,8 @@ describe('Metric Schemas', () => {
   });
 
   describe('aggregation schemas', () => {
-    it('accepts valid aggregation types including last and rate', () => {
-      for (const type of ['sum', 'avg', 'min', 'max', 'count', 'last', 'rate'] as const) {
+    it('accepts valid aggregation types', () => {
+      for (const type of ['sum', 'avg', 'min', 'max', 'count', 'last'] as const) {
         expect(aggregationTypeSchema.parse(type)).toBe(type);
       }
     });

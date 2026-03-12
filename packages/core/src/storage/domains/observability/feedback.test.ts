@@ -106,7 +106,6 @@ describe('Feedback Schemas', () => {
   describe('createFeedbackRecordSchema', () => {
     it('omits db timestamps', () => {
       const record = createFeedbackRecordSchema.parse({
-        id: 'fb-1',
         timestamp: now,
         traceId: 'trace-1',
         source: 'user',
@@ -122,7 +121,6 @@ describe('Feedback Schemas', () => {
     it('wraps a feedback record', () => {
       const args = createFeedbackArgsSchema.parse({
         feedback: {
-          id: 'fb-1',
           timestamp: now,
           traceId: 'trace-1',
           source: 'user',
@@ -130,7 +128,9 @@ describe('Feedback Schemas', () => {
           value: 1,
         },
       });
-      expect(args.feedback.id).toBe('fb-1');
+      expect(args.feedback.traceId).toBe('trace-1');
+      expect(args.feedback.source).toBe('user');
+      expect(args.feedback.value).toBe(1);
     });
   });
 

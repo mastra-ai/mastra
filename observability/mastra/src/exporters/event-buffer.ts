@@ -42,6 +42,7 @@ export class EventBuffer {
       for (const event of this.#preInit) {
         this.addEvent(event);
       }
+      this.#preInit = [];
     }
   }
 

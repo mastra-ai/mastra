@@ -240,7 +240,7 @@ async function attachScoreToSpan({
     const link = {
       type: 'score',
       scoreId: scoreRecord.id,
-      scorerId: scoreRecord.scorer?.id ?? scoreRecord.scorerId,
+      scorerId: scoreRecord.scorerId ?? scoreRecord.scorer?.id,
       score: scoreRecord.score,
       createdAt: scoreRecord.createdAt,
     };

@@ -83,7 +83,8 @@ export class ObservabilityStorage extends StorageDomain {
   /**
    * Provides hints for tracing strategy selection by the DefaultExporter.
    * Storage adapters can override this to specify their preferred and supported strategies.
-   * @deprecated Use 'observabilityStrategy' instead.
+   * @deprecated Use {@link observabilityStrategy} instead.
+   * @see {@link observabilityStrategy} for the replacement property.
    */
   public get tracingStrategy(): {
     preferred: TracingStorageStrategy;

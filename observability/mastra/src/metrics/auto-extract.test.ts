@@ -290,10 +290,9 @@ describe('AutoExtractedMetrics', () => {
 
   describe('CardinalityFilter integration', () => {
     it('should filter auto-extracted labels through CardinalityFilter on the bus', () => {
-      bus = new ObservabilityBus();
       const filter = new CardinalityFilter({ blockedLabels: ['entity_name'] });
-      bus.enableAutoExtractedMetrics(filter);
-      // Override emit after enableAutoExtractedMetrics so emitMetric -> emit is captured
+      bus = new ObservabilityBus({ cardinalityFilter: filter });
+      // Override emit so emitMetric -> emit is captured
       const originalEmit = bus.emit.bind(bus);
       bus.emit = (event: any) => {
         if (event.type === 'metric') {

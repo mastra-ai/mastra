@@ -76,24 +76,24 @@ export class AutoExtractedMetrics {
     };
 
     // Top-level token counts (always emit, even if zero)
-    emit('mastra_model_total_input_tokens', Number(usage.inputTokens));
-    emit('mastra_model_total_output_tokens', Number(usage.outputTokens));
+    emit('mastra_model_total_input_tokens', usage.inputTokens ?? 0);
+    emit('mastra_model_total_output_tokens', usage.outputTokens ?? 0);
 
     // Input token details (skip zeros)
     if (usage.inputDetails) {
-      emitNonZero('mastra_model_input_text_tokens', Number(usage.inputDetails.text));
-      emitNonZero('mastra_model_input_cache_read_tokens', Number(usage.inputDetails.cacheRead));
-      emitNonZero('mastra_model_input_cache_write_tokens', Number(usage.inputDetails.cacheWrite));
-      emitNonZero('mastra_model_input_audio_tokens', Number(usage.inputDetails.audio));
-      emitNonZero('mastra_model_input_image_tokens', Number(usage.inputDetails.image));
+      emitNonZero('mastra_model_input_text_tokens', usage.inputDetails.text ?? 0);
+      emitNonZero('mastra_model_input_cache_read_tokens', usage.inputDetails.cacheRead ?? 0);
+      emitNonZero('mastra_model_input_cache_write_tokens', usage.inputDetails.cacheWrite ?? 0);
+      emitNonZero('mastra_model_input_audio_tokens', usage.inputDetails.audio ?? 0);
+      emitNonZero('mastra_model_input_image_tokens', usage.inputDetails.image ?? 0);
     }
 
     // Output token details (skip zeros)
     if (usage.outputDetails) {
-      emitNonZero('mastra_model_output_text_tokens', Number(usage.outputDetails.text));
-      emitNonZero('mastra_model_output_reasoning_tokens', Number(usage.outputDetails.reasoning));
-      emitNonZero('mastra_model_output_audio_tokens', Number(usage.outputDetails.audio));
-      emitNonZero('mastra_model_output_image_tokens', Number(usage.outputDetails.image));
+      emitNonZero('mastra_model_output_text_tokens', usage.outputDetails.text ?? 0);
+      emitNonZero('mastra_model_output_reasoning_tokens', usage.outputDetails.reasoning ?? 0);
+      emitNonZero('mastra_model_output_audio_tokens', usage.outputDetails.audio ?? 0);
+      emitNonZero('mastra_model_output_image_tokens', usage.outputDetails.image ?? 0);
     }
   }
 
