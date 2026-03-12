@@ -2,16 +2,6 @@ import type { VectorFilter } from '@mastra/core/vector/filter';
 
 // Filter type definitions for Azure AI Search
 
-// Standard filterable fields in Azure AI Search documents
-export interface AzureAISearchFields {
-  category?: string;
-  price?: number;
-  content?: string;
-  inStock?: boolean;
-  rating?: number;
-  tags?: string;
-}
-
 /**
  * Azure AI Search vector filter interface that supports OData syntax
  *
@@ -50,32 +40,32 @@ export interface AzureAISearchLegacyFilter {
   /** Logical NOT operation */
   not?: AzureAISearchLegacyFilter;
 
-  /** Equality comparison - supports category and other string fields */
-  eq?: Partial<AzureAISearchFields> & Record<string, any>;
+  /** Equality comparison */
+  eq?: Record<string, any>;
 
   /** Not equal comparison */
-  ne?: Partial<AzureAISearchFields> & Record<string, any>;
+  ne?: Record<string, any>;
 
-  /** Greater than comparison - supports price, rating and other numeric fields */
-  gt?: Partial<Pick<AzureAISearchFields, 'price' | 'rating'>> & Record<string, number | Date>;
+  /** Greater than comparison */
+  gt?: Record<string, number | Date>;
 
   /** Greater than or equal comparison */
-  ge?: Partial<Pick<AzureAISearchFields, 'price' | 'rating'>> & Record<string, number | Date>;
+  ge?: Record<string, number | Date>;
 
   /** Less than comparison */
-  lt?: Partial<Pick<AzureAISearchFields, 'price' | 'rating'>> & Record<string, number | Date>;
+  lt?: Record<string, number | Date>;
 
   /** Less than or equal comparison */
-  le?: Partial<Pick<AzureAISearchFields, 'price' | 'rating'>> & Record<string, number | Date>;
+  le?: Record<string, number | Date>;
 
   /** Contains operation for strings */
-  contains?: Partial<Pick<AzureAISearchFields, 'category' | 'content' | 'tags'>> & Record<string, string>;
+  contains?: Record<string, string>;
 
   /** Starts with operation for strings */
-  startsWith?: Partial<Pick<AzureAISearchFields, 'category' | 'content'>> & Record<string, string>;
+  startsWith?: Record<string, string>;
 
   /** Ends with operation for strings */
-  endsWith?: Partial<Pick<AzureAISearchFields, 'category' | 'content'>> & Record<string, string>;
+  endsWith?: Record<string, string>;
 
   /** Collection any operation */
   any?: {
