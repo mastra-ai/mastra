@@ -8,10 +8,8 @@ import {
   HeaderAction,
   Button,
   DocsIcon,
-  MCPDetail,
-  useMCPServers,
-  MCPServerCombobox,
 } from '@mastra/playground-ui';
+import { MCPDetail, useMCPServers, MCPServerCombobox } from '@mastra/playground-ui/mcps';
 
 import { Link, useParams } from 'react-router';
 

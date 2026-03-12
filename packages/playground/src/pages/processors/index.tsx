@@ -7,10 +7,9 @@ import {
   HeaderAction,
   DocsIcon,
   Button,
-  ProcessorTable,
-  useProcessors,
   ProcessorIcon,
 } from '@mastra/playground-ui';
+import { ProcessorTable, useProcessors } from '@mastra/playground-ui/processors';
 
 import { Link } from 'react-router';
 

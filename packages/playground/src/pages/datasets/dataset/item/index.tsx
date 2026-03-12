@@ -1,12 +1,7 @@
 import {
   MainContentLayout,
   MainContentContent,
-  useDatasetItemVersions,
-  useDatasetMutations,
   useLinkComponent,
-  DatasetItemContent,
-  DatasetItemVersionsPanel,
-  EditModeContent,
   AlertDialog,
   Button,
   Icon,
@@ -17,7 +12,6 @@ import {
   ButtonsGroup,
   toast,
   TextAndIcon,
-  useDataset,
   CopyButton,
   Columns,
   Column,
@@ -25,7 +19,15 @@ import {
   PermissionDenied,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import type { DatasetItemVersion } from '@mastra/playground-ui';
+import {
+  useDatasetItemVersions,
+  useDatasetMutations,
+  DatasetItemContent,
+  DatasetItemVersionsPanel,
+  EditModeContent,
+  useDataset,
+} from '@mastra/playground-ui/datasets';
+import type { DatasetItemVersion } from '@mastra/playground-ui/datasets';
 import { format } from 'date-fns';
 import {
   AlertTriangleIcon,

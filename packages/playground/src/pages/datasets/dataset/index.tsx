@@ -1,22 +1,24 @@
 import {
   MainContentLayout,
   MainContentContent,
+  Button,
+  Header,
+  Breadcrumb,
+  Crumb,
+  Icon,
+  PermissionDenied,
+  is403ForbiddenError,
+} from '@mastra/playground-ui';
+import {
   DatasetPageContent,
   ExperimentTriggerDialog,
   AddItemDialog,
   EditDatasetDialog,
   DeleteDatasetDialog,
   useDataset,
-  Button,
-  Header,
-  Breadcrumb,
-  Crumb,
-  Icon,
   DatasetCombobox,
-  PermissionDenied,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
-import type { DatasetVersion } from '@mastra/playground-ui';
+} from '@mastra/playground-ui/datasets';
+import type { DatasetVersion } from '@mastra/playground-ui/datasets';
 import { Database, Play } from 'lucide-react';
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router';

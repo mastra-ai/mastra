@@ -1,20 +1,22 @@
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import {
-  WorkflowRunProvider,
   Header,
   HeaderTitle,
   MainContentLayout,
   MainContentContent,
   useWorkflow,
-  WorkflowRunList,
-  WorkflowInformation,
   useWorkflowRun,
   Skeleton,
   Txt,
-  TracingSettingsProvider,
-  WorkflowLayout as WorkflowLayoutUI,
-  SchemaRequestContextProvider,
 } from '@mastra/playground-ui';
+import {
+  WorkflowRunProvider,
+  WorkflowRunList,
+  WorkflowInformation,
+  WorkflowLayout as WorkflowLayoutUI,
+} from '@mastra/playground-ui/workflows';
+import { TracingSettingsProvider } from '@mastra/playground-ui/observability';
+import { SchemaRequestContextProvider } from '@mastra/playground-ui/request-context';
 import { useParams } from 'react-router';
 
 import { WorkflowHeader } from './workflow-header';

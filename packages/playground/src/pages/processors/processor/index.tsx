@@ -6,14 +6,12 @@ import {
   HeaderAction,
   Button,
   DocsIcon,
-  ProcessorPanel,
-  ProcessorCombobox,
   ProcessorIcon,
-  useProcessor,
   Skeleton,
   PermissionDenied,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { ProcessorPanel, ProcessorCombobox, useProcessor } from '@mastra/playground-ui/processors';
 import { Link, useParams, Navigate } from 'react-router';
 
 export function Processor() {

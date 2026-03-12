@@ -1,13 +1,7 @@
 import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
-import {
-  KeyValueList,
-  KeyValueListItemData,
-  Section,
-  Sections,
-  SpanScoring,
-  SpanScoreList,
-  useLinkComponent,
-} from '@/index';
+import { KeyValueList, KeyValueListItemData, Section, Sections, useLinkComponent } from '@/index';
+import { SpanScoring } from './span-scoring';
+import { SpanScoreList } from './span-score-list';
 import { TraceSpanUsage, type TokenUsage } from './trace-span-usage';
 import { SpanDetails } from './span-details';
 import { CircleGaugeIcon } from 'lucide-react';

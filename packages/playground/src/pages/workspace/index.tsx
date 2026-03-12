@@ -8,6 +8,11 @@ import {
   DocsIcon,
   PageHeader,
   Spinner,
+  is403ForbiddenError,
+  PermissionDenied,
+  toast,
+} from '@mastra/playground-ui';
+import {
   useWorkspaceInfo,
   useWorkspaces,
   useWorkspaceFiles,
@@ -24,16 +29,12 @@ import {
   WorkspaceNotConfigured,
   useWorkspaceFile,
   isWorkspaceNotSupportedError,
-  is403ForbiddenError,
-  PermissionDenied,
-  // Skills.sh
-  AddSkillDialog,
   useInstallSkill,
   useUpdateSkills,
   useRemoveSkill,
-  toast,
-} from '@mastra/playground-ui';
-import type { WorkspaceItem } from '@mastra/playground-ui';
+  AddSkillDialog,
+} from '@mastra/playground-ui/workspace';
+import type { WorkspaceItem } from '@mastra/playground-ui/workspace';
 import { Folder, FileText, Wand2, Search, ChevronDown, Bot, Server, AlertTriangle } from 'lucide-react';
 import { useState, useCallback } from 'react';
 

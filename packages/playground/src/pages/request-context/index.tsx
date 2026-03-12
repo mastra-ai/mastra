@@ -4,9 +4,8 @@ import {
   Icon,
   MainContentContent,
   MainContentLayout,
-  RequestContext,
-  RequestContextWrapper,
 } from '@mastra/playground-ui';
+import { RequestContext, RequestContextWrapper } from '@mastra/playground-ui/agents';
 import { Globe } from 'lucide-react';
 
 export default function RequestContextPage() {

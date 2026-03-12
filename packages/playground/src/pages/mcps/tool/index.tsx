@@ -7,10 +7,8 @@ import {
   Button,
   HeaderAction,
   DocsIcon,
-  MCPToolPanel,
-  useMCPServerTool,
-  useMCPServers,
 } from '@mastra/playground-ui';
+import { MCPToolPanel, useMCPServerTool, useMCPServers } from '@mastra/playground-ui/mcps';
 import { Link, useParams } from 'react-router';
 
 const MCPServerToolExecutor = () => {

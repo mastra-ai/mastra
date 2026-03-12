@@ -8,10 +8,9 @@ import {
   HeaderAction,
   DocsIcon,
   Button,
-  ToolTable,
-  useAgents,
-  useTools,
 } from '@mastra/playground-ui';
+import { ToolTable, useTools } from '@mastra/playground-ui/tools';
+import { useAgents } from '@mastra/playground-ui/agents';
 
 import { Link } from 'react-router';
 
