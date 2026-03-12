@@ -94,8 +94,7 @@ export class StoredAgent extends BaseResource {
     const queryParams = new URLSearchParams();
     if (params?.page !== undefined) queryParams.set('page', String(params.page));
     if (params?.perPage !== undefined) queryParams.set('perPage', String(params.perPage));
-    if (params?.orderBy) queryParams.set('orderBy', params.orderBy);
-    if (params?.sortDirection) queryParams.set('sortDirection', params.sortDirection);
+    if (params?.orderBy) queryParams.set('orderBy', JSON.stringify(params.orderBy));
 
     const queryString = queryParams.toString();
     const contextString = requestContextQueryString(requestContext);

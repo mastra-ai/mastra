@@ -54,7 +54,6 @@ export function useCreateSkill() {
         description,
         instructions: extractSkillInstructions(files),
         license: extractSkillLicense(files),
-        files,
       });
     },
     onSuccess: (_, variables) => {

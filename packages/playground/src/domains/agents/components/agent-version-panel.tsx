@@ -27,7 +27,7 @@ export function AgentVersionPanel({
 }: AgentVersionPanelProps) {
   const { data, isLoading } = useAgentVersions({
     agentId,
-    params: { sortDirection: 'DESC' },
+    params: { orderBy: { direction: 'DESC' } },
   });
 
   const versions = data?.versions ?? [];

@@ -10,7 +10,7 @@ export function exportItemsToCSV(items: DatasetItem[], filename: string): void {
   const rows = items.map(item => ({
     input: formatValue(item.input),
     groundTruth: formatValue(item.groundTruth),
-    createdAt: item.createdAt instanceof Date ? item.createdAt.toISOString() : String(item.createdAt ?? ''),
+    createdAt: String(item.createdAt ?? ''),
   }));
 
   // Generate CSV with headers
