@@ -43,7 +43,8 @@
     },
     {
       "groupName": "Hono",
-      "matchSourceUrls": ["https://github.com/honojs/hono"]
+      "matchSourceUrls": ["https://github.com/honojs/hono"],
+      "matchPackageNames": ["@hono/*", "hono"]
     },
     {
       "groupName": "AI SDK",
@@ -118,6 +119,7 @@
         "@microsoft/api-extractor",
         "tsup",
         "rollup",
+        "@rollup/*",
         "@types/node",
         "dotenv",
         "vitest",
@@ -154,6 +156,30 @@
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false,
       "automerge": true
+    },
+    {
+      "groupName": "Upstash",
+      "commitMessageTopic": "Upstash",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@upstash/*"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "CodeMirror",
+      "commitMessageTopic": "CodeMirror",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@uiw/*", "codemirror", "@codemirror/*"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "Serve",
+      "commitMessageTopic": "Serve",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["serve", "serve-handler"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
     }
   ]
 }
