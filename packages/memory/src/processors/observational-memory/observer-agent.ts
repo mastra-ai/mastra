@@ -622,6 +622,12 @@ function formatObserverMessage(
         }
 
         const partType = (part as { type?: string }).type;
+        if (partType === 'reasoning') {
+          // Include reasoning content only when it's not obscured/encrypted
+          const reasoning = (part as { reasoning?: string }).reasoning;
+          if (reasoning) return maybeTruncate(reasoning, maxLen);
+          return '';
+        }
         if (partType === 'image' || partType === 'file') {
           const attachment = part as ObserverAttachmentPart;
           const inputAttachment = toObserverInputAttachmentPart(attachment);
@@ -639,6 +645,11 @@ function formatObserverMessage(
     content = maybeTruncate(msg.content.content, maxLen);
   }
 
+  // Skip messages that produced no visible content (e.g. only data-* or encrypted reasoning parts)
+  if (!content && attachments.length === 0) {
+    return { text: '', attachments };
+  }
+
   return {
     text: `**${role}${timestampStr}:**\n${content}`,
     attachments,
@@ -647,20 +658,26 @@ function formatObserverMessage(
 
 export function formatMessagesForObserver(messages: MastraDBMessage[], options?: { maxPartLength?: number }): string {
   const counter = { nextImageId: 1, nextFileId: 1 };
-  return messages.map(msg => formatObserverMessage(msg, counter, options).text).join('\n\n---\n\n');
+  return messages
+    .map(msg => formatObserverMessage(msg, counter, options).text)
+    .filter(Boolean)
+    .join('\n\n---\n\n');
 }
 
 export function buildObserverHistoryMessage(messages: MastraDBMessage[]): CoreMessage {
   const counter = { nextImageId: 1, nextFileId: 1 };
   const content: any[] = [{ type: 'text', text: '## New Message History to Observe\n\n' }];
 
-  messages.forEach((message, index) => {
+  let visibleCount = 0;
+  messages.forEach(message => {
     const formatted = formatObserverMessage(message, counter);
-    content.push({ type: 'text', text: formatted.text });
-    content.push(...formatted.attachments);
-    if (index < messages.length - 1) {
+    if (!formatted.text && formatted.attachments.length === 0) return;
+    if (visibleCount > 0) {
       content.push({ type: 'text', text: '\n\n---\n\n' });
     }
+    content.push({ type: 'text', text: formatted.text });
+    content.push(...formatted.attachments);
+    visibleCount++;
   });
 
   return {
@@ -716,13 +733,16 @@ export function buildMultiThreadObserverHistoryMessage(
 
     content.push({ type: 'text', text: `<thread id="${threadId}">\n` });
 
-    messages.forEach((message, messageIndex) => {
+    let visibleCount = 0;
+    messages.forEach(message => {
       const formatted = formatObserverMessage(message, counter);
-      content.push({ type: 'text', text: formatted.text });
-      content.push(...formatted.attachments);
-      if (messageIndex < messages.length - 1) {
+      if (!formatted.text && formatted.attachments.length === 0) return;
+      if (visibleCount > 0) {
         content.push({ type: 'text', text: '\n\n---\n\n' });
       }
+      content.push({ type: 'text', text: formatted.text });
+      content.push(...formatted.attachments);
+      visibleCount++;
     });
 
     content.push({ type: 'text', text: '\n</thread>' });

@@ -668,6 +668,64 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).toContain('[Image #1: reference-board.png]');
       expect(formatted).toContain('[File #1: floorplan.pdf]');
     });
+
+    it('should skip messages with only data-* parts', () => {
+      const dataMsg = createTestMessage('ignored', 'assistant');
+      dataMsg.content = {
+        format: 2,
+        parts: [{ type: 'data-om-status' as any }, { type: 'data-workspace-metadata' as any }],
+      };
+      const textMsg = createTestMessage('Hello', 'user');
+
+      const formatted = formatMessagesForObserver([dataMsg, textMsg]);
+      expect(formatted).not.toContain('**Assistant');
+      expect(formatted).toContain('**User');
+      expect(formatted).toContain('Hello');
+    });
+
+    it('should include non-obscured reasoning content', () => {
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          { type: 'reasoning' as any, reasoning: 'I need to think about this carefully' },
+          { type: 'text', text: 'Here is my answer' },
+        ],
+      };
+
+      const formatted = formatMessagesForObserver([msg]);
+      expect(formatted).toContain('I need to think about this carefully');
+      expect(formatted).toContain('Here is my answer');
+    });
+
+    it('should skip obscured/encrypted reasoning parts', () => {
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          { type: 'reasoning' as any, reasoning: '', details: [{ type: 'text', text: '' }] },
+          { type: 'text', text: 'Visible answer' },
+        ],
+      };
+
+      const formatted = formatMessagesForObserver([msg]);
+      expect(formatted).not.toContain('reasoning');
+      expect(formatted).toContain('Visible answer');
+    });
+
+    it('should skip messages with only encrypted reasoning parts', () => {
+      const reasoningMsg = createTestMessage('ignored', 'assistant');
+      reasoningMsg.content = {
+        format: 2,
+        parts: [{ type: 'reasoning' as any, reasoning: '' }],
+      };
+      const textMsg = createTestMessage('Real content', 'user');
+
+      const formatted = formatMessagesForObserver([reasoningMsg, textMsg]);
+      expect(formatted).not.toContain('**Assistant');
+      expect(formatted).toContain('**User');
+      expect(formatted).toContain('Real content');
+    });
   });
 
   describe('buildObserverHistoryMessage', () => {
@@ -5674,7 +5732,6 @@ describe('Async Buffering Processor Logic', () => {
       const result = (om as any).combineObservationsForBuffering('- Active', '- Buffered');
       expect(result).toContain('- Active');
       expect(result).toContain('- Buffered');
-      expect(result).toContain('BUFFERED (pending activation)');
     });
   });
 

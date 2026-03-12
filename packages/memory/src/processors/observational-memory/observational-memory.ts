@@ -4692,8 +4692,7 @@ ${formattedMessages}
     if (!bufferedObservations) {
       return activeObservations;
     }
-    // Both exist - combine them with a clear separator
-    return `${activeObservations}\n\n--- BUFFERED (pending activation) ---\n\n${bufferedObservations}`;
+    return `${activeObservations}\n\n${bufferedObservations}`;
   }
 
   /**
