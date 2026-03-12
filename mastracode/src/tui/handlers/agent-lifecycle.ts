@@ -45,19 +45,57 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
   }
   state.followUpComponents = [];
   state.pendingTools.clear();
+  ctx.updateStatusLine();
+  state.ui.requestRender();
   // Keep allToolComponents so Ctrl+E continues to work after agent completes
 
   ctx.notify('agent_done');
 
-  // Drain queued slash commands once all harness-level follow-ups are done.
-  // Each slash command that triggers sendMessage will start a new agent
-  // operation, and handleAgentEnd will fire again to drain the next one.
-  if (state.pendingSlashCommands.length > 0 && state.harness.getFollowUpCount() === 0) {
-    const nextCommand = state.pendingSlashCommands.shift()!;
-    ctx.handleSlashCommand(nextCommand).catch(error => {
-      ctx.showError(error instanceof Error ? error.message : 'Queued slash command failed');
-    });
+  // Drain queued follow-up actions once all harness-level follow-ups are done.
+  // Each queued action that starts a new agent operation will eventually trigger
+  // handleAgentEnd again, which drains the next FIFO item.
+  if (state.harness.getFollowUpCount() > 0) {
+    return;
   }
+
+  const nextAction = state.pendingQueuedActions.shift();
+  ctx.updateStatusLine();
+  if (!nextAction) {
+    return;
+  }
+
+  if (nextAction === 'message') {
+    const nextMessage = state.pendingFollowUpMessages.shift();
+    if (!nextMessage) {
+      return;
+    }
+
+    ctx.addUserMessage({
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: [
+        { type: 'text', text: nextMessage.content },
+        ...(nextMessage.images?.map(img => ({
+          type: 'image' as const,
+          data: img.data,
+          mimeType: img.mimeType,
+        })) ?? []),
+      ],
+      createdAt: new Date(),
+    });
+    state.ui.requestRender();
+    ctx.fireMessage(nextMessage.content, nextMessage.images);
+    return;
+  }
+
+  const nextCommand = state.pendingSlashCommands.shift();
+  if (!nextCommand) {
+    return;
+  }
+
+  ctx.handleSlashCommand(nextCommand).catch(error => {
+    ctx.showError(error instanceof Error ? error.message : 'Queued slash command failed');
+  });
 }
 
 export function handleAgentAborted(ctx: EventHandlerContext): void {
@@ -81,9 +119,12 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
   state.userInitiatedAbort = false;
 
   state.followUpComponents = [];
+  state.pendingFollowUpMessages = [];
+  state.pendingQueuedActions = [];
   state.pendingSlashCommands = [];
   state.pendingTools.clear();
   // Keep allToolComponents so Ctrl+E continues to work after interruption
+  ctx.updateStatusLine();
   state.ui.requestRender();
 }
 
@@ -99,7 +140,11 @@ export function handleAgentError(ctx: EventHandlerContext): void {
   }
 
   state.followUpComponents = [];
+  state.pendingFollowUpMessages = [];
+  state.pendingQueuedActions = [];
   state.pendingSlashCommands = [];
   state.pendingTools.clear();
   // Keep allToolComponents so Ctrl+E continues to work after errors
+  ctx.updateStatusLine();
+  state.ui.requestRender();
 }

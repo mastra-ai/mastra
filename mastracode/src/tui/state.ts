@@ -127,9 +127,13 @@ export interface TUIState {
   activeInlinePlanApproval?: PlanApprovalInlineComponent;
   activeOnboarding?: OnboardingInlineComponent;
   lastSubmitPlanComponent?: IToolExecutionComponent;
-  /** Follow-up messages sent via Ctrl+F while streaming */
+  /** User-message follow-ups queued while the agent is running */
+  pendingFollowUpMessages: Array<{ content: string; images?: Array<{ data: string; mimeType: string }> }>;
+  /** FIFO ordering across queued follow-up messages and slash commands */
+  pendingQueuedActions: Array<'message' | 'slash'>;
+  /** Follow-up messages rendered while streaming so tool output stays above them */
   followUpComponents: UserMessageComponent[];
-  /** Slash commands queued via Ctrl+F while the agent is running */
+  /** Slash commands queued while the agent is running */
   pendingSlashCommands: string[];
   /** Active approval dialog dismiss callback — called on Ctrl+C to unblock the dialog */
   pendingApprovalDismiss: (() => void) | null;
@@ -217,6 +221,8 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Inline interaction
     lastClearedText: '',
     pendingInlineQuestions: [],
+    pendingFollowUpMessages: [],
+    pendingQueuedActions: [],
     followUpComponents: [],
     pendingSlashCommands: [],
     pendingApprovalDismiss: null,

@@ -62,8 +62,7 @@ function getShortcuts(modes: number): HelpEntry[] {
     { key: 'Ctrl+C', description: 'Interrupt / clear input' },
     { key: 'Ctrl+C×2', description: 'Exit (double-tap)' },
     { key: 'Ctrl+D', description: 'Exit (when editor empty)' },
-    { key: 'Enter', description: 'While working → steer' },
-    { key: 'Ctrl+F', description: 'Queue follow-up message' },
+    { key: 'Enter', description: 'Send message / queue follow-up' },
     { key: 'Ctrl+T', description: 'Toggle thinking blocks' },
     { key: 'Ctrl+E', description: 'Expand/collapse tool outputs' },
     { key: 'Ctrl+Y', description: 'Toggle YOLO mode' },
@@ -100,7 +99,7 @@ export function buildHelpText(options: HelpTextOptions): string {
 
   if (options.customSlashCommands.length > 0) {
     const customEntries = options.customSlashCommands.map(cmd => ({
-      key: `//${cmd.name}`,
+      key: `/${cmd.name}`,
       description: cmd.description || 'No description',
     }));
     sections.push(renderSection('Custom Commands', customEntries));

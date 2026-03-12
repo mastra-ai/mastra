@@ -108,11 +108,12 @@ export function updateStatusLine(state: TUIState): void {
 
   // --- Collect raw data ---
   // Show OM model when observing/reflecting, otherwise main model
-  const fullModelId = showOMMode
-    ? isObserving
-      ? state.harness.getObserverModelId()
-      : state.harness.getReflectorModelId()
-    : state.harness.getFullModelId();
+  const fullModelId =
+    (showOMMode
+      ? isObserving
+        ? state.harness.getObserverModelId()
+        : state.harness.getReflectorModelId()
+      : state.harness.getFullModelId()) ?? '';
   // e.g. "anthropic/claude-sonnet-4-20250514" → "claude-sonnet-4-20250514"
   const shortModelId = fullModelId.includes('/') ? fullModelId.slice(fullModelId.indexOf('/') + 1) : fullModelId;
   // e.g. "claude-opus-4-6" → "opus 4.6", "claude-sonnet-4-20250514" → "sonnet-4-20250514"
@@ -124,6 +125,9 @@ export function updateStatusLine(state: TUIState): void {
     displayPath = '~' + displayPath.slice(homedir.length);
   }
   const branch = state.projectInfo.gitBranch;
+  const queuedCount = state.pendingQueuedActions.length + state.harness.getFollowUpCount();
+  const queuedLabel =
+    queuedCount > 0 ? `${queuedCount} queued ${queuedCount === 1 ? 'message' : 'messages'}` : null;
   // Build progressively shorter directory strings for layout fallback
   const dirFull = branch ? `${displayPath} (${branch})` : displayPath;
   const dirBranchOnly = branch || null;
@@ -212,6 +216,7 @@ export function updateStatusLine(state: TUIState): void {
     showDir: boolean;
     dir?: string | null;
     badge?: 'full' | 'short';
+    showQueue?: boolean;
   }): { plain: string; styled: string } | null => {
     const parts: Array<{ plain: string; styled: string }> = [];
     // Model ID (always present) — styleModelId adds padding spaces
@@ -260,6 +265,12 @@ export function updateStatusLine(state: TUIState): void {
     }
     if (ref) {
       parts.push({ plain: ref, styled: ref });
+    }
+    if (opts.showQueue && queuedLabel) {
+      parts.push({
+        plain: queuedLabel,
+        styled: theme.fg('warning', queuedLabel),
+      });
     }
     // Directory / branch (lowest priority on line 1)
     const dirText = opts.dir !== undefined ? opts.dir : opts.showDir ? dirFull : null;
@@ -311,40 +322,52 @@ export function updateStatusLine(state: TUIState): void {
   // Try progressively more compact layouts.
   // Priority: token fractions + buffer > labels > provider > badge > buffer > fractions
   const result =
-    // 1. Full badge + full model + long labels + fractions + buffer + full dir
-    buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false, dir: dirFull }) ??
-    // 2. Full badge + full model + branch only (drop path)
-    buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false, dir: dirBranchOnly }) ??
-    // 3. Full badge + full model + abbreviated branch
-    buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false, dir: dirBranchShort }) ??
+    // 1. Full badge + full model + long labels + queue count + full dir
+    buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false, dir: dirFull, showQueue: true }) ??
+    // 2. Full badge + full model + queue count + branch only (drop path)
+    buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false, dir: dirBranchOnly, showQueue: true }) ??
+    // 3. Full badge + full model + queue count + abbreviated branch
+    buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false, dir: dirBranchShort, showQueue: true }) ??
     // 4. Drop directory entirely
-    buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false }) ??
-    // 5. Drop provider + "claude-" prefix, keep full labels + fractions + buffer
-    buildLine({ modelId: tinyModelId, memCompact: 'full', showDir: false }) ??
-    // 6. Short labels (msg/mem) + fractions + buffer
-    buildLine({ modelId: tinyModelId, showDir: false }) ??
-    // 7. Short badge + short labels + fractions + buffer
-    buildLine({ modelId: tinyModelId, showDir: false, badge: 'short' }) ??
-    // 8. Short badge + fractions (drop buffer indicator)
+    buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false, showQueue: true }) ??
+    // 5. Drop provider + "claude-" prefix, keep full labels + queue count
+    buildLine({ modelId: tinyModelId, memCompact: 'full', showDir: false, showQueue: true }) ??
+    // 6. Short labels (msg/mem) + queue count
+    buildLine({ modelId: tinyModelId, showDir: false, showQueue: true }) ??
+    // 7. Short badge + short labels + queue count
+    buildLine({ modelId: tinyModelId, showDir: false, badge: 'short', showQueue: true }) ??
+    // 8. Short badge + fractions (drop buffer indicator, keep queue count)
     buildLine({
       modelId: tinyModelId,
       memCompact: 'noBuffer',
       showDir: false,
       badge: 'short',
+      showQueue: true,
     }) ??
-    // 9. Full badge + percent only
+    // 9. Full badge + percent only + queue count
     buildLine({
       modelId: tinyModelId,
       memCompact: 'percentOnly',
       showDir: false,
+      badge: 'full',
+      showQueue: true,
     }) ??
-    // 10. Short badge + percent only
+    // 10. Short badge + percent only + queue count
     buildLine({
       modelId: tinyModelId,
       memCompact: 'percentOnly',
       showDir: false,
       badge: 'short',
-    });
+      showQueue: true,
+    }) ??
+    // 11. Model only + queue count
+    buildLine({ modelId: tinyModelId, showDir: false, badge: undefined, showQueue: true }) ??
+    // 12. Badge only + queue count
+    buildLine({ modelId: '', showDir: false, badge: 'short', showQueue: true }) ??
+    // 13. Model only
+    buildLine({ modelId: tinyModelId, showDir: false, badge: undefined }) ??
+    // 14. Badge only
+    buildLine({ modelId: '', showDir: false, badge: 'short' });
 
   state.statusLine.setText(
     result?.styled ??

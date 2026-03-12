@@ -37,7 +37,7 @@ export type AppAction =
   | 'toggleYolo';
 
 export class CustomEditor extends Editor {
-  private actionHandlers: Map<AppAction, () => void> = new Map();
+  private actionHandlers: Map<AppAction, () => unknown> = new Map();
 
   public onCtrlD?: () => void;
   public escapeEnabled = true;
@@ -49,7 +49,7 @@ export class CustomEditor extends Editor {
     super(tui, theme);
   }
 
-  onAction(action: AppAction, handler: () => void): void {
+  onAction(action: AppAction, handler: () => unknown): void {
     this.actionHandlers.set(action, handler);
   }
 
@@ -309,14 +309,19 @@ export class CustomEditor extends Editor {
       }
     }
 
-    if (matchesKey(data, 'ctrl+f')) {
-      if (this.isShowingAutocomplete()) {
-        super.handleInput('\t');
-      }
+    if (matchesKey(data, 'enter')) {
       const handler = this.actionHandlers.get('followUp');
       if (handler) {
-        handler();
-        return;
+        if (this.isShowingAutocomplete()) {
+          super.handleInput('\t');
+          if (this.getText().trimStart().startsWith('/') && handler() !== false) {
+            return;
+          }
+          return;
+        }
+        if (handler() !== false) {
+          return;
+        }
       }
     }
 

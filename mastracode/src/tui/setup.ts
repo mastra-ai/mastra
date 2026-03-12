@@ -14,7 +14,6 @@ import { ThreadLockError } from '../utils/thread-lock.js';
 import { renderBanner } from './components/banner.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { showError, showInfo } from './display.js';
-import { addUserMessage } from './render-messages.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
@@ -28,6 +27,7 @@ export function setupKeyboardShortcuts(
   callbacks: {
     stop: () => void;
     doubleCtrlCMs: number;
+    queueFollowUpMessage: (text: string) => void;
   },
 ): void {
   // Ctrl+C / Escape - abort if running, clear input if idle, double-tap always exits
@@ -145,34 +145,23 @@ export function setupKeyboardShortcuts(
     showInfo(state, current ? 'YOLO mode off' : 'YOLO mode on');
   });
 
-  // Ctrl+F - queue follow-up message while streaming
+  // Enter - submit immediately when idle, queue follow-up input while streaming
   state.editor.onAction('followUp', () => {
-    const text = state.editor.getText().trim();
-    if (!text) return;
-    if (!state.harness.isRunning()) return; // Only relevant while streaming
-
-    // Clear editor
-    state.editor.setText('');
-    state.ui.requestRender();
-
-    if (text.startsWith('/')) {
-      // Queue slash command for processing after the agent completes
-      state.pendingSlashCommands.push(text);
-      showInfo(state, `Slash command queued: ${text}`);
-    } else {
-      // Queue as a regular follow-up message
-      addUserMessage(state, {
-        id: `user-${Date.now()}`,
-        role: 'user',
-        content: [{ type: 'text', text }],
-        createdAt: new Date(),
-      });
-      state.ui.requestRender();
-
-      state.harness.followUp({ content: text }).catch(error => {
-        showError(state, error instanceof Error ? error.message : 'Follow-up failed');
-      });
+    if (!state.harness.isRunning()) {
+      state.editor.onSubmit?.(state.editor.getText());
+      return true;
     }
+
+    const text = state.editor.getText().trim();
+    if (!text) {
+      return true;
+    }
+
+    state.editor.addToHistory(text);
+    state.editor.setText('');
+    callbacks.queueFollowUpMessage(text);
+    state.ui.requestRender();
+    return true;
   });
 }
 
@@ -314,9 +303,8 @@ export function setupAutocomplete(state: TUIState): void {
 
   // Add custom slash commands to the list
   for (const customCmd of state.customSlashCommands) {
-    // Prefix with extra / to distinguish from built-in commands (//command-name)
     slashCommands.push({
-      name: `/${customCmd.name}`,
+      name: customCmd.name,
       description: customCmd.description || `Custom: ${customCmd.name}`,
     });
   }

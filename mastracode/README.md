@@ -60,7 +60,7 @@ On Ubuntu/Debian the binary is called `fdfind` — mastracode detects both `fd` 
 
 ### Starting a conversation
 
-Type your message and press Enter. The agent responds with streaming text.
+Type your message and press Enter. If the agent is already working, Enter queues your next message and sends it after the current run finishes.
 
 ### `@` file references
 
@@ -107,10 +107,15 @@ Select a suggestion with arrow keys and press Tab to insert it.
 
 | Shortcut | Action                            |
 | -------- | --------------------------------- |
-| `Ctrl+C` | Interrupt current operation       |
-| `Ctrl+D` | Exit (when editor is empty)       |
+| `Ctrl+C` | Interrupt current operation or clear input |
+| `Ctrl+C` ×2 | Exit (double-tap) |
+| `Ctrl+D` | Exit (when editor is empty) |
+| `Ctrl+Z` | Suspend process (`fg` to resume) |
+| `Alt+Z` | Undo last clear |
 | `Ctrl+T` | Toggle thinking blocks visibility |
-| `Ctrl+E` | Expand/collapse all tool outputs  |
+| `Ctrl+E` | Expand/collapse all tool outputs |
+| `Enter` | Send a message, or queue a follow-up while the agent is running |
+| `Ctrl+Y` | Toggle YOLO mode |
 
 ## Configuration
 

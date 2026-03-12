@@ -5,6 +5,7 @@ vi.hoisted(() => vi.resetModules());
 const mocks = vi.hoisted(() => ({
   handleModelsPackCommand: vi.fn().mockResolvedValue(undefined),
   handleCustomProvidersCommand: vi.fn().mockResolvedValue(undefined),
+  processSlashCommand: vi.fn().mockResolvedValue('custom output'),
   showError: vi.fn(),
 }));
 
@@ -43,7 +44,7 @@ vi.mock('../display.js', () => ({
 }));
 
 vi.mock('../../utils/slash-command-processor.js', () => ({
-  processSlashCommand: vi.fn(),
+  processSlashCommand: mocks.processSlashCommand,
 }));
 
 import { dispatchSlashCommand } from '../command-dispatch.js';
@@ -52,6 +53,7 @@ describe('dispatchSlashCommand models routing', () => {
   beforeEach(() => {
     mocks.handleModelsPackCommand.mockClear();
     mocks.handleCustomProvidersCommand.mockClear();
+    mocks.processSlashCommand.mockClear();
     mocks.showError.mockClear();
   });
 
@@ -85,5 +87,23 @@ describe('dispatchSlashCommand models routing', () => {
     expect(handled).toBe(true);
     expect(mocks.handleModelsPackCommand).not.toHaveBeenCalled();
     expect(mocks.showError).toHaveBeenCalledWith(state, 'Unknown command: models:pack');
+  });
+
+  it('routes /deploy to a matching custom slash command', async () => {
+    const state = {
+      customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' }],
+      getCurrentThreadId: vi.fn(() => 'thread-1'),
+      allSlashCommandComponents: [],
+      chatContainer: { addChild: vi.fn() },
+      ui: { requestRender: vi.fn() },
+      harness: { sendMessage: vi.fn().mockResolvedValue(undefined) },
+    } as any;
+
+    const handled = await dispatchSlashCommand('/deploy', state, () => ({}) as any);
+
+    expect(handled).toBe(true);
+    expect(mocks.processSlashCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.processSlashCommand).toHaveBeenCalledWith(state.customSlashCommands[0], [], process.cwd());
+    expect(mocks.showError).not.toHaveBeenCalled();
   });
 });
