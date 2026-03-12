@@ -82,7 +82,9 @@ export function getOpenAIApiKey(): string | undefined {
  * Applies prompt caching but NOT the Claude Code identity middleware
  * (which is only required for Claude Max OAuth).
  */
-function getEnvBaseUrl(envVarName: typeof ANTHROPIC_BASE_URL_ENV_VAR | typeof OPENAI_BASE_URL_ENV_VAR): string | undefined {
+function getEnvBaseUrl(
+  envVarName: typeof ANTHROPIC_BASE_URL_ENV_VAR | typeof OPENAI_BASE_URL_ENV_VAR,
+): string | undefined {
   const value = process.env[envVarName]?.trim();
   return value ? value : undefined;
 }
