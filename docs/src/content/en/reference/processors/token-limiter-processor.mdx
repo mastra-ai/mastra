@@ -1,5 +1,5 @@
 ---
-title: "Reference: Token Limiter Processor | Processors"
+title: "Reference: TokenLimiterProcessor | Processors"
 description: "Documentation for the TokenLimiterProcessor in Mastra, which limits the number of tokens in messages."
 packages:
   - "@mastra/core"
@@ -8,9 +8,10 @@ packages:
 
 # TokenLimiterProcessor
 
-The `TokenLimiterProcessor` limits the number of tokens in messages. It can be used as both an input and output processor:
+The `TokenLimiterProcessor` limits the number of tokens in messages. It can be used as an input, per-step input, and output processor:
 
-- **Input processor**: Filters historical messages to fit within the context window, prioritizing recent messages
+- **Input processor** (`processInput`): Filters historical messages to fit within the context window before the agentic loop starts, prioritizing recent messages
+- **Per-step input processor** (`processInputStep`): Prunes messages at each step of a multi-step agent workflow, preventing unbounded token growth when tools trigger additional LLM calls
 - **Output processor**: Limits generated response tokens via streaming or non-streaming with configurable strategies for handling exceeded limits
 
 ## Usage example
@@ -94,7 +95,14 @@ const processor = new TokenLimiterProcessor({
     name: 'processInput',
     type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>',
     description:
-      'Filters input messages to fit within token limit, prioritizing recent messages while preserving system messages',
+      'Filters input messages to fit within token limit before the agentic loop starts, prioritizing recent messages while preserving system messages',
+    isOptional: false,
+  },
+  {
+    name: 'processInputStep',
+    type: '(args: ProcessInputStepArgs) => Promise<void>',
+    description:
+      'Prunes messages at each step of the agentic loop (including tool call continuations) to keep the conversation within the token limit. Mutates the messageList directly by removing oldest messages first while preserving system messages.',
     isOptional: false,
   },
   {
@@ -120,10 +128,10 @@ const processor = new TokenLimiterProcessor({
 
 ## Error behavior
 
-When used as an input processor, `TokenLimiterProcessor` throws a `TripWire` error in the following cases:
+When used as an input processor (both `processInput` and `processInputStep`), `TokenLimiterProcessor` throws a `TripWire` error in the following cases:
 
-- **Empty messages**: If there are no messages to process, a TripWire is thrown because you cannot send an LLM request with no messages.
-- **System messages exceed limit**: If system messages alone exceed the token limit, a TripWire is thrown because you cannot send an LLM request with only system messages and no user/assistant messages.
+- **Empty messages**: If there are no messages to process, a TripWire is thrown because you can't send an LLM request with no messages.
+- **System messages exceed limit**: If system messages alone exceed the token limit, a TripWire is thrown because you can't send an LLM request with only system messages and no user/assistant messages.
 
 ```typescript
 import { TripWire } from '@mastra/core/agent'
@@ -158,6 +166,29 @@ export const agent = new Agent({
   inputProcessors: [
     new TokenLimiterProcessor({ limit: 4000 }), // Limits historical messages to ~4000 tokens
   ],
+})
+```
+
+### As a per-step input processor (limit multi-step token growth)
+
+When an agent uses tools across multiple steps (e.g. `maxSteps > 1`), each step accumulates conversation history from all previous steps. Use `inputProcessors` to also limit tokens at each step of the agentic loop — the `TokenLimiterProcessor` automatically applies to both the initial input and every subsequent step:
+
+```typescript title="src/mastra/agents/multi-step-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { TokenLimiterProcessor } from '@mastra/core/processors'
+
+export const agent = new Agent({
+  name: 'multi-step-agent',
+  instructions: 'You are a helpful research assistant with access to tools',
+  model: 'openai/gpt-4o',
+  inputProcessors: [
+    new TokenLimiterProcessor({ limit: 8000 }), // Applied at every step
+  ],
+})
+
+// Each tool call step will be limited to ~8000 input tokens
+const result = await agent.generate('Research this topic using your tools', {
+  maxSteps: 10,
 })
 ```
 

@@ -29,6 +29,7 @@ export function createStreamFromGenerateResult(result: {
         timestamp: result.response?.timestamp,
       });
 
+      const toolCallMeta: Record<string, { providerExecuted?: boolean }> = {};
       for (const message of result.content) {
         if (message.type === 'tool-call') {
           const toolCall = message as {
@@ -36,11 +37,16 @@ export function createStreamFromGenerateResult(result: {
             toolCallId: string;
             toolName: string;
             input: unknown;
+            providerExecuted?: boolean;
+            dynamic?: boolean;
           };
+          toolCallMeta[toolCall.toolCallId] = { providerExecuted: toolCall.providerExecuted };
           controller.enqueue({
             type: 'tool-input-start',
             id: toolCall.toolCallId,
             toolName: toolCall.toolName,
+            providerExecuted: toolCall.providerExecuted,
+            dynamic: toolCall.dynamic,
           });
           controller.enqueue({
             type: 'tool-input-delta',
@@ -53,7 +59,13 @@ export function createStreamFromGenerateResult(result: {
           });
           controller.enqueue(toolCall);
         } else if (message.type === 'tool-result') {
-          controller.enqueue(message);
+          const toolResult = message as { type: 'tool-result'; toolCallId: string; [key: string]: unknown };
+          const meta = toolCallMeta[toolResult.toolCallId];
+          if (meta?.providerExecuted) {
+            controller.enqueue({ ...toolResult, providerExecuted: meta.providerExecuted });
+          } else {
+            controller.enqueue(message);
+          }
         } else if (message.type === 'text') {
           const text = message as {
             type: 'text';

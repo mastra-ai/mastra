@@ -28,7 +28,7 @@ new OtelBridge()
 
 ## Methods
 
-### executeInContext
+### `executeInContext`
 
 ```typescript prettier:false
 executeInContext<T>(spanId: string, fn: () => Promise<T>): Promise<T>
@@ -55,7 +55,7 @@ Executes an async function within the OTEL context of a Mastra span. OTEL-instru
 
 **Returns:** `Promise<T>` - The result of the function execution.
 
-### executeInContextSync
+### `executeInContextSync`
 
 ```typescript prettier:false
 executeInContextSync<T>(spanId: string, fn: () => T): T
@@ -88,9 +88,9 @@ Executes a synchronous function within the OTEL context of a Mastra span.
 async shutdown(): Promise<void>
 ```
 
-Shuts down the bridge and cleans up resources. Ends any spans that were not properly closed.
+Shuts down the bridge and cleans up resources. Ends any spans that weren't properly closed.
 
-## Usage Examples
+## Usage examples
 
 ### Basic Usage
 
@@ -142,13 +142,13 @@ const mastra = new Mastra({
 })
 ```
 
-## OpenTelemetry Setup Requirements
+## `OpenTelemetry` setup requirements
 
 The OtelBridge requires an active OpenTelemetry SDK to function. The bridge reads from OTEL's ambient context.
 
 See the [OtelBridge Guide](/docs/observability/tracing/bridges/otel#configuration) for complete setup instructions, including how to configure OTEL instrumentation and run your application.
 
-## Tags Support
+## Tags support
 
 The OtelBridge supports trace tagging for categorization and filtering. Tags are only applied to root spans and are included as the `mastra.tags` attribute on native OTEL spans.
 

@@ -64,16 +64,20 @@ const response = await agent.generate('List all files in the workspace')
 
 By default, `LocalFilesystem` runs in **contained mode** — all file operations are restricted to stay within `basePath`. This prevents path traversal attacks and symlink escapes.
 
-In contained mode, absolute paths that fall within `basePath` are used as-is, while other absolute paths are treated as virtual paths relative to `basePath` (e.g. `/file.txt` resolves to `basePath/file.txt`). Any resolved path that escapes `basePath` throws a `PermissionError`.
+In contained mode:
 
-If your agent needs to access specific paths outside `basePath`, use `allowedPaths` to grant access without disabling containment entirely:
+- **Relative paths** (e.g. `src/index.ts`) resolve against `basePath`
+- **Absolute paths** (e.g. `/home/user/.config/file.txt`) are treated as real filesystem paths — if they fall outside `basePath` and any `allowedPaths`, a `PermissionError` is thrown
+- **Tilde paths** (e.g. `~/Documents`) expand to the home directory and follow the same containment rules
+
+If your agent needs to access specific paths outside `basePath`, use `allowedPaths` to grant access without disabling containment entirely. Relative paths are resolved against `basePath`, and absolute paths are used as-is:
 
 ```typescript
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: './workspace',
     // highlight-next-line
-    allowedPaths: ['/home/user/.config', '/home/user/documents'],
+    allowedPaths: ['~/.claude/skills', '../shared-data'],
   }),
 })
 ```
@@ -115,9 +119,9 @@ const workspace = new Workspace({
 })
 ```
 
-When read-only, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are not added to the agent's toolset. The agent can still read and list files.
+When read-only, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) aren't added to the agent's toolset. The agent can still read and list files.
 
-## Mounts and CompositeFilesystem
+## Mounts and `CompositeFilesystem`
 
 When you use the `mounts` option on a workspace, Mastra creates a `CompositeFilesystem` that routes file operations to the correct provider based on path prefix.
 
@@ -154,7 +158,7 @@ With this configuration:
 
 All file paths must start with a mount prefix. Operations on paths that don't match any mount will fail. Listing the root directory (`/`) returns virtual directory entries for each mount point.
 
-Mount paths cannot be nested — for example, you cannot mount at both `/data` and `/data/sub`.
+Mount paths can't be nested — for example, you can't mount at both `/data` and `/data/sub`.
 
 ### `filesystem` vs `mounts`
 

@@ -1,14 +1,14 @@
 ---
-title: "Time Travel | Workflows"
+title: "Time travel | Workflows"
 description: "Re-execute workflow steps from a specific point using time travel debugging in Mastra"
 packages:
   - "@mastra/core"
 ---
 
-# Time Travel
+# Time travel
 
 Time travel allows you to re-execute a workflow starting from any specific step, using either stored snapshot data or custom context you provide. This is useful for debugging failed workflows, testing individual steps with different inputs, or recovering from errors without re-running the entire workflow.
-You can also use time travel to execute a workflow that has not been run yet, starting from any specific step.
+You can also use time travel to execute a workflow that hasn't been run yet, starting from any specific step.
 
 ## How time travel works
 
@@ -201,7 +201,7 @@ Time travel throws errors in specific situations:
 
 ### Running workflow
 
-You cannot time travel to a workflow that is currently running:
+You can't time travel to a workflow that's currently running:
 
 ```typescript
 try {

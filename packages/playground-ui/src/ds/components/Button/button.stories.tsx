@@ -30,77 +30,55 @@ type Story = StoryObj<typeof Button>;
 export const Default: Story = {
   args: {
     children: 'Button',
-    variant: 'default',
-    size: 'md',
   },
 };
 
-export const ExperimentalVariants: Story = {
+export const Variants: Story = {
   render: () => (
-    <div className="grid gap-2">
-      <Button variant="standard" size="default">
-        Standard
-      </Button>
-      <Button variant="cta" size="default">
-        CTA
-      </Button>
+    <div className="flex items-center gap-4">
+      <Button variant="default">Default</Button>
+      <Button variant="primary">Primary</Button>
+      <Button variant="cta">CTA</Button>
+      <Button variant="ghost">Ghost</Button>
     </div>
   ),
 };
 
-export const ExperimentalSizes: Story = {
+export const Sizes: Story = {
   render: () => (
-    <div className="grid gap-2">
-      <Button variant="standard" size="default">
-        Default size
-      </Button>
-      <Button variant="cta" size="large">
-        Large size
-      </Button>
+    <div className="flex items-center gap-4">
+      <Button size="sm">Small</Button>
+      <Button size="md">Medium</Button>
+      <Button size="default">Default</Button>
+      <Button size="lg">Large</Button>
     </div>
   ),
-};
-
-export const Light: Story = {
-  args: {
-    children: 'Light Button',
-    variant: 'light',
-  },
-};
-
-export const Outline: Story = {
-  args: {
-    children: 'Outline Button',
-    variant: 'outline',
-  },
-};
-
-export const Ghost: Story = {
-  args: {
-    children: 'Ghost Button',
-    variant: 'ghost',
-  },
-};
-
-export const Large: Story = {
-  args: {
-    children: 'Large Button',
-    size: 'lg',
-  },
 };
 
 export const Disabled: Story = {
-  args: {
-    children: 'Disabled Button',
-    disabled: true,
-  },
+  render: () => (
+    <div className="flex items-center gap-4">
+      <Button disabled variant="default">
+        Default
+      </Button>
+      <Button disabled variant="primary">
+        Primary
+      </Button>
+      <Button disabled variant="cta">
+        CTA
+      </Button>
+      <Button disabled variant="ghost">
+        Ghost
+      </Button>
+    </div>
+  ),
 };
 
 export const WithIcon: Story = {
   args: {
     children: (
       <>
-        <Plus className="h-4 w-4" />
+        <Plus />
         Add Item
       </>
     ),
@@ -108,27 +86,13 @@ export const WithIcon: Story = {
 };
 
 export const IconOnly: Story = {
-  args: {
-    children: <Settings className="h-4 w-4" />,
-  },
-};
-
-export const AllVariants: Story = {
   render: () => (
-    <div className="flex items-center gap-2">
-      <Button variant="default">Default</Button>
-      <Button variant="light">Light</Button>
-      <Button variant="outline">Outline</Button>
-      <Button variant="ghost">Ghost</Button>
-    </div>
-  ),
-};
-
-export const AllSizes: Story = {
-  render: () => (
-    <div className="flex items-center gap-2">
-      <Button size="md">Medium</Button>
-      <Button size="lg">Large</Button>
+    <div className="flex items-center gap-4">
+      {(['sm', 'md', 'default', 'lg'] as const).map(size => (
+        <Button key={size} size={size}>
+          <Settings />
+        </Button>
+      ))}
     </div>
   ),
 };

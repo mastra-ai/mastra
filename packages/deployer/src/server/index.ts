@@ -12,6 +12,7 @@ import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { Context } from 'hono';
 import { Hono } from 'hono';
+import { compress } from 'hono/compress';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
@@ -186,7 +187,13 @@ export async function createHonoServer(
       credentials: hasAuth ? true : false,
       maxAge: 3600,
       ...server?.cors,
-      allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', ...(server?.cors?.allowHeaders ?? [])],
+      allowHeaders: [
+        'Content-Type',
+        'Authorization',
+        'x-mastra-client-type',
+        'x-mastra-dev-playground',
+        ...(server?.cors?.allowHeaders ?? []),
+      ],
       exposeHeaders: ['Content-Length', 'X-Requested-With', ...(server?.cors?.exposeHeaders ?? [])],
     };
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), cors(corsConfig));
@@ -325,6 +332,9 @@ export async function createHonoServer(
         });
       },
     );
+
+    // Enable gzip/deflate compression for studio static assets only
+    app.use(`${studioBasePath}/assets/*`, compress());
 
     // Studio routes - these should come after API routes
     // Serve static assets from studio directory

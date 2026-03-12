@@ -1,11 +1,11 @@
 ---
-title: "Control Flow | Workflows"
+title: "Control flow | Workflows"
 description: "Control flow in Mastra workflows allows you to manage branching, merging, and conditions to construct workflows that meet your logic requirements."
 packages:
   - "@mastra/core"
 ---
 
-# Control Flow
+# Control flow
 
 Workflows run a sequence of predefined tasks, and you can control how that flow is executed. Tasks are divided into **steps**, which can be executed in different ways depending on your requirements. They can run sequentially, in parallel, or follow different paths based on conditions.
 
@@ -345,7 +345,7 @@ export const testWorkflow = createWorkflow({
 
 ## Input data mapping
 
-When using `.then()`, `.parallel()`, or `.branch()`, it is sometimes necessary to transform the output of a previous step to match the input of the next. In these cases you can use `.map()` to access the `inputData` and transform it to create a suitable data shape for the next step.
+When using `.then()`, `.parallel()`, or `.branch()`, it's sometimes necessary to transform the output of a previous step to match the input of the next. In these cases you can use `.map()` to access the `inputData` and transform it to create a suitable data shape for the next step.
 
 ![Mapping with .map()](/img/workflows/workflows-data-mapping-map.jpg)
 
@@ -830,7 +830,7 @@ This means:
 
 - `.parallel()` collects all branch outputs into an object, then passes it to the next step
 - `.foreach()` collects all iteration outputs into an array, then passes it to the next step
-- There is no way to "stream" results to the next step as they complete
+- Results can't be "streamed" to the next step as they complete
 
 ### Concurrency behavior
 

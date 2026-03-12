@@ -1,5 +1,5 @@
 ---
-title: "Reference: PG Vector Store | Vectors"
+title: "Reference: PG vector store | Vectors"
 description: Documentation for the PgVector class in Mastra, which provides vector search using PostgreSQL with pgvector extension.
 packages:
   - "@mastra/core"
@@ -8,12 +8,12 @@ packages:
   - "@mastra/pg"
 ---
 
-# PG Vector Store
+# PG vector store
 
 The PgVector class provides vector search using [PostgreSQL](https://www.postgresql.org/) with [pgvector](https://github.com/pgvector/pgvector) extension.
 It provides robust vector similarity search capabilities within your existing PostgreSQL database.
 
-## Constructor Options
+## Constructor options
 
 <PropertiesTable
   content={[
@@ -87,7 +87,7 @@ It provides robust vector similarity search capabilities within your existing Po
 ]}
 />
 
-## Constructor Examples
+## Constructor examples
 
 ### Connection String
 
@@ -131,7 +131,7 @@ const vectorStore = new PgVector({
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 <PropertiesTable
   content={[
@@ -166,10 +166,17 @@ const vectorStore = new PgVector({
     defaultValue: 'true',
     description: 'Whether to build the index',
   },
+  {
+    name: 'metadataIndexes',
+    type: 'string[]',
+    isOptional: true,
+    description:
+      'Array of metadata field names to create btree indexes on. Improves query performance when filtering by these metadata fields.',
+  },
 ]}
 />
 
-#### IndexConfig
+#### `IndexConfig`
 
 <PropertiesTable
   content={[
@@ -259,7 +266,7 @@ HNSW indexes require significant shared memory during construction. For 100K vec
 
 Higher M values or efConstruction values will increase memory requirements significantly. Adjust your system's shared memory limits if needed.
 
-### upsert()
+### `upsert()`
 
 <PropertiesTable
   content={[
@@ -288,7 +295,7 @@ Higher M values or efConstruction values will increase memory requirements signi
 ]}
 />
 
-### query()
+### `query()`
 
 <PropertiesTable
   content={[
@@ -357,11 +364,11 @@ Higher M values or efConstruction values will increase memory requirements signi
 ]}
 />
 
-### listIndexes()
+### `listIndexes()`
 
 Returns an array of index names as strings.
 
-### describeIndex()
+### `describeIndex()`
 
 <PropertiesTable
   content={[
@@ -390,7 +397,7 @@ interface PGIndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 <PropertiesTable
   content={[
@@ -402,7 +409,7 @@ interface PGIndexStats {
 ]}
 />
 
-### updateVector()
+### `updateVector()`
 
 Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
@@ -456,7 +463,7 @@ await pgVector.updateVector({
 })
 ```
 
-### deleteVector()
+### `deleteVector()`
 
 <PropertiesTable
   content={[
@@ -479,7 +486,7 @@ Deletes a single vector by ID from the specified index.
 await pgVector.deleteVector({ indexName: 'my_vectors', id: 'vector123' })
 ```
 
-### deleteVectors()
+### `deleteVectors()`
 
 Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
 
@@ -505,11 +512,11 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 ]}
 />
 
-### disconnect()
+### `disconnect()`
 
 Closes the database connection pool. Should be called when done using the store.
 
-### buildIndex()
+### `buildIndex()`
 
 <PropertiesTable
   content={[
@@ -559,7 +566,7 @@ await pgVector.buildIndex('my_vectors', 'cosine', {
 })
 ```
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -572,7 +579,7 @@ interface QueryResult {
 }
 ```
 
-## Error Handling
+## Error handling
 
 The store throws typed errors that can be caught:
 
@@ -590,7 +597,7 @@ try {
 }
 ```
 
-## Index Configuration Guide
+## Index configuration guide
 
 ### Performance Optimization
 
@@ -619,14 +626,14 @@ The system automatically detects configuration changes and only rebuilds indexes
 - Changed configuration: Index is dropped and rebuilt
 - This prevents the performance issues from unnecessary index recreations
 
-## Best Practices
+## Best practices
 
 - Regularly evaluate your index configuration to ensure optimal performance.
 - Adjust parameters like `lists` and `m` based on dataset size and query requirements.
 - **Monitor index performance** using `describeIndex()` to track usage
 - Rebuild indexes periodically to maintain efficiency, especially after significant data changes
 
-## Direct Pool Access
+## Direct pool access
 
 The `PgVector` class exposes its underlying PostgreSQL connection pool as a public field:
 
@@ -642,7 +649,7 @@ This enables advanced usage such as running direct SQL queries, managing transac
 
 This design supports advanced use cases but requires careful resource management by the user.
 
-## Usage Example
+## Usage example
 
 ### Local embeddings with fastembed
 

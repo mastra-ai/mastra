@@ -31,6 +31,7 @@ import { lazy, Suspense } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/framework';
+
 import { Login } from './pages/login';
 import { SignUp } from './pages/signup';
 import { Layout } from '@/components/layout';
@@ -45,6 +46,8 @@ const WorkflowLayout = lazy(() =>
 // -- Agent pages --
 const Agents = lazy(() => import('./pages/agents'));
 const Agent = lazy(() => import('./pages/agents/agent'));
+const AgentPlayground = lazy(() => import('./pages/agents/agent-playground'));
+const AgentTraces = lazy(() => import('./pages/agents/agent-traces'));
 const AgentTool = lazy(() => import('./pages/tools/agent-tool'));
 
 // -- CMS Agent pages --
@@ -241,6 +244,8 @@ const routes = [
           },
           { path: 'chat', element: <Agent /> },
           { path: 'chat/:threadId', element: <Agent /> },
+          ...(isExperimentalFeatures ? [{ path: 'playground', element: <AgentPlayground /> }] : []),
+          { path: 'traces', element: <AgentTraces /> },
         ],
       },
 

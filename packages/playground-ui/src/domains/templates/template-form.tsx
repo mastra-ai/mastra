@@ -1,4 +1,4 @@
-import { InputField, SelectField } from '@/ds/components/FormFields';
+import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
 import { cn } from '@/lib/utils';
 import { ArrowRightIcon, PackageOpenIcon } from 'lucide-react';
 import { Fragment } from 'react';
@@ -6,6 +6,7 @@ import { Container } from './shared';
 import { Spinner } from '@/ds/components/Spinner';
 import { AgentMetadataModelSwitcher } from '../agents/components/agent-metadata/agent-metadata-model-switcher';
 import { Button } from '@/ds/components/Button/Button';
+import { TextFieldBlock } from '@/ds/components/FormFieldBlocks/fields/text-field-block';
 
 type TemplateFormProps = {
   providerOptions: { value: string; label: string }[];
@@ -49,12 +50,14 @@ export function TemplateForm({
         >
           Install Template <PackageOpenIcon />
         </h2>
-        <SelectField
+        <SelectFieldBlock
+          name="template-provider"
           options={providerOptions}
           label="Template AI Model Provider"
           onValueChange={onProviderChange}
           value={selectedProvider}
           placeholder="Select"
+          layout="horizontal"
         />
 
         {selectedProvider && Object.entries(variables || {}).length > 0 && (
@@ -74,7 +77,7 @@ export function TemplateForm({
               ) : (
                 Object.entries(variables).map(([key, value]) => (
                   <Fragment key={key}>
-                    <InputField
+                    <TextFieldBlock
                       name={`env-${key}`}
                       labelIsHidden={true}
                       label="Key"
@@ -82,7 +85,7 @@ export function TemplateForm({
                       disabled
                       className="w-full"
                     />
-                    <InputField
+                    <TextFieldBlock
                       name={key}
                       labelIsHidden={true}
                       label="Value"

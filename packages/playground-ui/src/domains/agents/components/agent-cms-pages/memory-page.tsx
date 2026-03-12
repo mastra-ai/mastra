@@ -309,7 +309,6 @@ function ObservationalMemoryFields() {
                     field.onChange(v);
                     setValue('memory.observationalMemory.model.name', '', { shouldDirty: true });
                   }}
-                  variant="light"
                 />
               </div>
             )}
@@ -324,12 +323,7 @@ function ObservationalMemoryFields() {
             control={control}
             render={({ field }) => (
               <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                <LLMModels
-                  value={field.value ?? ''}
-                  onValueChange={field.onChange}
-                  llmId={omProvider}
-                  variant="light"
-                />
+                <LLMModels value={field.value ?? ''} onValueChange={field.onChange} llmId={omProvider} />
               </div>
             )}
           />
@@ -411,7 +405,6 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
                     field.onChange(v);
                     setValue('memory.observationalMemory.observation.model.name', '', { shouldDirty: true });
                   }}
-                  variant="light"
                 />
               </div>
             )}
@@ -426,12 +419,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
             control={control}
             render={({ field }) => (
               <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                <LLMModels
-                  value={field.value ?? ''}
-                  onValueChange={field.onChange}
-                  llmId={observerProvider}
-                  variant="light"
-                />
+                <LLMModels value={field.value ?? ''} onValueChange={field.onChange} llmId={observerProvider} />
               </div>
             )}
           />
@@ -615,7 +603,6 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
                     field.onChange(v);
                     setValue('memory.observationalMemory.reflection.model.name', '', { shouldDirty: true });
                   }}
-                  variant="light"
                 />
               </div>
             )}
@@ -630,12 +617,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
             control={control}
             render={({ field }) => (
               <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                <LLMModels
-                  value={field.value ?? ''}
-                  onValueChange={field.onChange}
-                  llmId={reflectorProvider}
-                  variant="light"
-                />
+                <LLMModels value={field.value ?? ''} onValueChange={field.onChange} llmId={reflectorProvider} />
               </div>
             )}
           />
