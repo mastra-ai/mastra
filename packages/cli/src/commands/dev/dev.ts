@@ -497,7 +497,6 @@ export async function dev({
     if (analytics) {
       await analytics.shutdown();
     }
-  }
 
     devLogger.shutdown();
 
