@@ -3,10 +3,9 @@ import { z } from 'zod';
 import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
-import { isArraySchema, isNumberSchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
-import { SchemaCompatLayer } from '../schema-compatibility';
+import { isArraySchema, isNumberSchema, isObjectSchema, isStringSchema } from '../json-schema/utils';
 import type { ZodType } from '../schema.types';
-import type { ModelInformation } from '../types';
+import { ensureAllPropertiesRequired } from '../zod-to-json';
 import {
   isOptional,
   isObj,
@@ -19,31 +18,16 @@ import {
   isNullable,
   isNull,
 } from '../zodTypes';
+import { OpenAISchemaCompatLayer } from './openai';
 
-export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
-  constructor(model: ModelInformation) {
-    super(model);
-  }
-
+export class OpenAIReasoningSchemaCompatLayer extends OpenAISchemaCompatLayer {
   getSchemaTarget(): Targets | undefined {
     return `openApi3`;
   }
 
-  isReasoningModel(): boolean {
-    // there isn't a good way to automatically detect reasoning models besides doing this.
-    // in the future when o5 is released this compat wont apply and we'll want to come back and update this class + our tests
-    return (
-      this.getModel().modelId.includes(`o3`) ||
-      this.getModel().modelId.includes(`o4`) ||
-      this.getModel().modelId.includes(`o1`)
-    );
-  }
-
   shouldApply(): boolean {
-    if (
-      this.isReasoningModel() &&
-      (this.getModel().provider.includes(`openai`) || this.getModel().modelId.includes(`openai`))
-    ) {
+    const model = this.getModel();
+    if (this.isReasoningModel() && (model.provider.includes(`openai`) || model.modelId?.includes(`openai`))) {
       return true;
     }
 
@@ -134,6 +118,11 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
     return this.defaultUnsupportedZodTypeHandler(value as ZodObjectV4<any> | ZodObjectV3<any>);
   }
 
+  processToJSONSchema(zodSchema: ZodTypeV3 | ZodTypeV4): JSONSchema7 {
+    const jsonSchema = super.processToJSONSchema(zodSchema);
+    return ensureAllPropertiesRequired(jsonSchema);
+  }
+
   preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
     // Process based on schema type
     if (isObjectSchema(schema)) {
@@ -148,28 +137,11 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
   }
 
   postProcessJSONNode(schema: JSONSchema7): void {
-    // Handle union schemas in post-processing (after children are processed)
-    if (isUnionSchema(schema)) {
-      this.defaultUnionHandler(schema);
-    }
+    super.postProcessJSONNode(schema);
 
-    // Fix v4-specific issues in post-processing
-    if (isObjectSchema(schema)) {
-      // OpenAI reasoning models don't support passthrough, but we still need to fix empty additionalProperties
-      if (
-        schema.additionalProperties !== undefined &&
-        typeof schema.additionalProperties === 'object' &&
-        schema.additionalProperties !== null &&
-        Object.keys(schema.additionalProperties).length === 0
-      ) {
-        // For reasoning models, set to false (strict mode)
-        schema.additionalProperties = false;
-      }
-
-      // Fix record schemas: remove propertyNames (v4 adds this but it's not needed)
-      if ('propertyNames' in schema) {
-        delete (schema as Record<string, unknown>).propertyNames;
-      }
+    // force additionalProperties to be false for object schemas
+    if (schema.type === 'object' && schema.properties !== undefined) {
+      schema.additionalProperties = false;
     }
   }
 }

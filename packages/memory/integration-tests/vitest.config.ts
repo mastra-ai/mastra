@@ -13,6 +13,11 @@ export default defineConfig({
   ],
   test: {
     //pool: 'forks',
+    poolOptions: {
+      threads: {
+        maxThreads: 2,
+      },
+    },
     globals: true,
     environment: 'node',
     testTimeout: 60000,

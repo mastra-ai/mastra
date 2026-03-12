@@ -9,7 +9,7 @@ packages:
 
 The SarvamVoice class in Mastra provides text-to-speech and speech-to-text capabilities using Sarvam AI models.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { SarvamVoice } from '@mastra/voice-sarvam'
@@ -56,7 +56,7 @@ const text = await voice.listen(audioStream, {
 
 ## Configuration
 
-### Constructor Options
+### Constructor options
 
 <PropertiesTable
   content={[
@@ -196,7 +196,7 @@ const text = await voice.listen(audioStream, {
 
 ## Methods
 
-### speak()
+### `speak()`
 
 Converts text to speech using Sarvam's text-to-speech models.
 
@@ -209,18 +209,31 @@ Converts text to speech using Sarvam's text-to-speech models.
     isOptional: false,
   },
   {
-    name: 'options.speaker',
-    type: 'SarvamVoiceId',
-    description: 'Voice ID to use for speech synthesis.',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: "Constructor's speaker value",
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'SarvamVoiceId',
+            description: 'Voice ID to use for speech synthesis.',
+            isOptional: true,
+            defaultValue: "Constructor's speaker value",
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
 
 Returns: `Promise<NodeJS.ReadableStream>`
 
-### listen()
+### `listen()`
 
 Transcribes audio using Sarvam's speech recognition models.
 
@@ -243,7 +256,7 @@ Transcribes audio using Sarvam's speech recognition models.
 
 Returns: `Promise<string>`
 
-### getSpeakers()
+### `getSpeakers()`
 
 Returns an array of available voice options.
 

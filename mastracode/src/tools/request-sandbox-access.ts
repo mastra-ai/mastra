@@ -64,7 +64,7 @@ export const requestSandboxAccessTool = createTool({
           questionId,
           path: absolutePath,
           reason,
-        } as any);
+        });
       });
 
       const approved = answer.toLowerCase().startsWith('y') || answer.toLowerCase() === 'approve';

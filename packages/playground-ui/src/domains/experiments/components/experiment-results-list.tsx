@@ -108,9 +108,7 @@ function ExperimentResultsListSkeleton({ columns }: { columns: { name: string; l
           <ItemList.Row key={index}>
             <ItemList.RowButton columns={columns}>
               {columns.map((_, colIndex) => (
-                <ItemList.TextCell key={colIndex} isLoading>
-                  Loading...
-                </ItemList.TextCell>
+                <ItemList.TextCell key={colIndex}>Loading...</ItemList.TextCell>
               ))}
             </ItemList.RowButton>
           </ItemList.Row>

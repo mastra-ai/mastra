@@ -17,7 +17,7 @@ Sends Tracing data to any OpenTelemetry-compatible observability platform using 
 new OtelExporter(config: OtelExporterConfig)
 ```
 
-## OtelExporterConfig
+## `OtelExporterConfig`
 
 ```typescript
 interface OtelExporterConfig {
@@ -63,9 +63,9 @@ interface OtelExporterConfig {
 ]}
 />
 
-## Provider Configurations
+## Provider configurations
 
-### Dash0Config
+### `Dash0Config`
 
 ```typescript
 interface Dash0Config {
@@ -98,7 +98,7 @@ interface Dash0Config {
 ]}
 />
 
-### SignozConfig
+### `SignozConfig`
 
 ```typescript
 interface SignozConfig {
@@ -131,7 +131,7 @@ interface SignozConfig {
 ]}
 />
 
-### NewRelicConfig
+### `NewRelicConfig`
 
 ```typescript
 interface NewRelicConfig {
@@ -158,7 +158,7 @@ interface NewRelicConfig {
 ]}
 />
 
-### TraceloopConfig
+### `TraceloopConfig`
 
 ```typescript
 interface TraceloopConfig {
@@ -192,7 +192,7 @@ interface TraceloopConfig {
 ]}
 />
 
-### LaminarConfig
+### `LaminarConfig`
 
 ```typescript
 interface LaminarConfig {
@@ -218,7 +218,7 @@ interface LaminarConfig {
 ]}
 />
 
-### CustomConfig
+### `CustomConfig`
 
 ```typescript
 interface CustomConfig {
@@ -253,7 +253,7 @@ interface CustomConfig {
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -277,7 +277,7 @@ async shutdown(): Promise<void>
 
 Flushes pending traces and shuts down the exporter.
 
-## Usage Examples
+## Usage examples
 
 ### Zero-Config (using environment variables)
 
@@ -327,7 +327,7 @@ const exporter = new OtelExporter({
 })
 ```
 
-## Protocol Requirements
+## Protocol requirements
 
 Different providers require different OTEL exporter packages:
 
@@ -338,7 +338,7 @@ Different providers require different OTEL exporter packages:
 | HTTP/JSON | `@opentelemetry/exporter-trace-otlp-http` | Traceloop, Custom |
 | Zipkin | `@opentelemetry/exporter-zipkin` | Zipkin collectors |
 
-## Tags Support
+## Tags support
 
 The OtelExporter supports trace tagging for categorization and filtering. Tags are only applied to root spans and are stored as the `mastra.tags` attribute.
 

@@ -9,7 +9,7 @@ packages:
 
 The Murf voice implementation in Mastra provides text-to-speech (TTS) capabilities using Murf's AI voice service. It supports multiple voices across different languages.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { MurfVoice } from '@mastra/voice-murf'
@@ -50,7 +50,7 @@ const audioStream = await voice.speak('Hello, world!', {
 const voices = await voice.getSpeakers()
 ```
 
-## Constructor Parameters
+## Constructor parameters
 
 <PropertiesTable
   content={[
@@ -172,7 +172,7 @@ const voices = await voice.getSpeakers()
 
 ## Methods
 
-### speak()
+### `speak()`
 
 Converts text to speech using Murf's API.
 
@@ -189,25 +189,32 @@ Converts text to speech using Murf's API.
     type: 'object',
     description: 'Speech synthesis options',
     isOptional: true,
-  },
-  {
-    name: 'options.speaker',
-    type: 'string',
-    description: 'Override the default speaker for this request',
-    isOptional: true,
-  },
-  {
-    name: 'options.properties',
-    type: 'object',
-    description: 'Override default speech properties for this request',
-    isOptional: true,
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'string',
+            description: 'Override the default speaker for this request',
+            isOptional: true,
+          },
+          {
+            name: 'properties',
+            type: 'object',
+            description: 'Override default speech properties for this request',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
 
 Returns: `Promise<NodeJS.ReadableStream>`
 
-### getSpeakers()
+### `getSpeakers()`
 
 Returns an array of available voice options, where each node contains:
 
@@ -240,14 +247,14 @@ Returns an array of available voice options, where each node contains:
 ]}
 />
 
-### listen()
+### `listen()`
 
-This method is not supported by Murf and will throw an error. Murf does not provide speech-to-text functionality.
+This method isn't supported by Murf and will throw an error. Murf doesn't provide speech-to-text functionality.
 
-## Important Notes
+## Important notes
 
 1. A Murf API key is required. Set it via the `MURF_API_KEY` environment variable or pass it in the constructor.
 1. The service uses GEN2 as the default model version.
 1. Speech properties can be set at the constructor level and overridden per request.
 1. The service supports extensive audio customization through properties like format, sample rate, and channel type.
-1. Speech-to-text functionality is not supported.
+1. Speech-to-text functionality isn't supported.

@@ -219,61 +219,65 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     };
   }, []);
 
-  const handleSaveDraft = useCallback(async () => {
-    if (!isEdit) return;
+  const handleSaveDraft = useCallback(
+    async (changeMessage?: string) => {
+      if (!isEdit) return;
 
-    const isValid = await form.trigger();
-    if (!isValid) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
-
-    const values = form.getValues();
-    setIsSavingDraft(true);
-
-    try {
-      const sharedParams = await buildSharedParams(values);
-      const editMemory = isCodeAgentOverride ? undefined : buildMemoryParams(values);
-
-      if (needsCreate) {
-        // First save for a code agent — create the stored override
-        const createParams: CreateStoredAgentParams = {
-          id: options.agentId,
-          ...sharedParams,
-          memory: editMemory,
-        };
-        await createStoredAgent.mutateAsync(createParams);
-        setOverrideCreated(true);
-      } else {
-        await updateStoredAgent.mutateAsync({
-          ...sharedParams,
-          memory: editMemory,
-        });
+      const isValid = await form.trigger();
+      if (!isValid) {
+        toast.error('Please fill in all required fields');
+        return;
       }
 
-      // Reset form dirty state so publish can detect unsaved changes
-      form.reset(values);
-      queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
-      queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
-      queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
-      toast.success('Draft saved');
-    } catch (error) {
-      toast.error(`Failed to save draft: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsSavingDraft(false);
-    }
-  }, [
-    form,
-    isEdit,
-    agentId,
-    needsCreate,
-    options,
-    buildSharedParams,
-    buildMemoryParams,
-    createStoredAgent,
-    updateStoredAgent,
-    queryClient,
-  ]);
+      const values = form.getValues();
+      setIsSavingDraft(true);
+
+      try {
+        const sharedParams = await buildSharedParams(values);
+        const editMemory = isCodeAgentOverride ? undefined : buildMemoryParams(values);
+
+        if (needsCreate) {
+          // First save for a code agent — create the stored override
+          const createParams: CreateStoredAgentParams = {
+            id: options.agentId,
+            ...sharedParams,
+            memory: editMemory,
+          };
+          await createStoredAgent.mutateAsync(createParams);
+          setOverrideCreated(true);
+        } else {
+          await updateStoredAgent.mutateAsync({
+            ...sharedParams,
+            memory: editMemory,
+            ...(changeMessage ? { changeMessage } : {}),
+          });
+        }
+
+        // Reset form dirty state so publish can detect unsaved changes
+        form.reset(values);
+        queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
+        queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+        queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+        toast.success('Draft saved');
+      } catch (error) {
+        toast.error(`Failed to save draft: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        setIsSavingDraft(false);
+      }
+    },
+    [
+      form,
+      isEdit,
+      agentId,
+      needsCreate,
+      options,
+      buildSharedParams,
+      buildMemoryParams,
+      createStoredAgent,
+      updateStoredAgent,
+      queryClient,
+    ],
+  );
 
   const handlePublish = useCallback(async () => {
     const isValid = await form.trigger();

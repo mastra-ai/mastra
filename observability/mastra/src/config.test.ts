@@ -308,7 +308,7 @@ describe('Observability Config Validation', () => {
           expect(error.category).toBe('USER');
           expect(error.message).toContain('myTracing');
           expect(error.message).toContain('serviceName');
-          expect(error.message).toContain('Required');
+          expect(error.message).toContain('received undefined');
         }
       }
     });

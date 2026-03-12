@@ -1,7 +1,8 @@
+import type { ValidationErrorHook } from '@mastra/core/server';
 import { z } from 'zod';
 import type { ZodObject, ZodRawShape, ZodTypeAny } from 'zod';
 import { generateRouteOpenAPI } from '../openapi-utils';
-import type { InferParams, ResponseType, ServerRoute, ServerRouteHandler } from './index';
+import type { InferParams, ResponseType, RouteSchemas, ServerRoute, ServerRouteHandler } from './index';
 
 /**
  * Extracts parameters matching a Zod schema's shape from a params object.
@@ -79,10 +80,12 @@ export function jsonQueryParam<T extends ZodTypeAny>(schema: T): z.ZodType<z.inf
 
 /**
  * Gets the type name from a Zod schema's internal definition.
- * Works across zod v3 and v4 by checking _def.typeName.
+ * Works across zod v3 and v4 by checking _def.typeName (v3) and _def.type (v4).
  */
 function getZodTypeName(schema: ZodTypeAny): string | undefined {
-  return (schema as any)?._def?.typeName;
+  const schemaAny = schema as any;
+  const def = schemaAny?._def ?? schemaAny?.def;
+  return def?.typeName ?? def?.type;
 }
 
 /**
@@ -99,14 +102,27 @@ function isComplexType(schema: ZodTypeAny): boolean {
   let inner: ZodTypeAny = schema;
   let typeName = getZodTypeName(inner);
 
-  while (typeName === 'ZodOptional' || typeName === 'ZodNullable') {
-    // Access innerType directly from _def to avoid version-specific method differences
-    inner = (inner as any)._def.innerType;
+  while (
+    typeName === 'ZodOptional' ||
+    typeName === 'ZodNullable' ||
+    typeName === 'optional' ||
+    typeName === 'nullable'
+  ) {
+    // Access innerType from internals to avoid version-specific method differences
+    const innerDef = (inner as any)._def ?? (inner as any).def;
+    inner = innerDef.innerType;
     typeName = getZodTypeName(inner);
   }
 
   // Complex types that need JSON parsing
-  return typeName === 'ZodArray' || typeName === 'ZodRecord' || typeName === 'ZodObject';
+  return (
+    typeName === 'ZodArray' ||
+    typeName === 'ZodRecord' ||
+    typeName === 'ZodObject' ||
+    typeName === 'array' ||
+    typeName === 'record' ||
+    typeName === 'object'
+  );
 }
 
 /**
@@ -134,15 +150,17 @@ function isComplexType(schema: ZodTypeAny): boolean {
  * ```
  */
 export function wrapSchemaForQueryParams<T extends ZodRawShape>(schema: ZodObject<T>): ZodObject<ZodRawShape> {
-  const newShape: ZodRawShape = {};
+  const newShape: Record<string, ZodTypeAny> = {};
 
-  for (const [key, fieldSchema] of Object.entries(schema.shape)) {
-    if (isComplexType(fieldSchema as ZodTypeAny)) {
+  // schema.shape is Readonly in Zod v4, so we need to create a mutable copy
+  const shape = schema.shape as unknown as Record<string, ZodTypeAny>;
+  for (const [key, fieldSchema] of Object.entries(shape)) {
+    if (isComplexType(fieldSchema)) {
       // Wrap complex types to accept JSON strings
-      newShape[key] = jsonQueryParam(fieldSchema as ZodTypeAny);
+      newShape[key] = jsonQueryParam(fieldSchema);
     } else {
       // Keep simple types as-is
-      newShape[key] = fieldSchema as ZodTypeAny;
+      newShape[key] = fieldSchema;
     }
   }
 
@@ -155,9 +173,11 @@ interface RouteConfig<
   TBodySchema extends z.ZodTypeAny | undefined = undefined,
   TResponseSchema extends z.ZodTypeAny | undefined = undefined,
   TResponseType extends ResponseType = 'json',
+  TMethod extends string = string,
+  TPath extends string = string,
 > {
-  method: ServerRoute['method'];
-  path: string;
+  method: TMethod;
+  path: TPath;
   responseType: TResponseType;
   streamFormat?: 'sse' | 'stream'; // Only used when responseType is 'stream'
   handler: ServerRouteHandler<
@@ -181,6 +201,7 @@ interface RouteConfig<
    * Uses the format: `resource:action` or `resource:action:resourceId`
    */
   requiresPermission?: string;
+  onValidationError?: ValidationErrorHook;
 }
 
 /**
@@ -248,14 +269,20 @@ export function createRoute<
   TBodySchema extends z.ZodTypeAny | undefined = undefined,
   TResponseSchema extends z.ZodTypeAny | undefined = undefined,
   TResponseType extends ResponseType = 'json',
+  TMethod extends string = string,
+  TPath extends string = string,
 >(
-  config: RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema, TResponseType>,
+  config: RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema, TResponseType, TMethod, TPath>,
 ): ServerRoute<
   InferParams<TPathSchema, TQuerySchema, TBodySchema>,
   TResponseSchema extends z.ZodTypeAny ? z.infer<TResponseSchema> : unknown,
-  TResponseType
+  TResponseType,
+  RouteSchemas<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema>,
+  TMethod,
+  TPath
 > {
-  const { summary, description, tags, deprecated, requiresAuth, requiresPermission, ...baseRoute } = config;
+  const { summary, description, tags, deprecated, requiresAuth, requiresPermission, onValidationError, ...baseRoute } =
+    config;
 
   // Generate OpenAPI specification from the route config
   // Skip OpenAPI generation for 'ALL' method as it doesn't map to OpenAPI
@@ -277,10 +304,11 @@ export function createRoute<
 
   return {
     ...baseRoute,
-    openapi: openapi as any,
+    openapi,
     deprecated,
     requiresAuth,
     requiresPermission,
+    onValidationError,
   };
 }
 
@@ -326,12 +354,20 @@ export function createPublicRoute<
   TBodySchema extends z.ZodTypeAny | undefined = undefined,
   TResponseSchema extends z.ZodTypeAny | undefined = undefined,
   TResponseType extends ResponseType = 'json',
+  TMethod extends string = string,
+  TPath extends string = string,
 >(
-  config: Omit<RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema, TResponseType>, 'requiresAuth'>,
+  config: Omit<
+    RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema, TResponseType, TMethod, TPath>,
+    'requiresAuth'
+  >,
 ): ServerRoute<
   InferParams<TPathSchema, TQuerySchema, TBodySchema>,
   TResponseSchema extends z.ZodTypeAny ? z.infer<TResponseSchema> : unknown,
-  TResponseType
+  TResponseType,
+  RouteSchemas<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema>,
+  TMethod,
+  TPath
 > {
   return createRoute({
     ...config,

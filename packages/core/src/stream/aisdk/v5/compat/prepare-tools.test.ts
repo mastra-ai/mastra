@@ -1,3 +1,4 @@
+import { jsonSchema } from '@internal/ai-sdk-v5';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { createTool } from '../../../../tools/tool';
@@ -394,20 +395,45 @@ describe('prepareToolsAndToolChoice', () => {
           hasTypeKey || hasRef || hasAnyOf || hasOneOf || hasAllOf,
           `Property '${propName}' in agent tool schema must have a 'type', '$ref', 'anyOf', 'oneOf', or 'allOf' key. Got: ${JSON.stringify(schema)}`,
         ).toBe(true);
-
-        // Typeless fallback must NOT include 'array' — an array without a meaningful
-        // items schema is unusable, and it breaks Gemini which rejects items on non-ARRAY types.
-        if (Array.isArray(schema.type)) {
-          expect(
-            schema.type,
-            `Property '${propName}' fallback type should not include 'array'. Got: ${JSON.stringify(schema)}`,
-          ).not.toContain('array');
-          expect(
-            schema.items,
-            `Property '${propName}' should not have 'items' in the fallback. Got: ${JSON.stringify(schema)}`,
-          ).toBeUndefined();
-        }
       }
+
+      const resumeDataSchema = properties.resumeData as Record<string, any>;
+      expect(Array.isArray(resumeDataSchema.type)).toBe(true);
+      expect(resumeDataSchema.type).not.toContain('array');
+      expect(resumeDataSchema.items).toBeUndefined();
+    });
+
+    it('should drop items for typeless properties when applying non-array fallback type', () => {
+      const toolWithTypelessItems = {
+        description: 'A tool with a typeless schema property that incorrectly includes items',
+        parameters: jsonSchema({
+          type: 'object',
+          properties: {
+            resumeData: {
+              description: 'Typeless schema with items that Gemini rejects',
+              items: {
+                type: 'string',
+              },
+            },
+          },
+        }),
+        execute: async () => 'ok',
+      };
+
+      const result = prepareToolsAndToolChoice({
+        tools: { testTool: toolWithTypelessItems as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v2',
+      });
+
+      const toolDef = result.tools![0] as { type: string; inputSchema: Record<string, any> };
+      expect(toolDef.type).toBe('function');
+
+      const resumeDataSchema = toolDef.inputSchema.properties.resumeData as Record<string, any>;
+      expect(Array.isArray(resumeDataSchema.type)).toBe(true);
+      expect(resumeDataSchema.type).not.toContain('array');
+      expect(resumeDataSchema.items).toBeUndefined();
     });
   });
 

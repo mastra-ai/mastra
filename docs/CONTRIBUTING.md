@@ -56,6 +56,12 @@ Before submitting a PR, make sure to:
 
 4. **Verify code examples** - If you've added code examples, test them if possible to ensure they work.
 
+5. **Run linters** to check for style issues:
+
+   ```shell
+   pnpm run lint:prose
+   ```
+
 ## Documentation structure
 
 The Mastra documentation is organized into several sections:
@@ -136,6 +142,20 @@ Alternatively you can use `// highlight-next-line` and `// highlight-start` / `/
 ```typescript
 function add(a: number, b: number) {
   // highlight-next-line
+  return a + b
+}
+```
+````
+
+#### Prettier formatting
+
+By default, Prettier will format code blocks in all Markdown/MDX files. If you want to disable Prettier for a specific code block, add `prettier:false` to the code block's metadata.
+
+**Important:** This is an anti-pattern! This is an escape hatch for edge cases where Prettier's formatting produces undesirable results. In general, you should strive to write code that can be formatted by Prettier to maintain a consistent style across the documentation.
+
+````md
+```typescript prettier:false
+function add(a: number, b: number) {
   return a + b
 }
 ```

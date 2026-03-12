@@ -104,7 +104,7 @@ const response = await agent.generate('Run npm install')
 ]}
 />
 
-## NativeSandboxConfig
+## `NativeSandboxConfig`
 
 Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'` or `'bwrap'`).
 
@@ -181,148 +181,14 @@ Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'
     type: 'string',
     description: 'The configured working directory',
   },
-]}
-/>
-
-## Methods
-
-### `start()`
-
-Initialize and start the sandbox. Creates the working directory and sets up seatbelt profiles if using native isolation.
-
-```typescript
-await sandbox.start()
-```
-
-Called automatically by `workspace.init()` or on first `executeCommand()` call.
-
-### `stop()`
-
-Stop the sandbox.
-
-```typescript
-await sandbox.stop()
-```
-
-### `destroy()`
-
-Clean up sandbox resources. Removes seatbelt profiles if they were auto-generated.
-
-```typescript
-await sandbox.destroy()
-```
-
-Called by `workspace.destroy()`.
-
-### `isReady()`
-
-Check if the sandbox is ready for operations.
-
-```typescript
-const ready = await sandbox.isReady()
-// true if status is 'running'
-```
-
-### `executeCommand(command, args?, options?)`
-
-Execute a shell command in the sandbox.
-
-```typescript
-const listResult = await sandbox.executeCommand('ls', ['-la'])
-const installResult = await sandbox.executeCommand('npm', ['install', 'lodash'], {
-  timeout: 60000,
-  env: { NODE_ENV: 'development' },
-})
-```
-
-**Parameters:**
-
-<PropertiesTable
-  content={[
   {
-    name: 'command',
-    type: 'string',
-    description: 'Command to execute',
-  },
-  {
-    name: 'args',
-    type: 'string[]',
-    description: 'Command arguments',
-    isOptional: true,
-  },
-  {
-    name: 'options.timeout',
-    type: 'number',
-    description: 'Execution timeout in milliseconds',
-    isOptional: true,
-  },
-  {
-    name: 'options.cwd',
-    type: 'string',
-    description: 'Working directory for the command',
-    isOptional: true,
-  },
-  {
-    name: 'options.env',
-    type: 'Record<string, string>',
-    description: 'Additional environment variables',
-    isOptional: true,
-  },
-  {
-    name: 'options.onStdout',
-    type: '(data: string) => void',
-    description: 'Callback for stdout streaming',
-    isOptional: true,
-  },
-  {
-    name: 'options.onStderr',
-    type: '(data: string) => void',
-    description: 'Callback for stderr streaming',
-    isOptional: true,
+    name: 'processes',
+    type: 'LocalProcessManager',
+    description:
+      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
   },
 ]}
 />
-
-### `getInfo()`
-
-Get sandbox status and resource information.
-
-```typescript
-const info = await sandbox.getInfo()
-// { status: 'running', resources: { ... } }
-```
-
-### `getInstructions(opts?)`
-
-Returns a description of how this sandbox works. When assigned to an agent, this is injected into the agent's system message.
-
-```typescript
-const instructions = sandbox.getInstructions()
-// 'Local command execution. Working directory: "/workspace".'
-```
-
-Pass `requestContext` to enable per-request customization when the `instructions` constructor option is a function:
-
-```typescript
-const instructions = sandbox.getInstructions({ requestContext })
-```
-
-**Parameters:**
-
-<PropertiesTable
-  content={[
-  {
-    name: 'opts.requestContext',
-    type: 'RequestContext',
-    description: 'Forwarded to the `instructions` function if one was provided in the constructor.',
-    isOptional: true,
-  },
-]}
-/>
-
-**Returns:** `string`
-
-To override the default output, pass an `instructions` option to the constructor. See [constructor parameters](#constructor-parameters).
 
 ## Path Resolution
 
@@ -352,7 +218,28 @@ const sandbox = new LocalSandbox({
 
 Set `WORKSPACE_PATH` in your environment to an absolute path like `/home/user/my-project/workspace`. This ensures commands run from a consistent directory regardless of how you run your code.
 
-## Static Methods
+## Background processes
+
+`LocalSandbox` includes a built-in process manager for spawning and managing background processes. Processes run as child processes on the local machine using `child_process.spawn`.
+
+```typescript
+const sandbox = new LocalSandbox({ workingDirectory: './workspace' })
+await sandbox.start()
+
+// Spawn a background process
+const handle = await sandbox.processes.spawn('node server.js')
+
+// Read output, send stdin, kill
+console.log(handle.stdout)
+await handle.sendStdin('input\n')
+await handle.kill()
+```
+
+When native isolation is enabled (`seatbelt` or `bwrap`), spawned processes are also wrapped with the same isolation backend.
+
+See [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
+
+## Static methods
 
 ### `detectIsolation()`
 
@@ -363,7 +250,7 @@ const detection = LocalSandbox.detectIsolation()
 // { backend: 'seatbelt', available: true, message: 'Seatbelt available on macOS' }
 ```
 
-## Environment Isolation
+## Environment isolation
 
 By default, `LocalSandbox` only includes `PATH` in the environment. This allows commands to run while preventing accidental exposure of API keys and secrets.
 
@@ -389,7 +276,7 @@ const devSandbox = new LocalSandbox({
 })
 ```
 
-## Native OS Sandboxing
+## Native OS sandboxing
 
 `LocalSandbox` supports native OS-level sandboxing for additional security:
 
@@ -439,6 +326,7 @@ This separation prevents sandboxed processes from reading or modifying their own
 
 ## Related
 
+- [SandboxProcessManager reference](/reference/workspace/process-manager)
 - [WorkspaceSandbox Interface](/reference/workspace/sandbox)
 - [Workspace Class](/reference/workspace/workspace-class)
 - [Workspace Overview](/docs/workspace/overview)

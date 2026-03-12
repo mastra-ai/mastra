@@ -45,10 +45,10 @@ export function createLspCrossFileTests(getContext: () => TestContext): void {
 
         // Graceful skip: if TS server can't read math.ts from disk (remote FS),
         // diagnostics may be empty — test passes without assertions
-        if (diagnostics.length === 0) return ctx.skip();
+        if (!diagnostics?.length) return ctx.skip();
 
-        expect(diagnostics.some(d => d.severity === 'error')).toBe(true);
-        expect(diagnostics.some(d => d.message.includes('not assignable'))).toBe(true);
+        expect(diagnostics?.some(d => d.severity === 'error')).toBe(true);
+        expect(diagnostics?.some(d => d.message.includes('not assignable'))).toBe(true);
       },
       getContext().testTimeout,
     );
@@ -78,9 +78,9 @@ export function createLspCrossFileTests(getContext: () => TestContext): void {
         const diagnostics = await lsp.getDiagnostics(join(testDir, 'app.ts'), content);
 
         // Graceful skip if TS server can't resolve the import
-        if (diagnostics.length === 0) return ctx.skip();
+        if (!diagnostics?.length) return ctx.skip();
 
-        const errors = diagnostics.filter(d => d.severity === 'error');
+        const errors = diagnostics?.filter(d => d.severity === 'error') ?? [];
         expect(errors).toHaveLength(0);
       },
       getContext().testTimeout,

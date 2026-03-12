@@ -33,6 +33,8 @@ import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/framework';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
+import AgentPlayground from './pages/agents/agent-playground';
+import AgentTraces from './pages/agents/agent-traces';
 import CmsAgentAgentsPage from './pages/cms/agents/agents';
 import { CreateLayoutWrapper } from './pages/cms/agents/create-layout';
 import { EditLayoutWrapper } from './pages/cms/agents/edit-layout';
@@ -203,6 +205,8 @@ const routes = [
           },
           { path: 'chat', element: <Agent /> },
           { path: 'chat/:threadId', element: <Agent /> },
+          ...(isExperimentalFeatures ? [{ path: 'playground', element: <AgentPlayground /> }] : []),
+          { path: 'traces', element: <AgentTraces /> },
         ],
       },
 

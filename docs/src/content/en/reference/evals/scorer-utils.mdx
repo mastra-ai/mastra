@@ -1,12 +1,12 @@
 ---
-title: "Reference: Scorer Utils | Evals"
+title: "Reference: Scorer utils | Evals"
 description: Utility functions for extracting data from scorer run inputs and outputs, including text content, reasoning, system messages, and tool calls.
 packages:
   - "@mastra/core"
   - "@mastra/evals"
 ---
 
-# Scorer Utils
+# Scorer utils
 
 Mastra provides utility functions to help extract and process data from scorer run inputs and outputs. These utilities are particularly useful in the `preprocess` step of custom scorers.
 
@@ -25,9 +25,9 @@ import {
 } from '@mastra/evals/scorers/utils'
 ```
 
-## Message Extraction
+## Message extraction
 
-### getAssistantMessageFromRunOutput
+### `getAssistantMessageFromRunOutput`
 
 Extracts the text content from the first assistant message in the run output.
 
@@ -59,7 +59,7 @@ const scorer = createScorer({
 
 **Returns:** `string | undefined` - The assistant message text, or undefined if no assistant message is found.
 
-### getUserMessageFromRunInput
+### `getUserMessageFromRunInput`
 
 Extracts the text content from the first user message in the run input.
 
@@ -83,7 +83,7 @@ Extracts the text content from the first user message in the run input.
 
 **Returns:** `string | undefined` - The user message text, or undefined if no user message is found.
 
-### extractInputMessages
+### `extractInputMessages`
 
 Extracts text content from all input messages as an array.
 
@@ -96,7 +96,7 @@ Extracts text content from all input messages as an array.
 
 **Returns:** `string[]` - Array of text strings from each input message.
 
-### extractAgentResponseMessages
+### `extractAgentResponseMessages`
 
 Extracts text content from all assistant response messages as an array.
 
@@ -109,9 +109,9 @@ Extracts text content from all assistant response messages as an array.
 
 **Returns:** `string[]` - Array of text strings from each assistant message.
 
-## Reasoning Extraction
+## Reasoning extraction
 
-### getReasoningFromRunOutput
+### `getReasoningFromRunOutput`
 
 Extracts reasoning text from the run output. This is particularly useful when evaluating responses from reasoning models like `deepseek-reasoner` that produce chain-of-thought reasoning.
 
@@ -173,9 +173,9 @@ const reasoningQualityScorer = createScorer({
 
 **Returns:** `string | undefined` - The reasoning text, or undefined if no reasoning is present.
 
-## System Message Extraction
+## System message extraction
 
-### getSystemMessagesFromRunInput
+### `getSystemMessagesFromRunInput`
 
 Extracts all system messages from the run input, including both standard system messages and tagged system messages (specialized prompts like memory instructions).
 
@@ -191,7 +191,7 @@ Extracts all system messages from the run input, including both standard system 
 
 **Returns:** `string[]` - Array of system message strings.
 
-### getCombinedSystemPrompt
+### `getCombinedSystemPrompt`
 
 Combines all system messages into a single prompt string, joined with double newlines.
 
@@ -204,9 +204,9 @@ Combines all system messages into a single prompt string, joined with double new
 
 **Returns:** `string` - Combined system prompt string.
 
-## Tool Call Extraction
+## Tool call extraction
 
-### extractToolCalls
+### `extractToolCalls`
 
 Extracts information about all tool calls from the run output, including tool names, call IDs, and their positions in the message array.
 
@@ -251,11 +251,11 @@ type ToolCallInfo = {
 }
 ```
 
-## Test Utilities
+## Test utilities
 
 These utilities help create test data for scorer development.
 
-### createTestMessage
+### `createTestMessage`
 
 Creates a `MastraDBMessage` object for testing purposes.
 
@@ -282,7 +282,7 @@ const assistantMessage = createTestMessage({
 })
 ```
 
-### createAgentTestRun
+### `createAgentTestRun`
 
 Creates a complete test run object for testing scorers.
 
@@ -301,7 +301,7 @@ const result = await myScorer.run({
 })
 ```
 
-## Complete Example
+## Complete example
 
 Here's a complete example showing how to use multiple utilities together:
 

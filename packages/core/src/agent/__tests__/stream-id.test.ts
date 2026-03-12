@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import type { Processor } from '../../processors';
+import { createTool } from '../../tools';
 import { Agent } from '../agent';
 
 describe('Stream ID Consistency', () => {
@@ -276,6 +278,252 @@ describe('Stream ID Consistency', () => {
     expect(savedMessages).toHaveLength(1);
     expect(savedMessages[0].id).toBe(messageId!);
     expect(customIdGenerator).toHaveBeenCalled();
+  });
+
+  it('should let processInputStep rotate the active response message ID for stream output and persistence', async () => {
+    let initialMessageId: string | undefined;
+    let rotatedMessageId: string | undefined;
+
+    const rotateMessageIdProcessor = {
+      id: 'rotate-response-message-id-processor',
+      processInputStep: async ({ messageId, rotateResponseMessageId }) => {
+        initialMessageId = messageId;
+        rotatedMessageId = rotateResponseMessageId?.();
+        return {};
+      },
+    } satisfies Processor;
+
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'provider-msg-xyz123', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'rotated ' },
+          { type: 'text-delta', id: 'text-1', delta: 'response id' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent V2 Rotated Response ID',
+      instructions: 'You are a helpful assistant.',
+      model,
+      memory,
+      inputProcessors: [rotateMessageIdProcessor],
+    });
+
+    agent.__registerMastra(mastra);
+
+    const threadId = randomUUID();
+    const resourceId = 'test-resource';
+    const stream = await agent.stream('Hello!', { memory: { thread: threadId, resource: resourceId } });
+
+    for await (const _chunk of stream.fullStream) {
+    }
+
+    const res = await stream.response;
+    const messageId = res?.uiMessages?.[0]?.id;
+
+    expect(initialMessageId).toBeDefined();
+    expect(rotatedMessageId).toBeDefined();
+    expect(rotatedMessageId).not.toBe(initialMessageId);
+    expect(messageId).toBe(rotatedMessageId);
+
+    const rotatedResult = await memory.recall({ threadId, perPage: 0, include: [{ id: rotatedMessageId! }] });
+    expect(rotatedResult.messages).toHaveLength(1);
+    expect(rotatedResult.messages[0].id).toBe(rotatedMessageId!);
+
+    const initialResult = await memory.recall({ threadId, perPage: 0, include: [{ id: initialMessageId! }] });
+    expect(initialResult.messages).toHaveLength(0);
+  });
+
+  it('should return generate response IDs that match database-saved message IDs (V2 model)', async () => {
+    const model = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [
+          {
+            type: 'text',
+            text: 'Hello! I am a helpful assistant.',
+          },
+        ],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          {
+            type: 'response-metadata',
+            id: 'v2-gen-msg-xyz123',
+            modelId: 'mock-model-id',
+            timestamp: new Date(0),
+          },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Hello! ' },
+          { type: 'text-delta', id: 'text-1', delta: 'I am a ' },
+          { type: 'text-delta', id: 'text-1', delta: 'helpful assistant.' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'test-agent-generate',
+      name: 'Test Agent Generate V2',
+      instructions: 'You are a helpful assistant.',
+      model,
+      memory,
+    });
+
+    agent.__registerMastra(mastra);
+
+    const threadId = randomUUID();
+    const resourceId = 'test-resource';
+
+    const result = await agent.generate('Hello!', {
+      memory: { thread: threadId, resource: resourceId },
+    });
+
+    const responseMessageId = result.response?.uiMessages?.[0]?.id;
+    expect(responseMessageId).toBeDefined();
+
+    const recalled = await memory.recall({ threadId, include: [{ id: responseMessageId! }] });
+    const messageById = recalled.messages.find(m => m.id === responseMessageId);
+    expect(messageById).toBeDefined();
+    expect(messageById!.id).toBe(responseMessageId);
+
+    const allMessages = await memory.recall({ threadId });
+    const assistantMessages = allMessages.messages.filter(m => m.role === 'assistant');
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]!.id).toBe(responseMessageId);
+  });
+
+  it('should return consistent message IDs with tool calls (V2 model)', async () => {
+    let callCount = 0;
+
+    const toolCallStream = convertArrayToReadableStream([
+      { type: 'stream-start' as const, warnings: [] },
+      { type: 'response-metadata' as const, id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+      {
+        type: 'tool-call-start' as const,
+        id: 'call-1',
+        toolCallId: 'call-1',
+        toolName: 'test-tool',
+      },
+      {
+        type: 'tool-call-args-delta' as const,
+        id: 'call-1',
+        toolCallId: 'call-1',
+        toolName: 'test-tool',
+        argsDelta: '{"input":"test"}',
+      },
+      {
+        type: 'tool-call-end' as const,
+        id: 'call-1',
+        toolCallId: 'call-1',
+        toolName: 'test-tool',
+        args: { input: 'test' },
+      },
+      {
+        type: 'finish' as const,
+        finishReason: 'tool-calls' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      },
+    ]);
+
+    const textStream = convertArrayToReadableStream([
+      { type: 'stream-start' as const, warnings: [] },
+      { type: 'response-metadata' as const, id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+      { type: 'text-start' as const, id: 'text-1' },
+      { type: 'text-delta' as const, id: 'text-1', delta: 'Tool result received.' },
+      { type: 'text-end' as const, id: 'text-1' },
+      {
+        type: 'finish' as const,
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      },
+    ]);
+
+    const model = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: 'Tool result received.' }],
+        warnings: [],
+      }),
+      doStream: (async () => {
+        callCount++;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: callCount === 1 ? toolCallStream : textStream,
+        };
+      }) as any,
+    });
+
+    const testTool = createTool({
+      id: 'test-tool',
+      description: 'A test tool',
+      inputSchema: z.object({ input: z.string() }),
+      execute: async () => ({ result: 'Tool executed' }),
+    });
+
+    const agent = new Agent({
+      id: 'test-agent-tool-ids',
+      name: 'Test Agent Tool IDs',
+      instructions: 'You are a helpful assistant.',
+      model,
+      memory,
+      tools: { 'test-tool': testTool },
+    });
+
+    agent.__registerMastra(mastra);
+
+    const threadId = randomUUID();
+    const resourceId = 'test-resource';
+
+    const streamResult = await agent.stream('Use the test tool', {
+      memory: { thread: threadId, resource: resourceId },
+    });
+
+    await streamResult.consumeStream();
+
+    const response = await streamResult.response;
+    const uiMessageIds = response?.uiMessages?.map(m => m.id) || [];
+
+    const allRecalled = await memory.recall({ threadId });
+
+    for (const uiMsgId of uiMessageIds) {
+      const matchInMemory = allRecalled.messages.find(m => m.id === uiMsgId);
+      expect(matchInMemory, `uiMessage ID ${uiMsgId} should exist in memory`).toBeDefined();
+    }
+
+    const fullOutput = await streamResult.getFullOutput();
+    const responseMessageIds = fullOutput.messages.filter(m => m.role === 'assistant').map(m => m.id);
+
+    for (const uiMsgId of uiMessageIds) {
+      expect(responseMessageIds, `uiMessage ID ${uiMsgId} should appear in fullOutput.messages`).toContain(uiMsgId);
+    }
   });
 
   describe('onFinish callback with structured output', () => {

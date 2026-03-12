@@ -128,6 +128,49 @@ describe('Memory', () => {
       expect(result).not.toBeNull();
     });
 
+    it('should not drop messages with empty parts array but valid content.content (issue #13824)', () => {
+      const message: MastraDBMessage = {
+        id: 'test-empty-parts',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        role: 'user',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          content: 'Hello from a real message',
+          experimental_attachments: [],
+          parts: [],
+        },
+      };
+
+      const result = memory.testUpdateMessageToHideWorkingMemoryV2(message);
+
+      // The message has legitimate text in content.content — it must NOT be dropped
+      expect(result).not.toBeNull();
+      expect(result?.content.content).toBe('Hello from a real message');
+    });
+
+    it('should not drop assistant messages with empty parts array but valid content.content (issue #13824)', () => {
+      const message: MastraDBMessage = {
+        id: 'test-empty-parts-assistant',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          content: 'I am the assistant reply',
+          experimental_attachments: [],
+          parts: [],
+        },
+      };
+
+      const result = memory.testUpdateMessageToHideWorkingMemoryV2(message);
+
+      expect(result).not.toBeNull();
+      expect(result?.content.content).toBe('I am the assistant reply');
+    });
+
     it('should filter out updateWorkingMemory tool invocations', () => {
       const message: MastraDBMessage = {
         id: 'test-7',
@@ -156,6 +199,71 @@ describe('Memory', () => {
       expect(result).not.toBeNull();
       expect(result?.content.parts).toHaveLength(1);
       expect(result?.content.parts[0]).toEqual({ type: 'text', text: 'Let me update memory' });
+    });
+  });
+
+  describe('saveMessages with empty parts array (issue #13824)', () => {
+    let memory: Memory;
+
+    beforeEach(() => {
+      memory = new Memory({
+        storage: new InMemoryStore(),
+      });
+    });
+
+    it('should save messages that have content.content but empty parts array', async () => {
+      const threadId = 'thread-save-test';
+      const resourceId = 'resource-save-test';
+
+      await memory.createThread({
+        threadId,
+        resourceId,
+      });
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'save-msg-1',
+          threadId,
+          resourceId,
+          role: 'user',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+          content: {
+            format: 2,
+            content: 'Hello from user',
+            experimental_attachments: [],
+            parts: [],
+          },
+        },
+        {
+          id: 'save-msg-2',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          createdAt: new Date('2024-01-01T10:01:00Z'),
+          content: {
+            format: 2,
+            content: 'Hello from assistant',
+            experimental_attachments: [],
+            parts: [],
+          },
+        },
+      ];
+
+      const result = await memory.saveMessages({ messages });
+
+      // Messages must not be silently dropped
+      expect(result.messages.length).toBeGreaterThan(0);
+      expect(result.messages).toHaveLength(2);
+
+      const recalled = await memory.recall({
+        threadId,
+        resourceId,
+        perPage: false,
+      });
+
+      expect(recalled.messages).toHaveLength(2);
+      expect(recalled.messages.map(message => message.id)).toEqual(['save-msg-1', 'save-msg-2']);
+      expect(recalled.messages.map(message => message.content)).toEqual([messages[0].content, messages[1].content]);
     });
   });
 
@@ -1757,6 +1865,151 @@ describe('Memory', () => {
       expect(result.messages).toHaveLength(5);
       expect(result).toHaveProperty('total', 5);
       expect(result).toHaveProperty('hasMore', false);
+    });
+  });
+
+  describe('lastMessages: false (disable conversation history)', () => {
+    let memory: Memory;
+    const resourceId = 'test-resource';
+    const threadId = 'test-thread-lm-false';
+
+    beforeEach(async () => {
+      memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          lastMessages: false,
+        },
+      });
+
+      // Create a thread and seed it with messages
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Test Thread',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-1',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+          },
+          {
+            id: 'msg-2',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: 'Hi there!' }] },
+            createdAt: new Date('2024-01-01T10:01:00Z'),
+          },
+          {
+            id: 'msg-3',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'How are you?' }] },
+            createdAt: new Date('2024-01-01T10:02:00Z'),
+          },
+        ],
+      });
+    });
+
+    it('recall() should return empty messages with valid pagination metadata when lastMessages: false', async () => {
+      const result = await memory.recall({ threadId, resourceId });
+
+      expect(result.messages).toHaveLength(0);
+      expect(result).toHaveProperty('total', 0);
+      expect(result).toHaveProperty('page', 0);
+      expect(result).toHaveProperty('perPage', 0);
+      expect(result).toHaveProperty('hasMore', false);
+    });
+
+    it('recall() should return empty when lastMessages: false even if thread has many messages', async () => {
+      // Add more messages
+      for (let i = 4; i <= 20; i++) {
+        await memory.saveMessages({
+          messages: [
+            {
+              id: `msg-${i}`,
+              threadId,
+              resourceId,
+              role: i % 2 === 0 ? 'user' : 'assistant',
+              content: { format: 2, parts: [{ type: 'text', text: `Message ${i}` }] },
+              createdAt: new Date(`2024-01-01T10:${String(i).padStart(2, '0')}:00Z`),
+            },
+          ],
+        });
+      }
+
+      const result = await memory.recall({ threadId, resourceId });
+
+      expect(result.messages).toHaveLength(0);
+    });
+
+    it('recall() with explicit perPage override should still work', async () => {
+      // When perPage is explicitly passed (e.g., from playground listing messages),
+      // it should override the config and return messages
+      const result = await memory.recall({ threadId, resourceId, perPage: false });
+
+      // perPage: false explicitly = "no limit, return all"
+      expect(result.messages.length).toBeGreaterThan(0);
+      expect(result.messages).toHaveLength(3);
+    });
+
+    it('recall() with explicit perPage number should work', async () => {
+      const result = await memory.recall({ threadId, resourceId, perPage: 2 });
+
+      expect(result.messages).toHaveLength(2);
+    });
+
+    it('threadConfig should preserve lastMessages: false after construction', () => {
+      const config = memory.getMergedThreadConfig();
+
+      expect(config.lastMessages).toBe(false);
+    });
+
+    it('threadConfig should preserve lastMessages: false when merging with empty config', () => {
+      const config = memory.getMergedThreadConfig({});
+
+      expect(config.lastMessages).toBe(false);
+    });
+
+    it('threadConfig should preserve lastMessages: false when merging with unrelated options', () => {
+      const config = memory.getMergedThreadConfig({
+        workingMemory: { enabled: false },
+      });
+
+      expect(config.lastMessages).toBe(false);
+    });
+
+    it('per-request config can override lastMessages: false back to a number', () => {
+      const config = memory.getMergedThreadConfig({
+        lastMessages: 10,
+      });
+
+      expect(config.lastMessages).toBe(10);
+    });
+
+    it('getInputProcessors should return no MessageHistory processor when lastMessages: false', async () => {
+      const processors = await memory.getInputProcessors();
+
+      const messageHistoryProcessor = processors.find(p => p.id === 'message-history');
+      expect(messageHistoryProcessor).toBeUndefined();
+    });
+
+    it('getOutputProcessors should return no MessageHistory processor when lastMessages: false', async () => {
+      const processors = await memory.getOutputProcessors();
+
+      const messageHistoryProcessor = processors.find(p => p.id === 'message-history');
+      expect(messageHistoryProcessor).toBeUndefined();
     });
   });
 

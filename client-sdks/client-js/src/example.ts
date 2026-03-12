@@ -12,18 +12,21 @@ import { MastraClient } from './client';
 
   try {
     const agent = client.getAgent('weatherAgent');
-    const response = await agent.stream('what is the weather in new york?', {
-      // @ts-expect-error - TODO: fix this
+    const schema = z.object({
+      weather: z.string(),
+      temperature: z.number(),
+      humidity: z.number(),
+      windSpeed: z.number(),
+      windDirection: z.string(),
+      windGust: z.number(),
+      windChill: z.number(),
+    });
+
+    type WeatherOutput = z.infer<typeof schema>;
+
+    const response = await agent.stream<WeatherOutput>('what is the weather in new york?', {
       structuredOutput: {
-        schema: z.object({
-          weather: z.string(),
-          temperature: z.number(),
-          humidity: z.number(),
-          windSpeed: z.number(),
-          windDirection: z.string(),
-          windGust: z.number(),
-          windChill: z.number(),
-        }),
+        schema,
       },
     });
 
