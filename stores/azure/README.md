@@ -424,9 +424,9 @@ await azureVector.createIndex({
   semanticConfig: {
     name: 'semantic-config',
     prioritizedFields: {
-      titleField: 'title',
-      contentFields: ['content'],
-      keywordsFields: ['tags']
+      titleField: { fieldName: 'title' },
+      prioritizedContentFields: [{ fieldName: 'content' }],
+      prioritizedKeywordsFields: [{ fieldName: 'tags' }]
     }
   }
 });
