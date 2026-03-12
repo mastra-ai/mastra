@@ -364,6 +364,34 @@ export { default } from 'full-lib';`,
       virtual: "export * from '@workspace/internal-lib';\nexport { default } from '@workspace/internal-lib';",
     });
   });
+
+  it('should handle workspace packages without default export', () => {
+    const depsToOptimize = new Map<string, DependencyMetadata>([
+      [
+        '@workspace/no-default-lib',
+        {
+          exports: ['internalUtil'],
+          rootPath: '/workspace/packages/no-default-lib',
+          isWorkspace: true,
+        },
+      ],
+    ]);
+
+    const result = createVirtualDependencies(depsToOptimize, {
+      workspaceRoot: '/workspace',
+      projectRoot: '/workspace/app',
+      outputDir: '/workspace/app/.mastra/.build',
+      bundlerOptions: { isDev: false },
+    });
+
+    expect(result.optimizedDependencyEntries.get('@workspace/no-default-lib')).toEqual({
+      name: 'app/.mastra/.build/@workspace__no-default-lib',
+      virtual: "export * from '@workspace/no-default-lib';",
+    });
+    expect(result.fileNameToDependencyMap.get('app/.mastra/.build/@workspace__no-default-lib')).toBe(
+      '@workspace/no-default-lib',
+    );
+  });
 });
 
 describe('bundleExternals', () => {
