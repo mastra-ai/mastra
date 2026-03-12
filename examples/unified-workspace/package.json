@@ -8,6 +8,9 @@
     "@ai-sdk/openai": "^3.0.0",
     "@ai-sdk/provider": "^3.0.0",
     "@mastra/core": "latest",
+    "@mastra/e2b": "latest",
+    "@mastra/gcs": "latest",
+    "@mastra/s3": "latest",
     "@mastra/fastembed": "^1.0.0",
     "@mastra/libsql": "latest",
     "@mastra/memory": "latest",
@@ -20,6 +23,9 @@
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../packages/core",
+      "@mastra/e2b": "link:../../workspaces/e2b",
+      "@mastra/gcs": "link:../../workspaces/gcs",
+      "@mastra/s3": "link:../../workspaces/s3",
       "@mastra/memory": "link:../../packages/memory",
       "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/client-js": "link:../../client-sdks/client-js",

@@ -23,6 +23,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import type { Processor, ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
+import { getZodDef, getZodTypeName } from '@mastra/core/utils';
 vi.mock('@mastra/core/vector');
 
 vi.mock('zod', async importOriginal => {
@@ -454,10 +455,52 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     },
   });
 
-  // Mock getEditor to return an object with previewInstructions for stored agents routes
+  // Mock getEditor to return an object with namespaced methods for stored agents routes
+  const mockToolProvider = {
+    info: { id: 'test-provider', name: 'Test Provider', description: 'A test tool provider' },
+    listToolkits: vi.fn().mockResolvedValue({ data: [] }),
+    listTools: vi.fn().mockResolvedValue({ data: [], total: 0, page: 0, perPage: 20, hasMore: false }),
+    getToolSchema: vi.fn().mockResolvedValue({ name: 'test-tool-slug', inputSchema: {}, outputSchema: {} }),
+  };
+  const mockProcessorProvider = {
+    info: { id: 'test-provider', name: 'Test Processor Provider', description: 'A test processor provider' },
+    configSchema: z.object({}),
+    availablePhases: ['processInput'] as const,
+    createProcessor: vi.fn(),
+  };
   vi.spyOn(mastra, 'getEditor').mockReturnValue({
-    previewInstructions: vi.fn().mockResolvedValue('resolved instructions preview'),
-    clearStoredAgentCache: vi.fn(),
+    prompt: {
+      preview: vi.fn().mockResolvedValue('resolved instructions preview'),
+      clearCache: vi.fn(),
+    },
+    mcp: {
+      clearCache: vi.fn(),
+    },
+    agent: {
+      list: vi.fn().mockResolvedValue({ agents: [] }),
+      clearCache: vi.fn(),
+      clone: vi.fn().mockResolvedValue({
+        id: 'cloned-agent',
+        name: 'Test Agent (Clone)',
+        status: 'draft',
+        description: '',
+        instructions: 'test instructions',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+    },
+    scorer: {
+      clearCache: vi.fn(),
+    },
+    getToolProviders: vi.fn().mockReturnValue({ 'test-provider': mockToolProvider }),
+    getToolProvider: vi
+      .fn()
+      .mockImplementation((id: string) => (id === 'test-provider' ? mockToolProvider : undefined)),
+    getProcessorProviders: vi.fn().mockReturnValue({ 'test-provider': mockProcessorProvider }),
+    getProcessorProvider: vi
+      .fn()
+      .mockImplementation((id: string) => (id === 'test-provider' ? mockProcessorProvider : undefined)),
   } as any);
 
   await mockWorkflowRun(workflow);
@@ -490,8 +533,8 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     // Add test stored agent for stored agents routes
     const agents = await storage.getStore('agents');
     if (agents) {
-      // createAgent automatically creates version 1 with the initial config
-      const storedAgent = await agents.createAgent({
+      // create automatically creates version 1 with the initial config
+      const storedAgent = await agents.create({
         agent: {
           id: 'test-stored-agent',
           name: 'Test Stored Agent',
@@ -501,7 +544,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         },
       });
 
-      // Version 1 was auto-created by createAgent; its ID is the activeVersionId
+      // Version 1 was auto-created by create; its ID is the activeVersionId
       const version1Id = storedAgent.activeVersionId!;
 
       // Version 2: Non-active version that can be deleted or used in comparisons
@@ -518,9 +561,99 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       });
 
       // Ensure version 1 stays active, leaving version 2 (test-version-id) as non-active and deletable
-      await agents.updateAgent({
+      await agents.update({
         id: 'test-stored-agent',
         activeVersionId: version1Id,
+      });
+    }
+
+    // Add test stored scorer for stored scorers routes
+    const scorers = await storage.getStore('scorerDefinitions');
+    if (scorers) {
+      const storedScorer = await scorers.create({
+        scorerDefinition: {
+          id: 'test-stored-scorer',
+          name: 'Test Stored Scorer',
+          description: 'A test stored scorer for integration tests',
+          type: 'llm-judge',
+          instructions: 'Evaluate the response for accuracy.',
+          model: { provider: 'openai', name: 'gpt-4o' },
+          scoreRange: { min: 0, max: 1 },
+        },
+      });
+      // Version 2 with known ID for version-specific route tests
+      await scorers.createVersion({
+        id: 'test-version-id',
+        scorerDefinitionId: 'test-stored-scorer',
+        versionNumber: 2,
+        name: 'Test Stored Scorer',
+        type: 'llm-judge',
+        instructions: 'Updated instructions for version 2.',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        scoreRange: { min: 0, max: 1 },
+        changedFields: ['instructions'],
+        changeMessage: 'Second test version',
+      });
+    }
+
+    // Add test stored MCP client with version 2 (version 1 is auto-created by create())
+    const mcpClients = await storage.getStore('mcpClients');
+    if (mcpClients) {
+      await mcpClients.create({
+        mcpClient: {
+          id: 'test-stored-mcp-client',
+          name: 'Test Stored MCP Client',
+          servers: { 'test-server': { type: 'http', url: 'http://localhost:3000' } },
+        },
+      });
+      await mcpClients.createVersion({
+        id: 'test-version-id',
+        mcpClientId: 'test-stored-mcp-client',
+        versionNumber: 2,
+        name: 'Test Stored MCP Client',
+        servers: { 'test-server': { type: 'http', url: 'http://localhost:3001' } },
+        changedFields: ['servers'],
+        changeMessage: 'Second test version',
+      });
+    }
+
+    // Add test stored prompt block with version 2
+    const promptBlocks = await storage.getStore('promptBlocks');
+    if (promptBlocks) {
+      await promptBlocks.create({
+        promptBlock: {
+          id: 'test-stored-prompt-block',
+          name: 'Test Stored Prompt Block',
+          content: 'Hello {{name}}, this is a test prompt block.',
+        },
+      });
+      await promptBlocks.createVersion({
+        id: 'test-version-id',
+        blockId: 'test-stored-prompt-block',
+        versionNumber: 2,
+        name: 'Test Stored Prompt Block',
+        content: 'Updated content for {{name}}.',
+        changedFields: ['content'],
+        changeMessage: 'Second test version',
+      });
+    }
+
+    // Add test stored workspace and skill (no extra versions needed)
+    const workspaces = await storage.getStore('workspaces');
+    if (workspaces) {
+      await workspaces.create({
+        workspace: { id: 'test-stored-workspace', name: 'Test Stored Workspace' },
+      });
+    }
+    const skills = await storage.getStore('skills');
+    if (skills) {
+      await skills.create({
+        skill: {
+          id: 'test-stored-skill',
+          name: 'test-stored-skill',
+          description: 'A test stored skill',
+          instructions: 'Test skill instructions',
+        },
       });
     }
 
@@ -698,7 +831,7 @@ Follow these instructions for the test skill.
   const workspace = new Workspace({
     id: 'test-workspace',
     filesystem,
-    skills: ['/skills'],
+    skills: ['skills'],
     bm25: true, // Enable BM25 search for index/unindex operations
   });
 
@@ -813,37 +946,45 @@ export function createTestWorkflow(
 function schemaExpectsDate(schema: any, path: string[] = []): boolean {
   if (!schema) return false;
 
+  let typeName = getZodTypeName(schema);
+  let def = getZodDef(schema);
+
   // Unwrap effects, optional, nullable, default to get to the base type
   while (
-    schema._def?.typeName === 'ZodEffects' ||
-    schema._def?.typeName === 'ZodOptional' ||
-    schema._def?.typeName === 'ZodNullable' ||
-    schema._def?.typeName === 'ZodDefault'
+    typeName === 'ZodEffects' ||
+    typeName === 'ZodOptional' ||
+    typeName === 'ZodNullable' ||
+    typeName === 'ZodDefault'
   ) {
-    if (schema._def.typeName === 'ZodEffects') {
+    if (typeName === 'ZodEffects') {
       schema = schema._def.schema;
-    } else if (schema._def.typeName === 'ZodOptional' || schema._def.typeName === 'ZodNullable') {
-      schema = schema._def.innerType;
-    } else if (schema._def.typeName === 'ZodDefault') {
-      schema = schema._def.innerType;
+    } else if (typeName === 'ZodOptional' || typeName === 'ZodNullable') {
+      schema = def.innerType;
+    } else if (typeName === 'ZodDefault') {
+      schema = def.innerType;
     }
+    typeName = getZodTypeName(schema);
+    def = getZodDef(schema);
   }
+
+  typeName = getZodTypeName(schema);
+  def = getZodDef(schema);
 
   // If we have a path, navigate to that field
   if (path.length > 0) {
-    if (schema._def?.typeName === 'ZodObject') {
-      const shape = schema._def.shape();
+    if (typeName === 'ZodObject') {
+      const shape = typeof def.shape === 'function' ? def.shape() : def.shape;
       const fieldSchema = shape[path[0]];
       return schemaExpectsDate(fieldSchema, path.slice(1));
-    } else if (schema._def?.typeName === 'ZodArray') {
+    } else if (typeName === 'ZodArray') {
       // For arrays, check the element type (ignore the array index in path)
-      return schemaExpectsDate(schema._def.type, path.slice(1));
+      return schemaExpectsDate(def.element, path.slice(1));
     }
     return false;
   }
 
   // Check if this is a Date type
-  return schema._def?.typeName === 'ZodDate';
+  return typeName === 'ZodDate';
 }
 
 export function parseDatesInResponse(data: any, schema?: any, currentPath: string[] = []): any {
@@ -978,22 +1119,22 @@ function getRouteSpecificPathDefaults(route: ServerRoute): {
     routePath.includes('/fs/delete') ||
     routePath.includes('/fs/stat')
   ) {
-    return { query: { path: '/test-file.txt' }, body: { path: '/test-file.txt' } };
+    return { query: { path: 'test-file.txt' }, body: { path: 'test-file.txt' } };
   }
 
   // Directory operations need directory paths
   if (routePath.includes('/fs/list')) {
-    return { query: { path: '/' } };
+    return { query: { path: '.' } };
   }
 
   // mkdir needs a new path to create
   if (routePath.includes('/fs/mkdir')) {
-    return { body: { path: '/new-test-dir' } };
+    return { body: { path: 'new-test-dir' } };
   }
 
   // Index/unindex operations
   if (routePath.includes('/workspace/index') || routePath.includes('/workspace/unindex')) {
-    return { query: { path: '/test-file.txt' }, body: { path: '/test-file.txt' } };
+    return { query: { path: 'test-file.txt' }, body: { path: 'test-file.txt' } };
   }
 
   return {};

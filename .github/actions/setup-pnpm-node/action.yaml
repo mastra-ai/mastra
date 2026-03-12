@@ -10,6 +10,10 @@ inputs:
     description: 'Should use package manager cache'
     required: false
     default: 'true'
+  package-json-file:
+    description: 'Path to package.json for reading packageManager version (useful when checkout is not at workspace root)'
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -18,6 +22,7 @@ runs:
       name: Install pnpm
       with:
         run_install: false
+        package_json_file: ${{ inputs.package-json-file || 'package.json' }}
 
     - name: Setup Node.js 22.x
       uses: actions/setup-node@v6
@@ -29,4 +34,4 @@ runs:
     - name: Install dependencies
       if: ${{ inputs.install-dependencies == 'true' }}
       shell: bash
-      run: pnpm install
+      run: pnpm install --frozen-lockfile

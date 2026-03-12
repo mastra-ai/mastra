@@ -1,15 +1,16 @@
+import { createUIMessageStream, createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
+import type { InferUIMessageChunk, UIMessage } from '@internal/ai-sdk-v5';
 import type { Mastra } from '@mastra/core/mastra';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
-import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
-import type { InferUIMessageChunk, UIMessage } from 'ai';
 import { toAISdkV5Stream } from './convert-streams';
 
 export type WorkflowStreamHandlerParams = {
   runId?: string;
   resourceId?: string;
   inputData?: Record<string, any>;
+  initialState?: Record<string, any>;
   resumeData?: Record<string, any>;
   requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
@@ -33,7 +34,7 @@ export type WorkflowStreamHandlerOptions = {
  * ```ts
  * // Next.js App Router
  * import { handleWorkflowStream } from '@mastra/ai-sdk';
- * import { createUIMessageStreamResponse } from 'ai';
+ * import { createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
  * import { mastra } from '@/src/mastra';
  *
  * export async function POST(req: Request) {
@@ -55,7 +56,7 @@ export async function handleWorkflowStream<UI_MESSAGE extends UIMessage>({
   sendReasoning = false,
   sendSources = false,
 }: WorkflowStreamHandlerOptions): Promise<ReadableStream<InferUIMessageChunk<UI_MESSAGE>>> {
-  const { runId, resourceId, inputData, resumeData, requestContext, ...rest } = params;
+  const { runId, resourceId, inputData, initialState, resumeData, requestContext, ...rest } = params;
 
   const workflowObj = mastra.getWorkflowById(workflowId);
   if (!workflowObj) {
@@ -66,7 +67,7 @@ export async function handleWorkflowStream<UI_MESSAGE extends UIMessage>({
 
   const stream = resumeData
     ? run.resumeStream({ resumeData, ...rest, requestContext })
-    : run.stream({ inputData, ...rest, requestContext });
+    : run.stream({ inputData, initialState, ...rest, requestContext });
 
   return createUIMessageStream<UI_MESSAGE>({
     execute: async ({ writer }) => {

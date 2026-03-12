@@ -71,14 +71,39 @@ async function listScorersFromSystem({
 
   // Process stored agents (database-backed agents)
   try {
-    const storedAgentsResult = await mastra.getEditor()?.listStoredAgents();
+    const editor = mastra.getEditor();
+    const storedAgentsResult = await editor?.agent.list();
     if (storedAgentsResult?.agents) {
-      for (const storedAgent of storedAgentsResult.agents) {
-        await processAgentScorers(storedAgent);
+      for (const storedAgentConfig of storedAgentsResult.agents) {
+        try {
+          const agent = await editor?.agent.getById(storedAgentConfig.id);
+          if (agent) {
+            await processAgentScorers(agent);
+          }
+        } catch {
+          // Skip individual agents that fail to hydrate
+        }
       }
     }
   } catch {
     // Silently ignore if storage is not configured - not all setups have storage
+  }
+
+  // Process stored scorers (standalone CMS-created scorers)
+  try {
+    const editor = mastra.getEditor();
+    const storedScorersResult = await editor?.scorer.list();
+    if (storedScorersResult?.scorerDefinitions) {
+      for (const storedScorerConfig of storedScorersResult.scorerDefinitions) {
+        try {
+          await editor?.scorer.getById(storedScorerConfig.id);
+        } catch {
+          // Skip individual scorers that fail to hydrate
+        }
+      }
+    }
+  } catch {
+    // Silently ignore if storage is not configured
   }
 
   for (const [workflowId, workflow] of Object.entries(workflows)) {
@@ -151,13 +176,13 @@ export const LIST_SCORERS_ROUTE = createRoute({
   description: 'Returns a list of all registered scorers with their configuration and associated agents and workflows',
   tags: ['Scoring'],
   requiresAuth: true,
-  handler: async ({ mastra, requestContext }) => {
+  handler: (async ({ mastra, requestContext }: any) => {
     const scorers = await listScorersFromSystem({
       mastra,
       requestContext,
     });
     return scorers;
-  },
+  }) as any,
 });
 
 export const GET_SCORER_ROUTE = createRoute({
@@ -170,7 +195,7 @@ export const GET_SCORER_ROUTE = createRoute({
   description: 'Returns details for a specific scorer including its configuration and associations',
   tags: ['Scoring'],
   requiresAuth: true,
-  handler: async ({ mastra, scorerId, requestContext }) => {
+  handler: (async ({ mastra, scorerId, requestContext }: any) => {
     const scorers = await listScorersFromSystem({
       mastra,
       requestContext,
@@ -183,7 +208,7 @@ export const GET_SCORER_ROUTE = createRoute({
     }
 
     return scorer;
-  },
+  }) as any,
 });
 
 export const LIST_SCORES_BY_RUN_ID_ROUTE = createRoute({

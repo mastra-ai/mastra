@@ -39,8 +39,8 @@ jobs:
       - name: Configure git
         shell: bash
         run: |
-          git config --global user.name 'daneatmastra'
-          git config --global user.email 'dane@mastra.ai'
+          git config --global user.name 'Dane - AI (Mastra)'
+          git config --global user.email '199639756+daneatmastra@users.noreply.github.com'
 
       - name: Create/Update Changesets
         uses: 'wardpeet/changesets-dependencies-action@1ac684b9885a8e9bb1d24f09fd2c253b36b3700d'

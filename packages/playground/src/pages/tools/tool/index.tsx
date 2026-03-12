@@ -1,5 +1,3 @@
-import { Link, useParams } from 'react-router';
-
 import {
   Header,
   Breadcrumb,
@@ -12,6 +10,7 @@ import {
   ToolPanel,
   ToolCombobox,
 } from '@mastra/playground-ui';
+import { Link, useParams } from 'react-router';
 
 const Tool = () => {
   const { toolId } = useParams();
@@ -32,10 +31,14 @@ const Tool = () => {
         </Breadcrumb>
 
         <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/en/docs/agents/using-tools-and-mcp" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
+          <Button
+            as={Link}
+            to="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
+            target="_blank"
+            variant="ghost"
+            size="md"
+          >
+            <DocsIcon />
             Tools documentation
           </Button>
         </HeaderAction>

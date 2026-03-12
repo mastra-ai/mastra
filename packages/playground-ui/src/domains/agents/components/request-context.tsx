@@ -13,11 +13,23 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/c
 import { Braces, CopyIcon, ExternalLink } from 'lucide-react';
 import { formatJSON, isValidJson } from '@/lib/formatting';
 import { useLinkComponent } from '@/lib/framework';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select/select';
+import { useRequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 
 export const RequestContext = () => {
   const { requestContext, setRequestContext } = usePlaygroundStore();
   const [requestContextValue, setRequestContextValue] = useState<string>('');
   const theme = useCodemirrorTheme();
+  const presets = useRequestContextPresets();
+
+  const [selectedPreset, setSelectedPreset] = useState<string>(() => {
+    if (!presets || !requestContext) return '__custom__';
+    const savedStr = JSON.stringify(requestContext);
+    for (const [key, value] of Object.entries(presets)) {
+      if (JSON.stringify(value) === savedStr) return key;
+    }
+    return '__custom__';
+  });
 
   const { handleCopy } = useCopyToClipboard({ text: requestContextValue });
 
@@ -60,6 +72,24 @@ export const RequestContext = () => {
     setRequestContextValue(formatted);
   };
 
+  const handlePresetChange = async (presetKey: string) => {
+    setSelectedPreset(presetKey);
+    if (presetKey === '__custom__' || !presets) return;
+
+    const presetValue = presets[presetKey];
+    if (presetValue) {
+      const formatted = await formatJSON(JSON.stringify(presetValue));
+      setRequestContextValue(formatted);
+    }
+  };
+
+  const handleEditorChange = (value: string) => {
+    setRequestContextValue(value);
+    if (selectedPreset !== '__custom__') {
+      setSelectedPreset('__custom__');
+    }
+  };
+
   return (
     <TooltipProvider>
       <div>
@@ -93,9 +123,27 @@ export const RequestContext = () => {
           </div>
         </div>
 
+        {presets && Object.keys(presets).length > 0 && (
+          <div className="pb-3">
+            <Select value={selectedPreset} onValueChange={handlePresetChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a preset..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__custom__">Custom</SelectItem>
+                {Object.keys(presets).map(key => (
+                  <SelectItem key={key} value={key}>
+                    {key}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         <CodeMirror
           value={requestContextValue}
-          onChange={setRequestContextValue}
+          onChange={handleEditorChange}
           theme={theme}
           extensions={[jsonLanguage]}
           className="h-[400px] overflow-y-scroll bg-surface3 rounded-lg overflow-hidden p-3"

@@ -8,3 +8,4 @@ export * from './traces-list';
 export * from './span-score-list';
 export * from './span-scoring';
 export * from './span-tabs';
+export * from './trace-as-item-dialog';

@@ -108,6 +108,8 @@ export interface InstallSkillParams {
   repository: string;
   /** Skill name within the repo */
   skillName: string;
+  /** Mount path to install into (for CompositeFilesystem) */
+  mount?: string;
 }
 
 /**
@@ -126,15 +128,19 @@ export const useInstallSkill = () => {
 
       const baseUrl = client.options.baseUrl || '';
       const url = `${baseUrl}/api/workspaces/${params.workspaceId}/skills-sh/install`;
+      const body: Record<string, string> = { owner, repo, skillName: params.skillName };
+      if (params.mount) {
+        body.mount = params.mount;
+      }
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ owner, repo, skillName: params.skillName }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || `Failed to install skill: ${response.statusText}`);
+        throw new Error(error.error || error.message || `Failed to install skill: ${response.statusText}`);
       }
 
       return response.json().catch(() => {
@@ -171,7 +177,7 @@ export const useUpdateSkills = () => {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || `Failed to update skill: ${response.statusText}`);
+        throw new Error(error.error || error.message || `Failed to update skill: ${response.statusText}`);
       }
 
       return response.json().catch(() => {
@@ -208,7 +214,7 @@ export const useRemoveSkill = () => {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || `Failed to remove skill: ${response.statusText}`);
+        throw new Error(error.error || error.message || `Failed to remove skill: ${response.statusText}`);
       }
 
       return response.json().catch(() => {

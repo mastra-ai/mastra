@@ -25,10 +25,11 @@ export const RuleRow: React.FC<RuleRowProps> = ({ schema, rule, onChange, onRemo
   const isPrimitive = fieldType !== undefined && PRIMITIVE_TYPES.has(fieldType);
   const isArray = fieldType === 'array';
   const isArrayOperator = rule.operator === 'in' || rule.operator === 'not_in';
+  const isExistenceOperator = rule.operator === 'exists' || rule.operator === 'not_exists';
 
   // Show operator + value for primitive types, or for array types (restricted to in/not_in)
   const showComparator = isPrimitive || isArray;
-  const showValueInput = isPrimitive || (isArray && isArrayOperator);
+  const showValueInput = !isExistenceOperator && (isPrimitive || (isArray && isArrayOperator));
 
   const handleFieldChange = React.useCallback(
     (field: string) => {
@@ -39,6 +40,14 @@ export const RuleRow: React.FC<RuleRowProps> = ({ schema, rule, onChange, onRemo
 
   const handleOperatorChange = React.useCallback(
     (operator: ConditionOperator) => {
+      const isNewExistence = operator === 'exists' || operator === 'not_exists';
+
+      // Existence operators don't need a value
+      if (isNewExistence) {
+        onChange({ ...rule, operator, value: undefined });
+        return;
+      }
+
       // Reset value when changing to/from array operators
       const isArrayOperator = operator === 'in' || operator === 'not_in';
       const wasArrayOperator = rule.operator === 'in' || rule.operator === 'not_in';
