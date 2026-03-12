@@ -1,5 +1,6 @@
 import { DragDropContext, Draggable, DropResult, Droppable } from '@hello-pangea/dnd';
 import { GripVertical } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { Icon } from '@/ds/icons';
 import { ColumnMapping, FieldType } from '../../hooks/use-column-mapping';
 
@@ -82,30 +83,40 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
 
                     {columnsInZone.map((column, index) => (
                       <Draggable key={column} draggableId={column} index={index}>
-                        {(provided, snapshot) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            style={provided.draggableProps.style}
-                            className={`
-                              inline-flex items-center gap-1.5 px-2.5 py-1.5
-                              rounded-md text-sm font-medium
-                              bg-surface2 text-neutral1
-                              transition-all
-                              ${snapshot.isDragging ? 'shadow-lg ring-2 ring-accent1/30' : 'hover:bg-surface3'}
-                            `}
-                          >
-                            <span
-                              {...provided.dragHandleProps}
-                              className="text-neutral4 cursor-grab active:cursor-grabbing"
+                        {(provided, snapshot) => {
+                          const child = (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              style={provided.draggableProps.style}
+                              className={`
+                                inline-flex items-center gap-1.5 px-2.5 py-1.5
+                                rounded-md text-sm font-medium
+                                bg-surface2 text-neutral1
+                                transition-all
+                                ${snapshot.isDragging ? 'shadow-lg ring-2 ring-accent1/30' : 'hover:bg-surface3'}
+                              `}
                             >
-                              <Icon>
-                                <GripVertical className="h-3.5 w-3.5" />
-                              </Icon>
-                            </span>
-                            <span>{column}</span>
-                          </div>
-                        )}
+                              <span
+                                {...provided.dragHandleProps}
+                                className="text-neutral4 cursor-grab active:cursor-grabbing"
+                              >
+                                <Icon>
+                                  <GripVertical className="h-3.5 w-3.5" />
+                                </Icon>
+                              </span>
+                              <span>{column}</span>
+                            </div>
+                          );
+
+                          // Portal dragged item to document.body to avoid
+                          // offset issues from Radix Dialog portal + scrollable container
+                          if (snapshot.isDragging) {
+                            return createPortal(child, document.body);
+                          }
+
+                          return child;
+                        }}
                       </Draggable>
                     ))}
 

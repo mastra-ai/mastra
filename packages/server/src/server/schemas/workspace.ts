@@ -169,12 +169,25 @@ export const searchResponseSchema = z.object({
 export const indexBodySchema = z.object({
   path: z.string().describe('Path to use as document ID'),
   content: z.string().describe('Content to index'),
-  metadata: z.record(z.unknown()).optional().describe('Optional metadata'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Optional metadata'),
 });
 
 export const indexResponseSchema = z.object({
   success: z.boolean(),
   path: z.string(),
+});
+
+// =============================================================================
+// Mount Schemas
+// =============================================================================
+
+export const mountInfoSchema = z.object({
+  path: z.string().describe('Mount path'),
+  provider: z.string().describe('Filesystem provider type'),
+  readOnly: z.boolean().describe('Whether the mount is read-only'),
+  displayName: z.string().optional().describe('Human-readable name'),
+  icon: z.string().optional().describe('UI icon identifier'),
+  name: z.string().optional().describe('Filesystem instance name'),
 });
 
 // =============================================================================
@@ -210,9 +223,10 @@ export const workspaceInfoResponseSchema = z.object({
       error: z.string().optional(),
       readOnly: z.boolean().optional(),
       icon: z.string().optional(),
-      metadata: z.record(z.unknown()).optional(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
     })
     .optional(),
+  mounts: z.array(mountInfoSchema).optional().describe('Mount points (only present for CompositeFilesystem)'),
 });
 
 const workspaceItemSchema = z.object({
@@ -272,7 +286,7 @@ export const skillMetadataSchema = z.object({
   description: z.string(),
   license: z.string().optional(),
   compatibility: z.unknown().optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const skillSourceSchema = z.discriminatedUnion('type', [
@@ -410,6 +424,7 @@ export const skillsShInstallBodySchema = z.object({
   owner: z.string().describe('GitHub repository owner'),
   repo: z.string().describe('GitHub repository name'),
   skillName: z.string().describe('Skill name from skills.sh'),
+  mount: z.string().optional().describe('Mount path to install into (for CompositeFilesystem)'),
 });
 
 export const skillsShInstallResponseSchema = z.object({

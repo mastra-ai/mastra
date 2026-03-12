@@ -61,7 +61,8 @@
               }
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "source": "call"
             },
             "input": {
               "messages": [
@@ -112,6 +113,8 @@
                   "finishReason": "stop"
                 },
                 "metadata": {
+                  "runId": "<runId-1>",
+                  "source": "call",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -140,6 +143,10 @@
                     "attributes": {
                       "chunkType": "text",
                       "sequenceNumber": 0
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "source": "call"
                     },
                     "output": {
                       "text": "Mock V2 generate response"

@@ -1,17 +1,17 @@
 ---
-title: "Reference: LanceDB Storage | Storage"
+title: "Reference: LanceDB storage | Storage"
 description: Documentation for the LanceDB storage implementation in Mastra.
 packages:
   - "@mastra/core"
   - "@mastra/lance"
 ---
 
-# LanceDB Storage
+# LanceDB storage
 
 The LanceDB storage implementation provides a high-performance storage solution using the LanceDB database system, which excels at handling both traditional data storage and vector operations.
 
 :::warning[Observability Not Supported]
-LanceDB storage **does not support the observability domain**. Traces from the `DefaultExporter` cannot be persisted to LanceDB, and Mastra Studio's observability features won't work with LanceDB as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+LanceDB storage **doesn't support the observability domain**. Traces from the `DefaultExporter` can't be persisted to LanceDB, and Mastra Studio's observability features won't work with LanceDB as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
 :::
 
 ## Installation
@@ -25,50 +25,48 @@ npm install @mastra/lance@latest
 ### Basic Storage Usage
 
 ```typescript
-import { LanceStorage } from "@mastra/lance";
+import { LanceStorage } from '@mastra/lance'
 
 // Connect to a local database
-const storage = await LanceStorage.create("my-storage", "/path/to/db");
+const storage = await LanceStorage.create('my-storage', '/path/to/db')
 
 // Connect to a LanceDB cloud database
-const storage = await LanceStorage.create("my-storage", "db://host:port");
+const storage = await LanceStorage.create('my-storage', 'db://host:port')
 
 // Connect to a cloud database with custom options
-const storage = await LanceStorage.create("my-storage", "s3://bucket/db", {
-  storageOptions: { timeout: "60s" },
-});
+const storage = await LanceStorage.create('my-storage', 's3://bucket/db', {
+  storageOptions: { timeout: '60s' },
+})
 ```
 
 ## Parameters
 
-### LanceStorage.create()
+### `LanceStorage.create()`
 
 <PropertiesTable
   content={[
-    {
-      name: "name",
-      type: "string",
-      description: "Name identifier for the storage instance",
-      isOptional: false,
-    },
-    {
-      name: "uri",
-      type: "string",
-      description:
-        "URI to connect to the LanceDB database. Can be a local path, cloud DB URL, or S3 bucket URL",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "ConnectionOptions",
-      description:
-        "Connection options for LanceDB, such as timeout settings, authentication, etc.",
-      isOptional: true,
-    },
-  ]}
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Name identifier for the storage instance',
+    isOptional: false,
+  },
+  {
+    name: 'uri',
+    type: 'string',
+    description: 'URI to connect to the LanceDB database. Can be a local path, cloud DB URL, or S3 bucket URL',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'ConnectionOptions',
+    description: 'Connection options for LanceDB, such as timeout settings, authentication, etc.',
+    isOptional: true,
+  },
+]}
 />
 
-## Additional Notes
+## Additional notes
 
 ### Schema Management
 
@@ -85,33 +83,33 @@ The LanceStorage implementation automatically handles schema creation and update
 When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
 
 ```typescript
-import { Mastra } from "@mastra/core";
-import { LanceStorage } from "@mastra/lance";
+import { Mastra } from '@mastra/core'
+import { LanceStorage } from '@mastra/lance'
 
-const storage = await LanceStorage.create("my-storage", "/path/to/db");
+const storage = await LanceStorage.create('my-storage', '/path/to/db')
 
 const mastra = new Mastra({
   storage, // init() is called automatically
-});
+})
 ```
 
 If you're using storage directly without Mastra, you must call `init()` explicitly to create the tables:
 
 ```typescript
-import { LanceStorage } from "@mastra/lance";
+import { LanceStorage } from '@mastra/lance'
 
-const storage = await LanceStorage.create("my-storage", "/path/to/db");
+const storage = await LanceStorage.create('my-storage', '/path/to/db')
 
 // Required when using storage directly
-await storage.init();
+await storage.init()
 
 // Access domain-specific stores via getStore()
-const memoryStore = await storage.getStore('memory');
-const thread = await memoryStore?.getThreadById({ threadId: "..." });
+const memoryStore = await storage.getStore('memory')
+const thread = await memoryStore?.getThreadById({ threadId: '...' })
 ```
 
 :::warning
-If `init()` is not called, tables won't be created and storage operations will fail silently or throw errors.
+If `init()` isn't called, tables won't be created and storage operations will fail silently or throw errors.
 :::
 
 ### Deployment Options

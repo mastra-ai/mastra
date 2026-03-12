@@ -8,6 +8,7 @@ import { getServerOptions, normalizeStudioBase } from '@mastra/deployer/build';
 import { execa } from 'execa';
 import getPort from 'get-port';
 import pc from 'picocolors';
+import { getAnalytics } from '../../analytics/index.js';
 import { checkMastraPeerDeps, getUpdateCommand, logPeerDepWarnings } from '../../utils/check-peer-deps.js';
 import type { PeerDepMismatch } from '../../utils/check-peer-deps.js';
 import { devLogger } from '../../utils/dev-logger.js';
@@ -484,7 +485,19 @@ export async function dev({
     }
   });
 
-  process.on('SIGINT', () => {
+  const handleShutdown = async () => {
+    const analytics = getAnalytics();
+    if (analytics && serverStartTime) {
+      const durationMs = Date.now() - serverStartTime;
+      analytics.trackEvent('cli_dev_session_end', {
+        durationMs,
+        durationMinutes: Math.round(durationMs / 60000),
+      });
+    }
+    if (analytics) {
+      await analytics.shutdown();
+    }
+
     devLogger.shutdown();
 
     if (currentServerProcess) {
@@ -495,5 +508,13 @@ export async function dev({
       .close()
       .catch(() => {})
       .finally(() => process.exit(0));
+  };
+
+  process.on('SIGINT', () => {
+    handleShutdown().catch(() => process.exit(0));
+  });
+
+  process.on('SIGTERM', () => {
+    handleShutdown().catch(() => process.exit(0));
   });
 }

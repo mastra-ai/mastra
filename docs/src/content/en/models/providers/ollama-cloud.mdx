@@ -118,18 +118,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "ollama-cloud/gemini-3-pro-preview",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 64000,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "ollama-cloud/gemma3:12b",
     "imageInput": true,
     "audioInput": false,
@@ -418,6 +406,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "ollama-cloud/qwen3.5:397b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 81920,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "ollama-cloud/rnj-1:8b",
     "imageInput": false,
     "audioInput": false,
@@ -432,9 +432,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 ]}
 />
 
-## Advanced Configuration
+## Advanced configuration
 
-### Custom Headers
+### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
@@ -451,7 +451,7 @@ const agent = new Agent({
 });
 ```
 
-### Dynamic Model Selection
+### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({

@@ -1,159 +1,225 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
-import { Plug } from 'lucide-react';
+import { PlusIcon, XIcon } from 'lucide-react';
 
-import { EntityAccordionItem, SectionHeader } from '@/domains/cms';
-import { ToolsIcon } from '@/ds/icons';
-import { MultiCombobox } from '@/ds/components/Combobox';
+import { DisplayConditionsDialog } from '@/domains/cms';
+import { Icon, ToolsIcon } from '@/ds/icons';
+import { Button } from '@/ds/components/Button';
 import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Badge } from '@/ds/components/Badge';
+import { Section } from '@/ds/components/Section';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
-import { useAllIntegrationTools } from '@/domains/tool-providers/hooks';
+import { IntegrationToolsSection } from '@/domains/tool-providers/components';
+import { MCPClientList } from '@/domains/mcps/components/mcp-client-list';
+import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
+import type { RuleGroup } from '@/lib/rule-engine';
+import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
+import { SubSectionRoot } from '@/ds/components/Section/section-root';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-
-interface EntityConfig {
-  description?: string;
-}
+import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
+import { cn } from '@/lib/utils';
 
 export function ToolsPage() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;
-  const { data: tools, isLoading: isLoadingTools } = useTools();
-  const { data: integrationTools, isLoading: isLoadingIntegration } = useAllIntegrationTools();
-
+  const { data: tools } = useTools();
   const selectedTools = useWatch({ control, name: 'tools' });
   const selectedIntegrationTools = useWatch({ control, name: 'integrationTools' });
+  const variables = useWatch({ control, name: 'variables' });
 
-  const { options, integrationToolIds } = useMemo(() => {
-    const integrationToolIds = new Set<string>();
-    const opts: { value: string; label: string; description: string; start: React.ReactNode; end?: React.ReactNode }[] =
-      [];
+  const options = useMemo(() => {
+    const opts: { value: string; label: string; description: string }[] = [];
 
     if (tools) {
       for (const [id, tool] of Object.entries(tools)) {
         opts.push({
           value: id,
-          label: (tool as { name?: string }).name || id,
-          description: (tool as { description?: string }).description || '',
-          start: <ToolsIcon className="text-accent6 h-4 w-4" />,
+          label: id,
+          description: tool.description || '',
         });
       }
     }
 
-    for (const tool of integrationTools) {
-      const id = `${tool.providerId}:${tool.slug}`;
-      integrationToolIds.add(id);
-      opts.push({
-        value: id,
-        label: tool.name || tool.slug,
-        description: tool.description || '',
-        start: <Plug className="text-accent5 h-4 w-4" />,
-        end: <Badge>{tool.providerName}</Badge>,
-      });
-    }
+    return opts;
+  }, [tools]);
 
-    return { options: opts, integrationToolIds };
-  }, [tools, integrationTools]);
-
-  const allSelectedIds = [...Object.keys(selectedTools || {}), ...Object.keys(selectedIntegrationTools || {})];
-  const totalCount = allSelectedIds.length;
+  const selectedToolIds = Object.keys(selectedTools || {});
 
   const getOriginalDescription = (id: string): string => {
     const option = options.find(opt => opt.value === id);
     return option?.description || '';
   };
 
-  const handleValueChange = (newIds: string[]) => {
-    const newTools: Record<string, EntityConfig> = {};
-    const newIntegration: Record<string, EntityConfig> = {};
-
-    for (const id of newIds) {
-      if (integrationToolIds.has(id)) {
-        newIntegration[id] = selectedIntegrationTools?.[id] || { description: getOriginalDescription(id) };
-      } else {
-        newTools[id] = selectedTools?.[id] || { description: getOriginalDescription(id) };
-      }
+  const handleValueChange = (toolId: string) => {
+    const isSet = selectedTools?.[toolId] !== undefined;
+    if (isSet) {
+      const next = { ...selectedTools };
+      delete next[toolId];
+      form.setValue('tools', next, { shouldDirty: true });
+    } else {
+      form.setValue(
+        'tools',
+        {
+          ...selectedTools,
+          [toolId]: { ...selectedTools?.[toolId], description: getOriginalDescription(toolId) },
+        },
+        { shouldDirty: true },
+      );
     }
-
-    form.setValue('tools', newTools);
-    form.setValue('integrationTools', newIntegration);
   };
 
   const handleDescriptionChange = (toolId: string, description: string) => {
-    if (integrationToolIds.has(toolId)) {
-      form.setValue('integrationTools', {
-        ...selectedIntegrationTools,
-        [toolId]: { ...selectedIntegrationTools?.[toolId], description },
-      });
-    } else {
-      form.setValue('tools', {
+    form.setValue(
+      'tools',
+      {
         ...selectedTools,
         [toolId]: { ...selectedTools?.[toolId], description },
-      });
-    }
+      },
+      { shouldDirty: true },
+    );
   };
 
-  const handleRemove = (toolId: string) => {
-    if (integrationToolIds.has(toolId)) {
+  const handleRulesChange = (toolId: string, rules: RuleGroup | undefined) => {
+    form.setValue(
+      'tools',
+      {
+        ...selectedTools,
+        [toolId]: { ...selectedTools?.[toolId], rules },
+      },
+      { shouldDirty: true },
+    );
+  };
+
+  const handleIntegrationToolsSubmit = useCallback(
+    (providerId: string, tools: Map<string, string>) => {
       const next = { ...selectedIntegrationTools };
-      delete next[toolId];
-      form.setValue('integrationTools', next);
-    } else {
-      const next = { ...selectedTools };
-      delete next[toolId];
-      form.setValue('tools', next);
-    }
+
+      // Remove all tools from this provider
+      for (const key of Object.keys(next)) {
+        if (key.startsWith(`${providerId}:`)) {
+          delete next[key];
+        }
+      }
+
+      // Add selected tools, preserving existing config (rules) if available
+      for (const [id, description] of tools) {
+        next[id] = selectedIntegrationTools?.[id] || { description };
+      }
+
+      form.setValue('integrationTools', next, { shouldDirty: true });
+    },
+    [form, selectedIntegrationTools],
+  );
+
+  const selectedOptions = useMemo(() => {
+    return options.filter(opt => selectedToolIds.includes(opt.value));
+  }, [options, selectedToolIds]);
+
+  const unselectedOptions = useMemo(() => {
+    return options.filter(opt => !selectedToolIds.includes(opt.value));
+  }, [options, selectedToolIds]);
+
+  const handleAddTool = (toolId: string) => {
+    form.setValue(
+      'tools',
+      {
+        ...selectedTools,
+        [toolId]: { ...selectedTools?.[toolId], description: getOriginalDescription(toolId) },
+      },
+      { shouldDirty: true },
+    );
   };
 
-  const selectedOptions = options.filter(opt => allSelectedIds.includes(opt.value));
+  const renderToolEntity = (tool: (typeof options)[number]) => {
+    return (
+      <Entity key={tool.value} className="bg-surface2">
+        <EntityContent>
+          <EntityName className="!text-ui-md !leading-ui-md font-medium">{tool.label}</EntityName>
+          <EntityDescription>
+            <input
+              type="text"
+              aria-label={`Description for ${tool.label}`}
+              disabled={readOnly}
+              className={cn(
+                'border border-transparent appearance-none block w-full text-neutral3 bg-transparent rounded px-1 -mx-1 transition-colors focus:outline focus:outline-1 focus:outline-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-white',
+                !readOnly && 'hover:bg-surface4 focus:bg-surface4',
+              )}
+              value={selectedTools?.[tool.value]?.description ?? tool.description}
+              onChange={e => handleDescriptionChange(tool.value, e.target.value)}
+            />
+          </EntityDescription>
+        </EntityContent>
+
+        {!readOnly && (
+          <DisplayConditionsDialog
+            entityName={tool.label}
+            schema={variables}
+            rules={selectedTools?.[tool.value]?.rules}
+            onRulesChange={rules => handleRulesChange(tool.value, rules)}
+          />
+        )}
+
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => handleValueChange(tool.value)}
+            className="text-neutral3 hover:text-neutral5 transition-colors rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
+            aria-label={`Remove ${tool.label}`}
+          >
+            <Icon size="sm">
+              <XIcon />
+            </Icon>
+          </button>
+        )}
+      </Entity>
+    );
+  };
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6 p-4">
-        <SectionHeader
-          title="Tools"
-          subtitle={`Select the tools this agent can use.${totalCount > 0 ? ` (${totalCount} selected)` : ''}`}
-          icon={<ToolsIcon className="text-accent6" />}
-        />
+      <div className="flex flex-col gap-6 pt-4">
+        <SubSectionRoot>
+          <Section.Header>
+            <SubSectionHeader title="Tools" icon={<ToolsIcon />} />
 
-        <div className="flex flex-col gap-2">
-          <MultiCombobox
-            options={options}
-            value={allSelectedIds}
-            onValueChange={handleValueChange}
-            placeholder="Select tools..."
-            searchPlaceholder="Search tools..."
-            emptyText="No tools available"
-            disabled={(isLoadingTools && isLoadingIntegration) || readOnly}
-            variant="light"
-          />
+            {!readOnly && unselectedOptions.length > 0 && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="sm">
+                    <Icon size="sm">
+                      <PlusIcon />
+                    </Icon>
+                    Add Tools
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-80 p-0 pt-4 max-h-72 overflow-y-auto">
+                  {unselectedOptions.map(tool => (
+                    <button
+                      key={tool.value}
+                      type="button"
+                      onClick={() => handleAddTool(tool.value)}
+                      className="flex flex-col gap-0.5 w-full text-left px-3 py-2.5 hover:bg-white/10 focus:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-0"
+                    >
+                      <span className="text-ui-md font-normal text-neutral5">{tool.label}</span>
+                      {tool.description && <span className="text-ui-xs text-neutral3">{tool.description}</span>}
+                    </button>
+                  ))}
+                </PopoverContent>
+              </Popover>
+            )}
+          </Section.Header>
+
           {selectedOptions.length > 0 && (
-            <div className="flex flex-col gap-3 mt-2">
-              {selectedOptions.map(tool => (
-                <EntityAccordionItem
-                  key={tool.value}
-                  id={tool.value}
-                  name={tool.label}
-                  icon={
-                    integrationToolIds.has(tool.value) ? (
-                      <Plug className="text-accent5" />
-                    ) : (
-                      <ToolsIcon className="text-accent6" />
-                    )
-                  }
-                  description={
-                    (integrationToolIds.has(tool.value)
-                      ? selectedIntegrationTools?.[tool.value]?.description
-                      : selectedTools?.[tool.value]?.description) || ''
-                  }
-                  onDescriptionChange={readOnly ? undefined : desc => handleDescriptionChange(tool.value, desc)}
-                  onRemove={readOnly ? undefined : () => handleRemove(tool.value)}
-                />
-              ))}
-            </div>
+            <div className="flex flex-col gap-1">{selectedOptions.map(tool => renderToolEntity(tool))}</div>
           )}
-        </div>
+        </SubSectionRoot>
+
+        <MCPClientList />
+
+        <IntegrationToolsSection
+          selectedToolIds={selectedIntegrationTools}
+          onSubmitTools={readOnly ? undefined : handleIntegrationToolsSubmit}
+        />
       </div>
     </ScrollArea>
   );

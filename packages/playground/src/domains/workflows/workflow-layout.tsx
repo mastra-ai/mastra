@@ -1,5 +1,4 @@
-import { useParams } from 'react-router';
-
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import {
   WorkflowRunProvider,
   Header,
@@ -16,9 +15,9 @@ import {
   WorkflowLayout as WorkflowLayoutUI,
   SchemaRequestContextProvider,
 } from '@mastra/playground-ui';
+import { useParams } from 'react-router';
 
 import { WorkflowHeader } from './workflow-header';
-import { WorkflowRunState } from '@mastra/core/workflows';
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();

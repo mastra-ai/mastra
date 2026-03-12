@@ -43,6 +43,8 @@ export interface S3MountConfig extends FilesystemMountConfig {
   accessKeyId?: string;
   /** AWS secret access key */
   secretAccessKey?: string;
+  /** AWS session token for temporary credentials (SSO, AssumeRole, container credentials, etc.) */
+  sessionToken?: string;
   /** Mount as read-only */
   readOnly?: boolean;
 }
@@ -138,6 +140,12 @@ export interface S3FilesystemOptions extends MastraFilesystemOptions {
    */
   secretAccessKey?: string;
   /**
+   * AWS session token for temporary credentials.
+   * Required when using SSO, AssumeRole, container credentials, or any other
+   * temporary credential provider.
+   */
+  sessionToken?: string;
+  /**
    * Custom endpoint URL for S3-compatible storage.
    * Examples:
    * - Cloudflare R2: 'https://{accountId}.r2.cloudflarestorage.com'
@@ -225,6 +233,7 @@ export class S3Filesystem extends MastraFilesystem {
   private readonly region: string;
   private readonly accessKeyId?: string;
   private readonly secretAccessKey?: string;
+  private readonly sessionToken?: string;
   private readonly endpoint?: string;
   private readonly forcePathStyle: boolean;
   private readonly prefix: string;
@@ -238,6 +247,7 @@ export class S3Filesystem extends MastraFilesystem {
     this.region = options.region;
     this.accessKeyId = options.accessKeyId;
     this.secretAccessKey = options.secretAccessKey;
+    this.sessionToken = options.sessionToken;
     this.endpoint = options.endpoint;
     this.forcePathStyle = options.forcePathStyle ?? !!options.endpoint; // Default true for custom endpoints
     // Trim leading/trailing slashes from prefix using iterative approach (avoids polynomial regex)
@@ -248,6 +258,29 @@ export class S3Filesystem extends MastraFilesystem {
     this.displayName = options.displayName ?? this.getDefaultDisplayName(this.icon);
     this.description = options.description;
     this.readOnly = options.readOnly;
+  }
+
+  /**
+   * Get the underlying S3Client instance for direct access to AWS S3 APIs.
+   *
+   * Use this when you need to access S3 features not exposed through the
+   * WorkspaceFilesystem interface (e.g., presigned URLs, multipart uploads,
+   * custom S3 operations, etc.).
+   *
+   * @example Generate a presigned URL
+   * ```typescript
+   * import { GetObjectCommand } from '@aws-sdk/client-s3';
+   * import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+   *
+   * const s3Client = fs.client;
+   * const url = await getSignedUrl(s3Client, new GetObjectCommand({
+   *   Bucket: 'my-bucket',
+   *   Key: 'my-file.txt',
+   * }));
+   * ```
+   */
+  get client(): S3Client {
+    return this.getClient();
   }
 
   /**
@@ -265,6 +298,9 @@ export class S3Filesystem extends MastraFilesystem {
     if (this.accessKeyId && this.secretAccessKey) {
       config.accessKeyId = this.accessKeyId;
       config.secretAccessKey = this.secretAccessKey;
+      if (this.sessionToken) {
+        config.sessionToken = this.sessionToken;
+      }
     }
 
     if (this.readOnly) {
@@ -413,6 +449,7 @@ export class S3Filesystem extends MastraFilesystem {
         ? {
             accessKeyId: this.accessKeyId!,
             secretAccessKey: this.secretAccessKey!,
+            ...(this.sessionToken && { sessionToken: this.sessionToken }),
           }
         : // Anonymous access for public buckets - use empty credentials
           // to prevent SDK from trying to find credentials elsewhere

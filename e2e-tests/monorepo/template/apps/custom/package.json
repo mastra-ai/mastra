@@ -21,7 +21,7 @@
     "lodash": "^4.17.23",
     "hono": "^4.11.7",
     "unicorn-magic": "0.4.0",
-    "zod": "^3.25.76"
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "mastra": "monorepo-test"

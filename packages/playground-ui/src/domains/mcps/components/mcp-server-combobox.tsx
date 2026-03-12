@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { toast } from '@/lib/toast';
-import { Combobox } from '@/ds/components/Combobox';
+import { Combobox, type ComboboxProps } from '@/ds/components/Combobox';
 import { useMCPServers } from '../hooks/use-mcp-servers';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -12,7 +12,8 @@ export interface MCPServerComboboxProps {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'light' | 'outline' | 'ghost';
+  variant?: ComboboxProps['variant'];
+  container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
 }
 
 export function MCPServerCombobox({
@@ -23,7 +24,8 @@ export function MCPServerCombobox({
   emptyText = 'No MCP servers found.',
   className,
   disabled = false,
-  variant = 'default',
+  variant = 'inputLike',
+  container,
 }: MCPServerComboboxProps) {
   const { data: mcpServers = [], isLoading, isError, error } = useMCPServers();
   const { navigate, paths } = useLinkComponent();
@@ -59,6 +61,7 @@ export function MCPServerCombobox({
       className={className}
       disabled={disabled || isLoading || isError}
       variant={variant}
+      container={container}
     />
   );
 }

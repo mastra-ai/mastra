@@ -3,9 +3,7 @@ import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { ItemList } from '@/ds/components/ItemList';
 import { Checkbox } from '@/ds/components/Checkbox';
-import { Icon } from '@/ds/icons/Icon';
 import { Plus, Upload, FileJson } from 'lucide-react';
-import { format, isToday } from 'date-fns';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 
 export interface DatasetItemsListProps {
@@ -73,8 +71,6 @@ export function DatasetItemsList({
   }
 
   const allIds = items.map(i => i.id);
-  const itemsListColumnsWithCheckbox = [{ name: 'checkbox', label: 'c', size: '1.25rem' }, ...columns];
-  const columnsToRender = isSelectionActive ? itemsListColumnsWithCheckbox : columns;
 
   // Select all state
   const selectedCount = selectedIds.size;
@@ -90,7 +86,12 @@ export function DatasetItemsList({
   };
 
   const handleToggleSelection = (id: string, shiftKey: boolean, allIds: string[]) => {
-    if (maxSelection && !selectedIds.has(id) && selectedIds.size >= maxSelection) return;
+    if (maxSelection && !selectedIds.has(id) && selectedIds.size >= maxSelection) {
+      // Drop most recent selection, keep oldest + add new one
+      const [first] = Array.from(selectedIds);
+      onSelectAll([first, id]);
+      return;
+    }
     onToggleSelection(id, shiftKey, allIds);
   };
 
@@ -100,47 +101,41 @@ export function DatasetItemsList({
 
   return (
     <ItemList>
-      <ItemList.Header columns={columnsToRender}>
-        {columnsToRender?.map(col => (
-          <>
-            {col.name === 'checkbox' ? (
-              <ItemList.FlexCell key={col.name}>
-                {!maxSelection && (
-                  <Checkbox
-                    checked={isIndeterminate ? 'indeterminate' : isAllSelected}
-                    onCheckedChange={handleSelectAllToggle}
-                    aria-label="Select all items"
-                  />
-                )}
-              </ItemList.FlexCell>
-            ) : (
-              <ItemList.HeaderCol key={col.name}>{col.label || col.name}</ItemList.HeaderCol>
-            )}
-          </>
-        ))}
-      </ItemList.Header>
-
       <ItemList.Scroller>
+        <ItemList.Header columns={columns} isSelectionActive={isSelectionActive}>
+          {isSelectionActive && !maxSelection && (
+            <ItemList.LabelCell>
+              <Checkbox
+                checked={isIndeterminate ? 'indeterminate' : isAllSelected}
+                onCheckedChange={handleSelectAllToggle}
+                aria-label="Select all items"
+              />
+            </ItemList.LabelCell>
+          )}
+          {columns?.map(col => (
+            <ItemList.HeaderCol key={col.name}>{col.label || col.name}</ItemList.HeaderCol>
+          ))}
+        </ItemList.Header>
+
         <ItemList.Items>
           {items.length === 0 && searchQuery ? (
             <div className="flex items-center justify-center py-12 text-neutral4">No items match your search</div>
           ) : (
             items.map(item => {
               const createdAtDate = new Date(item.createdAt);
-              const isTodayDate = isToday(createdAtDate);
 
-              const entry = {
+              const listItem = {
                 id: item.id,
                 input: truncateValue(item.input, 60),
                 groundTruth: item.groundTruth ? truncateValue(item.groundTruth, 40) : '-',
                 metadata: item.metadata ? Object.keys(item.metadata).length + ' keys' : '-',
-                date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
+                date: createdAtDate,
               };
 
               return (
-                <ItemList.Row key={item.id} isSelected={featuredItemId === item.id}>
+                <ItemList.Row key={item.id} isSelected={selectedIds.has(item.id)}>
                   {isSelectionActive && (
-                    <ItemList.FlexCell className="w-12 pl-4">
+                    <ItemList.LabelCell>
                       <Checkbox
                         checked={selectedIds.has(item.id)}
                         onCheckedChange={() => {}}
@@ -150,18 +145,20 @@ export function DatasetItemsList({
                         }}
                         aria-label={`Select item ${item.id}`}
                       />
-                    </ItemList.FlexCell>
+                    </ItemList.LabelCell>
                   )}
                   <ItemList.RowButton
-                    entry={entry}
-                    isSelected={featuredItemId === item.id}
+                    item={listItem}
+                    isFeatured={featuredItemId === item.id}
                     columns={columns}
                     onClick={handleEntryClick}
                   >
-                    <ItemList.TextCell className="text-neutral2">{entry.id}</ItemList.TextCell>
-                    <ItemList.TextCell className="font-mono text-neutral4">{entry.input}</ItemList.TextCell>
-                    <ItemList.TextCell className="font-mono text-neutral4">{entry.groundTruth}</ItemList.TextCell>
-                    <ItemList.TextCell className="text-neutral2">{entry.date}</ItemList.TextCell>
+                    <ItemList.IdCell id={listItem.id} />
+                    <ItemList.TextCell className="font-mono">{listItem.input}</ItemList.TextCell>
+                    {columns.some(col => col.name === 'groundTruth') && (
+                      <ItemList.TextCell className="font-mono">{listItem.groundTruth}</ItemList.TextCell>
+                    )}
+                    <ItemList.DateCell date={listItem.date} withTime />
                   </ItemList.RowButton>
                 </ItemList.Row>
               );
@@ -181,27 +178,6 @@ export function DatasetItemsList({
   );
 }
 
-function DatasetItemListSkeleton({ columns = [] }: { columns?: { name: string; label: string; size: string }[] }) {
-  return (
-    <ItemList>
-      <ItemList.Header columns={columns} />
-      <ItemList.Items>
-        {Array.from({ length: 5 }).map((_, index) => (
-          <ItemList.Row key={index}>
-            <ItemList.RowButton columns={columns}>
-              {columns.map((col, colIndex) => (
-                <ItemList.TextCell key={colIndex} isLoading>
-                  Loading...
-                </ItemList.TextCell>
-              ))}
-            </ItemList.RowButton>
-          </ItemList.Row>
-        ))}
-      </ItemList.Items>
-    </ItemList>
-  );
-}
-
 interface EmptyDatasetItemListProps {
   onAddClick: () => void;
   onImportClick?: () => void;
@@ -214,28 +190,26 @@ function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: 
       <EmptyState
         iconSlot={<Plus className="w-8 h-8 text-neutral3" />}
         titleSlot="No items yet"
-        descriptionSlot="Add items to this dataset to use them in evaluation runs."
+        descriptionSlot="Add items to this dataset to use them in experiment runs."
         actionSlot={
-          <div className="flex flex-col gap-2">
-            <Button size="default" variant="cta" onClick={onAddClick}>
+          <ButtonsGroup>
+            <Button onClick={onAddClick} size="md">
               <Plus />
-              Add Item
+              Add Single Item
             </Button>
-            <ButtonsGroup>
-              {onImportClick && (
-                <Button size="default" variant="standard" onClick={onImportClick}>
-                  <Upload />
-                  Import CSV
-                </Button>
-              )}
-              {onImportJsonClick && (
-                <Button size="default" variant="standard" onClick={onImportJsonClick}>
-                  <FileJson />
-                  Import JSON
-                </Button>
-              )}
-            </ButtonsGroup>
-          </div>
+            {onImportClick && (
+              <Button onClick={onImportClick} size="md">
+                <Upload />
+                Import CSV
+              </Button>
+            )}
+            {onImportJsonClick && (
+              <Button onClick={onImportJsonClick} size="md">
+                <FileJson />
+                Import JSON
+              </Button>
+            )}
+          </ButtonsGroup>
         }
       />
     </div>

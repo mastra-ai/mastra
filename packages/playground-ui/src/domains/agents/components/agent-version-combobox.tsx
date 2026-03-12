@@ -1,4 +1,5 @@
-import { Combobox } from '@/ds/components/Combobox';
+import { Combobox, type ComboboxProps } from '@/ds/components/Combobox';
+import { Badge } from '@/ds/components/Badge';
 import { useAgentVersions } from '../hooks/use-agent-versions';
 
 function formatTimestamp(isoString: string): string {
@@ -18,7 +19,8 @@ export interface AgentVersionComboboxProps {
   onValueChange?: (value: string) => void;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'light' | 'outline' | 'ghost';
+  variant?: ComboboxProps['variant'];
+  activeVersionId?: string;
 }
 
 export function AgentVersionCombobox({
@@ -27,7 +29,8 @@ export function AgentVersionCombobox({
   onValueChange,
   className,
   disabled = false,
-  variant = 'default',
+  variant = 'inputLike',
+  activeVersionId,
 }: AgentVersionComboboxProps) {
   const { data, isLoading } = useAgentVersions({
     agentId,
@@ -36,13 +39,34 @@ export function AgentVersionCombobox({
 
   const versions = data?.versions ?? [];
 
+  const activeVersion = activeVersionId ? versions.find(v => v.id === activeVersionId) : undefined;
+  const activeVersionNumber = activeVersion?.versionNumber;
+
   const options = [
     { label: 'Latest', value: '' },
-    ...versions.map(version => ({
-      label: `v${version.versionNumber}`,
-      value: version.id,
-      description: formatTimestamp(version.createdAt),
-    })),
+    ...versions.map(version => {
+      const isPublished = version.id === activeVersionId;
+      const isDraft = activeVersionNumber !== undefined && version.versionNumber > activeVersionNumber;
+
+      const trimmedMessage = version.changeMessage?.trim();
+      const description = [
+        formatTimestamp(version.createdAt),
+        trimmedMessage && trimmedMessage !== 'Auto-saved after edit' ? trimmedMessage : undefined,
+      ]
+        .filter(Boolean)
+        .join(' — ');
+
+      return {
+        label: `v${version.versionNumber}`,
+        value: version.id,
+        description,
+        end: isPublished ? (
+          <Badge variant="success">Published</Badge>
+        ) : isDraft ? (
+          <Badge variant="info">Draft</Badge>
+        ) : undefined,
+      };
+    }),
   ];
 
   return (
