@@ -15,14 +15,14 @@ test('has overall information', async ({ page }) => {
     'https://mastra.ai/en/docs/tools-mcp/mcp-overview',
   );
 
-  const table = page.locator('table');
-  await expect(table).toMatchAriaSnapshot();
+  const list = page.locator('main').getByRole('list');
+  await expect(list).toMatchAriaSnapshot();
 });
 
 test('clicking on the agent row redirects', async ({ page }) => {
   await page.goto('/mcps');
 
-  const el = await page.locator('tr:has-text("Simple MCP Server")');
+  const el = page.locator('main').getByRole('listitem').filter({ hasText: 'Simple MCP Server' });
   await el.click();
 
   await expect(page).toHaveURL(/\/mcps\/simple-mcp-server.*/);

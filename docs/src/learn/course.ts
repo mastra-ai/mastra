@@ -18,6 +18,7 @@ AI agents are the next platform shift. Understanding how to build them is now a 
       durationMin: 5,
       status: 'published',
       youtubeId: 'G8tXjcseNjg',
+      publishedDate: '2026-03-04T00:00:00Z',
       module: 'Agents',
       preview: {
         intro:
@@ -40,6 +41,7 @@ AI agents are the next platform shift. Understanding how to build them is now a 
       durationMin: 5,
       status: 'published',
       youtubeId: 'RaqlPrGBscw',
+      publishedDate: '2026-03-04T00:00:00Z',
       module: 'Agents',
       preview: {
         intro:
@@ -62,6 +64,7 @@ AI agents are the next platform shift. Understanding how to build them is now a 
       durationMin: 4,
       status: 'published',
       youtubeId: 'lDKFFWLmt1Q',
+      publishedDate: '2026-03-04T00:00:00Z',
       module: 'Agents',
       preview: {
         intro:
@@ -84,6 +87,7 @@ AI agents are the next platform shift. Understanding how to build them is now a 
       durationMin: 5,
       status: 'published',
       youtubeId: 'lwhJxPl_loQ',
+      publishedDate: '2026-03-04T00:00:00Z',
       module: 'Agents',
       preview: {
         intro:
@@ -108,6 +112,7 @@ AI agents are the next platform shift. Understanding how to build them is now a 
       durationMin: 7,
       status: 'published',
       youtubeId: 'P8voCXTIGVI',
+      publishedDate: '2026-03-04T00:00:00Z',
       module: 'Tools',
       preview: {
         intro:
@@ -125,6 +130,7 @@ AI agents are the next platform shift. Understanding how to build them is now a 
       durationMin: 3,
       status: 'published',
       youtubeId: 'PBtct9tG19k',
+      publishedDate: '2026-03-04T00:00:00Z',
       module: 'Tools',
       preview: {
         intro:
@@ -142,6 +148,7 @@ AI agents are the next platform shift. Understanding how to build them is now a 
       durationMin: 7,
       status: 'published',
       youtubeId: 'CMofx-DhpoY',
+      publishedDate: '2026-03-04T00:00:00Z',
       module: 'Tools',
       preview: {
         intro:
@@ -159,6 +166,7 @@ AI agents are the next platform shift. Understanding how to build them is now a 
       durationMin: 7,
       status: 'published',
       youtubeId: 'b8rNHmL4s2s',
+      publishedDate: '2026-03-04T00:00:00Z',
       module: 'Tools',
       preview: {
         intro:

@@ -19,7 +19,7 @@ test('has overall information', async ({ page }) => {
 test('clicking on the scorer row redirects to detail page', async ({ page }) => {
   await page.goto('/scorers');
 
-  const el = page.locator('tr:has-text("Response Quality Scorer")');
+  const el = page.locator('main').getByRole('listitem').filter({ hasText: 'Response Quality Scorer' });
   await el.click();
 
   await expect(page).toHaveURL(/\/scorers\/response-quality$/);
