@@ -94,6 +94,21 @@ new BraintrustExporter({
 })
 ```
 
+## Querying Braintrust with returned `spanId`
+
+Mastra execution results now return both `traceId` and `spanId` when tracing is enabled. For Braintrust, use `spanId` as the root span identifier when searching for traces because Braintrust root-span queries are typically faster than trace-id queries.
+
+```typescript title="src/mastra/usage.ts"
+const result = await agent.stream('Summarize this ticket')
+
+console.log('Mastra trace ID:', result.traceId)
+console.log('Braintrust root span ID:', result.spanId)
+
+// Use result.spanId in your Braintrust lookup/query path
+```
+
+The same applies to `agent.generate()` and workflow run results (`run.start()`, `run.stream()` final state, `run.resume()`).
+
 ## Related
 
 - [Tracing Overview](/docs/observability/tracing/overview)

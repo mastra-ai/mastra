@@ -127,6 +127,8 @@ export type FullOutput<OUTPUT = undefined> = {
   };
   /** Trace ID for observability */
   traceId: string | undefined;
+  /** Span ID for observability (root span ID for a top-level agent execution) */
+  spanId: string | undefined;
   /** Run ID for this execution */
   runId: string | undefined;
   /** Payload for resuming suspended tool calls */
@@ -249,6 +251,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    * Trace ID used on the execution (if the execution was traced).
    */
   public traceId?: string;
+  /**
+   * Span ID used on the execution (if the execution was traced).
+   */
+  public spanId?: string;
   public messageId: string;
 
   constructor({
@@ -276,6 +282,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
     this.traceId = options.tracingContext?.currentSpan?.externalTraceId;
+    this.spanId = options.tracingContext?.currentSpan?.id;
 
     this.#model = _model;
 
@@ -1332,6 +1339,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       tripwire: this.#tripwire,
       ...(scoringData ? { scoringData } : {}),
       traceId: this.traceId,
+      spanId: this.spanId,
       runId: this.runId,
       suspendPayload: await this.suspendPayload,
       resumeSchema: await this.resumeSchema,

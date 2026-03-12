@@ -169,5 +169,34 @@ describe('MastraModelOutput', () => {
       // Custom chunk should appear before the finish chunk
       expect(customIndex).toBeLessThan(finishIndex);
     });
+
+    it('should include traceId and spanId in the final stream result when tracing context exists', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      const stream = createChunkStream([createStepFinishChunk(runId), createFinishChunk(runId)]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: {
+          runId,
+          tracingContext: {
+            currentSpan: {
+              id: 'mastra-root-span-id',
+              externalTraceId: 'mastra-trace-id',
+            },
+          } as any,
+        },
+      });
+
+      await output.consumeStream();
+      const result = await output.result;
+
+      expect(result.traceId).toBe('mastra-trace-id');
+      expect(result.spanId).toBe('mastra-root-span-id');
+    });
   });
 });
