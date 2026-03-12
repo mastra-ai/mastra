@@ -5,6 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  '@mastra/agentfs': link:../../workspaces/agentfs
   '@mastra/core': link:../../packages/core
   '@mastra/e2b': link:../../workspaces/e2b
   '@mastra/gcs': link:../../workspaces/gcs
@@ -26,6 +27,9 @@ importers:
       '@ai-sdk/provider':
         specifier: ^3.0.0
         version: 3.0.4
+      '@mastra/agentfs':
+        specifier: link:../../workspaces/agentfs
+        version: link:../../workspaces/agentfs
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
