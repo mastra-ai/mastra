@@ -873,7 +873,7 @@ All options are optional — if not specified, they fall back to the defaults sh
 
 ## Retrieving trace IDs
 
-When you execute agents or workflows with tracing enabled, responses include a `traceId` and `spanId` (the run root span) that you can use to look up data in your observability platform. This is especially helpful for backends that optimize root-span queries, such as Braintrust. This is useful for debugging, customer support, or correlating traces with other events in your system.
+When you execute agents or workflows with tracing enabled, responses include a `traceId` and `spanId` (the run root span) that you can use to look up data in your observability platform. This is useful for debugging, customer support, or correlating traces with other events in your system.
 
 ### Agent Trace IDs
 
@@ -884,13 +884,13 @@ Both `generate` and `stream` return `traceId` and `spanId`:
 const result = await agent.generate('Hello')
 
 console.log('Trace ID:', result.traceId)
-console.log('Span ID:', result.spanId) // root span ID for this generate execution
+console.log('Span ID:', result.spanId)
 
 // Using stream
 const streamResult = await agent.stream('Tell me a story')
 
 console.log('Trace ID:', streamResult.traceId)
-console.log('Span ID:', streamResult.spanId) // root span ID for this stream execution
+console.log('Span ID:', streamResult.spanId)
 ```
 
 ### Workflow Trace IDs
@@ -907,7 +907,7 @@ const result = await run.start({
 })
 
 console.log('Trace ID:', result.traceId)
-console.log('Span ID:', result.spanId) // workflow run root span ID
+console.log('Span ID:', result.spanId)
 
 // Or stream the workflow
 const { stream, getWorkflowState } = run.stream({
