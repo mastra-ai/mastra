@@ -100,6 +100,17 @@ export interface AgentRunAttributes extends AIBaseAttributes {
   availableTools?: string[];
   /** Maximum steps allowed */
   maxSteps?: number;
+  /** Tripwire abort details when a processor triggered a tripwire */
+  tripwireAbort?: {
+    /** Abort reason */
+    reason?: string;
+    /** Processor that triggered the tripwire */
+    processorId?: string;
+    /** Whether retry was requested */
+    retry?: boolean;
+    /** Additional metadata */
+    metadata?: unknown;
+  };
 }
 
 /**
@@ -259,6 +270,15 @@ export interface ProcessorRunAttributes extends AIBaseAttributes {
     tag?: string;
     message?: any;
   }>;
+  /** Tripwire abort details when a processor triggered a tripwire */
+  tripwireAbort?: {
+    /** Abort reason */
+    reason?: string;
+    /** Whether retry was requested */
+    retry?: boolean;
+    /** Additional metadata */
+    metadata?: unknown;
+  };
 }
 
 /**

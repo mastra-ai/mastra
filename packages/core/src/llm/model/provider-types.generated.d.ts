@@ -205,7 +205,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3-next-80b-a3b-thinking',
     'qwen/qwen3.5-397b-a17b',
     'qwen/qwq-32b',
-    'stepfun-ai/step-3-5-flash',
+    'stepfun-ai/step-3.5-flash',
     'z-ai/glm4.7',
     'z-ai/glm5',
   ];
@@ -313,6 +313,7 @@ export type ProviderModelsMap = {
   readonly synthetic: readonly [
     'hf:MiniMaxAI/MiniMax-M2',
     'hf:MiniMaxAI/MiniMax-M2.1',
+    'hf:MiniMaxAI/MiniMax-M2.5',
     'hf:Qwen/Qwen2.5-Coder-32B-Instruct',
     'hf:Qwen/Qwen3-235B-A22B-Instruct-2507',
     'hf:Qwen/Qwen3-235B-A22B-Thinking-2507',
@@ -337,6 +338,7 @@ export type ProviderModelsMap = {
     'hf:openai/gpt-oss-120b',
     'hf:zai-org/GLM-4.6',
     'hf:zai-org/GLM-4.7',
+    'hf:zai-org/GLM-4.7-Flash',
   ];
   readonly nebius: readonly [
     'BAAI/bge-en-icl',
@@ -385,6 +387,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.5',
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.7-FP8',
+    'zai-org/GLM-5',
   ];
   readonly 'qiniu-ai': readonly [
     'MiniMax-M1',
@@ -664,6 +667,7 @@ export type ProviderModelsMap = {
     'minimax-m2.1',
     'minimax-m2.5',
     'minimax-m2.5-free',
+    'nemotron-3-super-free',
   ];
   readonly poe: readonly [
     'anthropic/claude-haiku-3',
@@ -1333,6 +1337,8 @@ export type ProviderModelsMap = {
     'openai/o4-mini',
     'openrouter/aurora-alpha',
     'openrouter/free',
+    'openrouter/healer-alpha',
+    'openrouter/hunter-alpha',
     'openrouter/sherlock-dash-alpha',
     'openrouter/sherlock-think-alpha',
     'prime-intellect/intellect-3',
@@ -2700,11 +2706,11 @@ export type ProviderModelsMap = {
     'TEE/qwen3-30b-a3b-instruct-2507',
     'TEE/qwen3-coder',
     'TEE/qwen3.5-397b-a17b',
-    'THUDM 2/GLM-4-32B-0414',
-    'THUDM 2/GLM-4-9B-0414',
-    'THUDM 2/GLM-Z1-32B-0414',
-    'THUDM 2/GLM-Z1-9B-0414',
-    'THUDM 2/GLM-Z1-Rumination-32B-0414',
+    'THUDM/GLM-4-32B-0414',
+    'THUDM/GLM-4-9B-0414',
+    'THUDM/GLM-Z1-32B-0414',
+    'THUDM/GLM-Z1-9B-0414',
+    'THUDM/GLM-Z1-Rumination-32B-0414',
     'TheDrummer 2/Anubis-70B-v1',
     'TheDrummer 2/Anubis-70B-v1.1',
     'TheDrummer 2/Cydonia-24B-v2',

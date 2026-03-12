@@ -315,12 +315,12 @@ test.describe('Agent Creation Persistence - Tools', () => {
     // Navigate to tools page via sidebar
     await clickSidebarLink(page, 'Tools');
 
-    // Wait for tools to load
-    await expect(page.getByText('weatherInfo')).toBeVisible({ timeout: 10000 });
+    // Click "Add Tools" to open popover and select weatherInfo
+    await page.getByRole('button', { name: 'Add Tools' }).click({ timeout: 10000 });
+    await page.getByText('weatherInfo').click();
 
-    // Toggle the first tool switch
-    const firstSwitch = page.getByRole('switch').first();
-    await firstSwitch.click();
+    // Verify it appears in the selected list
+    await expect(page.getByLabel('Remove weatherInfo')).toBeVisible({ timeout: 5000 });
 
     const agentId = await createAgentAndGetId(page);
 
@@ -328,7 +328,7 @@ test.describe('Agent Creation Persistence - Tools', () => {
     await page.goto(`/cms/agents/${agentId}/edit/tools`);
     await page.waitForTimeout(2000);
 
-    await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
+    await expect(page.getByText('weatherInfo')).toBeVisible({ timeout: 10000 });
   });
 });
 
@@ -698,11 +698,11 @@ test.describe('Comprehensive Persistence Test', () => {
 
     // === Tools ===
     await clickSidebarLink(page, 'Tools');
-    await page.waitForTimeout(1000);
-    const toolSwitches = page.getByRole('switch');
-    if ((await toolSwitches.count()) > 0) {
-      await toolSwitches.first().click();
-    }
+    await page.getByRole('button', { name: 'Add Tools' }).click({ timeout: 10000 });
+    const firstToolOption = page.locator('[data-radix-popper-content-wrapper] button').first();
+    await firstToolOption.waitFor({ state: 'visible', timeout: 5000 });
+    await firstToolOption.click();
+    await expect(page.getByLabel(/^Remove /).first()).toBeVisible({ timeout: 5000 });
 
     // === Workflows ===
     await clickSidebarLink(page, 'Workflows');
@@ -747,7 +747,7 @@ test.describe('Comprehensive Persistence Test', () => {
     // === Verify Tools ===
     await page.goto(`/cms/agents/${agentId}/edit/tools`);
     await page.waitForTimeout(2000);
-    await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
+    await expect(page.getByLabel(/^Remove /).first()).toBeVisible({ timeout: 10000 });
 
     // === Verify Workflows ===
     await page.goto(`/cms/agents/${agentId}/edit/workflows`);
