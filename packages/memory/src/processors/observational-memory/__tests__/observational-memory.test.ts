@@ -8861,7 +8861,7 @@ describe('threadId validation in thread scope', () => {
 });
 
 // =============================================================================
-// Observer Context Optimization (observer.previousObservationTokens, observer.useBufferedReflection)
+// Observer Context Optimization (observer.previousObservationTokens)
 // =============================================================================
 
 describe('Observer Context Optimization', () => {
@@ -8910,7 +8910,7 @@ describe('Observer Context Optimization', () => {
   });
 
   describe('prepareObserverContext - default behavior', () => {
-    it('should return existingObservations unchanged when no optimization options are set', () => {
+    it('should return existingObservations unchanged when observations fit within default budget', () => {
       const om = createOM();
       const observations = '- User likes TypeScript\n- User prefers dark mode\n- User uses React';
       expect(prepareObserverContext(om, observations)).toBe(observations);
@@ -9019,9 +9019,9 @@ describe('Observer Context Optimization', () => {
     });
 
     it('should fully truncate everything when observer.previousObservationTokens is 0 even with buffered reflection', () => {
-      const om = createOM({ previousObservationTokens: 0, useBufferedReflection: true });
+      const om = createOM({ previousObservationTokens: 0 });
       const observations = '- User likes TypeScript\n- User prefers dark mode';
-      const record = { bufferedReflection: '- Condensed reflection content' };
+      const record = { bufferedReflection: '- Condensed reflection content', reflectedObservationLineCount: 1 };
       const result = prepareObserverContext(om, observations, record);
       // Budget is 0 so everything is truncated — reflection is inside the budget
       expect(result).toBe('');
@@ -9035,17 +9035,18 @@ describe('Observer Context Optimization', () => {
     });
   });
 
-  describe('prepareObserverContext - observer.useBufferedReflection', () => {
-    it('should NOT include buffered reflection when disabled (default)', () => {
-      const om = createOM({ useBufferedReflection: false });
+  describe('prepareObserverContext - automatic buffered reflection', () => {
+    it('should NOT include buffered reflection when previousObservationTokens is false', () => {
+      const om = createOM({ previousObservationTokens: false });
       const observations = '- User likes TypeScript';
-      const record = { bufferedReflection: '- Condensed reflection content' };
+      const record = { bufferedReflection: '- Condensed reflection content', reflectedObservationLineCount: 1 };
       const result = prepareObserverContext(om, observations, record);
+      // Truncation explicitly disabled, so no buffered reflection replacement
       expect(result).toBe(observations);
     });
 
-    it('should replace reflected lines with buffered reflection when reflectedObservationLineCount is set', () => {
-      const om = createOM({ useBufferedReflection: true });
+    it('should replace reflected lines with buffered reflection when previousObservationTokens is set', () => {
+      const om = createOM({ previousObservationTokens: 5000 });
       const observations = '- Old observation 1\n- Old observation 2\n- Recent observation 3';
       const record = {
         bufferedReflection: '- Summary of old observations',
@@ -9060,15 +9061,15 @@ describe('Observer Context Optimization', () => {
     });
 
     it('should ignore buffered reflection when no reflectedObservationLineCount exists', () => {
-      const om = createOM({ useBufferedReflection: true });
+      const om = createOM({ previousObservationTokens: 5000 });
       const observations = '- User likes TypeScript';
       const record = { bufferedReflection: '- Condensed reflection content' };
       const result = prepareObserverContext(om, observations, record);
       expect(result).toBe(observations);
     });
 
-    it('should not append anything when enabled but no buffered reflection exists', () => {
-      const om = createOM({ useBufferedReflection: true });
+    it('should not replace anything when no buffered reflection exists', () => {
+      const om = createOM({ previousObservationTokens: 5000 });
       const observations = '- User likes TypeScript';
       // No bufferedReflection in record
       const record = {};
@@ -9076,8 +9077,8 @@ describe('Observer Context Optimization', () => {
       expect(result).toBe(observations);
     });
 
-    it('should not append anything when enabled but record is null', () => {
-      const om = createOM({ useBufferedReflection: true });
+    it('should not replace anything when record is null', () => {
+      const om = createOM({ previousObservationTokens: 5000 });
       const observations = '- User likes TypeScript';
       const result = prepareObserverContext(om, observations, null);
       expect(result).toBe(observations);
@@ -9094,7 +9095,7 @@ describe('Observer Context Optimization', () => {
       const reflectionContent = '- Summary of first 10 observations';
 
       const budget = 50;
-      const om = createOM({ previousObservationTokens: budget, useBufferedReflection: true });
+      const om = createOM({ previousObservationTokens: budget });
       const record = {
         bufferedReflection: reflectionContent,
         reflectedObservationLineCount: 10,
@@ -9123,7 +9124,6 @@ describe('Observer Context Optimization', () => {
       const budget = tc.countObservations(assembled) + 5;
       const om = createOM({
         previousObservationTokens: budget,
-        useBufferedReflection: true,
       });
       const record = {
         bufferedReflection: reflectionContent,
@@ -9152,7 +9152,6 @@ describe('Observer Context Optimization', () => {
       const budget = 50;
       const om = createOM({
         previousObservationTokens: budget,
-        useBufferedReflection: true,
       });
       const record = {
         bufferedReflection: '- Summary of first 10 observations',

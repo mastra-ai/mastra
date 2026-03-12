@@ -153,15 +153,11 @@ export interface ObservationConfig {
   observer?: {
     /**
      * Optional token budget for observer context.
-     * When set, "Previous Observations" is tail-truncated to preserve the most recent entries.
+     * When set, "Previous Observations" is tail-truncated to preserve the most recent entries,
+     * and pending buffered reflections replace the raw observations they summarized.
      * Set to `0` for full truncation (omit previous observations entirely), or `false` to disable.
      */
     previousObservationTokens?: number | false;
-
-    /**
-     * Include pending buffered reflection content in observer context before activation.
-     */
-    useBufferedReflection?: boolean;
   };
 
   /**

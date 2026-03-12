@@ -2017,7 +2017,6 @@ Notes:
             observer: omConfig.observation.observer
               ? {
                   previousObservationTokens: omConfig.observation.observer.previousObservationTokens,
-                  useBufferedReflection: omConfig.observation.observer.useBufferedReflection,
                 }
               : undefined,
             instruction: omConfig.observation.instruction,

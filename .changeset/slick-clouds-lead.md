@@ -3,12 +3,9 @@
 '@mastra/core': patch
 ---
 
-Added opt-in observer context optimization for Observational Memory. Two new fields under `observation.observer` reduce Observer input token costs for long-running conversations:
+Added observer context optimization for Observational Memory. The `previousObservationTokens` field under `observation.observer` reduces Observer input token costs for long-running conversations:
 
-- **previousObservationTokens**: Truncates the 'Previous Observations' section to a token budget, keeping the most recent observations. Supports `0` for full truncation and `false` to disable truncation explicitly.
-- **useBufferedReflection**: Includes pending buffered reflection content in the Observer's context while reflection is still buffered.
-
-Both are disabled by default. Existing behavior is unchanged unless you opt in.
+- **previousObservationTokens** (default: `2000`): Truncates the 'Previous Observations' section to a token budget, keeping the most recent observations and automatically replacing already-reflected lines with the buffered reflection summary. Set to `0` to omit previous observations entirely, or `false` to disable truncation and keep the full observation history.
 
 ```typescript
 const memory = new Memory({
@@ -18,7 +15,6 @@ const memory = new Memory({
       observation: {
         observer: {
           previousObservationTokens: 10_000,
-          useBufferedReflection: true,
         },
       },
     },

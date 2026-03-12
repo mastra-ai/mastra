@@ -176,17 +176,9 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
                     name: 'previousObservationTokens',
                     type: 'number | false',
                     description:
-                      "Optional token budget for the observer's previous-observations context. When set to a number, the observations passed to the Observer agent are tail-truncated to fit within this budget while keeping the newest observations and preserving highlighted 🔴 items when possible. Set to `0` to omit previous observations entirely, or `false` to disable truncation explicitly.",
+                      "Optional token budget for the observer's previous-observations context. When set to a number, the observations passed to the Observer agent are tail-truncated to fit within this budget while keeping the newest observations and preserving highlighted 🔴 items when possible. When a buffered reflection is pending, the already-reflected observation lines are automatically replaced with the reflection summary before truncation. Set to `0` to omit previous observations entirely, or `false` to disable truncation explicitly.",
                     isOptional: true,
-                    defaultValue: 'undefined (disabled)',
-                  },
-                  {
-                    name: 'useBufferedReflection',
-                    type: 'boolean',
-                    description:
-                      'When `true`, pending buffered reflection content is included in the observer context. This only applies when async reflection buffering is enabled and a buffered reflection currently exists.',
-                    isOptional: true,
-                    defaultValue: 'false',
+                    defaultValue: '2000',
                   },
                 ],
               },

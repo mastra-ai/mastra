@@ -961,7 +961,6 @@ https://mastra.ai/en/docs/memory/overview`,
         observer: obs.observer
           ? {
               previousObservationTokens: obs.observer.previousObservationTokens,
-              useBufferedReflection: obs.observer.useBufferedReflection,
             }
           : undefined,
       };

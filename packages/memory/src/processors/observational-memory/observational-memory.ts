@@ -230,8 +230,6 @@ interface ResolvedObservationConfig {
   observer: {
     /** Optional token budget for observer context optimization (0 = full truncation, false = disabled) */
     previousObservationTokens?: number | false;
-    /** Include pending buffered reflection context in observer calls */
-    useBufferedReflection: boolean;
   };
   /** Custom instructions to append to the Observer's system prompt */
   instruction?: string;
@@ -900,8 +898,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
             config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
           ),
       observer: {
-        previousObservationTokens: config.observation?.observer?.previousObservationTokens,
-        useBufferedReflection: config.observation?.observer?.useBufferedReflection ?? false,
+        previousObservationTokens: config.observation?.observer?.previousObservationTokens ?? 2000,
       },
       instruction: config.observation?.instruction,
     };
@@ -1697,19 +1694,20 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     existingObservations: string | undefined,
     record?: ObservationalMemoryRecord | null,
   ): string | undefined {
-    const { previousObservationTokens, useBufferedReflection } = this.observationConfig.observer;
+    const { previousObservationTokens } = this.observationConfig.observer;
     const tokenBudget =
       previousObservationTokens === undefined || previousObservationTokens === false
         ? undefined
         : previousObservationTokens;
 
-    // Fast path: no optimization options configured — preserve legacy behavior
-    if (tokenBudget === undefined && !useBufferedReflection) {
+    // Fast path: no optimization configured — preserve legacy behavior
+    if (tokenBudget === undefined) {
       return existingObservations;
     }
 
+    // When previousObservationTokens is enabled, also use buffered reflections
     const bufferedReflection =
-      useBufferedReflection && record?.bufferedReflection ? record.bufferedReflection : undefined;
+      record?.bufferedReflection && record?.reflectedObservationLineCount ? record.bufferedReflection : undefined;
 
     if (!existingObservations) {
       return bufferedReflection;
@@ -1990,7 +1988,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           priorSuggestedResponse: options?.priorSuggestedResponse,
           observerConfig: {
             previousObservationTokens: this.observationConfig.observer.previousObservationTokens,
-            useBufferedReflection: this.observationConfig.observer.useBufferedReflection,
           },
         },
       });
@@ -2115,7 +2112,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
             : {},
           observerConfig: {
             previousObservationTokens: this.observationConfig.observer.previousObservationTokens,
-            useBufferedReflection: this.observationConfig.observer.useBufferedReflection,
           },
         },
       });
