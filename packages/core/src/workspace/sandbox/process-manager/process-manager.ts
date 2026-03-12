@@ -52,10 +52,10 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
   protected readonly env: Record<string, string | undefined>;
 
   /** Tracked process handles keyed by PID. Populated by spawn(), used by get()/kill(). */
-  protected readonly _tracked = new Map<number, ProcessHandle>();
+  protected readonly _tracked = new Map<string, ProcessHandle>();
 
   /** PIDs that have been read after exit and should not be re-discovered by subclass fallbacks. */
-  protected readonly _dismissed = new Set<number>();
+  protected readonly _dismissed = new Set<string>();
 
   constructor({ env = {} }: ProcessManagerOptions = {}) {
     this.env = env;
@@ -127,12 +127,12 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
   }
 
   /** Get a handle to a process by PID. Subclasses can override for fallback behavior. */
-  async get(pid: number): Promise<ProcessHandle | undefined> {
+  async get(pid: string): Promise<ProcessHandle | undefined> {
     return this._tracked.get(pid);
   }
 
   /** Kill a process by PID. Returns true if killed, false if not found. */
-  async kill(pid: number): Promise<boolean> {
+  async kill(pid: string): Promise<boolean> {
     const handle = await this.get(pid);
     if (!handle) return false;
     const killed = await handle.kill();
@@ -142,8 +142,8 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
       await handle.wait().catch(() => {});
     }
     // Release tracked handle to free accumulated output buffers.
-    this._tracked.delete(pid);
-    this._dismissed.add(pid);
+    this._tracked.delete(handle.pid);
+    this._dismissed.add(handle.pid);
     return killed;
   }
 }

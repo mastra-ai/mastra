@@ -711,7 +711,7 @@ export class Agent<
         ? await this.#inputProcessors({ requestContext: requestContext || new RequestContext() })
         : this.#inputProcessors;
 
-    return this.combineProcessorsIntoWorkflow(configuredProcessors, `${this.id}-configured-input-processor`);
+    return configuredProcessors;
   }
 
   /**
@@ -729,7 +729,7 @@ export class Agent<
         ? await this.#outputProcessors({ requestContext: requestContext || new RequestContext() })
         : this.#outputProcessors;
 
-    return this.combineProcessorsIntoWorkflow(configuredProcessors, `${this.id}-configured-output-processor`);
+    return configuredProcessors;
   }
 
   /**
@@ -4435,7 +4435,20 @@ export class Agent<
         text: result.text,
         object: result.object,
         files: result.files,
+        ...(result.tripwire ? { tripwire: result.tripwire } : {}),
       },
+      ...(result.tripwire
+        ? {
+            attributes: {
+              tripwireAbort: {
+                reason: result.tripwire.reason,
+                processorId: result.tripwire.processorId,
+                retry: result.tripwire.retry,
+                metadata: result.tripwire.metadata,
+              },
+            },
+          }
+        : {}),
     });
   }
 
