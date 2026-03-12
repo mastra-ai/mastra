@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Clear the module registry so vi.mock factories take effect even when
 // a previous test file (running under isolate:false) already cached the real modules.
