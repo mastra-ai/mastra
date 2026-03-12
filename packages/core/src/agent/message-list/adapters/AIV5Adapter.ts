@@ -289,6 +289,59 @@ export class AIV5Adapter {
       parts.push({ type: 'text', text: dbMsg.content.content });
     }
 
+    const existingToolStateDataPartIds = new Set(
+      parts
+        .filter(
+          (part): part is AIV5Type.DataUIPart<AIV5.UIDataTypes> =>
+            part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval',
+        )
+        .map(part => {
+          const data = part.data as Record<string, unknown> | undefined;
+          return typeof data?.toolCallId === 'string' ? data.toolCallId : undefined;
+        })
+        .filter((toolCallId): toolCallId is string => typeof toolCallId === 'string'),
+    );
+
+    const suspendedTools = metadata.suspendedTools;
+    if (suspendedTools && typeof suspendedTools === 'object') {
+      for (const suspendedTool of Object.values(suspendedTools)) {
+        if (!suspendedTool || typeof suspendedTool !== 'object') {
+          continue;
+        }
+
+        const toolCallId = 'toolCallId' in suspendedTool ? suspendedTool.toolCallId : undefined;
+        if (typeof toolCallId !== 'string' || existingToolStateDataPartIds.has(toolCallId)) {
+          continue;
+        }
+
+        parts.push({
+          type: 'data-tool-call-suspended',
+          data: suspendedTool,
+        } as AIV5Type.DataUIPart<AIV5.UIDataTypes>);
+        existingToolStateDataPartIds.add(toolCallId);
+      }
+    }
+
+    const pendingToolApprovals = metadata.pendingToolApprovals;
+    if (pendingToolApprovals && typeof pendingToolApprovals === 'object') {
+      for (const pendingToolApproval of Object.values(pendingToolApprovals)) {
+        if (!pendingToolApproval || typeof pendingToolApproval !== 'object') {
+          continue;
+        }
+
+        const toolCallId = 'toolCallId' in pendingToolApproval ? pendingToolApproval.toolCallId : undefined;
+        if (typeof toolCallId !== 'string' || existingToolStateDataPartIds.has(toolCallId)) {
+          continue;
+        }
+
+        parts.push({
+          type: 'data-tool-call-approval',
+          data: pendingToolApproval,
+        } as AIV5Type.DataUIPart<AIV5.UIDataTypes>);
+        existingToolStateDataPartIds.add(toolCallId);
+      }
+    }
+
     return {
       id: dbMsg.id,
       role: dbMsg.role,
