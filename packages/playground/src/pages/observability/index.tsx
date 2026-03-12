@@ -17,6 +17,7 @@ import {
   EntryListSkeleton,
   getToNextEntryFn,
   getToPreviousEntryFn,
+  groupTracesByThread,
   useAgents,
   useWorkflows,
   useScorers,
@@ -83,7 +84,7 @@ export default function Observability() {
     },
   });
 
-  const traces = tracesData?.spans ?? [];
+  const traces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
   const threadTitles = tracesData?.threadTitles ?? {};
 
   // Sync URL traceId to state
@@ -155,6 +156,23 @@ export default function Observability() {
 
   const error = isTracesError ? parseError(TracesError) : undefined;
 
+  const orderedTraceEntries = useMemo(() => {
+    if (!groupByThread) {
+      return traces.map(item => ({ id: item.traceId }));
+    }
+    const { groups, ungrouped } = groupTracesByThread(traces);
+    const ordered: { id: string }[] = [];
+    for (const group of groups) {
+      for (const trace of group.traces) {
+        ordered.push({ id: trace.traceId });
+      }
+    }
+    for (const trace of ungrouped) {
+      ordered.push({ id: trace.traceId });
+    }
+    return ordered;
+  }, [traces, groupByThread]);
+
   // 403 check - permission denied for traces
   if (TracesError && is403ForbiddenError(TracesError)) {
     return (
@@ -191,12 +209,12 @@ export default function Observability() {
   const filtersApplied = selectedEntityOption?.value !== 'all' || selectedDateFrom || selectedDateTo;
 
   const toNextTrace = getToNextEntryFn({
-    entries: traces.map(item => ({ id: item.traceId })),
+    entries: orderedTraceEntries,
     id: selectedTraceId,
     update: setSelectedTraceId,
   });
   const toPreviousTrace = getToPreviousEntryFn({
-    entries: traces.map(item => ({ id: item.traceId })),
+    entries: orderedTraceEntries,
     id: selectedTraceId,
     update: setSelectedTraceId,
   });
