@@ -1,5 +1,22 @@
 # @mastra/e2b
 
+## 0.1.2-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#13591](https://github.com/mastra-ai/mastra/pull/13591))
+  - Updated peerDependency `@mastra/core` to `>=1.12.0-0 <2.0.0-0`
+
+- `ProcessHandle.pid` is now a string. Numeric PIDs from the E2B SDK are stringified automatically. ([#13591](https://github.com/mastra-ai/mastra/pull/13591))
+
+  ```typescript
+  const handle = await sandbox.processes.spawn('node server.js');
+  handle.pid; // string (e.g., '1234')
+  ```
+
+- Updated dependencies [[`9cede11`](https://github.com/mastra-ai/mastra/commit/9cede110abac9d93072e0521bb3c8bcafb9fdadf), [`a59f126`](https://github.com/mastra-ai/mastra/commit/a59f1269104f54726699c5cdb98c72c93606d2df), [`c510833`](https://github.com/mastra-ai/mastra/commit/c5108333e8cbc19dafee5f8bfefbcb5ee935335c), [`7296fcc`](https://github.com/mastra-ai/mastra/commit/7296fcc599c876a68699a71c7054a16d5aaf2337), [`00c27f9`](https://github.com/mastra-ai/mastra/commit/00c27f9080731433230a61be69c44e39a7a7b4c7), [`ee19c9b`](https://github.com/mastra-ai/mastra/commit/ee19c9ba3ec3ed91feb214ad539bdc766c53bb01)]:
+  - @mastra/core@1.12.0-alpha.1
+
 ## 0.1.1
 
 ### Patch Changes

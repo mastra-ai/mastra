@@ -1,5 +1,12 @@
 # @mastra/schema-compat
 
+## 1.2.1-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#14119](https://github.com/mastra-ai/mastra/pull/14119))
+  - Updated dependency [`zod-from-json-schema@^0.5.2` ↗︎](https://www.npmjs.com/package/zod-from-json-schema/v/0.5.2) (from `^0.5.0`, in `dependencies`)
+
 ## 1.2.1-alpha.0
 
 ### Patch Changes

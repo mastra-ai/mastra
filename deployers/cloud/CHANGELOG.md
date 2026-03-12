@@ -1,5 +1,13 @@
 # @mastra/deployer-cloud
 
+## 1.12.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`9cede11`](https://github.com/mastra-ai/mastra/commit/9cede110abac9d93072e0521bb3c8bcafb9fdadf), [`b160727`](https://github.com/mastra-ai/mastra/commit/b160727bbc9f0bf2c3fee633c077a353c8dab5ac), [`a59f126`](https://github.com/mastra-ai/mastra/commit/a59f1269104f54726699c5cdb98c72c93606d2df), [`c510833`](https://github.com/mastra-ai/mastra/commit/c5108333e8cbc19dafee5f8bfefbcb5ee935335c), [`6255087`](https://github.com/mastra-ai/mastra/commit/62550872a7b4b11f2b3e34ef5f868bffb96e9440), [`7296fcc`](https://github.com/mastra-ai/mastra/commit/7296fcc599c876a68699a71c7054a16d5aaf2337), [`00c27f9`](https://github.com/mastra-ai/mastra/commit/00c27f9080731433230a61be69c44e39a7a7b4c7), [`ee19c9b`](https://github.com/mastra-ai/mastra/commit/ee19c9ba3ec3ed91feb214ad539bdc766c53bb01)]:
+  - @mastra/core@1.12.0-alpha.1
+  - @mastra/deployer@1.12.0-alpha.1
+
 ## 1.12.0-alpha.0
 
 ### Patch Changes
