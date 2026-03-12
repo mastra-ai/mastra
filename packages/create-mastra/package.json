@@ -50,7 +50,7 @@
     "@rollup/plugin-node-resolve": "16.0.3",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "22.19.7",
-    "esbuild": "^0.27.1",
+    "esbuild": "^0.27.3",
     "eslint": "^9.39.2",
     "mastra": "workspace:^",
     "rollup": "^4.55.2",
