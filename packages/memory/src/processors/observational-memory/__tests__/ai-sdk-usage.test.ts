@@ -539,3 +539,210 @@ describe('AI SDK: per-thread generateText with observations', () => {
     }
   });
 });
+
+// =============================================================================
+// CASE 6 — Multi-turn buffer→activate lifecycle invariants
+//
+//   Validates the core invariants of the staged observation path:
+//   - buffer() extracts to staging, does NOT update lastObservedAt
+//   - activate() promotes staging to active, no LLM call
+//   - shouldBuffer and shouldObserve are mutually exclusive
+//   - pendingTokens keep growing across buffer+activate cycles
+//   - final observe() advances the cursor and resets pending count
+//   - matches the pattern in explorations/ai-sdk-buffering.ts
+// =============================================================================
+
+describe('AI SDK: multi-turn buffer→activate lifecycle invariants', () => {
+  let storage: InMemoryMemory;
+  let om: ObservationalMemory;
+  const threadId = 'lifecycle-thread';
+
+  beforeEach(() => {
+    storage = createInMemoryStorage();
+    // bufferTokens: 0.2 enables async observation with buffer interval at 20% of threshold
+    om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
+  });
+
+  it('buffer does not update lastObservedAt', async () => {
+    await storage.saveMessages({ messages: createMessagesExceedingThreshold(5, threadId) });
+
+    const recordBefore = await om.getOrCreateRecord(threadId);
+    const lastObservedBefore = recordBefore.lastObservedAt;
+
+    await om.buffer({ threadId });
+
+    const recordAfter = await om.getRecord(threadId);
+    expect(recordAfter!.lastObservedAt).toEqual(lastObservedBefore);
+  });
+
+  it('activate promotes buffered observations without LLM call', async () => {
+    await storage.saveMessages({ messages: createMessagesExceedingThreshold(5, threadId) });
+
+    // Buffer first
+    const bufResult = await om.buffer({ threadId });
+    expect(bufResult.buffered).toBe(true);
+
+    const statusAfterBuffer = await om.getStatus({ threadId });
+    expect(statusAfterBuffer.canActivate).toBe(true);
+    expect(statusAfterBuffer.bufferedChunkCount).toBeGreaterThan(0);
+
+    // Activate — this is a pure storage swap, no model call
+    const actResult = await om.activate({ threadId });
+    expect(actResult.activated).toBe(true);
+    expect(actResult.record.activeObservations).toBeTruthy();
+
+    // After activation, no more buffered chunks
+    const statusAfterActivate = await om.getStatus({ threadId });
+    expect(statusAfterActivate.canActivate).toBe(false);
+    expect(statusAfterActivate.bufferedChunkCount).toBe(0);
+  });
+
+  it('shouldBuffer and shouldObserve are mutually exclusive', async () => {
+    // Seed below threshold — should buffer but not observe
+    await storage.saveMessages({ messages: createMessagesExceedingThreshold(3, threadId) });
+
+    const statusLow = await om.getStatus({ threadId });
+    if (statusLow.shouldBuffer) {
+      expect(statusLow.shouldObserve).toBe(false);
+    }
+
+    // Add enough to cross threshold — should observe but not buffer
+    await storage.saveMessages({
+      messages: createMessagesExceedingThreshold(20, threadId).map((m, i) => ({
+        ...m,
+        id: `${threadId}-extra-${i}`,
+        createdAt: new Date(Date.now() + (i + 1) * 1000),
+      })),
+    });
+
+    const statusHigh = await om.getStatus({ threadId });
+    if (statusHigh.shouldObserve) {
+      expect(statusHigh.shouldBuffer).toBe(false);
+    }
+  });
+
+  it('pendingTokens keep growing across buffer+activate cycles since lastObservedAt is unchanged', async () => {
+    // Turn 1: add messages and buffer
+    const turn1Msgs = createMessagesExceedingThreshold(5, threadId);
+    await storage.saveMessages({ messages: turn1Msgs });
+    await om.buffer({ threadId });
+
+    const statusAfterTurn1 = await om.getStatus({ threadId });
+    const pendingAfterTurn1 = statusAfterTurn1.pendingTokens;
+    expect(pendingAfterTurn1).toBeGreaterThan(0);
+
+    // Turn 2: activate, add MORE messages (different IDs), buffer again
+    await om.activate({ threadId });
+
+    // Use a larger batch with unique IDs so total unobserved messages grows
+    const turn2Msgs = createMessagesExceedingThreshold(8, threadId).map((m, i) => ({
+      ...m,
+      id: `${threadId}-turn2-${i}`,
+      createdAt: new Date(Date.now() + (i + 1) * 10000),
+    }));
+    await storage.saveMessages({ messages: turn2Msgs });
+    await om.buffer({ threadId });
+
+    const statusAfterTurn2 = await om.getStatus({ threadId });
+    // Pending tokens should have grown because lastObservedAt hasn't moved
+    // and we added more messages on top of the existing ones
+    expect(statusAfterTurn2.pendingTokens).toBeGreaterThan(pendingAfterTurn1);
+  });
+
+  it('observe advances cursor and resets pending count', async () => {
+    // Use a low-threshold OM so observe() actually triggers
+    const lowThresholdOm = createOM(storage, { messageTokens: 50, bufferTokens: 0.2 });
+
+    // Build up messages across two buffer+activate cycles
+    await storage.saveMessages({ messages: createMessagesExceedingThreshold(5, threadId) });
+    await lowThresholdOm.buffer({ threadId });
+    await lowThresholdOm.activate({ threadId });
+
+    await storage.saveMessages({
+      messages: createMessagesExceedingThreshold(5, threadId).map((m, i) => ({
+        ...m,
+        id: `${threadId}-more-${i}`,
+        createdAt: new Date(Date.now() + (i + 1) * 10000),
+      })),
+    });
+
+    const statusBefore = await lowThresholdOm.getStatus({ threadId });
+    expect(statusBefore.pendingTokens).toBeGreaterThan(0);
+
+    // Observe — this should advance lastObservedAt and drop pending count
+    const obsResult = await lowThresholdOm.observe({ threadId });
+    expect(obsResult.observed).toBe(true);
+
+    const recordAfter = await lowThresholdOm.getRecord(threadId);
+    const statusAfter = await lowThresholdOm.getStatus({ threadId });
+
+    // After a successful observe, lastObservedAt should be set
+    expect(recordAfter!.lastObservedAt).toBeTruthy();
+
+    // Pending tokens should be 0 (no new messages since observe)
+    expect(statusAfter.pendingTokens).toBe(0);
+    expect(statusAfter.shouldObserve).toBe(false);
+  });
+
+  it('full multi-turn cycle: buffer → activate+buffer → activate → observe', async () => {
+    // messageTokens: 500 — buffer interval is 100 tokens (0.2 * 500).
+    // Small batches (~200 tokens) trigger buffer but not observe.
+    // Large final batch pushes past 500 to trigger observe.
+    const cycleOm = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
+    // Use a unique threadId to avoid static state leaking from prior tests
+    const cycleThreadId = 'lifecycle-cycle-thread';
+
+    // ── Turn 1: seed + buffer ──
+    await storage.saveMessages({ messages: createMessagesExceedingThreshold(5, cycleThreadId) });
+
+    const buf1 = await cycleOm.buffer({ threadId: cycleThreadId });
+    expect(buf1.buffered).toBe(true);
+
+    const afterTurn1 = await cycleOm.getStatus({ threadId: cycleThreadId });
+    expect(afterTurn1.canActivate).toBe(true);
+
+    // ── Turn 2: activate + add messages + buffer ──
+    const act1 = await cycleOm.activate({ threadId: cycleThreadId });
+    expect(act1.activated).toBe(true);
+    expect(act1.record.activeObservations).toBeTruthy();
+
+    await storage.saveMessages({
+      messages: createMessagesExceedingThreshold(5, cycleThreadId).map((m, i) => ({
+        ...m,
+        id: `${cycleThreadId}-t2-${i}`,
+        createdAt: new Date(Date.now() + (i + 1) * 10000),
+      })),
+    });
+
+    const buf2 = await cycleOm.buffer({ threadId: cycleThreadId });
+    expect(buf2.buffered).toBe(true);
+
+    // ── Turn 3: activate (merges turn 2 buffer into active) ──
+    const act2 = await cycleOm.activate({ threadId: cycleThreadId });
+    expect(act2.activated).toBe(true);
+    expect(act2.record.activeObservations).toBeTruthy();
+
+    // ── Add a large batch to push past the observe threshold ──
+    await storage.saveMessages({
+      messages: createMessagesExceedingThreshold(20, cycleThreadId).map((m, i) => ({
+        ...m,
+        id: `${cycleThreadId}-t3-${i}`,
+        createdAt: new Date(Date.now() + (i + 1) * 20000),
+      })),
+    });
+
+    // ── Final: observe to consolidate and advance cursor ──
+    const statusPreObserve = await cycleOm.getStatus({ threadId: cycleThreadId });
+    expect(statusPreObserve.pendingTokens).toBeGreaterThan(0);
+
+    const obsResult = await cycleOm.observe({ threadId: cycleThreadId });
+    expect(obsResult.observed).toBe(true);
+    expect(obsResult.record.activeObservations).toBeTruthy();
+    expect(obsResult.record.lastObservedAt).toBeTruthy();
+
+    // After observe, pending should be reset
+    const statusPostObserve = await cycleOm.getStatus({ threadId: cycleThreadId });
+    expect(statusPostObserve.pendingTokens).toBe(0);
+    expect(statusPostObserve.shouldObserve).toBe(false);
+  });
+});
