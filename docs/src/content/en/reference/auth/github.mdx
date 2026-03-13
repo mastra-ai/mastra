@@ -1,0 +1,163 @@
+---
+title: "Reference: MastraAuthGitHub class | Auth"
+description: "API reference for the MastraAuthGitHub class, which authenticates Mastra applications using GitHub OAuth."
+packages:
+  - "@mastra/auth-github"
+  - "@mastra/core"
+---
+
+# MastraAuthGitHub class
+
+The `MastraAuthGitHub` class provides authentication for Mastra using GitHub OAuth. It verifies incoming requests using GitHub access tokens, manages session cookies, and supports SSO login flows through the GitHub OAuth authorization flow.
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthGitHub } from '@mastra/auth-github'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthGitHub({
+      clientId: process.env.GITHUB_CLIENT_ID,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET,
+      allowedOrgs: ['mastra-ai'],
+    }),
+  },
+})
+```
+
+:::note
+
+At least one access restriction (`allowedUsers`, `allowedOrgs`, `allowedTeams`, or `authorizeUser`) is required. The constructor throws an error if none are provided.
+
+You can omit `clientId` and `clientSecret` if you have the environment variables `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` set.
+
+:::
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'clientId',
+    type: 'string',
+    description: 'Your GitHub OAuth App client ID. Used for the OAuth authorization flow and token exchange.',
+    isOptional: true,
+    defaultValue: 'process.env.GITHUB_CLIENT_ID',
+  },
+  {
+    name: 'clientSecret',
+    type: 'string',
+    description: 'Your GitHub OAuth App client secret. Used to exchange authorization codes for access tokens.',
+    isOptional: true,
+    defaultValue: 'process.env.GITHUB_CLIENT_SECRET',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Custom name for the auth provider instance.',
+    isOptional: true,
+    defaultValue: '"github"',
+  },
+  {
+    name: 'allowedUsers',
+    type: 'string[]',
+    description: 'Restrict access to specific GitHub usernames. Matching is case-sensitive.',
+    isOptional: true,
+  },
+  {
+    name: 'allowedOrgs',
+    type: 'string[]',
+    description:
+      "Restrict access to members of specific GitHub organizations (e.g. ['mastra-ai']). Matching is case-insensitive. Requires the read:org scope.",
+    isOptional: true,
+  },
+  {
+    name: 'allowedTeams',
+    type: 'string[]',
+    description:
+      "Restrict access to members of specific GitHub teams in org/team-slug format (e.g. ['mastra-ai/engineering']). Matching is case-insensitive. Requires the read:org scope.",
+    isOptional: true,
+  },
+  {
+    name: 'authorizeUser',
+    type: '(user: GitHubUser) => Promise<boolean> | boolean',
+    description:
+      'Custom authorization function to determine if a user should be granted access. Called after token verification. Overrides the built-in allowedUsers/allowedOrgs/allowedTeams checks.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Environment variables
+
+The following environment variables are automatically used when constructor options aren't provided:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'GITHUB_CLIENT_ID',
+    type: 'string',
+    description: 'Your GitHub OAuth App client ID. Found in your GitHub Developer Settings under OAuth Apps.',
+  },
+  {
+    name: 'GITHUB_CLIENT_SECRET',
+    type: 'string',
+    description: 'Your GitHub OAuth App client secret. Generated in your GitHub Developer Settings under OAuth Apps.',
+  },
+]}
+/>
+
+## Authorization behavior
+
+`MastraAuthGitHub` validates GitHub access tokens and then checks the user against the configured access restrictions:
+
+1. **Token Verification**: The access token is read from the `Authorization` header or the `mastra-token` cookie, then verified by calling the GitHub API (`GET /user`)
+1. **User Retrieval**: If the token is valid, the user's profile (id, login, email, name, avatarUrl) is returned
+1. **Authorization Check**: The user is checked against the configured restrictions
+
+Access is granted if the user matches **any** of the configured restrictions (OR logic):
+
+- **`allowedUsers`**: Checks if `user.login` is in the list (case-sensitive, no API call needed)
+- **`allowedOrgs`**: Calls `GET /user/orgs` and checks if any of the user's organizations match (case-insensitive)
+- **`allowedTeams`**: Calls `GET /user/teams` and checks if any of the user's teams match (case-insensitive)
+
+Organization and team checks use the authenticated user's token and require the `read:org` scope, which is automatically included in the login URL only when `allowedOrgs` or `allowedTeams` are configured. To implement fully custom authorization logic, provide a custom `authorizeUser` function instead.
+
+## Session management
+
+`MastraAuthGitHub` uses a cookie-based session. When a user completes the SSO flow, `handleCallback` sets an `HttpOnly` `mastra-token` cookie containing the GitHub access token. Subsequent requests are authenticated by reading this cookie.
+
+## GitHubUser type
+
+The `GitHubUser` type used in the `authorizeUser` function contains the following fields:
+
+- `id`: The user's unique GitHub identifier (string)
+- `login`: The user's GitHub username
+- `email`: The user's primary email address (can be `null` if the user has not set a public email)
+- `name`: The user's display name (optional)
+- `avatarUrl`: The user's avatar URL (optional)
+
+## Implemented interfaces
+
+`MastraAuthGitHub` implements the following interfaces:
+
+### ISSOProvider
+
+Enables SSO login flows in Mastra Studio:
+
+- **`getLoginUrl(redirectUri, state)`**: Generates a GitHub OAuth authorization URL. Scopes include `read:user` and `user:email` by default, plus `read:org` when `allowedOrgs` or `allowedTeams` are configured
+- **`handleCallback(code, state)`**: Exchanges the authorization code for an access token, retrieves the user's profile, and returns a `mastra-token` session cookie
+- **`getLoginButtonConfig()`**: Returns configuration for rendering a "Sign in with GitHub" button
+
+### IUserProvider
+
+Enables user awareness in Mastra Studio:
+
+- **`getCurrentUser(request)`**: Reads the `mastra-token` cookie (or `Authorization` header) and fetches the GitHub user profile
+- **`getUser(userId)`**: Fetches a GitHub user by their numeric ID
+
+## Related
+
+[MastraAuthGitHub Class](/docs/server/auth/github)
