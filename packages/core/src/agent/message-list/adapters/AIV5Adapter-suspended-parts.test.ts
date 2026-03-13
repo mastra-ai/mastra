@@ -125,6 +125,94 @@ describe('AIV5Adapter — suspended tool state rehydration', () => {
     });
   });
 
+  it('should not duplicate data-tool-call-suspended parts when already present in content.parts', () => {
+    const dbMessage: MastraDBMessage = {
+      id: 'msg-dedup-suspended',
+      role: 'assistant',
+      createdAt: new Date('2024-01-01'),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              toolCallId: 'tc-4',
+              toolName: 'process-data',
+              args: { data: 'test' },
+              state: 'call',
+            },
+          },
+          {
+            type: 'data-tool-call-suspended',
+            data: {
+              toolCallId: 'tc-4',
+              toolName: 'process-data',
+              type: 'suspension',
+            },
+          } as any,
+        ],
+        metadata: {
+          suspendedTools: {
+            'process-data': {
+              toolCallId: 'tc-4',
+              toolName: 'process-data',
+              type: 'suspension',
+            },
+          },
+        },
+      },
+    };
+
+    const uiMessage = AIV5Adapter.toUIMessage(dbMessage);
+
+    const suspendedParts = uiMessage.parts.filter((p: any) => p.type === 'data-tool-call-suspended');
+    expect(suspendedParts).toHaveLength(1);
+  });
+
+  it('should not duplicate data-tool-call-approval parts when already present in content.parts', () => {
+    const dbMessage: MastraDBMessage = {
+      id: 'msg-dedup-approval',
+      role: 'assistant',
+      createdAt: new Date('2024-01-01'),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              toolCallId: 'tc-5',
+              toolName: 'delete-file',
+              args: { path: '/tmp/test.txt' },
+              state: 'call',
+            },
+          },
+          {
+            type: 'data-tool-call-approval',
+            data: {
+              toolCallId: 'tc-5',
+              toolName: 'delete-file',
+              type: 'approval',
+            },
+          } as any,
+        ],
+        metadata: {
+          pendingToolApprovals: {
+            'delete-file': {
+              toolCallId: 'tc-5',
+              toolName: 'delete-file',
+              type: 'approval',
+            },
+          },
+        },
+      },
+    };
+
+    const uiMessage = AIV5Adapter.toUIMessage(dbMessage);
+
+    const approvalParts = uiMessage.parts.filter((p: any) => p.type === 'data-tool-call-approval');
+    expect(approvalParts).toHaveLength(1);
+  });
+
   it('should NOT produce data-tool-call-suspended parts for already-resumed tools', () => {
     // When data-tool-call-suspended parts exist in content.parts but are marked as resumed,
     // they should NOT be re-synthesized
