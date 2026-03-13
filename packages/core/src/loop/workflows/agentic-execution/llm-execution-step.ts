@@ -1146,11 +1146,25 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
        * and ensures the message is re-saved.
        */
       const currentTurnToolCallIds = new Set(toolCalls.map(tc => tc.toolCallId));
-      const defferedProviderResults = toolResultChunks.filter(
-        chunk => chunk.payload.providerExecuted && !currentTurnToolCallIds.has(chunk.payload.toolCallId),
+      logger?.debug(
+        `[llm-execution-step] toolCalls: ${toolCalls.map(tc => `${tc.toolName}(${tc.toolCallId})`).join(', ')}`,
       );
+      logger?.debug(
+        `[llm-execution-step] toolResultChunks: ${toolResultChunks.map(c => `${c.payload.toolName}(${c.payload.toolCallId}, providerExecuted=${c.payload.providerExecuted})`).join(', ')}`,
+      );
+      // toolResultChunks only contains results from the provider stream (not client tool execution),
+      // so any result whose toolCallId isn't in the current turn's tool calls is an orphaned/deferred result.
+      // Note: we don't filter on providerExecuted because the Anthropic provider's web_search_tool_result
+      // stream chunk does not include providerExecuted on the tool-result payload.
+      const defferedProviderResults = toolResultChunks.filter(
+        chunk => !currentTurnToolCallIds.has(chunk.payload.toolCallId),
+      );
+      logger?.debug(`[llm-execution-step] deferredProviderResults: ${defferedProviderResults.length}`);
 
       for (const deffered of defferedProviderResults) {
+        logger?.debug(
+          `[llm-execution-step] resolving deferred: ${deffered.payload.toolName} toolCallId=${deffered.payload.toolCallId}`,
+        );
         messageList.updateToolInvocation({
           type: 'tool-invocation' as const,
           toolInvocation: {
