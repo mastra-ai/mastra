@@ -6,9 +6,18 @@ import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 
 const timeout = 5 * 60 * 1000;
 
-describe('optimized dependency cache invalidation', () => {
+describe('optimized dependency cache', () => {
   let fixturePath: string;
   const pkgManager = 'pnpm';
+
+  async function runBuild() {
+    const { stdout, stderr } = await execa(pkgManager, ['build'], {
+      cwd: fixturePath,
+      env: process.env,
+    });
+
+    return `${stdout}\n${stderr}`;
+  }
 
   beforeAll(
     async () => {
@@ -64,10 +73,7 @@ export const mastra = new Mastra({
         env: process.env,
       });
 
-      await execa(pkgManager, ['build'], {
-        cwd: fixturePath,
-        env: process.env,
-      });
+      await runBuild();
     },
     10 * 60 * 1000,
   );
@@ -77,6 +83,16 @@ export const mastra = new Mastra({
       await rm(fixturePath, { force: true, recursive: true });
     } catch {}
   });
+
+  it(
+    'should reuse optimized dependencies on repeated builds',
+    async () => {
+      const buildOutput = await runBuild();
+
+      expect(buildOutput).toContain('Optimizing dependencies... (cache hit)');
+    },
+    timeout,
+  );
 
   it(
     'should change cache key after dependency version update',
@@ -92,12 +108,10 @@ export const mastra = new Mastra({
       zodPackageJson.version = `${currentVersion}-cache-test`;
       await writeFile(zodPackageJsonPath, JSON.stringify(zodPackageJson, null, 2) + '\n');
 
-      await execa(pkgManager, ['build'], {
-        cwd: fixturePath,
-        env: process.env,
-      });
+      const buildOutput = await runBuild();
 
       const cacheAfter = JSON.parse(await readFile(cacheFilePath, 'utf-8')) as { key: string };
+      expect(buildOutput).not.toContain('Optimizing dependencies... (cache hit)');
       expect(cacheAfter.key).not.toBe(cacheBefore.key);
     },
     timeout,
