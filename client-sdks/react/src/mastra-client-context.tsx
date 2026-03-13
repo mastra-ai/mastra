@@ -12,10 +12,18 @@ export interface MastraClientProviderProps {
   headers?: Record<string, string>;
   /** API route prefix. Defaults to '/api'. Set this to match your server's apiPrefix configuration. */
   apiPrefix?: string;
+  /** Optional base URL for observability requests. When set, telemetry reads go to this URL instead of the main baseUrl. */
+  telemetryBaseUrl?: string;
 }
 
-export const MastraClientProvider = ({ children, baseUrl, headers, apiPrefix }: MastraClientProviderProps) => {
-  const client = createMastraClient(baseUrl, headers, apiPrefix);
+export const MastraClientProvider = ({
+  children,
+  baseUrl,
+  headers,
+  apiPrefix,
+  telemetryBaseUrl,
+}: MastraClientProviderProps) => {
+  const client = createMastraClient(baseUrl, headers, apiPrefix, telemetryBaseUrl);
 
   return <MastraClientContext.Provider value={client}>{children}</MastraClientContext.Provider>;
 };
@@ -46,10 +54,16 @@ export const isLocalUrl = (url?: string): boolean => {
   }
 };
 
-const createMastraClient = (baseUrl?: string, mastraClientHeaders: Record<string, string> = {}, apiPrefix?: string) => {
+const createMastraClient = (
+  baseUrl?: string,
+  mastraClientHeaders: Record<string, string> = {},
+  apiPrefix?: string,
+  telemetryBaseUrl?: string,
+) => {
   return new MastraClient({
     baseUrl: baseUrl || '',
     headers: isLocalUrl(baseUrl) ? { ...mastraClientHeaders, 'x-mastra-dev-playground': 'true' } : mastraClientHeaders,
     apiPrefix,
+    telemetryBaseUrl,
   });
 };

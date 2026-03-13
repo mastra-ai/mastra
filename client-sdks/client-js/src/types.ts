@@ -68,6 +68,8 @@ export interface ClientOptions {
   credentials?: 'omit' | 'same-origin' | 'include';
   /** Custom fetch function to use for HTTP requests. Useful for environments like Tauri that require custom fetch implementations. */
   fetch?: typeof fetch;
+  /** Optional base URL for the Observability resource. When set, observability requests are sent to this URL instead of the main baseUrl. */
+  telemetryBaseUrl?: string;
 }
 
 export interface RequestOptions {

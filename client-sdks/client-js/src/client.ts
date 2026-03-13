@@ -155,7 +155,9 @@ export class MastraClient extends BaseResource {
   private observability: Observability;
   constructor(options: ClientOptions) {
     super(options);
-    this.observability = new Observability(options);
+    this.observability = new Observability(
+      options.telemetryBaseUrl ? { ...options, baseUrl: options.telemetryBaseUrl } : options,
+    );
   }
 
   /**
