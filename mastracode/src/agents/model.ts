@@ -171,13 +171,7 @@ export function resolveModel(
       return opencodeClaudeMaxProvider(bareModelId);
     }
 
-    // Secondary path: explicit stored API key credential
-    if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
-      return anthropicApiKeyProvider(bareModelId, storedCred.key.trim());
-    }
-
-    // Fallback: direct API key from AuthStorage
-    const apiKey = getAnthropicApiKey();
+    const apiKey = storedCred?.type === 'api_key' ? storedCred.key.trim() : getAnthropicApiKey();
     if (apiKey) {
       return anthropicApiKeyProvider(bareModelId, apiKey);
     }
