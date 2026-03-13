@@ -1,5 +1,18 @@
 # @mastra/schema-compat
 
+## 1.2.2
+
+### Patch Changes
+
+- `@mastra/schema-compat`: patch ([#14195](https://github.com/mastra-ai/mastra/pull/14195))
+
+  Fixed published `@mastra/schema-compat` types so AI SDK v5 schemas resolve correctly for consumers
+
+- Fixed false `z.toJSONSchema is not available` errors for compatible Zod versions. ([#14264](https://github.com/mastra-ai/mastra/pull/14264))
+
+  **What changed**
+  - Improved Zod schema conversion detection so JSON Schema generation works more reliably across different runtime setups.
+
 ## 1.2.2-alpha.0
 
 ### Patch Changes

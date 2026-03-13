@@ -1,5 +1,28 @@
 # @mastra/playground-ui
 
+## 16.1.0
+
+### Minor Changes
+
+- Added group-by-thread utility for the Observability tab. Traces can now be grouped by their conversation thread ID, making it easier to follow multi-turn agent conversations in Studio. See [#14004](https://github.com/mastra-ai/mastra/issues/14004). ([#14112](https://github.com/mastra-ai/mastra/pull/14112))
+
+### Patch Changes
+
+- Fixed agent playground panels growing together when content overflows. Left and right columns now scroll independently. ([#14244](https://github.com/mastra-ai/mastra/pull/14244))
+
+- Fixed an agent chat editor crash in Playground UI caused by duplicate CodeMirror state instances. ([#14241](https://github.com/mastra-ai/mastra/pull/14241))
+
+- Improved studio loading performance by lazy-loading the Prettier code formatter. Prettier and its plugins are now loaded on-demand when formatting is triggered, rather than being bundled in the initial page load. ([#13934](https://github.com/mastra-ai/mastra/pull/13934))
+
+- Improved list-style pages across the Playground UI (agents, datasets, MCPs, processors, prompt blocks, scorers, tools, workflows) with a new list layout and updated empty states. ([#14173](https://github.com/mastra-ai/mastra/pull/14173))
+
+- Updated dependencies [[`ea86967`](https://github.com/mastra-ai/mastra/commit/ea86967449426e0a3673253bd1c2c052a99d970d), [`db21c21`](https://github.com/mastra-ai/mastra/commit/db21c21a6ae5f33539262cc535342fa8757eb359), [`a1d6b9c`](https://github.com/mastra-ai/mastra/commit/a1d6b9c907c909f259632a7ea26e9e3c221fb691), [`11f5dbe`](https://github.com/mastra-ai/mastra/commit/11f5dbe9a1e7ad8ef3b1ea34fb4a9fa3631d1587), [`c562ec2`](https://github.com/mastra-ai/mastra/commit/c562ec228f1af63693e2984ffa9712aa6db8fea8), [`6751354`](https://github.com/mastra-ai/mastra/commit/67513544d1a64be891d9de7624d40aadc895d56e), [`c958cd3`](https://github.com/mastra-ai/mastra/commit/c958cd36627c1eea122ec241b2b15492977a263a), [`86f2426`](https://github.com/mastra-ai/mastra/commit/86f242631d252a172d2f9f9a2ea0feb8647a76b0), [`950eb07`](https://github.com/mastra-ai/mastra/commit/950eb07b7e7354629630e218d49550fdd299c452)]:
+  - @mastra/core@1.13.0
+  - @mastra/schema-compat@1.2.2
+  - @mastra/client-js@1.8.2
+  - @mastra/ai-sdk@1.1.3
+  - @mastra/react@0.2.12
+
 ## 16.1.0-alpha.0
 
 ### Minor Changes
