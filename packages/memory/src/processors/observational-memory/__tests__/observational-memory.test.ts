@@ -7411,6 +7411,7 @@ describe('Full Async Buffering Flow', () => {
           { type: 'text' as const, text: 'Let me search for that.' },
           {
             type: 'tool-invocation',
+            providerExecuted: true,
             toolInvocation: {
               state: 'call',
               toolCallId: 'call_pending_123',
@@ -7589,6 +7590,7 @@ describe('Full Async Buffering Flow', () => {
           { type: 'text' as const, text: 'Let me search for that.' },
           {
             type: 'tool-invocation',
+            providerExecuted: true,
             toolInvocation: {
               state: 'call',
               toolCallId: 'call_sync_pending_123',
