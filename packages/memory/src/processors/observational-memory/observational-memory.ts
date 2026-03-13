@@ -3396,13 +3396,11 @@ ${suggestedResponse}
         // ════════════════════════════════════════════════════════════════════════
 
         if (this.isAsyncObservationEnabled() && totalPendingTokens < threshold) {
-          const shouldTrigger =
-            !hasIncompleteToolCalls &&
-            this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey, record, threshold);
+          const shouldTrigger = this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey, record, threshold);
           omDebug(
             `[OM:async-obs] belowThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, shouldTrigger=${shouldTrigger}, isBufferingObs=${record.isBufferingObservation}, lastBufferedAt=${record.lastBufferedAtTokens}, hasIncompleteToolCalls=${hasIncompleteToolCalls}`,
           );
-          if (shouldTrigger) {
+          if (shouldTrigger && !hasIncompleteToolCalls) {
             void this.startAsyncBufferedObservation(
               record,
               threadId,
@@ -3417,13 +3415,11 @@ ${suggestedResponse}
           // Above threshold but we still need to check async buffering:
           // - At step 0, sync observation won't run, so we need chunks ready
           // - Below blockAfter, sync observation won't run, so we need chunks ready
-          const shouldTrigger =
-            !hasIncompleteToolCalls &&
-            this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey, record, threshold);
+          const shouldTrigger = this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey, record, threshold);
           omDebug(
             `[OM:async-obs] atOrAboveThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, step=${stepNumber}, shouldTrigger=${shouldTrigger}, hasIncompleteToolCalls=${hasIncompleteToolCalls}`,
           );
-          if (shouldTrigger) {
+          if (shouldTrigger && !hasIncompleteToolCalls) {
             void this.startAsyncBufferedObservation(
               record,
               threadId,
