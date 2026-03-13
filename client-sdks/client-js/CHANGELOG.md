@@ -1,5 +1,19 @@
 # @mastra/client-js
 
+## 1.8.4
+
+### Patch Changes
+
+- Fixed `@mastra/client-js` so client-side tools with Zod `inputSchema`, `parameters`, or `outputSchema` are serialized to JSON Schema before requests are sent. ([#13673](https://github.com/mastra-ai/mastra/pull/13673))
+
+  Client tools with `execute` functions no longer trigger OpenAI `"Invalid schema for function"` errors when they include Zod schemas.
+
+  Fixes #11668. Alternative to #11787.
+
+- Updated dependencies [[`0ce6035`](https://github.com/mastra-ai/mastra/commit/0ce603591189f547397704e53f23c77bc5630071), [`1978bc4`](https://github.com/mastra-ai/mastra/commit/1978bc424dbb04f5f7c5d8522f07f1166006fa3f)]:
+  - @mastra/core@1.13.2
+  - @mastra/schema-compat@1.2.4
+
 ## 1.8.4-alpha.0
 
 ### Patch Changes

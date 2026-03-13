@@ -1,5 +1,13 @@
 # @mastra/deployer-vercel
 
+## 1.1.5
+
+### Patch Changes
+
+- Updated dependencies [[`0ce6035`](https://github.com/mastra-ai/mastra/commit/0ce603591189f547397704e53f23c77bc5630071)]:
+  - @mastra/core@1.13.2
+  - @mastra/deployer@1.13.2
+
 ## 1.1.5-alpha.0
 
 ### Patch Changes

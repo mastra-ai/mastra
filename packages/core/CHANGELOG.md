@@ -1,5 +1,14 @@
 # @mastra/core
 
+## 1.13.2
+
+### Patch Changes
+
+- Fix WorkingMemory type to accept Zod schemas in workingMemory.schema configuration ([#14261](https://github.com/mastra-ai/mastra/pull/14261))
+
+- Updated dependencies [[`1978bc4`](https://github.com/mastra-ai/mastra/commit/1978bc424dbb04f5f7c5d8522f07f1166006fa3f)]:
+  - @mastra/schema-compat@1.2.4
+
 ## 1.13.2-alpha.0
 
 ### Patch Changes
