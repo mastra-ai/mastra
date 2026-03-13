@@ -18,7 +18,7 @@ import type {
   AggregationInterval,
 } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
-import { buildWhereClause } from './filters';
+import { buildJsonPath, buildWhereClause } from './filters';
 import { v, jsonV } from './helpers';
 
 // ============================================================================
@@ -104,17 +104,36 @@ const METRIC_COLUMNS = [
   'scope',
 ] as const;
 
-const METRIC_COLUMNS_SQL = METRIC_COLUMNS.join(', ');
-const METRIC_GROUP_BY_COLUMNS = new Set(
-  METRIC_COLUMNS.filter(col => !['value', 'labels', 'metadata', 'scope'].includes(col)),
-);
+type MetricColumn = (typeof METRIC_COLUMNS)[number];
 
-function normalizeGroupByColumns(groupBy: string[]): string[] {
-  const invalid = groupBy.filter(col => !METRIC_GROUP_BY_COLUMNS.has(col));
+const METRIC_GROUP_BY_EXCLUDED: MetricColumn[] = ['value', 'labels', 'metadata', 'scope'];
+
+const METRIC_COLUMNS_SQL = METRIC_COLUMNS.join(', ');
+const METRIC_GROUP_BY_COLUMNS = new Set(METRIC_COLUMNS.filter(col => !METRIC_GROUP_BY_EXCLUDED.includes(col)));
+
+function normalizeGroupByColumns(groupBy: string[]): MetricColumn[] {
+  const invalid = groupBy.filter(col => !METRIC_GROUP_BY_COLUMNS.has(col as MetricColumn));
   if (invalid.length > 0) {
     throw new Error(`Invalid groupBy column(s): ${invalid.join(', ')}`);
   }
-  return groupBy;
+  return groupBy as MetricColumn[];
+}
+
+function buildCombinedWhereClause(
+  nameClause: string,
+  nameParams: unknown[],
+  filterClause: string,
+  filterParams: unknown[],
+): { clause: string; params: unknown[] } {
+  const conditions = [nameClause];
+  const params: unknown[] = [...nameParams];
+
+  if (filterClause) {
+    conditions.push(filterClause.replace('WHERE ', ''));
+    params.push(...filterParams);
+  }
+
+  return { clause: `WHERE ${conditions.join(' AND ')}`, params };
 }
 
 /** Insert multiple metric events in a single statement. */
@@ -171,16 +190,12 @@ export async function getMetricAggregate(
   const { clause: filterClause, params: filterParams } = buildWhereClause(
     args.filters as Record<string, unknown> | undefined,
   );
-
-  const allConditions = [nameClause];
-  const allParams = [...nameParams];
-
-  if (filterClause) {
-    allConditions.push(filterClause.replace('WHERE ', ''));
-    allParams.push(...filterParams);
-  }
-
-  const whereClause = `WHERE ${allConditions.join(' AND ')}`;
+  const { clause: whereClause, params: allParams } = buildCombinedWhereClause(
+    nameClause,
+    nameParams,
+    filterClause,
+    filterParams,
+  );
   const sql = `SELECT ${aggSql} as value FROM metric_events ${whereClause}`;
   const result = await db.query<{ value: number | null }>(sql, allParams);
   const value = result[0]?.value ?? null;
@@ -209,9 +224,26 @@ export async function getMetricAggregate(
           prevStart = new Date(ts.start.getTime() - duration);
           prevEnd = new Date(ts.end.getTime() - duration);
       }
-
-      const prevSql = `SELECT ${aggSql} as value FROM metric_events WHERE ${nameClause} AND timestamp >= ? AND timestamp <= ?`;
-      const prevResult = await db.query<{ value: number | null }>(prevSql, [...nameParams, prevStart!, prevEnd!]);
+      const prevFilters = {
+        ...(args.filters ?? {}),
+        timestamp: {
+          start: prevStart,
+          end: prevEnd,
+          startExclusive: ts.startExclusive,
+          endExclusive: ts.endExclusive,
+        },
+      };
+      const { clause: prevFilterClause, params: prevFilterParams } = buildWhereClause(
+        prevFilters as Record<string, unknown>,
+      );
+      const { clause: prevWhereClause, params: prevParams } = buildCombinedWhereClause(
+        nameClause,
+        nameParams,
+        prevFilterClause,
+        prevFilterParams,
+      );
+      const prevSql = `SELECT ${aggSql} as value FROM metric_events ${prevWhereClause}`;
+      const prevResult = await db.query<{ value: number | null }>(prevSql, prevParams);
       const previousValue = prevResult[0]?.value ?? null;
 
       let changePercent: number | null = null;
@@ -426,20 +458,20 @@ export async function getMetricLabelValues(
   db: DuckDBConnection,
   args: GetMetricLabelValuesArgs,
 ): Promise<GetMetricLabelValuesResponse> {
-  const escapedKey = v(args.labelKey);
-  const conditions = [`name = ?`, `json_extract_string(labels, ${escapedKey}) IS NOT NULL`];
-  const params: unknown[] = [args.metricName];
+  const labelPath = buildJsonPath(args.labelKey);
+  const conditions = [`name = ?`, `json_extract_string(labels, ?) IS NOT NULL`];
+  const params: unknown[] = [labelPath, args.metricName, labelPath];
 
   if (args.prefix) {
-    conditions.push(`json_extract_string(labels, ${escapedKey}) LIKE ?`);
-    params.push(`${args.prefix}%`);
+    conditions.push(`json_extract_string(labels, ?) LIKE ?`);
+    params.push(labelPath, `${args.prefix}%`);
   }
 
   const limitClause = args.limit ? `LIMIT ?` : '';
   if (args.limit) params.push(args.limit);
 
   const rows = await db.query<{ val: string }>(
-    `SELECT DISTINCT json_extract_string(labels, ${escapedKey}) as val FROM metric_events WHERE ${conditions.join(' AND ')} ORDER BY val ${limitClause}`,
+    `SELECT DISTINCT json_extract_string(labels, ?) as val FROM metric_events WHERE ${conditions.join(' AND ')} ORDER BY val ${limitClause}`,
     params,
   );
 

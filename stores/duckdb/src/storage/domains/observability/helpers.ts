@@ -10,11 +10,13 @@ export function jsonV(val: unknown): string {
   return DuckDBConnection.sqlValue(JSON.stringify(val));
 }
 
-/** Coerce a value to a Date, falling back to `new Date()` for nullish values. */
+/** Coerce a value to a Date. Throws if value is nullish. */
 export function toDate(val: unknown): Date {
+  if (val === null || val === undefined) {
+    throw new Error('Expected date value but received null/undefined');
+  }
   if (val instanceof Date) return val;
-  if (val !== null && val !== undefined) return new Date(String(val));
-  return new Date();
+  return new Date(String(val));
 }
 
 /** Coerce a value to a Date, returning null for nullish values. */
