@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.13.0",
+  "version": "1.13.2",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",

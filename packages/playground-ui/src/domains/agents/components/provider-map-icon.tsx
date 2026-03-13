@@ -13,7 +13,6 @@ import { NetlifyIcon } from '@/ds/icons/NetlifyIcon';
 export const providerMapToIcon = {
   'openai.chat': <OpenaiChatIcon />,
   'openai.responses': <OpenaiChatIcon />,
-  openai: <OpenaiChatIcon />,
   'anthropic.chat': <AnthropicChatIcon />,
   'anthropic.messages': <AnthropicMessagesIcon />,
   AZURE: <AzureIcon />,

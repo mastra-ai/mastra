@@ -1,5 +1,23 @@
 # @mastra/schema-compat
 
+## 1.2.4
+
+### Patch Changes
+
+- Lazily load createRequire to fix 'Uncaught (in promise) TypeError: lzt.createRequire is not a function' error ([#14275](https://github.com/mastra-ai/mastra/pull/14275))
+
+## 1.2.4-alpha.0
+
+### Patch Changes
+
+- Lazily load createRequire to fix 'Uncaught (in promise) TypeError: lzt.createRequire is not a function' error ([#14275](https://github.com/mastra-ai/mastra/pull/14275))
+
+## 1.2.3
+
+### Patch Changes
+
+- Fixed "Dynamic require of zod/v4 is not supported" error when schema-compat is consumed by ESM bundles (e.g. via npx mastracode). The dynamic require fallback was incorrectly selecting esbuild's require shim instead of Node.js createRequire. ([#14268](https://github.com/mastra-ai/mastra/pull/14268))
+
 ## 1.2.2
 
 ### Patch Changes
