@@ -38,4 +38,4 @@ export type InferPublicSchema<T extends PublicSchema> =
             ? O
             : T extends StandardSchemaWithJSON<any, infer O>
               ? O
-              : unknown;
+              : never;
