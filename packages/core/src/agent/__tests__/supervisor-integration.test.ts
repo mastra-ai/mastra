@@ -1543,25 +1543,13 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
               stream: convertArrayToReadableStream([
                 { type: 'stream-start', warnings: [] },
                 { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'tool-input-start', id: 'call-1', toolName: 'simple-tool' },
+                { type: 'tool-input-delta', id: 'call-1', delta: '{"input":"test"}' },
                 {
-                  type: 'tool-call-start',
-                  id: 'call-1',
+                  type: 'tool-call',
                   toolCallId: 'call-1',
                   toolName: 'simple-tool',
-                },
-                {
-                  type: 'tool-call-args-delta',
-                  id: 'call-1',
-                  toolCallId: 'call-1',
-                  toolName: 'simple-tool',
-                  argsDelta: '{"input":"test"}',
-                },
-                {
-                  type: 'tool-call-end',
-                  id: 'call-1',
-                  toolCallId: 'call-1',
-                  toolName: 'simple-tool',
-                  args: { input: 'test' },
+                  input: '{"input":"test"}',
                 },
                 {
                   type: 'finish',
@@ -1663,25 +1651,13 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'tool-input-start', id: `call-${callCount}`, toolName: 'counter-tool' },
+              { type: 'tool-input-delta', id: `call-${callCount}`, delta: `{"count":${callCount}}` },
               {
-                type: 'tool-call-start',
-                id: `call-${callCount}`,
+                type: 'tool-call',
                 toolCallId: `call-${callCount}`,
                 toolName: 'counter-tool',
-              },
-              {
-                type: 'tool-call-args-delta',
-                id: `call-${callCount}`,
-                toolCallId: `call-${callCount}`,
-                toolName: 'counter-tool',
-                argsDelta: `{"count":${callCount}}`,
-              },
-              {
-                type: 'tool-call-end',
-                id: `call-${callCount}`,
-                toolCallId: `call-${callCount}`,
-                toolName: 'counter-tool',
-                args: { count: callCount },
+                input: `{"count":${callCount}}`,
               },
               {
                 type: 'finish',
@@ -1749,25 +1725,13 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
               stream: convertArrayToReadableStream([
                 { type: 'stream-start', warnings: [] },
                 { type: 'response-metadata', id: `id-${callCount}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'tool-input-start', id: `call-${callCount}`, toolName: 'lookup-tool' },
+                { type: 'tool-input-delta', id: `call-${callCount}`, delta: `{"query":"item-${callCount}"}` },
                 {
-                  type: 'tool-call-start',
-                  id: `call-${callCount}`,
+                  type: 'tool-call',
                   toolCallId: `call-${callCount}`,
                   toolName: 'lookup-tool',
-                },
-                {
-                  type: 'tool-call-args-delta',
-                  id: `call-${callCount}`,
-                  toolCallId: `call-${callCount}`,
-                  toolName: 'lookup-tool',
-                  argsDelta: `{"query":"item-${callCount}"}`,
-                },
-                {
-                  type: 'tool-call-end',
-                  id: `call-${callCount}`,
-                  toolCallId: `call-${callCount}`,
-                  toolName: 'lookup-tool',
-                  args: { query: `item-${callCount}` },
+                  input: `{"query":"item-${callCount}"}`,
                 },
                 {
                   type: 'finish',
@@ -1855,25 +1819,13 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: `id-${callCount}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'tool-input-start', id: `call-${callCount}`, toolName: 'fetch-tool' },
+              { type: 'tool-input-delta', id: `call-${callCount}`, delta: `{"id":"${callCount}"}` },
               {
-                type: 'tool-call-start',
-                id: `call-${callCount}`,
+                type: 'tool-call',
                 toolCallId: `call-${callCount}`,
                 toolName: 'fetch-tool',
-              },
-              {
-                type: 'tool-call-args-delta',
-                id: `call-${callCount}`,
-                toolCallId: `call-${callCount}`,
-                toolName: 'fetch-tool',
-                argsDelta: `{"id":"${callCount}"}`,
-              },
-              {
-                type: 'tool-call-end',
-                id: `call-${callCount}`,
-                toolCallId: `call-${callCount}`,
-                toolName: 'fetch-tool',
-                args: { id: `${callCount}` },
+                input: `{"id":"${callCount}"}`,
               },
               {
                 type: 'finish',

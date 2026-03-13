@@ -1284,10 +1284,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // - OR finishReason indicates more work (e.g., tool-use)
       // Provider-executed tools (e.g. web_search) are handled server-side — the response already
       // contains both the tool execution and the text output, so no additional loop iteration is needed.
+      //
+      // Edge case: some providers (e.g. Anthropic) can return finishReason 'tool-calls' with an empty
+      // content array — no actual tool call chunks. Treat this as 'stop' to prevent an infinite loop.
       const hasPendingToolCalls = toolCalls && toolCalls.some(tc => !tc.providerExecuted);
+      const effectiveFinishReason = finishReason === 'tool-calls' && !hasPendingToolCalls ? 'stop' : finishReason;
       const shouldContinue =
         shouldRetry ||
-        (!tripwireTriggered && (hasPendingToolCalls || !['stop', 'error', 'length'].includes(finishReason)));
+        (!tripwireTriggered && (hasPendingToolCalls || !['stop', 'error', 'length'].includes(effectiveFinishReason)));
 
       // Increment processor retry count if we're retrying
       const nextProcessorRetryCount = shouldRetry ? currentProcessorRetryCount + 1 : currentProcessorRetryCount;
