@@ -75,7 +75,14 @@ export class MastraAuthStudio
     // Use production cookie settings (Secure + Domain) when:
     // 1. An explicit cookieDomain is configured, OR
     // 2. The shared API is on .mastra.ai (auto-detect default domain)
-    const autoDetectMastraAi = this.sharedApiUrl.includes('.mastra.ai');
+    // Use hostname-based detection to avoid false positives (e.g., api.mastra.ai.evil.com)
+    let autoDetectMastraAi = false;
+    try {
+      const hostname = new URL(this.sharedApiUrl).hostname.toLowerCase();
+      autoDetectMastraAi = hostname === 'mastra.ai' || hostname.endsWith('.mastra.ai');
+    } catch {
+      autoDetectMastraAi = false;
+    }
     this.useProductionCookies = !!this.cookieDomain || autoDetectMastraAi;
 
     // If no explicit domain but we're on .mastra.ai, use the default domain
