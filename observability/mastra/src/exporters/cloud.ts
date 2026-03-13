@@ -30,6 +30,7 @@ interface MastraCloudSpanRecord {
   spanType: string;
   attributes: Record<string, any> | null;
   metadata: Record<string, any> | null;
+  requestContext: Record<string, any> | null;
   startedAt: Date;
   endedAt: Date | null;
   input: any;
@@ -119,6 +120,7 @@ export class CloudExporter extends BaseExporter {
       spanType: span.type,
       attributes: span.attributes ?? null,
       metadata: span.metadata ?? null,
+      requestContext: span.requestContext ?? null,
       startedAt: span.startTime,
       endedAt: span.endTime ?? null,
       input: span.input ?? null,

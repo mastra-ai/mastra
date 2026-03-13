@@ -1,18 +1,18 @@
 ---
-title: "Reference: Tool Call Accuracy Scorers | Evals"
+title: "Reference: Tool call accuracy scorers | Evals"
 description: Documentation for the Tool Call Accuracy Scorers in Mastra, which evaluate whether LLM outputs call the correct tools from available options.
 packages:
   - "@mastra/evals"
 ---
 
-# Tool Call Accuracy Scorers
+# Tool call accuracy scorers
 
 Mastra provides two tool call accuracy scorers for evaluating whether an LLM selects the correct tools from available options:
 
 1. **Code-based scorer** - Deterministic evaluation using exact tool matching
 1. **LLM-based scorer** - Semantic evaluation using AI to assess appropriateness
 
-## Choosing Between Scorers
+## Choosing between scorers
 
 ### Use the Code-Based Scorer When:
 
@@ -30,7 +30,7 @@ Mastra provides two tool call accuracy scorers for evaluating whether an LLM sel
 - You need **explanations** for scoring decisions
 - You're evaluating **production agent behavior**
 
-## Code-Based Tool Call Accuracy Scorer
+## Code-based tool call accuracy scorer
 
 The `createToolCallAccuracyScorerCode()` function from `@mastra/evals/scorers/prebuilt` provides deterministic binary scoring based on exact tool matching and supports both strict and lenient evaluation modes, as well as tool calling order validation.
 
@@ -83,7 +83,7 @@ When `expectedToolOrder` is provided, the scorer validates tool calling sequence
 - **Strict Order (strictMode: true)**: Tools must be called in exactly the specified order with no extra tools
 - **Flexible Order (strictMode: false)**: Expected tools must appear in correct relative order (extra tools allowed)
 
-## Code-Based Scoring Details
+## Code-based scoring details
 
 - **Binary scores**: Always returns 0 or 1
 - **Deterministic**: Same input always produces same output
@@ -131,7 +131,7 @@ const strictOrderScorer = createCodeScorer({
 }
 ```
 
-## Code-Based Scorer Examples
+## Code-based scorer examples
 
 The code-based scorer provides deterministic, binary scoring (0 or 1) based on exact tool matching.
 
@@ -299,7 +299,7 @@ const result = await flexibleOrderScorer.run(run)
 console.log(result.score) // 1 - auth-tool comes before fetch-tool
 ```
 
-## LLM-Based Tool Call Accuracy Scorer
+## LLM-based tool call accuracy scorer
 
 The `createToolCallAccuracyScorerLLM()` function from `@mastra/evals/scorers/prebuilt` uses an LLM to evaluate whether the tools called by an agent are appropriate for the given user request, providing semantic evaluation rather than exact matching.
 
@@ -339,7 +339,7 @@ The LLM-based scorer provides:
 1. **Generate Score**: Calculates score based on appropriate vs total tool calls
 1. **Generate Reasoning**: Provides human-readable explanation
 
-## LLM-Based Scoring Details
+## LLM-based scoring details
 
 - **Fractional scores**: Returns values between 0.0 and 1.0
 - **Context-aware**: Considers user intent and appropriateness
@@ -382,7 +382,7 @@ const customModelScorer = createLLMScorer({
 }
 ```
 
-## LLM-Based Scorer Examples
+## LLM-based scorer examples
 
 The LLM-based scorer uses AI to evaluate whether tool selections are appropriate for the user's request.
 
@@ -506,7 +506,7 @@ console.log(result.score); // 1.0 - appropriate to ask for clarification
 console.log(result.reason); // "The agent appropriately asked for clarification rather than calling tools with insufficient information."
 ```
 
-## Comparing Both Scorers
+## Comparing both scorers
 
 Here's an example using both scorers on the same data:
 

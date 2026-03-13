@@ -129,7 +129,10 @@ test.describe('Member Role', () => {
       await expect(page.locator('h1')).toHaveText('Workflows');
 
       // Should see workflows in the list
-      const workflowRow = page.getByRole('row').filter({ hasText: /workflow/i });
+      const workflowRow = page
+        .locator('main')
+        .getByRole('listitem')
+        .filter({ hasText: /workflow/i });
       await expect(workflowRow.first()).toBeVisible();
     });
 
@@ -139,7 +142,8 @@ test.describe('Member Role', () => {
 
       // Click on a workflow
       await page
-        .getByRole('row')
+        .locator('main')
+        .getByRole('listitem')
         .filter({ hasText: /workflow/i })
         .first()
         .click();
@@ -190,7 +194,10 @@ test.describe('Member Role', () => {
       await expect(page.locator('h1')).toHaveText('Tools');
 
       // Should see tools in the list
-      const toolRow = page.getByRole('row').filter({ hasText: /weatherInfo|simpleMcpTool/i });
+      const toolRow = page
+        .locator('main')
+        .getByRole('listitem')
+        .filter({ hasText: /weatherInfo|simpleMcpTool/i });
       await expect(toolRow.first()).toBeVisible();
     });
 
@@ -200,7 +207,8 @@ test.describe('Member Role', () => {
 
       // Click on weatherInfo tool
       await page
-        .getByRole('row')
+        .locator('main')
+        .getByRole('listitem')
         .filter({ hasText: /weatherInfo/i })
         .click();
 

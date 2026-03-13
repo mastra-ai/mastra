@@ -261,6 +261,35 @@ describe('GET /auth/capabilities — SSO URL respects routePrefix', () => {
     const result = (await GET_AUTH_CAPABILITIES_ROUTE.handler(ctx as any)) as any;
 
     expect(result.enabled).toBe(true);
+    expect(result.login).not.toBeNull();
     expect(result.login.sso.url).toBe('/api/auth/sso/login');
+  });
+});
+
+// =============================================================================
+// Capabilities: no auth provider configured
+// =============================================================================
+
+describe('GET /auth/capabilities — no auth provider', () => {
+  it('should return enabled: false when no auth provider is configured', async () => {
+    const mockMastra = {
+      getServer: () => ({
+        auth: {
+          // No authenticateToken — not a provider
+          protected: ['/api/*'],
+        },
+      }),
+    };
+
+    const mockRequest = {
+      headers: new Headers(),
+    };
+
+    const result = await GET_AUTH_CAPABILITIES_ROUTE.handler({
+      mastra: mockMastra,
+      request: mockRequest,
+    } as any);
+
+    expect(result).toEqual({ enabled: false, login: null });
   });
 });

@@ -1,5 +1,5 @@
 ---
-title: "Reference: MongoDB Storage | Storage"
+title: "Reference: MongoDB storage | Storage"
 description: Documentation for the MongoDB storage implementation in Mastra.
 packages:
   - "@mastra/core"
@@ -7,7 +7,7 @@ packages:
   - "@mastra/mongodb"
 ---
 
-# MongoDB Storage
+# MongoDB storage
 
 The MongoDB storage implementation provides a scalable storage solution using MongoDB databases with support for both document storage and vector operations.
 
@@ -72,7 +72,7 @@ const storage = new MongoDBStore({
 The `url` parameter is deprecated but still supported for backward compatibility. Please use `uri` instead in all new code.
 :::
 
-## Constructor Examples
+## Constructor examples
 
 You can instantiate `MongoDBStore` in the following ways:
 
@@ -100,7 +100,7 @@ const store2 = new MongoDBStore({
 })
 ```
 
-## Additional Notes
+## Additional notes
 
 ### Collection Management
 
@@ -156,7 +156,7 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 If `init()` isn't called, collections won't be created and storage operations will fail silently or throw errors.
 :::
 
-## Vector Search Capabilities
+## Vector search capabilities
 
 MongoDB storage includes built-in vector search capabilities for AI applications:
 
@@ -208,7 +208,7 @@ const results = await vectorStore.query({
 });
 ```
 
-## Usage Example
+## Usage example
 
 ### Adding memory to an agent
 

@@ -1,9 +1,9 @@
 import deepEqual from 'fast-deep-equal';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
-import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
+import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
 import { resolveObservabilityContext } from '../../../observability';
 import type { ProcessorState } from '../../../processors/runner';
 import type { RequestContext } from '../../../request-context';
@@ -42,7 +42,7 @@ interface PrepareMemoryStepOptions<OUTPUT = undefined> {
   requestContext: RequestContext;
   methodType: AgentMethodType;
   instructions: SystemMessage;
-  memoryConfig?: MemoryConfig;
+  memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
 }
 

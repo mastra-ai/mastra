@@ -29,7 +29,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Test code that should compile with both Zod v3 and v4
 const testCode = `
 import { z } from 'zod';
-import { z as zv4 } from 'zod/v4';
+import { z as zv4 } from 'zod';
 import { createTool } from './src/tools/tool';
 
 // Test with Zod v4

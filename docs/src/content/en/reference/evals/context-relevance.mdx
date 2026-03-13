@@ -1,5 +1,5 @@
 ---
-title: "Reference: Context Relevance Scorer | Evals"
+title: "Reference: Context relevance scorer | Evals"
 description: Documentation for the Context Relevance Scorer in Mastra. Evaluates the relevance and utility of provided context for generating agent responses using weighted relevance scoring.
 packages:
   - "@mastra/evals"
@@ -7,13 +7,13 @@ packages:
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
-# Context Relevance Scorer
+# Context relevance scorer
 
 The `createContextRelevanceScorerLLM()` function creates a scorer that evaluates how relevant and useful provided context was for generating agent responses. It uses weighted relevance levels and applies penalties for unused high-relevance context and missing information.
 
 It's especially useful for these use cases:
 
-## Content Generation Evaluation
+## Content generation evaluation
 
 Best for evaluating context quality in:
 
@@ -21,7 +21,7 @@ Best for evaluating context quality in:
 - RAG pipelines needing nuanced relevance assessment
 - Systems where missing context affects quality
 
-## Context Selection Optimization
+## Context selection optimization
 
 Use when optimizing for:
 
@@ -96,7 +96,7 @@ Use when optimizing for:
 
 Note: Either `context` or `contextExtractor` must be provided. If both are provided, `contextExtractor` takes precedence.
 
-## .run() Returns
+## `.run()` returns
 
 <PropertiesTable
   content={[
@@ -113,7 +113,7 @@ Note: Either `context` or `contextExtractor` must be provided. If both are provi
 ]}
 />
 
-## Scoring Details
+## Scoring details
 
 ### Weighted Relevance Scoring
 
@@ -589,7 +589,7 @@ const evaluateRAG = async testCases => {
 }
 ```
 
-## Comparison with Context Precision
+## Comparison with context precision
 
 Choose the right scorer for your needs:
 

@@ -1,8 +1,8 @@
 import * as React from 'react';
-import { InputField, type InputFieldProps } from '@/ds/components/FormFields/input-field';
 import { useJSONSchemaFormField } from './json-schema-form-field-context';
+import { TextFieldBlock, type TextFieldBlockProps } from '../FormFieldBlocks/fields/text-field-block';
 
-export type JSONSchemaFormFieldDescriptionProps = Omit<InputFieldProps, 'value' | 'onChange' | 'name'>;
+export type JSONSchemaFormFieldDescriptionProps = Omit<TextFieldBlockProps, 'value' | 'onChange' | 'name'>;
 
 export function FieldDescription(props: JSONSchemaFormFieldDescriptionProps) {
   const { field, update } = useJSONSchemaFormField();
@@ -15,11 +15,12 @@ export function FieldDescription(props: JSONSchemaFormFieldDescriptionProps) {
   );
 
   return (
-    <InputField
+    <TextFieldBlock
       {...props}
       name={`field-description-${field.id}`}
       value={field.description || ''}
       onChange={handleChange}
+      size="md"
     />
   );
 }
