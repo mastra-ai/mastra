@@ -652,18 +652,23 @@ export class MCPServer extends MCPServerBase {
             ? resourcesOrResourceContent
             : [resourcesOrResourceContent];
           const contents: (TextResourceContents | BlobResourceContents)[] = resourcesContent.map(resourceContent => {
-            if ('text' in resourceContent) {
+            if ('text' in resourceContent && resourceContent.text !== undefined) {
               return {
                 uri: resource.uri,
                 mimeType: resource.mimeType,
-                text: resourceContent.text!,
+                text: resourceContent.text,
               } as TextResourceContents;
+            }
+
+            const blob = (resourceContent as { blob?: string }).blob;
+            if (blob === undefined) {
+              throw new Error(`Resource '${uri}' returned content with neither text nor blob`);
             }
 
             return {
               uri: resource.uri,
               mimeType: resource.mimeType,
-              blob: (resourceContent as { blob?: string }).blob!,
+              blob,
             } as BlobResourceContents;
           });
           const duration = Date.now() - startTime;
