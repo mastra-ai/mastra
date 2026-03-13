@@ -256,13 +256,25 @@ describe.skipIf(!hasS3Credentials)('S3 Workspace BM25 Search', () => {
     await s3Fs.init();
 
     // Create test content
-    await s3Fs.writeFile('/guides/london/activities.md', 'London has many activities including visiting the Tower of London and Big Ben');
-    await s3Fs.writeFile('/guides/tokyo/activities.md', 'Tokyo offers amazing experiences like visiting Shibuya crossing and Senso-ji temple');
+    await s3Fs.writeFile(
+      '/guides/london/activities.md',
+      'London has many activities including visiting the Tower of London and Big Ben',
+    );
+    await s3Fs.writeFile(
+      '/guides/tokyo/activities.md',
+      'Tokyo offers amazing experiences like visiting Shibuya crossing and Senso-ji temple',
+    );
     await s3Fs.writeFile('/guides/overview.txt', 'A travel guide covering major cities worldwide');
 
     // Create skills
-    await s3Fs.writeFile('/skills/travel-tips/SKILL.md', skillContent('travel-tips', 'providing travel tips and recommendations'));
-    await s3Fs.writeFile('/skills/language-helper/SKILL.md', skillContent('language-helper', 'translating common phrases'));
+    await s3Fs.writeFile(
+      '/skills/travel-tips/SKILL.md',
+      skillContent('travel-tips', 'providing travel tips and recommendations'),
+    );
+    await s3Fs.writeFile(
+      '/skills/language-helper/SKILL.md',
+      skillContent('language-helper', 'translating common phrases'),
+    );
   });
 
   afterEach(async () => {
