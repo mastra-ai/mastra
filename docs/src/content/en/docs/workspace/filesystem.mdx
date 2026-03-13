@@ -28,10 +28,11 @@ Available providers:
 - [`LocalFilesystem`](/reference/workspace/local-filesystem) - Stores files in a directory on disk
 - [`S3Filesystem`](/reference/workspace/s3-filesystem) - Stores files in Amazon S3 or S3-compatible storage (R2, MinIO)
 - [`GCSFilesystem`](/reference/workspace/gcs-filesystem) - Stores files in Google Cloud Storage
+- [`AgentFSFilesystem`](/reference/workspace/agentfs-filesystem) - Stores files in a Turso/SQLite database via AgentFS
 
 :::tip
 
-`LocalFilesystem` is the simplest way to get started as it requires no external services. For cloud storage, use `S3Filesystem` or `GCSFilesystem`.
+`LocalFilesystem` is the simplest way to get started as it requires no external services. For cloud storage, use `S3Filesystem` or `GCSFilesystem`. For database-backed storage without external services, use `AgentFSFilesystem`.
 
 :::
 
@@ -64,16 +65,20 @@ const response = await agent.generate('List all files in the workspace')
 
 By default, `LocalFilesystem` runs in **contained mode** — all file operations are restricted to stay within `basePath`. This prevents path traversal attacks and symlink escapes.
 
-In contained mode, absolute paths that fall within `basePath` are used as-is, while other absolute paths are treated as virtual paths relative to `basePath` (e.g. `/file.txt` resolves to `basePath/file.txt`). Any resolved path that escapes `basePath` throws a `PermissionError`.
+In contained mode:
 
-If your agent needs to access specific paths outside `basePath`, use `allowedPaths` to grant access without disabling containment entirely:
+- **Relative paths** (e.g. `src/index.ts`) resolve against `basePath`
+- **Absolute paths** (e.g. `/home/user/.config/file.txt`) are treated as real filesystem paths — if they fall outside `basePath` and any `allowedPaths`, a `PermissionError` is thrown
+- **Tilde paths** (e.g. `~/Documents`) expand to the home directory and follow the same containment rules
+
+If your agent needs to access specific paths outside `basePath`, use `allowedPaths` to grant access without disabling containment entirely. Relative paths are resolved against `basePath`, and absolute paths are used as-is:
 
 ```typescript
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: './workspace',
     // highlight-next-line
-    allowedPaths: ['/home/user/.config', '/home/user/documents'],
+    allowedPaths: ['~/.claude/skills', '../shared-data'],
   }),
 })
 ```
@@ -174,5 +179,6 @@ When you configure a filesystem on a workspace, agents receive tools for reading
 - [LocalFilesystem reference](/reference/workspace/local-filesystem)
 - [S3Filesystem reference](/reference/workspace/s3-filesystem)
 - [GCSFilesystem reference](/reference/workspace/gcs-filesystem)
+- [AgentFSFilesystem reference](/reference/workspace/agentfs-filesystem)
 - [Workspace overview](/docs/workspace/overview)
 - [Sandbox](/docs/workspace/sandbox)

@@ -9,8 +9,14 @@
  * Used with span.addScore() and trace.addScore().
  */
 export interface ScoreInput {
-  /** Name of the scorer (e.g., "relevance", "accuracy", "toxicity") */
-  scorerName: string;
+  /** Identifier of the scorer (e.g., "relevance", "accuracy", "toxicity") */
+  scorerId: string;
+
+  /** Version of the scorer */
+  scorerVersion?: string;
+
+  /** Source of the score (e.g., "manual", "automated", "experiment") */
+  source?: string;
 
   /** Numeric score value (typically 0-1 or 0-100) */
   score: number;
@@ -20,6 +26,9 @@ export interface ScoreInput {
 
   /** Experiment identifier for A/B testing or evaluation runs */
   experimentId?: string;
+
+  /** Trace ID of the scoring run itself (for debugging score generation) */
+  scoreTraceId?: string;
 
   /** Additional metadata specific to this score */
   metadata?: Record<string, unknown>;
@@ -47,8 +56,14 @@ export interface ExportedScore {
   /** Specific span being scored (undefined = trace-level score) */
   spanId?: string;
 
-  /** Name of the scorer */
-  scorerName: string;
+  /** Identifier of the scorer */
+  scorerId: string;
+
+  /** Version of the scorer */
+  scorerVersion?: string;
+
+  /** Source of the score */
+  source?: string;
 
   /** Numeric score value */
   score: number;
@@ -58,6 +73,9 @@ export interface ExportedScore {
 
   /** Experiment identifier for A/B testing */
   experimentId?: string;
+
+  /** Trace ID of the scoring run itself (for debugging score generation) */
+  scoreTraceId?: string;
 
   /**
    * User-defined metadata.

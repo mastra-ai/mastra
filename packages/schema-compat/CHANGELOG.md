@@ -1,5 +1,61 @@
 # @mastra/schema-compat
 
+## 1.2.1
+
+### Patch Changes
+
+- dependencies updates: ([#14119](https://github.com/mastra-ai/mastra/pull/14119))
+  - Updated dependency [`zod-from-json-schema@^0.5.2` ↗︎](https://www.npmjs.com/package/zod-from-json-schema/v/0.5.2) (from `^0.5.0`, in `dependencies`)
+
+- Fixed Zod v4 schema conversion when `zod/v4` compat layer from Zod 3.25.x is used. Schemas like `ask_user` and other harness tools were not being properly converted to JSON Schema when `~standard.jsonSchema` was absent, causing `type: "None"` errors from the Anthropic API. ([#14157](https://github.com/mastra-ai/mastra/pull/14157))
+
+## 1.2.1-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#14119](https://github.com/mastra-ai/mastra/pull/14119))
+  - Updated dependency [`zod-from-json-schema@^0.5.2` ↗︎](https://www.npmjs.com/package/zod-from-json-schema/v/0.5.2) (from `^0.5.0`, in `dependencies`)
+
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- Fixed Zod v4 schema conversion when `zod/v4` compat layer from Zod 3.25.x is used. Schemas like `ask_user` and other harness tools were not being properly converted to JSON Schema when `~standard.jsonSchema` was absent, causing `type: "None"` errors from the Anthropic API. ([#14157](https://github.com/mastra-ai/mastra/pull/14157))
+
+## 1.2.0
+
+### Minor Changes
+
+- Add Zod v4 and Standard Schema support ([#12238](https://github.com/mastra-ai/mastra/pull/12238))
+
+  ## Zod v4 Breaking Changes
+  - Fix all `z.record()` calls to use 2-argument form (key + value schema) as required by Zod v4
+  - Update `ZodError.errors` to `ZodError.issues` (Zod v4 API change)
+  - Update `@ai-sdk/provider` versions for Zod v4 compatibility
+
+  ## Standard Schema Integration
+  - Add `packages/core/src/schema/` module that re-exports from `@mastra/schema-compat`
+  - Migrate codebase to use `PublicSchema` type for schema parameters
+  - Use `toStandardSchema()` for normalizing schemas across Zod v3, Zod v4, AI SDK Schema, and JSON Schema
+  - Use `standardSchemaToJSONSchema()` for JSON Schema conversion
+
+  ## Schema Compatibility (@mastra/schema-compat)
+  - Add new adapter exports: `@mastra/schema-compat/adapters/ai-sdk`, `@mastra/schema-compat/adapters/zod-v3`, `@mastra/schema-compat/adapters/json-schema`
+  - Enhance test coverage with separate v3 and v4 test suites
+  - Improve zod-to-json conversion with `unrepresentable: 'any'` support
+
+  ## TypeScript Fixes
+  - Resolve deep instantiation errors in client-js and model.ts
+  - Add proper type assertions where Zod v4 inference differs
+
+  **BREAKING CHANGE**: Minimum Zod version is now `^3.25.0` for v3 compatibility or `^4.0.0` for v4
+
+### Patch Changes
+
+- Fixed Gemini supervisor agent tool calls failing with `INVALID_ARGUMENT` when delegated tool schemas include nullable fields. Fixes `#13988`. ([#14012](https://github.com/mastra-ai/mastra/pull/14012))
+
+- Fixed OpenAI and OpenAI Reasoning compat layers to ensure all properties appear in the JSON Schema required array when using processToJSONSchema. This prevents OpenAI strict mode rejections for schemas with optional, default, or nullish fields. (Fixes #12284) ([#13695](https://github.com/mastra-ai/mastra/pull/13695))
+
 ## 1.2.0-alpha.0
 
 ### Minor Changes

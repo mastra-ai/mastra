@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "16.0.0-alpha.1",
+  "version": "16.0.1",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -80,7 +80,7 @@
     "@codemirror/merge": "^6.12.0",
     "@codemirror/lang-markdown": "^6.5.0",
     "@codemirror/language-data": "^6.5.2",
-    "@codemirror/state": "^6.5.4",
+    "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.39.16",
     "@dagrejs/dagre": "^1.1.8",
     "@hello-pangea/dnd": "^18.0.1",
@@ -127,7 +127,7 @@
     "superjson": "^2.2.6",
     "tailwindcss-animate": "^1.0.7",
     "use-debounce": "^10.0.6",
-    "zustand": "^5.0.9"
+    "zustand": "^5.0.11"
   },
   "peerDependencies": {
     "@mastra/ai-sdk": "workspace:^",

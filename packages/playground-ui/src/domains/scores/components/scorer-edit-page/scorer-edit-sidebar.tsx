@@ -88,7 +88,7 @@ export function ScorerEditSidebar({
               name="model.provider"
               control={control}
               render={({ field }) => (
-                <LLMProviders value={field.value} onValueChange={field.onChange} variant="light" container={formRef} />
+                <LLMProviders value={field.value} onValueChange={field.onChange} container={formRef} />
               )}
             />
             {errors.model?.provider && <span className="text-xs text-accent2">{errors.model.provider.message}</span>}
@@ -107,7 +107,6 @@ export function ScorerEditSidebar({
                   value={field.value}
                   onValueChange={field.onChange}
                   llmId={watchedProvider || ''}
-                  variant="light"
                   container={formRef}
                 />
               )}

@@ -116,7 +116,7 @@ The built server exposes endpoints for health checks, agents, workflows, and mor
 | Endpoint | Description |
 | - | - |
 | `GET /health` | Health check endpoint, returns `200 OK` |
-| `GET /openapi.json` | OpenAPI specification (if `server.build.openAPIDocs` is enabled) |
+| `GET /api/openapi.json` | OpenAPI specification (if `server.build.openAPIDocs` is enabled). |
 | `GET /swagger-ui` | Interactive API documentation (if `server.build.swaggerUI` is enabled) |
 
 This list isn't exhaustive. To view all endpoints, run `mastra dev` and visit `http://localhost:4111/swagger-ui`.

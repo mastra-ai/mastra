@@ -1,48 +1,38 @@
-import {
-  Icon,
-  DocsIcon,
-  Button,
-  HeaderAction,
-  Header,
-  MainContentContent,
-  MainContentLayout,
-  MCPTable,
-  HeaderTitle,
-  McpServerIcon,
-  useMCPServers,
-} from '@mastra/playground-ui';
-
-import { Link } from 'react-router';
+import { Button, MCPServerList, McpServerIcon, useMCPServers, PageContent, MainHeader } from '@mastra/playground-ui';
+import { ExternalLinkIcon } from 'lucide-react';
 
 const MCPs = () => {
   const { data: mcpServers = [], isLoading, error } = useMCPServers();
 
-  const isEmpty = !isLoading && mcpServers.length === 0;
-
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <McpServerIcon />
-          </Icon>
-          MCP Servers
-        </HeaderTitle>
+    <PageContent>
+      <PageContent.TopBar>
+        <Button
+          as="a"
+          href="https://mastra.ai/en/docs/tools-mcp/mcp-overview"
+          target="_blank"
+          rel="noopener noreferrer"
+          variant="ghost"
+          size="md"
+        >
+          MCP documentation
+          <ExternalLinkIcon />
+        </Button>
+      </PageContent.TopBar>
+      <PageContent.Main>
+        <div className="w-full max-w-[80rem] px-10 mx-auto grid h-full grid-rows-[auto_1fr] overflow-y-auto">
+          <MainHeader>
+            <MainHeader.Column>
+              <MainHeader.Title isLoading={isLoading}>
+                <McpServerIcon /> MCP Servers
+              </MainHeader.Title>
+            </MainHeader.Column>
+          </MainHeader>
 
-        <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/en/docs/tools-mcp/mcp-overview" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
-            MCP documentation
-          </Button>
-        </HeaderAction>
-      </Header>
-
-      <MainContentContent isCentered={isEmpty}>
-        <MCPTable mcpServers={mcpServers} isLoading={isLoading} error={error} />
-      </MainContentContent>
-    </MainContentLayout>
+          <MCPServerList mcpServers={mcpServers} isLoading={isLoading} error={error} />
+        </div>
+      </PageContent.Main>
+    </PageContent>
   );
 };
 

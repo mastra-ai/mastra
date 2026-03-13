@@ -1,6 +1,6 @@
 {
   "name": "@mastra/schema-compat",
-  "version": "1.2.0-alpha.0",
+  "version": "1.2.1",
   "description": "Tool schema compatibility layer for Mastra.ai",
   "type": "module",
   "main": "dist/index.js",
@@ -99,7 +99,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "json-schema-to-zod": "^2.7.0",
-    "zod-from-json-schema": "^0.5.0",
+    "zod-from-json-schema": "^0.5.2",
     "zod-from-json-schema-v3": "npm:zod-from-json-schema@^0.0.5",
     "zod-to-json-schema": "^3.24.6"
   },

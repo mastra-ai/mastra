@@ -75,7 +75,7 @@ export function DatasetHeader({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="cursor-not-allowed">
-                    <Button variant="outline" size="sm" disabled tabIndex={-1}>
+                    <Button disabled tabIndex={-1}>
                       <Play />
                       Run Experiment
                     </Button>
@@ -84,7 +84,7 @@ export function DatasetHeader({
                 <TooltipContent>Add items to the dataset before running an experiment</TooltipContent>
               </Tooltip>
             ) : (
-              <Button variant="outline" size="sm" onClick={onExperimentClick}>
+              <Button onClick={onExperimentClick}>
                 <Play />
                 Run Experiment
               </Button>
@@ -92,7 +92,7 @@ export function DatasetHeader({
           ) : null}
           <DropdownMenu>
             <DropdownMenu.Trigger asChild>
-              <Button variant="standard" size="default" aria-label="Dataset actions menu">
+              <Button size="default" aria-label="Dataset actions menu">
                 <MoreVertical />
               </Button>
             </DropdownMenu.Trigger>
