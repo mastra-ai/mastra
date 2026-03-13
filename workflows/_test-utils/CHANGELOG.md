@@ -1,5 +1,12 @@
 # @internal/workflow-test-utils
 
+## 0.0.5
+
+### Patch Changes
+
+- Updated dependencies [[`205e76c`](https://github.com/mastra-ai/mastra/commit/205e76c3ba652205dafb037f50a4a8eea73f6736)]:
+  - @mastra/core@1.13.1
+
 ## 0.0.4
 
 ### Patch Changes
