@@ -28,7 +28,7 @@
     "dotenv": "^17.2.3",
     "mastra": "latest",
     "tsx": "^4.21.0",
-    "typescript": "catalog:"
+    "typescript": "^5.9.3"
   },
   "pnpm": {
     "overrides": {

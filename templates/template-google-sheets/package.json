@@ -31,6 +31,6 @@
   "devDependencies": {
     "@types/node": "^24.10.9",
     "mastra": "latest",
-    "typescript": "catalog:"
+    "typescript": "^5.9.3"
   }
 }

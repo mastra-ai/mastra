@@ -31,7 +31,7 @@
     }
   },
   "devDependencies": {
-    "typescript": "catalog:",
+    "typescript": "^5.9.3",
     "@types/node": "22.19.7",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",

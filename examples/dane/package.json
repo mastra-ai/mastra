@@ -51,7 +51,7 @@
     "playwright": "^1.51.0",
     "playwright-core": "^1.51.0",
     "sqlite3": "^5.1.7",
-    "typescript": "catalog:",
+    "typescript": "^5.9.3",
     "zod": "^4.3.6"
   },
   "homepage": "https://mastra.ai",

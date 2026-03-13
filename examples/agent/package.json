@@ -28,7 +28,7 @@
     "better-auth": "^1.2.8",
     "fetch-to-node": "^2.1.0",
     "mastra": "latest",
-    "typescript": "catalog:",
+    "typescript": "^5.9.3",
     "zod": "^4.3.6"
   },
   "pnpm": {
