@@ -200,8 +200,8 @@ AI agents are the next platform shift. Understanding how to build them is now a 
     {
       slug: 'agents-vs-workflows',
       title: 'Agents vs. Workflows',
-      durationMin: 9,
-      youtubeId: 'hHtUcuDqFrY',
+      durationMin: 3,
+      youtubeId: 'kiFhVZyHG84',
       status: 'published',
       module: 'Workflows',
       preview: {
