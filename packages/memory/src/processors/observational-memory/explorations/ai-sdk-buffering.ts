@@ -1,6 +1,7 @@
 import { openai } from '@ai-sdk/openai-v5';
 import { generateText, stepCountIs, tool } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { convertMessages } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { z } from 'zod';
 
@@ -9,7 +10,12 @@ import { ObservationalMemory } from '../observational-memory';
 import { seedThreadAndEnsureObservations } from './seed-phase';
 
 /**
- * Demo 2: deterministic multi-step buffering flow with Memory.getContext().
+ * Demo 2: AI SDK multi-step hooks + OM buffering lifecycle.
+ *
+ * This example demonstrates three things together:
+ * 1) AI SDK step callbacks (`onStepFinish`, `prepareStep`)
+ * 2) Persisting real step outputs (no fabricated seed/step payloads)
+ * 3) OM state transitions (`buffer`, `activate`, `observe`) between steps
  */
 
 const model = openai('gpt-4o-mini');
@@ -69,6 +75,29 @@ function getBufferedChunkCount(record: any): number {
   return Array.isArray(record?.bufferedObservations) ? record.bufferedObservations.length : 0;
 }
 
+function summarizeHookLog(hookLog: string[]) {
+  const counts = {
+    onStepFinish: 0,
+    prepareStep: 0,
+    buffer: 0,
+    activate: 0,
+    observe: 0,
+    noop: 0,
+  };
+
+  for (const entry of hookLog) {
+    if (entry.startsWith('prepareStep(')) {
+      counts.prepareStep += 1;
+      continue;
+    }
+    if (entry in counts) {
+      counts[entry as keyof typeof counts] += 1;
+    }
+  }
+
+  return counts;
+}
+
 function printBeforeSnapshot(params: {
   beforeStatus: { pendingTokens: number; threshold: number };
   beforeRecord: any;
@@ -91,9 +120,14 @@ function printAfterSnapshotAndDelta(params: {
   beforeObservationText: string;
 }) {
   const { resultText, hookLog, afterStatus, afterRecord, beforeObservationTokens, beforeObservationText } = params;
+  const hookCounts = summarizeHookLog(hookLog);
+
   console.log('\nAI SDK buffering demo complete');
   console.log('Result text:', resultText);
-  console.log('Hook log:', hookLog.join(' -> '));
+  console.log('Hook lifecycle:', hookLog.join(' -> '));
+  console.log(
+    `Hook counts: steps=${hookCounts.onStepFinish}, prepare=${hookCounts.prepareStep}, buffer=${hookCounts.buffer}, activate=${hookCounts.activate}, observe=${hookCounts.observe}, noop=${hookCounts.noop}`,
+  );
 
   console.log('\n=== AFTER (post-live turn) ===');
   console.log(`- pending tokens: ${afterStatus.pendingTokens}/${afterStatus.threshold}`);
@@ -147,6 +181,12 @@ async function main() {
 
   const hookLog: string[] = [];
   const ctx = await memory.getContext({ threadId });
+  const userPrompt = 'Compare current weather in Helsinki and Tokyo for travel today.';
+
+  await memory.saveMessages({
+    messages: [createMessage(userPrompt, 'user', threadId, 'turn-u1')],
+  });
+
   const result = await generateText({
     model,
     stopWhen: stepCountIs(3),
@@ -155,27 +195,27 @@ async function main() {
     messages: [
       {
         role: 'user',
-        content:
-          'Compare current weather in Helsinki and Tokyo for travel today. Use tools if needed, then always end with a concise final recommendation.',
+        content: `${userPrompt} Use tools if needed, then always end with a concise final recommendation.`,
       },
     ],
 
-    async onStepFinish() {
+    async onStepFinish(step) {
       hookLog.push('onStepFinish');
 
-      // Deterministic teaching behavior: synthetic per-step persistence so buffering
-      // transitions are reliably visible in each run.
-      await memory.saveMessages({
-        messages: [
-          createMessage(
-            `Synthetic step persistence for deterministic buffering demo #${hookLog.length}. ${'step-context '.repeat(12)}`,
-            'assistant',
-            threadId,
-            `step-${hookLog.length}`,
-          ),
-        ],
-      });
+      // Persist the real step output first so OM decisions below always run against
+      // the latest conversation state from this AI SDK step.
+      const responseMessages = convertMessages(step.response.messages)
+        .to('Mastra.V2')
+        .map(msg => ({ ...msg, threadId }));
 
+      if (responseMessages.length > 0) {
+        await memory.saveMessages({ messages: responseMessages });
+      }
+
+      // Core OM lifecycle decision point per step:
+      // - if enough fresh content exists, observe immediately
+      // - if we crossed buffer threshold only, buffer now
+      // - if buffered chunks are activatable, activate before observe
       const status = await om.getStatus({ threadId });
       if (status.shouldObserve) {
         if (status.canActivate) {
@@ -194,17 +234,13 @@ async function main() {
 
     async prepareStep({ stepNumber }) {
       if (stepNumber === 0) return undefined;
+
+      // Rebuild system context for the *next* model step so newly activated or
+      // observed memory can influence subsequent reasoning/tool decisions.
       const stepCtx = await memory.getContext({ threadId });
       hookLog.push(`prepareStep(${stepNumber})`);
       return { system: stepCtx.systemMessage };
     },
-  });
-
-  await memory.saveMessages({
-    messages: [
-      createMessage('Compare current weather in Helsinki and Tokyo for travel today.', 'user', threadId, 'turn-u1'),
-      createMessage(result.text || '(no final text returned)', 'assistant', threadId, 'turn-a1'),
-    ],
   });
 
   const finalizeStatus = await om.getStatus({ threadId });
