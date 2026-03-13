@@ -36,7 +36,7 @@
     "@types/express": "^5.0.5",
     "@types/node": "22.19.7",
     "tsx": "^4.21.0",
-    "typescript": "catalog:"
+    "typescript": "^5.9.3"
   },
   "version": "0.0.1",
   "pnpm": {

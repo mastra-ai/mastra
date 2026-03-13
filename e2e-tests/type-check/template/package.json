@@ -27,6 +27,6 @@
   "devDependencies": {
     "vitest": "^4.0.18",
     "@types/node": "22.19.13",
-    "typescript": "catalog:"
+    "typescript": "^5.9.3"
   }
 }
