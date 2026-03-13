@@ -1,7 +1,8 @@
+import { createRequire } from 'node:module';
 import type { Mastra } from '@mastra/core';
 import { listScoresResponseSchema } from '@mastra/core/evals';
 import { scoreTraces } from '@mastra/core/evals/scoreTraces';
-import type { MastraStorage, ScoresStorage, ObservabilityStorage } from '@mastra/core/storage';
+import type { ScoresStorage } from '@mastra/core/storage';
 import {
   tracesFilterSchema,
   tracesOrderBySchema,
@@ -13,50 +14,18 @@ import {
   getTraceArgsSchema,
   getTraceResponseSchema,
   dateRangeSchema,
-  // Logs
-  logsFilterSchema,
-  logsOrderBySchema,
-  listLogsResponseSchema,
-  // Scores (observability)
-  scoresFilterSchema,
-  scoresOrderBySchema,
-  listScoresResponseSchema as obsListScoresResponseSchema,
-  createScoreBodySchema,
-  createScoreResponseSchema,
-  // Feedback
-  feedbackFilterSchema,
-  feedbackOrderBySchema,
-  listFeedbackResponseSchema,
-  createFeedbackBodySchema,
-  createFeedbackResponseSchema,
-  // Metrics OLAP
-  getMetricAggregateArgsSchema,
-  getMetricAggregateResponseSchema,
-  getMetricBreakdownArgsSchema,
-  getMetricBreakdownResponseSchema,
-  getMetricTimeSeriesArgsSchema,
-  getMetricTimeSeriesResponseSchema,
-  getMetricPercentilesArgsSchema,
-  getMetricPercentilesResponseSchema,
-  // Discovery
-  getMetricNamesArgsSchema,
-  getMetricNamesResponseSchema,
-  getMetricLabelKeysArgsSchema,
-  getMetricLabelKeysResponseSchema,
-  getMetricLabelValuesArgsSchema,
-  getMetricLabelValuesResponseSchema,
-  getEntityTypesResponseSchema,
-  getEntityNamesArgsSchema,
-  getEntityNamesResponseSchema,
-  getServiceNamesResponseSchema,
-  getEnvironmentsResponseSchema,
-  getTagsArgsSchema,
-  getTagsResponseSchema,
 } from '@mastra/core/storage';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
+import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
+import {
+  NEW_OBSERVABILITY_UPGRADE_MESSAGE,
+  getObservabilityStore,
+  getStorage,
+  isNewObservabilityAvailable,
+} from './observability-shared';
 
 // ============================================================================
 // Legacy Parameter Support (backward compatibility with main branch API)
@@ -85,7 +54,7 @@ const legacyQueryParamsSchema = z.object({
 function transformLegacyParams(params: Record<string, unknown>): Record<string, unknown> {
   const result = { ...params };
 
-  // Transform old entityType='workflow' -> 'workflow_run' (the Zod validation would have already transformed this)
+  // Transform old entityType='workflow' -> 'workflow_run' to support direct handler usage in tests
   if (result.entityType === 'workflow') {
     result.entityType = 'workflow_run';
   }
@@ -118,25 +87,6 @@ function transformLegacyParams(params: Record<string, unknown>): Record<string, 
 // ============================================================================
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
-
-/** Retrieves MastraStorage or throws 500 if unavailable. */
-function getStorage(mastra: Mastra): MastraStorage {
-  const storage = mastra.getStorage();
-  if (!storage) {
-    throw new HTTPException(500, { message: 'Storage is not available' });
-  }
-  return storage;
-}
-
-/** Retrieves the observability storage domain or throws 500 if unavailable. */
-async function getObservabilityStore(mastra: Mastra): Promise<ObservabilityStorage> {
-  const storage = getStorage(mastra);
-  const observability = await storage.getStore('observability');
-  if (!observability) {
-    throw new HTTPException(500, { message: 'Observability storage domain is not available' });
-  }
-  return observability;
-}
 
 async function getScoresStore(mastra: Mastra): Promise<ScoresStorage> {
   const storage = getStorage(mastra);
@@ -256,7 +206,8 @@ export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
   path: '/observability/traces/:traceId/:spanId/scores',
   responseType: 'json',
   pathParamSchema: spanIdsSchema,
-  queryParamSchema: paginationArgsSchema,
+  // List endpoints accept optional query params; use partial() to allow empty queries.
+  queryParamSchema: wrapSchemaForQueryParams(paginationArgsSchema.partial()),
   responseSchema: listScoresResponseSchema,
   summary: 'List scores by span',
   description: 'Returns all scores for a specific span within a trace',
@@ -280,408 +231,255 @@ export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
 });
 
 // ============================================================================
-// Logs Routes
+// New Observability Routes Loader (guarded import)
 // ============================================================================
 
-/** Route: GET /observability/logs - paginated log listing with filtering and sorting. */
-export const LIST_LOGS_ROUTE = createRoute({
-  method: 'GET',
-  path: '/observability/logs',
-  responseType: 'json',
-  queryParamSchema: wrapSchemaForQueryParams(
-    logsFilterSchema.extend(paginationArgsSchema.shape).extend(logsOrderBySchema.shape).partial(),
-  ),
-  responseSchema: listLogsResponseSchema,
-  summary: 'List logs',
-  description: 'Returns a paginated list of logs with optional filtering and sorting',
-  tags: ['Observability'],
-  requiresAuth: true,
-  handler: async ({ mastra, ...params }) => {
-    try {
-      const filters = pickParams(logsFilterSchema, params);
-      const pagination = pickParams(paginationArgsSchema, params);
-      const orderBy = pickParams(logsOrderBySchema, params);
+const require = createRequire(import.meta.url);
 
-      const observabilityStore = await getObservabilityStore(mastra);
-      return await observabilityStore.listLogs({ filters, pagination, orderBy });
-    } catch (error) {
-      return handleError(error, 'Error listing logs');
-    }
-  },
-});
+const upgradeResponseSchema = z.object({ message: z.string() });
 
-// ============================================================================
-// Scores Routes
-// ============================================================================
+function createUpgradeRoute<TMethod extends ServerRoute['method'], TPath extends string>(config: {
+  method: TMethod;
+  path: TPath;
+  summary: string;
+  description: string;
+  requiresPermission?: ServerRoute['requiresPermission'];
+}) {
+  return createRoute({
+    method: config.method,
+    path: config.path,
+    responseType: 'json',
+    responseSchema: upgradeResponseSchema,
+    summary: config.summary,
+    description: config.description,
+    tags: ['Observability'],
+    requiresAuth: true,
+    requiresPermission: config.requiresPermission,
+    handler: async () => {
+      throw new HTTPException(501, { message: NEW_OBSERVABILITY_UPGRADE_MESSAGE });
+    },
+  });
+}
 
-/** Route: GET /observability/scores - paginated score listing with filtering and sorting. */
-export const LIST_SCORES_ROUTE = createRoute({
-  method: 'GET',
-  path: '/observability/scores',
-  responseType: 'json',
-  queryParamSchema: wrapSchemaForQueryParams(
-    scoresFilterSchema.extend(paginationArgsSchema.shape).extend(scoresOrderBySchema.shape).partial(),
-  ),
-  responseSchema: obsListScoresResponseSchema,
-  summary: 'List scores',
-  description: 'Returns a paginated list of scores with optional filtering and sorting',
-  tags: ['Observability'],
-  requiresAuth: true,
-  handler: async ({ mastra, ...params }) => {
-    try {
-      const filters = pickParams(scoresFilterSchema, params);
-      const pagination = pickParams(paginationArgsSchema, params);
-      const orderBy = pickParams(scoresOrderBySchema, params);
+function buildUpgradeObservabilityExports() {
+  const LIST_LOGS_ROUTE = createUpgradeRoute({
+    method: 'GET',
+    path: '/observability/logs',
+    summary: 'List logs',
+    description: 'Returns a paginated list of logs with optional filtering and sorting',
+  });
 
-      const observabilityStore = await getObservabilityStore(mastra);
-      return await observabilityStore.listScores({ filters, pagination, orderBy });
-    } catch (error) {
-      return handleError(error, 'Error listing scores');
-    }
-  },
-});
+  const LIST_SCORES_ROUTE = createUpgradeRoute({
+    method: 'GET',
+    path: '/observability/scores',
+    summary: 'List scores',
+    description: 'Returns a paginated list of scores with optional filtering and sorting',
+  });
 
-/** Route: POST /observability/scores - create a single score record. */
-export const CREATE_SCORE_ROUTE = createRoute({
-  method: 'POST',
-  path: '/observability/scores',
-  responseType: 'json',
-  bodySchema: createScoreBodySchema,
-  responseSchema: createScoreResponseSchema,
-  summary: 'Create a score',
-  description: 'Creates a single score record in the observability store',
-  tags: ['Observability'],
-  requiresAuth: true,
-  handler: async ({ mastra, score }) => {
-    try {
-      const observabilityStore = await getObservabilityStore(mastra);
-      await observabilityStore.createScore({ score: { ...score, timestamp: new Date() } });
-      return { success: true };
-    } catch (error) {
-      return handleError(error, 'Error creating score');
-    }
-  },
-});
+  const CREATE_SCORE_ROUTE = createUpgradeRoute({
+    method: 'POST',
+    path: '/observability/scores',
+    summary: 'Create a score',
+    description: 'Creates a single score record in the observability store',
+  });
 
-// ============================================================================
-// Feedback Routes
-// ============================================================================
+  const LIST_FEEDBACK_ROUTE = createUpgradeRoute({
+    method: 'GET',
+    path: '/observability/feedback',
+    summary: 'List feedback',
+    description: 'Returns a paginated list of feedback with optional filtering and sorting',
+  });
 
-/** Route: GET /observability/feedback - paginated feedback listing with filtering and sorting. */
-export const LIST_FEEDBACK_ROUTE = createRoute({
-  method: 'GET',
-  path: '/observability/feedback',
-  responseType: 'json',
-  queryParamSchema: wrapSchemaForQueryParams(
-    feedbackFilterSchema.extend(paginationArgsSchema.shape).extend(feedbackOrderBySchema.shape).partial(),
-  ),
-  responseSchema: listFeedbackResponseSchema,
-  summary: 'List feedback',
-  description: 'Returns a paginated list of feedback with optional filtering and sorting',
-  tags: ['Observability'],
-  requiresAuth: true,
-  handler: async ({ mastra, ...params }) => {
-    try {
-      const filters = pickParams(feedbackFilterSchema, params);
-      const pagination = pickParams(paginationArgsSchema, params);
-      const orderBy = pickParams(feedbackOrderBySchema, params);
+  const CREATE_FEEDBACK_ROUTE = createUpgradeRoute({
+    method: 'POST',
+    path: '/observability/feedback',
+    summary: 'Create feedback',
+    description: 'Creates a single feedback record in the observability store',
+  });
 
-      const observabilityStore = await getObservabilityStore(mastra);
-      return await observabilityStore.listFeedback({ filters, pagination, orderBy });
-    } catch (error) {
-      return handleError(error, 'Error listing feedback');
-    }
-  },
-});
+  const GET_METRIC_AGGREGATE_ROUTE = createUpgradeRoute({
+    method: 'POST',
+    path: '/observability/metrics/aggregate',
+    summary: 'Get metric aggregate',
+    description: 'Returns an aggregated metric value with optional period-over-period comparison',
+    requiresPermission: 'observability:read',
+  });
 
-/** Route: POST /observability/feedback - create a single feedback record. */
-export const CREATE_FEEDBACK_ROUTE = createRoute({
-  method: 'POST',
-  path: '/observability/feedback',
-  responseType: 'json',
-  bodySchema: createFeedbackBodySchema,
-  responseSchema: createFeedbackResponseSchema,
-  summary: 'Create feedback',
-  description: 'Creates a single feedback record in the observability store',
-  tags: ['Observability'],
-  requiresAuth: true,
-  handler: async ({ mastra, feedback }) => {
-    try {
-      const observabilityStore = await getObservabilityStore(mastra);
-      await observabilityStore.createFeedback({ feedback: { ...feedback, timestamp: new Date() } });
-      return { success: true };
-    } catch (error) {
-      return handleError(error, 'Error creating feedback');
-    }
-  },
-});
+  const GET_METRIC_BREAKDOWN_ROUTE = createUpgradeRoute({
+    method: 'POST',
+    path: '/observability/metrics/breakdown',
+    summary: 'Get metric breakdown',
+    description: 'Returns metric values grouped by specified dimensions',
+    requiresPermission: 'observability:read',
+  });
 
-// ============================================================================
-// Metrics Routes
-// ============================================================================
+  const GET_METRIC_TIME_SERIES_ROUTE = createUpgradeRoute({
+    method: 'POST',
+    path: '/observability/metrics/timeseries',
+    summary: 'Get metric time series',
+    description: 'Returns metric values bucketed by time interval with optional grouping',
+    requiresPermission: 'observability:read',
+  });
 
-/** Route: POST /observability/metrics/aggregate - aggregated metric with optional comparison. */
-export const GET_METRIC_AGGREGATE_ROUTE = createRoute({
-  method: 'POST',
-  path: '/observability/metrics/aggregate',
-  responseType: 'json',
-  bodySchema: getMetricAggregateArgsSchema,
-  responseSchema: getMetricAggregateResponseSchema,
-  summary: 'Get metric aggregate',
-  description: 'Returns an aggregated metric value with optional period-over-period comparison',
-  tags: ['Observability'],
-  requiresAuth: true,
-  requiresPermission: 'observability:read',
-  handler: async ({ mastra, ...params }) => {
-    try {
-      const args = pickParams(getMetricAggregateArgsSchema, params);
-      const observabilityStore = await getObservabilityStore(mastra);
-      return await observabilityStore.getMetricAggregate(args);
-    } catch (error) {
-      return handleError(error, 'Error getting metric aggregate');
-    }
-  },
-});
+  const GET_METRIC_PERCENTILES_ROUTE = createUpgradeRoute({
+    method: 'POST',
+    path: '/observability/metrics/percentiles',
+    summary: 'Get metric percentiles',
+    description: 'Returns percentile values for a metric bucketed by time interval',
+    requiresPermission: 'observability:read',
+  });
 
-/** Route: POST /observability/metrics/breakdown - metric values grouped by dimensions. */
-export const GET_METRIC_BREAKDOWN_ROUTE = createRoute({
-  method: 'POST',
-  path: '/observability/metrics/breakdown',
-  responseType: 'json',
-  bodySchema: getMetricBreakdownArgsSchema,
-  responseSchema: getMetricBreakdownResponseSchema,
-  summary: 'Get metric breakdown',
-  description: 'Returns metric values grouped by specified dimensions',
-  tags: ['Observability'],
-  requiresAuth: true,
-  requiresPermission: 'observability:read',
-  handler: async ({ mastra, ...params }) => {
-    try {
-      const args = pickParams(getMetricBreakdownArgsSchema, params);
-      const observabilityStore = await getObservabilityStore(mastra);
-      return await observabilityStore.getMetricBreakdown(args);
-    } catch (error) {
-      return handleError(error, 'Error getting metric breakdown');
-    }
-  },
-});
+  const GET_METRIC_NAMES_ROUTE = createUpgradeRoute({
+    method: 'GET',
+    path: '/observability/discovery/metric-names',
+    summary: 'Get metric names',
+    description: 'Returns distinct metric names with optional prefix filtering',
+  });
 
-/** Route: POST /observability/metrics/timeseries - metric values bucketed by time interval. */
-export const GET_METRIC_TIME_SERIES_ROUTE = createRoute({
-  method: 'POST',
-  path: '/observability/metrics/timeseries',
-  responseType: 'json',
-  bodySchema: getMetricTimeSeriesArgsSchema,
-  responseSchema: getMetricTimeSeriesResponseSchema,
-  summary: 'Get metric time series',
-  description: 'Returns metric values bucketed by time interval with optional grouping',
-  tags: ['Observability'],
-  requiresAuth: true,
-  requiresPermission: 'observability:read',
-  handler: async ({ mastra, ...params }) => {
-    try {
-      const args = pickParams(getMetricTimeSeriesArgsSchema, params);
-      const observabilityStore = await getObservabilityStore(mastra);
-      return await observabilityStore.getMetricTimeSeries(args);
-    } catch (error) {
-      return handleError(error, 'Error getting metric time series');
-    }
-  },
-});
+  const GET_METRIC_LABEL_KEYS_ROUTE = createUpgradeRoute({
+    method: 'GET',
+    path: '/observability/discovery/metric-label-keys',
+    summary: 'Get metric label keys',
+    description: 'Returns distinct label keys for a given metric',
+  });
 
-/** Route: POST /observability/metrics/percentiles - percentile values bucketed by time interval. */
-export const GET_METRIC_PERCENTILES_ROUTE = createRoute({
-  method: 'POST',
-  path: '/observability/metrics/percentiles',
-  responseType: 'json',
-  bodySchema: getMetricPercentilesArgsSchema,
-  responseSchema: getMetricPercentilesResponseSchema,
-  summary: 'Get metric percentiles',
-  description: 'Returns percentile values for a metric bucketed by time interval',
-  tags: ['Observability'],
-  requiresAuth: true,
-  requiresPermission: 'observability:read',
-  handler: async ({ mastra, ...params }) => {
-    try {
-      const args = pickParams(getMetricPercentilesArgsSchema, params);
-      const observabilityStore = await getObservabilityStore(mastra);
-      return await observabilityStore.getMetricPercentiles(args);
-    } catch (error) {
-      return handleError(error, 'Error getting metric percentiles');
-    }
-  },
-});
+  const GET_METRIC_LABEL_VALUES_ROUTE = createUpgradeRoute({
+    method: 'GET',
+    path: '/observability/discovery/metric-label-values',
+    summary: 'Get label values',
+    description: 'Returns distinct values for a given metric label key',
+  });
 
-// ============================================================================
-// Discovery Routes
-// ============================================================================
+  const GET_ENTITY_TYPES_ROUTE = createUpgradeRoute({
+    method: 'GET',
+    path: '/observability/discovery/entity-types',
+    summary: 'Get entity types',
+    description: 'Returns distinct entity types from observability data',
+  });
 
-/** Route: GET /observability/discovery/metric-names - distinct metric names. */
-export const GET_METRIC_NAMES_ROUTE = createRoute({
-  method: 'GET',
-  path: '/observability/discovery/metric-names',
-  responseType: 'json',
-  queryParamSchema: wrapSchemaForQueryParams(getMetricNamesArgsSchema.partial()),
-  responseSchema: getMetricNamesResponseSchema,
-  summary: 'Get metric names',
-  description: 'Returns distinct metric names with optional prefix filtering',
-  tags: ['Observability'],
-  requiresAuth: true,
-  handler: async ({ mastra, ...params }) => {
-    try {
-      const args = pickParams(getMetricNamesArgsSchema, params);
-      const observabilityStore = await getObservabilityStore(mastra);
-      return await observabilityStore.getMetricNames(args);
-    } catch (error) {
-      return handleError(error, 'Error getting metric names');
-    }
-  },
-});
+  const GET_ENTITY_NAMES_ROUTE = createUpgradeRoute({
+    method: 'GET',
+    path: '/observability/discovery/entity-names',
+    summary: 'Get entity names',
+    description: 'Returns distinct entity names with optional type filtering',
+  });
 
-/** Route: GET /observability/discovery/metric-label-keys - distinct label keys for a metric. */
-export const GET_METRIC_LABEL_KEYS_ROUTE = createRoute({
-  method: 'GET',
-  path: '/observability/discovery/metric-label-keys',
-  responseType: 'json',
-  queryParamSchema: z.object({ metricName: z.string() }),
-  responseSchema: getMetricLabelKeysResponseSchema,
-  summary: 'Get metric label keys',
-  description: 'Returns distinct label keys for a given metric',
-  tags: ['Observability'],
-  requiresAuth: true,
-  handler: async ({ mastra, ...params }) => {
-    try {
-      const args = pickParams(getMetricLabelKeysArgsSchema, params);
-      const observabilityStore = await getObservabilityStore(mastra);
-      return await observabilityStore.getMetricLabelKeys(args);
-    } catch (error) {
-      return handleError(error, 'Error getting metric label keys');
-    }
-  },
-});
+  const GET_SERVICE_NAMES_ROUTE = createUpgradeRoute({
+    method: 'GET',
+    path: '/observability/discovery/service-names',
+    summary: 'Get service names',
+    description: 'Returns distinct service names from observability data',
+  });
 
-/** Route: GET /observability/discovery/metric-label-values - distinct values for a label key. */
-export const GET_METRIC_LABEL_VALUES_ROUTE = createRoute({
-  method: 'GET',
-  path: '/observability/discovery/metric-label-values',
-  responseType: 'json',
-  queryParamSchema: wrapSchemaForQueryParams(getMetricLabelValuesArgsSchema),
-  responseSchema: getMetricLabelValuesResponseSchema,
-  summary: 'Get label values',
-  description: 'Returns distinct values for a given metric label key',
-  tags: ['Observability'],
-  requiresAuth: true,
-  handler: async ({ mastra, ...params }) => {
-    try {
-      const args = pickParams(getMetricLabelValuesArgsSchema, params);
-      const observabilityStore = await getObservabilityStore(mastra);
-      return await observabilityStore.getMetricLabelValues(args);
-    } catch (error) {
-      return handleError(error, 'Error getting label values');
-    }
-  },
-});
+  const GET_ENVIRONMENTS_ROUTE = createUpgradeRoute({
+    method: 'GET',
+    path: '/observability/discovery/environments',
+    summary: 'Get environments',
+    description: 'Returns distinct environments from observability data',
+  });
 
-/** Route: GET /observability/discovery/entity-types - distinct entity types. */
-export const GET_ENTITY_TYPES_ROUTE = createRoute({
-  method: 'GET',
-  path: '/observability/discovery/entity-types',
-  responseType: 'json',
-  responseSchema: getEntityTypesResponseSchema,
-  summary: 'Get entity types',
-  description: 'Returns distinct entity types from observability data',
-  tags: ['Observability'],
-  requiresAuth: true,
-  handler: async ({ mastra }) => {
-    try {
-      const observabilityStore = await getObservabilityStore(mastra);
-      return await observabilityStore.getEntityTypes({});
-    } catch (error) {
-      return handleError(error, 'Error getting entity types');
-    }
-  },
-});
+  const GET_TAGS_ROUTE = createUpgradeRoute({
+    method: 'GET',
+    path: '/observability/discovery/tags',
+    summary: 'Get tags',
+    description: 'Returns distinct tags with optional entity type filtering',
+  });
 
-/** Route: GET /observability/discovery/entity-names - distinct entity names. */
-export const GET_ENTITY_NAMES_ROUTE = createRoute({
-  method: 'GET',
-  path: '/observability/discovery/entity-names',
-  responseType: 'json',
-  queryParamSchema: wrapSchemaForQueryParams(getEntityNamesArgsSchema.partial()),
-  responseSchema: getEntityNamesResponseSchema,
-  summary: 'Get entity names',
-  description: 'Returns distinct entity names with optional type filtering',
-  tags: ['Observability'],
-  requiresAuth: true,
-  handler: async ({ mastra, ...params }) => {
-    try {
-      const args = pickParams(getEntityNamesArgsSchema, params);
-      const observabilityStore = await getObservabilityStore(mastra);
-      return await observabilityStore.getEntityNames(args);
-    } catch (error) {
-      return handleError(error, 'Error getting entity names');
-    }
-  },
-});
+  const NEW_OBSERVABILITY_ROUTES = [
+    // Logs
+    LIST_LOGS_ROUTE,
+    // Scores (observability storage)
+    LIST_SCORES_ROUTE,
+    CREATE_SCORE_ROUTE,
+    // Feedback
+    LIST_FEEDBACK_ROUTE,
+    CREATE_FEEDBACK_ROUTE,
+    // Metrics
+    GET_METRIC_AGGREGATE_ROUTE,
+    GET_METRIC_BREAKDOWN_ROUTE,
+    GET_METRIC_TIME_SERIES_ROUTE,
+    GET_METRIC_PERCENTILES_ROUTE,
+    // Discovery
+    GET_METRIC_NAMES_ROUTE,
+    GET_METRIC_LABEL_KEYS_ROUTE,
+    GET_METRIC_LABEL_VALUES_ROUTE,
+    GET_ENTITY_TYPES_ROUTE,
+    GET_ENTITY_NAMES_ROUTE,
+    GET_SERVICE_NAMES_ROUTE,
+    GET_ENVIRONMENTS_ROUTE,
+    GET_TAGS_ROUTE,
+  ] as const;
 
-/** Route: GET /observability/discovery/service-names - distinct service names. */
-export const GET_SERVICE_NAMES_ROUTE = createRoute({
-  method: 'GET',
-  path: '/observability/discovery/service-names',
-  responseType: 'json',
-  responseSchema: getServiceNamesResponseSchema,
-  summary: 'Get service names',
-  description: 'Returns distinct service names from observability data',
-  tags: ['Observability'],
-  requiresAuth: true,
-  handler: async ({ mastra }) => {
-    try {
-      const observabilityStore = await getObservabilityStore(mastra);
-      return await observabilityStore.getServiceNames({});
-    } catch (error) {
-      return handleError(error, 'Error getting service names');
-    }
-  },
-});
+  return {
+    LIST_LOGS_ROUTE,
+    LIST_SCORES_ROUTE,
+    CREATE_SCORE_ROUTE,
+    LIST_FEEDBACK_ROUTE,
+    CREATE_FEEDBACK_ROUTE,
+    GET_METRIC_AGGREGATE_ROUTE,
+    GET_METRIC_BREAKDOWN_ROUTE,
+    GET_METRIC_TIME_SERIES_ROUTE,
+    GET_METRIC_PERCENTILES_ROUTE,
+    GET_METRIC_NAMES_ROUTE,
+    GET_METRIC_LABEL_KEYS_ROUTE,
+    GET_METRIC_LABEL_VALUES_ROUTE,
+    GET_ENTITY_TYPES_ROUTE,
+    GET_ENTITY_NAMES_ROUTE,
+    GET_SERVICE_NAMES_ROUTE,
+    GET_ENVIRONMENTS_ROUTE,
+    GET_TAGS_ROUTE,
+    NEW_OBSERVABILITY_ROUTES,
+  } as const;
+}
 
-/** Route: GET /observability/discovery/environments - distinct environments. */
-export const GET_ENVIRONMENTS_ROUTE = createRoute({
-  method: 'GET',
-  path: '/observability/discovery/environments',
-  responseType: 'json',
-  responseSchema: getEnvironmentsResponseSchema,
-  summary: 'Get environments',
-  description: 'Returns distinct environments from observability data',
-  tags: ['Observability'],
-  requiresAuth: true,
-  handler: async ({ mastra }) => {
-    try {
-      const observabilityStore = await getObservabilityStore(mastra);
-      return await observabilityStore.getEnvironments({});
-    } catch (error) {
-      return handleError(error, 'Error getting environments');
-    }
-  },
-});
+function loadNewObservabilityExports(): NewObservabilityExports {
+  if (!isNewObservabilityAvailable()) {
+    return buildUpgradeObservabilityExports();
+  }
 
-/** Route: GET /observability/discovery/tags - distinct tags with optional filtering. */
-export const GET_TAGS_ROUTE = createRoute({
-  method: 'GET',
-  path: '/observability/discovery/tags',
-  responseType: 'json',
-  queryParamSchema: wrapSchemaForQueryParams(getTagsArgsSchema.partial()),
-  responseSchema: getTagsResponseSchema,
-  summary: 'Get tags',
-  description: 'Returns distinct tags with optional entity type filtering',
-  tags: ['Observability'],
-  requiresAuth: true,
-  handler: async ({ mastra, ...params }) => {
-    try {
-      const args = getTagsArgsSchema.parse(pickParams(getTagsArgsSchema, params));
-      const observabilityStore = await getObservabilityStore(mastra);
-      return await observabilityStore.getTags(args);
-    } catch (error) {
-      return handleError(error, 'Error getting tags');
-    }
-  },
-});
+  try {
+    return require('./observability-new-endpoints') as NewObservabilityExports;
+  } catch {
+    return buildUpgradeObservabilityExports();
+  }
+}
+
+type NewObservabilityExports = ReturnType<typeof buildUpgradeObservabilityExports>;
+type NewObservabilityRoutes = NewObservabilityExports['NEW_OBSERVABILITY_ROUTES'];
+
+const newObservabilityExports = loadNewObservabilityExports();
+
+export const LIST_LOGS_ROUTE = newObservabilityExports.LIST_LOGS_ROUTE;
+export const LIST_SCORES_ROUTE = newObservabilityExports.LIST_SCORES_ROUTE;
+export const CREATE_SCORE_ROUTE = newObservabilityExports.CREATE_SCORE_ROUTE;
+export const LIST_FEEDBACK_ROUTE = newObservabilityExports.LIST_FEEDBACK_ROUTE;
+export const CREATE_FEEDBACK_ROUTE = newObservabilityExports.CREATE_FEEDBACK_ROUTE;
+export const GET_METRIC_AGGREGATE_ROUTE = newObservabilityExports.GET_METRIC_AGGREGATE_ROUTE;
+export const GET_METRIC_BREAKDOWN_ROUTE = newObservabilityExports.GET_METRIC_BREAKDOWN_ROUTE;
+export const GET_METRIC_TIME_SERIES_ROUTE = newObservabilityExports.GET_METRIC_TIME_SERIES_ROUTE;
+export const GET_METRIC_PERCENTILES_ROUTE = newObservabilityExports.GET_METRIC_PERCENTILES_ROUTE;
+export const GET_METRIC_NAMES_ROUTE = newObservabilityExports.GET_METRIC_NAMES_ROUTE;
+export const GET_METRIC_LABEL_KEYS_ROUTE = newObservabilityExports.GET_METRIC_LABEL_KEYS_ROUTE;
+export const GET_METRIC_LABEL_VALUES_ROUTE = newObservabilityExports.GET_METRIC_LABEL_VALUES_ROUTE;
+export const GET_ENTITY_TYPES_ROUTE = newObservabilityExports.GET_ENTITY_TYPES_ROUTE;
+export const GET_ENTITY_NAMES_ROUTE = newObservabilityExports.GET_ENTITY_NAMES_ROUTE;
+export const GET_SERVICE_NAMES_ROUTE = newObservabilityExports.GET_SERVICE_NAMES_ROUTE;
+export const GET_ENVIRONMENTS_ROUTE = newObservabilityExports.GET_ENVIRONMENTS_ROUTE;
+export const GET_TAGS_ROUTE = newObservabilityExports.GET_TAGS_ROUTE;
+export const NEW_OBSERVABILITY_ROUTES = newObservabilityExports.NEW_OBSERVABILITY_ROUTES as NewObservabilityRoutes;
+
+const LEGACY_OBSERVABILITY_ROUTES = [
+  // Traces
+  LIST_TRACES_ROUTE,
+  GET_TRACE_ROUTE,
+  SCORE_TRACES_ROUTE,
+  LIST_SCORES_BY_SPAN_ROUTE,
+] as const;
+
+export const OBSERVABILITY_ROUTES = [...LEGACY_OBSERVABILITY_ROUTES, ...NEW_OBSERVABILITY_ROUTES] as const;
+
+export type ObservabilityRoutes = typeof OBSERVABILITY_ROUTES;
+
+export function getObservabilityRoutes(): ObservabilityRoutes {
+  return OBSERVABILITY_ROUTES;
+}

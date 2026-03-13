@@ -5,11 +5,8 @@ import type { MastraStorage, TraceRecord, SpanRecord } from '@mastra/core/storag
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import * as errorHandler from './error';
+import { LIST_TRACES_ROUTE, GET_TRACE_ROUTE, SCORE_TRACES_ROUTE, LIST_SCORES_BY_SPAN_ROUTE } from './observability';
 import {
-  LIST_TRACES_ROUTE,
-  GET_TRACE_ROUTE,
-  SCORE_TRACES_ROUTE,
-  LIST_SCORES_BY_SPAN_ROUTE,
   LIST_LOGS_ROUTE,
   LIST_SCORES_ROUTE,
   CREATE_SCORE_ROUTE,
@@ -27,7 +24,7 @@ import {
   GET_SERVICE_NAMES_ROUTE,
   GET_ENVIRONMENTS_ROUTE,
   GET_TAGS_ROUTE,
-} from './observability';
+} from './observability-new-endpoints';
 import { createTestServerContext } from './test-utils';
 
 // Mock scoreTraces
