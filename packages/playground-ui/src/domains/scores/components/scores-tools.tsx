@@ -1,8 +1,8 @@
-import { SelectField } from '@/ds/components/FormFields';
+import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
 import { Button } from '@/ds/components/Button/Button';
-import { cn } from '@/lib/utils';
 import { XIcon } from 'lucide-react';
 import { Icon } from '@/ds/icons/Icon';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 
 export type ScoreEntityOption = { value: string; label: string; type: 'AGENT' | 'WORKFLOW' | 'ALL' };
 
@@ -16,29 +16,32 @@ type ScoresToolsProps = {
 
 export function ScoresTools({ onEntityChange, onReset, selectedEntity, entityOptions, isLoading }: ScoresToolsProps) {
   return (
-    <div className={cn('flex flex-wrap gap-x-8 gap-y-4')}>
-      <SelectField
+    <ButtonsGroup>
+      <SelectFieldBlock
         label="Filter by Entity"
-        name={'select-entity'}
+        labelIsHidden={true}
+        name="select-entity"
         placeholder="Select..."
         options={entityOptions || []}
-        onValueChange={val => {
+        onValueChange={(val: string) => {
           const entity = entityOptions?.find(entity => entity.value === val);
           if (entity) {
             onEntityChange(entity);
           }
         }}
         value={selectedEntity?.value || ''}
-        className="min-w-[20rem]"
+        className="min-w-56"
         disabled={isLoading}
       />
 
-      <Button variant="light" size="lg" className="min-w-32" onClick={onReset} disabled={isLoading}>
-        Reset
-        <Icon>
-          <XIcon />
-        </Icon>
-      </Button>
-    </div>
+      {selectedEntity && selectedEntity.value !== 'all' && (
+        <Button onClick={onReset} disabled={isLoading}>
+          Reset
+          <Icon>
+            <XIcon />
+          </Icon>
+        </Button>
+      )}
+    </ButtonsGroup>
   );
 }

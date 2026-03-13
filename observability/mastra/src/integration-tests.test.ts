@@ -4,7 +4,7 @@ import type { StructuredOutputOptions } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
-import { SpanType } from '@mastra/core/observability';
+import { SpanType, EntityType, getOrCreateSpan, executeWithContext } from '@mastra/core/observability';
 import type { TracingContext } from '@mastra/core/observability';
 
 // Core Mastra imports
@@ -724,17 +724,11 @@ describe('Tracing Integration Tests', () => {
     expect(stepLog!.spanId).toBeDefined();
 
     // Verify auto-extracted workflow metrics
-    const workflowStarted = testExporter.getMetricsByName('mastra_workflow_runs_started');
-    expect(workflowStarted).toHaveLength(1);
-    expect(workflowStarted[0]!.labels.entity_name).toBeDefined();
-
-    const workflowEnded = testExporter.getMetricsByName('mastra_workflow_runs_ended');
-    expect(workflowEnded).toHaveLength(1);
-    expect(workflowEnded[0]!.labels.status).toBe('ok');
-
     const workflowDuration = testExporter.getMetricsByName('mastra_workflow_duration_ms');
     expect(workflowDuration).toHaveLength(1);
     expect(workflowDuration[0]!.value).toBeGreaterThanOrEqual(0);
+    expect(workflowDuration[0]!.labels.entity_name).toBeDefined();
+    expect(workflowDuration[0]!.labels.status).toBe('ok');
   });
 
   it('should add child spans in workflow step', async () => {
@@ -1212,52 +1206,38 @@ describe('Tracing Integration Tests', () => {
       // Verify custom metrics delivered to the exporter
       const counterMetrics = testExporter.getMetricsByName('metadata_tool_calls');
       expect(counterMetrics, 'metrics.counter() in tool should be captured by the exporter').toHaveLength(1);
-      expect(counterMetrics[0]!.metricType).toBe('counter');
       expect(counterMetrics[0]!.value).toBe(1);
       expect(counterMetrics[0]!.labels.tool_id).toBe('metadata-tool');
       expect(counterMetrics[0]!.labels.service_name).toBe('integration-tests');
 
       const histoMetrics = testExporter.getMetricsByName('metadata_tool_input_length');
       expect(histoMetrics, 'metrics.histogram() in tool should be captured by the exporter').toHaveLength(1);
-      expect(histoMetrics[0]!.metricType).toBe('histogram');
       expect(histoMetrics[0]!.value).toBe('some data'.length);
 
       // Verify auto-extracted metrics from the agent run
-      const agentStarted = testExporter.getMetricsByName('mastra_agent_runs_started');
-      expect(agentStarted).toHaveLength(1);
-      expect(agentStarted[0]!.labels.entity_name).toBe('Metadata Agent');
-
-      const agentEnded = testExporter.getMetricsByName('mastra_agent_runs_ended');
-      expect(agentEnded).toHaveLength(1);
-      expect(agentEnded[0]!.labels.status).toBe('ok');
-
       const agentDuration = testExporter.getMetricsByName('mastra_agent_duration_ms');
       expect(agentDuration).toHaveLength(1);
+      expect(agentDuration[0]!.labels.entity_name).toBe('Metadata Agent');
+      expect(agentDuration[0]!.labels.status).toBe('ok');
       expect(agentDuration[0]!.value).toBeGreaterThanOrEqual(0);
 
       // Auto-extracted model metrics (token counts, duration)
-      const modelStarted = testExporter.getMetricsByName('mastra_model_requests_started');
-      expect(modelStarted.length).toBeGreaterThanOrEqual(1);
+      const modelDuration = testExporter.getMetricsByName('mastra_model_duration_ms');
+      expect(modelDuration.length).toBeGreaterThanOrEqual(1);
 
-      const inputTokens = testExporter.getMetricsByName('mastra_model_input_tokens');
+      const inputTokens = testExporter.getMetricsByName('mastra_model_total_input_tokens');
       expect(inputTokens.length).toBeGreaterThanOrEqual(1);
       expect(inputTokens[0]!.value).toBeGreaterThan(0);
 
-      const outputTokens = testExporter.getMetricsByName('mastra_model_output_tokens');
+      const outputTokens = testExporter.getMetricsByName('mastra_model_total_output_tokens');
       expect(outputTokens.length).toBeGreaterThanOrEqual(1);
       expect(outputTokens[0]!.value).toBeGreaterThan(0);
 
       // Auto-extracted tool call metrics
-      const toolStarted = testExporter.getMetricsByName('mastra_tool_calls_started');
-      expect(toolStarted).toHaveLength(1);
-      expect(toolStarted[0]!.labels.entity_name).toBe('metadataTool');
-
-      const toolEnded = testExporter.getMetricsByName('mastra_tool_calls_ended');
-      expect(toolEnded).toHaveLength(1);
-      expect(toolEnded[0]!.labels.status).toBe('ok');
-
       const toolDuration = testExporter.getMetricsByName('mastra_tool_duration_ms');
       expect(toolDuration).toHaveLength(1);
+      expect(toolDuration[0]!.labels.entity_name).toBe('metadataTool');
+      expect(toolDuration[0]!.labels.status).toBe('ok');
       expect(toolDuration[0]!.value).toBeGreaterThanOrEqual(0);
     });
   });
@@ -1836,6 +1816,75 @@ describe('Tracing Integration Tests', () => {
       expect(spansWithContext.length).toBeGreaterThanOrEqual(1);
 
       finalExpectations(testExporter);
+    });
+  });
+
+  describe('Standalone tool execution tracing (MCP-style)', () => {
+    it('should create a root span when tool is executed without a parent span context', async () => {
+      const testExporter = new TestExporter();
+
+      const simpleTool = createTool({
+        id: 'standalone-tool',
+        description: 'A tool executed without an agent',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ doubled: z.number() }),
+        execute: async inputData => {
+          return { doubled: inputData.value * 2 };
+        },
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        tools: { 'standalone-tool': simpleTool },
+      });
+
+      // Simulate standalone tool execution (e.g. MCP server calling a tool directly)
+      // by using getOrCreateSpan with no tracingContext.currentSpan
+      const selectedInstance = mastra.observability.getSelectedInstance({});
+      expect(selectedInstance).toBeDefined();
+      expect(typeof selectedInstance!.startSpan).toBe('function');
+
+      const toolSpan = getOrCreateSpan({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'standalone-tool'",
+        input: { value: 5 },
+        entityType: EntityType.TOOL,
+        entityId: 'standalone-tool',
+        entityName: 'standalone-tool',
+        attributes: {
+          toolDescription: 'A tool executed without an agent',
+          toolType: 'tool',
+        },
+        tracingContext: { currentSpan: undefined },
+        mastra,
+      });
+
+      expect(toolSpan).toBeDefined();
+
+      // Execute within the span context and complete it
+      const result = await executeWithContext({
+        span: toolSpan!,
+        fn: async () => {
+          return { doubled: 10 };
+        },
+      });
+
+      toolSpan!.end({ output: result });
+
+      // Flush the observability bus to ensure async export handlers complete
+      await selectedInstance!.getObservabilityBus().flush();
+
+      expect(result).toEqual({ doubled: 10 });
+
+      // Verify a TOOL_CALL span was created as a root span
+      const toolSpans = testExporter.getSpansByType(SpanType.TOOL_CALL);
+      expect(toolSpans).toHaveLength(1);
+      expect(toolSpans[0]?.name).toBe("tool: 'standalone-tool'");
+      expect(toolSpans[0]?.traceId).toBeDefined();
+
+      // Verify no incomplete spans
+      const incompleteSpans = testExporter.getIncompleteSpans();
+      expect(incompleteSpans).toHaveLength(0);
     });
   });
 });

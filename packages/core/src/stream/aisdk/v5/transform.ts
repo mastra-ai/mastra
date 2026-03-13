@@ -270,6 +270,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           toolName: value.toolName,
           providerExecuted: value.providerExecuted,
           providerMetadata: value.providerMetadata,
+          dynamic: (value as { dynamic?: boolean }).dynamic,
         },
       };
 
