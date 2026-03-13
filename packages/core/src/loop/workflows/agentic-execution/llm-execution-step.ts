@@ -30,6 +30,7 @@ import type {
   TextStartPayload,
 } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
+import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { isMastraTool } from '../../../tools/toolchecks';
 import { makeCoreTool } from '../../../utils';
@@ -1100,6 +1101,36 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }
         return payload;
       });
+
+      /**
+       * Merge provider-executed tool results into their corresponding tool calls.
+       *
+       * For some provider-executed tools (like the ones from @ai-sdk/gateway),
+       * the response includes both tool-call and tool-result chunks.
+       * We need to:
+       * 1. Infer providerExecuted for provider tools when the stream doesn't set it
+       *    (gateway tools may not have providerExecuted set in the raw stream)
+       * 2. Pair tool results with their tool calls so the tool-call-step can skip
+       *    execution and return the actual provider result
+       */
+      const streamToolResults = outputStream._getImmediateToolResults();
+
+      if (toolCalls.length > 0) {
+        for (const toolCall of toolCalls) {
+          const tool = findProviderToolByName(stepTools, toolCall.toolName);
+          const inferred = inferProviderExecuted(toolCall.providerExecuted, tool);
+          if (inferred !== undefined) {
+            toolCall.providerExecuted = inferred;
+          }
+
+          if (toolCall.providerExecuted) {
+            const match = streamToolResults?.find(r => r.payload.toolCallId === toolCall.toolCallId);
+            if (match) {
+              toolCall.output = match.payload.result;
+            }
+          }
+        }
+      }
 
       if (toolCalls.length > 0) {
         const message: MastraDBMessage = {
