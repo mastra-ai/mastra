@@ -1146,10 +1146,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       }
 
       // Handle deferred provider-executed tool results (e.g. Anthropic web_search).
-      // When a provider-executed tool is requested alongside a client tool, the provider
-      // returns stop_reason:tool_use without executing the server tool. On the next API call
-      // (after client tool results are sent back), the provider executes the deferred server
-      // tool and returns a tool-result with no matching tool-call in this turn.
+      // The provider may non-deterministically defer server tool execution — particularly
+      // when a provider-executed tool is requested alongside a client tool. In that case
+      // the provider returns stop_reason:tool_use without executing the server tool, and
+      // the deferred result arrives on a subsequent API call as a tool-result with no
+      // matching tool-call in this turn.
       // Find these orphaned results and update the existing state:'call' parts in the messageList.
       const matchedToolCallIds = new Set(
         toolCalls.filter(tc => tc.providerExecuted && tc.output != null).map(tc => tc.toolCallId),

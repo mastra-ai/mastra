@@ -108,10 +108,11 @@ export function sanitizeV5UIMessages(
         // and provider-executed tools that are still pending (input-available).
         // Filter out client-side input-available (incomplete) and input-streaming.
         //
-        // Provider-executed tools in input-available state have been deferred by the provider
-        // (e.g. Anthropic returns stop_reason:tool_use without executing web_search when
-        // mixed with client tools). They must be kept so the provider sees the server_tool_use
-        // block on the next request and returns the deferred result.
+        // Provider-executed tools in input-available state may have been non-deterministically
+        // deferred by the provider (e.g. Anthropic may return stop_reason:tool_use without
+        // executing web_search, particularly when mixed with client tools). They must be kept
+        // so the provider sees the server_tool_use block on the next request and returns the
+        // deferred result.
         if (filterIncompleteToolCalls) {
           if (p.state === 'output-available' || p.state === 'output-error') return true;
           if (p.state === 'input-available' && p.providerExecuted) return true;
