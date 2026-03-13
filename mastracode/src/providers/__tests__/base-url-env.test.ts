@@ -1,6 +1,6 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@ai-sdk/anthropic', () => ({
   createAnthropic: vi.fn((_opts: Record<string, unknown>) => {
@@ -36,11 +36,18 @@ describe('provider base URL env support', () => {
       NODE_ENV: 'test',
       VITEST: 'true',
     };
+    delete process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_BASE_URL;
+    delete process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_BASE_URL;
   });
 
-  it('passes OPENAI_BASE_URL to the OpenAI Codex provider in test mode', async () => {
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it('passes OPENAI_BASE_URL to the OpenAI Codex provider in test mode when OPENAI_API_KEY is set', async () => {
+    process.env.OPENAI_API_KEY = 'sk-openai-test-key';
     process.env.OPENAI_BASE_URL = 'https://proxy.example.com/openai/v1';
 
     const { openaiCodexProvider } = await import('../openai-codex.js');
@@ -48,12 +55,13 @@ describe('provider base URL env support', () => {
     openaiCodexProvider('gpt-5.3-codex');
 
     expect(createOpenAI).toHaveBeenCalledWith({
-      apiKey: 'test-api-key',
+      apiKey: 'sk-openai-test-key',
       baseURL: 'https://proxy.example.com/openai/v1',
     });
   });
 
-  it('passes ANTHROPIC_BASE_URL to the Claude Max provider in test mode', async () => {
+  it('passes ANTHROPIC_BASE_URL to the Claude Max provider in test mode when ANTHROPIC_API_KEY is set', async () => {
+    process.env.ANTHROPIC_API_KEY = 'sk-anthropic-test-key';
     process.env.ANTHROPIC_BASE_URL = 'https://proxy.example.com/anthropic';
 
     const { opencodeClaudeMaxProvider } = await import('../claude-max.js');
@@ -61,7 +69,7 @@ describe('provider base URL env support', () => {
     opencodeClaudeMaxProvider('claude-sonnet-4-20250514');
 
     expect(createAnthropic).toHaveBeenCalledWith({
-      apiKey: 'test-api-key',
+      apiKey: 'sk-anthropic-test-key',
       baseURL: 'https://proxy.example.com/anthropic',
     });
   });

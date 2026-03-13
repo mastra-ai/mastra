@@ -11,11 +11,20 @@ import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
 import { AuthStorage } from '../auth/storage.js';
 
+const ANTHROPIC_API_KEY_ENV_VAR = 'ANTHROPIC_API_KEY';
 const ANTHROPIC_BASE_URL_ENV_VAR = 'ANTHROPIC_BASE_URL';
 
-function getAnthropicBaseUrl(): string | undefined {
-  const value = process.env[ANTHROPIC_BASE_URL_ENV_VAR]?.trim();
+function getEnvValue(envVarName: string): string | undefined {
+  const value = process.env[envVarName]?.trim();
   return value ? value : undefined;
+}
+
+function getAnthropicApiKey(): string | undefined {
+  return getEnvValue(ANTHROPIC_API_KEY_ENV_VAR);
+}
+
+function getAnthropicBaseUrl(): string | undefined {
+  return getEnvValue(ANTHROPIC_BASE_URL_ENV_VAR);
 }
 
 // Required for Claude Max plan OAuth - the endpoint checks for this system message
@@ -142,14 +151,17 @@ export const promptCacheMiddleware: LanguageModelMiddleware = {
  * Uses OAuth tokens from AuthStorage (auto-refreshes when needed)
  */
 export function opencodeClaudeMaxProvider(modelId: string = 'claude-sonnet-4-20250514'): MastraModelConfig {
-  // Test environment: use API key
+  // Test environment: use direct API key auth when explicitly configured by the test.
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
-    const baseURL = getAnthropicBaseUrl();
-    const anthropic = createAnthropic(baseURL ? { apiKey: 'test-api-key', baseURL } : { apiKey: 'test-api-key' });
-    return wrapLanguageModel({
-      model: anthropic(modelId),
-      middleware: [claudeCodeMiddleware, promptCacheMiddleware],
-    });
+    const apiKey = getAnthropicApiKey();
+    if (apiKey) {
+      const baseURL = getAnthropicBaseUrl();
+      const anthropic = createAnthropic(baseURL ? { apiKey, baseURL } : { apiKey });
+      return wrapLanguageModel({
+        model: anthropic(modelId),
+        middleware: [claudeCodeMiddleware, promptCacheMiddleware],
+      });
+    }
   }
 
   // Custom fetch that handles OAuth
