@@ -2,4 +2,4 @@
 '@internal/playground': patch
 ---
 
-Fixed SSE reconnection to use exponential backoff with jitter, preventing thundering herd when the dev server restarts. Also fixed a memory leak where beforeunload listeners accumulated on each reconnection.
+Improved Studio reconnect behavior after dev server restarts by spreading retry attempts over time to prevent many clients reconnecting at once. Also fixed a memory leak from repeated event handler registration during reconnects.
