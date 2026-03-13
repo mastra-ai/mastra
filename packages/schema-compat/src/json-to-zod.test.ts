@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { describe, it, expect } from 'vitest';
 import type { JsonSchema } from './json-to-zod';
 import { jsonSchemaToZod } from './json-to-zod';
@@ -1088,7 +1089,8 @@ describe('jsonSchemaToZod', () => {
       const result = jsonSchemaToZod(schema);
 
       // Should be valid JavaScript that can be evaluated with Function()
-      const { z } = require('zod');
+      const __require = typeof require === 'function' ? require : createRequire(import.meta.url);
+      const { z } = __require('zod');
       expect(() => {
         Function('z', `"use strict";return (${result});`)(z);
       }).not.toThrow();
@@ -1103,7 +1105,8 @@ describe('jsonSchemaToZod', () => {
       };
 
       const result = jsonSchemaToZod(schema);
-      const { z } = require('zod');
+      const __require = typeof require === 'function' ? require : createRequire(import.meta.url);
+      const { z } = __require('zod');
       const zodSchema = Function('z', `"use strict";return (${result});`)(z);
 
       // Valid data (strings only - matches exactly one schema)

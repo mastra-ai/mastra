@@ -9,12 +9,12 @@
   "dependencies": {
     "@ai-sdk/anthropic": "latest",
     "@mastra/core": "latest",
-    "zod": "^3.25.76"
+    "zod": "^4.3.6"
   },
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../../../packages/core"
     }
   },
-  "packageManager": "pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39"
+  "packageManager": "pnpm@10.29.3+sha512.498e1fb4cca5aa06c1dcf2611e6fafc50972ffe7189998c409e90de74566444298ffe43e6cd2acdc775ba1aa7cc5e092a8b7054c811ba8c5770f84693d33d2dc"
 }
