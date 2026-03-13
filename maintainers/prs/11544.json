@@ -1,0 +1,61 @@
+{
+  "number": 11544,
+  "title": "fix(core): use findParent for input step processor span parenting",
+  "url": "https://github.com/mastra-ai/mastra/pull/11544",
+  "author": {
+    "login": "suhasdeshpande",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-01-02T18:52:51Z",
+    "lastUpdated": "2026-01-03T19:07:23Z",
+    "ageInDays": 67,
+    "daysSinceLastUpdate": 66
+  },
+  "size": {
+    "additions": 200,
+    "deletions": 2,
+    "changedFiles": 2,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/langfuse-trace",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11683,
+        "title": "Fixed tracing of processors",
+        "state": "MERGED",
+        "mergedAt": "2026-01-07T17:51:59Z",
+        "relationship": "supersedes"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Fixes input step processor spans being incorrectly parented to MODEL_GENERATION spans instead of AGENT_RUN spans in Langfuse. Uses findParent(SpanType.AGENT_RUN) to walk up the span parent chain with fallback to parent and then currentSpan. Includes 3 unit tests covering the fallback chain. Only touches runner.ts (1 line logic change) and runner.test.ts (new test block).",
+  "maintainerNotes": "This PR was superseded by #11683 ('Fixed tracing of processors'), which was merged on Jan 7 — 5 days after this PR was opened. PR #11683 took a more comprehensive approach: it moved span creation into workflow steps so each processor gets its own span, added new entity types (INPUT_STEP_PROCESSOR, OUTPUT_STEP_PROCESSOR), and explicitly reverted the findParent approach from this PR in favor of using currentSpan directly. The current PR now has merge conflicts (DIRTY/CONFLICTING state) because runner.ts has been significantly refactored by #11683 and subsequent PRs. CI checks are stuck in PENDING state (never completed). This PR should be closed as superseded.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

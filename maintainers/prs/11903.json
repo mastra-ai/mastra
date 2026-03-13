@@ -1,0 +1,69 @@
+{
+  "number": 11903,
+  "title": "chore(deps): bump hono from 4.11.3 to 4.11.4",
+  "url": "https://github.com/mastra-ai/mastra/pull/11903",
+  "author": {
+    "login": "dependabot",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-01-13T22:11:41Z",
+    "lastUpdated": "2026-02-18T07:59:36Z",
+    "ageInDays": 56,
+    "daysSinceLastUpdate": 20
+  },
+  "size": {
+    "additions": 812,
+    "deletions": 455,
+    "changedFiles": 11,
+    "category": "XL"
+  },
+  "labels": [
+    "dependencies",
+    "javascript"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "dependabot/npm_and_yarn/hono-4.11.4",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12695,
+        "title": "chore(deps): update dependency hono to v4.11.4 [security]",
+        "state": "MERGED",
+        "mergedAt": "2026-02-05T08:08:24Z"
+      },
+      {
+        "number": 13127,
+        "title": "chore(deps): update dependency hono to ^4.11.9",
+        "state": "MERGED",
+        "mergedAt": "2026-02-17T09:05:22Z"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Dependabot PR to bump hono from 4.11.3 to 4.11.4 (a security patch fixing JWT algorithm confusion in JWT and JWK/JWKS middleware). Changes are entirely in pnpm-lock.yaml and the server-adapter package.json. However, the same update was already merged via Renovate in PR #12695 on 2026-02-05, and hono was further bumped to 4.11.9 in PR #13127 on 2026-02-17.",
+  "maintainerNotes": "This PR is fully superseded. The exact same hono 4.11.4 security update was merged via Renovate (#12695), and hono has since been updated to 4.11.9 (#13127). This PR has merge conflicts and all CI checks are failing (prebuild fails due to conflicts). Safe to close immediately.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

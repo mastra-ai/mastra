@@ -1,0 +1,55 @@
+{
+  "number": 13977,
+  "title": "fix(mcp): add SIGHUP handler to clean up stdio child processes on terminal disconnect",
+  "url": "https://github.com/mastra-ai/mastra/pull/13977",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-08T05:18:40Z",
+    "lastUpdated": "2026-03-09T08:39:34Z",
+    "ageInDays": 2,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 80,
+    "deletions": 0,
+    "changedFiles": 3,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/mcp-sighup-child-process-leak",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "#13973"
+    ]
+  },
+  "summary": "Adds a SIGHUP signal handler to InternalMastraMCPClient alongside the existing SIGTERM handler. When a terminal session closes (tmux, SSH, terminal emulator), the OS sends SIGHUP which was not handled, causing stdio child processes to leak. The fix mirrors the existing SIGTERM pattern: registers a handler on connect() that calls gracefulExit(), and removes it on disconnect(). Includes 3 well-written tests covering listener cleanup on disconnect, no accumulation across connect/disconnect cycles, and no duplicate listeners on repeated connects.",
+  "maintainerNotes": "Clean, well-scoped fix from external contributor. The implementation exactly mirrors the existing SIGTERM handler pattern. LekoArts (maintainer) has engaged in comments helping with changeset issues but hasn't left a formal review yet. The changeset was updated per CodeRabbit feedback to be user-facing. CI tests are pending (waiting for secrets-gated jobs to run). Vercel deploy check fails because external contributor needs authorization — this is expected and not a blocker. The linked issue #13973 provides good reproduction details. No similar PRs found.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

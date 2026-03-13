@@ -1,0 +1,60 @@
+{
+  "number": 11312,
+  "title": "fix(deployer): Fix bundling for packages without exports field (#11310)",
+  "url": "https://github.com/mastra-ai/mastra/pull/11312",
+  "author": {
+    "login": "app/dane-ai-mastra",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-12-20T00:23:46Z",
+    "lastUpdated": "2026-01-10T17:07:03Z",
+    "ageInDays": 80,
+    "daysSinceLastUpdate": 59
+  },
+  "size": {
+    "additions": 144,
+    "deletions": 197,
+    "changedFiles": 4,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "backport/fix-node-resolver-11310",
+    "base": "0.x"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "low",
+    "quality": "needs-work",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": false,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11310,
+        "title": "fix(deployer): Fix bundling for packages without exports field",
+        "state": "MERGED",
+        "relationship": "This is a backport of #11310 which was already merged to main"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Backport of #11310 (already merged to main) to the 0.x branch. Rewrites the node-modules-extension-resolver plugin to use local-pkg's getPackageInfo for resolving packages, simplifying the logic: packages with exports fields are left to Node to resolve, while packages without exports get resolved via @rollup/plugin-node-resolve and path rewriting. Also conditionally skips the commonjs plugin when externalsPreset is enabled.",
+  "maintainerNotes": "CI is failing (prebuild failure cascading to all test suites). The code contains leftover console.log debug statements that should be removed. This is the only open PR targeting the 0.x branch. Since the original fix (#11310) was merged to main 80 days ago and this backport has had no human activity, consider whether 0.x still needs this fix or if the branch is effectively EOL. If the 0.x branch is still maintained, this needs CI fixes and removal of debug console.log statements before merging.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

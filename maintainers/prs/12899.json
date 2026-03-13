@@ -1,0 +1,65 @@
+{
+  "number": 12899,
+  "title": "feat: add server.publicHost and server.publicProtocol options to fix Studio API URL in cloud deployments",
+  "url": "https://github.com/mastra-ai/mastra/pull/12899",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-10T20:21:49Z",
+    "lastUpdated": "2026-03-07T13:49:34Z",
+    "ageInDays": 28,
+    "daysSinceLastUpdate": 3
+  },
+  "size": {
+    "additions": 153,
+    "deletions": 4,
+    "changedFiles": 4,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/server-public-host-protocol",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13935,
+        "title": "fix(server): parse only the first X-Forwarded-Host value",
+        "state": "MERGED",
+        "relationship": "related but complementary — #13935 fixes X-Forwarded-Host parsing for proxied requests, while this PR adds explicit config options for public-facing URL"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 12298,
+        "title": "Add server.publicHost option for Studio in cloud deployments"
+      }
+    ]
+  },
+  "summary": "Adds three new optional ServerConfig properties — publicHost, publicProtocol, and publicPort — so the Studio HTML injection and startup log can use a public-facing URL different from the server's bind address. This solves the problem where cloud deployments binding to 0.0.0.0 would inject that address into Studio, causing browser fetch calls to fail. Changes span core types (ServerConfig), deployer server (createHonoServer + createNodeServer), and include 5 new unit tests. Includes a well-written changeset.",
+  "maintainerNotes": "Well-structured community contribution that fixes a real cloud deployment issue (#12298). CodeRabbit flagged a minor issue in an earlier revision about publicPort not being used in one injection path, which was subsequently addressed. The merged PR #13935 (X-Forwarded-Host parsing) solves a similar problem via request headers, but this PR's approach of explicit config is complementary and useful when header-based detection isn't available. Review requested from NikAiyer and wardpeet. CI tests are stuck in PENDING state (likely needs org member authorization for the Vercel deployment check + test secrets). The approach is clean: 3 new optional fields with sensible fallbacks, no breaking changes.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

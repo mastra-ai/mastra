@@ -1,0 +1,72 @@
+{
+  "number": 13479,
+  "title": "fix(tools): schema-aware null stripping preserves .nullable() fields (#13419)",
+  "url": "https://github.com/mastra-ai/mastra/pull/13479",
+  "author": {
+    "login": "echoVic",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-25T07:34:50Z",
+    "lastUpdated": "2026-03-03T12:35:12Z",
+    "ageInDays": 13,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 93,
+    "deletions": 31,
+    "changedFiles": 6,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/schema-aware-null-stripping",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": false
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12396,
+        "title": "fix(core): strip null values from tool inputs before validation",
+        "state": "MERGED",
+        "relationship": "predecessor — introduced the original stripNullishValues that this PR improves"
+      },
+      {
+        "number": 13478,
+        "title": "fix(agent): use unique runId per parallel workflow tool call (#13473)",
+        "state": "MERGED",
+        "relationship": "same author — already merged separately, but this PR still includes its changeset and agent.ts change"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 13419,
+        "title": "Default and Optional Parameters in Tool Input Schema Causing Validation Issues Still",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Makes stripNullishValues schema-aware so that .nullable() fields preserve their null values while .optional()-only fields still get null stripped. Adds isFieldNullable() helper that walks the Zod wrapper chain to detect ZodNullable. Also propagates element schemas into arrays for nested nullable support. Updates an existing test that previously expected failure to now expect success. The PR also includes an unrelated fix for parallel workflow runId reuse in agent.ts (already merged via #13478).",
+  "maintainerNotes": "1. **Merge conflicts**: PR is currently CONFLICTING and needs a rebase onto main. 2. **Scope creep**: Includes an unrelated agent.ts change and changeset (fix-parallel-workflow-runid.md) for #13473, which was already merged separately via PR #13478. Author should remove those files. 3. **Duplicate changesets**: Has two changeset files for the same nullable fix (fix-schema-aware-null-stripping.md and schema-aware-null-stripping.md) — should be consolidated into one. 4. **CI not running**: Most CI checks are stuck in PENDING state (Core, Memory, E2E, etc.) — likely due to merge conflicts or needing authorization. 5. **Code quality is good**: The core fix is well-designed — walking the Zod wrapper chain to detect nullable is the right approach, handles both Zod 3 and 4, and the test update is appropriate. 6. **CodeRabbit reviewed** with actionable feedback; author responded and addressed suggestions in follow-up commit. 7. No human maintainer review yet.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

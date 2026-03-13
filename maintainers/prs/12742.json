@@ -1,0 +1,53 @@
+{
+  "number": 12742,
+  "title": "fix(cli): wait for server process to exit before restarting",
+  "url": "https://github.com/mastra-ai/mastra/pull/12742",
+  "author": {
+    "login": "gartz",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-05T21:42:27Z",
+    "lastUpdated": "2026-02-05T21:51:13Z",
+    "ageInDays": 33,
+    "daysSinceLastUpdate": 33
+  },
+  "size": {
+    "additions": 16,
+    "deletions": 0,
+    "changedFiles": 1,
+    "category": "XS"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/wait-for-server-exit-on-restart",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Fixes a race condition in the CLI dev server restart flow. Previously, after sending SIGINT to the old server process, the new server would start immediately without waiting for the old one to exit, causing port conflicts and zombie processes. The fix adds a Promise that waits for the process 'exit' event with a 5-second timeout that escalates to SIGKILL, then clears the currentServerProcess reference.",
+  "maintainerNotes": "Small, focused, and well-described fix for a real dev experience pain point. The change is purely additive (16 lines in one file). No tests or changeset included. CI checks are stuck in PENDING state (likely due to external contributor permissions — setup jobs passed but actual test jobs never ran). CodeRabbit review suggested a minor improvement: after sending SIGKILL in the timeout handler, the code should also wait for the 'exit' event rather than resolving immediately, since SIGKILL is also async on some platforms. The PR has had no human review or activity for 33 days. Mergeable with no conflicts. A maintainer should review the CodeRabbit feedback, decide if the SIGKILL-wait refinement is needed, request a changeset, and re-trigger CI.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

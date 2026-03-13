@@ -1,0 +1,57 @@
+{
+  "number": 12991,
+  "title": "feat(pg, rag): add full-text and hybrid search support to RAG vector query tool",
+  "url": "https://github.com/mastra-ai/mastra/pull/12991",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-12T07:32:43Z",
+    "lastUpdated": "2026-03-07T17:07:14Z",
+    "ageInDays": 26,
+    "daysSinceLastUpdate": 3
+  },
+  "size": {
+    "additions": 1116,
+    "deletions": 71,
+    "changedFiles": 10,
+    "category": "XL"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/fulltext-hybrid-search-rag",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "CHANGES_REQUESTED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "#10453"
+    ]
+  },
+  "summary": "Adds full-text search and hybrid (vector + keyword) search to @mastra/pg and the RAG vector query tool. Introduces SearchMode type ('vector'|'fulltext'|'hybrid'), HybridConfig for fusion weights, a content TEXT column + GIN tsvector index on PgVector.createIndex, fulltext/hybrid query routing in PgVector.query, and embedding skip optimization for fulltext mode. Includes 16 integration tests for PG full-text search and 6 unit tests for RAG tool parameter forwarding. All new params are optional and backward compatible.",
+  "maintainerNotes": "Well-structured community contribution addressing issue #10453 (labeled 'help wanted', 'p: low', 'effort:high'). LekoArts requested splitting the changeset into three files — this was done and all review threads are resolved, but the review status still shows CHANGES_REQUESTED. The PR currently has merge conflicts that need rebasing. CI shows MCP tests failing and core/E2E/Memory/RAG tests stuck in pending (likely due to secrets gating for external contributors). Vercel deploys need authorization. Documentation checklist item is unchecked — docs will need to be added. The author's latest commit (Mar 7) addressed the changeset feedback. Needs: (1) rebase to resolve conflicts, (2) documentation updates, (3) re-review from LekoArts/DanielSLew/NikAiyer who are requested reviewers.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

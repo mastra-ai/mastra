@@ -1,0 +1,64 @@
+{
+  "number": 14040,
+  "title": "feat(core): add metadata filtering for message queries",
+  "url": "https://github.com/mastra-ai/mastra/pull/14040",
+  "author": {
+    "login": "DanielSLew",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-09T21:22:04Z",
+    "lastUpdated": "2026-03-09T21:59:59Z",
+    "ageInDays": 1,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 1070,
+    "deletions": 46,
+    "changedFiles": 32,
+    "category": "XL"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/issue-12260",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 14034,
+        "title": "feat(pg): add btree indexes on memory_messages metadata fields",
+        "state": "MERGED",
+        "relationship": "complementary"
+      }
+    ],
+    "relatedIssues": [
+      "#12260"
+    ]
+  },
+  "summary": "Adds metadata filtering support (filter.metadata with AND semantics) for listMessages and listMessagesByResourceId across all 11 storage backends. Includes SQL-level filtering for PG/LibSQL/D1/MSSQL/ClickHouse and in-memory post-fetch filtering for KV/Convex/DynamoDB/LanceDB/Upstash. Adds validateMetadataKeys to base MemoryStorage. Also implements the missing listMessagesByResourceId for D1 and MSSQL backends. 9 new shared tests in _test-utils cover single/multi-key filters, type handling, pagination, and date range combinations. Docs updated for recall() and message-history. Two changesets included. Peer deps bumped to >=1.11.0 across all store packages.",
+  "maintainerNotes": "Well-structured cross-cutting feature by a maintainer. CI has failures in Agent Builder, Combined Store, Core, Observability, and Full Test Suite — need to check if these are pre-existing flaky tests or related to this PR (Memory Tests and E2E Tests are still pending). CodeRabbit flagged 17 actionable issues including: (1) MSSQL metadata validation errors being swallowed by try/catch instead of propagating, (2) MSSQL sort comparator ignoring requested orderBy when seq_id exists, (3) D1 count query missing Number() coercion, (4) MSSQL JSON_VALUE not guarded by ISJSON check, (5) null metadata filter conflating missing keys with explicit nulls in MSSQL. The scope is large (32 files, 11 backends) but coherent — all changes serve metadata filtering. PR #14034 (merged same day) adds btree indexes on PG metadata fields, which complements this PR's query-time filtering.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

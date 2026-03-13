@@ -1,0 +1,59 @@
+{
+  "number": 11464,
+  "title": "Add Drizzle integration",
+  "url": "https://github.com/mastra-ai/mastra/pull/11464",
+  "author": {
+    "login": "gmethvin",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-12-29T09:47:27Z",
+    "lastUpdated": "2026-01-30T16:08:02Z",
+    "ageInDays": 71,
+    "daysSinceLastUpdate": 39
+  },
+  "size": {
+    "additions": 4688,
+    "deletions": 765,
+    "changedFiles": 32,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feature/drizzle-integration",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "medium",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      {
+        "number": 5993,
+        "title": "[DISCORD:1393253194951299122] Integrating Mastra with Drizzle",
+        "state": "CLOSED"
+      }
+    ]
+  },
+  "summary": "Adds Drizzle ORM schema exports for @mastra/pg, @mastra/libsql, and @mastra/cloudflare-d1 via subpath exports (e.g. @mastra/pg/drizzle). Includes a createMastraSchema() factory API with store-specific options (schemaName for PG, tablePrefix for D1), auto-generated schemas from database introspection, CI workflow to validate schema drift, integration/unit tests for all 3 stores, shared schema generation scripts, and README documentation. The changeset, tests, and description are all present and thorough. Community members have expressed interest. However, the PR has merge conflicts and CI tests are stuck pending (likely due to conflicts). No maintainer has reviewed it yet.",
+  "maintainerNotes": "High-quality community contribution with strong interest (2 positive community comments). Well-structured: adds Drizzle schemas to 3 store packages with consistent factory pattern, comprehensive tests, CI validation workflow, and proper changeset. The bulk of the diff is lockfile changes and generated schema files, so actual authored code is reasonable in scope. Main blocker: merge conflicts need resolution (likely from recent PG schema changes like #14034 adding btree indexes and #11906 fixing JSONB). The related issue #5993 is already closed. Author needs to rebase against current main to resolve conflicts and get CI running again. Worth asking the author if they're still interested in maintaining this.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

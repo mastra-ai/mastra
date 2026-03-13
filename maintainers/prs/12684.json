@@ -1,0 +1,75 @@
+{
+  "number": 12684,
+  "title": "chore(deps): bump @modelcontextprotocol/sdk from 1.20.1 to 1.26.0",
+  "url": "https://github.com/mastra-ai/mastra/pull/12684",
+  "author": {
+    "login": "dependabot",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-04T20:33:27Z",
+    "lastUpdated": "2026-03-09T15:07:57Z",
+    "ageInDays": 34,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 665,
+    "deletions": 157,
+    "changedFiles": 5,
+    "category": "XL"
+  },
+  "labels": [
+    "dependencies",
+    "javascript"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "dependabot/npm_and_yarn/modelcontextprotocol/sdk-1.26.0",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13908,
+        "title": "chore(deps): update dependency @modelcontextprotocol/sdk to v1.25.2 [security]",
+        "state": "OPEN",
+        "relationship": "supersedes"
+      },
+      {
+        "number": 12712,
+        "title": "chore(deps): update dependency @modelcontextprotocol/sdk to v1.25.2 [security]",
+        "state": "CLOSED",
+        "relationship": "similar"
+      },
+      {
+        "number": 11527,
+        "title": "chore(deps): bump @modelcontextprotocol/sdk from 1.20.1 to 1.24.0",
+        "state": "CLOSED",
+        "relationship": "similar"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Dependabot PR to bump @modelcontextprotocol/sdk from 1.20.1 to 1.26.0. The update includes a security fix (GHSA for cross-client response data leakage), vulnerability fixes, and Client Credentials scopes support. Changes are entirely in pnpm-lock.yaml and package resolution entries. The PR has merge conflicts and all CI checks are failing (build fails, all test suites fail). Dependabot itself reported an update failure on 2026-02-10.",
+  "maintainerNotes": "This PR is likely superseded by #13908, a newer open PR from daneatmastra that also updates @modelcontextprotocol/sdk (to v1.25.2, targeting the same security fix). Both PRs currently have merge conflicts. The lockfile on main still resolves to 1.20.1, so the security update is still needed. However, v1.26.0 introduced new peer dependencies (zod ^3.25 || ^4.0, optional @cfworker/json-schema) which changed the SDK's API surface — the diff shows zod resolving to 4.3.6 in one place, which could cause compatibility issues. Recommend closing this in favor of #13908 or a fresh manual update that carefully handles the zod peer dependency.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

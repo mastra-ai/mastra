@@ -1,0 +1,71 @@
+{
+  "number": 13894,
+  "title": "fix(playground-ui): fix Enter key not reliably submitting messages in chat input",
+  "url": "https://github.com/mastra-ai/mastra/pull/13894",
+  "author": {
+    "login": "graysonhicks",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-06T02:29:52Z",
+    "lastUpdated": "2026-03-06T16:29:48Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 4
+  },
+  "size": {
+    "additions": 17,
+    "deletions": 0,
+    "changedFiles": 2,
+    "category": "XS"
+  },
+  "labels": [],
+  "isDraft": true,
+  "branch": {
+    "head": "fix/13878--enter",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "draft-in-progress",
+    "priority": "medium",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13938,
+        "title": "feat(playground): agent playground, traces tab, and dataset iteration workflow",
+        "relationship": "The fix commits from this PR's branch were cherry-picked into #13938's branch but were NOT included in the final squash merge to main. The fix is still needed."
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 13878,
+        "title": "Studio - Query Input box does not work with 'Enter' Have to enter several times to submit request",
+        "state": "OPEN",
+        "labels": [
+          "bug",
+          "UI / Dev Playground",
+          "impact:medium",
+          "effort:medium"
+        ]
+      }
+    ]
+  },
+  "summary": "Fixes a bug where pressing Enter in the playground chat input did not reliably submit messages due to a stale React render closure in the @assistant-ui/react library's form submission chain. The fix adds an explicit onKeyDown handler that calls composerRuntime.send() directly, reading current state from the runtime at keypress time. Also adds an isRunning guard and respects IME composition. Only touches 2 files: the changeset and the thread.tsx component (10 lines added).",
+  "maintainerNotes": "This is a draft PR from a maintainer (graysonhicks). CI has 2 failures (Core Package Tests and E2E Tests) which appear to be pre-existing/flaky rather than caused by this change — the PR only adds a keydown handler to a UI component. The fix is well-explained with a clear root cause analysis. Commits from this branch were part of the #13938 feature branch, but the Enter key fix was NOT included in #13938's squash merge to main, so this fix is still needed. The related issue #13878 remains open. No automated tests were added but the PR includes a manual test plan. The author should mark it as ready for review.",
+  "suggestedAction": "ping-author",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,74 @@
+{
+  "number": 6609,
+  "title": "fix: Delete embeddings when deleting messages and threads",
+  "url": "https://github.com/mastra-ai/mastra/pull/6609",
+  "author": {
+    "login": "gpanakkal",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-08-06T01:03:34Z",
+    "lastUpdated": "2026-03-03T12:43:14Z",
+    "ageInDays": 216,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 612,
+    "deletions": 85,
+    "changedFiles": 9,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "delete-message-embeddings",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12227,
+        "title": "fix: Cleanup Memory message in vector store",
+        "state": "MERGED",
+        "mergedAt": "2026-03-05T15:57:54Z",
+        "relevance": "Addresses the exact same problem: deleting vector embeddings when messages/threads are deleted. Merged 5 days ago."
+      },
+      {
+        "number": 11842,
+        "title": "fix(memory): sync vector database when updating messages",
+        "state": "MERGED",
+        "mergedAt": "2026-01-12T23:16:37Z",
+        "relevance": "Related fix for syncing vector DB on message updates, which this PR's approach also partially touches."
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 6604,
+        "title": "[BUG] Message embeddings do not get deleted",
+        "state": "CLOSED"
+      }
+    ]
+  },
+  "summary": "Adds embedding deletion logic to Memory.deleteMessages() and Memory.deleteThread() so that vector embeddings are cleaned up when messages or threads are removed. Includes integration tests for the new behavior and a typo fix (getResuableTests -> getReusableTests). The PR was well-structured with tests, a changeset, and clear description.",
+  "maintainerNotes": "This PR is almost certainly superseded by PR #12227 (merged 2026-03-05), which implements the same fix — cascading cleanup of vector embeddings when deleting messages/threads. The related issue #6604 is already closed. The PR has merge conflicts and CI checks are stuck in PENDING. Despite being a well-written contribution, the work has been independently completed and merged. Recommend closing with a thank-you to the author for identifying the issue.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

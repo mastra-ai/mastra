@@ -1,0 +1,53 @@
+{
+  "number": 13934,
+  "title": "fix(playground-ui): lazy-load prettier to reduce main bundle size",
+  "url": "https://github.com/mastra-ai/mastra/pull/13934",
+  "author": {
+    "login": "rphansen91",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-06T18:34:17Z",
+    "lastUpdated": "2026-03-10T14:07:29Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 26,
+    "deletions": 3,
+    "changedFiles": 2,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/lazy-load-prettier",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "ready-to-merge",
+    "priority": "medium",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Replaces static imports of prettier/standalone, prettier/plugins/babel, and prettier/plugins/estree in playground-ui's formatting.ts with dynamic import() calls behind a memoized lazy loader. This removes ~634KB from the main bundle (180KB gzipped) by splitting prettier into on-demand chunks loaded only when formatJSON is called. Includes error-handling that resets the cached promise on failure so retries work correctly.",
+  "maintainerNotes": "Approved by abhiaiyer91 and wardpeet. CI failures are E2E Tests and Memory Tests which are unrelated to this 2-file change (only touches playground-ui formatting). Build, lint, core tests, and all other checks pass. No tests added but the change is a straightforward lazy-loading refactor with no behavioral change. CodeRabbit feedback was addressed across iterations (memoization, error cache reset). Ready to merge.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

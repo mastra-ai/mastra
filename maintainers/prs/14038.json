@@ -1,0 +1,72 @@
+{
+  "number": 14038,
+  "title": "fix(core): capture tripwire aborts in OpenTelemetry spans",
+  "url": "https://github.com/mastra-ai/mastra/pull/14038",
+  "author": {
+    "login": "DanielSLew",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-09T21:03:01Z",
+    "lastUpdated": "2026-03-10T12:28:25Z",
+    "ageInDays": 1,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 369,
+    "deletions": 185,
+    "changedFiles": 6,
+    "category": "L"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/issue-12163",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11343,
+        "title": "fix(core): handle TripWire from processInputStep properly",
+        "state": "MERGED",
+        "relevance": "Related prior fix for TripWire handling in processInputStep; this PR extends observability coverage for those same code paths"
+      },
+      {
+        "number": 11683,
+        "title": "Fixed tracing of processors",
+        "state": "MERGED",
+        "relevance": "Prior fix for processor tracing; this PR builds on that foundation to capture tripwire-specific abort details"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 12163,
+        "title": "[FEATURE] Ensure processor trip-wire aborts are traced properly",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "When a processor tripwire aborts an agent run, the tracing spans did not record why the run was short-circuited, making tripwire-triggered aborts invisible in tracing dashboards. This PR changes all tripwire catch blocks across processor runner (input, output, beforeGenerate, streaming), agent-legacy, agent onFinish, and the v5 workflow map-results-step to use span.error() with structured tripwire attributes (reason, processorId, retry, metadata) instead of span.end() with plain metadata. It also adds tripwire-specific attribute types to the tracing type definitions. The bulk of the diff is wrapping existing processor logic in try/catch blocks to properly capture and propagate tripwire errors to OTel spans.",
+  "maintainerNotes": "Maintainer-authored PR (DanielSLew is a repo collaborator). Review requested from epinzur. CI has 4 failures (Agent Builder Tests, Core Package Tests, Full Test Suite, Observability Package Tests) — these should be investigated to determine if they are related to this change or pre-existing/flaky. No new tests added, but the changes are primarily observability wiring (calling span.error instead of span.end with metadata). The changeset is present and correctly scoped as a patch to @mastra/core. CodeRabbit left automated review comments that the author responded to. The scope is focused and reasonable — all changes serve the single goal of making tripwire aborts visible in traces.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

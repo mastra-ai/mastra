@@ -1,0 +1,56 @@
+{
+  "number": 12174,
+  "title": "chore(deps-dev): bump wrangler from 4.58.0 to 4.59.1",
+  "url": "https://github.com/mastra-ai/mastra/pull/12174",
+  "author": {
+    "login": "dependabot[bot]",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-01-21T23:26:31Z",
+    "lastUpdated": "2026-02-23T00:50:49Z",
+    "ageInDays": 47,
+    "daysSinceLastUpdate": 15
+  },
+  "size": {
+    "additions": 750,
+    "deletions": 334,
+    "changedFiles": 2,
+    "category": "XL"
+  },
+  "labels": [
+    "dependencies",
+    "javascript"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "dependabot/npm_and_yarn/wrangler-4.59.1",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Automated dependabot PR bumping wrangler devDependency in deployers/cloudflare from ^4.54.0 to ^4.59.1. Changes are in deployers/cloudflare/package.json and pnpm-lock.yaml. The wrangler 4.59.0 release adds a --check flag to `wrangler types` and 4.59.1 fixes a command injection issue in `wrangler pages deploy --commit-hash`.",
+  "maintainerNotes": "This PR has merge conflicts (CONFLICTING state) and CI is failing on Build, Lint, and multiple test suites. The PR is 47 days old with no review activity. Since this is a devDependency used only for the cloudflare deployer, it's low risk but needs a rebase to resolve conflicts with the current main branch. The lockfile diff is large (750+/334-) due to transitive dependency resolution changes. Consider closing and letting dependabot create a fresh PR, or manually rebasing.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

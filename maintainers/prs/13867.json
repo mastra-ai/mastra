@@ -1,0 +1,66 @@
+{
+  "number": 13867,
+  "title": "feat: show accurate tiktoken output count in shell tool footers",
+  "url": "https://github.com/mastra-ai/mastra/pull/13867",
+  "author": {
+    "login": "CalebBarnes",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-05T19:37:03Z",
+    "lastUpdated": "2026-03-05T19:54:26Z",
+    "ageInDays": 5,
+    "daysSinceLastUpdate": 5
+  },
+  "size": {
+    "additions": 281,
+    "deletions": 131,
+    "changedFiles": 19,
+    "category": "L"
+  },
+  "labels": [],
+  "isDraft": true,
+  "branch": {
+    "head": "feat/accurate-output-token-count",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "draft-in-progress",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13828,
+        "title": "fix(core): truncate workspace tool output at token level instead of line boundaries",
+        "state": "MERGED",
+        "relationship": "prior-work"
+      },
+      {
+        "number": 13440,
+        "title": "feat(workspace): ANSI stripping, tail pipe extraction, and tiktoken-based output limits for workspace tools",
+        "state": "MERGED",
+        "relationship": "prior-work"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Refactors output-helpers (applyTokenLimit, applyTokenLimitSandwich, truncateOutput) to return a TruncationResult object ({ text, tokens }) instead of a plain string, reusing the tiktoken count already computed during truncation. The accurate token count is emitted in the data-sandbox-exit chunk from execute-command, get-process-output, and kill-process tools. The mc TUI and playground UI display the token count in the tool footer when it exceeds 1k tokens. All callers of the changed functions (grep, list-files, read-file) are updated to use .text from the new return type. Existing tests are updated with 62 assertions passing locally.",
+  "maintainerNotes": "PR is still in draft status. CI has 3 failures: Core Package Tests, Full Test Suite, and Lint. The Lint failure and Core test failures need investigation — they may or may not be related to this PR's changes. The code change is well-structured: it's a natural extension of the existing tiktoken truncation infrastructure (built in prior PRs #13440 and #13828 by the same author). The return type refactor is clean — all callers are updated. The playground-ui peer dep on @mastra/core was bumped from >=1.7.1-0 to >=1.9.1-0. No reviews have been submitted yet. Author should fix CI failures and mark as ready for review.",
+  "suggestedAction": "wait",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,64 @@
+{
+  "number": 13073,
+  "title": "fix(deployer): watch workspace package source files during mastra dev",
+  "url": "https://github.com/mastra-ai/mastra/pull/13073",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-14T06:38:34Z",
+    "lastUpdated": "2026-03-03T12:37:00Z",
+    "ageInDays": 24,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 238,
+    "deletions": 1,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/mastra-dev-watch-workspace-packages",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      {
+        "number": 13033,
+        "title": "Turborepo watch on mono repo mastra setup",
+        "state": "OPEN"
+      },
+      {
+        "number": 10063,
+        "title": "Is file watching supported in monorepos with Mastra's dev server?",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "During `mastra dev`, workspace packages are marked external by the alias-optimized-deps plugin, so Rollup never watches them for changes. This PR adds a `workspace-file-watcher` Rollup plugin that uses `this.addWatchFile()` in `buildStart` to register workspace package src/ and dist/ files with Rollup's watcher. It recursively collects .ts/.js/.tsx/.jsx/.mts/.mjs/.cts/.cjs files, skipping node_modules. When a watched file changes, Rollup triggers a rebuild. The approach preserves existing bundling behavior — workspace packages remain external. Includes comprehensive tests and a changeset.",
+  "maintainerNotes": "Well-structured community PR that fixes a real pain point (2 open issues). The author initially took a riskier approach (bundling workspace packages), but maintainer @TheIsrael1 provided detailed review feedback suggesting the simpler `addWatchFile()` approach. The author incorporated this feedback in subsequent commits. The current implementation is the safe `addWatchFile` approach — no changes to bundling, tree-shaking, or module resolution. CI checks are stuck in PENDING state (tests never ran after the 'Setup actions with secrets' step completed), which is likely a CI infrastructure issue for external contributors rather than a code problem. Needs a maintainer to re-trigger CI and do a final review of the implementation. The `collectSourceFiles` helper is clean and well-scoped. Tests mock fs correctly and cover edge cases (missing dirs, non-source files, plugin ordering).",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

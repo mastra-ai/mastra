@@ -1,0 +1,74 @@
+{
+  "number": 13998,
+  "title": "fix(deployer): resolve .js tsconfig aliases during build",
+  "url": "https://github.com/mastra-ai/mastra/pull/13998",
+  "author": {
+    "login": "TheIsrael1",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-09T09:31:17Z",
+    "lastUpdated": "2026-03-09T09:37:51Z",
+    "ageInDays": 1,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 104,
+    "deletions": 10,
+    "changedFiles": 8,
+    "category": "M"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "melodious-coat",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "passing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11788,
+        "title": "fix(deployer): support tsconfig paths when using extended configs",
+        "state": "MERGED",
+        "relevance": "Related prior fix to the same tsconfig-paths plugin, but for extended config support not .js extensions"
+      },
+      {
+        "number": 12239,
+        "title": "fix: resolve TypeScript path aliases in transpiled workspace packages",
+        "state": "MERGED",
+        "relevance": "Related path alias resolution fix but for transpiled workspace packages, different scope"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 12448,
+        "title": "Deployer tsConfigPaths plugin does not resolve path aliases during build",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Fixes an issue where the deployer's tsconfig-paths Rollup plugin fails to resolve ESM-style `.js` module specifiers (e.g., `~/utils/build-flags.js`) that point to TypeScript source files. Adds a `resolveJsImportToSourceFile` function that, when a `.js` import doesn't exist on disk, tries `.ts`, `.tsx`, `.js`, `.jsx` extensions to find the actual source file. Includes a unit test for the plugin, e2e test updates (with a new fixture file and two new e2e assertions), a doc update to the configuration reference, and a changeset.",
+  "maintainerNotes": "High-quality PR: well-scoped bug fix with clear description, linked issue (#12448), unit test, e2e regression tests, docs update, and changeset. All CI checks pass and there are no merge conflicts. The e2e test refactors `buildFixture()` into a lazy/cached helper to avoid building in the top-level beforeAll (now deferred to the build describe block). CodeRabbit suggests also handling `.mts`/`.cts` extensions — minor nitpick that could be addressed separately. Related PRs #11788 and #12239 fixed different aspects of tsconfig path resolution and do not overlap with this fix.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

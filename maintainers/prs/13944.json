@@ -1,0 +1,53 @@
+{
+  "number": 13944,
+  "title": "fix(playground): split vendor deps into parallel-loadable chunks",
+  "url": "https://github.com/mastra-ai/mastra/pull/13944",
+  "author": {
+    "login": "rphansen91",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-06T21:29:38Z",
+    "lastUpdated": "2026-03-10T13:56:05Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 25,
+    "deletions": 0,
+    "changedFiles": 2,
+    "category": "XS"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/vendor-chunks-clean",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "ready-to-merge",
+    "priority": "medium",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds manualChunks config to the playground Vite build to split heavy vendor deps (CodeMirror ~1.7MB, XYFlow ~221KB, PostHog ~80KB) into separate chunks. This lets the browser download them in parallel instead of fetching one monolithic 5.8MB bundle, reducing the main chunk to ~4.7MB. Only touches vite.config.ts and adds a changeset.",
+  "maintainerNotes": "Approved by two maintainers (abhiaiyer91, wardpeet). CI failures are in Core Package Tests and E2E Tests which are unrelated to this config-only change in the playground package. The PR is MERGEABLE with no conflicts. CodeRabbit noted a minor nitpick about broadening the posthog match pattern but acknowledged it's optional. This is part of a series of 4 optimization PRs by the author; this one is independent and can land on its own.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

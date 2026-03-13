@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mastra PR Triage Dashboard</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface-hover: #1c2129;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent-blue: #58a6ff;
+      --accent-green: #3fb950;
+      --accent-red: #f85149;
+      --accent-orange: #d29922;
+      --accent-purple: #bc8cff;
+      --accent-pink: #f778ba;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.4;
+      font-size: 13px;
+    }
+    .header {
+      border-bottom: 1px solid var(--border);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header h1 { font-size: 16px; font-weight: 600; }
+    .header .meta { color: var(--text-muted); font-size: 12px; }
+    .progress-bar {
+      margin: 0 20px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .progress-bar .bar {
+      height: 6px;
+      background: var(--surface);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .progress-bar .bar .fill {
+      height: 100%;
+      background: var(--accent-green);
+      transition: width 0.5s ease;
+    }
+    .progress-bar .label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+    .stats {
+      display: flex;
+      gap: 8px;
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 14px;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .stat-card:hover { border-color: var(--accent-blue); }
+    .stat-card.active { border-color: var(--accent-blue); background: rgba(88,166,255,0.08); }
+    .stat-card .value { font-size: 20px; font-weight: 700; }
+    .stat-card .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
+    .controls {
+      padding: 8px 20px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+    }
+    .controls input, .controls select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--text);
+      padding: 5px 10px;
+      font-size: 12px;
+    }
+    .controls input { width: 220px; }
+    .controls .result-count { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+    .badge {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .badge-green { background: rgba(63,185,80,0.15); color: var(--accent-green); }
+    .badge-red { background: rgba(248,81,73,0.15); color: var(--accent-red); }
+    .badge-orange { background: rgba(210,153,34,0.15); color: var(--accent-orange); }
+    .badge-blue { background: rgba(88,166,255,0.15); color: var(--accent-blue); }
+    .badge-purple { background: rgba(188,140,255,0.15); color: var(--accent-purple); }
+    .badge-pink { background: rgba(247,120,186,0.15); color: var(--accent-pink); }
+    .badge-gray { background: rgba(139,148,158,0.15); color: var(--text-muted); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    thead th {
+      text-align: left;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      z-index: 10;
+    }
+    /* Column widths */
+    col.col-pr { width: 30%; }
+    col.col-author { width: 9%; }
+    col.col-category { width: 13%; }
+    col.col-pri { width: 6%; }
+    col.col-size { width: 5%; }
+    col.col-age { width: 5%; }
+    col.col-status { width: 10%; }
+    col.col-action { width: 22%; }
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
+    }
+    tbody tr.data-row:hover { background: var(--surface-hover); }
+    tbody td {
+      padding: 5px 10px;
+      font-size: 12px;
+      vertical-align: top;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pr-cell {
+      overflow: hidden;
+    }
+    .pr-link {
+      font-weight: 500;
+      color: var(--text);
+      text-decoration: none;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: block;
+      font-size: 12px;
+    }
+    .pr-link:hover { color: var(--accent-blue); text-decoration: underline; }
+    .pr-num { color: var(--text-muted); font-weight: 400; }
+    .pr-author { color: var(--accent-blue); font-size: 12px; }
+
+    .date { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+    .size-xs { color: var(--accent-green); }
+    .size-s { color: var(--accent-green); }
+    .size-m { color: var(--accent-orange); }
+    .size-l { color: var(--accent-red); }
+    .size-xl { color: var(--accent-red); font-weight: 700; }
+    .loading-row td { text-align: center; padding: 40px; color: var(--text-muted); }
+    #table-container { overflow-x: auto; }
+
+    /* Expandable detail panel */
+    .detail-panel { display: none; }
+    .detail-panel.open { display: table-row; }
+    .detail-content {
+      padding: 12px 20px;
+      background: var(--surface);
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      font-size: 12px;
+    }
+    .detail-section h4 {
+      color: var(--text-muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin-bottom: 4px;
+    }
+    .detail-section p { color: var(--text); margin-bottom: 8px; line-height: 1.5; }
+    .quality-signals { display: flex; gap: 4px; flex-wrap: wrap; }
+    .signal { font-size: 11px; }
+    .signal-yes::before { content: "✓ "; color: var(--accent-green); }
+    .signal-no::before { content: "✗ "; color: var(--accent-red); }
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+    }
+    .refresh-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--text);
+      padding: 4px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .refresh-btn:hover { background: var(--surface-hover); }
+    .stale-indicator { color: var(--accent-orange); font-size: 10px; }
+    .draft-indicator { color: var(--accent-purple); font-size: 10px; }
+    .bot-indicator { font-size: 10px; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Mastra PR Triage Dashboard</h1>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button class="refresh-btn" onclick="loadData()">Refresh</button>
+      <div class="meta" id="last-updated">Loading...</div>
+    </div>
+  </div>
+
+  <div class="progress-bar">
+    <div class="bar"><div class="fill" id="progress-fill" style="width:0%"></div></div>
+    <div class="label" id="progress-label">Loading triage data...</div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="controls">
+    <input type="text" id="search" placeholder="Search PRs..." oninput="filterAndRender()">
+    <select id="filter-category" onchange="filterAndRender()">
+      <option value="">All Categories</option>
+      <option value="ready-to-merge">Ready to Merge</option>
+      <option value="needs-maintainer-review">Needs Review</option>
+      <option value="needs-author-action">Needs Author</option>
+      <option value="stale">Stale</option>
+      <option value="likely-superseded">Superseded</option>
+      <option value="draft-in-progress">Draft</option>
+      <option value="blocked">Blocked</option>
+      <option value="auto-dependency-update">Dep Update</option>
+      <option value="close-candidate">Close Candidate</option>
+    </select>
+    <select id="filter-priority" onchange="filterAndRender()">
+      <option value="">All Priorities</option>
+      <option value="critical">Critical</option>
+      <option value="high">High</option>
+      <option value="medium">Medium</option>
+      <option value="low">Low</option>
+    </select>
+    <select id="filter-quality" onchange="filterAndRender()">
+      <option value="">All Quality</option>
+      <option value="high">High</option>
+      <option value="good">Good</option>
+      <option value="fair">Fair</option>
+      <option value="needs-work">Needs Work</option>
+      <option value="poor">Poor</option>
+    </select>
+    <select id="filter-action" onchange="filterAndRender()">
+      <option value="">All Actions</option>
+      <option value="merge">Merge</option>
+      <option value="review">Review</option>
+      <option value="close">Close</option>
+      <option value="rebase">Rebase</option>
+      <option value="wait">Wait</option>
+      <option value="ping-author">Ping Author</option>
+      <option value="request-changes">Request Changes</option>
+    </select>
+    <select id="filter-ci" onchange="filterAndRender()">
+      <option value="">All CI</option>
+      <option value="passing">Passing</option>
+      <option value="failing">Failing</option>
+      <option value="pending">Pending</option>
+    </select>
+    <select id="filter-review" onchange="filterAndRender()">
+      <option value="">All Reviews</option>
+      <option value="APPROVED">Approved</option>
+      <option value="CHANGES_REQUESTED">Changes Requested</option>
+      <option value="REVIEW_REQUIRED">Review Required</option>
+    </select>
+    <select id="sort-by" onchange="filterAndRender()">
+      <option value="number-desc">Newest</option>
+      <option value="number-asc">Oldest</option>
+      <option value="updated-desc">Recently Updated</option>
+      <option value="updated-asc">Least Updated</option>
+      <option value="priority">Priority</option>
+      <option value="age-desc">Oldest Age</option>
+    </select>
+    <span class="result-count" id="result-count"></span>
+  </div>
+
+  <div id="table-container">
+    <table>
+      <colgroup>
+        <col class="col-pr">
+        <col class="col-author">
+        <col class="col-category">
+        <col class="col-pri">
+        <col class="col-size">
+        <col class="col-age">
+        <col class="col-status">
+        <col class="col-action">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>PR</th>
+          <th>Author</th>
+          <th>Category</th>
+          <th>Pri</th>
+          <th>Size</th>
+          <th>Age</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="pr-table"></tbody>
+    </table>
+  </div>
+
+  <script>
+    let allPRs = [];
+    let TOTAL_EXPECTED = 228;
+    let activeStatFilter = null;
+
+    const categoryColors = {
+      'ready-to-merge': 'green',
+      'needs-maintainer-review': 'blue',
+      'needs-author-action': 'orange',
+      'stale': 'gray',
+      'likely-superseded': 'pink',
+      'draft-in-progress': 'purple',
+      'blocked': 'red',
+      'auto-dependency-update': 'gray',
+      'close-candidate': 'red'
+    };
+
+    const categoryShort = {
+      'ready-to-merge': 'merge-ready',
+      'needs-maintainer-review': 'needs-review',
+      'needs-author-action': 'needs-author',
+      'likely-superseded': 'superseded',
+      'draft-in-progress': 'draft',
+      'auto-dependency-update': 'dep-update',
+      'close-candidate': 'close',
+      'stale': 'stale',
+      'blocked': 'blocked'
+    };
+
+    const priorityColors = {
+      'critical': 'red',
+      'high': 'orange',
+      'medium': 'blue',
+      'low': 'gray'
+    };
+
+    const priorityOrder = { 'critical': 0, 'high': 1, 'medium': 2, 'low': 3 };
+    const sizeOrder = { 'XS': 0, 'S': 1, 'M': 2, 'L': 3, 'XL': 4 };
+
+    const actionColors = {
+      'merge': 'green',
+      'review': 'blue',
+      'close': 'red',
+      'rebase': 'purple',
+      'wait': 'gray',
+      'ping-author': 'orange',
+      'request-changes': 'orange',
+    };
+
+    const qualityColors = {
+      'high': 'green',
+      'good': 'blue',
+      'fair': 'gray',
+      'needs-work': 'orange',
+      'poor': 'red',
+    };
+
+    async function loadData() {
+      try {
+        const manifestResp = await fetch('../prs/index.json?t=' + Date.now());
+        if (!manifestResp.ok) {
+          document.getElementById('progress-label').textContent = 'No manifest found (prs/index.json)';
+          return;
+        }
+        const prNumbers = await manifestResp.json();
+        TOTAL_EXPECTED = prNumbers.length;
+
+        const results = await Promise.all(prNumbers.map(async (num) => {
+          try {
+            const resp = await fetch(`../prs/${num}.json?t=` + Date.now());
+            if (!resp.ok) return null;
+            return await resp.json();
+          } catch { return null; }
+        }));
+        allPRs = results.filter(Boolean);
+        const triaged = allPRs.length;
+        const pct = Math.round((triaged / TOTAL_EXPECTED) * 100);
+        document.getElementById('progress-fill').style.width = pct + '%';
+        document.getElementById('progress-label').textContent = `${triaged} / ${TOTAL_EXPECTED} PRs triaged (${pct}%)`;
+        document.getElementById('last-updated').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+        renderStats();
+        filterAndRender();
+      } catch (e) {
+        document.getElementById('progress-label').textContent = 'Error loading data: ' + e.message;
+      }
+    }
+
+    function renderStats() {
+      const triaged = allPRs.filter(p => p.triage);
+      const cats = {};
+      triaged.forEach(p => {
+        const c = p.triage.category;
+        cats[c] = (cats[c] || 0) + 1;
+      });
+
+      const stale = triaged.filter(p => p.triage.isStale).length;
+      const readyToMerge = cats['ready-to-merge'] || 0;
+      const needsReview = cats['needs-maintainer-review'] || 0;
+      const closeCandidates = (cats['close-candidate'] || 0) + (cats['likely-superseded'] || 0);
+      const needsAuthor = cats['needs-author-action'] || 0;
+      const depUpdates = cats['auto-dependency-update'] || 0;
+      const drafts = cats['draft-in-progress'] || 0;
+
+      const cards = [
+        { label: 'Merge Ready', value: readyToMerge, color: 'var(--accent-green)', filter: 'ready-to-merge' },
+        { label: 'Needs Review', value: needsReview, color: 'var(--accent-blue)', filter: 'needs-maintainer-review' },
+        { label: 'Needs Author', value: needsAuthor, color: 'var(--accent-orange)', filter: 'needs-author-action' },
+        { label: 'Closeable', value: closeCandidates, color: 'var(--accent-red)', filter: '_closeable' },
+        { label: 'Stale', value: stale, color: 'var(--text-muted)', filter: '_stale' },
+        { label: 'Dep Updates', value: depUpdates, color: 'var(--accent-purple)', filter: 'auto-dependency-update' },
+        { label: 'Drafts', value: drafts, color: 'var(--text-muted)', filter: 'draft-in-progress' },
+        { label: 'Total', value: allPRs.length, color: 'var(--text)', filter: null },
+      ];
+
+      document.getElementById('stats').innerHTML = cards.map(c =>
+        `<div class="stat-card${activeStatFilter === c.filter ? ' active' : ''}" onclick="toggleStatFilter('${c.filter}')">
+          <div class="value" style="color:${c.color}">${c.value}</div>
+          <div class="label">${c.label}</div>
+        </div>`
+      ).join('');
+    }
+
+    function toggleStatFilter(filter) {
+      if (filter === 'null' || !filter) {
+        activeStatFilter = null;
+      } else {
+        activeStatFilter = activeStatFilter === filter ? null : filter;
+      }
+      // Reset category dropdown when using stat filter
+      document.getElementById('filter-category').value = '';
+      renderStats();
+      filterAndRender();
+    }
+
+    function filterAndRender() {
+      const search = document.getElementById('search').value.toLowerCase();
+      const category = document.getElementById('filter-category').value;
+      const priority = document.getElementById('filter-priority').value;
+      const quality = document.getElementById('filter-quality').value;
+      const action = document.getElementById('filter-action').value;
+      const ci = document.getElementById('filter-ci').value;
+      const review = document.getElementById('filter-review').value;
+      const sortBy = document.getElementById('sort-by').value;
+
+      let filtered = allPRs.filter(p => {
+        if (search && !(`#${p.number} ${p.title} ${p.author?.login || ''} ${p.summary || ''}`.toLowerCase().includes(search))) return false;
+
+        // Stat card filter takes priority
+        if (activeStatFilter) {
+          if (activeStatFilter === '_closeable') {
+            if (p.triage?.category !== 'close-candidate' && p.triage?.category !== 'likely-superseded') return false;
+          } else if (activeStatFilter === '_stale') {
+            if (!p.triage?.isStale) return false;
+          } else {
+            if (p.triage?.category !== activeStatFilter) return false;
+          }
+        } else if (category) {
+          if (p.triage?.category !== category) return false;
+        }
+
+        if (priority && p.triage?.priority !== priority) return false;
+        if (quality && p.triage?.quality !== quality) return false;
+        if (action && p.suggestedAction !== action) return false;
+        if (ci && p.status?.ciStatus !== ci) return false;
+        if (review && p.status?.reviewDecision !== review) return false;
+        return true;
+      });
+
+      filtered.sort((a, b) => {
+        switch (sortBy) {
+          case 'number-desc': return b.number - a.number;
+          case 'number-asc': return a.number - b.number;
+          case 'updated-desc': return new Date(b.dates?.lastUpdated || 0) - new Date(a.dates?.lastUpdated || 0);
+          case 'updated-asc': return new Date(a.dates?.lastUpdated || 0) - new Date(b.dates?.lastUpdated || 0);
+          case 'priority': return (priorityOrder[a.triage?.priority] ?? 9) - (priorityOrder[b.triage?.priority] ?? 9);
+          case 'age-desc': return (b.dates?.ageInDays ?? 0) - (a.dates?.ageInDays ?? 0);
+          default: return b.number - a.number;
+        }
+      });
+
+      document.getElementById('result-count').textContent = `${filtered.length} PRs`;
+
+      const tbody = document.getElementById('pr-table');
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr class="loading-row"><td colspan="8">No PRs match the current filters</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(pr => {
+        const t = pr.triage || {};
+        const d = pr.dates || {};
+        const s = pr.size || {};
+        const st = pr.status || {};
+        const catLabel = categoryShort[t.category] || t.category || 'pending';
+        const catBadge = `<span class="badge badge-${categoryColors[t.category] || 'gray'}">${catLabel}</span>`;
+        const priBadge = t.priority ? `<span class="badge badge-${priorityColors[t.priority] || 'gray'}">${t.priority}</span>` : '';
+        const sizeClass = s.category ? `size-${s.category.toLowerCase()}` : '';
+
+        // Status: combine review + CI + conflicts into compact badges
+        let statusParts = [];
+        if (st.reviewDecision === 'APPROVED') statusParts.push('<span class="badge badge-green">approved</span>');
+        else if (st.reviewDecision === 'CHANGES_REQUESTED') statusParts.push('<span class="badge badge-red">changes req</span>');
+        if (st.mergeConflicts) statusParts.push('<span class="badge badge-red">conflicts</span>');
+        if (st.ciStatus === 'failing') statusParts.push('<span class="badge badge-orange">CI fail</span>');
+        else if (st.ciStatus === 'passing') statusParts.push('<span class="badge badge-green">CI ok</span>');
+
+        // Indicators
+        let indicators = '';
+        if (t.isStale) indicators += '<span class="stale-indicator" title="Stale">⏳</span> ';
+        if (pr.isDraft) indicators += '<span class="draft-indicator" title="Draft">📝</span> ';
+        if (pr.author?.isBot) indicators += '<span class="bot-indicator" title="Bot">🤖</span> ';
+
+        // Action badge
+        const rawAction = pr.suggestedAction || '';
+        const actionBadge = rawAction ? `<span class="badge badge-${actionColors[rawAction] || 'gray'}">${rawAction}</span>` : '';
+
+        return `<tr class="data-row" onclick="this.nextElementSibling.classList.toggle('open')" style="cursor:pointer">
+          <td class="pr-cell">
+            <a class="pr-link" href="${pr.url}" target="_blank" onclick="event.stopPropagation()">
+              ${indicators}<span class="pr-num">#${pr.number}</span> ${escHtml(pr.title)}
+            </a>
+          </td>
+          <td><span class="pr-author">${escHtml(pr.author?.login || '')}</span></td>
+          <td>${catBadge}</td>
+          <td>${priBadge}</td>
+          <td><span class="${sizeClass}" title="+${s.additions||0} / -${s.deletions||0}">${s.category || '?'}</span></td>
+          <td><span class="date">${d.ageInDays != null ? d.ageInDays + 'd' : '?'}</span></td>
+          <td>${statusParts.join(' ')}</td>
+          <td>${actionBadge}</td>
+        </tr>
+        <tr class="detail-panel"><td colspan="8"><div class="detail-content">
+          <div class="detail-section">
+            <h4>Summary</h4>
+            <p>${escHtml(pr.summary || 'N/A')}</p>
+            <h4>Maintainer Notes</h4>
+            <p>${escHtml(pr.maintainerNotes || 'N/A')}</p>
+          </div>
+          <div class="detail-section">
+            <h4>Quality Signals</h4>
+            <div class="quality-signals">
+              ${t.qualitySignals ? Object.entries(t.qualitySignals).map(([k,v]) => `<span class="signal signal-${v?'yes':'no'}">${k.replace(/([A-Z])/g,' $1').trim()}</span>`).join('') : 'N/A'}
+            </div>
+            <h4 style="margin-top:8px">Quality</h4>
+            <p>${t.quality ? `<span class="badge badge-${qualityColors[t.quality] || 'gray'}">${t.quality}</span>` : 'N/A'}</p>
+          </div>
+          <div class="detail-section">
+            <h4>Branch</h4>
+            <div>${pr.branch ? `${pr.branch.head} → ${pr.branch.base}` : 'N/A'}</div>
+            <h4 style="margin-top:8px">Labels</h4>
+            <div>${(pr.labels || []).map(l => `<span class="badge badge-blue">${escHtml(typeof l === 'string' ? l : l.name || '')}</span>`).join(' ') || 'None'}</div>
+            <h4 style="margin-top:8px">Size</h4>
+            <div>+${s.additions||0} / -${s.deletions||0} across ${s.changedFiles||0} files</div>
+            <h4 style="margin-top:8px">Last Updated</h4>
+            <div>${d.daysSinceLastUpdate != null ? d.daysSinceLastUpdate + ' days ago' : '?'}</div>
+            ${(t.similarOrDuplicatePRs || []).length ? `<h4 style="margin-top:8px">Similar PRs</h4><div>${t.similarOrDuplicatePRs.map(n => typeof n === 'object' ? '#' + (n.number || n) : '#'+n).join(', ')}</div>` : ''}
+          </div>
+        </div></td></tr>`;
+      }).join('');
+    }
+
+    function escHtml(s) {
+      if (!s) return '';
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    loadData();
+    setInterval(loadData, 30000);
+  </script>
+</body>
+</html>

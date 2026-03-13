@@ -1,0 +1,53 @@
+{
+  "number": 10146,
+  "title": "feat: add @mastra/aisearch - Azure AI Search vector store",
+  "url": "https://github.com/mastra-ai/mastra/pull/10146",
+  "author": {
+    "login": "valdepeace",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-11-16T19:37:01Z",
+    "lastUpdated": "2026-02-08T16:35:52Z",
+    "ageInDays": 114,
+    "daysSinceLastUpdate": 30
+  },
+  "size": {
+    "additions": 4390,
+    "deletions": 0,
+    "changedFiles": 19,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "main",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Community contribution adding a new Azure AI Search vector store adapter (@mastra/azure) under stores/azure/. Implements the full MastraVector interface including createIndex, upsert, query, delete, and filter translation (both Mastra-style and Azure OData filters). Includes unit tests, integration tests, examples, comprehensive README, and a changeset. The PR was originally under stores/aisearch but was renamed to stores/azure per maintainer (abhiaiyer91) feedback. The author made 14 commits, with the latest batch on 2026-02-08 aligning the adapter with 1.x vector operations. No human maintainer has reviewed since the initial positive comments in Nov 2025.",
+  "maintainerNotes": "This is a well-structured community PR that adds Azure AI Search as a new vector store provider. Quality is good: tests exist (unit + integration), changeset is included, follows existing store conventions (stores/<name>/ pattern), and the author was responsive to maintainer feedback (renamed from aisearch to azure). However, the PR now has merge conflicts and CI checks are stuck in pending state. No maintainer has reviewed since abhiaiyer91's initial comments in Nov 2025. The author's last activity was Feb 8, 2026. Key decisions needed: (1) resolve merge conflicts, (2) verify the adapter aligns with current MastraVector interface (the codebase may have evolved since), (3) full code review of the 900+ line vector implementation. Only CodeRabbit has reviewed the code, flagging minor consistency issues with MastraError usage.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

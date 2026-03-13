@@ -1,0 +1,74 @@
+{
+  "number": 12859,
+  "title": "feature: add more metadata in agent message",
+  "url": "https://github.com/mastra-ai/mastra/pull/12859",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-10T06:22:30Z",
+    "lastUpdated": "2026-03-07T13:28:19Z",
+    "ageInDays": 28,
+    "daysSinceLastUpdate": 3
+  },
+  "size": {
+    "additions": 357,
+    "deletions": 8,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/add-more-metadata",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13144,
+        "title": "Add network mode metadata to internal messages (fixes #13106)",
+        "state": "MERGED",
+        "relationship": "partial-overlap",
+        "notes": "Merged PR #13144 added metadata.mode='network' to network-internal messages. This PR extends that work further by adding source, primitiveId, and primitiveType metadata. They touch some of the same code sites but are complementary — #13144 added 'mode' and this PR adds 'source' plus richer provenance fields."
+      },
+      {
+        "number": 12969,
+        "title": "fix: persist modelId in assistant message content.metadata",
+        "state": "MERGED",
+        "relationship": "related",
+        "notes": "Related work on enriching message metadata, but different scope (modelId vs source/primitiveId)."
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 11961,
+        "title": "[FEATURE] Add more metadata to agent message?",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Adds source identification metadata to all messages in agent networks. Introduces content.metadata.source ('user' | 'routing-agent' | 'agent-network') and consistently propagates primitiveId/primitiveType across 11 message creation sites in the network loop. Also converts the routing-agent's bare string prompt to sub-agents into a full MastraDBMessage with provenance metadata. Includes a new filterMessagesForSubAgent helper and 266 lines of tests. Fixes #11961.",
+  "maintainerNotes": "Well-structured community PR with good description, changeset, and comprehensive tests. wardpeet showed interest on Feb 10 ('Running tests and I'll review') but never followed up with a formal review. CI tests are stuck in PENDING state (likely because they require secrets/approval for external contributors). The Vercel deploy checks fail with 'Authorization required' which is normal for external PRs. Merged PR #13144 already added metadata.mode='network' to the same code area — this PR builds on that by adding finer-grained source tracking. The two PRs are complementary, not duplicative, but the overlap means merge conflicts are possible if the branch isn't rebased. Currently marked MERGEABLE. The changeset marks @mastra/core as minor which is appropriate for a new feature. Two bug fixes also included: primitiveId was incorrectly set to toolId in two places — now correctly uses inputData.primitiveId. The exported filterMessagesForSubAgent helper may need discussion on whether it should be public API.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

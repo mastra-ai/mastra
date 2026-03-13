@@ -1,0 +1,55 @@
+{
+  "number": 11590,
+  "title": "chore(deps): update react",
+  "url": "https://github.com/mastra-ai/mastra/pull/11590",
+  "author": {
+    "login": "daneatmastra",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-01-05T12:31:18Z",
+    "lastUpdated": "2026-03-10T14:50:22Z",
+    "ageInDays": 64,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 64,
+    "deletions": 64,
+    "changedFiles": 6,
+    "category": "M"
+  },
+  "labels": [
+    "automation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "renovate/react",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Renovate bot PR that bumps react/react-dom from ^19.2.3 to ^19.2.4, @types/react to ^19.2.14, @types/react-dom to ^19.2.3, and @ast-grep/napi from 0.41.0 to 0.41.1 (in lockfile). Patch-level updates across 5 package.json files and pnpm-lock.yaml. React 19.2.4 includes DoS mitigations and hardening for Server Components/Actions.",
+  "maintainerNotes": "Approved by wardpeet and auto-approved by github-actions many times as Renovate rebases. CI has failures: 'Full Test Suite' and 'Observability Package Tests' fail, 'changeset' check fails (expected for Renovate PRs), and 'Memory Tests'/'E2E Tests' are still pending. Build, lint, and validation checks all pass. The test failures should be investigated to determine if they are flaky/pre-existing or caused by these dependency bumps before merging. Automerge is enabled by Renovate config.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

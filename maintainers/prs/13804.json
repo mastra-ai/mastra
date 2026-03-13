@@ -1,0 +1,62 @@
+{
+  "number": 13804,
+  "title": "refactor: remove virtual-root path convention from LocalFilesystem",
+  "url": "https://github.com/mastra-ai/mastra/pull/13804",
+  "author": {
+    "login": "CalebBarnes",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-04T19:08:35Z",
+    "lastUpdated": "2026-03-09T21:12:15Z",
+    "ageInDays": 6,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 780,
+    "deletions": 678,
+    "changedFiles": 30,
+    "category": "XL"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": true,
+  "branch": {
+    "head": "refactor/no-virtual-root",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "draft-in-progress",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13741,
+        "title": "fix(core): prevent tilde paths from nesting under basePath in contained LocalFilesystem",
+        "state": "MERGED",
+        "relationship": "predecessor - fixed a related path-nesting bug that motivated this broader refactor"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Removes the virtual-root path convention from LocalFilesystem where absolute paths like '/file.txt' were silently mapped to 'basePath/file.txt' in contained mode. Now absolute paths are treated as real filesystem paths (subject to containment checks), and relative paths resolve against basePath. Changes span 5 source files (local-filesystem.ts, composite-filesystem.ts, glob.ts, tree-formatter.ts, workspace.ts), 19 test files updated to use relative paths, 1 doc file, 1 playground-ui component, and 2 changesets. The author reports all 1395 tests pass locally.",
+  "maintainerNotes": "PR is still in draft. CI has 4 failing checks (Agent Builder, Core e2e, Observability, Full Test Suite) but all failures appear unrelated to this PR — they involve API call errors (ENOTFOUND internal-llm.enterprise.com), agent-not-found errors, and observability tracing test issues. Two reviewers have left comments: TylerBarnes questioned the composite-filesystem '.' normalization logic (CalebBarnes responded explaining the difference for composite FS), and LekoArts requested splitting the changeset so playground-ui gets a separate description. The playground-ui changeset has been split out (.changeset/no-virtual-root-playground.md). This follows PR #13741 which fixed a related tilde-path nesting bug. The refactor is well-scoped to a single concern with thorough test coverage updates.",
+  "suggestedAction": "wait",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,57 @@
+{
+  "number": 13929,
+  "title": "fix: prevent exponential token growth in multi-step agent workflows",
+  "url": "https://github.com/mastra-ai/mastra/pull/13929",
+  "author": {
+    "login": "NikAiyer",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-06T17:22:59Z",
+    "lastUpdated": "2026-03-10T16:12:25Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 514,
+    "deletions": 419,
+    "changedFiles": 6,
+    "category": "XL"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "fix-exponential-token-growth",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "blocked"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "#11805"
+    ]
+  },
+  "summary": "Refactors TokenLimiterProcessor to use processInputStep instead of processInput so token-based message pruning runs before every LLM call in the agentic loop (including tool call continuations), not just once at the start. This prevents unbounded token accumulation in multi-step workflows. Also refactors Tiktoken encoder to use the shared global singleton via getTiktoken() instead of creating a new ~80-120MB instance per processor, and makes token counting methods async. Includes comprehensive test rewrites (unit + integration), updated e2e token-accuracy tests, documentation updates, and a changeset.",
+  "maintainerNotes": "High-impact bug fix for issue #11805 (exponential token growth). The PR is well-structured: 6 files changed across source, tests, docs, and changeset. CI is mostly green — 'Observability Package Tests' failed but appears unrelated to this PR's changes (processors package only). A few pending checks (Memory Tests, Full Test Suite, E2E Tests, Combined store Tests) are still running. CodeRabbit left review comments suggesting minor improvements (shared state in output stream tests, defensive guard in processInputStep). Review requested from TylerBarnes and DanielSLew. No human reviews yet. The net line change is small (+95 net) — most of the churn is test refactoring from processInput to processInputStep API.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

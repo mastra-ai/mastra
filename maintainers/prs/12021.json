@@ -1,0 +1,61 @@
+{
+  "number": 12021,
+  "title": "feat: add NestJS server adapter with Express and Fastify support",
+  "url": "https://github.com/mastra-ai/mastra/pull/12021",
+  "author": {
+    "login": "eduartua",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-01-16T18:26:44Z",
+    "lastUpdated": "2026-01-19T19:33:09Z",
+    "ageInDays": 53,
+    "daysSinceLastUpdate": 50
+  },
+  "size": {
+    "additions": 3814,
+    "deletions": 1347,
+    "changedFiles": 28,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feature/nestjs-adapter",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "low",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": false,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12751,
+        "title": "feat(server): add NestJS server adapter",
+        "state": "OPEN",
+        "author": "saguirre",
+        "relationship": "competing"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Adds a new @mastra/nestjs server adapter package under server-adapters/nestjs/ that auto-detects Express or Fastify platform from the NestJS app instance. Includes platform-specific adapters for route registration, auth middleware, SSE streaming with optional redaction, and MCP transport. Ships with Express and Fastify integration test suites, documentation (getting-started guide + reference page), changeset, and example code. Bulk of the lockfile deletions are unrelated AWS SDK cleanup.",
+  "maintainerNotes": "1) PR description is blank (template not filled out). 2) Merge conflicts exist. 3) CI tests are stuck in 'pending' state — likely because contributor actions require authorization for secrets, which was never granted. 4) A competing PR #12751 by saguirre was opened 3 weeks later with a similar NestJS adapter (6194 additions, 63 files, has changes requested). 5) Community member joshkaplinsky questioned the need for a dedicated NestJS adapter since @mastra/express and @mastra/fastify can be used directly with NestJS apps — this is a valid architectural question that maintainers should resolve before merging either PR. 6) No maintainer has reviewed this PR. 7) Last meaningful activity was Jan 19, 2026 (50 days ago). 8) The PR does include tests, docs, and a changeset, showing reasonable contribution quality despite the empty description.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,53 @@
+{
+  "number": 13755,
+  "title": "fix: propagate OTEL context into step.execute() for correct span nesting",
+  "url": "https://github.com/mastra-ai/mastra/pull/13755",
+  "author": {
+    "login": "Sanrigas",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-04T07:13:27Z",
+    "lastUpdated": "2026-03-04T07:21:54Z",
+    "ageInDays": 6,
+    "daysSinceLastUpdate": 6
+  },
+  "size": {
+    "additions": 7,
+    "deletions": 1,
+    "changedFiles": 2,
+    "category": "XS"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/workflow-step-otel-context-propagation",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Wraps `step.execute(proxiedData)` in `executeWithContext({ span: stepSpan, fn: ... })` in the workflow step handler so that auto-instrumented code running inside a step (e.g. AI SDK spans) correctly nests under the workflow step span instead of appearing as siblings. This is a one-line functional change plus the corresponding import addition. A changeset is included.",
+  "maintainerNotes": "Clean, minimal fix. The `executeWithContext` utility is already used in the same pattern by tool-builder and LLM model code for the same purpose. The `stepSpan` variable is already in scope at the call site (defined at line 154). No tests are included — CodeRabbit suggested adding a span-parentage regression test, which would strengthen the PR. CI checks (Core, Memory, RAG, E2E, MCP) are stuck in PENDING state since March 4, likely due to the external contributor fork not having secrets access; the Vercel checks also fail for the same authorization reason. A maintainer should trigger CI or verify locally. The Vercel deploy failures are expected for external PRs and not a concern.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

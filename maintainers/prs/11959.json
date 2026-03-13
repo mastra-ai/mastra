@@ -1,0 +1,66 @@
+{
+  "number": 11959,
+  "title": "fix(observability): llm span metadata inheritance",
+  "url": "https://github.com/mastra-ai/mastra/pull/11959",
+  "author": {
+    "login": "kosukeoya",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-01-15T07:08:22Z",
+    "lastUpdated": "2026-01-22T13:53:50Z",
+    "ageInDays": 54,
+    "daysSinceLastUpdate": 47
+  },
+  "size": {
+    "additions": 138,
+    "deletions": 3,
+    "changedFiles": 4,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feature/llm-span-metadata-inheritance",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "CHANGES_REQUESTED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 14020,
+        "title": "Add requestContext snapshot to tracing spans",
+        "relationship": "related-but-complementary",
+        "note": "PR #14020 (merged) adds RequestContext snapshots to spans. This PR adds metadata inheritance from parent to child spans, which is a different mechanism. They are complementary, not duplicates."
+      },
+      {
+        "number": 11914,
+        "title": "fix(observability): Inherit entityId and entityName from parent span",
+        "relationship": "pattern-precedent",
+        "note": "Already-merged PR that established the same inheritance pattern for entityId/entityName. This PR extends that pattern to metadata."
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Implements automatic metadata inheritance for child spans in the observability system. When a parent span has metadata (e.g., userId, tenantId), child spans automatically inherit it via a spread merge, with child metadata taking precedence. This enables use cases like per-user token consumption tracking without requiring explicit metadata at every span level. Changes are minimal: a 6-line modification to BaseSpan constructor in base.ts, a changeset, and ~120 lines of well-structured tests covering inheritance, merge precedence, and multi-level propagation.",
+  "maintainerNotes": "Maintainer @epinzur approved the approach and explicitly asked the author to rebase on main and run formatting (comment from Jan 22). The author has not responded in 47 days. The PR has merge conflicts and lint CI is failing. The code change itself is small and clean (follows the existing entityId/entityName inheritance pattern from PR #11914). One existing test assertion was updated from expecting undefined metadata on child spans to expecting inherited metadata. The PR needs: (1) rebase on main to resolve conflicts (especially since #14020 modified the same base.ts file), (2) running pnpm format && pnpm prettier:format to fix lint, (3) re-verification that tests pass after rebase. If the author doesn't respond soon, a maintainer could easily apply this 6-line change themselves.",
+  "suggestedAction": "ping-author",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

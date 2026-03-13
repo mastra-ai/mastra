@@ -1,0 +1,66 @@
+{
+  "number": 12674,
+  "title": "feat(deployer): add runtime TypeScript transpilation for transpilePackages",
+  "url": "https://github.com/mastra-ai/mastra/pull/12674",
+  "author": {
+    "login": "sjha2048",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-04T17:15:22Z",
+    "lastUpdated": "2026-02-13T08:39:35Z",
+    "ageInDays": 34,
+    "daysSinceLastUpdate": 25
+  },
+  "size": {
+    "additions": 143,
+    "deletions": 4,
+    "changedFiles": 5,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feature/transpile-packages-runtime-support",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "CHANGES_REQUESTED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "low",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 7572,
+        "title": "fix(deployer): transpilePackages bugs during mastra dev",
+        "state": "MERGED",
+        "relevance": "Previous fix for transpilePackages during mastra dev — related but different scope"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 12617,
+        "title": "[FEATURE] Extend transpilePackages to handle runtime TypeScript imports from node_modules",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Adds runtime TypeScript transpilation for packages listed in transpilePackages during `mastra dev`. Currently transpilePackages only works at build time; at runtime Node.js fails loading raw .ts files from node_modules. This PR adds an ESM load hook using esbuild to JIT-compile TypeScript files, a config generation step in DevBundler, and passes the config via MASTRA_TRANSPILE_CONFIG env var.",
+  "maintainerNotes": "Maintainer LekoArts explicitly requested changes, stating the approach of JIT compilation is not the desired direction. They asked the author to follow up in issue #12617 with a reproduction instead. The author has not responded since Feb 12. The PR also has merge conflicts (CONFLICTING state) and CI checks are stuck in PENDING (likely due to the conflicts or needing secrets). No tests were added. Reviewer roaminro is still listed as a requested reviewer. The fundamental approach may be rejected by the team — this likely needs to be closed unless the author can make a case for JIT compilation in the linked issue.",
+  "suggestedAction": "wait",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

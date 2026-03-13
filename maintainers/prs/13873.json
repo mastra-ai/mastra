@@ -1,0 +1,60 @@
+{
+  "number": 13873,
+  "title": "fix(server): only bypass auth in dev mode when no auth provider is configured",
+  "url": "https://github.com/mastra-ai/mastra/pull/13873",
+  "author": {
+    "login": "rphansen91",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-05T21:15:26Z",
+    "lastUpdated": "2026-03-07T00:04:23Z",
+    "ageInDays": 5,
+    "daysSinceLastUpdate": 3
+  },
+  "size": {
+    "additions": 44,
+    "deletions": 14,
+    "changedFiles": 4,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/dev-auth-bypass",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13801,
+        "title": "fix: return auth disabled for dev playground requests in capabilities endpoint",
+        "state": "MERGED",
+        "relationship": "predecessor — this PR refines the approach introduced in #13801"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Refines the dev-playground auth bypass (originally added in merged PR #13801) so it only applies when no real auth provider is configured. Previously, MASTRA_DEV=true with localhost unconditionally skipped auth, which broke local auth development by leaving user/roles/permissions unset in requestContext. Now coreAuthMiddleware checks for the presence of authenticateToken before bypassing, and the capabilities endpoint returns disabled only when getAuthProvider() returns null. Includes updated tests for both scenarios and a minor TS fix in permission-generator.ts.",
+  "maintainerNotes": "Approved by graysonhicks but currently has merge conflicts (CONFLICTING state) and CI failures (Build, Lint, E2E, Validate build outputs). The build/lint failures may be pre-existing or caused by conflicts with main. Author needs to rebase, resolve conflicts, and add a changeset before this can be merged. The code change itself is clean and well-scoped — the core logic change (checking hasAuthProvider before bypassing) is straightforward and correct.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

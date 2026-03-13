@@ -1,0 +1,66 @@
+{
+  "number": 13673,
+  "title": "fix(client-js): serialize Zod inputSchema for ClientTools with execute functions",
+  "url": "https://github.com/mastra-ai/mastra/pull/13673",
+  "author": {
+    "login": "TheIsrael1",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-02T14:03:30Z",
+    "lastUpdated": "2026-03-03T12:34:31Z",
+    "ageInDays": 8,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 112,
+    "deletions": 19,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "witness",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "blocked"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11787,
+        "title": "fix(client-js): correctly serialize Zod schemas for OpenAI tool calls",
+        "state": "CLOSED",
+        "relationship": "alternative (closed without merge, this PR supersedes it)"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 11668,
+        "title": "[BUG] Client tools in @mastra/client-js beta do not serialize Zod schemas (even simple ones), causing invalid OpenAI function parameters",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Fixes a bug where ClientTools with execute functions had their Zod inputSchema sent unconverted to OpenAI, causing 'Invalid schema for function' errors. The root cause was that isVercelTool() matched ClientTools (both have execute + inputSchema), so processClientTools only serialized 'parameters' (which ClientTools don't have), leaving inputSchema as a raw Zod object. The fix removes the isVercelTool branching and unconditionally serializes all schema fields (parameters, inputSchema, outputSchema) since zodToJsonSchema safely passes through non-Zod values. Includes 4 well-structured regression tests and a changeset.",
+  "maintainerNotes": "High-quality community contribution. The fix is simple and correct: instead of trying to detect tool type (which was buggy), it just serializes all possible schema fields. The zodToJsonSchema utility already handles non-Zod values as pass-through, making this safe. CI failures (E2E Tests, Observability) appear unrelated to this client-js-only change. Tool Builder Tests still pending. This is an alternative to the closed #11787 and fixes open issue #11668. The PR description is thorough with root cause analysis, before/after code comparison, and test plan. Ready for maintainer review and likely approval.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,55 @@
+{
+  "number": 10188,
+  "title": "chore(deps): update dependency cloudflare to v5",
+  "url": "https://github.com/mastra-ai/mastra/pull/10188",
+  "author": {
+    "login": "daneatmastra",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-11-17T18:43:47Z",
+    "lastUpdated": "2026-03-10T12:28:46Z",
+    "ageInDays": 113,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 55,
+    "deletions": 25,
+    "changedFiles": 13,
+    "category": "M"
+  },
+  "labels": [
+    "automation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "renovate/cloudflare-5.x",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "medium",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Renovate Bot major version bump of the `cloudflare` npm package from v4.5.0 to v5.2.0 across 6 packages (deployers/cloudflare, stores/cloudflare, stores/cloudflare-d1, stores/mongodb, stores/vectorize, voice/cloudflare) plus pnpm-lock.yaml updates. This is a major semver change with potential breaking API changes.",
+  "maintainerNotes": "CI is failing: Build, Validate build outputs, and Observability Package Tests all fail, with downstream test jobs (Core, Memory, RAG, MCP, E2E, Full Test Suite) stuck pending because they depend on the build. The only approvals are from github-actions (automated), no human has reviewed this. Since this is a major version bump (v4 → v5), it warrants manual verification that cloudflare SDK API usage in the codebase is compatible with v5 breaking changes. The PR has been open for 113 days and was recently rebased (today), but CI still fails. A maintainer should investigate whether the build failure is caused by this version bump or is a pre-existing issue on main, and verify API compatibility before merging.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

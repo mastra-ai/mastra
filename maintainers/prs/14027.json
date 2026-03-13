@@ -1,0 +1,59 @@
+{
+  "number": 14027,
+  "title": "feat(playground-ui): add group-by-thread utility for observability traces",
+  "url": "https://github.com/mastra-ai/mastra/pull/14027",
+  "author": {
+    "login": "graysonhicks",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-09T18:25:22Z",
+    "lastUpdated": "2026-03-09T19:05:25Z",
+    "ageInDays": 1,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 403,
+    "deletions": 39,
+    "changedFiles": 7,
+    "category": "L"
+  },
+  "labels": [],
+  "isDraft": true,
+  "branch": {
+    "head": "graysonhicks/fix-workflow-cleanup",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "draft-in-progress",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      {
+        "number": 14004,
+        "title": "[FEATURE] Group-by-thread view in Studio Observability tab",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Adds a groupTracesByThread utility function for the Observability tab in Mastra Studio. The utility groups SpanRecord traces by threadId, places traces without a threadId into an ungrouped bucket, and sorts groups by most recent trace activity. Includes a 'Group by thread' toggle (Switch component) in the traces toolbar and conditionally renders a GroupedTracesList component when enabled. Comes with 165 lines of thorough unit tests covering edge cases (empty input, no threadId, sorting, order preservation). Touches 7 files across playground-ui and playground packages.",
+  "maintainerNotes": "Well-structured draft PR from a maintainer. The utility logic is clean and well-tested. However: (1) PR is marked as draft, indicating author is still working on it. (2) There are merge conflicts that need to be resolved before merging. (3) Several CI checks (Core, E2E, Memory, RAG, MCP, Combined store) are still pending — likely blocked by the draft status or conflicts. (4) The branch name 'fix-workflow-cleanup' doesn't match the feature being implemented, suggesting this may have been branched from or repurposed from another effort. (5) The GroupedTracesList component is referenced in traces-list.tsx but the implementation isn't visible in the diff — it may be imported from elsewhere or still needs to be created. Wait for the author to mark as ready for review and resolve conflicts.",
+  "suggestedAction": "wait",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,57 @@
+{
+  "number": 12963,
+  "title": "fix(deployer): skip analyzeBundle in dev mode to prevent hang in large monorepos",
+  "url": "https://github.com/mastra-ai/mastra/pull/12963",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-11T18:05:48Z",
+    "lastUpdated": "2026-03-09T14:02:05Z",
+    "ageInDays": 27,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 91,
+    "deletions": 8,
+    "changedFiles": 4,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/12843-dev-hangs-large-monorepos",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      "#12645 (merged) - fix(deployer): Fix monorepo workspace dependency resolution"
+    ],
+    "relatedIssues": [
+      "#12843 - [BUG] `mastra dev` hangs indefinitely in large monorepos due to recursive `analyzeBundle`"
+    ]
+  },
+  "summary": "Adds a shared `analyzeCache` Map to `analyzeEntry()` to deduplicate Rollup instances when recursively analyzing transitive workspace dependencies. Before spawning a Rollup instance, the cache is checked — if the entry was already analyzed, the cached result is returned. Virtual file entries are not cached since they have no stable path key. Includes tests verifying dedup behavior and virtual file exclusion. The PR was initially approved by TheIsrael1, but was then revised after wardpeet flagged that the original approach (skipping analyzeBundle entirely in dev mode) broke TypeScript workspace transpilation. The current approach uses the cache-based dedup strategy wardpeet suggested.",
+  "maintainerNotes": "CI is failing: Agent Builder Tests and Core Package Tests fail (not related to Vercel auth or deployer changes — may be flaky or base-branch issues). wardpeet's concern about the original approach was addressed by switching from 'skip analyzeBundle' to 'dedup cache'. However, the existing APPROVED review from TheIsrael1 was on the previous approach. wardpeet has not re-reviewed the updated dedup cache implementation. The E2E monorepo test failure wardpeet mentioned may still apply — needs verification. Memory Tests are still pending. Needs a fresh maintainer review of the updated approach and CI green before merging.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

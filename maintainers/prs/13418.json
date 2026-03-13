@@ -1,0 +1,55 @@
+{
+  "number": 13418,
+  "title": "fix(core): strip OpenAI reasoning parts from LLM input to prevent item pairing errors",
+  "url": "https://github.com/mastra-ai/mastra/pull/13418",
+  "author": {
+    "login": "graysonhicks",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-23T20:18:52Z",
+    "lastUpdated": "2026-03-10T15:06:04Z",
+    "ageInDays": 15,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 222,
+    "deletions": 0,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/12980--reasoning-parts",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "#12980"
+    ]
+  },
+  "summary": "Fixes OpenAI Responses API errors when replaying conversation history containing reasoning parts from models like gpt-5.2. The API enforces mandatory pairing between reasoning (rs_*) and message (msg_*) items via itemIds. When these parts are replayed from memory, the API rejects them with pairing errors. The fix strips reasoning parts and their providerMetadata.openai from text parts in sanitizeV5UIMessages when building the prompt to the LLM (filterIncompleteToolCalls=true). Reasoning data is preserved in the database. Changes span 3 files: a changeset, a new test in reasoning-memory.test.ts, and the fix in output-converter.ts.",
+  "maintainerNotes": "Maintainer roaminro asked whether stripping metadata only (keeping reasoning parts) would be better than removing reasoning parts entirely. Author graysonhicks explained both approaches are functionally equivalent—the SDK drops reasoning parts without itemIds anyway—but the current approach is explicit and avoids relying on SDK implementation details or producing warnings. dilincoln gave a +1 to roaminro's question. This design discussion needs a final decision from a maintainer. The only CI failure is Observability Package Tests, which is unrelated to this change. Full Test Suite, Build, Lint all pass. The snapshot version 'openai-reasoning' has been published for testing.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

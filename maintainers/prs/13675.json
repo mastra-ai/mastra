@@ -1,0 +1,53 @@
+{
+  "number": 13675,
+  "title": "ScrollArea with permanently visible thumb and padding for content Columns",
+  "url": "https://github.com/mastra-ai/mastra/pull/13675",
+  "author": {
+    "login": "greglobinski",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-02T15:01:34Z",
+    "lastUpdated": "2026-03-02T15:23:21Z",
+    "ageInDays": 8,
+    "daysSinceLastUpdate": 8
+  },
+  "size": {
+    "additions": 93,
+    "deletions": 43,
+    "changedFiles": 6,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": true,
+  "branch": {
+    "head": "scroll-area-with-permanent-scrollbar",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "draft-in-progress",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds a `permanentScrollbar` prop to the ScrollArea component in playground-ui. When enabled, the scrollbar thumb is always visible (via forceMount) and content gets right-padding to prevent overlap. Introduces a new `useHasOverflow` hook that uses ResizeObserver to detect overflow. Refactors ColumnContent and ItemListItemsScroller to use ScrollArea with the new prop, removing old manual overflow-handling code (including commented-out code). Also includes a Storybook story and minor scrollbar styling tweaks (width, thumb color).",
+  "maintainerNotes": "This is a draft PR from a maintainer. CI has 2 failures (E2E Tests and Observability Package Tests) — the Observability failure is likely unrelated to these UI changes, but the E2E failure may be relevant since this modifies playground-ui components. No human reviews yet, only CodeRabbit automated review with 3 actionable comments. The PR has a changeset and description with screenshots/video. No unit tests added but this is a UI/styling change. The checklist items are unchecked. PR has been idle for 8 days since creation — author may still be iterating.",
+  "suggestedAction": "wait",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

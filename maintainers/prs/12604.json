@@ -1,0 +1,59 @@
+{
+  "number": 12604,
+  "title": "chore(deps): bump fastify from 5.6.0 to 5.7.3 in /observability/_examples/otel-bridge/agent-hub",
+  "url": "https://github.com/mastra-ai/mastra/pull/12604",
+  "author": {
+    "login": "dependabot[bot]",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-03T00:20:24Z",
+    "lastUpdated": "2026-03-09T23:34:58Z",
+    "ageInDays": 35,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 58,
+    "deletions": 15,
+    "changedFiles": 2,
+    "category": "S"
+  },
+  "labels": [
+    "dependencies",
+    "javascript"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "dependabot/npm_and_yarn/observability/_examples/otel-bridge/agent-hub/fastify-5.7.3",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      "#12602 - chore(deps-dev): bump fastify from 5.6.2 to 5.7.3 (root devDeps)",
+      "#12603 - chore(deps): bump fastify from 5.6.2 to 5.7.3 in /examples/server-fastify-adapter"
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Dependabot bumps fastify from 5.6.0 to 5.7.3 in the observability otel-bridge agent-hub example. v5.7.3 is a security release fixing CVE-2026-25224 (GHSA-mrq3-vjjr-p77c). Changes are limited to package.json and pnpm-lock.yaml in the examples directory. Transitive dependency updates include pino 9.11.0 -> 10.3.0 and fast-json-stringify 6.1.1 -> 6.2.0.",
+  "maintainerNotes": "Security fix (CVE-2026-25224) — should be prioritized. CI failures (Agent Builder, Core, Observability, Full Test Suite) appear to be pre-existing/flaky since this PR only modifies an example's lockfile. Two related dependabot PRs (#12602, #12603) bump fastify in other locations and should be merged together. No changeset is needed since this is an examples-only change. The PR was recently rebased (last update ~1 day ago) so it's current with main.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

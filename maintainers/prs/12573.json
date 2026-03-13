@@ -1,0 +1,77 @@
+{
+  "number": 12573,
+  "title": "fix(core): use toJSON for requestContext serialization in all workflow paths",
+  "url": "https://github.com/mastra-ai/mastra/pull/12573",
+  "author": {
+    "login": "owk-owk130",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-02T05:03:18Z",
+    "lastUpdated": "2026-03-10T12:05:52Z",
+    "ageInDays": 36,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 157,
+    "deletions": 22,
+    "changedFiles": 7,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/serialize-request-context-non-serializable",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12344,
+        "title": "fix(core): skip non-serializable values in RequestContext.toJSON",
+        "state": "MERGED",
+        "relationship": "predecessor — this PR is the follow-up completing the fix"
+      },
+      {
+        "number": 13856,
+        "title": "Fix RequestContext constructor crashing when constructed from a deserialized plain object",
+        "state": "MERGED",
+        "relationship": "related — fixes deserialization side of RequestContext"
+      },
+      {
+        "number": 14020,
+        "title": "Add requestContext snapshot to tracing spans",
+        "state": "MERGED",
+        "relationship": "related — adds RequestContext to tracing, also uses safe serialization"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 12301,
+        "relationship": "fixes"
+      }
+    ]
+  },
+  "summary": "Follow-up to #12344. While that PR fixed RequestContext.toJSON() to skip non-serializable values, several other code paths still serialized requestContext without calling toJSON(): DefaultExecutionEngine.serializeRequestContext() (used forEach), EventedWorkflow.start()/startAsync() (used Object.fromEntries), and EventedExecutionEngine.execute() (used Object.fromEntries). This PR switches all those paths to use requestContext.toJSON(). Additionally adds a safeStringify() utility to @mastra/libsql that handles non-serializable values (functions, symbols, circular refs, RPC proxies) when writing to the database, replacing direct JSON.stringify calls in prepareStatement, transformToSqlValue, and workflow snapshot persistence.",
+  "maintainerNotes": "Maintainer @abhiaiyer91 already reviewed positively ('Thank you for this! lets fix the merge conflict and we'll be good!'). Author resolved conflicts and pushed updated code. Review requests are pending from NikAiyer and TylerBarnes. CI tests are currently pending (just triggered ~minutes ago on latest push). Vercel deploy checks fail due to authorization (expected for external contributors). CodeRabbit left actionable comments across 3 reviews about safeStringify edge cases (return type, docstring accuracy, circular reference handling) — verify those were addressed in the latest revision. The scope expanded from the initial core fix to also include @mastra/libsql safeStringify, which is reasonable since the same serialization issue manifests there. Note that #14020 (merged yesterday) added its own requestContext serialization using deepClean — check for potential overlap or conflict with the approach in this PR.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

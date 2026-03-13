@@ -1,0 +1,53 @@
+{
+  "number": 13941,
+  "title": "fix(playground): split vendor deps into parallel-loadable chunks",
+  "url": "https://github.com/mastra-ai/mastra/pull/13941",
+  "author": {
+    "login": "rphansen91",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-06T20:43:21Z",
+    "lastUpdated": "2026-03-06T20:53:36Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 4
+  },
+  "size": {
+    "additions": 127,
+    "deletions": 51,
+    "changedFiles": 4,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/vendor-chunk-splitting",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Splits heavy vendor dependencies (codemirror ~588KB gzip, xyflow ~74KB, posthog ~55KB) into separate chunks via Vite manualChunks for parallel HTTP/2 loading. Converts all page-level route imports in App.tsx to React.lazy() with a Suspense/PageLoader fallback. Also defers prettier imports in playground-ui formatting.ts to dynamic imports with memoized Promise.all. Four files changed: vite.config.ts (manualChunks), App.tsx (lazy routes), page-loader.tsx (new Spinner component), formatting.ts (dynamic prettier import).",
+  "maintainerNotes": "Well-structured performance PR from a maintainer. Has merge conflicts that need rebasing. CI shows failures in E2E Tests, Lint, and Memory Tests — E2E and Memory failures appear to be flaky infrastructure issues (other open PRs show similar unrelated failures), but the Lint failure may need investigation. Build check passes. Missing changeset. No tests added but this is a build/bundling optimization with no behavioral changes — manual verification via Network tab is the appropriate test approach. The lazy loading pattern is clean and uses standard React.lazy/Suspense. Login and SignUp pages are kept as eager imports (appropriate for auth entry points).",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

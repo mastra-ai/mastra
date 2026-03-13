@@ -1,0 +1,66 @@
+{
+  "number": 13974,
+  "title": "fix(memory): ignore binary payload size in observational token counts",
+  "url": "https://github.com/mastra-ai/mastra/pull/13974",
+  "author": {
+    "login": "Wert1go",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-07T23:26:56Z",
+    "lastUpdated": "2026-03-09T08:40:42Z",
+    "ageInDays": 3,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 155,
+    "deletions": 0,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/13301-om-image-token-count",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": false,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13953,
+        "title": "feat: add attachment support to observational memory and MastraCode",
+        "state": "MERGED",
+        "relationship": "parent-feature"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 13301,
+        "title": "Observational Memory Image Issues",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Fixes observational memory token counting so binary payloads (base64 images, binary files) don't inflate token estimates. Adds `serializePartForTokenCounting` handlers for image and file parts that replace raw binary data with short summaries like [binary], [data-uri:type], [url], or [base64]. Text-like file types (text/*, JSON, XML, JS, TS) are still counted by their actual content. Includes comprehensive tests covering image parts, binary files, and text files.",
+  "maintainerNotes": "Good community fix addressing #13301. Code quality is solid with proper tests and a changeset. However: (1) PR has merge conflicts, likely caused by #13953 being merged after this PR was opened — author needs to rebase. (2) Maintainer LekoArts already asked the author to fill in the PR description and link the related issue, but author has not responded yet. (3) CI checks are still pending/stuck. (4) CodeRabbit raised one actionable comment about preferring `mimeType` over `mediaType` for FilePartType canonical property, and a nitpick about handling URL objects — worth reviewing.",
+  "suggestedAction": "wait",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

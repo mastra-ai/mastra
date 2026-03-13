@@ -1,0 +1,56 @@
+{
+  "number": 13515,
+  "title": "chore(deps): bump rollup from 4.55.1 to 4.59.0 in /observability/_examples/otel-bridge/agent-hub",
+  "url": "https://github.com/mastra-ai/mastra/pull/13515",
+  "author": {
+    "login": "dependabot[bot]",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-25T23:47:32Z",
+    "lastUpdated": "2026-03-06T11:07:34Z",
+    "ageInDays": 13,
+    "daysSinceLastUpdate": 4
+  },
+  "size": {
+    "additions": 13,
+    "deletions": 0,
+    "changedFiles": 1,
+    "category": "XS"
+  },
+  "labels": [
+    "dependencies",
+    "javascript"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "dependabot/npm_and_yarn/observability/_examples/otel-bridge/agent-hub/rollup-4.59.0",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "passing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Automated dependabot bump of rollup from 4.55.1 to 4.59.0 in the observability examples directory. The diff only modifies pnpm-lock.yaml, adding `libc` fields to rollup platform-specific package resolutions. The change is confined to an examples project, not a core package.",
+  "maintainerNotes": "Low-risk lockfile-only change in an examples directory. CI is fully passing and there are no merge conflicts. Safe to merge as-is. No changeset is needed since this only affects an example project's lockfile.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

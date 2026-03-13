@@ -1,0 +1,72 @@
+{
+  "number": 12981,
+  "title": "[codex] Fix network tracingContext propagation across delegated primitives",
+  "url": "https://github.com/mastra-ai/mastra/pull/12981",
+  "author": {
+    "login": "suhasdeshpande",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-12T00:53:13Z",
+    "lastUpdated": "2026-03-03T12:37:38Z",
+    "ageInDays": 26,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 157,
+    "deletions": 6,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": true,
+  "branch": {
+    "head": "suhas/network-tracing-context-regression",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": false,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13058,
+        "title": "feat(core): Add unified observability type system and context propagation",
+        "state": "MERGED",
+        "relevance": "Merged after this PR was opened. Refactored tracingContext to ObservabilityContext pattern in the same files. Partially addresses the same problem but does NOT fully fix sub-agent/workflow propagation gaps this PR targets."
+      },
+      {
+        "number": 13596,
+        "title": "fix(core): forward tracingContext/tracingOptions in harness sendMessage",
+        "state": "MERGED",
+        "relevance": "Related tracing propagation fix in harness, different code path."
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 12979,
+        "title": "agent.network() drops tracingContext, causing split traces across routing, workflows, and sub-agents",
+        "state": "CLOSED"
+      }
+    ]
+  },
+  "summary": "Fixes a regression where agent.network() accepts tracingContext but does not propagate it through network internals, causing disconnected traces in observability tools like Langfuse. The fix adds tracingContext to routingAgentOptions in agent.ts and forwards it through agentStep, workflowStep, and toolStep execute functions in the network loop. Includes a regression test verifying sub-agents receive propagated tracing span context.",
+  "maintainerNotes": "The underlying bug this PR targets is real and still present on main: (1) routingAgentOptions in agent.ts still omits tracingContext, (2) agentForStep.stream()/resumeStream() calls don't pass tracing context, (3) toolStep still uses createObservabilityContext({ currentSpan: undefined }) placeholder. However, PR #13058 (merged Feb 26) refactored the tracing system from raw tracingContext to ObservabilityContext pattern with resolveObservabilityContext/createObservabilityContext helpers. This PR predates that refactor and uses the old tracingContext API directly, causing merge conflicts. The author needs to rebase onto main and adapt the fix to use the new ObservabilityContext pattern. The linked issue #12979 was closed but the fix was never actually merged. CI checks are stuck in pending state (likely due to the draft status and external contributor needing authorization). No changeset was added.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

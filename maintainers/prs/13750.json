@@ -1,0 +1,53 @@
+{
+  "number": 13750,
+  "title": "feat(mastracode): allow passing MCP server configs to createMastraCode",
+  "url": "https://github.com/mastra-ai/mastra/pull/13750",
+  "author": {
+    "login": "tulga-bytes",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-04T03:14:55Z",
+    "lastUpdated": "2026-03-05T15:06:54Z",
+    "ageInDays": 6,
+    "daysSinceLastUpdate": 5
+  },
+  "size": {
+    "additions": 100,
+    "deletions": 4,
+    "changedFiles": 4,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/mastracode-mcp-servers-config",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "ready-to-merge",
+    "priority": "medium",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds a `mcpServers` option to `MastraCodeConfig` so users can programmatically provide MCP server configurations when calling `createMastraCode()`. Programmatic servers are merged with file-based configs (from `.mastracode/mcp.json`, etc.) at highest priority, persist across `reload()` calls, and are still disabled by `disableMcp: true`. Changes span 4 files: config interface update in `index.ts`, merge logic in `mcp/manager.ts`, 4 new tests in `manager.test.ts`, and a well-written changeset.",
+  "maintainerNotes": "Clean, well-scoped community contribution. Approved by abhiaiyer91. Author addressed CodeRabbit's nitpick by extracting the merge logic into a helper function. CI test jobs (Core, E2E, MCP, Memory, RAG, Combined stores) are stuck in PENDING state for 5 days — this is likely because external contributor PRs require approval to run CI workflows. Vercel deploy failures are expected (authorization required for external PRs). A maintainer should trigger the CI jobs or merge based on local verification. The code change is minimal and low-risk.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

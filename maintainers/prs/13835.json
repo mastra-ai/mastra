@@ -1,0 +1,67 @@
+{
+  "number": 13835,
+  "title": "fix(core): forward threadId and resourceId to runScorers from executeOnFinish",
+  "url": "https://github.com/mastra-ai/mastra/pull/13835",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-05T06:13:00Z",
+    "lastUpdated": "2026-03-07T13:53:24Z",
+    "ageInDays": 5,
+    "daysSinceLastUpdate": 3
+  },
+  "size": {
+    "additions": 57,
+    "deletions": 1,
+    "changedFiles": 5,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/scorer-threadid-resourceid-forwarding",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 6850,
+        "title": "[core] Fix scorers have resourceId and threadId",
+        "state": "MERGED",
+        "relationship": "prior-fix-same-area",
+        "notes": "Merged Aug 2025 for the original agent code. This new PR addresses the same gap in the newer prepare-stream workflow and executeOnFinish path."
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 13780,
+        "title": "[BUG] threadId and resourceId not passed to #runScorers from #executeOnFinish in Agent",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Fixes a bug where executeOnFinish calls runScorers without forwarding threadId and resourceId, causing onScorerRun hook payloads to receive undefined for both fields. Also adds threadFromArgs?.id as a fallback in map-results-step so threadId is available even without a memory backend. Includes a test covering both v1 (generateLegacy) and v2 (generate) code paths, plus a changeset.",
+  "maintainerNotes": "Well-structured community contribution that fixes a real bug (issue #13780). The diff is small and focused: 2 lines in agent.ts to forward threadId/resourceId to executeOnFinish, 3 lines in prepare-stream to pipe threadId through map-results-step with a fallback, and a solid test. A similar fix (#6850) was merged in Aug 2025 for the original agent code — this addresses the same gap in the newer workflow-based agent execution path. CI checks for Core/E2E/MCP/Memory/RAG tests are stuck in PENDING since March 5 (likely need maintainer approval to run for external contributors). Vercel deploy failures are expected for external PRs. CodeRabbit review passed with one minor comment. No merge conflicts.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

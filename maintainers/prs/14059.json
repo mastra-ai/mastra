@@ -1,0 +1,55 @@
+{
+  "number": 14059,
+  "title": "chore(deps): update storybook monorepo to ^9.1.20",
+  "url": "https://github.com/mastra-ai/mastra/pull/14059",
+  "author": {
+    "login": "daneatmastra",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-10T10:09:44Z",
+    "lastUpdated": "2026-03-10T14:47:48Z",
+    "ageInDays": 0,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 57,
+    "deletions": 57,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [
+    "automation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "renovate/storybook-monorepo",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Renovate Bot patch update of the Storybook monorepo: @storybook/addon-docs (^9.1.16 -> ^9.1.20), @storybook/react-vite (^9.1.16 -> ^9.1.20), and storybook (^9.1.10 -> ^9.1.20). Changes are limited to package.json specifiers and pnpm-lock.yaml. Upstream changes include request validation hardening, websocket connection hardening, and a .env parsing fix.",
+  "maintainerNotes": "CI has failures in Lint, changeset check, Full Test Suite, and Observability Package Tests. The changeset failure is expected for automated dep bumps. The other failures should be investigated — they may be pre-existing/flaky on main rather than caused by this patch bump. Review approval is only from github-actions (automated), no human has reviewed. Since these are devDependencies (Storybook tooling only), risk is low, but CI should be green before merging.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

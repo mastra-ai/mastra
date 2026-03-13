@@ -1,0 +1,60 @@
+{
+  "number": 13446,
+  "title": "feat(playground-ui): add Preprocessors CMS page for agent create/edit",
+  "url": "https://github.com/mastra-ai/mastra/pull/13446",
+  "author": {
+    "login": "mfrachet",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-24T08:58:22Z",
+    "lastUpdated": "2026-02-24T12:21:11Z",
+    "ageInDays": 14,
+    "daysSinceLastUpdate": 14
+  },
+  "size": {
+    "additions": 847,
+    "deletions": 3,
+    "changedFiles": 19,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "processors",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "passing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13219,
+        "title": "feat(editor): processor providers and stored processor graphs",
+        "state": "MERGED",
+        "relationship": "prerequisite backend work for this UI PR"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Adds a Preprocessors CMS page to the agent create/edit flow in playground-ui. Users can toggle processor providers on/off and configure which processing phases (input/output) are enabled per provider. Includes new React Query hooks for fetching processor providers, form mapper utilities to convert between API StoredProcessorGraph and form state, sidebar navigation integration, and 9 comprehensive Playwright E2E tests covering provider listing, toggling, phase selection, create persistence, edit/save-draft persistence, and publish flow. Kitchen-sink E2E setup updated with ProcessorProvider wrappers.",
+  "maintainerNotes": "High-quality PR from a maintainer with good test coverage (9 E2E tests), a changeset, and clear description with a video demo. However, it has merge conflicts that need resolution — the mergeable state is CONFLICTING. The only CI item still pending is 'Tool Builder Tests' but all other checks pass. CodeRabbit review flagged minor issues: fragile DOM traversal in tests (should use data-testid), missing staleTime on React Query hook, and potential path delimiter issues in providerId form paths. No human reviews have been submitted yet. Author needs to resolve conflicts before this can be reviewed and merged.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}
