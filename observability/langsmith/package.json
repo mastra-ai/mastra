@@ -32,10 +32,10 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/observability": "workspace:*",
-    "langsmith": ">=0.3.79"
+    "langsmith": "^0.5.10"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.35",
+    "@ai-sdk/openai": "^2.0.99",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
@@ -46,7 +46,7 @@
     "dotenv": "^17.3.1",
     "eslint": "^9.39.4",
     "tsup": "^8.5.1",
-    "typescript": "catalog:",
+    "typescript": "^5.9.3",
     "vitest": "catalog:",
     "zod": "catalog:"
   },

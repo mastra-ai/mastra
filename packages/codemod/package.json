@@ -27,7 +27,7 @@
     "codemod"
   ],
   "dependencies": {
-    "@clack/prompts": "^1.0.1",
+    "@clack/prompts": "^1.1.0",
     "commander": "^14.0.3",
     "debug": "^4.4.3",
     "jscodeshift": "^17.3.0"
@@ -42,7 +42,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",
     "tsup": "^8.5.1",
-    "typescript": "catalog:",
+    "typescript": "^5.9.3",
     "vitest": "catalog:"
   },
   "homepage": "https://mastra.ai",

@@ -26,7 +26,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "firebase-admin": "^13.4.0"
+    "firebase-admin": "^13.7.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -37,7 +37,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",
     "tsup": "^8.5.1",
-    "typescript": "catalog:",
+    "typescript": "^5.9.3",
     "vitest": "catalog:"
   },
   "files": [

@@ -30,33 +30,33 @@
     "@mastra/server": "workspace:*"
   },
   "devDependencies": {
+    "@ai-sdk/openai": "^2.0.99",
     "@internal/lint": "workspace:*",
     "@internal/server-adapter-test-utils": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/evals": "workspace:*",
     "@mastra/libsql": "workspace:*",
-    "@mastra/observability": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@types/node": "^20.19.35",
-    "eslint": "^9.39.4",
-    "tsup": "^8.5.1",
-    "typescript": "catalog:",
-    "vitest": "catalog:",
-    "@internal/types-builder": "workspace:*",
-    "express": "^5.1.0",
-    "@types/express": "^5.0.5",
+    "@mastra/observability": "workspace:*",
     "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "22.19.13",
+    "@types/swagger-ui-express": "^4.1.8",
     "cors": "^2.8.6",
-    "@ai-sdk/openai": "^2.0.62",
-    "zod": "catalog:",
+    "eslint": "^9.39.4",
+    "express": "^5.2.1",
     "swagger-ui-express": "^5.0.1",
-    "@types/swagger-ui-express": "^4.1.8"
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "catalog:",
+    "zod": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0",
-    "express": "^5.1.0",
-    "@types/express": "^5.0.5"
+    "@types/express": "^5.0.5",
+    "express": "^5.1.0"
   },
   "engines": {
     "node": ">=22.13.0"

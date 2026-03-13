@@ -117,7 +117,7 @@
     "eslint": "^9.39.4",
     "superjson": "^2.2.6",
     "tsup": "^8.5.1",
-    "typescript": "catalog:",
+    "typescript": "^5.9.3",
     "vitest": "catalog:",
     "zod": "catalog:"
   },
@@ -134,6 +134,6 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "hono": "^4.11.9"
+    "hono": "^4.12.7"
   }
 }

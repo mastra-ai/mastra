@@ -32,7 +32,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@clickhouse/client": "^1.12.1"
+    "@clickhouse/client": "^1.18.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -44,7 +44,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",
     "tsup": "^8.5.1",
-    "typescript": "catalog:",
+    "typescript": "^5.9.3",
     "vitest": "catalog:"
   },
   "peerDependencies": {
