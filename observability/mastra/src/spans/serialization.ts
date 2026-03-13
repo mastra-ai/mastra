@@ -291,34 +291,31 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
       if (typeof val.serializeForSpan === 'function') {
         try {
           return helper(val.serializeForSpan(), depth);
-        } catch {
-          // If serializeForSpan() fails, fall through to default object handling
+        } catch (error) {
+          return `[serializeForSpan failed: ${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`;
         }
       }
 
       // Handle JSON Schema objects - compress to a more readable format
       // Pass the compressed result back through helper to apply size limits
       if (isJsonSchema(val)) {
-        return helper(compressJsonSchema(val), depth);
+        const compressed = compressJsonSchema(val);
+        return compressed === val ? '[JSONSchema]' : helper(compressed, depth);
       }
 
       // Handle objects - enforce key limit
       const cleaned: Record<string, any> = {};
-      const entries = Object.entries(val);
+      const keys = Object.keys(val).filter(key => !stripSet.has(key));
       let keyCount = 0;
 
-      for (const [key, v] of entries) {
-        if (stripSet.has(key)) {
-          continue;
-        }
-
+      for (const key of keys) {
         if (keyCount >= maxObjectKeys) {
-          cleaned['__truncated'] = `${entries.length - keyCount} more keys omitted`;
+          cleaned['__truncated'] = `${keys.length - keyCount} more keys omitted`;
           break;
         }
 
         try {
-          cleaned[key] = helper(v, depth + 1);
+          cleaned[key] = helper((val as Record<string, unknown>)[key], depth + 1);
           keyCount++;
         } catch (error) {
           cleaned[key] = `[${error instanceof Error ? error.message : String(error)}]`;
