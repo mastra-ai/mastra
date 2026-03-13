@@ -791,6 +791,67 @@ describe('Span', () => {
         nested: '[MaxDepth]',
       });
     });
+
+    it('should summarize composition-root JSON schemas instead of treating them as circular', () => {
+      const schema = {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        oneOf: [{ type: 'string' }, { type: 'number' }],
+      };
+
+      const result = deepClean(schema);
+
+      expect(result).toEqual({
+        oneOf: ['string', 'number'],
+      });
+    });
+
+    it('should not abort when array element getters throw', () => {
+      const items = ['safe'];
+      Object.defineProperty(items, 1, {
+        enumerable: true,
+        get() {
+          throw new Error('array getter failed');
+        },
+      });
+      items.length = 2;
+
+      const result = deepClean({ items });
+
+      expect(result.items).toEqual(['safe', '[array getter failed]']);
+    });
+
+    it('should return a safe placeholder when serializeForSpan access throws', () => {
+      const input = {
+        secret: 'should-not-leak',
+        get serializeForSpan() {
+          throw new Error('probe failed');
+        },
+      };
+
+      const result = deepClean(input);
+
+      expect(result).toBe('[serializeForSpan failed: probe failed]');
+    });
+
+    it('should fall back to guarded object traversal when JSON schema probes throw', () => {
+      const input: Record<string, unknown> = {
+        type: 'object',
+        properties: { safe: { type: 'string' } },
+      };
+
+      Object.defineProperty(input, '$schema', {
+        enumerable: true,
+        get() {
+          throw new Error('schema getter failed');
+        },
+      });
+
+      const result = deepClean(input);
+
+      expect(result.type).toBe('object');
+      expect(result.properties.safe.type).toBe('string');
+      expect(result.$schema).toBe('[schema getter failed]');
+    });
   });
 
   describe('serializationOptions', () => {

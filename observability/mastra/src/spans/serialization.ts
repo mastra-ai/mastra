@@ -138,6 +138,21 @@ function compressJsonSchema(schema: any, depth: number = 0): any {
     return schema.type || 'object';
   }
 
+  const compositionKeys = ['oneOf', 'anyOf', 'allOf'].filter(key => Array.isArray(schema[key]));
+  if (compositionKeys.length > 0) {
+    const compressed: Record<string, any> = {};
+
+    for (const key of compositionKeys) {
+      compressed[key] = schema[key].map((entry: any) => compressJsonSchema(entry, depth + 1));
+    }
+
+    if (typeof schema.type === 'string') {
+      compressed.type = schema.type;
+    }
+
+    return compressed;
+  }
+
   if (schema.type !== 'object' || !schema.properties) {
     // For non-object schemas, just return the type
     return schema.type || schema;
@@ -264,8 +279,16 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
     try {
       // Handle arrays - enforce length limit
       if (Array.isArray(val)) {
-        const limitedArray = val.slice(0, maxArrayLength);
-        const cleaned = limitedArray.map(item => helper(item, depth + 1));
+        const cleaned = [];
+
+        for (let i = 0; i < Math.min(val.length, maxArrayLength); i++) {
+          try {
+            cleaned.push(helper(val[i], depth + 1));
+          } catch (error) {
+            cleaned.push(`[${error instanceof Error ? error.message : String(error)}]`);
+          }
+        }
+
         if (val.length > maxArrayLength) {
           cleaned.push(`[…${val.length - maxArrayLength} more items]`);
         }
@@ -288,9 +311,16 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
       }
 
       // Handle objects with serializeForSpan() method - use their custom trace serialization
-      if (typeof val.serializeForSpan === 'function') {
+      let serializeForSpan;
+      try {
+        serializeForSpan = val.serializeForSpan;
+      } catch (error) {
+        return `[serializeForSpan failed: ${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`;
+      }
+
+      if (typeof serializeForSpan === 'function') {
         try {
-          return helper(val.serializeForSpan(), depth);
+          return helper(serializeForSpan.call(val), depth);
         } catch (error) {
           return `[serializeForSpan failed: ${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`;
         }
@@ -298,9 +328,20 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
 
       // Handle JSON Schema objects - compress to a more readable format
       // Pass the compressed result back through helper to apply size limits
-      if (isJsonSchema(val)) {
-        const compressed = compressJsonSchema(val);
-        return compressed === val ? '[JSONSchema]' : helper(compressed, depth);
+      let looksLikeJsonSchema = false;
+      try {
+        looksLikeJsonSchema = isJsonSchema(val);
+      } catch {
+        looksLikeJsonSchema = false;
+      }
+
+      if (looksLikeJsonSchema) {
+        try {
+          const compressed = compressJsonSchema(val);
+          return compressed === val ? '[JSONSchema]' : helper(compressed, depth);
+        } catch {
+          // Fall back to guarded object traversal below.
+        }
       }
 
       // Handle objects - enforce key limit
