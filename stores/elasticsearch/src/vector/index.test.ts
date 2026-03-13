@@ -18,7 +18,11 @@ describe('ElasticSearchVector', () => {
     console.log(`🚀 Running tests against Elasticsearch: ${url}`);
     console.log(`Using API Key: ${api_key ? '****' + api_key.slice(-4) : 'None'}`);
 
-    vectorDB = new ElasticSearchVector({ url, id: 'elasticsearch-test', ...(api_key ? { auth: { apiKey: api_key } } : {}) });
+    vectorDB = new ElasticSearchVector({
+      url,
+      id: 'elasticsearch-test',
+      ...(api_key ? { auth: { apiKey: api_key } } : {}),
+    });
   });
 
   describe('Error Handling', () => {
