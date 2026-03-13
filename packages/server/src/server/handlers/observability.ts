@@ -431,6 +431,7 @@ export const GET_METRIC_AGGREGATE_ROUTE = createRoute({
   description: 'Returns an aggregated metric value with optional period-over-period comparison',
   tags: ['Observability'],
   requiresAuth: true,
+  requiresPermission: 'observability:read',
   handler: async ({ mastra, ...params }) => {
     try {
       const args = pickParams(getMetricAggregateArgsSchema, params);
@@ -453,6 +454,7 @@ export const GET_METRIC_BREAKDOWN_ROUTE = createRoute({
   description: 'Returns metric values grouped by specified dimensions',
   tags: ['Observability'],
   requiresAuth: true,
+  requiresPermission: 'observability:read',
   handler: async ({ mastra, ...params }) => {
     try {
       const args = pickParams(getMetricBreakdownArgsSchema, params);
@@ -475,6 +477,7 @@ export const GET_METRIC_TIME_SERIES_ROUTE = createRoute({
   description: 'Returns metric values bucketed by time interval with optional grouping',
   tags: ['Observability'],
   requiresAuth: true,
+  requiresPermission: 'observability:read',
   handler: async ({ mastra, ...params }) => {
     try {
       const args = pickParams(getMetricTimeSeriesArgsSchema, params);
@@ -497,6 +500,7 @@ export const GET_METRIC_PERCENTILES_ROUTE = createRoute({
   description: 'Returns percentile values for a metric bucketed by time interval',
   tags: ['Observability'],
   requiresAuth: true,
+  requiresPermission: 'observability:read',
   handler: async ({ mastra, ...params }) => {
     try {
       const args = pickParams(getMetricPercentilesArgsSchema, params);
@@ -673,7 +677,7 @@ export const GET_TAGS_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, ...params }) => {
     try {
-      const args = pickParams(getTagsArgsSchema, params);
+      const args = getTagsArgsSchema.parse(pickParams(getTagsArgsSchema, params));
       const observabilityStore = await getObservabilityStore(mastra);
       return await observabilityStore.getTags(args);
     } catch (error) {

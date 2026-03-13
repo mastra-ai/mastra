@@ -124,27 +124,98 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
     // Respect min/max constraints from Zod checks
     let min = -Infinity;
     let max = Infinity;
+    let minInclusive = true;
+    let maxInclusive = true;
+    let requiresInt = false;
+    let requiresSafeInt = false;
+    let multipleOf: number | undefined;
     const checks = def.checks ?? [];
     for (const check of checks) {
       // Zod 3: check.kind === 'min'/'max', check.value
-      if (check.kind === 'min') min = check.value;
-      if (check.kind === 'max') max = check.value;
+      if (check.kind === 'min') {
+        min = check.value;
+        minInclusive = check.inclusive ?? true;
+      }
+      if (check.kind === 'max') {
+        max = check.value;
+        maxInclusive = check.inclusive ?? true;
+      }
+      if (check.kind === 'int') requiresInt = true;
+      if (check.kind === 'multipleOf') multipleOf = check.value;
       // Zod 4: checks have _zod.def with check type and value
       const zod4Def = check._zod?.def;
       if (zod4Def) {
-        if (zod4Def.check === 'greater_than') min = zod4Def.value;
-        if (zod4Def.check === 'less_than') max = zod4Def.value;
+        if (zod4Def.check === 'greater_than') {
+          min = zod4Def.value;
+          minInclusive = false;
+        }
+        if (zod4Def.check === 'greater_than_or_equal') {
+          min = zod4Def.value;
+          minInclusive = true;
+        }
+        if (zod4Def.check === 'less_than') {
+          max = zod4Def.value;
+          maxInclusive = false;
+        }
+        if (zod4Def.check === 'less_than_or_equal') {
+          max = zod4Def.value;
+          maxInclusive = true;
+        }
+        if (zod4Def.check === 'multiple_of') multipleOf = zod4Def.value;
+        if (zod4Def.check === 'integer') requiresInt = true;
+        if (zod4Def.check === 'safeint') {
+          requiresSafeInt = true;
+          requiresInt = true;
+        }
       }
     }
 
-    if (min !== -Infinity && max !== Infinity) {
-      return (min + max) / 2; // midpoint
-    } else if (max !== Infinity) {
-      return max - 1 < 0 ? max : max - 1;
-    } else if (min !== -Infinity) {
-      return min + 1;
+    const step = requiresInt || requiresSafeInt ? 1 : 0.1;
+    const effectiveMin = min === -Infinity ? min : minInclusive ? min : min + step;
+    const effectiveMax = max === Infinity ? max : maxInclusive ? max : max - step;
+
+    const clampToRange = (value: number): number => {
+      if (effectiveMin !== -Infinity && value < effectiveMin) return effectiveMin;
+      if (effectiveMax !== Infinity && value > effectiveMax) return effectiveMax;
+      return value;
+    };
+
+    let candidate: number;
+    if (effectiveMin !== -Infinity && effectiveMax !== Infinity) {
+      candidate = (effectiveMin + effectiveMax) / 2;
+    } else if (effectiveMin !== -Infinity) {
+      candidate = effectiveMin;
+    } else if (effectiveMax !== Infinity) {
+      candidate = effectiveMax;
+    } else {
+      candidate = requiresInt ? 10 : 10.5;
     }
-    return 10;
+
+    candidate = clampToRange(candidate);
+
+    if (multipleOf && multipleOf > 0) {
+      const minBase = effectiveMin !== -Infinity ? effectiveMin : 0;
+      const maxBase = effectiveMax !== Infinity ? effectiveMax : minBase + multipleOf * 10;
+      let aligned = Math.ceil(minBase / multipleOf) * multipleOf;
+      if (effectiveMin !== -Infinity && aligned < effectiveMin) {
+        aligned += multipleOf;
+      }
+      if (effectiveMax !== Infinity && aligned > effectiveMax) {
+        aligned = Math.floor(maxBase / multipleOf) * multipleOf;
+      }
+      candidate = aligned;
+    }
+
+    if (requiresInt) {
+      candidate = Math.round(candidate);
+      candidate = clampToRange(candidate);
+    }
+
+    if (requiresSafeInt) {
+      candidate = Math.min(Math.max(candidate, Number.MIN_SAFE_INTEGER), Number.MAX_SAFE_INTEGER);
+    }
+
+    return candidate;
   }
   if (typeName === 'ZodBoolean') return true;
   if (typeName === 'ZodNull') return null;
