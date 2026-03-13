@@ -65,6 +65,58 @@ function preview(text: string, maxChars = 900): string {
   return `${text.slice(0, maxChars)}\n... (truncated)`;
 }
 
+function getBufferedChunkCount(record: any): number {
+  return Array.isArray(record?.bufferedObservations) ? record.bufferedObservations.length : 0;
+}
+
+function printBeforeSnapshot(params: {
+  beforeStatus: { pendingTokens: number; threshold: number };
+  beforeRecord: any;
+}) {
+  const { beforeStatus, beforeRecord } = params;
+  console.log('=== BEFORE (seeded observations) ===');
+  console.log(`- pending tokens: ${beforeStatus.pendingTokens}/${beforeStatus.threshold}`);
+  console.log(`- active observation tokens: ${beforeRecord?.observationTokenCount ?? 0}`);
+  console.log(`- buffered chunks: ${getBufferedChunkCount(beforeRecord)}`);
+  console.log('\n--- Active Observations (before) ---');
+  console.log(preview(beforeRecord?.activeObservations ?? '<none>'));
+}
+
+function printAfterSnapshotAndDelta(params: {
+  turn1Buffered: boolean;
+  turn2Activated: boolean;
+  turn2Text: string;
+  afterStatus: { pendingTokens: number; threshold: number };
+  afterRecord: any;
+  beforeObservationTokens: number;
+  beforeObservationText: string;
+}) {
+  const {
+    turn1Buffered,
+    turn2Activated,
+    turn2Text,
+    afterStatus,
+    afterRecord,
+    beforeObservationTokens,
+    beforeObservationText,
+  } = params;
+  console.log('\nAI SDK cross-turn buffering demo complete');
+  console.log('Turn 1 buffered:', turn1Buffered);
+  console.log('Turn 2 activated:', turn2Activated);
+  console.log('Turn 2 generated text:', turn2Text);
+
+  console.log('\n=== AFTER (post-live turn) ===');
+  console.log(`- pending tokens: ${afterStatus.pendingTokens}/${afterStatus.threshold}`);
+  console.log(`- active observation tokens: ${afterRecord?.observationTokenCount ?? 0}`);
+  console.log(`- buffered chunks: ${getBufferedChunkCount(afterRecord)}`);
+  console.log('\n--- Active Observations (after) ---');
+  console.log(preview(afterRecord?.activeObservations ?? '<none>'));
+
+  console.log('\n=== DELTA ===');
+  console.log(`- observation token delta: ${(afterRecord?.observationTokenCount ?? 0) - beforeObservationTokens}`);
+  console.log(`- observations changed: ${beforeObservationText !== (afterRecord?.activeObservations ?? '')}`);
+}
+
 async function main() {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is required to run this demo.');
@@ -111,15 +163,7 @@ async function main() {
   const beforeStatus = await om.getStatus({ threadId });
   const beforeObservationText = beforeRecord?.activeObservations ?? '';
   const beforeObservationTokens = beforeRecord?.observationTokenCount ?? 0;
-
-  console.log('=== BEFORE (seeded observations) ===');
-  console.log(`- pending tokens: ${beforeStatus.pendingTokens}/${beforeStatus.threshold}`);
-  console.log(`- active observation tokens: ${beforeRecord?.observationTokenCount ?? 0}`);
-  console.log(
-    `- buffered chunks: ${Array.isArray((beforeRecord as any)?.bufferedObservations) ? (beforeRecord as any).bufferedObservations.length : 0}`,
-  );
-  console.log('\n--- Active Observations (before) ---');
-  console.log(preview(beforeRecord?.activeObservations ?? '<none>'));
+  printBeforeSnapshot({ beforeStatus, beforeRecord });
 
   // Turn 1 (deterministic buffering setup): add enough new context to trigger buffering.
   await memory.saveMessages({
@@ -179,24 +223,15 @@ async function main() {
 
   const afterRecord = await om.getRecord(threadId);
   const afterStatus = await om.getStatus({ threadId });
-
-  console.log('\nAI SDK cross-turn buffering demo complete');
-  console.log('Turn 1 buffered:', turn1Buffered.buffered);
-  console.log('Turn 2 activated:', activated.activated);
-  console.log('Turn 2 generated text:', result.text);
-
-  console.log('\n=== AFTER (post-live turn) ===');
-  console.log(`- pending tokens: ${afterStatus.pendingTokens}/${afterStatus.threshold}`);
-  console.log(`- active observation tokens: ${afterRecord?.observationTokenCount ?? 0}`);
-  console.log(
-    `- buffered chunks: ${Array.isArray((afterRecord as any)?.bufferedObservations) ? (afterRecord as any).bufferedObservations.length : 0}`,
-  );
-  console.log('\n--- Active Observations (after) ---');
-  console.log(preview(afterRecord?.activeObservations ?? '<none>'));
-
-  console.log('\n=== DELTA ===');
-  console.log(`- observation token delta: ${(afterRecord?.observationTokenCount ?? 0) - beforeObservationTokens}`);
-  console.log(`- observations changed: ${beforeObservationText !== (afterRecord?.activeObservations ?? '')}`);
+  printAfterSnapshotAndDelta({
+    turn1Buffered: turn1Buffered.buffered,
+    turn2Activated: activated.activated,
+    turn2Text: result.text,
+    afterStatus,
+    afterRecord,
+    beforeObservationTokens,
+    beforeObservationText,
+  });
 }
 
 void main();
