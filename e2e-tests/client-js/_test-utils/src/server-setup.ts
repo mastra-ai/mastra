@@ -108,7 +108,7 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
     const storage = new MastraCompositeStore({
       id: storageId,
       domains: {
-        ...libSqlStore,
+        ...libSqlStore.stores,
         observability: inMemoryStore.stores.observability,
       },
     });

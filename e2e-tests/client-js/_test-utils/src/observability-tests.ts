@@ -98,7 +98,7 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
           },
         });
       } catch (e) {
-        console.warn('Could not seed scores/feedback, some tests may fail:', e);
+        throw e;
       }
     });
 
@@ -380,7 +380,10 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
     describe('createScore', () => {
       it('should create a score and return success', async () => {
         const listResponse = await client.listTraces({ pagination: { page: 0, perPage: 1 } });
-        const traceId = listResponse.spans[0]?.traceId ?? 'test-trace';
+        const traceId = listResponse.spans[0]?.traceId;
+        if (!traceId) {
+          throw new Error('No traces available for createScore test (setup likely failed)');
+        }
 
         const result = await client.createScore({
           score: {
@@ -439,7 +442,10 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
     describe('createFeedback', () => {
       it('should create feedback and return success', async () => {
         const listResponse = await client.listTraces({ pagination: { page: 0, perPage: 1 } });
-        const traceId = listResponse.spans[0]?.traceId ?? 'test-trace';
+        const traceId = listResponse.spans[0]?.traceId;
+        if (!traceId) {
+          throw new Error('No traces available for createFeedback test (setup likely failed)');
+        }
 
         const result = await client.createFeedback({
           feedback: {

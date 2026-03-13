@@ -650,13 +650,13 @@ describe('Observability Methods', () => {
 
       await client.listScores({
         filters: {
-          name: 'accuracy',
+          scorerId: 'accuracy-scorer',
         },
       });
 
       const call = (global.fetch as any).mock.calls[0];
       const url = call[0] as string;
-      expect(url).toContain('name=accuracy');
+      expect(url).toContain('scorerId=accuracy-scorer');
     });
 
     it('should fetch scores with pagination parameters', async () => {
@@ -680,14 +680,14 @@ describe('Observability Methods', () => {
 
       await client.listScores({
         orderBy: {
-          field: 'createdAt',
+          field: 'timestamp',
           direction: 'DESC',
         },
       });
 
       const call = (global.fetch as any).mock.calls[0];
       const url = call[0] as string;
-      expect(url).toContain('field=createdAt');
+      expect(url).toContain('field=timestamp');
       expect(url).toContain('direction=DESC');
     });
 
@@ -732,9 +732,11 @@ describe('Observability Methods', () => {
 
       await expect(
         client.createScore({
-          traceId: 'trace-123',
-          scorerId: 'accuracy-scorer',
-          score: 0.95,
+          score: {
+            traceId: 'trace-123',
+            scorerId: 'accuracy-scorer',
+            score: 0.95,
+          },
         }),
       ).rejects.toThrow();
     });
@@ -793,14 +795,14 @@ describe('Observability Methods', () => {
 
       await client.listFeedback({
         orderBy: {
-          field: 'createdAt',
+          field: 'timestamp',
           direction: 'ASC',
         },
       });
 
       const call = (global.fetch as any).mock.calls[0];
       const url = call[0] as string;
-      expect(url).toContain('field=createdAt');
+      expect(url).toContain('field=timestamp');
       expect(url).toContain('direction=ASC');
     });
 
@@ -846,11 +848,13 @@ describe('Observability Methods', () => {
 
       await expect(
         client.createFeedback({
-          traceId: 'trace-123',
-          source: 'user',
-          feedbackType: 'thumbs',
-          value: 1,
-          comment: 'Great response',
+          feedback: {
+            traceId: 'trace-123',
+            source: 'user',
+            feedbackType: 'thumbs',
+            value: 1,
+            comment: 'Great response',
+          },
         }),
       ).rejects.toThrow();
     });

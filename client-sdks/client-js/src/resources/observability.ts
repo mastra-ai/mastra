@@ -315,7 +315,7 @@ export class Observability extends BaseResource {
    */
   getMetricLabelKeys(params: GetMetricLabelKeysArgs): Promise<GetMetricLabelKeysResponse> {
     const queryString = toQueryParams(params);
-    return this.request(`/observability/discovery/metric-label-keys?${queryString}`);
+    return this.request(`/observability/discovery/metric-label-keys${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -323,7 +323,7 @@ export class Observability extends BaseResource {
    */
   getMetricLabelValues(params: GetMetricLabelValuesArgs): Promise<GetMetricLabelValuesResponse> {
     const queryString = toQueryParams(params);
-    return this.request(`/observability/discovery/metric-label-values?${queryString}`);
+    return this.request(`/observability/discovery/metric-label-values${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
