@@ -46,7 +46,7 @@
     "eslint": "^9.39.4",
     "fastify": "^5.8.2",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
+    "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"
   },

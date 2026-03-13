@@ -88,7 +88,7 @@
     "rollup": "^4.59.0",
     "tsup": "^8.5.1",
     "type-fest": "^5.4.4",
-    "typescript": "^5.9.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

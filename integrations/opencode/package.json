@@ -60,7 +60,7 @@
     "@opencode-ai/plugin": "^1.2.25",
     "@opencode-ai/sdk": "^1.2.25",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   }
 }

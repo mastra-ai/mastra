@@ -122,7 +122,7 @@
     "eslint": "^9.39.4",
     "json-schema-traverse": "^1.0.0",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
+    "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:",
     "zod-v3": "npm:zod@^3.25.76"

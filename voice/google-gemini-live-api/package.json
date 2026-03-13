@@ -49,7 +49,7 @@
     "eslint": "^9.39.4",
     "tsup": "^8.5.1",
     "tsx": "latest",
-    "typescript": "^5.9.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

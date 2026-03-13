@@ -23,7 +23,7 @@
     "@types/node": "22.19.7",
     "mastra": "latest",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "catalog:"
   },
   "pnpm": {
     "overrides": {

@@ -31,7 +31,6 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@types/mongodb": "^4.0.7",
     "cloudflare": "^4.5.0",
     "mongodb": "^7.1.0",
     "uuid": "^13.0.0"
@@ -46,7 +45,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
