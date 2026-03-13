@@ -239,8 +239,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               };
               rest.messageList.add(successMessage, 'response');
             }
-
-            // Provider-executed tool results are handled in llm-execution-step.
           }
 
           // Continue the loop — the error messages are already in the messageList,
@@ -328,9 +326,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           };
           rest.messageList.add(toolResultMessage, 'response');
         }
-
-        // Provider-executed tool results (e.g. Anthropic web_search) are already stored
-        // as state:"result" in llm-execution-step, so no separate messageList.add is needed.
 
         // Check if any delegation hook called ctx.bail() — signal the loop to stop.
         // The bail flag is communicated via requestContext because Zod output validation
