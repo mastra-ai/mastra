@@ -3384,10 +3384,12 @@ ${suggestedResponse}
         state.sealedIds = sealedIds;
         const lockKey = this.getLockKey(threadId, resourceId);
 
-        // Defer observation/buffering if any message has a pending tool call (state: 'call').
+        // Defer observation/buffering if any *unobserved* message has a pending tool call (state: 'call').
         // Provider-executed tools (e.g. Anthropic web_search) may have their result arrive
         // in a later step. We skip this cycle and let the next step observe with complete data.
-        const hasIncompleteToolCalls = allMessages.some(msg =>
+        // Only check unobserved messages — old observed/sealed messages may have historical
+        // state:'call' parts from before the fix and should not block observation.
+        const hasIncompleteToolCalls = unobservedMessages.some(msg =>
           msg.content?.parts?.some(part => part?.type === 'tool-invocation' && part.toolInvocation?.state === 'call'),
         );
 
