@@ -4428,6 +4428,8 @@ export class Agent<
       requestContext,
       structuredOutput,
       overrideScorers,
+      threadId,
+      resourceId,
       ...observabilityContext,
     });
 
