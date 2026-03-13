@@ -102,7 +102,10 @@ const sidebars = {
         {
           type: 'doc',
           id: 'agents/networks',
-          label: 'Networks (Deprecated)',
+          label: 'Networks',
+          customProps: {
+            tags: ['deprecated'],
+          },
         },
       ],
     },
