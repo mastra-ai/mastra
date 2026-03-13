@@ -27,7 +27,7 @@
     "local-pkg": "^1.1.2",
     "resolve.exports": "^2.0.3",
     "ts-morph": "^27.0.2",
-    "typescript": "^5.9.3"
+    "typescript": "catalog:"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",

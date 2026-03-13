@@ -54,7 +54,7 @@
     "hono": "^4.12.7",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "homepage": "https://mastra.ai",

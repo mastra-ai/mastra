@@ -73,7 +73,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
+    "typescript": "catalog:",
     "typescript-eslint": "^8.57.0",
     "vitest": "catalog:",
     "zod": "catalog:"

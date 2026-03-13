@@ -41,7 +41,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   }
 }

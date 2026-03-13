@@ -44,7 +44,7 @@
     "eslint": "^9.39.4",
     "hono": "^4.12.7",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "files": [

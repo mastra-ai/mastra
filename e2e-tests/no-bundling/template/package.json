@@ -30,6 +30,6 @@
   "devDependencies": {
     "@types/node": "22.19.13",
     "mastra": "no-bundling-test",
-    "typescript": "^5.9.3"
+    "typescript": "catalog:"
   }
 }

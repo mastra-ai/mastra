@@ -169,7 +169,7 @@
     "storybook": "^9.1.20",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^3.4.19",
-    "typescript": "^5.9.3",
+    "typescript": "catalog:",
     "vite": "^7.3.1",
     "vite-plugin-dts": "^4.5.4",
     "vite-plugin-lib-inject-css": "^2.2.2",

@@ -295,7 +295,7 @@
     "rollup": "^4.59.0",
     "ts-morph": "^27.0.2",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
+    "typescript": "catalog:",
     "vitest": "catalog:",
     "vscode-jsonrpc": "^8.2.1",
     "vscode-languageserver-protocol": "^3.17.5",
