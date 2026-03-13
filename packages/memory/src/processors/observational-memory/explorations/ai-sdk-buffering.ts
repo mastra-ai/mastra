@@ -17,24 +17,18 @@ import { seedThreadAndEnsureObservations } from './seed-phase';
  * a turn, and `activate()` promotes them to active at the start of the next turn.
  * This is the pattern the OM processor uses for async observation.
  *
- * Flow across 3 turns:
+ * Each turn follows a consistent per-turn pattern (see `runTurn()`):
+ *   1. activate() — promote any buffered observations from the previous turn
+ *   2. save user message + getContext (now includes activated observations)
+ *   3. streamText with tool use + persist via onFinish
+ *   4. buffer() — stage new observations for the next turn
  *
- * Turn 1 — Helsinki weather
- *   seed → getContext → streamText (multi-step via tool) → persist via onFinish
- *   → buffer() stages new observations from the conversation
- *
- * Turn 2 — Tokyo weather
- *   activate() promotes Turn 1's buffered observations into active context
- *   → getContext (now enriched) → streamText → persist → buffer() stages more
- *
- * Turn 3 — Helsinki vs Tokyo comparison
- *   activate() promotes Turn 2's buffered observations
- *   → getContext (fully enriched) → streamText → persist
- *   → observe() if threshold reached (final sync catch-up)
+ * After all turns, a final observe() catches up any remaining unprocessed
+ * messages and advances the observation cursor.
  */
 
 const model = openai('gpt-4o-mini');
-const OBSERVATION_MESSAGE_TOKENS = 80;
+const OBSERVATION_MESSAGE_TOKENS = 150;
 
 // ─── Shared helpers ──────────────────────────────────────────────────────────
 
@@ -102,11 +96,15 @@ function preview(text: string, maxChars = 900): string {
 
 // ─── Print helpers ───────────────────────────────────────────────────────────
 
-function printSnapshot(label: string, status: { pendingTokens: number; threshold: number; canActivate?: boolean }, record: any) {
+function printSnapshot(
+  label: string,
+  status: { pendingTokens: number; threshold: number; canActivate?: boolean; bufferedChunkCount?: number },
+  record: any,
+) {
   console.log(`\n=== ${label} ===`);
   console.log(`- pending tokens: ${status.pendingTokens}/${status.threshold}`);
   console.log(`- active observation tokens: ${record?.observationTokenCount ?? 0}`);
-  console.log(`- buffered chunks: ${Array.isArray(record?.bufferedObservations) ? record.bufferedObservations.length : 0}`);
+  console.log(`- buffered chunks: ${status.bufferedChunkCount ?? 0}`);
   console.log(`- can activate: ${status.canActivate ?? false}`);
   console.log(`--- Active Observations ---`);
   console.log(preview(record?.activeObservations ?? '<none>'));
@@ -133,29 +131,42 @@ function printFinalDelta(
 // ─── Turn runner ─────────────────────────────────────────────────────────────
 
 /**
- * Run a single conversational turn: save the user message, load context,
- * stream a model response with tool use, and persist the result.
+ * Run a single conversational turn with the buffer→activate lifecycle baked in.
  *
- * Returns the final text so the caller can log it. OM lifecycle decisions
- * (buffer/activate/observe) are intentionally left to the caller in main().
+ * Per-turn pattern:
+ * 1. activate() — promote any buffered observations from the previous turn
+ * 2. save user message + getContext (now includes activated observations)
+ * 3. streamText with tool use + persist via onFinish
+ * 4. buffer() — stage new observations for the next turn
+ *
+ * Returns the final text and what OM actions were taken.
  */
 async function runTurn(opts: {
+  om: ObservationalMemory;
   memory: Memory;
   threadId: string;
   userPrompt: string;
   userMessageId: string;
-}): Promise<string> {
-  const { memory, threadId, userPrompt, userMessageId } = opts;
+}): Promise<{ text: string; actions: string[] }> {
+  const { om, memory, threadId, userPrompt, userMessageId } = opts;
+  const actions: string[] = [];
 
-  // 1. Save user message to storage
+  // 1. Activate buffered observations from previous turn (if any)
+  const preStatus = await om.getStatus({ threadId });
+  if (preStatus.canActivate) {
+    await om.activate({ threadId });
+    actions.push('activate');
+  }
+
+  // 2. Save user message to storage
   await memory.saveMessages({
     messages: [createMessage(userPrompt, 'user', threadId, userMessageId)],
   });
 
-  // 2. Load context (includes observations if any are active)
+  // 3. Load context (includes activated observations if step 1 ran)
   const ctx = await memory.getContext({ threadId });
 
-  // 3. Stream model response with tool use
+  // 4. Stream model response with tool use
   const result = streamText({
     model,
     stopWhen: stepCountIs(4),
@@ -180,9 +191,14 @@ async function runTurn(opts: {
     },
   });
 
-  // 4. Wait for stream + onFinish persistence to complete
+  // 5. Wait for stream + onFinish persistence to complete
   await result.consumeStream();
-  return await result.text;
+
+  // 6. Buffer new observations from this turn for the next turn
+  await om.buffer({ threadId });
+  actions.push('buffer');
+
+  return { text: await result.text, actions };
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -218,6 +234,30 @@ async function main() {
         threadId,
         'seed-u3',
       ),
+      createMessage(
+        'I usually travel between Helsinki and Tokyo twice a year, in spring and autumn. Those are the seasons where weather differences matter most for packing and planning outdoor activities.',
+        'user',
+        threadId,
+        'seed-u4',
+      ),
+      createMessage(
+        'That helps me tailor comparisons to seasonal patterns. I can highlight what to expect in each city during those transition months.',
+        'assistant',
+        threadId,
+        'seed-a2',
+      ),
+      createMessage(
+        'I prefer Celsius and metric units. Also, humidity matters a lot to me — Tokyo can be very humid even when temperatures seem moderate.',
+        'user',
+        threadId,
+        'seed-u5',
+      ),
+      createMessage(
+        'Good to know about the humidity preference. I will always include humidity and wind chill when relevant to give you a complete picture.',
+        'assistant',
+        threadId,
+        'seed-a3',
+      ),
     ],
   });
 
@@ -228,60 +268,52 @@ async function main() {
   printSnapshot('BEFORE (seeded observations)', beforeStatus, beforeRecord);
 
   // ── Turn 1: Helsinki weather ───────────────────────────────────────────
-  // After the turn, buffer() stages new observations from the conversation.
 
-  const turn1Text = await runTurn({
+  const turn1 = await runTurn({
+    om,
     memory,
     threadId,
     userPrompt: "What's the weather like in Helsinki right now?",
     userMessageId: 'turn1-u1',
   });
-
-  await om.buffer({ threadId });
-  printTurnResult('Turn 1: Helsinki weather', turn1Text, 'buffer');
+  printTurnResult('Turn 1: Helsinki weather', turn1.text, turn1.actions.join(' → '));
   printSnapshot('After Turn 1', await om.getStatus({ threadId }), await om.getRecord(threadId));
 
   // ── Turn 2: Tokyo weather ──────────────────────────────────────────────
-  // First activate() to promote Turn 1's buffered observations into active
-  // context, so the model sees them. Then run the turn and buffer again.
 
-  await om.activate({ threadId });
-  console.log('\n  [Turn 2] Activated buffered observations from Turn 1');
-
-  const turn2Text = await runTurn({
+  const turn2 = await runTurn({
+    om,
     memory,
     threadId,
     userPrompt: "And what's the current weather in Tokyo?",
     userMessageId: 'turn2-u1',
   });
-
-  await om.buffer({ threadId });
-  printTurnResult('Turn 2: Tokyo weather', turn2Text, 'activate + buffer');
+  printTurnResult('Turn 2: Tokyo weather', turn2.text, turn2.actions.join(' → '));
   printSnapshot('After Turn 2', await om.getStatus({ threadId }), await om.getRecord(threadId));
 
   // ── Turn 3: Comparison ─────────────────────────────────────────────────
-  // Activate Turn 2's buffered observations, then ask for a comparison.
-  // After the turn, observe() if we've crossed the threshold for a full
-  // sync observation pass.
 
-  await om.activate({ threadId });
-  console.log('\n  [Turn 3] Activated buffered observations from Turn 2');
-
-  const turn3Text = await runTurn({
+  const turn3 = await runTurn({
+    om,
     memory,
     threadId,
     userPrompt: 'Compare Helsinki and Tokyo weather — which city is better for outdoor sightseeing today?',
     userMessageId: 'turn3-u1',
   });
+  printTurnResult('Turn 3: Comparison', turn3.text, turn3.actions.join(' → '));
 
-  printTurnResult('Turn 3: Comparison', turn3Text, 'activate');
+  // ── Final: activate remaining chunks, then observe if needed ───────────
 
-  // ── Final: observe if any unprocessed messages remain ──────────────────
+  const preCleanup = await om.getStatus({ threadId });
+  if (preCleanup.canActivate) {
+    await om.activate({ threadId });
+    console.log('\n  [Final] Activated remaining buffered chunks');
+  }
 
   const finalStatus = await om.getStatus({ threadId });
   if (finalStatus.shouldObserve) {
     await om.observe({ threadId });
-    console.log('\n  [Final] Ran observe() to catch up remaining messages');
+    console.log('  [Final] Ran observe() to catch up remaining messages');
   }
 
   const afterRecord = await om.getRecord(threadId);
