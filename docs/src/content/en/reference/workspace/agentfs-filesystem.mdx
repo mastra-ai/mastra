@@ -1,0 +1,159 @@
+---
+title: "Reference: AgentFSFilesystem | Workspace"
+description: "Documentation for the AgentFSFilesystem provider for Turso/SQLite-backed storage."
+packages:
+  - "@mastra/agentfs"
+---
+
+# AgentFSFilesystem
+
+Stores files in a Turso/SQLite database via the [AgentFS](https://github.com/nichochar/agentfs) SDK. Files are persisted across sessions in a local SQLite database, giving agents durable storage without external cloud services.
+
+:::info
+
+For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
+
+:::
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/agentfs
+```
+
+## Usage
+
+Add an `AgentFSFilesystem` to a workspace and assign it to an agent. You must provide at least one of `agentId`, `path`, or `agent` when instantiating the `AgentFSFilesystem` class.
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { AgentFSFilesystem } from '@mastra/agentfs'
+
+const workspace = new Workspace({
+  filesystem: new AgentFSFilesystem({
+    agentId: 'my-agent',
+  }),
+})
+
+const agent = new Agent({
+  name: 'file-agent',
+  model: 'openai/gpt-5.4',
+  workspace,
+})
+```
+
+### Using an explicit database path
+
+By default, databases are stored inside the `.agentfs` directory with the `agentId` as filename. You can specify a custom database path:
+
+```typescript
+import { AgentFSFilesystem } from '@mastra/agentfs'
+
+const filesystem = new AgentFSFilesystem({
+  path: '/data/my-agent.db',
+})
+```
+
+### Using a pre-opened AgentFS instance
+
+If you need to manage the AgentFS lifecycle yourself:
+
+```typescript
+import { AgentFS } from 'agentfs-sdk'
+import { AgentFSFilesystem } from '@mastra/agentfs'
+
+const agent = await AgentFS.open({ id: 'my-agent' })
+
+const filesystem = new AgentFSFilesystem({
+  agent, // caller manages open/close
+})
+```
+
+## Constructor parameters
+
+You must provide at least one of `agentId`, `path`, or `agent`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'agentId',
+    type: 'string',
+    description: 'Agent ID — creates database at `.agentfs/<agentId>.db`',
+    isOptional: true,
+  },
+  {
+    name: 'path',
+    type: 'string',
+    description: 'Explicit database file path (alternative to agentId)',
+    isOptional: true,
+  },
+  {
+    name: 'agent',
+    type: 'AgentFS',
+    description: 'Pre-opened AgentFS instance. When provided, the caller manages the lifecycle (open/close).',
+    isOptional: true,
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this filesystem instance',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'displayName',
+    type: 'string',
+    description: 'Human-friendly display name for the UI',
+    isOptional: true,
+    defaultValue: "'AgentFS'",
+  },
+  {
+    name: 'icon',
+    type: 'FilesystemIcon',
+    description: 'Icon identifier for the UI',
+    isOptional: true,
+    defaultValue: "'database'",
+  },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'Short description of this filesystem for the UI',
+    isOptional: true,
+  },
+  {
+    name: 'readOnly',
+    type: 'boolean',
+    description: 'When true, all write operations are blocked',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Filesystem instance identifier',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Provider name ('AgentFSFilesystem')",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "Provider identifier ('agentfs')",
+  },
+  {
+    name: 'readOnly',
+    type: 'boolean | undefined',
+    description: 'Whether the filesystem is in read-only mode',
+  },
+]}
+/>

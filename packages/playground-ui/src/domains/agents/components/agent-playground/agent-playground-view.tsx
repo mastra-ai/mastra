@@ -151,7 +151,7 @@ export function AgentPlaygroundView({
   });
 
   return (
-    <div className="flex flex-col h-full bg-surface2">
+    <div className="flex flex-col h-full overflow-hidden bg-surface2">
       <Group className="flex-1 min-h-0" defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
         {/* Left panel - Version Bar + Configuration + Action Bar */}
         <Panel id="playground-config" minSize={30} defaultSize={50} className="overflow-hidden">

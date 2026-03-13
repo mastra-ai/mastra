@@ -4,9 +4,11 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, ValidationErrorHook } from '@mastra/core/server';
 import type z from 'zod';
 import type { InMemoryTaskStore } from '../../a2a/store';
+import type { OpenAPIRoute } from '../openapi-utils';
 import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
 import { AGENTS_ROUTES } from './agents';
+import type { AgentRoutes } from './agents';
 import { AUTH_ROUTES } from './auth';
 import { DATASETS_ROUTES } from './datasets';
 import { LEGACY_ROUTES } from './legacy';
@@ -18,6 +20,7 @@ import { PROCESSOR_PROVIDER_ROUTES } from './processor-providers';
 import { PROCESSORS_ROUTES } from './processors';
 import { SCORES_ROUTES } from './scorers';
 import { STORED_AGENTS_ROUTES } from './stored-agents';
+import type { StoredAgentRoutes } from './stored-agents';
 import { STORED_MCP_CLIENTS_ROUTES } from './stored-mcp-clients';
 import { STORED_PROMPT_BLOCKS_ROUTES } from './stored-prompt-blocks';
 import { STORED_SCORERS_ROUTES } from './stored-scorers';
@@ -82,19 +85,42 @@ export type ServerRouteHandler<
       : TResponse
 >;
 
+/**
+ * Phantom type for preserving Zod schema types on routes.
+ * Not present at runtime — used only for type-level inference via RouteMap.
+ */
+export interface RouteSchemas<
+  TPathSchema = unknown,
+  TQuerySchema = unknown,
+  TBodySchema = unknown,
+  TResponseSchema = unknown,
+> {
+  readonly pathParams: TPathSchema;
+  readonly queryParams: TQuerySchema;
+  readonly body: TBodySchema;
+  readonly response: TResponseSchema;
+}
+
 export type ServerRoute<
   TParams = Record<string, unknown>,
   TResponse = unknown,
-  TResponseType extends ResponseType = 'json',
-> = Omit<ApiRoute, 'handler' | 'createHandler'> & {
+  TResponseType extends ResponseType = ResponseType,
+  TSchemas extends RouteSchemas = RouteSchemas,
+  TMethod extends string = string,
+  TPath extends string = string,
+> = Omit<ApiRoute, 'handler' | 'createHandler' | 'method' | 'path' | 'openapi'> & {
+  method: TMethod;
+  path: TPath;
   responseType: TResponseType;
   streamFormat?: 'sse' | 'stream'; // Only used when responseType is 'stream', defaults to 'stream'
-  handler: ServerRouteHandler<TParams, TResponse, TResponseType>;
+  // Method signature is bivariant in params, allowing heterogeneous route arrays
+  // while still preserving specific param types on individual routes.
+  handler(params: TParams & ServerContext): ReturnType<ServerRouteHandler<TParams, TResponse, TResponseType>>;
   pathParamSchema?: z.ZodSchema;
   queryParamSchema?: z.ZodSchema;
   bodySchema?: z.ZodSchema;
   responseSchema?: z.ZodSchema;
-  openapi?: any; // Auto-generated OpenAPI spec for this route
+  openapi?: OpenAPIRoute; // Auto-generated OpenAPI spec for this route
   maxBodySize?: number; // Optional route-specific body size limit in bytes
   deprecated?: boolean; // Flag for deprecated routes (used for route parity, skipped in tests)
   /**
@@ -108,9 +134,11 @@ export type ServerRoute<
    */
   requiresPermission?: string;
   onValidationError?: ValidationErrorHook;
+  /** @internal Phantom type — not present at runtime. Used for type-level schema inference. */
+  readonly __schemas?: TSchemas;
 };
 
-export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
+export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...AGENTS_ROUTES,
   ...AUTH_ROUTES,
   ...WORKFLOWS_ROUTES,
@@ -136,6 +164,38 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...PROCESSOR_PROVIDER_ROUTES,
   ...SYSTEM_ROUTES,
   ...DATASETS_ROUTES,
+];
+
+/**
+ * Union type of all individual route arrays.
+ * Built from the per-domain `as const` tuples to preserve each route's specific schema types.
+ */
+export type ServerRoutes = readonly [
+  ...AgentRoutes,
+  ...typeof AUTH_ROUTES,
+  ...typeof WORKFLOWS_ROUTES,
+  ...typeof TOOLS_ROUTES,
+  ...typeof PROCESSORS_ROUTES,
+  ...typeof MEMORY_ROUTES,
+  ...typeof SCORES_ROUTES,
+  ...typeof OBSERVABILITY_ROUTES,
+  ...typeof LOGS_ROUTES,
+  ...typeof VECTORS_ROUTES,
+  ...typeof A2A_ROUTES,
+  ...typeof AGENT_BUILDER_ROUTES,
+  ...typeof WORKSPACE_ROUTES,
+  ...typeof LEGACY_ROUTES,
+  ...typeof MCP_ROUTES,
+  ...StoredAgentRoutes,
+  ...typeof STORED_MCP_CLIENTS_ROUTES,
+  ...typeof STORED_PROMPT_BLOCKS_ROUTES,
+  ...typeof STORED_SCORERS_ROUTES,
+  ...typeof STORED_WORKSPACES_ROUTES,
+  ...typeof STORED_SKILLS_ROUTES,
+  ...typeof TOOL_PROVIDER_ROUTES,
+  ...typeof PROCESSOR_PROVIDER_ROUTES,
+  ...typeof SYSTEM_ROUTES,
+  ...typeof DATASETS_ROUTES,
 ];
 
 // Export route builder and OpenAPI utilities

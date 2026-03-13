@@ -14,9 +14,8 @@ import {
   UPDATE_STORED_PROMPT_BLOCK_ROUTE,
   DELETE_STORED_PROMPT_BLOCK_ROUTE,
 } from '../../handlers/stored-prompt-blocks';
-import type { ServerRoute } from '.';
 
-export const STORED_PROMPT_BLOCKS_ROUTES: ServerRoute<any, any, any>[] = [
+export const STORED_PROMPT_BLOCKS_ROUTES = [
   // Stored Prompt Blocks CRUD Routes
   LIST_STORED_PROMPT_BLOCKS_ROUTE,
   GET_STORED_PROMPT_BLOCK_ROUTE,
@@ -34,4 +33,4 @@ export const STORED_PROMPT_BLOCKS_ROUTES: ServerRoute<any, any, any>[] = [
   ACTIVATE_PROMPT_BLOCK_VERSION_ROUTE,
   RESTORE_PROMPT_BLOCK_VERSION_ROUTE,
   DELETE_PROMPT_BLOCK_VERSION_ROUTE,
-];
+] as const;
