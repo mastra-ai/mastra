@@ -1969,6 +1969,20 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
           }
           break;
         }
+        case 'data-sandbox-exit': {
+          const d = (chunk as any).data as Record<string, any> | undefined;
+          if (d?.toolCallId) {
+            this.emit({
+              type: 'shell_exit',
+              toolCallId: d.toolCallId,
+              exitCode: d.exitCode ?? -1,
+              success: d.success ?? false,
+              executionTimeMs: d.executionTimeMs ?? 0,
+              outputTokensEstimate: d.outputTokensEstimate ?? 0,
+            });
+          }
+          break;
+        }
 
         default:
           break;
@@ -2396,6 +2410,10 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
         }
         break;
       }
+
+      case 'shell_exit':
+        // Consumed by TUI subscribers; no display state update needed.
+        break;
 
       case 'tool_approval_required':
         ds.pendingApproval = {

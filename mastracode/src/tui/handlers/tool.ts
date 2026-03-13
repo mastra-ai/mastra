@@ -190,6 +190,22 @@ export function handleShellOutput(
   }
 }
 
+export function handleShellExit(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  exitCode: number,
+  success: boolean,
+  executionTimeMs: number,
+  outputTokensEstimate: number,
+): void {
+  const { state } = ctx;
+  const component = state.pendingTools.get(toolCallId);
+  if (component?.setShellExit) {
+    component.setShellExit({ exitCode, success, executionTimeMs, outputTokensEstimate });
+    state.ui.requestRender();
+  }
+}
+
 /**
  * Handle the start of streaming tool call input arguments.
  * Creates the tool component early so partial args can render as they arrive.

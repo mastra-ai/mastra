@@ -20,6 +20,7 @@ export {
   handleToolStart,
   handleToolUpdate,
   handleShellOutput,
+  handleShellExit,
   handleToolInputStart,
   handleToolInputDelta,
   handleToolInputEnd,

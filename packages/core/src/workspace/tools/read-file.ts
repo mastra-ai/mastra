@@ -39,19 +39,23 @@ export const readFileTool = createTool({
     const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]?.maxOutputTokens;
 
     if (!isTextEncoding) {
-      return await applyTokenLimit(
-        `${stat.path} (${stat.size} bytes, ${effectiveEncoding})\n${fullContent}`,
-        tokenLimit,
-        'end',
-      );
+      return (
+        await applyTokenLimit(
+          `${stat.path} (${stat.size} bytes, ${effectiveEncoding})\n${fullContent}`,
+          tokenLimit,
+          'end',
+        )
+      ).text;
     }
 
     if (typeof fullContent !== 'string') {
-      return await applyTokenLimit(
-        `${stat.path} (${stat.size} bytes, base64)\n${fullContent.toString('base64')}`,
-        tokenLimit,
-        'end',
-      );
+      return (
+        await applyTokenLimit(
+          `${stat.path} (${stat.size} bytes, base64)\n${fullContent.toString('base64')}`,
+          tokenLimit,
+          'end',
+        )
+      ).text;
     }
 
     const hasLineRange = offset !== undefined || limit !== undefined;
@@ -69,6 +73,6 @@ export const readFileTool = createTool({
       header = `${stat.path} (${stat.size} bytes)`;
     }
 
-    return await applyTokenLimit(`${header}\n${formattedContent}`, tokenLimit, 'end');
+    return (await applyTokenLimit(`${header}\n${formattedContent}`, tokenLimit, 'end')).text;
   },
 });

@@ -32,6 +32,7 @@ import {
   handleToolStart,
   handleToolUpdate,
   handleShellOutput,
+  handleShellExit,
   handleToolInputStart,
   handleToolInputDelta,
   handleToolInputEnd,
@@ -85,6 +86,10 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     case 'shell_output':
       handleShellOutput(ectx, event.toolCallId, event.output, event.stream);
+      break;
+
+    case 'shell_exit':
+      handleShellExit(ectx, event.toolCallId, event.exitCode, event.success, event.executionTimeMs, event.outputTokensEstimate);
       break;
 
     case 'tool_input_start':

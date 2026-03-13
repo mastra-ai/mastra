@@ -51,8 +51,9 @@ Use this after starting a background command with execute_command (background: t
     }
 
     // If wait requested, block until process exits with streaming callbacks
+    let waitResult: { exitCode: number; success: boolean; executionTimeMs?: number } | undefined;
     if (shouldWait && handle.exitCode === undefined) {
-      const result = await handle.wait({
+      waitResult = await handle.wait({
         onStdout: context?.writer
           ? async (data: string) => {
               await context.writer!.custom({
@@ -72,43 +73,48 @@ Use this after starting a background command with execute_command (background: t
             }
           : undefined,
       });
-
-      await context?.writer?.custom({
-        type: 'data-sandbox-exit',
-        data: {
-          exitCode: result.exitCode,
-          success: result.success,
-          executionTimeMs: result.executionTimeMs,
-          toolCallId,
-        },
-      });
     }
 
     const running = handle.exitCode === undefined;
 
     const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT]?.maxOutputTokens;
-    const stdout = await truncateOutput(handle.stdout, tail, tokenLimit, 'sandwich');
-    const stderr = await truncateOutput(handle.stderr, tail, tokenLimit, 'sandwich');
+    const stdoutResult = await truncateOutput(handle.stdout, tail, tokenLimit, 'sandwich');
+    const stderrResult = await truncateOutput(handle.stderr, tail, tokenLimit, 'sandwich');
 
-    if (!stdout && !stderr) {
+    if (!stdoutResult.text && !stderrResult.text) {
       return '(no output yet)';
     }
 
     const parts: string[] = [];
 
     // Only label stdout/stderr when both are present
-    if (stdout && stderr) {
-      parts.push('stdout:', stdout, '', 'stderr:', stderr);
-    } else if (stdout) {
-      parts.push(stdout);
+    if (stdoutResult.text && stderrResult.text) {
+      parts.push('stdout:', stdoutResult.text, '', 'stderr:', stderrResult.text);
+    } else if (stdoutResult.text) {
+      parts.push(stdoutResult.text);
     } else {
-      parts.push('stderr:', stderr);
+      parts.push('stderr:', stderrResult.text);
     }
 
     if (!running) {
       parts.push('', `Exit code: ${handle.exitCode}`);
     }
 
-    return parts.join('\n');
+    const output = parts.join('\n');
+
+    if (waitResult) {
+      await context?.writer?.custom({
+        type: 'data-sandbox-exit',
+        data: {
+          exitCode: waitResult.exitCode,
+          success: waitResult.success,
+          executionTimeMs: waitResult.executionTimeMs,
+          outputTokensEstimate: stdoutResult.tokens + stderrResult.tokens,
+          toolCallId,
+        },
+      });
+    }
+
+    return output;
   },
 });

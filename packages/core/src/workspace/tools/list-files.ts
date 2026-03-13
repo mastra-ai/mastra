@@ -67,10 +67,11 @@ Examples:
       respectGitignore,
     });
 
-    return await applyTokenLimit(
+    const truncated = await applyTokenLimit(
       `${result.tree}\n\n${result.summary}`,
       workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]?.maxOutputTokens ?? 1_000,
       'end',
     );
+    return truncated.text;
   },
 });

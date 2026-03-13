@@ -229,10 +229,11 @@ Usage:
     const summary = summaryParts.join(' ');
     outputLines.unshift(summary, '---');
 
-    return await applyTokenLimit(
+    const result = await applyTokenLimit(
       outputLines.join('\n'),
       workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.GREP]?.maxOutputTokens,
       'end',
     );
+    return result.text;
   },
 });

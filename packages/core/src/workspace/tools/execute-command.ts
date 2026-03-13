@@ -153,43 +153,54 @@ async function executeCommand(input: Record<string, any>, context: any) {
       },
     });
 
+    let output: string;
+    let outputTokensEstimate = 0;
+    if (!result.success) {
+      const stdoutResult = await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom);
+      const stderrResult = await truncateOutput(result.stderr, tail, tokenLimit, tokenFrom);
+      outputTokensEstimate = stdoutResult.tokens + stderrResult.tokens;
+      const parts = [stdoutResult.text, stderrResult.text].filter(Boolean);
+      parts.push(`Exit code: ${result.exitCode}`);
+      output = parts.join('\n');
+    } else {
+      const result_ = await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom);
+      outputTokensEstimate = result_.tokens;
+      output = result_.text || '(no output)';
+    }
+
     await context?.writer?.custom({
       type: 'data-sandbox-exit',
       data: {
         exitCode: result.exitCode,
         success: result.success,
         executionTimeMs: result.executionTimeMs,
+        outputTokensEstimate,
         toolCallId,
       },
     });
 
-    if (!result.success) {
-      const parts = [
-        await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom),
-        await truncateOutput(result.stderr, tail, tokenLimit, tokenFrom),
-      ].filter(Boolean);
-      parts.push(`Exit code: ${result.exitCode}`);
-      return parts.join('\n');
-    }
-
-    return (await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom)) || '(no output)';
+    return output;
   } catch (error) {
+    const stdoutResult = await truncateOutput(stdout, tail, tokenLimit, tokenFrom);
+    const stderrResult = await truncateOutput(stderr, tail, tokenLimit, tokenFrom);
+    const outputTokensEstimate = stdoutResult.tokens + stderrResult.tokens;
+    const parts = [stdoutResult.text, stderrResult.text].filter(Boolean);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    parts.push(`Error: ${errorMessage}`);
+    const output = parts.join('\n');
+
     await context?.writer?.custom({
       type: 'data-sandbox-exit',
       data: {
         exitCode: -1,
         success: false,
         executionTimeMs: Date.now() - startedAt,
+        outputTokensEstimate,
         toolCallId,
       },
     });
-    const parts = [
-      await truncateOutput(stdout, tail, tokenLimit, tokenFrom),
-      await truncateOutput(stderr, tail, tokenLimit, tokenFrom),
-    ].filter(Boolean);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    parts.push(`Error: ${errorMessage}`);
-    return parts.join('\n');
+
+    return output;
   }
 }
 
