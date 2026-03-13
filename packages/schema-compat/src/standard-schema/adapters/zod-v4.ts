@@ -56,7 +56,7 @@ function convertToJsonSchema(
  */
 let _toJSONSchema: ((schema: unknown, options?: unknown) => unknown) | null = null;
 let _toJSONSchemaResolved = false;
-const __require = typeof require === 'function' ? require : createRequire(import.meta.url);
+const __require = createRequire(import.meta.url);
 
 function pickToJSONSchema(mod: unknown): ((schema: unknown, options?: unknown) => unknown) | null {
   const candidate = mod as {
