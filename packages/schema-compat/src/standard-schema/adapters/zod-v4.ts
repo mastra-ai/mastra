@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../standard-schema.types';
 
@@ -51,21 +52,54 @@ function convertToJsonSchema(
 }
 
 /**
- * Cached reference to z.toJSONSchema from zod/v4.
+ * Cached reference to z.toJSONSchema.
  */
 let _toJSONSchema: ((schema: unknown, options?: unknown) => unknown) | null = null;
 let _toJSONSchemaResolved = false;
+const __require = typeof require === 'function' ? require : createRequire(import.meta.url);
+
+function pickToJSONSchema(mod: unknown): ((schema: unknown, options?: unknown) => unknown) | null {
+  const candidate = mod as {
+    toJSONSchema?: unknown;
+    z?: { toJSONSchema?: unknown };
+    default?: { toJSONSchema?: unknown; z?: { toJSONSchema?: unknown } };
+  };
+
+  const picks = [
+    candidate?.toJSONSchema,
+    candidate?.z?.toJSONSchema,
+    candidate?.default?.toJSONSchema,
+    candidate?.default?.z?.toJSONSchema,
+  ];
+
+  const toJSONSchema = picks.find(fn => typeof fn === 'function');
+  return (toJSONSchema as ((schema: unknown, options?: unknown) => unknown) | undefined) ?? null;
+}
+
+function resolveToJSONSchema(
+  loadModule: (moduleName: 'zod/v4' | 'zod') => unknown,
+): ((schema: unknown, options?: unknown) => unknown) | null {
+  for (const moduleName of ['zod/v4', 'zod'] as const) {
+    try {
+      const zodModule = loadModule(moduleName);
+      const toJSONSchema = pickToJSONSchema(zodModule);
+      if (toJSONSchema) {
+        return toJSONSchema;
+      }
+    } catch {
+      // Try next module path.
+    }
+  }
+
+  return null;
+}
 
 function getToJSONSchema(): ((schema: unknown, options?: unknown) => unknown) | null {
   if (_toJSONSchemaResolved) {
     return _toJSONSchema;
   }
-  try {
-    const zv4 = require('zod/v4');
-    _toJSONSchema = typeof zv4.toJSONSchema === 'function' ? zv4.toJSONSchema : null;
-  } catch {
-    _toJSONSchema = null;
-  }
+
+  _toJSONSchema = resolveToJSONSchema(moduleName => __require(moduleName));
   _toJSONSchemaResolved = true;
   return _toJSONSchema;
 }
