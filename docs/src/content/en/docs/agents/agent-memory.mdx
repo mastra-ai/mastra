@@ -16,9 +16,9 @@ Agents use memory to maintain context across interactions. Without memory, each 
 
 Memory stores message history. Mastra supports three additional memory modes:
 
-- [Working memory](../memory/working-memory) to maintain recent context.
-- [Semantic recall](../memory/semantic-recall) to retrieve past messages based on meaning.
 - [Observational memory](../memory/observational-memory) for automatic long-term memory that compresses conversations as they grow.
+- [Working memory](../memory/working-memory) to maintain a small, structured scratchpad of recent context.
+- [Semantic recall](../memory/semantic-recall) to retrieve past messages based on meaning.
 
 ## When to use memory
 
@@ -186,21 +186,21 @@ When a [supervisor agent](/docs/agents/supervisor-agents) delegates to a subagen
 Each delegation creates a fresh `threadId` and a deterministic `resourceId` for the subagent:
 
 - **Thread ID**: Unique per delegation. The subagent starts with a clean message history every time it's called.
-- **Resource ID**: Derived as `{parentResourceId}-{agentName}`. Because the resource ID is stable across delegations, resource-scoped [working memory](../memory/working-memory) persists between calls. A subagent remembers facts from previous delegations by the same user.
+- **Resource ID**: Derived as `{parentResourceId}-{agentName}`. Because the resource ID is stable across delegations, resource-scoped memory persists between calls. A subagent remembers facts from previous delegations by the same user.
 - **Memory instance**: If a subagent has no memory configured, it inherits the supervisor's `Memory` instance. If the subagent defines its own, that takes precedence.
 
-The supervisor forwards its conversation context to the subagent so it has enough background to complete the task. Only the delegation prompt and the subagent's response are saved and the full parent conversation is not stored. You can control which messages reach the subagent with the [`messageFilter`](/docs/agents/supervisor-agents) callback.
+The supervisor forwards its conversation context to the subagent so it has enough background to complete the task. Only the delegation prompt and the subagent's response are saved — the full parent conversation is not stored. You can control which messages reach the subagent with the [`messageFilter`](/docs/agents/supervisor-agents) callback.
 
 ### Share memory between agents
 
-In some cases you want agents to collaborate on a shared context, for example, a researcher that saves notes and a writer that reads them. Memory sharing in Mastra is controlled by two identifiers: `resourceId` and `threadId`. Agents that use the same values read and write to the same data.
+Memory sharing in Mastra is controlled by two identifiers: `resourceId` and `threadId`. Agents that use the same values read and write to the same data. This is useful when agents collaborate on a shared context — for example, a researcher that saves notes and a writer that reads them.
 
-**Resource-scoped sharing** is the most common pattern. [Working memory](../memory/working-memory) and [semantic recall](../memory/semantic-recall) both default to `scope: 'resource'`. If two agents share a `resourceId`, they share working memory and can search each other's embeddings, even across different threads.
+**Resource-scoped sharing** is the most common pattern. [Observational memory](../memory/observational-memory), [working memory](../memory/working-memory), and [semantic recall](../memory/semantic-recall) all default to `scope: 'resource'`. If two agents share a `resourceId`, they share observations, working memory, and embeddings — even across different threads.
 
-To share memory between agents outside the supervisor pattern, call them with the same `resource` value:
+To share memory between agents, call them with the same `resource` value:
 
 ```typescript
-// Both agents read and write to the same resource-scoped memory
+// Both agents share the same resource-scoped memory
 await researcher.generate('Find information about quantum computing.', {
   memory: { resource: 'project-42', thread: 'research-session' },
 })
@@ -210,13 +210,13 @@ await writer.generate('Write a summary from the research notes.', {
 })
 ```
 
-Because both calls use `resource: 'project-42'`, the writer can access the researcher's working memory and semantic embeddings. Each agent still has its own thread, so message histories stay separate.
+Because both calls use `resource: 'project-42'`, the writer can access the researcher's observations, working memory, and semantic embeddings. Each agent still has its own thread, so message histories stay separate.
 
 **Thread-scoped sharing** gives tighter coupling. If two agents use the same `resource` _and_ `thread`, they share the full message history — each agent sees every message the other has written. This is useful when agents need to build on each other's exact outputs.
 
 :::note
 
-In the supervisor pattern, subagent resource IDs are always suffixed with the agent name (`{parentResourceId}-{agentName}`). Two different subagents under the same supervisor do not share a resource ID by default. To share memory between supervised subagents, call them directly with matching `resource` values outside the delegation flow, or use a shared storage layer with explicit thread/resource management.
+In the supervisor pattern, subagent resource IDs are always suffixed with the agent name (`{parentResourceId}-{agentName}`). Two different subagents under the same supervisor do not share a resource ID by default. To share memory between supervised subagents, call them directly with matching `resource` values outside the delegation flow.
 
 :::
 
