@@ -204,7 +204,7 @@ type WorkingMemoryNone = BaseWorkingMemory & {
   schema?: never;
 };
 
-export type WorkingMemory = TemplateWorkingMemory | SchemaWorkingMemory | WorkingMemoryNone;
+export type WorkingMemory = TemplateWorkingMemory | SchemaWorkingMemory | PublicSchemaWorkingMemory | WorkingMemoryNone;
 
 /**
  * Vector index configuration for optimizing semantic recall performance.
