@@ -75,6 +75,9 @@ const sidebars = {
           type: 'doc',
           id: 'agents/supervisor-agents',
           label: 'Supervisor Agents',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',
@@ -99,7 +102,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'agents/networks',
-          label: 'Networks',
+          label: 'Networks (Deprecated)',
         },
       ],
     },
