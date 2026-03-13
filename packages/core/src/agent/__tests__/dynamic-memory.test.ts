@@ -374,14 +374,18 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
 
       if (version === 'v1') {
         await agent.generateLegacy(testMessages, {
-          threadId: 'test-thread',
-          resourceId: 'test-resource',
+          memory: {
+            resource: 'test-resource',
+            thread: { id: 'test-thread' },
+          },
           runId: 'test-run',
         });
       } else {
         await agent.generate(testMessages, {
-          threadId: 'test-thread',
-          resourceId: 'test-resource',
+          memory: {
+            resource: 'test-resource',
+            thread: { id: 'test-thread' },
+          },
           runId: 'test-run',
         });
       }
@@ -480,8 +484,10 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
 
       if (version === 'v1') {
         const stream = await agent.streamLegacy(testMessages, {
-          threadId: 'test-thread',
-          resourceId: 'test-resource',
+          memory: {
+            resource: 'test-resource',
+            thread: { id: 'test-thread' },
+          },
           runId: 'test-run',
         });
         // Consume the stream to trigger the model call
@@ -490,8 +496,10 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
         }
       } else {
         const stream = await agent.stream(testMessages, {
-          threadId: 'test-thread',
-          resourceId: 'test-resource',
+          memory: {
+            resource: 'test-resource',
+            thread: { id: 'test-thread' },
+          },
           runId: 'test-run',
         });
         // Consume the stream to trigger the model call
@@ -1289,6 +1297,322 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       expect(hasFirst).toBe(true);
       expect(hasSecond).toBe(true);
       expect(hasThird).toBe(true);
+    });
+
+    it('should disable all memory processors when enabled is false via dynamic memory', async () => {
+      const storage = new InMemoryStore();
+      const enabledMemory = new MockMemory({ storage });
+      const disabledMemory = new MockMemory({
+        storage,
+        options: { enabled: false, lastMessages: 10, workingMemory: { enabled: true, template: '# Test' } },
+      });
+
+      let _capturedMessages: any[] = [];
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        testModel = new MockLanguageModelV1({
+          doGenerate: async ({ prompt }) => {
+            _capturedMessages = prompt;
+            return {
+              text: 'Response',
+              usage: { promptTokens: 10, completionTokens: 5 },
+              finishReason: 'stop',
+              rawCall: { rawPrompt: [], rawSettings: {} },
+            };
+          },
+        });
+      } else {
+        testModel = new MockLanguageModelV2({
+          doGenerate: async ({ prompt }) => {
+            _capturedMessages = prompt;
+            return {
+              content: [{ type: 'text', text: 'Response' }],
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              finishReason: 'stop',
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          },
+          doStream: async ({ prompt }) => {
+            _capturedMessages = prompt;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                {
+                  type: 'response-metadata',
+                  id: 'mock-response-id',
+                  modelId: 'mock-model-v2',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Response' },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+            };
+          },
+        });
+      }
+
+      const agent = new Agent({
+        id: 'memory-disable-test-agent',
+        name: 'Memory Disable Test Agent',
+        instructions: 'You are a test agent',
+        model: testModel,
+        memory: ({ requestContext }) => {
+          const disableMemory = requestContext.get('disableMemory') as boolean | undefined;
+          return disableMemory ? disabledMemory : enabledMemory;
+        },
+      });
+
+      // Test 1: Memory enabled by default (disableMemory is false)
+      const enabledContext = new RequestContext();
+      enabledContext.set('disableMemory', false);
+
+      let response;
+      if (version === 'v1') {
+        response = await agent.generateLegacy('Hello', {
+          memory: {
+            resource: 'user-1',
+            thread: { id: 'thread-enabled' },
+          },
+          requestContext: enabledContext,
+        });
+      } else {
+        response = await agent.generate('Hello', {
+          memory: {
+            resource: 'user-1',
+            thread: { id: 'thread-enabled' },
+          },
+          requestContext: enabledContext,
+        });
+      }
+
+      expect(response.text).toBe('Response');
+
+      // Verify that thread was created (memory was enabled)
+      const threadEnabled = await enabledMemory.getThreadById({ threadId: 'thread-enabled' });
+      expect(threadEnabled).toBeDefined();
+      expect(threadEnabled?.resourceId).toBe('user-1');
+
+      // Test 2: Memory disabled via runtime context
+      const disabledContext = new RequestContext();
+      disabledContext.set('disableMemory', true);
+
+      if (version === 'v1') {
+        response = await agent.generateLegacy('Hello again', {
+          memory: {
+            resource: 'user-1',
+            thread: { id: 'thread-disabled' },
+          },
+          requestContext: disabledContext,
+        });
+      } else {
+        response = await agent.generate('Hello again', {
+          memory: {
+            resource: 'user-1',
+            thread: { id: 'thread-disabled' },
+          },
+          requestContext: disabledContext,
+        });
+      }
+
+      expect(response.text).toBe('Response');
+
+      // Verify that thread was NOT created (memory was disabled)
+      const threadDisabled = await disabledMemory.getThreadById({ threadId: 'thread-disabled' });
+      expect(threadDisabled).toBeNull();
+
+      // Verify no messages were stored
+      const result = await disabledMemory.recall({ threadId: 'thread-disabled' });
+      expect(result.messages).toHaveLength(0);
+    });
+
+    it('should disable all memory processors when enabled is false via dynamic memory (stream)', async () => {
+      const storage = new InMemoryStore();
+      const enabledMemory = new MockMemory({ storage });
+      const disabledMemory = new MockMemory({
+        storage,
+        options: { enabled: false, lastMessages: 10, workingMemory: { enabled: true, template: '# Test' } },
+      });
+
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        testModel = new MockLanguageModelV1({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: 'Stream' },
+                { type: 'text-delta', textDelta: ' response' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { promptTokens: 10, completionTokens: 5 },
+                },
+              ],
+            }),
+            rawCall: { rawPrompt: [], rawSettings: {} },
+          }),
+        });
+      } else {
+        testModel = new MockLanguageModelV2({
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'response-metadata',
+                id: 'mock-response-id',
+                modelId: 'mock-model-v2',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Stream' },
+              { type: 'text-delta', id: 'text-1', delta: ' response' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+          }),
+        });
+      }
+
+      const agent = new Agent({
+        id: 'memory-disable-stream-test-agent',
+        name: 'Memory Disable Stream Test Agent',
+        instructions: 'You are a test agent',
+        model: testModel,
+        memory: ({ requestContext }) => {
+          const disableMemory = requestContext.get('disableMemory') as boolean | undefined;
+          return disableMemory ? disabledMemory : enabledMemory;
+        },
+      });
+
+      // Test 1: Memory enabled by default (disableMemory is false)
+      const enabledContext = new RequestContext();
+      enabledContext.set('disableMemory', false);
+
+      if (version === 'v1') {
+        const streamResult = await agent.streamLegacy('Hello stream', {
+          memory: {
+            resource: 'user-1',
+            thread: { id: 'stream-thread-enabled' },
+          },
+          requestContext: enabledContext,
+        });
+        // Consume the stream
+        for await (const _chunk of streamResult.textStream) {
+          // Just consume
+        }
+      } else {
+        const streamResult = await agent.stream('Hello stream', {
+          memory: {
+            resource: 'user-1',
+            thread: { id: 'stream-thread-enabled' },
+          },
+          requestContext: enabledContext,
+        });
+        await streamResult.getFullOutput();
+      }
+
+      // Verify that thread was created (memory was enabled)
+      const threadEnabled = await enabledMemory.getThreadById({ threadId: 'stream-thread-enabled' });
+      expect(threadEnabled).toBeDefined();
+      expect(threadEnabled?.resourceId).toBe('user-1');
+
+      // Test 2: Memory disabled via runtime context
+      const disabledContext = new RequestContext();
+      disabledContext.set('disableMemory', true);
+
+      if (version === 'v1') {
+        const streamResult = await agent.streamLegacy('Hello stream again', {
+          memory: {
+            resource: 'user-1',
+            thread: { id: 'stream-thread-disabled' },
+          },
+          requestContext: disabledContext,
+        });
+        // Consume the stream
+        for await (const _chunk of streamResult.textStream) {
+          // Just consume
+        }
+      } else {
+        const streamResult = await agent.stream('Hello stream again', {
+          memory: {
+            resource: 'user-1',
+            thread: { id: 'stream-thread-disabled' },
+          },
+          requestContext: disabledContext,
+        });
+        await streamResult.getFullOutput();
+      }
+
+      // Verify that thread was NOT created (memory was disabled)
+      const threadDisabled = await disabledMemory.getThreadById({ threadId: 'stream-thread-disabled' });
+      expect(threadDisabled).toBeNull();
+
+      // Verify no messages were stored
+      const result = await disabledMemory.recall({ threadId: 'stream-thread-disabled' });
+      expect(result.messages).toHaveLength(0);
+    });
+
+    it('should return empty processor arrays when memory config enabled is false', async () => {
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
+
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: { id: 'test-thread' },
+        resourceId: 'test-resource',
+        memoryConfig: {
+          enabled: false,
+          lastMessages: 10,
+          workingMemory: { enabled: true, template: '# Test' },
+        },
+      });
+
+      // When memory is disabled, getInputProcessors should return empty array
+      const inputProcessors = await mockMemory.getInputProcessors([], requestContext);
+      expect(inputProcessors).toEqual([]);
+
+      // When memory is disabled, getOutputProcessors should return empty array
+      const outputProcessors = await mockMemory.getOutputProcessors([], requestContext);
+      expect(outputProcessors).toEqual([]);
+    });
+
+    it('should return processors when memory config enabled is true or undefined', async () => {
+      const storage = new InMemoryStore();
+      const mockMemory = new MockMemory({ storage });
+
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: { id: 'test-thread' },
+        resourceId: 'test-resource',
+        memoryConfig: {
+          enabled: true,
+          lastMessages: 10,
+        },
+      });
+
+      // When memory is explicitly enabled, getInputProcessors should return processors
+      const inputProcessors = await mockMemory.getInputProcessors([], requestContext);
+      expect(inputProcessors.length).toBeGreaterThan(0);
+
+      // When memory is explicitly enabled, getOutputProcessors should return processors
+      const outputProcessors = await mockMemory.getOutputProcessors([], requestContext);
+      expect(outputProcessors.length).toBeGreaterThan(0);
     });
   });
 }
