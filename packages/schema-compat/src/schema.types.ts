@@ -25,4 +25,17 @@ export type PublicSchema<Output = unknown, Input = Output> =
   | JSONSchema7
   | StandardSchemaWithJSON<Input, Output>;
 
-export type InferPublicSchema<T extends PublicSchema> = T extends PublicSchema<infer Output> ? Output : never;
+export type InferPublicSchema<T extends PublicSchema> =
+  T extends z4.ZodType<infer O, any>
+    ? O
+    : T extends z3.Schema<infer O, any, any>
+      ? O
+      : T extends SchemaV4<infer O>
+        ? O
+        : T extends SchemaV5<infer O>
+          ? O
+          : T extends SchemaV6<infer O>
+            ? O
+            : T extends StandardSchemaWithJSON<any, infer O>
+              ? O
+              : unknown;
