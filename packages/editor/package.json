@@ -85,7 +85,7 @@
     "@mastra/hono": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/mcp": "workspace:*",
-    "hono": "^4.7.10",
+    "hono": "^4.12.7",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
