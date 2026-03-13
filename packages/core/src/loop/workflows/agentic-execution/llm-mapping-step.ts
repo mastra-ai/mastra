@@ -240,8 +240,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               rest.messageList.add(successMessage, 'response');
             }
 
-            // Provider-executed tool results are already stored as state:"result"
-            // in llm-execution-step, so no separate messageList.add is needed.
+            // Provider-executed tool results are handled in llm-execution-step.
           }
 
           // Continue the loop — the error messages are already in the messageList,

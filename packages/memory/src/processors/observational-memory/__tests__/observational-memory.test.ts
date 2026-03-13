@@ -7324,6 +7324,368 @@ describe('Full Async Buffering Flow', () => {
     expect(observerCalls.length).toBeGreaterThan(0);
   });
 
+  it('should defer async buffering when messages contain pending tool calls (state: call)', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    // Clear static maps to avoid cross-test pollution
+    (ObservationalMemory as any).asyncBufferingOps.clear();
+    (ObservationalMemory as any).lastBufferedBoundary.clear();
+    (ObservationalMemory as any).lastBufferedAtTime.clear();
+    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    (ObservationalMemory as any).sealedMessageIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'pending-tool-thread';
+    const resourceId = 'pending-tool-resource';
+
+    const observerCalls: { input: string }[] = [];
+    const mockModel = createStreamCapableMockModel({
+      doGenerate: async ({ prompt }) => {
+        observerCalls.push({ input: JSON.stringify(prompt).slice(0, 200) });
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>\nDate: Jan 1, 2025\n* 🔴 Observed at call ${observerCalls.length}\n</observations>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: {
+        messageTokens: 2000, // Low threshold so observation would normally trigger
+        bufferTokens: 500,
+        bufferActivation: 0.7,
+      },
+      reflection: {
+        observationTokens: 50000, // High - don't trigger reflection
+      },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Pending Tool Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    // Save messages: enough text to exceed the threshold, but the last assistant
+    // message contains a pending tool call (state: 'call')
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10); // ~200 tokens
+    const messages: any[] = [];
+    for (let i = 0; i < 10; i++) {
+      messages.push({
+        id: `pending-msg-${i}`,
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+        },
+        type: 'text',
+        createdAt: new Date(Date.UTC(2025, 0, 1, 9, i)),
+        threadId,
+        resourceId,
+      });
+    }
+    // Add an assistant message with a pending tool call (state: 'call')
+    messages.push({
+      id: 'pending-msg-tool-call',
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text' as const, text: 'Let me search for that.' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'call',
+              toolCallId: 'call_pending_123',
+              toolName: 'web_search',
+              args: { query: 'test query' },
+            },
+          },
+        ],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 9, 10)),
+      threadId,
+      resourceId,
+    });
+    await storage.saveMessages({ messages });
+
+    // Helper to wait for async buffering ops
+    async function waitForAsyncOps(timeoutMs = 3000) {
+      const ops = (ObservationalMemory as any).asyncBufferingOps as Map<string, Promise<void>>;
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        if (ops.size === 0) return;
+        await Promise.allSettled([...ops.values()]);
+        await new Promise(r => setTimeout(r, 50));
+      }
+    }
+
+    // Step 0: Load messages with pending tool call.
+    // Even though total tokens (~2200) exceed threshold (2000),
+    // OM should NOT trigger async buffering because a message has state: 'call'.
+    const messageList = new MessageList({ threadId, resourceId });
+    const sharedState: Record<string, unknown> = {};
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    requestContext.set('currentDate', new Date('2025-01-01T12:00:00Z').toISOString());
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state: sharedState,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+    await waitForAsyncOps();
+
+    // Observer should NOT have been called because there's a pending tool call
+    expect(observerCalls.length).toBe(0);
+
+    // ─── Simulate tool completion: update the message in the messageList ───
+    // In real usage, llm-execution-step mutates the state:'call' part to state:'result'
+    const allDbMsgs = messageList.get.all.db();
+    const toolMsg = allDbMsgs.find(m => m.id === 'pending-msg-tool-call');
+    expect(toolMsg).toBeDefined();
+    const toolPart = toolMsg!.content?.parts?.find(
+      (p: any) => p.type === 'tool-invocation' && p.toolInvocation?.state === 'call',
+    ) as any;
+    expect(toolPart).toBeDefined();
+    toolPart.toolInvocation.state = 'result';
+    toolPart.toolInvocation.result = { title: 'Test Result', url: 'https://example.com' };
+
+    // Step 1: Now all tool calls are resolved, async buffering should fire
+    const requestContext2 = new RequestContext();
+    requestContext2.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    requestContext2.set('currentDate', new Date('2025-01-01T12:00:00Z').toISOString());
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: requestContext2,
+      stepNumber: 1,
+      state: sharedState,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+    await waitForAsyncOps();
+
+    // NOW the observer should have been called since all tool calls are resolved
+    expect(observerCalls.length).toBeGreaterThan(0);
+  });
+
+  it('should defer sync observation when messages contain pending tool calls (state: call)', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    // Clear static maps to avoid cross-test pollution
+    (ObservationalMemory as any).asyncBufferingOps.clear();
+    (ObservationalMemory as any).lastBufferedBoundary.clear();
+    (ObservationalMemory as any).lastBufferedAtTime.clear();
+    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    (ObservationalMemory as any).sealedMessageIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'pending-tool-sync-thread';
+    const resourceId = 'pending-tool-sync-resource';
+
+    const observerCalls: { input: string }[] = [];
+    const mockModel = createStreamCapableMockModel({
+      doGenerate: async ({ prompt }) => {
+        observerCalls.push({ input: JSON.stringify(prompt).slice(0, 200) });
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>\nDate: Jan 1, 2025\n* 🔴 Observed at call ${observerCalls.length}\n</observations>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    // bufferTokens: false → async buffering disabled, only sync observation path
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: {
+        messageTokens: 500, // Low threshold so sync observation triggers at step > 0
+        bufferTokens: false as any, // Disable async buffering entirely
+      },
+      reflection: {
+        observationTokens: 50000,
+      },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Pending Tool Sync Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    // Save messages: enough text to exceed the threshold
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10); // ~200 tokens
+    const messages: any[] = [];
+    for (let i = 0; i < 10; i++) {
+      messages.push({
+        id: `sync-pending-msg-${i}`,
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+        },
+        type: 'text',
+        createdAt: new Date(Date.UTC(2025, 0, 1, 9, i)),
+        threadId,
+        resourceId,
+      });
+    }
+    // Add an assistant message with a pending tool call (state: 'call')
+    messages.push({
+      id: 'sync-pending-msg-tool-call',
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text' as const, text: 'Let me search for that.' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'call',
+              toolCallId: 'call_sync_pending_123',
+              toolName: 'web_search',
+              args: { query: 'test query' },
+            },
+          },
+        ],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 9, 10)),
+      threadId,
+      resourceId,
+    });
+    await storage.saveMessages({ messages });
+
+    // Step 0: Load messages (sync observation doesn't run at step 0 regardless)
+    const messageList = new MessageList({ threadId, resourceId });
+    const sharedState: Record<string, unknown> = {};
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    requestContext.set('currentDate', new Date('2025-01-01T12:00:00Z').toISOString());
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state: sharedState,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    // Step 1: Sync observation would normally fire (stepNumber > 0, tokens >= threshold),
+    // but should be skipped because of the pending tool call
+    const requestContext2 = new RequestContext();
+    requestContext2.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    requestContext2.set('currentDate', new Date('2025-01-01T12:00:00Z').toISOString());
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: requestContext2,
+      stepNumber: 1,
+      state: sharedState,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    // Observer should NOT have been called because there's a pending tool call
+    expect(observerCalls.length).toBe(0);
+
+    // ─── Simulate tool completion: mutate the part in the messageList ───
+    const allDbMsgs = messageList.get.all.db();
+    const toolMsg = allDbMsgs.find(m => m.id === 'sync-pending-msg-tool-call');
+    expect(toolMsg).toBeDefined();
+    const toolPart = toolMsg!.content?.parts?.find(
+      (p: any) => p.type === 'tool-invocation' && p.toolInvocation?.state === 'call',
+    ) as any;
+    expect(toolPart).toBeDefined();
+    toolPart.toolInvocation.state = 'result';
+    toolPart.toolInvocation.result = { title: 'Test Result', url: 'https://example.com' };
+
+    // Step 2: Now all tool calls are resolved, sync observation should fire
+    const requestContext3 = new RequestContext();
+    requestContext3.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    requestContext3.set('currentDate', new Date('2025-01-01T12:00:00Z').toISOString());
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: requestContext3,
+      stepNumber: 2,
+      state: sharedState,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    // NOW the observer should have been called since all tool calls are resolved
+    expect(observerCalls.length).toBeGreaterThan(0);
+  });
+
   describe('Full Async Reflection Flow', () => {
     /**
      * Helper that directly exercises storage-level buffering and activation
