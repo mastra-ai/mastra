@@ -1,5 +1,43 @@
 # @mastra/schema-compat
 
+## 1.2.4-alpha.0
+
+### Patch Changes
+
+- Lazily load createRequire to fix 'Uncaught (in promise) TypeError: lzt.createRequire is not a function' error ([#14275](https://github.com/mastra-ai/mastra/pull/14275))
+
+## 1.2.3
+
+### Patch Changes
+
+- Fixed "Dynamic require of zod/v4 is not supported" error when schema-compat is consumed by ESM bundles (e.g. via npx mastracode). The dynamic require fallback was incorrectly selecting esbuild's require shim instead of Node.js createRequire. ([#14268](https://github.com/mastra-ai/mastra/pull/14268))
+
+## 1.2.2
+
+### Patch Changes
+
+- `@mastra/schema-compat`: patch ([#14195](https://github.com/mastra-ai/mastra/pull/14195))
+
+  Fixed published `@mastra/schema-compat` types so AI SDK v5 schemas resolve correctly for consumers
+
+- Fixed false `z.toJSONSchema is not available` errors for compatible Zod versions. ([#14264](https://github.com/mastra-ai/mastra/pull/14264))
+
+  **What changed**
+  - Improved Zod schema conversion detection so JSON Schema generation works more reliably across different runtime setups.
+
+## 1.2.2-alpha.0
+
+### Patch Changes
+
+- `@mastra/schema-compat`: patch ([#14195](https://github.com/mastra-ai/mastra/pull/14195))
+
+  Fixed published `@mastra/schema-compat` types so AI SDK v5 schemas resolve correctly for consumers
+
+- Fixed false `z.toJSONSchema is not available` errors for compatible Zod versions. ([#14264](https://github.com/mastra-ai/mastra/pull/14264))
+
+  **What changed**
+  - Improved Zod schema conversion detection so JSON Schema generation works more reliably across different runtime setups.
+
 ## 1.2.1
 
 ### Patch Changes

@@ -1,5 +1,113 @@
 # @mastra/core
 
+## 1.13.2-alpha.0
+
+### Patch Changes
+
+- Fix WorkingMemory type to accept Zod schemas in workingMemory.schema configuration ([#14261](https://github.com/mastra-ai/mastra/pull/14261))
+
+- Updated dependencies [[`1978bc4`](https://github.com/mastra-ai/mastra/commit/1978bc424dbb04f5f7c5d8522f07f1166006fa3f)]:
+  - @mastra/schema-compat@1.2.4-alpha.0
+
+## 1.13.1
+
+### Patch Changes
+
+- Fixed tryRepairJson to handle unquoted date values (e.g. 2026-04-15) in tool call arguments. LLMs like Claude Sonnet sometimes produce bare date values without quotes, causing JSON.parse to fail and tool calls to silently lose all arguments. The repair function now detects and quotes date-like values matching YYYY-MM-DD and YYYY-MM-DDTHH:MM:SS patterns. See https://github.com/mastra-ai/mastra/issues/14230 ([#14233](https://github.com/mastra-ai/mastra/pull/14233))
+
+- Updated dependencies [[`c4e600e`](https://github.com/mastra-ai/mastra/commit/c4e600e39a04309c3a7ff182bd806ab2b3c788ea)]:
+  - @mastra/schema-compat@1.2.3
+
+## 1.13.0
+
+### Minor Changes
+
+- **Added observability storage domain schemas and implementations** ([#14214](https://github.com/mastra-ai/mastra/pull/14214))
+
+  Introduced comprehensive storage schemas and in-memory implementations for all observability signals (scores, logs, feedback, metrics, discovery). All schemas are zod-based with full type inference. The `ObservabilityStorage` base class includes default implementations for all new methods.
+
+  **Breaking changes:**
+  - `MetricType` (`counter`/`gauge`/`histogram`) is deprecated — metrics are now raw events with aggregation at query time
+  - Score schemas use `scorerId` instead of `scorerName` for scorer identification
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`ea86967`](https://github.com/mastra-ai/mastra/commit/ea86967449426e0a3673253bd1c2c052a99d970d))
+
+- Fixed provider tools (e.g. `openai.tools.webSearch()`) being silently dropped when using a custom gateway that returns AI SDK v6 (V3) models. The router now remaps tool types from `provider-defined` to `provider` when delegating to V3 models, so provider tools work correctly through gateways. Fixes #13667. ([#13895](https://github.com/mastra-ai/mastra/pull/13895))
+
+- Fixed TypeScript type errors in `onStepFinish` and `onFinish` callbacks, and resolved compatibility issues with `createOpenRouter()` across different AI SDK versions. ([#14229](https://github.com/mastra-ai/mastra/pull/14229))
+
+- Fixed a bug where thread metadata (e.g. title, custom properties) passed via `options.memory.thread` was discarded when `MASTRA_THREAD_ID_KEY` was set in the request context. The thread ID from context still takes precedence, but all other user-provided thread properties are now preserved. ([#13146](https://github.com/mastra-ai/mastra/pull/13146))
+
+- Fixed workspace tools such as `mastra_workspace_list_files` and `mastra_workspace_read_file` failing with `WorkspaceNotAvailableError` in some execution paths. ([#14228](https://github.com/mastra-ai/mastra/pull/14228))
+
+  Workspace tools now work consistently across execution paths.
+
+- Added observer context optimization for Observational Memory. The `observation.previousObserverTokens` field reduces Observer input token costs for long-running conversations: ([#13568](https://github.com/mastra-ai/mastra/pull/13568))
+  - **previousObserverTokens** (default: `2000`): Truncates the 'Previous Observations' section to a token budget, keeping the most recent observations and automatically replacing already-reflected lines with the buffered reflection summary. Set to `0` to omit previous observations entirely, or `false` to disable truncation and keep the full observation history.
+
+  ```typescript
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        observation: {
+          previousObserverTokens: 10_000,
+        },
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`a1d6b9c`](https://github.com/mastra-ai/mastra/commit/a1d6b9c907c909f259632a7ea26e9e3c221fb691), [`c562ec2`](https://github.com/mastra-ai/mastra/commit/c562ec228f1af63693e2984ffa9712aa6db8fea8)]:
+  - @mastra/schema-compat@1.2.2
+
+## 1.13.0-alpha.0
+
+### Minor Changes
+
+- **Added observability storage domain schemas and implementations** ([#14214](https://github.com/mastra-ai/mastra/pull/14214))
+
+  Introduced comprehensive storage schemas and in-memory implementations for all observability signals (scores, logs, feedback, metrics, discovery). All schemas are zod-based with full type inference. The `ObservabilityStorage` base class includes default implementations for all new methods.
+
+  **Breaking changes:**
+  - `MetricType` (`counter`/`gauge`/`histogram`) is deprecated — metrics are now raw events with aggregation at query time
+  - Score schemas use `scorerId` instead of `scorerName` for scorer identification
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`ea86967`](https://github.com/mastra-ai/mastra/commit/ea86967449426e0a3673253bd1c2c052a99d970d))
+
+- Fixed provider tools (e.g. `openai.tools.webSearch()`) being silently dropped when using a custom gateway that returns AI SDK v6 (V3) models. The router now remaps tool types from `provider-defined` to `provider` when delegating to V3 models, so provider tools work correctly through gateways. Fixes #13667. ([#13895](https://github.com/mastra-ai/mastra/pull/13895))
+
+- Fixed TypeScript type errors in `onStepFinish` and `onFinish` callbacks, and resolved compatibility issues with `createOpenRouter()` across different AI SDK versions. ([#14229](https://github.com/mastra-ai/mastra/pull/14229))
+
+- Fixed a bug where thread metadata (e.g. title, custom properties) passed via `options.memory.thread` was discarded when `MASTRA_THREAD_ID_KEY` was set in the request context. The thread ID from context still takes precedence, but all other user-provided thread properties are now preserved. ([#13146](https://github.com/mastra-ai/mastra/pull/13146))
+
+- Fixed workspace tools such as `mastra_workspace_list_files` and `mastra_workspace_read_file` failing with `WorkspaceNotAvailableError` in some execution paths. ([#14228](https://github.com/mastra-ai/mastra/pull/14228))
+
+  Workspace tools now work consistently across execution paths.
+
+- Added observer context optimization for Observational Memory. The `observation.previousObserverTokens` field reduces Observer input token costs for long-running conversations: ([#13568](https://github.com/mastra-ai/mastra/pull/13568))
+  - **previousObserverTokens** (default: `2000`): Truncates the 'Previous Observations' section to a token budget, keeping the most recent observations and automatically replacing already-reflected lines with the buffered reflection summary. Set to `0` to omit previous observations entirely, or `false` to disable truncation and keep the full observation history.
+
+  ```typescript
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        observation: {
+          previousObserverTokens: 10_000,
+        },
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`a1d6b9c`](https://github.com/mastra-ai/mastra/commit/a1d6b9c907c909f259632a7ea26e9e3c221fb691), [`c562ec2`](https://github.com/mastra-ai/mastra/commit/c562ec228f1af63693e2984ffa9712aa6db8fea8)]:
+  - @mastra/schema-compat@1.2.2-alpha.0
+
 ## 1.12.0
 
 ### Minor Changes
