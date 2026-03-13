@@ -8,8 +8,10 @@ type TemplateFailureProps = {
 };
 
 export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureProps) {
-  const isSchemaError = errorMsg?.includes('Invalid schema for function');
-  const isValidationError = errorMsg?.includes('validation issue') || (validationErrors && validationErrors.length > 0);
+  const errorString = typeof errorMsg === 'string' ? errorMsg : errorMsg != null ? String(errorMsg) : undefined;
+  const isSchemaError = errorString?.includes('Invalid schema for function');
+  const isValidationError =
+    errorString?.includes('validation issue') || (validationErrors && validationErrors.length > 0);
 
   const getUserFriendlyMessage = () => {
     if (isValidationError) {
@@ -69,13 +71,13 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
       )}
 
       {/* General Error Details */}
-      {errorMsg && !isValidationError && (
+      {errorString && !isValidationError && (
         <details className="text-xs">
           <summary className="cursor-pointer text-neutral3 hover:text-neutral4 select-none text-center">
             Show Details
           </summary>
           <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded text-xs font-mono overflow-auto max-h-60 text-left">
-            <div className="whitespace-pre-wrap break-words">{errorMsg}</div>
+            <div className="whitespace-pre-wrap break-words">{errorString}</div>
           </div>
         </details>
       )}
