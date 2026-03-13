@@ -1108,9 +1108,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           content: {
             format: 2,
             parts: toolCalls.map(toolCall => {
-              // Provider-executed tools (e.g. Anthropic web_search) already have their
-              // result from the provider. Store them directly as state:'result' so they
-              // don't need a separate merge step in llm-mapping-step via MessageMerger.
+              // Provider-executed tools (e.g. Anthropic web_search) may already have their
+              // result when executed in the same turn. Store them directly as state:'result'.
+              // When deferred (mixed with client tools), the result arrives in a later turn
+              // and is handled by the orphaned-results logic below.
               if (toolCall.providerExecuted && toolCall.output != null) {
                 return {
                   type: 'tool-invocation' as const,
@@ -1158,6 +1159,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       );
 
       if (orphanedResults.length > 0) {
+        // Update existing state:'call' parts in the messageList to state:'result'.
+        // We mutate in place rather than using messageList.add() because the message
+        // containing the call may not be the latest message (a tool-role message from
+        // the client tool may follow it), and MessageMerger only merges into the latest.
         const allMessages = messageList.get.all.db();
         for (const orphan of orphanedResults) {
           for (const msg of allMessages) {
