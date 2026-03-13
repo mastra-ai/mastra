@@ -3,6 +3,7 @@ import { MockStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import z from 'zod';
 import { HTTPException } from '../http-exception';
 import { getWorkflowInfo } from '../utils';
 import { createTestServerContext } from './test-utils';
@@ -36,8 +37,6 @@ vi.mock('zod', async importOriginal => {
     })),
   };
 });
-
-const z = require('zod');
 
 function createMockWorkflow(name: string) {
   const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });

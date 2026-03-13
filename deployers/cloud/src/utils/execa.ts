@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { Transform } from 'node:stream';
 import { execa } from 'execa';
 import { PROJECT_ENV_VARS, PROJECT_ROOT } from './constants.js';
@@ -58,7 +59,8 @@ export function runWithChildProcess(cmd: string, args: string[]): { stdout?: str
   const pinoStream = createPinoStream();
 
   try {
-    const { stdout, stderr } = require('node:child_process').spawnSync(cmd, args, {
+    const __require = typeof require === 'function' ? require : createRequire(import.meta.url);
+    const { stdout, stderr } = __require('node:child_process').spawnSync(cmd, args, {
       cwd: PROJECT_ROOT,
       encoding: 'utf8',
       shell: true,

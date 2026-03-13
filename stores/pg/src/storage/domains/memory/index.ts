@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -28,7 +29,8 @@ const OM_TABLE = 'mastra_observational_memory' as const;
  */
 let _omTableSchema: Record<string, Record<string, any>> | undefined;
 try {
-  const storage = require('@mastra/core/storage');
+  const __require = typeof require === 'function' ? require : createRequire(import.meta.url);
+  const storage = __require('@mastra/core/storage');
   _omTableSchema = storage.OBSERVATIONAL_MEMORY_TABLE_SCHEMA;
 } catch {
   // OM not available in this version of core
