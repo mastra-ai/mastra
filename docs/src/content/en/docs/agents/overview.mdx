@@ -113,3 +113,25 @@ Once your agent is running, use this table to find the right page for what you w
 | Validate what goes in or comes out of an agent | [Guardrails](/docs/agents/guardrails) |
 | Pause execution and wait for human approval | [Approval](/docs/agents/agent-approval) |
 | Add speech-to-text or text-to-speech | [Voice](/docs/agents/adding-voice) |
+
+## Multi-agent systems
+
+A multi-agent system uses multiple agents to solve a task that is too broad or too specialized for a single agent. Instead of building one agent with dozens of tools and a long instruction set, you split responsibilities across focused agents and let a coordinator bring results together.
+
+### When to use multiple agents
+
+Reach for a multi-agent system when:
+
+- A task spans distinct domains (research, writing, data analysis) that benefit from separate instructions and tool sets.
+- You want to limit each agent's scope so its context stays small and its responses stay accurate.
+- Different parts of a task need different models, memory configurations, or guardrails.
+
+For tasks that a single agent can handle with a few tools, adding more agents introduces unnecessary latency and complexity.
+
+### Supervisor agents
+
+[Supervisor agents](/docs/agents/supervisor-agents) are the recommended way to build multi-agent systems in Mastra. A supervisor agent owns a set of subagents. During execution, the supervisor's LLM decides when to delegate to a subagent, what prompt to send, and how to combine results. Subagents are automatically exposed as callable tools.
+
+Each subagent runs with its own thread and resource ID. This means memory stays isolated: subagents receive the conversation context they need but store only their own delegation prompt and response. The supervisor's memory is unaffected.
+
+You can control delegation behavior with hooks (`onDelegationStart`, `onDelegationComplete`), filter which messages are forwarded (`messageFilter`), and score task completion (`taskCompletionCriteria`). See [Supervisor agents](/docs/agents/supervisor-agents) for a full walkthrough with code examples.

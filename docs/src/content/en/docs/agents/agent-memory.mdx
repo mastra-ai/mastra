@@ -177,6 +177,28 @@ See [Observational Memory](../memory/observational-memory) for details on how ob
 
 :::
 
+## Memory in multi-agent systems
+
+When a [supervisor agent](/docs/agents/supervisor-agents) delegates to a subagent, Mastra isolates memory automatically. Each subagent receives its own `threadId` and `resourceId`, so conversations stay separate from the supervisor's thread.
+
+### How memory is scoped
+
+- **Thread ID**: A new, unique thread is created for every delegation. This keeps each subagent invocation clean — the subagent doesn't see results from its previous delegations in message history.
+- **Resource ID**: Derived deterministically as `{parentResourceId}-{agentName}`. Because the resource ID is stable across delegations, resource-scoped [working memory](../memory/working-memory) persists. A subagent remembers facts across multiple calls from the same user.
+- **Memory instance**: If a subagent has no memory configured, it inherits the supervisor's memory instance. If a subagent defines its own memory, that configuration takes precedence.
+
+### What subagents see
+
+The supervisor forwards its conversation context to the subagent so it has enough background to complete the task. However, only the delegation prompt and the subagent's own response are saved to its memory — the full parent conversation is not stored.
+
+You can control which messages reach the subagent with the `messageFilter` callback on the supervisor. See [supervisor agents](/docs/agents/supervisor-agents) for details.
+
+:::note
+
+Memory modes (working memory, semantic recall, observational memory) are all scoped by `threadId` and `resourceId`. In a supervisor setup, this means each subagent's memory modes operate independently from the supervisor's.
+
+:::
+
 ## Switch memory per request
 
 Use [`RequestContext`](/docs/server/request-context) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
@@ -215,3 +237,4 @@ Visit [Request Context](/docs/server/request-context) for more information.
 - [Semantic Recall](../memory/semantic-recall)
 - [Storage](../memory/storage)
 - [Request Context](/docs/server/request-context)
+- [Supervisor agents](/docs/agents/supervisor-agents)
