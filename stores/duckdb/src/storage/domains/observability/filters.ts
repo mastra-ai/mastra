@@ -1,7 +1,7 @@
 import type { DateRange } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
-function buildJsonPath(key: string): string {
+export function buildJsonPath(key: string): string {
   try {
     return `$.${parseFieldKey(key)}`;
   } catch {
@@ -15,6 +15,10 @@ function normalizeJsonFilterValue(value: unknown): string | null {
   if (typeof value === 'string') return value;
   const json = JSON.stringify(value);
   return json ?? null;
+}
+
+function sanitizeColumn(column: string): string {
+  return parseFieldKey(column);
 }
 
 /**
@@ -33,7 +37,7 @@ export function buildWhereClause(
   for (const [key, value] of Object.entries(filters)) {
     if (value === undefined || value === null) continue;
 
-    const column = fieldMappings?.[key] ?? key;
+    const column = sanitizeColumn(fieldMappings?.[key] ?? key);
 
     if (key === 'timestamp' || key === 'startedAt' || key === 'endedAt') {
       const dateRange = value as DateRange;
@@ -62,7 +66,7 @@ export function buildWhereClause(
     if (key === 'tags') {
       const tags = value as string[];
       for (const tag of tags) {
-        conditions.push(`list_contains(CAST(tags AS VARCHAR[]), ?)`);
+        conditions.push(`list_contains(CAST(${column} AS VARCHAR[]), ?)`);
         params.push(tag);
       }
       continue;
@@ -151,6 +155,12 @@ export function buildPaginationClause(pagination?: { page: number; perPage: numb
   params: unknown[];
 } {
   if (!pagination) return { clause: '', params: [] };
+  if (!Number.isInteger(pagination.page) || pagination.page < 0) {
+    throw new Error(`Invalid page: ${pagination.page}`);
+  }
+  if (!Number.isInteger(pagination.perPage) || pagination.perPage <= 0) {
+    throw new Error(`Invalid perPage: ${pagination.perPage}`);
+  }
   const offset = pagination.page * pagination.perPage;
   return {
     clause: `LIMIT ? OFFSET ?`,

@@ -72,13 +72,58 @@ export class DuckDBConnection extends MastraBase {
     return this.instance.connect();
   }
 
+  private closeConnection(connection: unknown): void {
+    const conn = connection as {
+      closeSync?: () => void;
+      disconnectSync?: () => void;
+      close?: () => void;
+      disconnect?: () => void;
+    };
+    try {
+      if (typeof conn?.closeSync === 'function') {
+        conn.closeSync();
+        return;
+      }
+      if (typeof conn?.disconnectSync === 'function') {
+        conn.disconnectSync();
+        return;
+      }
+      if (typeof conn?.close === 'function') {
+        conn.close();
+        return;
+      }
+      if (typeof conn?.disconnect === 'function') {
+        conn.disconnect();
+      }
+    } catch {
+      // Ignore close failures to avoid masking query/execute errors.
+    }
+  }
+
   /**
    * Execute a SQL query and return results as objects.
    */
   async query<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
     const connection = await this.getConnection();
-    if (params.length === 0) {
-      const result = await connection.run(sql);
+    try {
+      if (params.length === 0) {
+        const result = await connection.run(sql);
+        const rows = await result.getRows();
+        const columns = result.columnNames();
+        return rows.map(row => {
+          const obj: Record<string, unknown> = {};
+          columns.forEach((col, i) => {
+            obj[col] = toJsValue(row[i]);
+          });
+          return obj as T;
+        });
+      }
+
+      let paramIndex = 0;
+      const preparedSql = sql.replace(/\?/g, () => `$${++paramIndex}`);
+      const stmt = await connection.prepare(preparedSql);
+      stmt.bind(params as DuckDBValue[]);
+      const result = await stmt.run();
       const rows = await result.getRows();
       const columns = result.columnNames();
       return rows.map(row => {
@@ -88,22 +133,9 @@ export class DuckDBConnection extends MastraBase {
         });
         return obj as T;
       });
+    } finally {
+      this.closeConnection(connection);
     }
-
-    let paramIndex = 0;
-    const preparedSql = sql.replace(/\?/g, () => `$${++paramIndex}`);
-    const stmt = await connection.prepare(preparedSql);
-    stmt.bind(params as DuckDBValue[]);
-    const result = await stmt.run();
-    const rows = await result.getRows();
-    const columns = result.columnNames();
-    return rows.map(row => {
-      const obj: Record<string, unknown> = {};
-      columns.forEach((col, i) => {
-        obj[col] = toJsValue(row[i]);
-      });
-      return obj as T;
-    });
   }
 
   /**
@@ -111,15 +143,19 @@ export class DuckDBConnection extends MastraBase {
    */
   async execute(sql: string, params: unknown[] = []): Promise<void> {
     const connection = await this.getConnection();
-    if (params.length === 0) {
-      await connection.run(sql);
-      return;
+    try {
+      if (params.length === 0) {
+        await connection.run(sql);
+        return;
+      }
+      let paramIndex = 0;
+      const preparedSql = sql.replace(/\?/g, () => `$${++paramIndex}`);
+      const stmt = await connection.prepare(preparedSql);
+      stmt.bind(params as DuckDBValue[]);
+      await stmt.run();
+    } finally {
+      this.closeConnection(connection);
     }
-    let paramIndex = 0;
-    const preparedSql = sql.replace(/\?/g, () => `$${++paramIndex}`);
-    const stmt = await connection.prepare(preparedSql);
-    stmt.bind(params as DuckDBValue[]);
-    await stmt.run();
   }
 
   /**
@@ -143,6 +179,16 @@ export class DuckDBConnection extends MastraBase {
   /** Release the DuckDB instance, allowing garbage collection. */
   async close(): Promise<void> {
     if (this.instance) {
+      try {
+        const instance = this.instance as unknown as { closeSync?: () => void; close?: () => void };
+        if (typeof instance.closeSync === 'function') {
+          instance.closeSync();
+        } else if (typeof instance.close === 'function') {
+          instance.close();
+        }
+      } catch {
+        // Ignore close failures to allow cleanup of references.
+      }
       this.instance = null;
       this.initialized = false;
       this.initPromise = null;

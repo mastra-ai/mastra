@@ -105,7 +105,7 @@ const SPAN_RECONSTRUCT_SELECT = `
 
 function buildHasChildErrorClause(hasChildError: boolean | undefined): string {
   if (hasChildError === undefined) return '';
-  const base = `SELECT 1 FROM reconstructed_spans c WHERE c.traceId = root_spans.traceId AND c.error IS NOT NULL`;
+  const base = `SELECT 1 FROM reconstructed_spans c WHERE c.traceId = root_spans.traceId AND c.spanId != root_spans.spanId AND c.error IS NOT NULL`;
   return hasChildError ? `EXISTS (${base})` : `NOT EXISTS (${base})`;
 }
 
@@ -360,7 +360,8 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
 
   const filterParts = [];
   if (filterClause) filterParts.push(filterClause.replace(/^WHERE\s+/i, ''));
-  const childErrorClause = buildHasChildErrorClause(filters.hasChildError);
+  const hasChildError = typeof filters.hasChildError === 'boolean' ? filters.hasChildError : undefined;
+  const childErrorClause = buildHasChildErrorClause(hasChildError);
   if (childErrorClause) filterParts.push(childErrorClause);
   const combinedFilterClause = filterParts.length > 0 ? `WHERE ${filterParts.join(' AND ')}` : '';
 
