@@ -270,6 +270,93 @@ for await (const chunk of stream.fullStream) {
 }
 ```
 
+## Speed up guardrails
+
+Guardrail processors that use an LLM (moderation, PII detection, prompt injection) add latency to every request. Three techniques reduce this overhead.
+
+### Run guardrails in parallel
+
+By default, processors run sequentially. Guardrails that only `block` (and never mutate messages) are independent and can run at the same time using a [workflow processor](/docs/agents/processors#use-workflows-as-processors).
+
+You can also mix `block` and `redact` strategies in a single parallel step. Map to the `redact` branch so its transformed messages carry forward.
+
+For output guardrails, run `TokenLimiterProcessor` and `BatchPartsProcessor` sequentially _before_ the parallel step, and any `redact` processors that depend on each other sequentially _after_ it:
+
+```typescript title="src/mastra/processors/output-guardrails.ts"
+import { createWorkflow, createStep } from '@mastra/core/workflows'
+import {
+  ProcessorStepSchema,
+  PIIDetector,
+  ModerationProcessor,
+  SystemPromptScrubber,
+  TokenLimiterProcessor,
+  BatchPartsProcessor,
+} from '@mastra/core/processors'
+
+export const outputGuardrails = createWorkflow({
+  id: 'output-guardrails',
+  inputSchema: ProcessorStepSchema,
+  outputSchema: ProcessorStepSchema,
+})
+  // Sequential: limit tokens first, then batch stream chunks
+  .then(createStep(new TokenLimiterProcessor({ limit: 1000 })))
+  .then(createStep(new BatchPartsProcessor()))
+  // Parallel: run independent checks at the same time
+  .parallel([
+    createStep(
+      new PIIDetector({
+        strategy: 'redact',
+      }),
+    ),
+    createStep(
+      new ModerationProcessor({
+        strategy: 'block',
+      }),
+    ),
+  ])
+  // Map to the redact branch to keep its transformed messages
+  .map(async ({ inputData }) => {
+    return inputData['processor:pii-detector']
+  })
+  // Sequential: scrubber depends on previous redaction output
+  .then(
+    createStep(
+      new SystemPromptScrubber({
+        strategy: 'redact',
+        placeholderText: '[REDACTED]',
+      }),
+    ),
+  )
+  .commit()
+```
+
+See [workflows as processors](/docs/agents/processors#use-workflows-as-processors) for more details on `.parallel()` and `.map()`.
+
+### Choose a fast model
+
+Guardrail processors don't need your primary model. Use a small, fast model for classification tasks:
+
+```typescript
+const GUARDRAIL_MODEL = 'openai/gpt-5-nano'
+
+new ModerationProcessor({ model: GUARDRAIL_MODEL })
+new PIIDetector({ model: GUARDRAIL_MODEL })
+new PromptInjectionDetector({ model: GUARDRAIL_MODEL })
+```
+
+### Batch stream parts
+
+Output guardrails that implement `processOutputStream` run on every streamed chunk. Use `BatchPartsProcessor` _before_ heavier processors to combine chunks and reduce the number of LLM classification calls:
+
+```typescript
+outputProcessors: [
+  new BatchPartsProcessor({ batchSize: 10 }),
+  // Heavier processors now run on batched chunks instead of individual ones
+  new PIIDetector({ model: GUARDRAIL_MODEL, strategy: 'redact' }),
+  new ModerationProcessor({ model: GUARDRAIL_MODEL, strategy: 'block' }),
+]
+```
+
 ## Related
 
 - [Processors](/docs/agents/processors): How processors work, execution order, custom processors, and retry mechanism

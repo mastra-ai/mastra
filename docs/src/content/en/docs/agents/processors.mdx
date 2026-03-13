@@ -452,7 +452,12 @@ You can use Mastra workflows as processors to create complex processing pipeline
 
 ```typescript title="src/mastra/processors/moderation-workflow.ts"
 import { createWorkflow, createStep } from '@mastra/core/workflows'
-import { ProcessorStepSchema } from '@mastra/core/processors'
+import {
+  ProcessorStepSchema,
+  PromptInjectionDetector,
+  PIIDetector,
+  ModerationProcessor,
+} from '@mastra/core/processors'
 import { Agent } from '@mastra/core/agent'
 
 // Create a workflow that runs multiple checks in parallel
@@ -461,11 +466,26 @@ const moderationWorkflow = createWorkflow({
   inputSchema: ProcessorStepSchema,
   outputSchema: ProcessorStepSchema,
 })
-  .then(createStep(new LengthValidator({ maxLength: 10000 })))
   .parallel([
-    createStep(new PIIDetector({ strategy: 'redact' })),
-    createStep(new ToxicityChecker({ threshold: 0.8 })),
+    createStep(
+      new PIIDetector({
+        strategy: 'redact',
+      }),
+    ),
+    createStep(
+      new PromptInjectionDetector({
+        strategy: 'block',
+      }),
+    ),
+    createStep(
+      new ModerationProcessor({
+        strategy: 'block',
+      }),
+    ),
   ])
+  .map(async ({ inputData }) => {
+    return inputData['processor:pii-detector']
+  })
   .commit()
 
 // Use the workflow as an input processor
@@ -476,6 +496,10 @@ const agent = new Agent({
   inputProcessors: [moderationWorkflow],
 })
 ```
+
+After a `.parallel()` step, each branch result is keyed by its processor ID (e.g. `processor:pii-detector`). Use `.map()` to select the branch whose output the next step should receive.
+
+If a branch uses a mutating strategy like `redact`, map to that branch so its transformed messages carry forward. If all branches only `block`, any branch works. Pick any one since none of them modify the messages.
 
 When an agent is registered with Mastra, processor workflows are automatically registered as workflows, allowing you to view and debug them in the [Studio](/docs/getting-started/studio).
 
