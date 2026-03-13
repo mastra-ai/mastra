@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.2.4-alpha.0
+
+### Patch Changes
+
+- Lazily load createRequire to fix 'Uncaught (in promise) TypeError: lzt.createRequire is not a function' error ([#14275](https://github.com/mastra-ai/mastra/pull/14275))
+
 ## 1.2.3
 
 ### Patch Changes

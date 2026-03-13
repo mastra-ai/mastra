@@ -119,5 +119,9 @@
     "@mastra/gcs": "0.2.0",
     "@mastra/s3": "0.3.0"
   },
-  "changesets": []
+  "changesets": [
+    "fix-working-memory-public-schema",
+    "revert-new-list-pages",
+    "six-waves-admire"
+  ]
 }
