@@ -4,6 +4,8 @@
 
 Added observability storage domain to DuckDB adapter. Provides OLAP-based storage for traces, metrics, logs, scores, and feedback using DuckDB's analytical engine. New exports: `DuckDBStore`, `ObservabilityStorageDuckDB`, and `DuckDBConnection` connection manager.
 
+Migration note: this adapter depends on `@mastra/core >=1.13.0-0` for observability storage. Upgrade `@mastra/core` to 1.13.0 or newer before using the DuckDB observability store.
+
 ```typescript
 import { Mastra } from '@mastra/core/mastra';
 import { DefaultExporter, Observability } from '@mastra/observability';
@@ -23,7 +25,7 @@ const storage = new MastraCompositeStore({
 })
 
 export const mastra = new Mastra({
-  agents: { <your_agent> },
+  agents: { /* your agents here */ },
   observability: new Observability({
     configs: {
       default: {

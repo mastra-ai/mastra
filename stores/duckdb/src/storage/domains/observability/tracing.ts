@@ -75,7 +75,7 @@ const SPAN_RECONSTRUCT_SELECT = `
     ${argMaxNonNull('spanType')},
     ${argMaxNonNull('parentSpanId')},
     ${argMaxNonNull('isEvent')},
-    min(timestamp) FILTER (WHERE eventType = 'start') as startedAt,
+    coalesce(min(timestamp) FILTER (WHERE eventType = 'start'), min(timestamp)) as startedAt,
     ${argMaxNonNull('endedAt')},
     ${argMaxNonNull('experimentId')},
     ${argMaxNonNull('entityType')},
@@ -102,6 +102,12 @@ const SPAN_RECONSTRUCT_SELECT = `
     ${argMaxNonNull('requestContext')}
   FROM span_events
 `;
+
+function buildHasChildErrorClause(hasChildError: boolean | undefined): string {
+  if (hasChildError === undefined) return '';
+  const base = `SELECT 1 FROM reconstructed_spans c WHERE c.traceId = root_spans.traceId AND c.error IS NOT NULL`;
+  return hasChildError ? `EXISTS (${base})` : `NOT EXISTS (${base})`;
+}
 
 // ============================================================================
 // Row builder — used by both create and update
@@ -352,24 +358,33 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
   const orderByClause = buildOrderByClause(orderBy);
   const { clause: paginationClause, params: paginationParams } = buildPaginationClause({ page, perPage });
 
-  const countSql = `
-    WITH reconstructed AS (
+  const filterParts = [];
+  if (filterClause) filterParts.push(filterClause.replace(/^WHERE\s+/i, ''));
+  const childErrorClause = buildHasChildErrorClause(filters.hasChildError);
+  if (childErrorClause) filterParts.push(childErrorClause);
+  const combinedFilterClause = filterParts.length > 0 ? `WHERE ${filterParts.join(' AND ')}` : '';
+
+  const cteSql = `
+    WITH reconstructed_spans AS (
       ${SPAN_RECONSTRUCT_SELECT}
       GROUP BY traceId, spanId
-      HAVING arg_max(parentSpanId, timestamp) IS NULL
+    ),
+    root_spans AS (
+      SELECT * FROM reconstructed_spans
+      WHERE parentSpanId IS NULL
     )
-    SELECT COUNT(*) as total FROM reconstructed ${filterClause}
+  `;
+
+  const countSql = `
+    ${cteSql}
+    SELECT COUNT(*) as total FROM root_spans ${combinedFilterClause}
   `;
   const countResult = await db.query<{ total: number }>(countSql, filterParams);
   const total = Number(countResult[0]?.total ?? 0);
 
   const dataSql = `
-    WITH reconstructed AS (
-      ${SPAN_RECONSTRUCT_SELECT}
-      GROUP BY traceId, spanId
-      HAVING arg_max(parentSpanId, timestamp) IS NULL
-    )
-    SELECT * FROM reconstructed ${filterClause} ${orderByClause} ${paginationClause}
+    ${cteSql}
+    SELECT * FROM root_spans ${combinedFilterClause} ${orderByClause} ${paginationClause}
   `;
   const rows = await db.query(dataSql, [...filterParams, ...paginationParams]);
 

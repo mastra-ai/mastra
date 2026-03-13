@@ -105,6 +105,17 @@ const METRIC_COLUMNS = [
 ] as const;
 
 const METRIC_COLUMNS_SQL = METRIC_COLUMNS.join(', ');
+const METRIC_GROUP_BY_COLUMNS = new Set(
+  METRIC_COLUMNS.filter(col => !['value', 'labels', 'metadata', 'scope'].includes(col)),
+);
+
+function normalizeGroupByColumns(groupBy: string[]): string[] {
+  const invalid = groupBy.filter(col => !METRIC_GROUP_BY_COLUMNS.has(col));
+  if (invalid.length > 0) {
+    throw new Error(`Invalid groupBy column(s): ${invalid.join(', ')}`);
+  }
+  return groupBy;
+}
 
 /** Insert multiple metric events in a single statement. */
 export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreateMetricsArgs): Promise<void> {
@@ -194,6 +205,9 @@ export async function getMetricAggregate(
           prevStart = new Date(ts.start.getTime() - 604800000);
           prevEnd = new Date(ts.end.getTime() - 604800000);
           break;
+        default:
+          prevStart = new Date(ts.start.getTime() - duration);
+          prevEnd = new Date(ts.end.getTime() - duration);
       }
 
       const prevSql = `SELECT ${aggSql} as value FROM metric_events WHERE ${nameClause} AND timestamp >= ? AND timestamp <= ?`;
@@ -231,7 +245,8 @@ export async function getMetricBreakdown(
   }
 
   const whereClause = `WHERE ${allConditions.join(' AND ')}`;
-  const groupByCols = args.groupBy.join(', ');
+  const groupBy = normalizeGroupByColumns(args.groupBy);
+  const groupByCols = groupBy.join(', ');
 
   const sql = `SELECT ${groupByCols}, ${aggSql} as value FROM metric_events ${whereClause} GROUP BY ${groupByCols} ORDER BY value DESC`;
   const rows = await db.query(sql, allParams);
@@ -239,7 +254,7 @@ export async function getMetricBreakdown(
   const groups = rows.map(row => {
     const r = row as Record<string, unknown>;
     const dimensions: Record<string, string> = {};
-    for (const col of args.groupBy) {
+    for (const col of groupBy) {
       dimensions[col] = String(r[col] ?? '');
     }
     return { dimensions, value: Number(r.value ?? 0) };
@@ -270,7 +285,8 @@ export async function getMetricTimeSeries(
   const whereClause = `WHERE ${allConditions.join(' AND ')}`;
 
   if (args.groupBy && args.groupBy.length > 0) {
-    const groupByCols = args.groupBy.join(', ');
+    const groupBy = normalizeGroupByColumns(args.groupBy);
+    const groupByCols = groupBy.join(', ');
     const sql = `
       SELECT time_bucket(INTERVAL '${intervalSql}', timestamp) as bucket,
              ${groupByCols}, ${aggSql} as value
@@ -283,7 +299,7 @@ export async function getMetricTimeSeries(
     const seriesMap = new Map<string, { timestamp: Date; value: number }[]>();
     for (const row of rows) {
       const r = row as Record<string, unknown>;
-      const key = args.groupBy!.map(col => String(r[col] ?? '')).join('|');
+      const key = groupBy.map(col => String(r[col] ?? '')).join('|');
       if (!seriesMap.has(key)) seriesMap.set(key, []);
       seriesMap.get(key)!.push({
         timestamp: new Date(r.bucket as string),

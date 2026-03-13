@@ -1,4 +1,21 @@
 import type { DateRange } from '@mastra/core/storage';
+import { parseFieldKey } from '@mastra/core/utils';
+
+function buildJsonPath(key: string): string {
+  try {
+    return `$.${parseFieldKey(key)}`;
+  } catch {
+    const escaped = key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    return `$["${escaped}"]`;
+  }
+}
+
+function normalizeJsonFilterValue(value: unknown): string | null {
+  if (value === undefined) return null;
+  if (typeof value === 'string') return value;
+  const json = JSON.stringify(value);
+  return json ?? null;
+}
 
 /**
  * Build a WHERE clause from a filter object.
@@ -36,8 +53,8 @@ export function buildWhereClause(
     if (key === 'labels') {
       const labelsObj = value as Record<string, string>;
       for (const [labelKey, labelValue] of Object.entries(labelsObj)) {
-        conditions.push(`labels->>? = ?`);
-        params.push(labelKey, labelValue);
+        conditions.push(`json_extract_string(${column}, ?) = ?`);
+        params.push(buildJsonPath(labelKey), labelValue);
       }
       continue;
     }
@@ -60,8 +77,8 @@ export function buildWhereClause(
     if (key === 'dataKeys') {
       const keys = value as string[];
       for (const k of keys) {
-        conditions.push(`data->>? IS NOT NULL`);
-        params.push(k);
+        conditions.push(`json_extract(data, ?) IS NOT NULL`);
+        params.push(buildJsonPath(k));
       }
       continue;
     }
@@ -85,7 +102,13 @@ export function buildWhereClause(
     }
 
     if (key === 'metadata' || key === 'scope') {
-      // JSON containment — simplified for DuckDB
+      const jsonObj = value as Record<string, unknown>;
+      for (const [jsonKey, jsonValue] of Object.entries(jsonObj)) {
+        const normalized = normalizeJsonFilterValue(jsonValue);
+        if (normalized === null) continue;
+        conditions.push(`json_extract_string(${column}, ?) = ?`);
+        params.push(buildJsonPath(jsonKey), normalized);
+      }
       continue;
     }
 
@@ -112,7 +135,12 @@ export function buildWhereClause(
  */
 export function buildOrderByClause(orderBy?: { field: string; direction: string }): string {
   if (!orderBy) return '';
-  return `ORDER BY ${orderBy.field} ${orderBy.direction}`;
+  const dir = orderBy.direction.toUpperCase();
+  if (dir !== 'ASC' && dir !== 'DESC') {
+    throw new Error(`Invalid sort direction: ${orderBy.direction}`);
+  }
+  const field = parseFieldKey(orderBy.field);
+  return `ORDER BY ${field} ${dir}`;
 }
 
 /**

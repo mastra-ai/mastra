@@ -88,7 +88,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   /** Delete all rows from every observability table. Use with caution. */
   async dangerouslyClearAll(): Promise<void> {
     for (const table of ['span_events', 'metric_events', 'log_events', 'score_events', 'feedback_events']) {
-      await this.db.execute(`DELETE FROM ${table}`);
+      await this.db.execute(`TRUNCATE TABLE ${table}`);
     }
   }
 
