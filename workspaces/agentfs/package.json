@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agentfs",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "AgentFS (Turso/SQLite-backed) filesystem provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
