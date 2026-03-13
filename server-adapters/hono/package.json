@@ -50,9 +50,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
-    "@types/express": "^5.0.5",
-    "express": "^5.1.0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "engines": {
     "node": ">=22.13.0"

@@ -836,7 +836,7 @@ describe('MCPServer', () => {
       expect(result).toBeDefined();
       expect(result.messages[0].content.type === 'text' && result.messages[0].content.text).toContain('foo is: none');
     });
-    it('should retrieve prompt by name', async () => {
+    it('should retrieve prompt by name after list change', async () => {
       currentPrompts = [
         {
           name: 'simple-prompt',

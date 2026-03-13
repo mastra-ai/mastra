@@ -73,7 +73,7 @@
     "execa": "^9.6.1",
     "fastest-levenshtein": "latest",
     "js-tiktoken": "^1.0.21",
-    "js-yaml": "^3.14.2",
+    "js-yaml": "^4.1.0",
     "partial-json": "^0.1.7",
     "strip-ansi": "^7.2.0",
     "tree-kill": "latest",
