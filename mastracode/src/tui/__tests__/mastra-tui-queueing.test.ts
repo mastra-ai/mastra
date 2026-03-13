@@ -21,9 +21,9 @@ vi.mock('../display.js', () => ({
   notify: vi.fn(),
 }));
 
-import { MastraTUI, consumePendingImages } from '../mastra-tui.js';
 import { handleAgentEnd } from '../handlers/agent-lifecycle.js';
 import type { EventHandlerContext } from '../handlers/types.js';
+import { MastraTUI, consumePendingImages } from '../mastra-tui.js';
 import type { TUIState } from '../state.js';
 
 function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
