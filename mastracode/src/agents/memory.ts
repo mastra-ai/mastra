@@ -62,6 +62,7 @@ export function getDynamicMemory(storage: MastraCompositeStore) {
       options: {
         observationalMemory: {
           enabled: true,
+          graph: true,
           scope: omScope,
           observation: {
             bufferTokens: isResourceScope ? false : 1 / 5,

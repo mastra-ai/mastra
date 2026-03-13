@@ -5,6 +5,7 @@ import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/age
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { resolveModelConfig } from '@mastra/core/llm';
+import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, parseMemoryRequestContext, setThreadOMMetadata } from '@mastra/core/memory';
 import type {
   Processor,
@@ -57,6 +58,7 @@ import {
   createObservationFailedMarker,
   createObservationStartMarker,
 } from './markers';
+import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import {
   buildObserverSystemPrompt,
   buildObserverTaskPrompt,
@@ -156,6 +158,14 @@ export interface ObservationalMemoryConfig {
   storage: MemoryStorage;
 
   /**
+   * Enable graph-mode observation group metadata.
+   * When true, observation groups are treated as durable pointers to raw message history.
+   *
+   * @default false
+   */
+  graph?: boolean;
+
+  /**
    * Model for both Observer and Reflector agents.
    * Sets the model for both agents at once. Cannot be used together with
    * `observation.model` or `reflection.model` — an error will be thrown.
@@ -249,6 +259,7 @@ interface ResolvedReflectionConfig {
  * Default configuration values matching the spec
  */
 export const OBSERVATIONAL_MEMORY_DEFAULTS = {
+  graph: false,
   observation: {
     model: 'google/gemini-2.5-flash',
     messageTokens: 30_000,
@@ -317,6 +328,8 @@ PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm goi
 
 MOST RECENT USER INPUT: Treat the most recent user message as the highest-priority signal for what to do next. Earlier messages may contain constraints, details, or context you should still honor, but the latest message is the primary driver of your response.`;
 
+export const OBSERVATION_GRAPH_INSTRUCTIONS = `Your observations may include durable group ranges shown as lines like _range: \`messageId1-messageId2\`_. When you need exact wording, detailed chronology, or raw context behind one of those groups, call the recall tool with the exact cursor message id plus page and limit arguments.`;
+
 /**
  * ObservationalMemory - A three-agent memory system for long conversations.
  *
@@ -370,6 +383,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private storage: MemoryStorage;
   private tokenCounter: TokenCounter;
   private scope: 'resource' | 'thread';
+  private graph: boolean = false;
   private observationConfig: ResolvedObservationConfig;
   private reflectionConfig: ResolvedReflectionConfig;
   private onDebugEvent?: (event: ObservationDebugEvent) => void;
@@ -773,6 +787,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
+    this.graph = config.graph ?? OBSERVATIONAL_MEMORY_DEFAULTS.graph;
 
     // Resolve "default" to the default model
     const resolveModel = (m: typeof config.model) =>
@@ -946,6 +961,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   get config(): {
     scope: 'resource' | 'thread';
+    graph: boolean;
     observation: {
       messageTokens: number | ThresholdRange;
     };
@@ -955,6 +971,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   } {
     return {
       scope: this.scope,
+      graph: this.graph,
       observation: {
         messageTokens: this.observationConfig.messageTokens,
       },
@@ -982,7 +999,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
     if (typeof model === 'function') {
       // Wrap to handle functions that may return ModelWithRetries[]
-      return async ctx => {
+      return async (ctx: { requestContext: RequestContext; mastra?: Mastra }) => {
         const result = await model(ctx);
         if (Array.isArray(result)) {
           return (result[0]?.model ?? 'unknown') as MastraModelConfig;
@@ -1269,6 +1286,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           observation: this.observationConfig,
           reflection: this.reflectionConfig,
           scope: this.scope,
+          graph: this.graph,
         },
         observedTimezone,
       });
@@ -1953,7 +1971,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         totalUsage.totalTokens += usage.totalTokens ?? 0;
       }
 
-      parsed = parseReflectorOutput(result.text);
+      parsed = parseReflectorOutput(result.text, observations);
 
       // If degenerate repetition detected, treat as compression failure
       if (parsed.degenerate) {
@@ -2038,9 +2056,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     suggestedResponse?: string,
     unobservedContextBlocks?: string,
     currentDate?: Date,
+    graph = false,
   ): string {
-    // Optimize observations to save tokens
-    let optimized = optimizeObservationsForContext(observations);
+    // Optimize observations to save tokens unless graph mode needs durable group metadata preserved.
+    let optimized = graph
+      ? (renderObservationGroupsForReflection(observations) ?? observations)
+      : optimizeObservationsForContext(observations);
 
     // Add relative time annotations to date headers if currentDate is provided
     if (currentDate) {
@@ -2054,7 +2075,7 @@ ${OBSERVATION_CONTEXT_PROMPT}
 ${optimized}
 </observations>
 
-${OBSERVATION_CONTEXT_INSTRUCTIONS}`;
+${OBSERVATION_CONTEXT_INSTRUCTIONS}${graph ? `\n\n${OBSERVATION_GRAPH_INSTRUCTIONS}` : ''}`;
 
     // Add unobserved context from other threads (resource scope only)
     if (unobservedContextBlocks) {
@@ -2743,6 +2764,7 @@ ${suggestedResponse}
       suggestedResponse,
       unobservedContextBlocks,
       currentDate,
+      this.graph,
     );
 
     // Clear any existing observation system message and add fresh one
@@ -3681,11 +3703,14 @@ ${formattedMessages}
    * Wrap observations in a thread attribution tag.
    * Used in resource scope to track which thread observations came from.
    */
-  private async wrapWithThreadTag(threadId: string, observations: string): Promise<string> {
+  private async wrapWithThreadTag(threadId: string, observations: string, messageRange?: string): Promise<string> {
     // First strip any thread tags the Observer might have added
     const cleanObservations = this.stripThreadTags(observations);
+    const groupedObservations = messageRange
+      ? wrapInObservationGroup(cleanObservations, messageRange)
+      : cleanObservations;
     const obscuredId = await this.representThreadIDInContext(threadId);
-    return `<thread id="${obscuredId}">\n${cleanObservations}\n</thread>`;
+    return `<thread id="${obscuredId}">\n${groupedObservations}\n</thread>`;
   }
 
   /**
@@ -3880,16 +3905,18 @@ ${formattedMessages}
 
       // Build new observations (use freshRecord if available)
       const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
+      const messageRange = `${messagesToObserve[0]!.id}-${messagesToObserve[messagesToObserve.length - 1]!.id}`;
       let newObservations: string;
       if (this.scope === 'resource') {
         // In resource scope: wrap with thread tag and replace/append
-        const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
+        const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
         newObservations = this.replaceOrAppendThreadSection(existingObservations, threadId, threadSection);
       } else {
         // In thread scope: simple append
+        const groupedObservations = wrapInObservationGroup(result.observations, messageRange);
         newObservations = existingObservations
-          ? `${existingObservations}\n\n${result.observations}`
-          : result.observations;
+          ? `${existingObservations}\n\n${groupedObservations}`
+          : groupedObservations;
       }
 
       let totalTokenCount = this.tokenCounter.countObservations(newObservations);
@@ -4276,11 +4303,12 @@ ${formattedMessages}
 
     // Get the new observations to buffer (just the new content, not merged)
     // The storage adapter will handle appending to existing buffered content
+    const messageRange = `${messagesToBuffer[0]!.id}-${messagesToBuffer[messagesToBuffer.length - 1]!.id}`;
     let newObservations: string;
     if (this.scope === 'resource') {
-      newObservations = await this.wrapWithThreadTag(threadId, result.observations);
+      newObservations = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
     } else {
-      newObservations = result.observations;
+      newObservations = wrapInObservationGroup(result.observations, messageRange);
     }
 
     const newTokenCount = this.tokenCounter.countObservations(newObservations);
@@ -5176,7 +5204,8 @@ ${formattedMessages}
         cycleObservationTokens += this.tokenCounter.countObservations(result.observations);
 
         // Wrap with thread tag and append (in thread order for consistency)
-        const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
+        const messageRange = `${threadMessages[0]!.id}-${threadMessages[threadMessages.length - 1]!.id}`;
+        const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
         currentObservations = this.replaceOrAppendThreadSection(currentObservations, threadId, threadSection);
 
         // Update thread-specific metadata:

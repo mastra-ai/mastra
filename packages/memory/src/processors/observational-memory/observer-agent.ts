@@ -1,6 +1,8 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 
+import { stripEphemeralAnchorIds } from './anchor-ids';
+
 /**
  * The core extraction instructions for the Observer.
  * This is exported so the Reflector can understand how observations were created.
@@ -1103,7 +1105,7 @@ export function extractCurrentTask(observations: string): string | null {
  * The full format is preserved in storage for analysis.
  */
 export function optimizeObservationsForContext(observations: string): string {
-  let optimized = observations;
+  let optimized = stripEphemeralAnchorIds(observations);
 
   // Remove 🟡 and 🟢 emojis (keep 🔴 for critical items)
   optimized = optimized.replace(/🟡\s*/g, '');

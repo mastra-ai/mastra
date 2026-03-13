@@ -721,6 +721,13 @@ export interface ObservationalMemoryOptions {
    * @default false
    */
   shareTokenBudget?: boolean;
+
+  /**
+   * Enable graph-mode observation groups as durable pointers to raw message history.
+   *
+   * @default false
+   */
+  graph?: boolean;
 }
 
 /**
@@ -1127,6 +1134,9 @@ export type SerializedObservationalMemoryConfig = {
 
   /** Share the token budget between messages and observations */
   shareTokenBudget?: boolean;
+
+  /** Enable graph-mode observation groups as durable pointers to raw message history */
+  graph?: boolean;
 
   /** Observation step configuration */
   observation?: SerializedObservationalMemoryObservationConfig;

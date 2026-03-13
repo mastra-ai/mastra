@@ -4,6 +4,13 @@ import { coreFeatures } from '@mastra/core/features';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
+import { injectAnchorIds, parseAnchorId, stripEphemeralAnchorIds } from '../anchor-ids';
+import {
+  deriveObservationGroupProvenance,
+  parseObservationGroups,
+  reconcileObservationGroupsFromReflection,
+  renderObservationGroupsForReflection,
+} from '../observation-groups';
 import { ObservationalMemory } from '../observational-memory';
 import {
   buildObserverPrompt,
@@ -1169,9 +1176,20 @@ User asked about </current-task> parsing and how it works
   });
 
   describe('sanitizeObservationLines', () => {
-    it('should pass through normal observations unchanged', () => {
+    it('should leave normal observation lines unchanged', () => {
       const obs = '- 🔴 User asked about React\n- 🟡 Some context';
-      expect(sanitizeObservationLines(obs)).toBe(obs);
+      const sanitized = sanitizeObservationLines(obs);
+
+      expect(sanitized).toBe(obs);
+    });
+
+    it('should preserve existing anchor IDs', () => {
+      const obs = '[O1] - 🔴 Already anchored\nDate: Mar 11, 2026';
+      const sanitized = sanitizeObservationLines(obs);
+      const lines = sanitized.split('\n');
+
+      expect(lines[0]).toBe('[O1] - 🔴 Already anchored');
+      expect(lines[1]).toBe('Date: Mar 11, 2026');
     });
 
     it('should truncate lines exceeding 10k characters', () => {
@@ -1181,13 +1199,47 @@ User asked about </current-task> parsing and how it works
       expect(result).toContain('- 🔴 Short line');
       expect(result).toContain('- 🟡 Another line');
       expect(result).toContain(' … [truncated]');
-      // The truncated line should be 10k + the suffix
+      expect(result).not.toContain('[O');
       const lines = result.split('\n');
-      expect(lines[1]!.length).toBeLessThan(11_000);
+      expect(lines[1]!.length).toBeLessThan(11_100);
     });
 
     it('should handle empty input', () => {
       expect(sanitizeObservationLines('')).toBe('');
+    });
+  });
+
+  describe('anchor IDs', () => {
+    it('should inject ordinal anchors into observation lines only', () => {
+      const observations = `Date: Mar 11, 2026
+- 🔴 First observation
+<observation-group id="abcd" range="m1-m2">
+  - 🟡 Nested observation
+</observation-group>
+- 🔴 Second observation`;
+      const anchored = injectAnchorIds(observations);
+      const lines = anchored.split('\n');
+
+      expect(lines[0]).toBe('Date: Mar 11, 2026');
+      expect(lines[1]).toBe('[O1] - 🔴 First observation');
+      expect(lines[2]).toBe('<observation-group id="abcd" range="m1-m2">');
+      expect(lines[3]).toBe('  [O1-N1] - 🟡 Nested observation');
+      expect(lines[4]).toBe('</observation-group>');
+      expect(lines[5]).toBe('[O2] - 🔴 Second observation');
+    });
+
+    it('should strip ephemeral anchors before canonical storage', () => {
+      const observations = `[O1] - 🔴 First observation\n  [O1-N1] - 🟡 Nested observation\n[O2] - 🔴 Second observation`;
+
+      expect(stripEphemeralAnchorIds(observations)).toBe(
+        `- 🔴 First observation\n  - 🟡 Nested observation\n- 🔴 Second observation`,
+      );
+    });
+
+    it('should parse existing anchor IDs', () => {
+      expect(parseAnchorId('[O12] - 🔴 Observation')).toBe('O12');
+      expect(parseAnchorId('[O12-N3] - 🔴 Observation')).toBe('O12-N3');
+      expect(parseAnchorId('- 🔴 Observation')).toBeNull();
     });
   });
 
@@ -1235,6 +1287,16 @@ User asked about </current-task> parsing and how it works
       expect(optimized).toContain('🔴 Critical info');
       expect(optimized).not.toContain('🟡');
       expect(optimized).not.toContain('🟢');
+    });
+
+    it('should strip anchor IDs before injecting context', () => {
+      const observations = '[O1] - 🔴 Critical info\n[O2] - 🟡 Medium info';
+      const optimized = optimizeObservationsForContext(observations);
+
+      expect(optimized).toContain('🔴 Critical info');
+      expect(optimized).toContain('- Medium info');
+      expect(optimized).not.toContain('[O1]');
+      expect(optimized).not.toContain('[O2]');
     });
 
     it('should preserve red emojis', () => {
@@ -1292,12 +1354,31 @@ describe('Reflector Agent Helpers', () => {
   });
 
   describe('buildReflectorPrompt', () => {
-    it('should include observations to reflect on', () => {
+    it('should include observations to reflect on with ephemeral anchor IDs', () => {
       const observations = '- 🔴 User is building a React app';
       const prompt = buildReflectorPrompt(observations);
 
       expect(prompt).toContain('OBSERVATIONS TO REFLECT ON');
-      expect(prompt).toContain('User is building a React app');
+      expect(prompt).toContain('[O1] - 🔴 User is building a React app');
+    });
+
+    it('should render grouped observations as markdown sections for reflection', () => {
+      const observations = `<observation-group id="group-a" range="m1-m2">
+- 🔴 User is building a React app
+</observation-group>
+
+<observation-group id="group-b" range="m3-m4">
+- 🟡 Needs help with auth flow
+</observation-group>`;
+
+      const prompt = buildReflectorPrompt(observations);
+
+      expect(prompt).toContain('## Group `group-a`');
+      expect(prompt).toContain('_range: `m1-m2`_');
+      expect(prompt).toContain('## Group `group-b`');
+      expect(prompt).toContain('[O1] - 🔴 User is building a React app');
+      expect(prompt).toContain('[O2] - 🟡 Needs help with auth flow');
+      expect(prompt).not.toContain('[O1-N1] ## Group `group-a`');
     });
 
     it('should include manual prompt guidance if provided', () => {
@@ -1318,6 +1399,73 @@ describe('Reflector Agent Helpers', () => {
     });
   });
 
+  describe('Observation Groups', () => {
+    it('should render canonical groups into reflection markdown', () => {
+      const observations = `<observation-group id="group-a" range="m1-m2">
+- 🔴 User is building a React app
+</observation-group>
+
+<observation-group id="group-b" range="m3-m4">
+- 🟡 Needs help with auth flow
+</observation-group>`;
+
+      expect(renderObservationGroupsForReflection(observations)).toBe(`## Group \`group-a\`
+_range: \`m1-m2\`_
+
+- 🔴 User is building a React app
+
+## Group \`group-b\`
+_range: \`m3-m4\`_
+
+- 🟡 Needs help with auth flow`);
+    });
+
+    it('should derive merged group provenance from reflection edits', () => {
+      const sourceObservations = `<observation-group id="group-a" range="m1-m2">
+- 🔴 User is building a React app
+</observation-group>
+
+<observation-group id="group-b" range="m3-m4">
+- 🟡 Needs help with auth flow
+</observation-group>`;
+      const reflection = `## Group \`merged-project\`
+_range: \`ignored-by-reconciler\`_
+
+- 🔴 User is building a React app
+- 🟡 Needs help with auth flow`;
+
+      expect(deriveObservationGroupProvenance(reflection, parseObservationGroups(sourceObservations))).toEqual([
+        {
+          id: 'merged-project',
+          range: 'm1-m2,m3-m4',
+          content: '- 🔴 User is building a React app\n- 🟡 Needs help with auth flow',
+          sourceGroupIds: ['group-a', 'group-b'],
+        },
+      ]);
+    });
+
+    it('should reconcile reflected markdown back into canonical grouped observations', () => {
+      const sourceObservations = `<observation-group id="group-a" range="m1-m2">
+- 🔴 User is building a React app
+</observation-group>
+
+<observation-group id="group-b" range="m3-m4">
+- 🟡 Needs help with auth flow
+</observation-group>`;
+      const reflection = `## Group \`merged-project\`
+_range: \`ignored-by-reconciler\`_
+
+- 🔴 User is building a React app
+- 🟡 Needs help with auth flow`;
+
+      expect(reconcileObservationGroupsFromReflection(reflection, sourceObservations))
+        .toBe(`<observation-group id="merged-project" range="m1-m2,m3-m4" source-group-ids="group-a,group-b">
+- 🔴 User is building a React app
+- 🟡 Needs help with auth flow
+</observation-group>`);
+    });
+  });
+
   describe('parseReflectorOutput', () => {
     it('should extract observations from output', () => {
       const output = `
@@ -1330,6 +1478,68 @@ describe('Reflector Agent Helpers', () => {
       const result = parseReflectorOutput(output);
       expect(result.observations).toContain('Project Context');
       expect(result.observations).toContain('Completed auth implementation');
+    });
+
+    it('should strip ephemeral anchor IDs from reflector output', () => {
+      const output = `
+<observations>
+[O1] - 🔴 Critical project context
+  [O1-N1] - 🟡 Nested detail
+</observations>
+      `;
+
+      const result = parseReflectorOutput(output);
+      expect(result.observations).toContain('Critical project context');
+      expect(result.observations).toContain('Nested detail');
+      expect(result.observations).not.toContain('[O1]');
+      expect(result.observations).not.toContain('[O1-N1]');
+    });
+
+    it('should reconcile reflected markdown groups back to canonical grouped observations', () => {
+      const sourceObservations = `<observation-group id="group-a" range="m1-m2">
+- 🔴 User is building a React app
+</observation-group>
+
+<observation-group id="group-b" range="m3-m4">
+- 🟡 Needs help with auth flow
+</observation-group>`;
+      const output = `
+<observations>
+## Group \`merged-project\`
+_range: \`ignored-by-reconciler\`_
+
+[O1] - 🔴 User is building a React app
+[O2] - 🟡 Needs help with auth flow
+</observations>
+      `;
+
+      const result = parseReflectorOutput(output, sourceObservations);
+
+      expect(result.observations)
+        .toBe(`<observation-group id="merged-project" range="m1-m2,m3-m4" source-group-ids="group-a,group-b">
+- 🔴 User is building a React app
+- 🟡 Needs help with auth flow
+</observation-group>`);
+    });
+
+    it('should keep original group ids for unchanged reflected sections', () => {
+      const sourceObservations = `<observation-group id="group-a" range="m1-m2">
+- 🔴 User is building a React app
+</observation-group>`;
+      const output = `
+<observations>
+## Group \`group-a\`
+_range: \`ignored-by-reconciler\`_
+
+[O1] - 🔴 User is building a React app
+</observations>
+      `;
+
+      const result = parseReflectorOutput(output, sourceObservations);
+
+      expect(result.observations).toBe(`<observation-group id="group-a" range="m1-m2" source-group-ids="group-a">
+- 🔴 User is building a React app
+</observation-group>`);
     });
 
     it('should extract continuation hint from XML suggested-response tag', () => {
@@ -1492,7 +1702,7 @@ describe('Token Counter', () => {
           parts: [
             {
               type: 'tool-invocation',
-              toolInvocation: { state: 'result', toolName: 'test', toolCallId: 'tc1', result: 'ok' },
+              toolInvocation: { state: 'result', toolName: 'test', toolCallId: 'tc1', args: {}, result: 'ok' },
             },
             { type: 'data-om-activation', data: { cycleId: 'cycle-1', observations: largeObservationText } } as any,
             { type: 'data-om-buffering-start', data: { cycleId: 'cycle-2' } } as any,
@@ -1510,7 +1720,7 @@ describe('Token Counter', () => {
           parts: [
             {
               type: 'tool-invocation',
-              toolInvocation: { state: 'result', toolName: 'test', toolCallId: 'tc1', result: 'ok' },
+              toolInvocation: { state: 'result', toolName: 'test', toolCallId: 'tc1', args: {}, result: 'ok' },
             },
           ],
         },
@@ -1693,6 +1903,66 @@ describe('ObservationalMemory Integration', () => {
 
       const history = await om.getHistory(threadId, resourceId);
       expect(history.length).toBe(2);
+    });
+  });
+
+  describe('config', () => {
+    it('should expose graph mode when enabled', () => {
+      const graphOm = new ObservationalMemory({
+        storage,
+        graph: true,
+        observation: {
+          messageTokens: 500,
+          model: 'test-model',
+        },
+        reflection: {
+          observationTokens: 1000,
+          model: 'test-model',
+        },
+      });
+
+      expect(graphOm.config).toEqual({
+        scope: 'thread',
+        graph: true,
+        observation: {
+          messageTokens: 500,
+        },
+        reflection: {
+          observationTokens: 1000,
+        },
+      });
+    });
+
+    it('should preserve observation group ranges in actor context when graph mode is enabled', () => {
+      const graphOm = new ObservationalMemory({
+        storage,
+        graph: true,
+        observation: {
+          messageTokens: 500,
+          model: 'test-model',
+        },
+        reflection: {
+          observationTokens: 1000,
+          model: 'test-model',
+        },
+      });
+
+      const formatted = (graphOm as any).formatObservationsForContext(
+        '<observation-group id="group-1" range="msg-1-msg-2">\n- 🔴 User prefers direct answers\n</observation-group>',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true,
+      );
+
+      expect(formatted).toContain('## Group `group-1`');
+      expect(formatted).toContain('_range: `msg-1-msg-2`_');
+      expect(formatted).toContain('recall tool');
+    });
+
+    it('should default graph mode to false', () => {
+      expect(om.config.graph).toBe(false);
     });
   });
 
@@ -3130,6 +3400,18 @@ describe('Thread Attribution Helpers', () => {
 
       expect(result).toBe(`<thread id="thread-123">\n${observations}\n</thread>`);
     });
+
+    it('should wrap observations in an observation group when a message range is provided', async () => {
+      const observations = '- 🔴 User likes coffee';
+      const result = await (om as any).wrapWithThreadTag('thread-123', observations, 'msg-1-msg-2');
+
+      expect(result).toContain('<thread id="thread-123">');
+      expect(result).toContain('<observation-group id="');
+      expect(result).toContain('range="msg-1-msg-2"');
+      expect(result).toContain(observations);
+      expect(result).toContain('</observation-group>');
+      expect(result).toContain('</thread>');
+    });
   });
 
   describe('replaceOrAppendThreadSection', () => {
@@ -3288,10 +3570,12 @@ Ask about preferred brewing method
       unobservedMessages: messages,
     });
 
-    // Check stored observations have thread tag
+    // Check stored observations have thread tag and durable observation-group boundary
     const record = await storage.getObservationalMemory(null, 'resource-1');
     expect(record?.activeObservations).toContain('<thread id="thread-1">');
     expect(record?.activeObservations).toContain('</thread>');
+    expect(record?.activeObservations).toContain('<observation-group id="');
+    expect(record?.activeObservations).toContain('range="msg-1-msg-2"');
     expect(record?.activeObservations).toContain('User mentioned they like coffee');
   });
 
@@ -3359,6 +3643,8 @@ Ask about preferred brewing method
     const record = await storage.getObservationalMemory('thread-1', 'resource-1');
     // Should NOT have thread tags in thread scope
     expect(record?.activeObservations).not.toContain('<thread id=');
+    expect(record?.activeObservations).toContain('<observation-group id="');
+    expect(record?.activeObservations).toContain('range="msg-1-msg-1"');
     expect(record?.activeObservations).toContain('User mentioned they like tea');
   });
 });
@@ -4458,6 +4744,7 @@ describe('Async Buffering Storage Operations', () => {
         id: initial.id,
         reflection: '- 🔴 Reflected: User prefers TypeScript',
         tokenCount: 30,
+        inputTokenCount: 30,
         reflectedObservationLineCount: 5,
       });
 
@@ -4488,6 +4775,7 @@ describe('Async Buffering Storage Operations', () => {
         id: initial.id,
         reflection: '- 🔴 Condensed reflection of obs 1 and 2',
         tokenCount: 50,
+        inputTokenCount: 50,
         reflectedObservationLineCount: 2,
       });
 
@@ -4531,6 +4819,7 @@ describe('Async Buffering Storage Operations', () => {
         id: initial.id,
         reflection: '- 🔴 Full condensed reflection',
         tokenCount: 50,
+        inputTokenCount: 50,
         reflectedObservationLineCount: lineCount,
       });
 
@@ -4567,6 +4856,7 @@ describe('Async Buffering Storage Operations', () => {
         id: initial.id,
         reflection: '- 🔴 Reflected summary of originals',
         tokenCount: 50,
+        inputTokenCount: 50,
         reflectedObservationLineCount: 3,
       });
 
@@ -7375,6 +7665,7 @@ describe('Full Async Buffering Flow', () => {
         id: initial.id,
         reflection: '* Already buffered reflection',
         tokenCount: 20,
+        inputTokenCount: 20,
         reflectedObservationLineCount: 3,
       });
 
