@@ -3390,7 +3390,7 @@ ${suggestedResponse}
         // with complete data. Only provider-executed tools are checked because client tools always
         // have their result in the same message — a state:'call' on a client tool is a historical
         // artifact from before the fix and should not block observation.
-        const hasIncompleteToolCalls = unobservedMessages.some(msg =>
+        const hasIncompleteProviderToolCalls = unobservedMessages.some(msg =>
           msg.content?.parts?.some(
             part =>
               part?.type === 'tool-invocation' &&
@@ -3406,9 +3406,9 @@ ${suggestedResponse}
         if (this.isAsyncObservationEnabled() && totalPendingTokens < threshold) {
           const shouldTrigger = this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey, record, threshold);
           omDebug(
-            `[OM:async-obs] belowThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, shouldTrigger=${shouldTrigger}, isBufferingObs=${record.isBufferingObservation}, lastBufferedAt=${record.lastBufferedAtTokens}, hasIncompleteToolCalls=${hasIncompleteToolCalls}`,
+            `[OM:async-obs] belowThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, shouldTrigger=${shouldTrigger}, isBufferingObs=${record.isBufferingObservation}, lastBufferedAt=${record.lastBufferedAtTokens}, hasIncompleteProviderToolCalls=${hasIncompleteProviderToolCalls}`,
           );
-          if (shouldTrigger && !hasIncompleteToolCalls) {
+          if (shouldTrigger && !hasIncompleteProviderToolCalls) {
             void this.startAsyncBufferedObservation(
               record,
               threadId,
@@ -3425,9 +3425,9 @@ ${suggestedResponse}
           // - Below blockAfter, sync observation won't run, so we need chunks ready
           const shouldTrigger = this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey, record, threshold);
           omDebug(
-            `[OM:async-obs] atOrAboveThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, step=${stepNumber}, shouldTrigger=${shouldTrigger}, hasIncompleteToolCalls=${hasIncompleteToolCalls}`,
+            `[OM:async-obs] atOrAboveThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, step=${stepNumber}, shouldTrigger=${shouldTrigger}, hasIncompleteProviderToolCalls=${hasIncompleteProviderToolCalls}`,
           );
-          if (shouldTrigger && !hasIncompleteToolCalls) {
+          if (shouldTrigger && !hasIncompleteProviderToolCalls) {
             void this.startAsyncBufferedObservation(
               record,
               threadId,
@@ -3453,7 +3453,7 @@ ${suggestedResponse}
         // ════════════════════════════════════════════════════════════════════════
         // THRESHOLD REACHED: Observe and clean up
         // ════════════════════════════════════════════════════════════════════════
-        if (stepNumber > 0 && !hasIncompleteToolCalls && totalPendingTokens >= threshold) {
+        if (stepNumber > 0 && !hasIncompleteProviderToolCalls && totalPendingTokens >= threshold) {
           reproCaptureDetails.thresholdReached = true;
           const { observationSucceeded, updatedRecord, activatedMessageIds } = await this.handleThresholdReached(
             messageList,
