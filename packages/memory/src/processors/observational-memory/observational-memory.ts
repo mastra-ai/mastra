@@ -3408,10 +3408,9 @@ ${suggestedResponse}
         omDebug(`OM DEBUG: latestStepParts=${JSON.stringify(latestStepParts, null, 2)}`);
 
         const hasIncompleteProviderToolCalls = latestStepParts.some(
-          part =>
-            part?.type === 'tool-invocation' &&
-            part.toolInvocation?.state === 'call' &&
-            (part as { providerExecuted?: boolean }).providerExecuted === true,
+          part => part?.type === 'tool-invocation' && part.toolInvocation?.state === 'call',
+          // &&
+          // (part as { providerExecuted?: boolean }).providerExecuted === true,
         );
         omDebug(`OM DEBUG: hasIncompleteProviderToolCalls=${hasIncompleteProviderToolCalls}`);
 

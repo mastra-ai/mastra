@@ -1108,14 +1108,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           content: {
             format: 2,
             parts: toolCalls.map(toolCall => {
+              const hasProviderResult = toolCall.providerExecuted && toolCall.output != null;
               return {
                 type: 'tool-invocation' as const,
-                toolInvocation: {
-                  state: 'call' as const,
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  args: toolCall.args,
-                },
+                toolInvocation: hasProviderResult
+                  ? {
+                      state: 'result' as const, // single-turn provider tool calls arrive immediately with a result
+                      toolCallId: toolCall.toolCallId,
+                      toolName: toolCall.toolName,
+                      args: toolCall.args,
+                      result: toolCall.output,
+                    }
+                  : {
+                      state: 'call' as const,
+                      toolCallId: toolCall.toolCallId,
+                      toolName: toolCall.toolName,
+                      args: toolCall.args,
+                    },
                 providerMetadata: toolCall.providerMetadata,
                 providerExecuted: toolCall.providerExecuted,
               };
@@ -1125,6 +1134,33 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           createdAt: new Date(),
         };
         messageList.add(message, 'response');
+      }
+
+      /**
+       * Handles deferred provider-executed tool results (e.g. Anthropic web_search).
+       * The provider may non-deterministically defer server tool execution — particularly
+       * when a provider-executed tool is requested alongside a client tool. The deferred
+       * result arrives on a subsequent API call as a tool-result with no matching tool call
+       * in the current turn. This function finds those orphaned results and resolves them
+       * via messageList.updateToolInvocation, which updates the state:'call' part to state:'result'
+       * and ensures the message is re-saved.
+       */
+      const currentTurnToolCallIds = new Set(toolCalls.map(tc => tc.toolCallId));
+      const defferedProviderResults = toolResultChunks.filter(
+        chunk => chunk.payload.providerExecuted && !currentTurnToolCallIds.has(chunk.payload.toolCallId),
+      );
+
+      for (const deffered of defferedProviderResults) {
+        messageList.updateToolInvocation({
+          type: 'tool-invocation' as const,
+          toolInvocation: {
+            state: 'result' as const,
+            toolCallId: deffered.payload.toolCallId,
+            toolName: deffered.payload.toolName,
+            args: deffered.payload.args,
+            result: deffered.payload.result,
+          },
+        });
       }
 
       // Call processOutputStep for processors (runs AFTER LLM response, BEFORE tool execution)
