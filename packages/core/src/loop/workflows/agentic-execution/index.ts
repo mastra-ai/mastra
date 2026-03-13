@@ -8,6 +8,7 @@ import { createIsTaskCompleteStep } from './is-task-complete-step';
 import { createLLMExecutionStep } from './llm-execution-step';
 import { createLLMMappingStep } from './llm-mapping-step';
 import { createToolCallStep } from './tool-call-step';
+import type { ToolChunkEmitter } from './tool-call-step';
 
 export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   models,
@@ -27,11 +28,23 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     ...rest,
   });
 
-  const toolCallStep = createToolCallStep({
-    models,
-    _internal,
-    ...rest,
-  });
+  // Create a chunk emitter that enqueues tool-result/tool-error chunks directly
+  // to the stream controller as each tool completes. This enables incremental
+  // streaming: the TUI sees results one-by-one instead of waiting for all
+  // parallel tools to finish (which is what happens when llmMappingStep emits).
+  const chunkEmitter: ToolChunkEmitter<OUTPUT> = async chunk => {
+    rest.controller.enqueue(chunk);
+    return chunk;
+  };
+
+  const toolCallStep = createToolCallStep(
+    {
+      models,
+      _internal,
+      ...rest,
+    },
+    chunkEmitter,
+  );
 
   const llmMappingStep = createLLMMappingStep(
     {
@@ -40,6 +53,7 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
       ...rest,
     },
     llmExecutionStep,
+    { chunksAlreadyEmitted: true },
   );
 
   const isTaskCompleteStep = createIsTaskCompleteStep({
