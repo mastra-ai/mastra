@@ -233,7 +233,7 @@ describe('MCPClient', () => {
       expect(receivedUri).toBe(resourceUri);
 
       await mcp.resources.unsubscribe(serverName, resourceUri); // Cleanup
-    }, 5000);
+    }, 15_000);
 
     it('should receive resource list changed notification from a specific server', async () => {
       const serverName = 'weather';

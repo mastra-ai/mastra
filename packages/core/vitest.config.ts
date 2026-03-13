@@ -1,7 +1,13 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
+const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'));
+
 export default defineConfig({
+  define: {
+    __MASTRA_VERSION__: JSON.stringify(pkg.version),
+  },
   resolve: {
     alias: {
       '@internal/workflow-test-utils': path.resolve(__dirname, '../../workflows/_test-utils/src'),
@@ -10,6 +16,9 @@ export default defineConfig({
   test: {
     projects: [
       {
+        define: {
+          __MASTRA_VERSION__: JSON.stringify(pkg.version),
+        },
         resolve: {
           alias: {
             '@internal/workflow-test-utils': path.resolve(__dirname, '../../workflows/_test-utils/src'),

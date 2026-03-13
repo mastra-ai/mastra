@@ -315,9 +315,9 @@ Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-
   models={${modelDataJson}}
 />
 
-## Advanced Configuration
+## Advanced configuration
 
-### Custom Headers
+### Custom headers
 
 \`\`\`typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
@@ -338,7 +338,7 @@ const agent = new Agent({
 });
 \`\`\`
 
-### Dynamic Model Selection
+### Dynamic model selection
 
 \`\`\`typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
@@ -357,7 +357,7 @@ ${generateProviderOptionsSection(provider.id)}
 ${
   provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible'
     ? `
-## Direct Provider Installation
+## Direct provider installation
 
 This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/${provider.packageName}) for more details.
 
@@ -476,7 +476,7 @@ Learn more in the [${displayName} documentation](${docUrl}).`
   const modelTable =
     allModels.length > 0
       ? `
-## Available Models
+## Available models
 
 | Model |
 |-------|
@@ -952,11 +952,11 @@ import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";${
 
 Gateway providers aggregate multiple model providers and add features like caching, rate limiting, analytics, and automatic failover. Use gateways when you need observability, cost management, or simplified multi-provider access.
 
-## Custom Gateways
+## Custom gateways
 
 Create custom gateways for private LLM deployments or specialized provider integrations. See [Custom Gateways](/models/gateways/custom-gateways) for implementation details.
 
-## Built-in Gateways
+## Built-in gateways
 
 <CardGrid>
 ${gatewaysList

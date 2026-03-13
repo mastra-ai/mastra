@@ -103,10 +103,20 @@ export const mastra = new Mastra({
 
 ### idGenerator
 
-**Type:** `() => string`\
+**Type:** `(context?: IdGeneratorContext) => string`\
 **Default:** `crypto.randomUUID()`
 
-Custom ID generator function for creating unique identifiers.
+Custom ID generator function for creating unique identifiers. Mastra passes optional context so you can generate IDs based on what's being created.
+
+`IdGeneratorContext` includes:
+
+- `idType`: `'thread' | 'message' | 'run' | 'step' | 'generic'`
+- `source?`: `'agent' | 'workflow' | 'memory'`
+- `entityId?`: ID of the requesting agent/workflow/memory entity
+- `threadId?`: Thread ID when relevant (for example, when creating message IDs)
+- `resourceId?`: Resource ID when relevant (for example, user-scoped threads)
+- `role?`: Message role when creating a message ID
+- `stepType?`: Workflow step type when creating a step ID
 
 :::warning
 
@@ -119,7 +129,17 @@ import { Mastra } from '@mastra/core'
 import { nanoid } from 'nanoid'
 
 export const mastra = new Mastra({
-  idGenerator: () => nanoid(),
+  idGenerator: context => {
+    if (context?.idType === 'message' && context?.threadId) {
+      return `msg-${context.threadId}-${nanoid(8)}`
+    }
+
+    if (context?.idType === 'run' && context?.source && context?.entityId) {
+      return `${context.source}-run-${context.entityId}-${nanoid(6)}`
+    }
+
+    return nanoid()
+  },
 })
 ```
 

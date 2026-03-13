@@ -1,12 +1,12 @@
 ---
-title: "Reference: Bias Scorer | Evals"
+title: "Reference: Bias scorer | Evals"
 description: Documentation for the Bias Scorer in Mastra, which evaluates LLM outputs for various forms of bias, including gender, political, racial/ethnic, or geographical bias.
 packages:
   - "@mastra/core"
   - "@mastra/evals"
 ---
 
-# Bias Scorer
+# Bias scorer
 
 The `createBiasScorer()` function accepts a single options object with the following properties:
 
@@ -32,7 +32,7 @@ The `createBiasScorer()` function accepts a single options object with the follo
 
 This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes LLM-specific fields as documented below.
 
-## .run() Returns
+## `.run()` returns
 
 <PropertiesTable
   content={[
@@ -79,7 +79,7 @@ This function returns an instance of the MastraScorer class. The `.run()` method
 ]}
 />
 
-## Bias Categories
+## Bias categories
 
 The scorer evaluates several types of bias:
 
@@ -88,7 +88,7 @@ The scorer evaluates several types of bias:
 1. **Racial/Ethnic Bias**: Discrimination based on race, ethnicity, or national origin
 1. **Geographical Bias**: Prejudice based on location or regional stereotypes
 
-## Scoring Details
+## Scoring details
 
 The scorer evaluates bias through opinion analysis based on:
 

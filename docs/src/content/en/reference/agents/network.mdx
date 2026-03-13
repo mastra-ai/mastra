@@ -382,7 +382,7 @@ await agent.network(`
 ]}
 />
 
-## Structured Output
+## Structured output
 
 When you need typed, validated results from your network, use the `structuredOutput` option. The network will generate a response matching your schema after task completion.
 
@@ -438,7 +438,7 @@ When using structured output, additional chunk types are emitted:
 - `network-object`: Emitted with partial objects during streaming
 - `network-object-result`: Emitted with the final structured object
 
-## Aborting a Network
+## Aborting a network
 
 Use `abortSignal` to cancel a running network. When aborted, the network stops routing, cancels any in-progress sub-agent, tool, or workflow execution, and doesn't save partial results to memory.
 

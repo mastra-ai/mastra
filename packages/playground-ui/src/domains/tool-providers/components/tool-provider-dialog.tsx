@@ -4,7 +4,7 @@ import { SideDialog } from '@/ds/components/SideDialog';
 import { Button } from '@/ds/components/Button';
 
 import { ToolkitList } from './toolkit-list';
-import { ToolList } from './tool-list';
+import { ProviderToolList } from './provider-tool-list';
 
 interface ToolProviderDialogProps {
   provider: { id: string; name: string; description?: string } | null;
@@ -90,7 +90,7 @@ export function ToolProviderDialog({ provider, onClose, selectedToolIds, onSubmi
 
         <div className="overflow-hidden">
           {provider && (
-            <ToolList
+            <ProviderToolList
               providerId={provider.id}
               toolkit={selectedToolkit}
               selectedIds={selectedIdSet}

@@ -1,11 +1,11 @@
 ---
-title: "Reference: Harness Class | Harness"
+title: "Reference: Harness class | Harness"
 description: "Documentation for the Harness class, the core orchestrator for multi-mode agents, shared state, memory, and storage in Mastra."
 packages:
   - "@mastra/core"
 ---
 
-# Harness Class
+# Harness class
 
 **Added in:** `@mastra/core@1.5.0`
 
@@ -247,7 +247,7 @@ await harness.sendMessage({ content: 'Hello!' })
   {
     name: 'idGenerator',
     type: '() => string',
-    description: 'Custom ID generator for threads, messages, and other entities.',
+    description: 'Custom ID generator for Harness-managed IDs such as threads and mode-run identifiers.',
     isOptional: true,
     defaultValue: 'timestamp + random string',
   },

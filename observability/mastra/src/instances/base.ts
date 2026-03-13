@@ -75,11 +75,14 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       serializationOptions: config.serializationOptions,
     };
 
-    // Initialize cardinality filter for metrics
-    this.cardinalityFilter = new CardinalityFilter();
+    // Initialize cardinality filter for metrics (uses user config or defaults)
+    this.cardinalityFilter = new CardinalityFilter(config.cardinality);
 
-    // Initialize the unified ObservabilityBus and register all exporters
-    this.observabilityBus = new ObservabilityBus();
+    // Initialize the unified ObservabilityBus with cardinality filter and auto-extracted metrics
+    this.observabilityBus = new ObservabilityBus({
+      cardinalityFilter: this.cardinalityFilter,
+    });
+
     for (const exporter of this.exporters) {
       this.observabilityBus.registerExporter(exporter);
     }
@@ -88,9 +91,6 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     if (this.config.bridge) {
       this.observabilityBus.registerBridge(this.config.bridge);
     }
-
-    // Enable auto-extracted metrics (TracingEvent → MetricEvent cross-emission)
-    this.observabilityBus.enableAutoExtractedMetrics(this.cardinalityFilter);
 
     // Initialize bridge if present
     if (this.config.bridge?.init) {
@@ -431,7 +431,6 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     return new MetricsContextImpl({
       labels: Object.keys(labels).length > 0 ? labels : undefined,
       observabilityBus: this.observabilityBus,
-      cardinalityFilter: this.cardinalityFilter,
     });
   }
 
@@ -619,6 +618,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   // Event-driven Export Methods
   // ============================================================================
 
+  /** Process a span through output processors and export it, returning undefined if filtered out. */
   getSpanForExport(span: AnySpan): AnyExportedSpan | undefined {
     if (!span.isValid) return undefined;
     if (span.isInternal && !this.config.includeInternalSpans) return undefined;
@@ -671,7 +671,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    *
    * The bus routes the event to each registered exporter's and bridge's
    * onTracingEvent handler and triggers auto-extracted metrics (e.g.,
-   * mastra_agent_runs_started, mastra_model_duration_ms).
+   * mastra_agent_duration_ms, mastra_model_duration_ms).
    */
   private emitTracingEvent(event: TracingEvent): void {
     this.observabilityBus.emit(event);

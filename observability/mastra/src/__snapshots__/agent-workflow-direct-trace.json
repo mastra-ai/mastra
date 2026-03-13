@@ -31,7 +31,9 @@
         },
         "input": "Execute the simpleWorkflow with test input",
         "output": {
-          "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+          "text": {
+            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+          },
           "files": []
         }
       },
@@ -88,7 +90,9 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+              "text": {
+                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+              },
               "warnings": []
             }
           },
@@ -116,6 +120,7 @@
                   "finishReason": "tool-calls"
                 },
                 "metadata": {
+                  "runId": "<runId-1>",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -155,6 +160,9 @@
                       "chunkType": "tool-call",
                       "sequenceNumber": 0
                     },
+                    "metadata": {
+                      "runId": "<runId-1>"
+                    },
                     "output": {
                       "toolName": "workflow-simpleWorkflow",
                       "toolCallId": "call-workflow-1",
@@ -182,6 +190,9 @@
                       "toolDescription": "Workflow: simpleWorkflow",
                       "toolType": "tool",
                       "success": true
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>"
                     },
                     "input": {
                       "inputData": {
@@ -237,6 +248,9 @@
                             "attributes": {
                               "status": "success"
                             },
+                            "metadata": {
+                              "runId": "<runId-2>"
+                            },
                             "input": {
                               "input": "test input"
                             },
@@ -266,6 +280,7 @@
                       "sequenceNumber": 1
                     },
                     "metadata": {
+                      "runId": "<runId-1>",
                       "toolCallId": "call-workflow-1",
                       "toolName": "workflow-simpleWorkflow"
                     },
@@ -302,6 +317,7 @@
                   "finishReason": "stop"
                 },
                 "metadata": {
+                  "runId": "<runId-1>",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -310,7 +326,9 @@
                 },
                 "input": {},
                 "output": {
-                  "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+                  "text": {
+                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                  },
                   "toolCalls": []
                 }
               },
@@ -331,8 +349,13 @@
                       "chunkType": "text",
                       "sequenceNumber": 0
                     },
+                    "metadata": {
+                      "runId": "<runId-1>"
+                    },
                     "output": {
-                      "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] }
+                      "text": {
+                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                      }
                     }
                   }
                 }

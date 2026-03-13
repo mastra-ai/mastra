@@ -162,6 +162,33 @@ async function processOutputStream<OUTPUT = undefined>({
       chunk.type !== 'text-start' &&
       runState.state.isReasoning
     ) {
+      // Flush reasoning deltas before clearing, same pattern as textDeltas above.
+      // Some providers (e.g., OpenAI-compatible reasoning models like kimi-k2.5, DeepSeek-R1)
+      // emit tool-input-start before reasoning-end (which arrives from flush()).
+      // Without this flush, reasoningDeltas are lost and reasoning_content becomes empty,
+      // causing 400 errors on subsequent turns that require reasoning_content echo-back.
+      // See: https://github.com/mastra-ai/mastra/issues/13635
+      if (runState.state.reasoningDeltas.length) {
+        const message: MastraDBMessage = {
+          id: messageId,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'reasoning' as const,
+                reasoning: '',
+                details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
+                providerMetadata: runState.state.providerOptions,
+              },
+            ],
+            ...buildResponseModelMetadata(runState),
+          },
+          createdAt: new Date(),
+        };
+        messageList.add(message, 'response');
+      }
+
       runState.setState({
         isReasoning: false,
         reasoningDeltas: [],
@@ -259,6 +286,11 @@ async function processOutputStream<OUTPUT = undefined>({
         break;
       }
 
+      case 'tool-call-input-streaming-end': {
+        safeEnqueue(controller, chunk);
+        break;
+      }
+
       case 'reasoning-start': {
         runState.setState({
           isReasoning: true,
@@ -305,6 +337,15 @@ async function processOutputStream<OUTPUT = undefined>({
       }
 
       case 'reasoning-end': {
+        // If reasoning was already flushed by the guard (e.g. tool-input-start arrived
+        // before reasoning-end from provider flush), skip the duplicate empty message.
+        // This only affects OpenAI-compatible providers; the native OpenAI Responses API
+        // sends reasoning-end in order, so the item_reference fix (#9005) is unaffected.
+        if (!runState.state.isReasoning) {
+          safeEnqueue(controller, chunk);
+          break;
+        }
+
         // Always store reasoning, even if empty - OpenAI requires item_reference for tool calls
         // See: https://github.com/mastra-ai/mastra/issues/9005
         const message: MastraDBMessage = {
@@ -442,6 +483,7 @@ async function processOutputStream<OUTPUT = undefined>({
         'tool-call',
         'tool-call-input-streaming-start',
         'tool-call-delta',
+        'tool-call-input-streaming-end',
         'raw',
       ].includes(chunk.type)
     ) {
@@ -1045,11 +1087,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       }
 
       /**
-       * Add tool calls to the message list
+       * Add tool calls to the message list.
+       * For PTC (programmatic tool calling from code execution), merge matching tool-result
+       * so providerExecuted tool calls include output for the tool-call-step.
        */
-
-      const toolCalls = outputStream._getImmediateToolCalls()?.map(chunk => {
-        return chunk.payload;
+      const toolResultChunks = outputStream._getImmediateToolResults() ?? [];
+      const toolCalls = (outputStream._getImmediateToolCalls() ?? []).map(chunk => {
+        const payload = { ...chunk.payload };
+        if (payload.providerExecuted) {
+          const match = toolResultChunks.find(t => t.payload.toolCallId === payload.toolCallId);
+          if (match) payload.output = match.payload.result;
+        }
+        return payload;
       });
 
       if (toolCalls.length > 0) {
@@ -1231,8 +1280,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       // isContinued should be true if:
       // - shouldRetry is true (processor requested retry)
+      // - OR there are non-provider-executed tool calls to process (some LLMs return finishReason 'stop' even with tool calls)
       // - OR finishReason indicates more work (e.g., tool-use)
-      const shouldContinue = shouldRetry || (!tripwireTriggered && !['stop', 'error', 'length'].includes(finishReason));
+      // Provider-executed tools (e.g. web_search) are handled server-side — the response already
+      // contains both the tool execution and the text output, so no additional loop iteration is needed.
+      const hasPendingToolCalls = toolCalls && toolCalls.some(tc => !tc.providerExecuted);
+      const shouldContinue =
+        shouldRetry ||
+        (!tripwireTriggered && (hasPendingToolCalls || !['stop', 'error', 'length'].includes(finishReason)));
 
       // Increment processor retry count if we're retrying
       const nextProcessorRetryCount = shouldRetry ? currentProcessorRetryCount + 1 : currentProcessorRetryCount;

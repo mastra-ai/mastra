@@ -2,7 +2,10 @@
 // Metric Type
 // ============================================================================
 
-/** Types of metrics */
+/**
+ * @deprecated MetricType is no longer stored. All metrics are raw events
+ * with aggregation determined at query time.
+ */
 export type MetricType = 'counter' | 'gauge' | 'histogram';
 
 // ============================================================================
@@ -11,22 +14,31 @@ export type MetricType = 'counter' | 'gauge' | 'histogram';
 
 /**
  * MetricsContext - API for emitting metrics.
- * Provides counter, gauge, and histogram metric types.
+ * Use `emit()` to record a metric observation.
  */
 export interface MetricsContext {
+  /** Emit a metric observation. */
+  emit(name: string, value: number, labels?: Record<string, string>): void;
+
+  /** @deprecated Use `emit()` instead. */
   counter(name: string): Counter;
+  /** @deprecated Use `emit()` instead. */
   gauge(name: string): Gauge;
+  /** @deprecated Use `emit()` instead. */
   histogram(name: string): Histogram;
 }
 
+/** @deprecated Use MetricsContext.emit() instead. */
 export interface Counter {
   add(value: number, additionalLabels?: Record<string, string>): void;
 }
 
+/** @deprecated Use MetricsContext.emit() instead. */
 export interface Gauge {
   set(value: number, additionalLabels?: Record<string, string>): void;
 }
 
+/** @deprecated Use MetricsContext.emit() instead. */
 export interface Histogram {
   record(value: number, additionalLabels?: Record<string, string>): void;
 }
@@ -52,9 +64,6 @@ export interface ExportedMetric {
 
   /** Metric name (e.g., mastra_agent_duration_ms) */
   name: string;
-
-  /** Type of metric */
-  metricType: MetricType;
 
   /** Metric value (single observation) */
   value: number;

@@ -1,5 +1,5 @@
 ---
-title: "Reference: Composite Storage | Storage"
+title: "Reference: Composite storage | Storage"
 description: Documentation for combining multiple storage backends in Mastra.
 packages:
   - "@mastra/clickhouse"
@@ -8,7 +8,7 @@ packages:
   - "@mastra/pg"
 ---
 
-# Composite Storage
+# Composite storage
 
 `MastraCompositeStore` can compose storage domains from different providers. Use it when you need different databases for different purposes. For example, use LibSQL for memory and PostgreSQL for workflows.
 
@@ -28,7 +28,7 @@ npm install @mastra/pg@latest @mastra/libsql@latest
 
 ## Storage domains
 
-Mastra organizes storage into five specialized domains, each handling a specific type of data. Each domain can be backed by a different storage adapter, and domain classes are exported from each storage package.
+Mastra organizes storage into domains, each handling a specific type of data. Each domain can be backed by a different storage adapter, and domain classes are exported from each storage package.
 
 | Domain | Description |
 | - | - |
@@ -37,6 +37,14 @@ Mastra organizes storage into five specialized domains, each handling a specific
 | `scores` | Evaluation results from Mastra's evals system. Scores and metrics are persisted here for analysis and comparison over time. |
 | `observability` | Telemetry data including traces and spans. Agent interactions, tool calls, and LLM requests generate spans collected into traces for debugging and performance analysis. |
 | `agents` | Agent configurations for stored agents. Enables agents to be defined and updated at runtime without code deployments. |
+| `datasets` | Evaluation datasets used for experiment runs. Stores dataset definitions, schemas, and versioned items. |
+| `experiments` | Experiment runs and per-item experiment results linked to datasets and targets. |
+
+:::note
+
+`MastraCompositeStore` accepts all of the domain keys above, but storage adapter support varies by package. You can mix adapters per domain, but only for domains implemented and exported by those adapters. For example, `memory: new MemoryLibSQL(...)` and `workflows: new WorkflowsPG(...)` is valid because both packages export those domain classes.
+
+:::
 
 ## Usage
 
@@ -106,47 +114,66 @@ export const mastra = new Mastra({
     isOptional: true,
   },
   {
-    name: 'domains',
-    type: 'object',
-    description:
-      'Individual domain overrides. Each domain can come from a different storage adapter. These take precedence over the default storage.',
-    isOptional: true,
-  },
-  {
-    name: 'domains.memory',
-    type: 'MemoryStorage',
-    description: 'Storage for threads, messages, and resources.',
-    isOptional: true,
-  },
-  {
-    name: 'domains.workflows',
-    type: 'WorkflowsStorage',
-    description: 'Storage for workflow snapshots.',
-    isOptional: true,
-  },
-  {
-    name: 'domains.scores',
-    type: 'ScoresStorage',
-    description: 'Storage for evaluation scores.',
-    isOptional: true,
-  },
-  {
-    name: 'domains.observability',
-    type: 'ObservabilityStorage',
-    description: 'Storage for traces and spans.',
-    isOptional: true,
-  },
-  {
-    name: 'domains.agents',
-    type: 'AgentsStorage',
-    description: 'Storage for stored agent configurations.',
-    isOptional: true,
-  },
-  {
     name: 'disableInit',
     type: 'boolean',
     description: 'When true, automatic initialization is disabled. You must call init() explicitly.',
     isOptional: true,
+  },
+  {
+    name: 'domains',
+    type: 'object',
+    description:
+      'Individual domain overrides. Each domain can come from a different storage adapter. These take precedence over both `editor` and `default` storage.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'memory',
+            type: 'MemoryStorage',
+            description: 'Storage for threads, messages, and resources.',
+            isOptional: true,
+          },
+          {
+            name: 'workflows',
+            type: 'WorkflowsStorage',
+            description: 'Storage for workflow snapshots.',
+            isOptional: true,
+          },
+          {
+            name: 'scores',
+            type: 'ScoresStorage',
+            description: 'Storage for evaluation scores.',
+            isOptional: true,
+          },
+          {
+            name: 'observability',
+            type: 'ObservabilityStorage',
+            description: 'Storage for traces and spans.',
+            isOptional: true,
+          },
+          {
+            name: 'agents',
+            type: 'AgentsStorage',
+            description: 'Storage for stored agent configurations.',
+            isOptional: true,
+          },
+          {
+            name: 'datasets',
+            type: 'DatasetsStorage',
+            description: 'Storage for dataset metadata, dataset items, and dataset versions.',
+            isOptional: true,
+          },
+          {
+            name: 'experiments',
+            type: 'ExperimentsStorage',
+            description: 'Storage for experiment runs and per-item experiment results.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
 ]}
 />

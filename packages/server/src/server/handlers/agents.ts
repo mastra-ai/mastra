@@ -43,7 +43,6 @@ import {
 } from '../schemas/agents';
 import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
 import { getAgentSkillResponseSchema } from '../schemas/workspace';
-import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
@@ -946,10 +945,7 @@ export const CLONE_AGENT_ROUTE = createRoute({
   },
 });
 
-export const GENERATE_AGENT_ROUTE: ServerRoute<
-  z.infer<typeof agentIdPathParams> & z.infer<typeof agentExecutionBodySchema>,
-  unknown
-> = createRoute({
+export const GENERATE_AGENT_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/generate',
   responseType: 'json',
@@ -1211,10 +1207,7 @@ export const GET_PROVIDERS_ROUTE = createRoute({
   },
 });
 
-export const GENERATE_AGENT_VNEXT_ROUTE: ServerRoute<
-  z.infer<typeof agentIdPathParams> & z.infer<typeof agentExecutionBodySchema>,
-  unknown
-> = createRoute({
+export const GENERATE_AGENT_VNEXT_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/generate/vnext',
   responseType: 'json',

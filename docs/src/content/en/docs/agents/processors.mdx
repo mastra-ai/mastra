@@ -167,7 +167,7 @@ This is useful for:
 - Filtering or modifying semantic recall content to prevent "prompt too long" errors
 - Dynamically adjusting system instructions based on the conversation
 
-### Per-step processing with processInputStep
+### Per-step processing with `processInputStep`
 
 While `processInput` runs once at the start of agent execution, `processInputStep` runs at **each step** of the agentic loop (including tool call continuations). This enables per-step configuration changes like dynamic model switching or tool choice modifications.
 
@@ -226,7 +226,7 @@ The method can return any combination of:
 - `modelSettings`: Modify model settings
 - `structuredOutput`: Modify structured output configuration
 
-#### Ensuring a final response with maxSteps
+#### Ensuring a final response with `maxSteps`
 
 When using `maxSteps` to limit agent execution, the agent may return an empty response if it attempts a tool call on the final step. Use `processInputStep` to force a text response on the last step:
 
@@ -290,7 +290,7 @@ const result = await agent.generate('Your prompt', { maxSteps: MAX_STEPS })
 
 This ensures that on the final allowed step (step 4 when `maxSteps` is 5, since steps are 0-indexed), the LLM generates a summary instead of attempting another tool call, and clearly indicates if the task is incomplete.
 
-#### Using prepareStep callback
+#### Using `prepareStep` callback
 
 For simpler per-step logic, you can use the `prepareStep` callback on `generate()` or `stream()` instead of creating a full processor:
 
@@ -331,7 +331,7 @@ The `processOutputStream` method receives all streaming chunks. To also receive 
 
 #### Accessing generation result data
 
-The `processOutputResult` method receives a `result` object containing the resolved generation data — the same information available in the `onFinish` callback. This makes it easy to access token usage, generated text, finish reason, and step details.
+The `processOutputResult` method receives a `result` object containing the resolved generation data — the same information available in the `onFinish` callback. This lets you access token usage, generated text, finish reason, and step details.
 
 ```typescript title="src/mastra/processors/usage-tracker.ts"
 import type { Processor } from '@mastra/core'
@@ -473,14 +473,14 @@ const response = await stream.response
 console.log(response.uiMessages)
 ```
 
-## Built-in Utility Processors
+## Built-in utility processors
 
 Mastra provides utility processors for common tasks:
 
 **For security and validation processors**, see the [Guardrails](/docs/agents/guardrails) page for input/output guardrails and moderation processors.
 **For memory-specific processors**, see the [Memory Processors](/docs/memory/memory-processors) page for processors that handle message history, semantic recall, and working memory.
 
-### TokenLimiter
+### `TokenLimiter`
 
 Prevents context window overflow by removing older messages when the total token count exceeds a specified limit.
 
@@ -514,7 +514,7 @@ const agent = new Agent({
 })
 ```
 
-### ToolCallFilter
+### `ToolCallFilter`
 
 Removes tool calls from messages sent to the LLM, saving tokens by excluding potentially verbose tool interactions.
 
@@ -544,7 +544,7 @@ The example above filters tool calls and limits tokens for the LLM, but these fi
 
 :::
 
-### ToolSearchProcessor
+### `ToolSearchProcessor`
 
 Enables dynamic tool discovery and loading for agents with large tool libraries. Instead of providing all tools upfront, the agent searches for tools by keyword and loads them on demand, reducing context token usage.
 
