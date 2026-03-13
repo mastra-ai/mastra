@@ -262,7 +262,7 @@ export interface HarnessOMConfig {
  * Tool category for permission grouping.
  * Consumers define how tool names map to categories via `toolCategoryResolver`.
  */
-export type ToolCategory = 'read' | 'edit' | 'execute' | 'mcp' | 'other';
+export type ToolCategory = 'read' | 'edit' | 'execute' | 'mcp' | 'browser' | 'other';
 
 /**
  * Permission policy for a tool or category.

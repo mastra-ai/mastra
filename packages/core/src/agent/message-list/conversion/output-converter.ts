@@ -167,7 +167,11 @@ export function sanitizeV5UIMessages(
             return {
               ...part,
               output:
-                typeof part.output === 'object' && part.output && 'value' in part.output
+                typeof part.output === 'object' &&
+                part.output &&
+                'value' in part.output &&
+                // Don't unwrap ToolResultOutput objects (e.g. { type: 'content', value: [...] })
+                !('type' in part.output)
                   ? part.output.value
                   : part.output,
             };

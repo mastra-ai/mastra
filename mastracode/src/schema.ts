@@ -21,6 +21,8 @@ export const stateSchema = z.object({
   thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh']).default('off'),
   // YOLO mode — auto-approve all tool calls
   yolo: z.boolean().default(false),
+  // Chrome browser automation — enabled via --chrome CLI flag
+  chromeEnabled: z.boolean().default(false),
   // Permission rules — per-category and per-tool approval policies
   permissionRules: z
     .object({

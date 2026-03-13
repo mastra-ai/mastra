@@ -542,6 +542,58 @@ function getBase64Size(base64: string): number {
   return Math.max(0, Math.floor((sanitized.length * 3) / 4) - padding);
 }
 
+/**
+ * Detect and extract media/image parts from a tool result for token counting.
+ * Handles two shapes:
+ *
+ * 1. AI SDK ToolResultOutput (from toModelOutput / modelOutput):
+ *    `{ type: 'content', value: [{ type: 'media', data, mediaType }, ...] }`
+ *
+ * 2. Raw MCP CallToolResult (from execute):
+ *    `{ content: [{ type: 'image', data, mimeType }, ...] }`
+ *
+ * Returns the media parts (for image token counting) and any concatenated text payload,
+ * or `undefined` if no images found.
+ */
+function extractToolResultMediaContent(
+  value: unknown,
+): { mediaParts: Array<{ data: string; mediaType: string }>; textPayload: string } | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const obj = value as Record<string, unknown>;
+
+  // Shape 1: AI SDK ToolResultOutput { type: 'content', value: [...] }
+  if (obj.type === 'content' && Array.isArray(obj.value)) {
+    const parts = obj.value as Array<Record<string, unknown>>;
+    const mediaParts: Array<{ data: string; mediaType: string }> = [];
+    const textPieces: string[] = [];
+    for (const p of parts) {
+      if (p.type === 'media' && typeof p.data === 'string' && typeof p.mediaType === 'string') {
+        mediaParts.push({ data: p.data, mediaType: p.mediaType });
+      } else if (p.type === 'text' && typeof p.text === 'string') {
+        textPieces.push(p.text);
+      }
+    }
+    if (mediaParts.length > 0) return { mediaParts, textPayload: textPieces.join('\n') };
+  }
+
+  // Shape 2: Raw MCP CallToolResult { content: [{ type: 'image', data, mimeType }, ...] }
+  if (Array.isArray(obj.content)) {
+    const parts = obj.content as Array<Record<string, unknown>>;
+    const mediaParts: Array<{ data: string; mediaType: string }> = [];
+    const textPieces: string[] = [];
+    for (const p of parts) {
+      if (p.type === 'image' && typeof p.data === 'string') {
+        mediaParts.push({ data: p.data, mediaType: (p.mimeType as string) || 'image/png' });
+      } else if (p.type === 'text' && typeof p.text === 'string') {
+        textPieces.push(p.text);
+      }
+    }
+    if (mediaParts.length > 0) return { mediaParts, textPayload: textPieces.join('\n') };
+  }
+
+  return undefined;
+}
+
 function resolveImageSourceStats(image: unknown): { source: 'url' | 'data-uri' | 'binary'; sizeBytes?: number } {
   if (image instanceof URL) {
     return { source: 'url' };
@@ -1474,7 +1526,28 @@ export class TokenCounter {
         );
 
         if (resultForCounting !== undefined) {
-          if (typeof resultForCounting === 'string') {
+          // Handle AI SDK ToolResultOutput with embedded media (e.g. MCP screenshot results).
+          // These arrive as { type: 'content', value: [{ type: 'media', data, mediaType }, ...] }.
+          // Count media parts as images via estimateImageAssetTokens instead of stringifying base64.
+          const mediaContent = extractToolResultMediaContent(resultForCounting);
+          if (mediaContent) {
+            for (const mediaPart of mediaContent.mediaParts) {
+              const estimate = this.estimateImageAssetTokens(part, mediaPart.data, 'image');
+              tokens += this.readOrPersistFixedPartEstimate(
+                part,
+                'tool-result-image',
+                estimate.cachePayload,
+                estimate.tokens,
+              );
+            }
+            if (mediaContent.textPayload) {
+              tokens += this.readOrPersistPartEstimate(
+                part,
+                usingStoredModelOutput ? 'tool-result-model-output' : 'tool-result',
+                mediaContent.textPayload,
+              );
+            }
+          } else if (typeof resultForCounting === 'string') {
             tokens += this.readOrPersistPartEstimate(
               part,
               usingStoredModelOutput ? 'tool-result-model-output' : 'tool-result',

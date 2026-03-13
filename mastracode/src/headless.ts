@@ -5,6 +5,13 @@ import { parseArgs } from 'node:util';
 
 import type { Harness, HarnessEvent } from '@mastra/core/harness';
 
+import {
+  parseChromeFlag,
+  findClaudeBinary,
+  runChromeDiagnostics,
+  buildChromeMcpConfig,
+  CHROME_MCP_SERVER_NAME,
+} from './chrome/index.js';
 // Imported from local modules
 import { setupDebugLogging } from './utils/debug-log.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
@@ -275,7 +282,27 @@ export async function headlessMain(): Promise<never> {
     process.exit(1);
   }
 
-  const result = await createMastraCode({ initialState: { yolo: true } });
+  // Chrome browser automation
+  const chromeFlag = parseChromeFlag();
+  let chromeEnabled = false;
+  let chromeMcpServers: Record<string, ReturnType<typeof buildChromeMcpConfig>> | undefined;
+
+  if (chromeFlag) {
+    const claudeBinary = findClaudeBinary();
+    if (claudeBinary) {
+      runChromeDiagnostics();
+      chromeMcpServers = { [CHROME_MCP_SERVER_NAME]: buildChromeMcpConfig(claudeBinary) };
+      chromeEnabled = true;
+      process.stderr.write(`Chrome: enabled (using ${claudeBinary})\n`);
+    } else {
+      process.stderr.write('Chrome: --chrome specified but `claude` CLI not found in PATH. Chrome integration disabled.\n');
+    }
+  }
+
+  const result = await createMastraCode({
+    initialState: { yolo: true, ...(chromeEnabled && { chromeEnabled: true }) },
+    ...(chromeMcpServers ? { mcpServers: chromeMcpServers } : {}),
+  });
   const { harness, mcpManager } = result;
 
   if (mcpManager?.hasServers()) {

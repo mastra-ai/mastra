@@ -774,4 +774,175 @@ describe('TokenCounter', () => {
       expect(counter.countObservations(text)).toBe(counter.countString(text));
     });
   });
+
+  describe('tool results with embedded media (ToolResultOutput { type: content })', () => {
+    // Simulates what convertMcpImageResult returns for a Chrome screenshot:
+    // { type: 'content', value: [{ type: 'media', data: '<base64>', mediaType: 'image/png' }] }
+    const LARGE_BASE64 = 'A'.repeat(100_000); // ~75KB image
+
+    function createToolResultWithMedia(mediaData: string, mediaType = 'image/png') {
+      return {
+        type: 'content',
+        value: [{ type: 'media', data: mediaData, mediaType }],
+      };
+    }
+
+    it('counts media in tool results as image tokens, not text tokens', () => {
+      const counter = new TokenCounter();
+
+      // Message with raw base64 stringified as JSON (the old broken behavior)
+      const rawStringified = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'screenshot',
+              result: { rawBase64: LARGE_BASE64 },
+            },
+          },
+        ],
+      });
+
+      // Message with ToolResultOutput containing media (the new format)
+      const withMedia = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'screenshot',
+              result: createToolResultWithMedia(LARGE_BASE64),
+            },
+          },
+        ],
+      });
+
+      const rawTokens = counter.countMessage(rawStringified);
+      const mediaTokens = counter.countMessage(withMedia);
+
+      // The media result should be MUCH smaller than the raw stringified result
+      // because the base64 data is counted as image tokens (~1000 tokens) not text (~25000+ tokens)
+      expect(mediaTokens).toBeLessThan(rawTokens / 2);
+    });
+
+    it('counts text parts alongside media parts in tool results', () => {
+      const counter = new TokenCounter();
+
+      const withMediaAndText = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'screenshot',
+              result: {
+                type: 'content',
+                value: [
+                  { type: 'text', text: 'Screenshot captured successfully' },
+                  { type: 'media', data: LARGE_BASE64, mediaType: 'image/png' },
+                ],
+              },
+            },
+          },
+        ],
+      });
+
+      const tokens = counter.countMessage(withMediaAndText);
+      // Should include both image estimate and text tokens, but still be much less
+      // than if the base64 were stringified as JSON text
+      const textOnlyTokens = counter.countString('Screenshot captured successfully');
+      expect(tokens).toBeGreaterThan(textOnlyTokens);
+      // And still way less than stringifying 100K of base64
+      expect(tokens).toBeLessThan(counter.countString(LARGE_BASE64));
+    });
+
+    it('falls through to normal JSON counting for non-media content results', () => {
+      const counter = new TokenCounter();
+
+      // A { type: 'content', value: [...] } with only text parts (no media) should
+      // fall through to the normal JSON.stringify path
+      const textOnlyContent = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'search',
+              result: { type: 'content', value: [{ type: 'text', text: 'just text' }] },
+            },
+          },
+        ],
+      });
+
+      const tokens = counter.countMessage(textOnlyContent);
+      // Should still count something reasonable (via JSON.stringify fallback)
+      expect(tokens).toBeGreaterThan(0);
+    });
+
+    it('handles modelOutput with media via providerMetadata', () => {
+      const counter = new TokenCounter();
+
+      // Simulates a tool that used toModelOutput to convert result to media content
+      const withModelOutputMedia = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'screenshot',
+              result: { rawData: 'original-result' },
+            },
+            providerMetadata: {
+              mastra: {
+                modelOutput: createToolResultWithMedia(LARGE_BASE64),
+              },
+            },
+          },
+        ],
+      });
+
+      const tokens = counter.countMessage(withModelOutputMedia);
+      // Should use the modelOutput (which has media), not the raw result
+      // and count it as image tokens
+      expect(tokens).toBeLessThan(counter.countString(LARGE_BASE64));
+    });
+
+    it('counts raw MCP CallToolResult with image content as image tokens', () => {
+      const counter = new TokenCounter();
+
+      // Raw MCP CallToolResult shape: { content: [{ type: 'image', data, mimeType }] }
+      const mcpImageResult = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'screenshot',
+              result: {
+                content: [{ type: 'image', data: LARGE_BASE64, mimeType: 'image/png' }],
+                isError: false,
+              },
+            },
+          },
+        ],
+      });
+
+      const tokens = counter.countMessage(mcpImageResult);
+      // Image data should be counted as image tokens, not as stringified JSON
+      expect(tokens).toBeLessThan(counter.countString(LARGE_BASE64));
+    });
+  });
 });

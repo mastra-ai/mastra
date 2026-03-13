@@ -12,7 +12,7 @@ import { MC_TOOLS } from './tool-names.js';
 // Categories
 // ---------------------------------------------------------------------------
 
-export type ToolCategory = 'read' | 'edit' | 'execute' | 'mcp';
+export type ToolCategory = 'read' | 'edit' | 'execute' | 'mcp' | 'browser';
 
 export const TOOL_CATEGORIES: Record<ToolCategory, { label: string; description: string }> = {
   read: {
@@ -30,6 +30,10 @@ export const TOOL_CATEGORIES: Record<ToolCategory, { label: string; description:
   mcp: {
     label: 'MCP',
     description: 'External MCP server tools',
+  },
+  browser: {
+    label: 'Browser',
+    description: 'Chrome browser automation tools',
   },
 };
 
@@ -59,6 +63,9 @@ const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
   // ask_user, task_write, task_check, submit_plan, request_access
 };
 
+/** Prefix for Chrome browser automation tools from the claude-in-chrome MCP server. */
+export const CHROME_TOOL_PREFIX = 'claude-in-chrome_';
+
 // Tools that never need approval regardless of policy
 const ALWAYS_ALLOW_TOOLS = new Set(['ask_user', 'task_write', 'task_check', 'submit_plan', 'request_access']);
 
@@ -67,6 +74,7 @@ const ALWAYS_ALLOW_TOOLS = new Set(['ask_user', 'task_write', 'task_check', 'sub
  */
 export function getToolCategory(toolName: string): ToolCategory | null {
   if (ALWAYS_ALLOW_TOOLS.has(toolName)) return null;
+  if (toolName.startsWith(CHROME_TOOL_PREFIX)) return 'browser';
   return TOOL_CATEGORY_MAP[toolName] ?? 'mcp';
 }
 
@@ -98,6 +106,7 @@ export const DEFAULT_POLICIES: Record<ToolCategory, PermissionPolicy> = {
   edit: 'ask',
   execute: 'ask',
   mcp: 'ask',
+  browser: 'ask',
 };
 
 /** YOLO-mode policies — everything auto-allowed. */
@@ -106,6 +115,7 @@ export const YOLO_POLICIES: Record<ToolCategory, PermissionPolicy> = {
   edit: 'allow',
   execute: 'allow',
   mcp: 'allow',
+  browser: 'allow',
 };
 
 export function createDefaultRules(): PermissionRules {
