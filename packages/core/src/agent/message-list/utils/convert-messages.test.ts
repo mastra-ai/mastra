@@ -165,9 +165,6 @@ describe('convertMessages', () => {
   });
 
   describe('data-* parts preservation', () => {
-    // Test for issue #10936 and #10477: data-* parts should survive the round-trip
-    // Stream → Storage → UI conversion
-
     const mastraV2MessageWithDataParts: MastraDBMessage = {
       id: 'test-data-parts',
       role: 'assistant',
@@ -247,6 +244,42 @@ describe('convertMessages', () => {
       expect((fileRefPart as any).data).toEqual({
         fileId: 'file-123',
         fileName: 'document.pdf',
+      });
+    });
+
+    it('should preserve data-tool-call-suspended parts for HITL workflow resume', () => {
+      const suspendedMessage: MastraDBMessage = {
+        id: 'test-suspended',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Waiting for approval...' },
+            {
+              type: 'data-tool-call-suspended',
+              data: {
+                runId: 'run-abc-123',
+                toolCallId: 'tc-xyz-456',
+                suspendPayload: { question: 'Approve this action?' },
+                resumeSchema: { type: 'object', properties: { approved: { type: 'boolean' } } },
+              },
+            } as any,
+          ],
+          content: 'Waiting for approval...',
+        },
+      };
+
+      const result = convertMessages(suspendedMessage).to('AIV4.UI');
+
+      expect(result).toHaveLength(1);
+      const suspendedPart = result[0].parts.find((p: any) => p.type === 'data-tool-call-suspended');
+      expect(suspendedPart).toBeDefined();
+      expect((suspendedPart as any).data).toEqual({
+        runId: 'run-abc-123',
+        toolCallId: 'tc-xyz-456',
+        suspendPayload: { question: 'Approve this action?' },
+        resumeSchema: { type: 'object', properties: { approved: { type: 'boolean' } } },
       });
     });
 

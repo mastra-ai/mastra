@@ -19,12 +19,11 @@ import type {
 import { findToolCallArgs } from '../utils/provider-compat';
 
 /**
- * Separate data-* parts from V4-compatible parts.
- * Data parts (e.g. data-tool-call-suspended) are a Mastra extension not natively typed in AI SDK V4,
- * but they must survive the DB → UI round-trip so features like HITL workflow resumption work
- * after a page refresh. We keep them in the parts array alongside V4 parts.
+ * Cast Mastra parts (including data-* extensions) to the V4 UI parts type.
+ * Data-* parts (e.g. data-tool-call-suspended) are not natively typed in AI SDK V4,
+ * but must be preserved so features like HITL workflow resumption work after a page refresh.
  */
-function filterDataParts(parts: MastraMessagePart[]): UIMessageV4Part[] {
+function preserveExtendedParts(parts: MastraMessagePart[]): UIMessageV4Part[] {
   return parts as UIMessageV4Part[];
 }
 
@@ -158,8 +157,7 @@ export class AIV4Adapter {
       parts.push({ type: 'text', text: '' });
     }
 
-    // Filter out data-* parts when converting to UIMessageV4 (V4 doesn't support them)
-    const v4Parts = filterDataParts(parts);
+    const v4Parts = preserveExtendedParts(parts);
 
     if (m.role === `user`) {
       const uiMessage: UIMessageWithMetadata = {
