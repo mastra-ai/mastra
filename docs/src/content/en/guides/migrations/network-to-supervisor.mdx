@@ -1,15 +1,15 @@
 ---
-title: "Migration: .network() to supervisor pattern | Migration Guide"
-description: "Learn how to migrate from .network() to the supervisor pattern using .stream() and .generate() for better multi-agent coordination."
+title: "Migration: .network() to supervisor agents | Migration Guide"
+description: "Learn how to migrate from .network() to supervisor agents using .stream() and .generate() for better multi-agent coordination."
 ---
 
-# Migrate from `.network()` to supervisor pattern
+# Migrate from `.network()` to supervisor agents
 
-The supervisor pattern using `Agent.stream()` and `Agent.generate()` is the recommended approach for coordinating multiple agents, replacing the older `.network()` API. This guide walks you through each step of the migration.
+Supervisor agents using `Agent.stream()` and `Agent.generate()` are the recommended approach for coordinating multiple agents, replacing the older `.network()` API. This guide walks you through each step of the migration.
 
 :::warning[.network() Deprecation]
 
-`.network()` is deprecated and will be removed in a future release. While existing code will continue to work until then, no new features will be added to it. Migrate to the supervisor pattern as soon as possible.
+`.network()` is deprecated and will be removed in a future release. While existing code will continue to work until then, no new features will be added to it. Migrate to supervisor agents as soon as possible.
 
 :::
 
@@ -57,7 +57,7 @@ console.log(result.text)
 
 ## Write clear supervisor instructions
 
-With `.network()`, the routing agent relied on generic instructions and primitive descriptions to decide what to call. The supervisor pattern works the same way, but clear and specific instructions significantly improve delegation accuracy.
+With `.network()`, the routing agent relied on generic instructions and primitive descriptions to decide what to call. Supervisor agents work the same way, but clear and specific instructions significantly improve delegation accuracy.
 
 Your supervisor's `instructions` should specify what resources are available, when to use each one, how to coordinate them, and when the task is complete.
 
@@ -121,7 +121,7 @@ const writingAgent = new Agent({
 
 If you were handling specific `.network()` events, update them to use the standard stream chunk types:
 
-| `.network()` event | Supervisor pattern chunk |
+| `.network()` event | Supervisor agent chunk |
 | - | - |
 | `routing-agent-start` | `step-start` |
 | `routing-agent-end` | `step-finish` |
@@ -134,7 +134,7 @@ If you were handling specific `.network()` events, update them to use the standa
 
 ## Add delegation hooks
 
-The supervisor pattern lets you hook into the delegation lifecycle to monitor, modify, or reject delegations. These hooks can be configured in the agent's `defaultOptions` or passed per-call.
+Supervisor agents let you hook into the delegation lifecycle to monitor, modify, or reject delegations. These hooks can be configured in the agent's `defaultOptions` or passed per-call.
 
 `onDelegationStart` is called before the supervisor delegates to a subagent. You can modify the prompt, limit the subagent's steps, or reject the delegation entirely:
 

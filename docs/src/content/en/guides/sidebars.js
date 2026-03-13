@@ -158,11 +158,6 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'guide/research-coordinator',
-              label: 'Supervisor Pattern: Research Coordinator',
-            },
-            {
-              type: 'doc',
               id: 'guide/stock-agent',
               label: 'Tools: Stock Agent',
             },
@@ -188,7 +183,40 @@ const sidebars = {
             },
           ],
         },
-
+        {
+          type: 'category',
+          label: 'Multi-agent systems',
+          collapsed: false,
+          items: [
+            {
+              type: 'doc',
+              id: 'guide/research-coordinator',
+              label: 'Supervisor Agents: Research Coordinator',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Workspaces',
+          collapsed: false,
+          items: [
+            {
+              type: 'doc',
+              id: 'guide/dev-assistant',
+              label: 'Workspace: Dev Assistant',
+            },
+            {
+              type: 'doc',
+              id: 'guide/code-review-bot',
+              label: 'Skills: Code Review Bot',
+            },
+            {
+              type: 'doc',
+              id: 'guide/docs-manager',
+              label: 'Filesystem: Docs Manager',
+            },
+          ],
+        },
         {
           type: 'doc',
           id: 'guide/whatsapp-chat-bot',
@@ -198,21 +226,6 @@ const sidebars = {
           type: 'doc',
           id: 'guide/github-actions-pr-description',
           label: 'GitHub Actions: PR Description',
-        },
-        {
-          type: 'doc',
-          id: 'guide/code-review-bot',
-          label: 'Skills: Code Review Bot',
-        },
-        {
-          type: 'doc',
-          id: 'guide/docs-manager',
-          label: 'Filesystem: Docs Manager',
-        },
-        {
-          type: 'doc',
-          id: 'guide/dev-assistant',
-          label: 'Workspace: Dev Assistant',
         },
       ],
     },
@@ -325,7 +338,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'migrations/network-to-supervisor',
-          label: '.network() → Supervisor Pattern',
+          label: '.network() → Supervisor Agents',
         },
         {
           type: 'doc',

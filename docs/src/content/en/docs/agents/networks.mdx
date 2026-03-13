@@ -9,9 +9,9 @@ packages:
 
 # Agent networks
 
-:::warning[Deprecated — Use the supervisor pattern]
+:::warning[Deprecated — Use supervisor agents]
 
-Agent networks are deprecated and will be removed in a future major release. The [supervisor pattern](./supervisor-agents) using `agent.stream()` or `agent.generate()` is now the recommended approach. It provides the same multi-agent coordination with better control, a simpler API, and easier debugging.
+Agent networks are deprecated and will be removed in a future major release. [Supervisor agents](./supervisor-agents) using `agent.stream()` or `agent.generate()` are now the recommended approach. It provides the same multi-agent coordination with better control, a simpler API, and easier debugging.
 
 See the [migration guide](/guides/migrations/network-to-supervisor) to upgrade.
 
@@ -200,4 +200,4 @@ Requirements for automatic resumption:
 ## Related
 
 - [Supervisor agents](./supervisor-agents)
-- [Migration: `.network()` to supervisor pattern](/guides/migrations/network-to-supervisor)
+- [Migration: `.network()` to supervisor agents](/guides/migrations/network-to-supervisor)

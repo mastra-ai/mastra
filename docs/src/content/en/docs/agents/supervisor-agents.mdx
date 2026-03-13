@@ -1,6 +1,6 @@
 ---
 title: "Supervisor agents | Agents"
-description: Learn how to coordinate multiple agents using the supervisor pattern with delegation hooks, iteration monitoring, message filtering, and task completion scoring.
+description: Learn how to coordinate multiple agents with delegation hooks, iteration monitoring, message filtering, and task completion scoring.
 packages:
   - "@mastra/core"
   - "@mastra/memory"
@@ -210,7 +210,7 @@ Return `{ continue: true }` to keep iterating, or `{ continue: false }` to stop.
 
 ## Memory isolation
 
-The supervisor pattern implements memory isolation. Subagents receive the full conversation context for better decision-making, but only their specific delegation prompt and response are saved to their memory.
+Supervisor agents implement memory isolation. Subagents receive the full conversation context for better decision-making, but only their specific delegation prompt and response are saved to their memory.
 
 How it works:
 

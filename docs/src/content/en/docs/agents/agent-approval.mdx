@@ -404,9 +404,9 @@ For automatic tool resumption to work:
 
 Both approaches work with the same tool definitions. Automatic resumption triggers only when suspended tools exist in the message history and the user sends a new message on the same thread.
 
-## Tool approval: Supervisor pattern
+## Tool approval: Supervisor agents
 
-The [supervisor pattern](/docs/agents/supervisor-agents) lets a supervisor agent coordinate multiple subagents using `.stream()` or `.generate()`. The supervisor delegates tasks to subagents, which may use tools that require approval. When this happens, tool approvals properly propagate through the delegation chain — the approval request surfaces at the supervisor level where you can handle it, regardless of which subagent triggered it.
+A [supervisor agent](/docs/agents/supervisor-agents) coordinates multiple subagents using `.stream()` or `.generate()`. The supervisor delegates tasks to subagents, which may use tools that require approval. When this happens, tool approvals properly propagate through the delegation chain — the approval request surfaces at the supervisor level where you can handle it, regardless of which subagent triggered it.
 
 ### How it works
 
@@ -491,7 +491,7 @@ for await (const chunk of stream.fullStream) {
 }
 ```
 
-### Declining tool calls in supervisor pattern
+### Declining tool calls in supervisor agents
 
 Decline tool calls at the supervisor level by calling `declineToolCall`. The supervisor responds acknowledging the declined tool without executing it:
 
@@ -514,7 +514,7 @@ for await (const chunk of stream.fullStream) {
 }
 ```
 
-### Using `suspend()` in supervisor pattern
+### Using `suspend()` in supervisor agents
 
 Tools can also use [`suspend()`](#approval-using-suspend) to pause execution and return context to the user. This approach works through the supervisor delegation chain the same way `requireApproval` does — the suspension surfaces at the supervisor level:
 
@@ -545,7 +545,7 @@ const conditionalTool = createTool({
   },
 })
 
-// When using this tool through a subagent in supervisor pattern
+// When using this tool through a subagent in supervisor agents
 for await (const chunk of stream.fullStream) {
   if (chunk.type === 'tool-call-suspended') {
     console.log('Tool suspended:', chunk.payload.suspendPayload.message)
@@ -565,7 +565,7 @@ for await (const chunk of stream.fullStream) {
 
 ### Tool approval with `generate()`
 
-Tool approval propagation also works with `generate()` in supervisor pattern:
+Tool approval propagation also works with `generate()` in supervisor agents:
 
 ```typescript
 const output = await supervisorAgent.generate('Find user with ID 12345', {

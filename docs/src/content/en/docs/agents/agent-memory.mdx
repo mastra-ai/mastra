@@ -216,7 +216,7 @@ Because both calls use `resource: 'project-42'`, the writer can access the resea
 
 :::note
 
-In the supervisor pattern, subagent resource IDs are always suffixed with the agent name (`{parentResourceId}-{agentName}`). Two different subagents under the same supervisor do not share a resource ID by default. To share memory between supervised subagents, call them directly with matching `resource` values outside the delegation flow.
+With supervisor agents, subagent resource IDs are always suffixed with the agent name (`{parentResourceId}-{agentName}`). Two different subagents under the same supervisor do not share a resource ID by default. To share memory between supervised subagents, call them directly with matching `resource` values outside the delegation flow.
 
 :::
 
