@@ -1,5 +1,5 @@
 ---
-title: "Reference: MongoDB Storage | Storage"
+title: "Reference: MongoDB storage | Storage"
 description: Documentation for the MongoDB storage implementation in Mastra.
 packages:
   - "@mastra/core"
@@ -7,7 +7,7 @@ packages:
   - "@mastra/mongodb"
 ---
 
-# MongoDB Storage
+# MongoDB storage
 
 The MongoDB storage implementation provides a scalable storage solution using MongoDB databases with support for both document storage and vector operations.
 
@@ -35,39 +35,36 @@ const storage = new MongoDBStore({
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Unique identifier for this storage instance.",
-isOptional: false,
-},
-{
-name: "uri",
-type: "string",
-description:
-"MongoDB connection string (e.g., mongodb+srv://user:password@cluster.mongodb.net)",
-isOptional: false,
-},
-{
-name: "url",
-type: "string",
-description:
-"Deprecated. Use uri instead. MongoDB connection string (supported for backward compatibility).",
-isOptional: true,
-},
-{
-name: "dbName",
-type: "string",
-description: "The name of the database you want the storage to use.",
-isOptional: false,
-},
-{
-name: "options",
-type: "MongoClientOptions",
-description:
-"MongoDB client options for advanced configuration (SSL, connection pooling, etc.).",
-isOptional: true,
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this storage instance.',
+    isOptional: false,
+  },
+  {
+    name: 'uri',
+    type: 'string',
+    description: 'MongoDB connection string (e.g., mongodb+srv://user:password@cluster.mongodb.net)',
+    isOptional: false,
+  },
+  {
+    name: 'url',
+    type: 'string',
+    description: 'Deprecated. Use uri instead. MongoDB connection string (supported for backward compatibility).',
+    isOptional: true,
+  },
+  {
+    name: 'dbName',
+    type: 'string',
+    description: 'The name of the database you want the storage to use.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'MongoClientOptions',
+    description: 'MongoDB client options for advanced configuration (SSL, connection pooling, etc.).',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -75,7 +72,7 @@ isOptional: true,
 The `url` parameter is deprecated but still supported for backward compatibility. Please use `uri` instead in all new code.
 :::
 
-## Constructor Examples
+## Constructor examples
 
 You can instantiate `MongoDBStore` in the following ways:
 
@@ -103,7 +100,7 @@ const store2 = new MongoDBStore({
 })
 ```
 
-## Additional Notes
+## Additional notes
 
 ### Collection Management
 
@@ -156,10 +153,10 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 ```
 
 :::warning
-If `init()` is not called, collections won't be created and storage operations will fail silently or throw errors.
+If `init()` isn't called, collections won't be created and storage operations will fail silently or throw errors.
 :::
 
-## Vector Search Capabilities
+## Vector search capabilities
 
 MongoDB storage includes built-in vector search capabilities for AI applications:
 
@@ -211,7 +208,7 @@ const results = await vectorStore.query({
 });
 ```
 
-## Usage Example
+## Usage example
 
 ### Adding memory to an agent
 

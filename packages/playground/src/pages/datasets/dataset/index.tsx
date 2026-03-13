@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router';
 import {
   MainContentLayout,
   MainContentContent,
@@ -15,10 +13,13 @@ import {
   Crumb,
   Icon,
   DatasetCombobox,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import type { DatasetVersion } from '@mastra/playground-ui';
-import { Link } from 'react-router';
 import { Database, Play } from 'lucide-react';
+import { useState } from 'react';
+import { useParams, useNavigate, Link } from 'react-router';
 
 function DatasetPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -34,7 +35,7 @@ function DatasetPage() {
   const [activeVersion, setActiveVersion] = useState<number | null>(null);
 
   // Fetch dataset for edit dialog
-  const { data: dataset } = useDataset(datasetId ?? '');
+  const { data: dataset, error } = useDataset(datasetId ?? '');
 
   if (!datasetId) {
     return (
@@ -46,13 +47,23 @@ function DatasetPage() {
     );
   }
 
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="datasets" />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
   const handleExperimentSuccess = (experimentId: string) => {
-    navigate(`/datasets/${datasetId}/experiments/${experimentId}`);
+    void navigate(`/datasets/${datasetId}/experiments/${experimentId}`);
   };
 
   const handleDeleteSuccess = () => {
     // Navigate back to datasets list
-    navigate('/datasets');
+    void navigate('/datasets');
   };
 
   // Version selection handler for contextual run button
@@ -75,6 +86,7 @@ function DatasetPage() {
           </Crumb>
         </Breadcrumb>
       </Header>
+
       <MainContentContent className="content-stretch">
         <DatasetPageContent
           datasetId={datasetId}
@@ -84,7 +96,7 @@ function DatasetPage() {
           activeDatasetVersion={activeVersion}
           onVersionSelect={handleVersionSelect}
           experimentTriggerSlot={
-            <Button variant="cta" size="default" onClick={() => setExperimentDialogOpen(true)}>
+            <Button variant="primary" onClick={() => setExperimentDialogOpen(true)}>
               <Play />
               {activeVersion != null ? `Run on v${activeVersion}` : 'Run Experiment'}
             </Button>

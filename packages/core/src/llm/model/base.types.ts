@@ -18,7 +18,7 @@ import type {
   DeepPartial,
 } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
+import type { ZodSchema } from 'zod/v3';
 import type { MessageList } from '../../agent/types';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
 import type { ObservabilityContext, TracingProperties } from '../../observability';
@@ -74,7 +74,7 @@ type GenerateTextOptions<Tools extends ToolSet, Output extends ZodSchema | JSONS
   MastraCustomLLMOptionsKeys | 'model' | 'onStepFinish'
 > &
   MastraCustomLLMOptions & {
-    onStepFinish?: GenerateTextOnStepFinishCallback<inferOutput<Output>>;
+    onStepFinish?: GenerateTextOnStepFinishCallback<Tools>;
     experimental_output?: Output;
   };
 
@@ -138,8 +138,8 @@ type StreamTextOptions<Tools extends ToolSet, Output extends ZodSchema | JSONSch
   MastraCustomLLMOptionsKeys | 'model' | 'onStepFinish' | 'onFinish'
 > &
   MastraCustomLLMOptions & {
-    onStepFinish?: StreamTextOnStepFinishCallback<inferOutput<Output>>;
-    onFinish?: StreamTextOnFinishCallback<inferOutput<Output>>;
+    onStepFinish?: StreamTextOnStepFinishCallback<Tools>;
+    onFinish?: StreamTextOnFinishCallback<Tools>;
     experimental_output?: Output;
   };
 

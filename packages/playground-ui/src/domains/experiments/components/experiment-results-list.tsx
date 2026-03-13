@@ -1,4 +1,4 @@
-import { DatasetExperimentResult } from '@mastra/client-js';
+import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
 import { ItemList } from '@/ds/components/ItemList';
 
 export type ExperimentResultsListProps = {
@@ -7,11 +7,15 @@ export type ExperimentResultsListProps = {
   featuredResultId: string | null;
   onResultClick: (resultId: string) => void;
   columns: { name: string; label: string; size: string }[];
+  scoresByItemId?: Record<string, ClientScoreRowData[]>;
+  scorerIds?: string[];
+  setEndOfListElement?: (element: HTMLDivElement | null) => void;
+  isFetchingNextPage?: boolean;
+  hasNextPage?: boolean;
 };
 
 /**
  * List component for experiment results - controlled by parent for selection state.
- * Used by ExperimentResultsListAndDetails.
  */
 export function ExperimentResultsList({
   results,
@@ -19,6 +23,11 @@ export function ExperimentResultsList({
   featuredResultId,
   onResultClick,
   columns,
+  scoresByItemId,
+  scorerIds,
+  setEndOfListElement,
+  isFetchingNextPage,
+  hasNextPage,
 }: ExperimentResultsListProps) {
   if (isLoading) {
     return <ExperimentResultsListSkeleton columns={columns} />;
@@ -59,16 +68,27 @@ export function ExperimentResultsList({
                       {truncate(formatValue(result.input), 200)}
                     </ItemList.TextCell>
                   )}
-                  {columns.some(col => col.name === 'output') && (
-                    <ItemList.TextCell className="font-mono">
-                      {truncate(formatValue(result.output), 200)}
-                    </ItemList.TextCell>
-                  )}
+                  {scorerIds?.map(scorerId => {
+                    const scores = scoresByItemId?.[result.itemId];
+                    const score = scores?.find(s => s.scorerId === scorerId);
+                    return (
+                      <ItemList.TextCell key={scorerId} className="font-mono text-center">
+                        {score != null ? score.score.toFixed(3) : '-'}
+                      </ItemList.TextCell>
+                    );
+                  })}
                 </ItemList.RowButton>
               </ItemList.Row>
             );
           })}
         </ItemList.Items>
+        <ItemList.NextPageLoading
+          setEndOfListElement={setEndOfListElement}
+          isLoading={isFetchingNextPage}
+          hasMore={hasNextPage}
+          loadingText="Loading more results..."
+          noMoreDataText="All results loaded"
+        />
       </ItemList.Scroller>
     </ItemList>
   );
@@ -88,9 +108,7 @@ function ExperimentResultsListSkeleton({ columns }: { columns: { name: string; l
           <ItemList.Row key={index}>
             <ItemList.RowButton columns={columns}>
               {columns.map((_, colIndex) => (
-                <ItemList.TextCell key={colIndex} isLoading>
-                  Loading...
-                </ItemList.TextCell>
+                <ItemList.TextCell key={colIndex}>Loading...</ItemList.TextCell>
               ))}
             </ItemList.RowButton>
           </ItemList.Row>

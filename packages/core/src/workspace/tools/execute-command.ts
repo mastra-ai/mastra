@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
@@ -13,7 +13,7 @@ export const executeCommandInputSchema = z.object({
   command: z
     .string()
     .describe('The shell command to execute (e.g., "npm install", "ls -la src/", "cat file.txt | grep error")'),
-  timeout: z.number().nullish().describe('Maximum execution time in milliseconds. Example: 60000 for 1 minute.'),
+  timeout: z.number().nullish().describe('Maximum execution time in seconds. Example: 60 for 1 minute.'),
   cwd: z.string().nullish().describe('Working directory for the command'),
   tail: z
     .number()
@@ -58,7 +58,8 @@ function extractTailPipe(command: string): { command: string; tail?: number } {
 
 /** Shared execute function used by both foreground-only and background-capable tool variants. */
 async function executeCommand(input: Record<string, any>, context: any) {
-  let { command, timeout, cwd, tail } = input;
+  let { command, cwd, tail } = input;
+  const timeout = input.timeout != null ? (input.timeout as number) * 1000 : undefined;
   const background = input.background as boolean | undefined;
   const { workspace, sandbox } = requireSandbox(context);
 
@@ -139,6 +140,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
         await context?.writer?.custom({
           type: 'data-sandbox-stdout',
           data: { output: data, timestamp: Date.now(), toolCallId },
+          transient: true,
         });
       },
       onStderr: async (data: string) => {
@@ -146,6 +148,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
         await context?.writer?.custom({
           type: 'data-sandbox-stderr',
           data: { output: data, timestamp: Date.now(), toolCallId },
+          transient: true,
         });
       },
     });
@@ -201,7 +204,7 @@ Examples:
 Usage:
 - Commands run in a shell, so pipes, redirects, and chaining (&&, ||, ;) all work.
 - Always quote file paths that contain spaces (e.g., cd "/path/with spaces").
-- Use the timeout parameter to limit execution time. Behavior when omitted depends on the sandbox provider.
+- Use the timeout parameter (in seconds) to limit execution time. Behavior when omitted depends on the sandbox provider.
 - Optionally use cwd to override the working directory. Commands run from the sandbox default if omitted.`;
 
 /** Foreground-only tool (no background param in schema). */

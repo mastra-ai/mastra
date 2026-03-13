@@ -1,13 +1,4 @@
-import {
-  useTemplateRepo,
-  useTemplateRepoEnvVars,
-  useStreamTemplateInstall,
-  useCreateTemplateInstallRun,
-  useAgentBuilderWorkflow,
-  useGetTemplateInstallRun,
-  useObserveStreamTemplateInstall,
-} from '@/hooks/use-templates';
-import { cn } from '@/lib/utils';
+import { version } from '@mastra/core/package.json';
 import {
   Breadcrumb,
   Crumb,
@@ -22,10 +13,19 @@ import {
   TemplateFailure,
   Icon,
 } from '@mastra/playground-ui';
-import { Link, useParams, useSearchParams } from 'react-router';
-import { useEffect, useState } from 'react';
 import { BrainIcon, PackageIcon, TagIcon, WorkflowIcon } from 'lucide-react';
-import { version } from '@mastra/core/package.json';
+import { useEffect, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router';
+import {
+  useTemplateRepo,
+  useTemplateRepoEnvVars,
+  useStreamTemplateInstall,
+  useCreateTemplateInstallRun,
+  useAgentBuilderWorkflow,
+  useGetTemplateInstallRun,
+  useObserveStreamTemplateInstall,
+} from '@/hooks/use-templates';
+import { cn } from '@/lib/utils';
 
 export default function Template() {
   const { templateSlug } = useParams()! as { templateSlug: string };
@@ -59,7 +59,7 @@ export default function Template() {
   // Fetch agent builder workflow info for step pre-population
   const { data: workflowInfo, isLoading: isLoadingWorkflow } = useAgentBuilderWorkflow();
   const { mutateAsync: createTemplateInstallRun, isPending: isCreatingRun } = useCreateTemplateInstallRun();
-  const { mutateAsync: getTemplateInstallRun, isPending: isGettingRun } = useGetTemplateInstallRun();
+  const { mutateAsync: getTemplateInstallRun } = useGetTemplateInstallRun();
   const { streamInstall, streamResult, isStreaming } = useStreamTemplateInstall(workflowInfo);
   const {
     observeInstall,
@@ -72,7 +72,7 @@ export default function Template() {
     const runId = searchParams.get('runId');
 
     if (runId && !success && !failure && !isStreaming && !isObserving) {
-      console.log('🔄 Checking completed run after hot reload:', { runId });
+      console.info('🔄 Checking completed run after hot reload:', { runId });
 
       setCurrentRunId(runId);
 
@@ -234,13 +234,14 @@ export default function Template() {
     }
   }, [templateEnvVars]);
 
-  // Monitor for workflow errors
+  // Monitor for workflow errors — only react to phase/error changes, not full object identity
   useEffect(() => {
     const result = streamResult || observeStreamResult;
 
     if (result?.phase === 'error' && result?.error) {
       setFailure(result.error);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streamResult?.phase, streamResult?.error, observeStreamResult?.phase, observeStreamResult?.error]);
 
   const handleProviderChange = (value: string) => {

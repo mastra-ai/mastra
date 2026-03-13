@@ -5,11 +5,15 @@
  * read and write tools to complete it. It can modify files, run commands,
  * and perform actual development work within a constrained scope.
  */
-import type { SubagentDefinition } from './types.js';
+import type { HarnessSubagent } from '@mastra/core/harness';
 
-export const executeSubagent: SubagentDefinition = {
+import { taskCheckTool, taskWriteTool } from '@mastra/core/harness';
+
+export const executeSubagent: HarnessSubagent = {
   id: 'execute',
   name: 'Execute',
+  description:
+    "Task execution with write capabilities. Use for 'implement feature X', 'fix bug Y', 'refactor module Z'.",
   instructions: `You are a focused execution agent. Your job is to complete a specific, well-defined task by making the necessary changes to the codebase.
 
 ## Rules
@@ -43,18 +47,8 @@ End with a structured summary:
 . **Changes**: Files modified/created
 . **Verification**: How you verified it works
 . **Notes**: Follow-up needed (if any)`,
-  allowedTools: [
-    // Read tools
-    'view',
-    'search_content',
-    'find_files',
-    // Write tools
-    'string_replace_lsp',
-    'write_file',
-    // Execution tool
-    'execute_command',
-    // Task tracking (built-in harness tools)
-    'task_write',
-    'task_check',
-  ],
+  tools: {
+    task_write: taskWriteTool,
+    task_check: taskCheckTool,
+  },
 };

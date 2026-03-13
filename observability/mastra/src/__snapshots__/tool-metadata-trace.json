@@ -29,7 +29,9 @@
         },
         "input": "Use metadata tool to process some data",
         "output": {
-          "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+          "text": {
+            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+          },
           "files": []
         }
       },
@@ -86,7 +88,9 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+              "text": {
+                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+              },
               "warnings": []
             }
           },
@@ -114,6 +118,7 @@
                   "finishReason": "tool-calls"
                 },
                 "metadata": {
+                  "runId": "<runId-1>",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -151,6 +156,9 @@
                       "chunkType": "tool-call",
                       "sequenceNumber": 0
                     },
+                    "metadata": {
+                      "runId": "<runId-1>"
+                    },
                     "output": {
                       "toolName": "metadataTool",
                       "toolCallId": "call-metadata-1",
@@ -178,6 +186,7 @@
                       "success": true
                     },
                     "metadata": {
+                      "runId": "<runId-1>",
                       "toolOperation": "metadata-processing",
                       "inputValue": "some data",
                       "customFlag": true,
@@ -208,6 +217,7 @@
                       "sequenceNumber": 1
                     },
                     "metadata": {
+                      "runId": "<runId-1>",
                       "toolCallId": "call-metadata-1",
                       "toolName": "metadataTool"
                     },
@@ -241,6 +251,7 @@
                   "finishReason": "stop"
                 },
                 "metadata": {
+                  "runId": "<runId-1>",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -249,7 +260,9 @@
                 },
                 "input": {},
                 "output": {
-                  "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+                  "text": {
+                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                  },
                   "toolCalls": []
                 }
               },
@@ -270,8 +283,13 @@
                       "chunkType": "text",
                       "sequenceNumber": 0
                     },
+                    "metadata": {
+                      "runId": "<runId-1>"
+                    },
                     "output": {
-                      "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] }
+                      "text": {
+                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                      }
                     }
                   }
                 }

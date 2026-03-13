@@ -1,15 +1,15 @@
 ---
-title: "Reference: Cloned Thread Utilities | Memory"
+title: "Reference: Cloned thread utilities | Memory"
 description: "Documentation for utility methods to work with cloned threads in Mastra Memory."
 packages:
   - "@mastra/memory"
 ---
 
-# Cloned Thread Utilities
+# Cloned thread utilities
 
 The Memory class provides utility methods for working with cloned threads. These methods help you check clone status, retrieve clone metadata, navigate clone relationships, and track clone history.
 
-## isClone()
+## `isClone()`
 
 Checks whether a thread is a clone of another thread.
 
@@ -23,12 +23,12 @@ const isClonedThread = memory.isClone(thread)
 
 <PropertiesTable
   content={[
-{
-name: "thread",
-type: "StorageThreadType",
-description: "The thread object to check.",
-isOptional: false,
-},
+  {
+    name: 'thread',
+    type: 'StorageThreadType',
+    description: 'The thread object to check.',
+    isOptional: false,
+  },
 ]}
 />
 
@@ -44,7 +44,7 @@ if (memory.isClone(thread)) {
 }
 ```
 
-## getCloneMetadata()
+## `getCloneMetadata()`
 
 Retrieves the clone metadata from a thread if it exists.
 
@@ -58,12 +58,12 @@ const metadata = memory.getCloneMetadata(thread)
 
 <PropertiesTable
   content={[
-{
-name: "thread",
-type: "StorageThreadType",
-description: "The thread object to extract clone metadata from.",
-isOptional: false,
-},
+  {
+    name: 'thread',
+    type: 'StorageThreadType',
+    description: 'The thread object to extract clone metadata from.',
+    isOptional: false,
+  },
 ]}
 />
 
@@ -79,7 +79,7 @@ if (cloneInfo) {
 }
 ```
 
-## getSourceThread()
+## `getSourceThread()`
 
 Retrieves the original source thread that a cloned thread was created from.
 
@@ -93,12 +93,12 @@ const sourceThread = await memory.getSourceThread(threadId)
 
 <PropertiesTable
   content={[
-{
-name: "threadId",
-type: "string",
-description: "The ID of the cloned thread.",
-isOptional: false,
-},
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'The ID of the cloned thread.',
+    isOptional: false,
+  },
 ]}
 />
 
@@ -113,7 +113,7 @@ if (sourceThread) {
 }
 ```
 
-## listClones()
+## `listClones()`
 
 Lists all threads that were cloned from a specific source thread.
 
@@ -127,12 +127,12 @@ const clones = await memory.listClones(sourceThreadId)
 
 <PropertiesTable
   content={[
-{
-name: "sourceThreadId",
-type: "string",
-description: "The ID of the source thread to find clones for.",
-isOptional: false,
-},
+  {
+    name: 'sourceThreadId',
+    type: 'string',
+    description: 'The ID of the source thread to find clones for.',
+    isOptional: false,
+  },
 ]}
 />
 
@@ -147,7 +147,7 @@ for (const clone of clones) {
 }
 ```
 
-## getCloneHistory()
+## `getCloneHistory()`
 
 Retrieves the full clone history chain for a thread, tracing back to the original.
 
@@ -161,12 +161,12 @@ const history = await memory.getCloneHistory(threadId)
 
 <PropertiesTable
   content={[
-{
-name: "threadId",
-type: "string",
-description: "The ID of the thread to get clone history for.",
-isOptional: false,
-},
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'The ID of the thread to get clone history for.',
+    isOptional: false,
+  },
 ]}
 />
 
@@ -188,7 +188,7 @@ for (let i = 0; i < history.length; i++) {
 }
 ```
 
-## Complete Example
+## Complete example
 
 ```typescript title="src/clone-management.ts"
 import { mastra } from './mastra'

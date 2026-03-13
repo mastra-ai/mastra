@@ -155,6 +155,7 @@ export class MemoryPG extends MemoryStorage {
           'isBufferingReflection',
           'lastBufferedAtTokens',
           'lastBufferedAtTime',
+          'metadata',
         ],
       });
     }
@@ -638,54 +639,102 @@ export class MemoryPG extends MemoryStorage {
    * issues on large tables (see GitHub issue #11150). The old approach required
    * scanning and sorting ALL messages in a thread to assign row numbers.
    *
-   * The new approach uses the existing (thread_id, createdAt) index to efficiently
-   * fetch only the messages needed by using createdAt as a cursor.
+   * The current approach uses two phases for optimal performance:
+   * 1. Batch-fetch all target messages' metadata (thread_id, createdAt) in one query
+   * 2. Build cursor subqueries using "createdAt" directly (not COALESCE) so that
+   *    the existing (thread_id, createdAt DESC) index can be used for index scans
+   *    instead of sequential scans. This fixes GitHub issue #11702 where semantic
+   *    recall latency scaled linearly with message count (~30s for 7.4k messages).
    */
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    return messages.sort((a, b) => {
+      const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+      const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+
+      if (aValue == null && bValue == null) return a.id.localeCompare(b.id);
+      if (aValue == null) return 1;
+      if (bValue == null) return -1;
+
+      if (aValue === bValue) {
+        return a.id.localeCompare(b.id);
+      }
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
+      return direction === 'ASC'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    });
+  }
+
   private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
     if (!include || include.length === 0) return null;
 
     const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
     const selectColumns = `id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
 
-    // Build a single efficient query that fetches context for all target messages
-    // For each target message, we fetch:
-    // 1. The target message itself plus any previous messages (createdAt <= target)
-    // 2. Any next messages after the target (createdAt > target)
-    // Each subquery is wrapped in parentheses to allow ORDER BY within UNION ALL
+    // Phase 1: Batch-fetch metadata for all target messages in a single query.
+    // This eliminates the correlated subselects that previously ran per-subquery.
+    const targetIds = include.map(inc => inc.id).filter(Boolean);
+    if (targetIds.length === 0) return null;
+
+    const idPlaceholders = targetIds.map((_, i) => '$' + (i + 1)).join(', ');
+    const targetRows = await this.#db.client.manyOrNone<{
+      id: string;
+      thread_id: string;
+      createdAt: Date | string;
+    }>(`SELECT id, thread_id, "createdAt" FROM ${tableName} WHERE id IN (${idPlaceholders})`, targetIds);
+
+    if (targetRows.length === 0) return null;
+
+    const targetMap = new Map(targetRows.map(r => [r.id, { threadId: r.thread_id, createdAt: r.createdAt }]));
+
+    // Phase 2: Build cursor subqueries using materialized constants from Phase 1.
+    // Uses "createdAt" directly instead of COALESCE("createdAtZ", "createdAt") so
+    // the (thread_id, createdAt DESC) composite index covers the query.
+    // createdAt and createdAtZ always store the same instant (createdAtZ is a TIMESTAMPTZ
+    // copy for timezone-correctness), so using createdAt for ordering is safe.
     const unionQueries: string[] = [];
     const params: any[] = [];
     let paramIdx = 1;
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
+      const target = targetMap.get(id);
+      if (!target) continue;
 
-      // Always fetch the target message, plus any requested previous messages
+      // Fetch the target message itself plus previous messages.
       // Uses createdAt <= target's createdAt, ordered DESC, limited to withPreviousMessages + 1
-      // The +1 ensures we always get the target message itself
+      const p1 = '$' + paramIdx;
+      const p2 = '$' + (paramIdx + 1);
+      const p3 = '$' + (paramIdx + 2);
       unionQueries.push(`(
         SELECT ${selectColumns}
         FROM ${tableName} m
-        WHERE m.thread_id = (SELECT thread_id FROM ${tableName} WHERE id = $${paramIdx})
-          AND COALESCE(m."createdAtZ", m."createdAt") <= (SELECT COALESCE("createdAtZ", "createdAt") FROM ${tableName} WHERE id = $${paramIdx})
-        ORDER BY COALESCE(m."createdAtZ", m."createdAt") DESC
-        LIMIT $${paramIdx + 1}
+        WHERE m.thread_id = ${p1}
+          AND m."createdAt" <= ${p2}
+        ORDER BY m."createdAt" DESC, m.id DESC
+        LIMIT ${p3}
       )`);
-      params.push(id, withPreviousMessages + 1); // +1 to include the target message itself
-      paramIdx += 2;
+      params.push(target.threadId, target.createdAt, withPreviousMessages + 1);
+      paramIdx += 3;
 
-      // Query for messages after the target (only if requested)
-      // Uses createdAt > target's createdAt, ordered ASC, limited to withNextMessages
+      // Fetch messages after the target (only if requested)
       if (withNextMessages > 0) {
+        const p4 = '$' + paramIdx;
+        const p5 = '$' + (paramIdx + 1);
+        const p6 = '$' + (paramIdx + 2);
         unionQueries.push(`(
           SELECT ${selectColumns}
           FROM ${tableName} m
-          WHERE m.thread_id = (SELECT thread_id FROM ${tableName} WHERE id = $${paramIdx})
-            AND COALESCE(m."createdAtZ", m."createdAt") > (SELECT COALESCE("createdAtZ", "createdAt") FROM ${tableName} WHERE id = $${paramIdx})
-          ORDER BY COALESCE(m."createdAtZ", m."createdAt") ASC
-          LIMIT $${paramIdx + 1}
+          WHERE m.thread_id = ${p4}
+            AND m."createdAt" > ${p5}
+          ORDER BY m."createdAt" ASC, m.id ASC
+          LIMIT ${p6}
         )`);
-        params.push(id, withNextMessages);
-        paramIdx += 2;
+        params.push(target.threadId, target.createdAt, withNextMessages);
+        paramIdx += 3;
       }
     }
 
@@ -700,7 +749,7 @@ export class MemoryPG extends MemoryStorage {
       finalQuery = unionQueries[0]!.slice(1, -1); // Remove ( and )
     } else {
       // Multiple queries - UNION ALL and sort the result
-      finalQuery = `SELECT * FROM (${unionQueries.join(' UNION ALL ')}) AS combined ORDER BY "createdAt" ASC`;
+      finalQuery = `SELECT * FROM (${unionQueries.join(' UNION ALL ')}) AS combined ORDER BY "createdAt" ASC, id ASC`;
     }
     const includedRows = await this.#db.client.manyOrNone(finalQuery, params);
 
@@ -834,6 +883,29 @@ export class MemoryPG extends MemoryStorage {
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
+      // When perPage is 0 and we have include targets, skip COUNT(*) and data queries.
+      // This is the semantic recall path where we only need the included messages.
+      if (perPage === 0 && include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        if (!includeMessages || includeMessages.length === 0) {
+          return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+        }
+        const messagesWithParsedContent = includeMessages.map(row => this.parseRow(row));
+        const list = new MessageList().add(messagesWithParsedContent, 'memory');
+        return {
+          messages: this._sortMessages(list.get.all.db(), field, direction),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       const countQuery = `SELECT COUNT(*) FROM ${tableName} ${whereClause}`;
       const countResult = await this.#db.client.one(countQuery, queryParams);
       const total = parseInt(countResult.count, 10);
@@ -869,27 +941,7 @@ export class MemoryPG extends MemoryStorage {
       const messagesWithParsedContent = messages.map(row => this.parseRow(row));
 
       const list = new MessageList().add(messagesWithParsedContent, 'memory');
-      let finalMessages = list.get.all.db();
-
-      finalMessages = finalMessages.sort((a, b) => {
-        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
-        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
-
-        if (aValue == null && bValue == null) return a.id.localeCompare(b.id);
-        if (aValue == null) return 1;
-        if (bValue == null) return -1;
-
-        if (aValue === bValue) {
-          return a.id.localeCompare(b.id);
-        }
-
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        }
-        return direction === 'ASC'
-          ? String(aValue).localeCompare(String(bValue))
-          : String(bValue).localeCompare(String(aValue));
-      });
+      const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
       const threadIdSet = new Set(threadIds);
       const returnedThreadMessageIds = new Set(
@@ -998,6 +1050,39 @@ export class MemoryPG extends MemoryStorage {
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
+      // Fast path: when perPage is 0 and include is provided, skip COUNT(*) and the
+      // main data query entirely. This is the semantic recall path where only included
+      // (vector-matched) messages are needed. Skipping the COUNT(*) avoids scanning
+      // the entire thread which was a major source of latency for large threads.
+      if (perPage === 0 && include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        if (!includeMessages || includeMessages.length === 0) {
+          return {
+            messages: [],
+            total: 0,
+            page,
+            perPage: perPageForResponse,
+            hasMore: false,
+          };
+        }
+
+        const messagesWithParsedContent = includeMessages.map(row => this.parseRow(row));
+        const list = new MessageList().add(messagesWithParsedContent, 'memory');
+
+        return {
+          messages: this._sortMessages(list.get.all.db(), field, direction),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       const countQuery = `SELECT COUNT(*) FROM ${tableName} ${whereClause}`;
       const countResult = await this.#db.client.one(countQuery, queryParams);
       const total = parseInt(countResult.count, 10);
@@ -1033,27 +1118,7 @@ export class MemoryPG extends MemoryStorage {
       const messagesWithParsedContent = messages.map(row => this.parseRow(row));
 
       const list = new MessageList().add(messagesWithParsedContent, 'memory');
-      let finalMessages = list.get.all.db();
-
-      finalMessages = finalMessages.sort((a, b) => {
-        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
-        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
-
-        if (aValue == null && bValue == null) return a.id.localeCompare(b.id);
-        if (aValue == null) return 1;
-        if (bValue == null) return -1;
-
-        if (aValue === bValue) {
-          return a.id.localeCompare(b.id);
-        }
-
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        }
-        return direction === 'ASC'
-          ? String(aValue).localeCompare(String(bValue))
-          : String(bValue).localeCompare(String(aValue));
-      });
+      const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
       const hasMore = perPageInput !== false && offset + perPage < total;
 
@@ -1573,10 +1638,12 @@ export class MemoryPG extends MemoryStorage {
 
         // Clone messages with new IDs
         const clonedMessages: MastraDBMessage[] = [];
+        const messageIdMap: Record<string, string> = {};
         const targetResourceId = resourceId || sourceThread.resourceId;
 
         for (const sourceMsg of sourceMessages) {
           const newMessageId = crypto.randomUUID();
+          messageIdMap[sourceMsg.id] = newMessageId;
           const normalizedMsg = this.normalizeMessageRow(sourceMsg);
           let parsedContent = normalizedMsg.content;
           try {
@@ -1614,6 +1681,7 @@ export class MemoryPG extends MemoryStorage {
         return {
           thread: newThread,
           clonedMessages,
+          messageIdMap,
         };
       });
     } catch (error) {
@@ -1840,6 +1908,79 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
+  async insertObservationalMemoryRecord(record: ObservationalMemoryRecord): Promise<void> {
+    try {
+      const lookupKey = this.getOMKey(record.threadId, record.resourceId);
+      const tableName = getTableName({
+        indexName: OM_TABLE,
+        schemaName: getSchemaName(this.#schema),
+      });
+      const lastObservedAtStr = record.lastObservedAt ? record.lastObservedAt.toISOString() : null;
+      const lastBufferedAtTimeStr = record.lastBufferedAtTime ? record.lastBufferedAtTime.toISOString() : null;
+      await this.#db.client.none(
+        `INSERT INTO ${tableName} (
+          id, "lookupKey", scope, "resourceId", "threadId",
+          "activeObservations", "activeObservationsPendingUpdate",
+          "originType", config, "generationCount", "lastObservedAt", "lastObservedAtZ", "lastReflectionAt", "lastReflectionAtZ",
+          "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
+          "observedMessageIds", "bufferedObservationChunks",
+          "bufferedReflection", "bufferedReflectionTokens", "bufferedReflectionInputTokens",
+          "reflectedObservationLineCount",
+          "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection",
+          "lastBufferedAtTokens", "lastBufferedAtTime",
+          "observedTimezone", metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)`,
+        [
+          record.id,
+          lookupKey,
+          record.scope,
+          record.resourceId,
+          record.threadId || null,
+          record.activeObservations || '',
+          null,
+          record.originType || 'initial',
+          record.config ? JSON.stringify(record.config) : null,
+          record.generationCount || 0,
+          lastObservedAtStr,
+          lastObservedAtStr,
+          null, // lastReflectionAt
+          null, // lastReflectionAtZ
+          record.pendingMessageTokens || 0,
+          record.totalTokensObserved || 0,
+          record.observationTokenCount || 0,
+          record.observedMessageIds ? JSON.stringify(record.observedMessageIds) : null,
+          record.bufferedObservationChunks ? JSON.stringify(record.bufferedObservationChunks) : null,
+          record.bufferedReflection || null,
+          record.bufferedReflectionTokens ?? null,
+          record.bufferedReflectionInputTokens ?? null,
+          record.reflectedObservationLineCount ?? null,
+          record.isObserving || false,
+          record.isReflecting || false,
+          record.isBufferingObservation || false,
+          record.isBufferingReflection || false,
+          record.lastBufferedAtTokens || 0,
+          lastBufferedAtTimeStr,
+          record.observedTimezone || null,
+          record.metadata ? JSON.stringify(record.metadata) : null,
+          record.createdAt.toISOString(),
+          record.createdAt.toISOString(),
+          record.updatedAt.toISOString(),
+          record.updatedAt.toISOString(),
+        ],
+      );
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'INSERT_OBSERVATIONAL_MEMORY_RECORD', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: record.id, threadId: record.threadId, resourceId: record.resourceId },
+        },
+        error,
+      );
+    }
+  }
+
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
     try {
       const now = new Date();
@@ -1945,8 +2086,8 @@ export class MemoryPG extends MemoryStorage {
           "originType", config, "generationCount", "lastObservedAt", "lastObservedAtZ", "lastReflectionAt", "lastReflectionAtZ",
           "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
           "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection", "lastBufferedAtTokens", "lastBufferedAtTime",
-          "observedTimezone", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)`,
+          "observedTimezone", metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)`,
         [
           id,
           lookupKey,
@@ -1972,6 +2113,7 @@ export class MemoryPG extends MemoryStorage {
           0, // lastBufferedAtTokens
           null, // lastBufferedAtTime
           record.observedTimezone || null,
+          record.metadata ? JSON.stringify(record.metadata) : null,
           nowStr, // createdAt
           nowStr, // createdAtZ
           nowStr, // updatedAt

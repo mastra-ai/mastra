@@ -1,11 +1,10 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../agent';
 import { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';
 import type { ChunkType } from '../stream/types';
-import { delay } from '../utils';
 import { createStep, createWorkflow } from '../workflows/workflow';
 import { createTool } from '.';
 
@@ -475,31 +474,50 @@ describe('ToolStream - writer.custom', () => {
       },
     });
 
-    // Create a mock model that will call the tool
+    // Create a mock model that calls the tool on first invocation, then just returns text
+    let callCount = 0;
     const mockModelWithTool = new MockLanguageModelV2({
-      doStream: async () => ({
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-          {
-            type: 'tool-call',
-            toolCallId: 'call-progress-1',
-            toolName: 'progressTool',
-            input: '{"taskName": "test-task"}',
-            providerExecuted: false,
-          },
-          { type: 'text-start', id: 'text-1' },
-          { type: 'text-delta', id: 'text-1', delta: 'Task completed.' },
-          { type: 'text-end', id: 'text-1' },
-          {
-            type: 'finish',
-            finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          },
-        ]),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-      }),
+      doStream: async () => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-progress-1',
+                toolName: 'progressTool',
+                input: '{"taskName": "test-task"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Task completed.' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
     });
 
     // Create agent with memory
@@ -535,29 +553,166 @@ describe('ToolStream - writer.custom', () => {
     const dataChunks = chunks.filter(chunk => chunk.type === 'data-progress');
     expect(dataChunks.length).toBe(2);
 
-    // Wait for debounced save to complete
-    await delay(200);
+    // Wait for debounced save to flush to storage
+    await vi.waitFor(async () => {
+      const recalledMessages = await mockMemory.recall({ threadId, resourceId });
+      const assistantMessages = recalledMessages.messages.filter(m => m.role === 'assistant');
+      expect(assistantMessages.length).toBeGreaterThan(0);
 
-    // Retrieve messages from storage
-    const recalledMessages = await mockMemory.recall({
-      threadId,
-      resourceId,
+      const hasDataParts = assistantMessages.some(m => {
+        const content = m.content;
+        if (typeof content === 'object' && 'parts' in content) {
+          return content.parts.some((p: any) => p.type === 'data-progress');
+        }
+        return false;
+      });
+      expect(hasDataParts).toBe(true);
+    });
+  });
+
+  it('should stream transient data-* chunks but not persist them to storage', async () => {
+    const mockMemory = new MockMemory();
+
+    // Create a tool that emits both transient and non-transient chunks
+    const mixedTool = createTool({
+      id: 'mixed-tool',
+      description: 'A tool that emits both transient and non-transient data chunks',
+      inputSchema: z.object({
+        taskName: z.string(),
+      }),
+      execute: async (inputData, context) => {
+        // Emit a transient chunk (should stream but NOT persist)
+        await context?.writer?.custom({
+          type: 'data-sandbox-stdout',
+          data: { output: 'streaming output line 1\n' },
+          transient: true,
+        });
+
+        // Emit another transient chunk
+        await context?.writer?.custom({
+          type: 'data-sandbox-stderr',
+          data: { output: 'error output\n' },
+          transient: true,
+        });
+
+        // Emit a non-transient chunk (should both stream AND persist)
+        await context?.writer?.custom({
+          type: 'data-sandbox-exit',
+          data: {
+            exitCode: 0,
+            success: true,
+            executionTimeMs: 123,
+          },
+        });
+
+        return { success: true, taskName: inputData.taskName };
+      },
     });
 
-    // Find assistant messages
-    const assistantMessages = recalledMessages.messages.filter(m => m.role === 'assistant');
-    expect(assistantMessages.length).toBeGreaterThan(0);
-
-    // Check if any assistant message contains data parts (stored as { type: 'data-progress', data: ... })
-    const hasDataParts = assistantMessages.some(m => {
-      const content = m.content;
-      if (typeof content === 'object' && 'parts' in content) {
-        return content.parts.some((p: any) => p.type === 'data-progress');
-      }
-      return false;
+    let mixedCallCount = 0;
+    const mockModelWithTool = new MockLanguageModelV2({
+      doStream: async () => {
+        mixedCallCount++;
+        if (mixedCallCount === 1) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-mixed-1',
+                toolName: 'mixedTool',
+                input: '{"taskName": "test-task"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Done.' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
     });
 
-    // data-* chunks should now be persisted to storage
-    expect(hasDataParts).toBe(true);
+    const agent = new Agent({
+      id: 'test-agent-transient',
+      name: 'Test Agent Transient',
+      instructions: 'You are a test agent.',
+      model: mockModelWithTool,
+      tools: {
+        mixedTool,
+      },
+      memory: mockMemory,
+    });
+
+    const threadId = 'test-thread-transient';
+    const resourceId = 'user-test-transient';
+
+    const stream = await agent.stream('Run the mixed tool', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    // Collect all stream chunks
+    const chunks: ChunkType<any>[] = [];
+    for await (const chunk of stream.fullStream) {
+      chunks.push(chunk);
+    }
+
+    // Verify ALL chunks (transient and non-transient) appear in the stream
+    const stdoutChunks = chunks.filter(chunk => chunk.type === 'data-sandbox-stdout');
+    const stderrChunks = chunks.filter(chunk => chunk.type === 'data-sandbox-stderr');
+    const exitChunks = chunks.filter(chunk => chunk.type === 'data-sandbox-exit');
+
+    expect(stdoutChunks.length).toBe(1);
+    expect(stderrChunks.length).toBe(1);
+    expect(exitChunks.length).toBe(1);
+
+    // Wait for debounced save to flush to storage
+    await vi.waitFor(async () => {
+      const recalledMessages = await mockMemory.recall({ threadId, resourceId });
+      const assistantMessages = recalledMessages.messages.filter(m => m.role === 'assistant');
+      expect(assistantMessages.length).toBeGreaterThan(0);
+
+      const allDataParts = assistantMessages.flatMap(m => {
+        const content = m.content;
+        if (typeof content === 'object' && 'parts' in content) {
+          return content.parts.filter((p: any) => typeof p.type === 'string' && p.type.startsWith('data-'));
+        }
+        return [];
+      });
+
+      // Non-transient exit chunk should be persisted
+      const exitParts = allDataParts.filter((p: any) => p.type === 'data-sandbox-exit');
+      expect(exitParts.length).toBe(1);
+
+      // Transient stdout/stderr chunks should NOT be persisted
+      const stdoutParts = allDataParts.filter((p: any) => p.type === 'data-sandbox-stdout');
+      const stderrParts = allDataParts.filter((p: any) => p.type === 'data-sandbox-stderr');
+      expect(stdoutParts.length).toBe(0);
+      expect(stderrParts.length).toBe(0);
+    });
   });
 });

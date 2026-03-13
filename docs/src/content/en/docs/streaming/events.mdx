@@ -1,11 +1,11 @@
 ---
-title: "Streaming Events | Streaming"
+title: "Streaming events | Streaming"
 description: "Learn about the different types of streaming events in Mastra, including text deltas, tool calls, step events, and how to handle them in your applications."
 packages:
   - "@mastra/core"
 ---
 
-# Streaming Events
+# Streaming events
 
 Streaming from agents or workflows provides real-time visibility into either the LLM’s output or the status of a workflow run. This feedback can be passed directly to the user, or used within applications to handle workflow status more effectively, creating a smoother and more responsive experience.
 
@@ -155,7 +155,7 @@ Each progress event includes:
 - **`id`**: The step ID of the foreach step
 - **`completedCount`**: Number of iterations completed so far
 - **`totalCount`**: Total number of iterations
-- **`currentIndex`**: Index of the iteration that just completed
+- **`currentIndex`**: Index of the iteration that completed
 - **`iterationStatus`**: Status of the iteration (`success`, `failed`, or `suspended`)
 - **`iterationOutput`**: Output of the iteration (when successful)
 

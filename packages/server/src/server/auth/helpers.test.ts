@@ -7,6 +7,7 @@ import {
   isCustomRoutePublic,
   isDevPlaygroundRequest,
   isProtectedCustomRoute,
+  isProtectedPath,
   matchesOrIncludes,
   pathMatchesPattern,
   pathMatchesRule,
@@ -305,6 +306,79 @@ describe('auth helpers', () => {
 
       expect(isProtectedCustomRoute('/custom/all', 'GET', config)).toBe(true);
       expect(isProtectedCustomRoute('/custom/all', 'POST', config)).toBe(true);
+    });
+  });
+
+  describe('isProtectedPath', () => {
+    describe('studio UI routes should be accessible for login in production', () => {
+      /**
+       * When auth is configured and MASTRA_DEV is not set (production), users must
+       * be able to access the studio UI to see the login page.
+       *
+       * The auth config says `protected: ['/api/*']` - only API routes should require auth.
+       * Routes outside /api/* (like /, /agents, /assets/*) should NOT require auth
+       * so the login page can load.
+       */
+
+      const authConfig: MastraAuthConfig = {
+        protected: ['/api/*'],
+        public: ['/api', '/api/auth/*'],
+      };
+
+      it('should NOT protect studio root path "/" so login page can load', () => {
+        // "/" is not under /api/*, so it should not be protected
+        expect(isProtectedPath('/', 'GET', authConfig)).toBe(false);
+      });
+
+      it('should NOT protect studio route "/agents"', () => {
+        // "/agents" is not under /api/*, so it should not be protected
+        expect(isProtectedPath('/agents', 'GET', authConfig)).toBe(false);
+      });
+
+      it('should NOT protect studio assets "/assets/index-abc123.js"', () => {
+        // Static assets are not under /api/*, so they should not be protected
+        expect(isProtectedPath('/assets/index-abc123.js', 'GET', authConfig)).toBe(false);
+      });
+
+      it('should NOT protect other non-API paths like "/login" or "/callback"', () => {
+        expect(isProtectedPath('/login', 'GET', authConfig)).toBe(false);
+        expect(isProtectedPath('/oauth/callback', 'GET', authConfig)).toBe(false);
+      });
+
+      it('SHOULD protect API routes under /api/*', () => {
+        expect(isProtectedPath('/api/agents', 'GET', authConfig)).toBe(true);
+        expect(isProtectedPath('/api/agents/123', 'GET', authConfig)).toBe(true);
+        expect(isProtectedPath('/api/memory/threads', 'POST', authConfig)).toBe(true);
+      });
+    });
+
+    it('should protect API routes', () => {
+      const authConfig: MastraAuthConfig = {
+        protected: ['/api/*'],
+      };
+      expect(isProtectedPath('/api/agents', 'GET', authConfig)).toBe(true);
+    });
+
+    it('should not protect routes when customRouteAuthConfig marks them as public', () => {
+      const authConfig: MastraAuthConfig = {
+        protected: ['/api/*'],
+      };
+      const customRouteAuthConfig = new Map<string, boolean>();
+      customRouteAuthConfig.set('GET:/webhook', false); // Public webhook
+
+      // Non-API route marked as public custom route
+      expect(isProtectedPath('/webhook', 'GET', authConfig, customRouteAuthConfig)).toBe(false);
+    });
+
+    it('should protect routes when customRouteAuthConfig marks them as protected', () => {
+      const authConfig: MastraAuthConfig = {
+        protected: ['/api/*'],
+      };
+      const customRouteAuthConfig = new Map<string, boolean>();
+      customRouteAuthConfig.set('GET:/custom/protected', true); // Protected custom route
+
+      // Non-API route explicitly marked as protected
+      expect(isProtectedPath('/custom/protected', 'GET', authConfig, customRouteAuthConfig)).toBe(true);
     });
   });
 

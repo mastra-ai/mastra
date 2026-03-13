@@ -543,6 +543,69 @@ describe('MongoDB Specific Tests', () => {
     });
   });
 
+  describe('MongoDB OM Regression: bufferedObservationChunks null handling', () => {
+    beforeEach(async () => {
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      await memoryStore?.dangerouslyClearAll();
+    });
+
+    it('should append buffered observation chunks when legacy docs store null and keep array shape after swap', async () => {
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+
+      const resourceId = `resource-om-regression-${Date.now()}`;
+      const record = await memoryStore!.initializeObservationalMemory({
+        threadId: null,
+        resourceId,
+        scope: 'resource',
+        config: {
+          observationThreshold: 5000,
+          reflectionThreshold: 40000,
+        },
+      });
+
+      const client = new MongoClient(TEST_CONFIG.uri!);
+      await client.connect();
+      try {
+        const omCollection = client.db(TEST_CONFIG.dbName).collection('mastra_observational_memory');
+
+        await omCollection.updateOne({ id: record.id }, { $set: { bufferedObservationChunks: null } });
+
+        await expect(
+          memoryStore!.updateBufferedObservations({
+            id: record.id,
+            chunk: {
+              cycleId: `cycle-${Date.now()}`,
+              observations: 'Buffered from regression test',
+              tokenCount: 100,
+              messageIds: [`msg-${Date.now()}`],
+              messageTokens: 200,
+              lastObservedAt: new Date(),
+            },
+          }),
+        ).resolves.not.toThrow();
+
+        const afterBuffer = await omCollection.findOne({ id: record.id });
+        expect(Array.isArray(afterBuffer?.bufferedObservationChunks)).toBe(true);
+        expect(afterBuffer?.bufferedObservationChunks).toHaveLength(1);
+
+        await memoryStore!.swapBufferedToActive({
+          id: record.id,
+          activationRatio: 1,
+          messageTokensThreshold: 1000,
+          currentPendingTokens: 200,
+        });
+
+        const afterSwap = await omCollection.findOne({ id: record.id });
+        expect(Array.isArray(afterSwap?.bufferedObservationChunks)).toBe(true);
+        expect(afterSwap?.bufferedObservationChunks).toEqual([]);
+      } finally {
+        await client.close();
+      }
+    });
+  });
+
   describe('MongoDB Span Operations with Complex Data', () => {
     beforeEach(async () => {
       const observabilityStore = await store.getStore('observability');

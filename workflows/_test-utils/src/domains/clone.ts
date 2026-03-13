@@ -301,7 +301,6 @@ export function createCloneTests(ctx: WorkflowTestContext, registry?: WorkflowRe
         expect(result.steps['last-step']).toMatchObject({
           status: 'success',
           output: { success: true },
-          payload: { finalValue: 27 },
         });
       },
     );

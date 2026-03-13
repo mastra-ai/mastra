@@ -352,7 +352,9 @@ export type SkippableTest =
   // Foreach streaming progress events
   | 'foreachProgressStreaming'
   | 'foreachProgressConcurrentStreaming'
-  | 'foreachProgressFailStreaming';
+  | 'foreachProgressFailStreaming'
+  // stepExecutionPath deduplication on suspend/resume (default engine only)
+  | 'resumeStepExecutionPath';
 
 /**
  * Configuration for creating a workflow test suite

@@ -173,9 +173,7 @@ export function DatasetExperimentsComparison({
             <div className="relative z-1 bg-surface2 rounded-lg p-2">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="standard" size="default" onClick={onSwap}>
-                    VS
-                  </Button>
+                  <Button onClick={onSwap}>VS</Button>
                 </TooltipTrigger>
                 <TooltipContent>Switch the order</TooltipContent>
               </Tooltip>

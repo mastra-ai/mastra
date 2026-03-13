@@ -5,9 +5,26 @@
  */
 
 import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { FileNotFoundError } from '../errors';
+
+// =============================================================================
+// Tilde Expansion
+// =============================================================================
+
+/**
+ * Expand a leading `~` or `~/` to the user's home directory.
+ * Shell commands handle this automatically, but Node.js path APIs do not.
+ */
+export function expandTilde(p: string): string {
+  if (p === '~') return os.homedir();
+  if (p.startsWith('~/') || p.startsWith('~\\')) {
+    return path.join(os.homedir(), p.slice(2));
+  }
+  return p;
+}
 
 // =============================================================================
 // Types
@@ -173,26 +190,22 @@ export function isTextFile(filename: string): boolean {
 // =============================================================================
 
 /**
- * Resolve a workspace path to an absolute OS filesystem path.
+ * Resolve a path against a base directory.
  *
- * Workspace paths typically start with '/' but are relative to `basePath`
- * (e.g. "/app.ts" → "basePath/app.ts"). However, with `contained: false` or
- * when the path is already a real path within `basePath`, it should be used as-is.
+ * - Tilde (`~`) is expanded to the user's home directory.
+ * - Absolute paths are normalized and returned as-is.
+ * - Relative paths (including `../`) are resolved against `basePath`.
  *
- * @param basePath - The workspace filesystem base path
- * @param filePath - The workspace path to resolve
- * @returns The absolute OS filesystem path
+ * @param basePath - The absolute base path to resolve against
+ * @param filePath - The path to resolve
+ * @returns The absolute resolved path
  */
-export function resolveWorkspacePath(basePath: string, filePath: string): string {
-  if (path.isAbsolute(filePath)) {
-    const normalizedBase = path.normalize(basePath);
-    const normalizedFile = path.normalize(filePath);
-    const rel = path.relative(normalizedBase, normalizedFile);
-    if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
-      return normalizedFile;
-    }
+export function resolveToBasePath(basePath: string, filePath: string): string {
+  const expanded = expandTilde(filePath);
+  if (path.isAbsolute(expanded)) {
+    return path.normalize(expanded);
   }
-  return path.join(basePath, filePath.replace(/^\/+/, ''));
+  return path.resolve(basePath, expanded);
 }
 
 // =============================================================================

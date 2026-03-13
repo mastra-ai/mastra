@@ -1,9 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router';
-import { useMastraClient } from '@mastra/react';
-import { useQueryClient } from '@tanstack/react-query';
-import { BookIcon } from 'lucide-react';
-
+import type { UpdateStoredPromptBlockParams } from '@mastra/client-js';
 import {
   toast,
   useLinkComponent,
@@ -27,10 +22,13 @@ import {
   Alert,
   AlertTitle,
   AlertDescription,
-  type PromptBlockFormValues,
 } from '@mastra/playground-ui';
-
-import type { UpdateStoredPromptBlockParams } from '@mastra/client-js';
+import type { PromptBlockFormValues } from '@mastra/playground-ui';
+import { useMastraClient } from '@mastra/react';
+import { useQueryClient } from '@tanstack/react-query';
+import { BookIcon } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useParams, useSearchParams } from 'react-router';
 
 type StoredPromptBlockData = NonNullable<ReturnType<typeof useStoredPromptBlock>['data']>;
 
@@ -130,11 +128,11 @@ function CmsPromptBlocksEditForm({ block, blockId, selectedVersionId, hasDraft }
       }
       await client.getStoredPromptBlock(blockId).activateVersion(latestVersion.id);
 
-      queryClient.invalidateQueries({ queryKey: ['stored-prompt-blocks'] });
-      queryClient.invalidateQueries({ queryKey: ['stored-prompt-block'] });
-      queryClient.invalidateQueries({ queryKey: ['prompt-block-versions', blockId] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-prompt-blocks'] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-prompt-block'] });
+      void queryClient.invalidateQueries({ queryKey: ['prompt-block-versions', blockId] });
       toast.success('Prompt block published');
-      navigate(paths.promptBlocksLink());
+      void navigate(paths.promptBlocksLink());
     } catch (error) {
       toast.error(`Failed to publish: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
@@ -258,7 +256,6 @@ function CmsPromptBlocksEditPage() {
             blockId={blockId}
             value={selectedVersionId ?? ''}
             onValueChange={handleVersionSelect}
-            variant="outline"
             activeVersionId={activeVersionId}
           />
         </HeaderAction>

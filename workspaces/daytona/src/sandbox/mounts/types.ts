@@ -4,10 +4,10 @@
 
 import type { Sandbox } from '@daytonaio/sdk';
 
-export const LOG_PREFIX = '[@mastra/daytona]';
-
 import type { DaytonaGCSMountConfig } from './gcs';
 import type { DaytonaS3MountConfig } from './s3';
+
+export const LOG_PREFIX = '[@mastra/daytona]';
 
 /**
  * Union of mount configs supported by Daytona sandbox.
@@ -16,9 +16,11 @@ export type DaytonaMountConfig = DaytonaS3MountConfig | DaytonaGCSMountConfig;
 
 /**
  * Context for mount operations.
+ * Abstracts over the Daytona SDK so mount helpers stay SDK-agnostic.
  */
 export interface MountContext {
-  sandbox: Sandbox;
+  run: (cmd: string, timeoutMs?: number) => Promise<{ exitCode: number; stdout: string; stderr: string }>;
+  writeFile: (path: string, content: string) => Promise<void>;
   logger: {
     debug: (message: string, ...args: unknown[]) => void;
     info: (message: string, ...args: unknown[]) => void;
@@ -94,12 +96,4 @@ export async function runCommand(
     exitCode: result.exitCode,
     output: result.result ?? '',
   };
-}
-
-/**
- * Write a file in the Daytona sandbox.
- * Uses the Daytona SDK's filesystem upload API for safe content transport.
- */
-export async function writeFile(sandbox: Sandbox, remotePath: string, content: string): Promise<void> {
-  await sandbox.fs.uploadFile(Buffer.from(content, 'utf-8'), remotePath);
 }

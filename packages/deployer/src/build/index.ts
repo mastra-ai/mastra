@@ -5,5 +5,5 @@ export { FileService } from '../services/fs';
 export { Deps } from '../services/deps';
 export { getServerOptions } from './serverOptions';
 export { getBundlerOptions } from './bundlerOptions';
-export { normalizeStudioBase, detectRuntime } from './utils';
-export type { RuntimePlatform, BundlerPlatform } from './utils';
+export { normalizeStudioBase, detectRuntime, injectStudioHtmlConfig } from './utils';
+export type { RuntimePlatform, BundlerPlatform, StudioInjectionConfig } from './utils';

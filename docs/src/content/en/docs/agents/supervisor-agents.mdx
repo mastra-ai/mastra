@@ -1,12 +1,12 @@
 ---
-title: "Supervisor Agents | Agents"
+title: "Supervisor agents | Agents"
 description: Learn how to coordinate multiple agents using the supervisor pattern with delegation hooks, iteration monitoring, message filtering, and task completion scoring.
 packages:
   - "@mastra/core"
   - "@mastra/memory"
 ---
 
-# Supervisor Agents
+# Supervisor agents
 
 A supervisor agent coordinates multiple subagents using `agent.stream()` or `agent.generate()`. You configure subagents on the supervisor's `agents` property, and the supervisor uses its instructions and each subagent's `description` to decide when and how to delegate tasks.
 
@@ -69,7 +69,7 @@ for await (const chunk of stream.textStream) {
 
 Delegation hooks let you intercept, modify, or reject delegations as they happen. Configure them under the `delegation` option, either in the agent's `defaultOptions` or per-call.
 
-### onDelegationStart
+### `onDelegationStart`
 
 Called before the supervisor delegates to a subagent. Return an object to control the delegation:
 
@@ -116,7 +116,7 @@ The `context` object includes:
 | `prompt` | The prompt the supervisor is sending |
 | `iteration` | Current iteration number |
 
-### onDelegationComplete
+### `onDelegationComplete`
 
 Called after a delegation finishes. Use it to inspect results, provide feedback, or stop execution:
 
@@ -204,7 +204,7 @@ const stream = await supervisor.stream('Research AI trends', {
 })
 ```
 
-Return `{ continue: true }` to keep iterating, or `{ continue: false }` to stop. Include optional `feedback` to add guidance that's visible to the next iteration.
+Return `{ continue: true }` to keep iterating, or `{ continue: false }` to stop. Include optional `feedback` to inject guidance into the conversation. When `feedback` is combined with `continue: false`, the model may get one final turn to produce a text response incorporating the feedback, but only if the current iteration is still active (e.g., after tool calls) — otherwise no extra turn is granted.
 
 ## Memory isolation
 

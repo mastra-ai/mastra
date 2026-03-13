@@ -176,13 +176,13 @@ export const LIST_SCORERS_ROUTE = createRoute({
   description: 'Returns a list of all registered scorers with their configuration and associated agents and workflows',
   tags: ['Scoring'],
   requiresAuth: true,
-  handler: async ({ mastra, requestContext }) => {
+  handler: (async ({ mastra, requestContext }: any) => {
     const scorers = await listScorersFromSystem({
       mastra,
       requestContext,
     });
     return scorers;
-  },
+  }) as any,
 });
 
 export const GET_SCORER_ROUTE = createRoute({
@@ -195,7 +195,7 @@ export const GET_SCORER_ROUTE = createRoute({
   description: 'Returns details for a specific scorer including its configuration and associations',
   tags: ['Scoring'],
   requiresAuth: true,
-  handler: async ({ mastra, scorerId, requestContext }) => {
+  handler: (async ({ mastra, scorerId, requestContext }: any) => {
     const scorers = await listScorersFromSystem({
       mastra,
       requestContext,
@@ -208,7 +208,7 @@ export const GET_SCORER_ROUTE = createRoute({
     }
 
     return scorer;
-  },
+  }) as any,
 });
 
 export const LIST_SCORES_BY_RUN_ID_ROUTE = createRoute({

@@ -1092,7 +1092,7 @@ exports[`MetaSchemaCompatLayer > processZodType - String Constraints > should ha
       "type": "string",
     },
     "url": {
-      "description": "constraints: a valid url",
+      "description": "constraints: a valid uri",
       "type": "string",
     },
   },

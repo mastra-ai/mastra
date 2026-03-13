@@ -11,8 +11,8 @@ import {
   ZodNull,
   ZodNullable,
   ZodIntersection,
-} from 'zod';
-import type { ZodTypeAny } from 'zod';
+} from 'zod/v3';
+import type { ZodTypeAny } from 'zod/v3';
 import type { Targets } from 'zod-to-json-schema';
 import type { JSONSchema7, Schema } from './json-schema';
 import type { SchemaCompatLayer as ParentSchemaCompatLayer } from './schema-compatibility';

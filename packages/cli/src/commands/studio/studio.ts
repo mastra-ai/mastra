@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import http from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 import { config } from 'dotenv';
 import handler from 'serve-handler';
 import { logger } from '../../utils/logger';
@@ -15,6 +16,24 @@ interface StudioOptions {
   serverProtocol?: string;
   serverApiPrefix?: string;
   requestContextPresets?: string;
+}
+
+function normalizeBasePath(basePath: string): string {
+  const trimmed = basePath.trim();
+
+  if (trimmed === '' || trimmed === '/') {
+    return '';
+  }
+
+  let normalized = trimmed.replace(/\/+/g, '/');
+  if (!normalized.startsWith('/')) {
+    normalized = `/${normalized}`;
+  }
+  if (normalized.endsWith('/')) {
+    normalized = normalized.slice(0, -1);
+  }
+
+  return normalized;
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -76,9 +95,9 @@ export async function studio(
   }
 }
 
-const createServer = (builtStudioPath: string, options: StudioOptions, requestContextPresetsJson: string) => {
+export const createServer = (builtStudioPath: string, options: StudioOptions, requestContextPresetsJson: string) => {
   const indexHtmlPath = join(builtStudioPath, 'index.html');
-  const basePath = '';
+  const basePath = normalizeBasePath(process.env.MASTRA_STUDIO_BASE_PATH ?? '');
 
   const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
 
@@ -94,16 +113,57 @@ const createServer = (builtStudioPath: string, options: StudioOptions, requestCo
     .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', process.env.MASTRA_TELEMETRY_DISABLED ?? '')
     .replaceAll('%%MASTRA_REQUEST_CONTEXT_PRESETS%%', escapeJsonForHtml(requestContextPresetsJson));
 
-  const server = http.createServer((req, res) => {
-    const url = req.url || basePath;
+  // Pre-compress the HTML shell since it's served for every non-asset request
+  const compressedHtml = gzipSync(Buffer.from(html));
 
+  const server = http.createServer((req, res) => {
+    const url = req.url || '/';
+    const queryStart = url.indexOf('?');
+    const rawPathname = queryStart >= 0 ? url.slice(0, queryStart) : url;
+    const query = queryStart >= 0 ? url.slice(queryStart + 1) : '';
+    const pathname = rawPathname || '/';
+
+    const pathWithoutBase =
+      basePath && pathname.startsWith(`${basePath}/`)
+        ? pathname.slice(basePath.length)
+        : pathname === basePath
+          ? '/'
+          : pathname;
     // Let static assets be served by serve-handler
-    const isStaticAsset = url.includes('/assets/') || url.includes('/dist/assets/') || url.includes('/mastra.svg');
+    const isAssetsPath = /(^|\/)assets\//.test(pathWithoutBase);
+    const isDistAssetsPath = /(^|\/)dist\/assets\//.test(pathWithoutBase);
+    const isMastraSvg = pathWithoutBase === '/mastra.svg' || pathWithoutBase.endsWith('/mastra.svg');
+    const isStaticAsset = isAssetsPath || isDistAssetsPath || isMastraSvg;
+
+    const rawEncoding = req.headers['accept-encoding'] ?? '';
+    const encodingValues = Array.isArray(rawEncoding) ? rawEncoding : [rawEncoding];
+    const supportsGzip = encodingValues
+      .flatMap((v: string) => v.split(','))
+      .map((v: string) => v.trim().toLowerCase())
+      .some((v: string) => {
+        const [coding, ...params] = v.split(';').map((p: string) => p.trim());
+        if (coding !== 'gzip') return false;
+        const q = params.find((p: string) => p.startsWith('q='));
+        return q ? Number(q.slice(2)) > 0 : true;
+      });
 
     // For everything that's not a static asset, serve the SPA shell (index.html)
     if (!isStaticAsset) {
-      res.writeHead(200, { 'Content-Type': 'text/html' });
+      if (supportsGzip) {
+        res.writeHead(200, {
+          'Content-Type': 'text/html',
+          'Content-Encoding': 'gzip',
+          'Content-Length': compressedHtml.length,
+          Vary: 'Accept-Encoding',
+        });
+        return res.end(compressedHtml);
+      }
+      res.writeHead(200, { 'Content-Type': 'text/html', Vary: 'Accept-Encoding' });
       return res.end(html);
+    }
+
+    if (basePath && pathWithoutBase !== pathname) {
+      req.url = query ? `${pathWithoutBase}?${query}` : pathWithoutBase;
     }
 
     return handler(req, res, {

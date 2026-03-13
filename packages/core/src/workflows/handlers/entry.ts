@@ -89,6 +89,15 @@ export interface PersistStepUpdateParams {
   result?: Record<string, any>;
   error?: SerializedError;
   requestContext: RequestContext;
+  /**
+   * Tracing context for span continuity during suspend/resume.
+   * When provided, this will be persisted to the snapshot for use on resume.
+   */
+  tracingContext?: {
+    traceId?: string;
+    spanId?: string;
+    parentSpanId?: string;
+  };
 }
 
 export async function persistStepUpdate(
@@ -106,6 +115,7 @@ export async function persistStepUpdate(
     result,
     error,
     requestContext,
+    tracingContext,
   } = params;
 
   const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate`;
@@ -131,6 +141,7 @@ export async function persistStepUpdate(
         value: executionContext.state,
         context: stepResults as any,
         activePaths: executionContext.executionPath,
+        stepExecutionPath: executionContext.stepExecutionPath,
         activeStepsPath: executionContext.activeStepsPath,
         serializedStepGraph,
         suspendedPaths: executionContext.suspendedPaths,
@@ -140,6 +151,8 @@ export async function persistStepUpdate(
         error,
         requestContext: requestContextObj,
         timestamp: Date.now(),
+        // Persist tracing context for span continuity on resume
+        tracingContext,
       },
     });
   });
@@ -201,6 +214,10 @@ export async function executeEntry(
   let entryRequestContext: Record<string, any> | undefined;
 
   if (entry.type === 'step') {
+    const isResumedStep = resume?.steps?.includes(entry.step.id) ?? false;
+    if (!isResumedStep) {
+      executionContext.stepExecutionPath?.push(entry.step.id);
+    }
     const { step } = entry;
     const stepExecResult = await engine.executeStep({
       workflowId,
@@ -243,6 +260,7 @@ export async function executeEntry(
         workflowId,
         runId,
         executionPath: [...executionContext.executionPath, idx!],
+        stepExecutionPath: executionContext.stepExecutionPath ? [...executionContext.stepExecutionPath] : undefined,
         suspendedPaths: executionContext.suspendedPaths,
         resumeLabels: executionContext.resumeLabels,
         retryConfig: executionContext.retryConfig,
@@ -314,6 +332,7 @@ export async function executeEntry(
           workflowId,
           runId,
           executionPath: [...executionContext.executionPath, idx!],
+          stepExecutionPath: executionContext.stepExecutionPath ? [...executionContext.stepExecutionPath] : undefined,
           suspendedPaths: executionContext.suspendedPaths,
           resumeLabels: executionContext.resumeLabels,
           retryConfig: executionContext.retryConfig,
@@ -349,6 +368,7 @@ export async function executeEntry(
           workflowId,
           runId,
           executionPath: [...executionContext.executionPath, idx!],
+          stepExecutionPath: executionContext.stepExecutionPath ? [...executionContext.stepExecutionPath] : undefined,
           suspendedPaths: executionContext.suspendedPaths,
           resumeLabels: executionContext.resumeLabels,
           retryConfig: executionContext.retryConfig,
@@ -442,6 +462,7 @@ export async function executeEntry(
       perStep,
     });
   } else if (entry.type === 'sleep') {
+    executionContext.stepExecutionPath?.push(entry.id);
     const startedAt = Date.now();
     const sleepWaitingOperationId = `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.waiting_ev`;
     await engine.wrapDurableOperation(sleepWaitingOperationId, async () => {
@@ -544,6 +565,7 @@ export async function executeEntry(
       });
     });
   } else if (entry.type === 'sleepUntil') {
+    executionContext.stepExecutionPath?.push(entry.id);
     const startedAt = Date.now();
     const sleepUntilWaitingOperationId = `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.waiting_ev`;
     await engine.wrapDurableOperation(sleepUntilWaitingOperationId, async () => {

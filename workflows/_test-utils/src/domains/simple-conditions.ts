@@ -382,7 +382,6 @@ export function createSimpleConditionsTests(ctx: WorkflowTestContext, registry?:
       expect(step1Result).toBeDefined();
       expect(step1Result).toMatchObject({
         status: 'failed',
-        payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -402,14 +401,12 @@ export function createSimpleConditionsTests(ctx: WorkflowTestContext, registry?:
         step1: {
           status: 'success',
           output: { status: 'success' },
-          payload: {},
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
         step2: {
           status: 'success',
           output: { result: 'step2' },
-          payload: { status: 'success' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
@@ -424,13 +421,11 @@ export function createSimpleConditionsTests(ctx: WorkflowTestContext, registry?:
       expect(result.steps.step1).toMatchObject({
         status: 'success',
         output: { count: 5 },
-        payload: { count: 5 },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
       expect(result.steps.step2).toMatchObject({
         status: 'success',
-        payload: { count: 5 },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });

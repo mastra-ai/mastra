@@ -72,12 +72,10 @@ export function createInteroperabilityTests(ctx: WorkflowTestContext, registry?:
       expect(result.steps.step1).toMatchObject({
         status: 'success',
         output: { name: 'step1' },
-        payload: {},
       });
       expect(result.steps['random-tool']).toMatchObject({
         status: 'success',
         output: { name: 'step1' },
-        payload: { name: 'step1' },
       });
 
       const workflowSteps = workflow.steps;

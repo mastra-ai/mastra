@@ -1,5 +1,5 @@
 ---
-title: "Reference: Express Adapter | Server"
+title: "Reference: Express adapter | Server"
 description: "API reference for the @mastra/express server adapter."
 packages:
   - "@mastra/express"
@@ -9,7 +9,7 @@ import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
-# Express Adapter
+# Express adapter
 
 The `@mastra/express` package provides a server adapter for running Mastra with [Express](https://expressjs.com).
 
@@ -55,70 +55,72 @@ Express requires `express.json()` middleware for JSON body parsing. Add it befor
 
 <PropertiesTable
   content={[
-{
-name: "app",
-type: "Application",
-description: "Express app instance",
-isOptional: false,
-},
-{
-name: "mastra",
-type: "Mastra",
-description: "Mastra instance",
-isOptional: false,
-},
-{
-name: "prefix",
-type: "string",
-description: "Route path prefix (e.g., `/api/v2`)",
-isOptional: true,
-defaultValue: "''",
-},
-{
-name: "openapiPath",
-type: "string",
-description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
-isOptional: true,
-defaultValue: "''",
-},
-{
-name: "bodyLimitOptions",
-type: "{ maxSize: number, onError: (err) => unknown }",
-description: "Request body size limits",
-isOptional: true,
-},
-{
-name: "streamOptions",
-type: "{ redact?: boolean }",
-description: "Stream redaction config. When true, redacts sensitive data from streams.",
-isOptional: true,
-defaultValue: "{ redact: true }",
-},
-{
-name: "customRouteAuthConfig",
-type: "Map<string, boolean>",
-description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
-isOptional: true,
-},
-{
-name: "tools",
-type: "Record<string, Tool>",
-description: "Available tools for the server",
-isOptional: true,
-},
-{
-name: "taskStore",
-type: "InMemoryTaskStore",
-description: "Task store for A2A (Agent-to-Agent) operations",
-isOptional: true,
-},
-{
-name: "mcpOptions",
-type: "MCPOptions",
-typeDescription: "{ serverless?: boolean, sessionIdGenerator?: () => string }",
-description: "MCP transport options. Set `serverless: true` for stateless environments like Cloudflare Workers or Vercel Edge.",
-isOptional: true,
-},
+  {
+    name: 'app',
+    type: 'Application',
+    description: 'Express app instance',
+    isOptional: false,
+  },
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    description: 'Mastra instance',
+    isOptional: false,
+  },
+  {
+    name: 'prefix',
+    type: 'string',
+    description: 'Route path prefix (e.g., `/api/v2`)',
+    isOptional: true,
+    defaultValue: "''",
+  },
+  {
+    name: 'openapiPath',
+    type: 'string',
+    description: 'Path to serve OpenAPI spec (e.g., `/openapi.json`)',
+    isOptional: true,
+    defaultValue: "''",
+  },
+  {
+    name: 'bodyLimitOptions',
+    type: '{ maxSize: number, onError: (err) => unknown }',
+    description: 'Request body size limits',
+    isOptional: true,
+  },
+  {
+    name: 'streamOptions',
+    type: '{ redact?: boolean }',
+    description: 'Stream redaction config. When true, redacts sensitive data from streams.',
+    isOptional: true,
+    defaultValue: '{ redact: true }',
+  },
+  {
+    name: 'customRouteAuthConfig',
+    type: 'Map<string, boolean>',
+    description:
+      'Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.',
+    isOptional: true,
+  },
+  {
+    name: 'tools',
+    type: 'Record<string, Tool>',
+    description: 'Available tools for the server',
+    isOptional: true,
+  },
+  {
+    name: 'taskStore',
+    type: 'InMemoryTaskStore',
+    description: 'Task store for A2A (Agent-to-Agent) operations',
+    isOptional: true,
+  },
+  {
+    name: 'mcpOptions',
+    type: 'MCPOptions',
+    typeDescription: '{ serverless?: boolean, sessionIdGenerator?: () => string }',
+    description:
+      'MCP transport options. Set `serverless: true` for stateless environments like Cloudflare Workers or Vercel Edge.',
+    isOptional: true,
+  },
 ]}
 />
 

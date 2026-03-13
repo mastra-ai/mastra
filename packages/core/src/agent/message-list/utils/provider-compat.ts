@@ -1,7 +1,7 @@
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type { ModelMessage, ToolResultPart } from '@internal/ai-sdk-v5';
 
-import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
+import type { IMastraLogger } from '../../../logger';
 import type { MastraDBMessage } from '../state/types';
 
 /**
@@ -23,26 +23,31 @@ export type ToolResultWithInput = ToolResultPart & {
  * 2. Cannot have only system messages - at least one user/assistant is required
  *
  * @param messages - Array of model messages to validate and fix
+ * @param logger - Optional logger for warnings
  * @returns Modified messages array that satisfies Gemini requirements
- * @throws MastraError if no user or assistant messages are present
  *
  * @see https://github.com/mastra-ai/mastra/issues/7287 - Tool call ordering
  * @see https://github.com/mastra-ai/mastra/issues/8053 - Single turn validation
+ * @see https://github.com/mastra-ai/mastra/issues/13045 - Empty thread support
  */
-export function ensureGeminiCompatibleMessages<T extends ModelMessage | CoreMessageV4>(messages: T[]): T[] {
+export function ensureGeminiCompatibleMessages<T extends ModelMessage | CoreMessageV4>(
+  messages: T[],
+  logger?: IMastraLogger,
+): T[] {
   const result = [...messages];
 
   // Ensure first non-system message is user
   const firstNonSystemIndex = result.findIndex(m => m.role !== 'system');
 
   if (firstNonSystemIndex === -1) {
-    // Only system messages or empty - this is an error condition
-    throw new MastraError({
-      id: 'NO_USER_OR_ASSISTANT_MESSAGES',
-      domain: ErrorDomain.AGENT,
-      category: ErrorCategory.USER,
-      text: 'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-    });
+    // Only system messages or empty — warn and pass through unchanged.
+    // Providers that support system-only prompts (Anthropic, OpenAI) will work natively.
+    // Providers that don't (Gemini) will return their own error.
+    if (result.length > 0) {
+      logger?.warn(
+        'No user or assistant messages in the request. Some providers (e.g. Gemini) require at least one user message to generate a response.',
+      );
+    }
   } else if (result[firstNonSystemIndex]?.role === 'assistant') {
     // First non-system is assistant, insert user message before it
     result.splice(firstNonSystemIndex, 0, {

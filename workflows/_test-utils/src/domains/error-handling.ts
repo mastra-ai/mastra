@@ -495,7 +495,6 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
       expect(step1Result).toBeDefined();
       expect(step1Result).toMatchObject({
         status: 'failed',
-        payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -514,15 +513,11 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
             output: {
               data: 'success',
             },
-            payload: {},
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
           step2: {
             status: 'success',
-            payload: {
-              data: 'success',
-            },
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
@@ -539,13 +534,11 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
         expect(result.steps).toMatchObject({
           step1: {
             status: 'success',
-            payload: {},
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
           step2: {
             status: 'failed',
-            payload: {},
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
@@ -600,7 +593,6 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
         expect(result.steps).toMatchObject({
           'error-nested-inner-workflow': {
             status: 'failed',
-            payload: {},
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },

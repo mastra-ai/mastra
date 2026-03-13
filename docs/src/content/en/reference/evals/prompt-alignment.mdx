@@ -1,5 +1,5 @@
 ---
-title: "Reference: Prompt Alignment Scorer | Evals"
+title: "Reference: Prompt alignment scorer | Evals"
 description: Documentation for the Prompt Alignment Scorer in Mastra. Evaluates how well agent responses align with user prompt intent, requirements, completeness, and appropriateness using multi-dimensional analysis.
 packages:
   - "@mastra/evals"
@@ -7,7 +7,7 @@ packages:
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
-# Prompt Alignment Scorer
+# Prompt alignment scorer
 
 The `createPromptAlignmentScorerLLM()` function creates a scorer that evaluates how well agent responses align with user prompts across multiple dimensions: intent understanding, requirement fulfillment, response completeness, and format appropriateness.
 
@@ -15,53 +15,50 @@ The `createPromptAlignmentScorerLLM()` function creates a scorer that evaluates 
 
 <PropertiesTable
   content={[
-{
-name: "model",
-type: "MastraModelConfig",
-description:
-"The language model to use for evaluating prompt-response alignment",
-required: true,
-},
-{
-name: "options",
-type: "PromptAlignmentOptions",
-description: "Configuration options for the scorer",
-required: false,
-children: [
-{
-name: "scale",
-type: "number",
-description: "Scale factor to multiply the final score (default: 1)",
-required: false,
-},
-{
-name: "evaluationMode",
-type: "'user' | 'system' | 'both'",
-description:
-"Evaluation mode - 'user' evaluates user prompt alignment only, 'system' evaluates system compliance only, 'both' evaluates both with weighted scoring (default: 'both')",
-required: false,
-},
-],
-},
+  {
+    name: 'model',
+    type: 'MastraModelConfig',
+    description: 'The language model to use for evaluating prompt-response alignment',
+    required: true,
+  },
+  {
+    name: 'options',
+    type: 'PromptAlignmentOptions',
+    description: 'Configuration options for the scorer',
+    required: false,
+    children: [
+      {
+        name: 'scale',
+        type: 'number',
+        description: 'Scale factor to multiply the final score (default: 1)',
+        required: false,
+      },
+      {
+        name: 'evaluationMode',
+        type: "'user' | 'system' | 'both'",
+        description:
+          "Evaluation mode - 'user' evaluates user prompt alignment only, 'system' evaluates system compliance only, 'both' evaluates both with weighted scoring (default: 'both')",
+        required: false,
+      },
+    ],
+  },
 ]}
 />
 
-## .run() Returns
+## `.run()` returns
 
 <PropertiesTable
   content={[
-{
-name: "score",
-type: "number",
-description:
-"Multi-dimensional alignment score between 0 and scale (default 0-1)",
-},
-{
-name: "reason",
-type: "string",
-description:
-"Human-readable explanation of the prompt alignment evaluation with detailed breakdown",
-},
+  {
+    name: 'score',
+    type: 'number',
+    description: 'Multi-dimensional alignment score between 0 and scale (default 0-1)',
+  },
+  {
+    name: 'reason',
+    type: 'string',
+    description: 'Human-readable explanation of the prompt alignment evaluation with detailed breakdown',
+  },
 ]}
 />
 
@@ -103,7 +100,7 @@ description:
 }
 ```
 
-## Scoring Details
+## Scoring details
 
 ### Scorer configuration
 
@@ -214,7 +211,7 @@ Final Score = Weighted Score × scale
 - Production monitoring where both user and system requirements matter
 - Holistic assessment of prompt-response alignment
 
-## Common Use Cases
+## Common use cases
 
 ### Code Generation Evaluation
 
@@ -648,7 +645,7 @@ const result = await scorer.run({
 // High score for both addressing the user's request AND following system guidelines
 ```
 
-## Comparison with Other Scorers
+## Comparison with other scorers
 
 | Aspect | Prompt Alignment | Answer Relevancy | Faithfulness |
 | - | - | - | - |

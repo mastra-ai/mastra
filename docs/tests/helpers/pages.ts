@@ -13,8 +13,7 @@ export interface PageConfig {
 
 export const pages: PageConfig[] = [
   // --- Docs ---
-  { path: '/docs', name: 'Docs – Introduction' },
-  { path: '/docs/getting-started/start', name: 'Docs – Getting Started' },
+  { path: '/docs', name: 'Docs – Get Started' },
   { path: '/docs/agents/overview', name: 'Docs – Agents' },
   { path: '/docs/workflows/overview', name: 'Docs – Workflows' },
   { path: '/docs/memory/overview', name: 'Docs – Memory' },
@@ -43,4 +42,15 @@ export const pages: PageConfig[] = [
   { path: '/reference/agents/agent', name: 'Reference – Agent' },
   { path: '/reference/tools/create-tool', name: 'Reference – Create Tool' },
   { path: '/reference/workflows/workflow', name: 'Reference – Workflow' },
+
+  // --- Learn ---
+  { path: '/learn', name: 'Learn – Landing Page' },
+  { path: '/learn/what-is-an-agent', name: 'Learn – What is an Agent?' },
+  { path: '/learn/run-your-first-agent', name: 'Learn – Run Your First Agent' },
+  { path: '/learn/project-structure', name: 'Learn – Project Structure' },
+  { path: '/learn/create-an-agent', name: 'Learn – Create an Agent' },
+  { path: '/learn/create-a-tool', name: 'Learn – Create a Tool' },
+  { path: '/learn/build-with-ai', name: 'Learn – Build with AI' },
+  { path: '/learn/fetch-live-data', name: 'Learn – Fetch Live Data' },
+  { path: '/learn/connect-to-mcp', name: 'Learn – Connect to MCP' },
 ]

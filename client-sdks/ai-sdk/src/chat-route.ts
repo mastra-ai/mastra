@@ -1,10 +1,9 @@
-import type { AgentExecutionOptions } from '@mastra/core/agent';
-
+import { createUIMessageStream, createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
+import type { InferUIMessageChunk, UIMessage } from '@internal/ai-sdk-v5';
+import type { AgentExecutionOptions, AgentExecutionOptionsBase } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
-import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
-import type { InferUIMessageChunk, UIMessage } from 'ai';
 import { toAISdkV5Stream } from './convert-streams';
 
 export type ChatStreamHandlerParams<
@@ -36,7 +35,7 @@ export type ChatStreamHandlerOptions<UI_MESSAGE extends UIMessage, OUTPUT = unde
  * ```ts
  * // Next.js App Router
  * import { handleChatStream } from '@mastra/ai-sdk';
- * import { createUIMessageStreamResponse } from 'ai';
+ * import { createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
  * import { mastra } from '@/src/mastra';
  *
  * export async function POST(req: Request) {
@@ -92,16 +91,30 @@ export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT = un
     }
   }
 
-  const mergedOptions = {
-    ...defaultOptions,
-    ...rest,
+  const { structuredOutput: restStructuredOutput, ...restOptions } = rest;
+  const { structuredOutput: defaultStructuredOutput, ...defaultOptionsRest } = defaultOptions ?? {};
+  const structuredOutput = restStructuredOutput ?? defaultStructuredOutput;
+
+  const mergedProviderOptions = {
+    ...defaultOptions?.providerOptions,
+    ...restOptions.providerOptions,
+  };
+
+  const baseOptions = {
+    ...defaultOptionsRest,
+    ...restOptions,
     ...(runId && { runId }),
     requestContext: requestContext || defaultOptions?.requestContext,
+    ...(Object.keys(mergedProviderOptions).length > 0 && { providerOptions: mergedProviderOptions }),
   };
 
   const result = resumeData
-    ? await agentObj.resumeStream<OUTPUT>(resumeData, mergedOptions)
-    : await agentObj.stream<OUTPUT>(messagesToSend, mergedOptions);
+    ? structuredOutput
+      ? await agentObj.resumeStream(resumeData, { ...baseOptions, structuredOutput })
+      : await agentObj.resumeStream(resumeData, baseOptions as AgentExecutionOptionsBase<unknown>)
+    : structuredOutput
+      ? await agentObj.stream(messagesToSend, { ...baseOptions, structuredOutput })
+      : await agentObj.stream(messagesToSend, baseOptions as AgentExecutionOptionsBase<unknown>);
 
   return createUIMessageStream<UI_MESSAGE>({
     originalMessages: messages,

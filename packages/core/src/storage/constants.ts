@@ -1,4 +1,4 @@
-import { spanRecordSchema } from './domains/observability/types';
+import { spanRecordSchema } from './domains/observability';
 import { buildStorageSchema } from './types';
 import type { StorageColumn, StorageTableConfig } from './types';
 
@@ -35,6 +35,7 @@ export const TABLE_DATASET_VERSIONS = 'mastra_dataset_versions';
 export const TABLE_EXPERIMENTS = 'mastra_experiments';
 export const TABLE_EXPERIMENT_RESULTS = 'mastra_experiment_results';
 
+/** Union of all core table name constants. */
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
   | typeof TABLE_MESSAGES
@@ -370,6 +371,7 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
   isBufferingReflection: { type: 'boolean', nullable: false },
   lastBufferedAtTokens: { type: 'integer', nullable: false },
   lastBufferedAtTime: { type: 'timestamp', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -382,6 +384,7 @@ export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
   metadata: { type: 'jsonb', nullable: true },
   inputSchema: { type: 'jsonb', nullable: true },
   groundTruthSchema: { type: 'jsonb', nullable: true },
+  requestContextSchema: { type: 'jsonb', nullable: true },
   version: { type: 'integer', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
@@ -395,6 +398,7 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   isDeleted: { type: 'boolean', nullable: false },
   input: { type: 'jsonb', nullable: false },
   groundTruth: { type: 'jsonb', nullable: true },
+  requestContext: { type: 'jsonb', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },

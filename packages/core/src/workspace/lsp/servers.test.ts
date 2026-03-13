@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   BUILTIN_SERVERS,
+  buildServerDefs,
   findProjectRoot,
   findProjectRootAsync,
   getServersForFile,
@@ -409,6 +410,157 @@ describe('BUILTIN_SERVERS command()', () => {
       } else {
         expect(result).toBeUndefined();
       }
+    });
+  });
+});
+
+describe('buildServerDefs', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'lsp-build-'));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  describe('binaryOverrides', () => {
+    it('returns the override path for typescript without checking node_modules', () => {
+      const defs = buildServerDefs({
+        binaryOverrides: { typescript: '/usr/local/bin/typescript-language-server --stdio' },
+      });
+      // Even with no binary in tempDir, override wins
+      expect(defs.typescript!.command(tempDir)).toBe('/usr/local/bin/typescript-language-server --stdio');
+    });
+
+    it('returns the override path for eslint', () => {
+      const defs = buildServerDefs({ binaryOverrides: { eslint: '/opt/bin/vscode-eslint-language-server --stdio' } });
+      expect(defs.eslint!.command(tempDir)).toBe('/opt/bin/vscode-eslint-language-server --stdio');
+    });
+
+    it('returns the override path for go', () => {
+      const defs = buildServerDefs({ binaryOverrides: { go: '/usr/local/bin/gopls serve' } });
+      expect(defs.go!.command()).toBe('/usr/local/bin/gopls serve');
+    });
+
+    it('returns the override path for rust', () => {
+      const defs = buildServerDefs({ binaryOverrides: { rust: '/usr/local/bin/rust-analyzer --stdio' } });
+      expect(defs.rust!.command()).toBe('/usr/local/bin/rust-analyzer --stdio');
+    });
+
+    it('override takes priority over a local binary', () => {
+      const bin = join(tempDir, 'node_modules', '.bin', 'vscode-eslint-language-server');
+      mkdirSync(join(tempDir, 'node_modules', '.bin'), { recursive: true });
+      writeFileSync(bin, '');
+
+      const defs = buildServerDefs({ binaryOverrides: { eslint: '/custom/path/eslint-server --stdio' } });
+      expect(defs.eslint!.command(tempDir)).toBe('/custom/path/eslint-server --stdio');
+    });
+  });
+
+  describe('packageRunner fallback', () => {
+    it('uses the provided runner for eslint when binary not found', () => {
+      const defs = buildServerDefs({ packageRunner: 'npx --yes' });
+      const result = defs.eslint!.command(tempDir);
+      // If vscode-eslint-language-server is on PATH, runner is not needed
+      if (result === 'vscode-eslint-language-server --stdio') return;
+      expect(result).toBe('npx --yes vscode-eslint-language-server --stdio');
+    });
+
+    it('works with pnpm dlx runner', () => {
+      const defs = buildServerDefs({ packageRunner: 'pnpm dlx' });
+      const result = defs.eslint!.command(tempDir);
+      if (result === 'vscode-eslint-language-server --stdio') return;
+      expect(result).toBe('pnpm dlx vscode-eslint-language-server --stdio');
+    });
+
+    it('works with bunx runner', () => {
+      const defs = buildServerDefs({ packageRunner: 'bunx' });
+      const result = defs.eslint!.command(tempDir);
+      if (result === 'vscode-eslint-language-server --stdio') return;
+      expect(result).toBe('bunx vscode-eslint-language-server --stdio');
+    });
+
+    it('uses the provided runner for python after PATH check when no binary found', () => {
+      const defs = buildServerDefs({ packageRunner: 'npx --yes' });
+      const result = defs.python!.command(tempDir);
+      // Either pyright-langserver is on PATH (returns PATH command) or not (returns runner)
+      if (result === 'pyright-langserver --stdio') return; // on PATH, runner not needed
+      expect(result).toBe('npx --yes pyright-langserver --stdio');
+    });
+
+    it('returns undefined when no packageRunner set (default)', () => {
+      const defs = buildServerDefs();
+      const result = defs.eslint!.command(tempDir);
+      // If vscode-eslint-language-server is on PATH, it returns the PATH command
+      if (result === 'vscode-eslint-language-server --stdio') return;
+      expect(result).toBeUndefined();
+    });
+
+    it('local binary takes priority over packageRunner', () => {
+      const bin = join(tempDir, 'node_modules', '.bin', 'vscode-eslint-language-server');
+      mkdirSync(join(tempDir, 'node_modules', '.bin'), { recursive: true });
+      writeFileSync(bin, '');
+
+      const defs = buildServerDefs({ packageRunner: 'npx --yes' });
+      expect(defs.eslint!.command(tempDir)).toBe(`${bin} --stdio`);
+    });
+  });
+
+  describe('searchPaths', () => {
+    it('finds typescript/lib/tsserver.js from searchPaths for module resolution', () => {
+      // Use a root dir that does NOT contain typescript so resolution can only succeed via searchPaths.
+      const emptyRoot = join(tempDir, 'empty-root');
+      mkdirSync(emptyRoot, { recursive: true });
+
+      // searchPaths points to cwd (monorepo root) which has typescript installed.
+      const defs = buildServerDefs({ searchPaths: [process.cwd()] });
+      const init = defs.typescript!.initialization!(emptyRoot);
+      expect(init).toBeDefined();
+      expect((init as { tsserver: { path: string } }).tsserver.path).toContain('tsserver.js');
+    });
+
+    it('finds binary in searchPaths node_modules/.bin', () => {
+      // Create a fake binary inside a searchPath directory
+      const searchDir = join(tempDir, 'search');
+      const bin = join(searchDir, 'node_modules', '.bin', 'vscode-eslint-language-server');
+      mkdirSync(join(searchDir, 'node_modules', '.bin'), { recursive: true });
+      writeFileSync(bin, '');
+
+      const defs = buildServerDefs({ searchPaths: [searchDir] });
+      expect(defs.eslint!.command(tempDir)).toBe(`${bin} --stdio`);
+    });
+
+    it('project node_modules takes priority over searchPaths', () => {
+      const projectBin = join(tempDir, 'node_modules', '.bin', 'vscode-eslint-language-server');
+      mkdirSync(join(tempDir, 'node_modules', '.bin'), { recursive: true });
+      writeFileSync(projectBin, '');
+
+      const searchDir = join(tempDir, 'search');
+      const searchBin = join(searchDir, 'node_modules', '.bin', 'vscode-eslint-language-server');
+      mkdirSync(join(searchDir, 'node_modules', '.bin'), { recursive: true });
+      writeFileSync(searchBin, '');
+
+      const defs = buildServerDefs({ searchPaths: [searchDir] });
+      expect(defs.eslint!.command(tempDir)).toBe(`${projectBin} --stdio`);
+    });
+  });
+
+  describe('getServersForFile with custom defs', () => {
+    it('uses provided defs instead of BUILTIN_SERVERS', () => {
+      const customDefs = buildServerDefs({ binaryOverrides: { typescript: '/custom/tls --stdio' } });
+      const servers = getServersForFile('/project/app.ts', undefined, customDefs);
+      const ts = servers.find(s => s.id === 'typescript');
+      expect(ts).toBeDefined();
+      // The command should use the override
+      expect(ts!.command('/any/root')).toBe('/custom/tls --stdio');
+    });
+
+    it('falls back to BUILTIN_SERVERS when no defs provided', () => {
+      const servers = getServersForFile('/project/app.ts');
+      // Should still return servers from BUILTIN_SERVERS
+      expect(servers.some(s => s.id === 'typescript')).toBe(true);
     });
   });
 });

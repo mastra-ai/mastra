@@ -719,8 +719,10 @@ export class InMemoryMemory extends MemoryStorage {
 
     // Clone messages with new IDs
     const clonedMessages: MastraDBMessage[] = [];
+    const messageIdMap: Record<string, string> = {};
     for (const sourceMsg of sourceMessages) {
       const newMessageId = crypto.randomUUID();
+      messageIdMap[sourceMsg.id] = newMessageId;
       const parsedContent = safelyParseJSON(sourceMsg.content);
 
       // Create storage message
@@ -755,6 +757,7 @@ export class InMemoryMemory extends MemoryStorage {
     return {
       thread: newThread,
       clonedMessages,
+      messageIdMap,
     };
   }
 
@@ -854,6 +857,22 @@ export class InMemoryMemory extends MemoryStorage {
     return record;
   }
 
+  async insertObservationalMemoryRecord(record: ObservationalMemoryRecord): Promise<void> {
+    const key = this.getObservationalMemoryKey(record.threadId, record.resourceId);
+    const existing = this.db.observationalMemory.get(key) ?? [];
+    // Insert in order by generationCount descending (newest first)
+    let inserted = false;
+    for (let i = 0; i < existing.length; i++) {
+      if (record.generationCount >= existing[i]!.generationCount) {
+        existing.splice(i, 0, record);
+        inserted = true;
+        break;
+      }
+    }
+    if (!inserted) existing.push(record);
+    this.db.observationalMemory.set(key, existing);
+  }
+
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
     const { id, observations, tokenCount, lastObservedAt, observedMessageIds } = input;
     const record = this.findObservationalMemoryRecordById(id);
@@ -916,7 +935,11 @@ export class InMemoryMemory extends MemoryStorage {
       throw new Error(`Observational memory record not found: ${id}`);
     }
 
-    const chunks = Array.isArray(record.bufferedObservationChunks) ? record.bufferedObservationChunks : [];
+    // Use caller-provided refreshed chunks (with up-to-date token weights) for
+    // activation math, falling back to persisted chunks otherwise.
+    // Keep refreshed chunks local — don't overwrite the stored buffer.
+    const persistedChunks = Array.isArray(record.bufferedObservationChunks) ? record.bufferedObservationChunks : [];
+    const chunks = Array.isArray(input.bufferedChunks) ? input.bufferedChunks : persistedChunks;
     if (chunks.length === 0) {
       return {
         chunksActivated: 0,

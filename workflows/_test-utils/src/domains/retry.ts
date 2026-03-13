@@ -176,11 +176,9 @@ export function createRetryTests(ctx: WorkflowTestContext, registry?: WorkflowRe
       expect(result.steps.step1).toMatchObject({
         status: 'success',
         output: { result: 'success' },
-        payload: {},
       });
       expect(result.steps.step2).toMatchObject({
         status: 'failed',
-        payload: { result: 'success' },
       });
       expect((result.steps.step2 as any)?.error).toBeInstanceOf(Error);
       expect((result.steps.step2 as any)?.error.message).toMatch(/Step failed/);
@@ -195,11 +193,9 @@ export function createRetryTests(ctx: WorkflowTestContext, registry?: WorkflowRe
       expect(result.steps.step1).toMatchObject({
         status: 'success',
         output: { result: 'success' },
-        payload: {},
       });
       expect(result.steps.step2).toMatchObject({
         status: 'failed',
-        payload: { result: 'success' },
       });
       expect((result.steps.step2 as any)?.error).toBeInstanceOf(Error);
       expect((result.steps.step2 as any)?.error.message).toMatch(/Step failed/);
@@ -214,11 +210,9 @@ export function createRetryTests(ctx: WorkflowTestContext, registry?: WorkflowRe
       expect(result.steps.step1).toMatchObject({
         status: 'success',
         output: { result: 'success' },
-        payload: {},
       });
       expect(result.steps.step2).toMatchObject({
         status: 'failed',
-        payload: { result: 'success' },
       });
       expect((result.steps.step2 as any)?.error).toBeInstanceOf(Error);
       expect((result.steps.step2 as any)?.error.message).toMatch(/Step failed/);

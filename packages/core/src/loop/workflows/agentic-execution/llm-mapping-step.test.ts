@@ -281,6 +281,38 @@ describe('createLLMMappingStep HITL behavior', () => {
     expect(result.stepResult.isContinued).toBe(true);
   });
 
+  it('should sanitize invalid tool names before persisting tool-error history', async () => {
+    const { ToolNotFoundError } = await import('../errors');
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: '$FUNCTION_NAME',
+        args: { param: 'test' },
+        result: undefined,
+        error: new ToolNotFoundError('Tool "$FUNCTION_NAME" not found.'),
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(messageList.add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.objectContaining({
+          parts: [
+            expect.objectContaining({
+              type: 'tool-invocation',
+              toolInvocation: expect.objectContaining({
+                toolCallId: 'call-1',
+                toolName: 'unknown_tool',
+              }),
+            }),
+          ],
+        }),
+      }),
+      'response',
+    );
+  });
+
   it('should emit successful tool results alongside tool-not-found errors in the same turn', async () => {
     // Arrange: One valid tool with result + one hallucinated tool-not-found error
     const { ToolNotFoundError } = await import('../errors');

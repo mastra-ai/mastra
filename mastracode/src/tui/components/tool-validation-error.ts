@@ -5,6 +5,7 @@
 
 import { Container, Text } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
+import { MC_TOOLS } from '../../tool-names.js';
 import { theme } from '../theme.js';
 
 export interface ValidationError {
@@ -203,11 +204,11 @@ export class ToolValidationErrorComponent extends Container {
       suggestions.push('Make sure to provide a "question" parameter with your question text');
     }
 
-    if (toolName === 'execute_command' && errors.some(e => e.field === 'command')) {
+    if (toolName === MC_TOOLS.EXECUTE_COMMAND && errors.some(e => e.field === 'command')) {
       suggestions.push('Provide a "command" parameter with the command to execute');
     }
 
-    if (toolName === 'view' && errors.some(e => e.field === 'path')) {
+    if (toolName === MC_TOOLS.VIEW && errors.some(e => e.field === 'path')) {
       suggestions.push('Provide a "path" parameter with the file or directory path');
     }
 

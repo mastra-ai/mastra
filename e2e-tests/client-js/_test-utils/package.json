@@ -1,6 +1,6 @@
 {
   "name": "@internal/client-js-test-utils",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Shared test utilities for client-js e2e tests",
   "type": "module",
   "main": "src/index.ts",

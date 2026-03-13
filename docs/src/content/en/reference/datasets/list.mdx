@@ -31,18 +31,18 @@ for (const ds of datasets) {
 
 <PropertiesTable
   content={[
-{
-name: "page",
-type: "number",
-isOptional: true,
-description: "Page number. Defaults to `0`.",
-},
-{
-name: "perPage",
-type: "number",
-isOptional: true,
-description: "Number of datasets per page. Defaults to `20`.",
-},
+  {
+    name: 'page',
+    type: 'number',
+    isOptional: true,
+    description: 'Page number. Defaults to `0`.',
+  },
+  {
+    name: 'perPage',
+    type: 'number',
+    isOptional: true,
+    description: 'Number of datasets per page. Defaults to `20`.',
+  },
 ]}
 />
 
@@ -50,25 +50,27 @@ description: "Number of datasets per page. Defaults to `20`.",
 
 <PropertiesTable
   content={[
-{
-name: "result",
-type: "Promise<object>",
-description: "Paginated dataset list.",
-properties: [{
-type: "object",
-parameters: [
-{
-name: "datasets",
-type: "DatasetRecord[]",
-description: "Array of dataset records. See dataset.getDetails() for the record shape.",
-},
-{
-name: "pagination",
-type: "PaginationInfo",
-description: "Pagination metadata with `total`, `page`, `perPage`, and `hasMore`.",
-},
-],
-}],
-},
+  {
+    name: 'result',
+    type: 'Promise<object>',
+    description: 'Paginated dataset list.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'datasets',
+            type: 'DatasetRecord[]',
+            description: 'Array of dataset records. See dataset.getDetails() for the record shape.',
+          },
+          {
+            name: 'pagination',
+            type: 'PaginationInfo',
+            description: 'Pagination metadata with `total`, `page`, `perPage`, and `hasMore`.',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />

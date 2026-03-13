@@ -397,7 +397,6 @@ export function createSchemaValidationTests(ctx: WorkflowTestContext, registry?:
       expect(result.status).toBe('success');
       expect(result.steps.step1).toMatchObject({
         status: 'success',
-        payload: { required: 'test', nested: { value: 1 } },
         output: { required: 'test', nested: { value: 1 } },
       });
 

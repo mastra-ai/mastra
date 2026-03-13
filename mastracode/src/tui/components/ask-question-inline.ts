@@ -15,6 +15,8 @@ export interface AskQuestionInlineOptions {
   formatResult?: (answer: string) => string;
   /** If provided, determines whether an answer should be shown with error styling (red ✗). */
   isNegativeAnswer?: (answer: string) => boolean;
+  /** Allow submitting an empty string in free-text mode. */
+  allowEmptyInput?: boolean;
   onSubmit: (answer: string) => void;
   onCancel: () => void;
 }
@@ -27,6 +29,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
   private onCancel: () => void;
   private formatResult?: (answer: string) => string;
   private isNegativeAnswer?: (answer: string) => boolean;
+  private allowEmptyInput = false;
   private answered = false;
   private questionText: string;
 
@@ -48,6 +51,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     this.onCancel = options.onCancel;
     this.formatResult = options.formatResult;
     this.isNegativeAnswer = options.isNegativeAnswer;
+    this.allowEmptyInput = Boolean(options.allowEmptyInput);
     this.questionText = options.question;
 
     // Add spacing above
@@ -98,7 +102,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     this.input = new Input();
     this.input.onSubmit = (value: string) => {
       const trimmed = value.trim();
-      if (trimmed) {
+      if (trimmed || this.allowEmptyInput) {
         this.handleAnswer(trimmed);
       }
     };

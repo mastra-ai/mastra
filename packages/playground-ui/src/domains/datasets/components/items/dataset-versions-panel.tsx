@@ -9,7 +9,6 @@ import { Checkbox } from '@/ds/components/Checkbox';
 import { useDatasetVersions, type DatasetVersion } from '../../hooks/use-dataset-versions';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Column } from '@/ds/components/Columns';
-import { cn } from '@/lib/utils';
 
 export interface DatasetVersionsPanelProps {
   datasetId: string;
@@ -79,12 +78,9 @@ export function DatasetVersionsPanel({
       {isSelectionActive ? (
         <Column.Toolbar className="grid justify-stretch gap-3 w-full">
           <ButtonsGroup>
-            <Button variant="standard" size="default" onClick={handleCancelSelection}>
-              Cancel
-            </Button>
+            <Button onClick={handleCancelSelection}>Cancel</Button>
             <ButtonWithTooltip
-              variant="cta"
-              size="default"
+              variant="primary"
               disabled={selectedKeys.size !== 2}
               onClick={handleExecuteCompare}
               tooltipContent={selectedKeys.size !== 2 ? 'Select two versions to enable comparison' : undefined}
@@ -96,10 +92,10 @@ export function DatasetVersionsPanel({
         </Column.Toolbar>
       ) : (
         <Column.Toolbar>
-          <Button variant="standard" size="default" onClick={handleCompareClick}>
+          <Button onClick={handleCompareClick}>
             <GitCompareIcon /> Compare Ver.
           </Button>
-          <ButtonWithTooltip variant="standard" size="default" onClick={onClose} tooltipContent="Hide Versions Panel">
+          <ButtonWithTooltip onClick={onClose} tooltipContent="Hide Versions Panel">
             <XIcon />
           </ButtonWithTooltip>
         </Column.Toolbar>
@@ -156,13 +152,7 @@ export function DatasetVersionsPanel({
                 })}
               </ItemList.Items>
               {hasNextPage && (
-                <Button
-                  variant="standard"
-                  size="default"
-                  onClick={() => fetchNextPage()}
-                  disabled={isFetchingNextPage}
-                  className="w-full mt-2"
-                >
+                <Button size="md" onClick={() => fetchNextPage()} disabled={isFetchingNextPage} className="w-full mt-2">
                   {isFetchingNextPage ? 'Loading...' : 'Load More'}
                 </Button>
               )}
@@ -184,7 +174,7 @@ function DatasetVersionsListSkeleton() {
         {Array.from({ length: 3 }).map((_, index) => (
           <ItemList.Row key={index}>
             <ItemList.RowButton columns={[{ name: 'version', label: 'Dataset Version History', size: '1fr' }]}>
-              <ItemList.TextCell isLoading>Loading...</ItemList.TextCell>
+              <ItemList.TextCell>Loading...</ItemList.TextCell>
             </ItemList.RowButton>
           </ItemList.Row>
         ))}

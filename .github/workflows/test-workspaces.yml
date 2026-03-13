@@ -54,7 +54,7 @@ jobs:
         run: pnpm test:unit
         working-directory: workspaces/${{ matrix.package }}
         env:
-          NODE_OPTIONS: '--max_old_space_size=4096'
+          NODE_OPTIONS: '--max_old_space_size=8192'
 
   test-docker:
     # Only run on the main repository, not on forks
@@ -81,4 +81,4 @@ jobs:
         run: pnpm test
         working-directory: workspaces/${{ matrix.package }}
         env:
-          NODE_OPTIONS: '--max_old_space_size=4096'
+          NODE_OPTIONS: '--max_old_space_size=8192'

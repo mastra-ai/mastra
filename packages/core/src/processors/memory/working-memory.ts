@@ -2,9 +2,10 @@ import type { Processor } from '..';
 import type { MessageList } from '../../agent/message-list';
 import type { IMastraLogger } from '../../logger';
 import { parseMemoryRequestContext } from '../../memory';
-import type { MastraDBMessage, MemoryConfig } from '../../memory';
+import type { MastraDBMessage, MemoryConfigInternal } from '../../memory';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
+import { generateEmptyFromSchema } from '../../utils';
 
 export interface WorkingMemoryTemplate {
   format: 'markdown' | 'json';
@@ -71,7 +72,7 @@ export class WorkingMemory implements Processor {
       useVNext?: boolean;
       readOnly?: boolean;
       templateProvider?: {
-        getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfig }): Promise<WorkingMemoryTemplate | null>;
+        getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfigInternal }): Promise<WorkingMemoryTemplate | null>;
       };
       logger?: IMastraLogger;
     },
@@ -166,7 +167,8 @@ export class WorkingMemory implements Processor {
         }
         return empty;
       }
-      return null;
+
+      return generateEmptyFromSchema(schema);
     } catch {
       return null;
     }

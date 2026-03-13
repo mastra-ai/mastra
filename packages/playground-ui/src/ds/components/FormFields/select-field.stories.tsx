@@ -53,8 +53,6 @@ export const ExperimentalVariant: Story = {
     options: sampleOptions,
     placeholder: 'Choose an option...',
     onValueChange: (value: string) => console.log('Selected:', value),
-    variant: 'experimental',
-    size: 'default',
   },
 };
 

@@ -81,6 +81,7 @@ export class BuildBundler extends Bundler {
     import { mastra } from '#mastra';
     import { createNodeServer, getToolExports } from '#server';
     import { tools } from '#tools';
+
     // @ts-expect-error
     await createNodeServer(mastra, { tools: getToolExports(tools), studio: ${this.studio} });
 

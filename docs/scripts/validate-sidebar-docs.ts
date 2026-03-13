@@ -55,6 +55,7 @@ const SECTIONS: SectionConfig[] = [
 /** Files that are intentionally not in any sidebar */
 const IGNORED_PATTERNS = [
   /\/_template\.mdx$/, // Template files for authors
+  /\/_partial-.*\.mdx$/, // Partial MDX files that are imported into other docs
 ]
 
 function extractDocIds(items: SidebarItem[]): Set<string> {

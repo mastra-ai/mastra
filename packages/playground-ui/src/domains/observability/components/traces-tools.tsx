@@ -1,6 +1,7 @@
 import { SelectField } from '@/ds/components/FormFields';
 import { DateTimePicker } from '@/ds/components/DateTimePicker';
 import { Button } from '@/ds/components/Button/Button';
+import { Switch } from '@/ds/components/Switch/switch';
 import { cn } from '@/lib/utils';
 import { XIcon } from 'lucide-react';
 import { EntityType } from '@mastra/core/observability';
@@ -22,6 +23,8 @@ type TracesToolsProps = {
   onReset?: () => void;
   onDateChange?: (value: Date | undefined, type: 'from' | 'to') => void;
   isLoading?: boolean;
+  groupByThread?: boolean;
+  onGroupByThreadChange?: (value: boolean) => void;
 };
 
 export function TracesTools({
@@ -33,6 +36,8 @@ export function TracesTools({
   selectedDateFrom,
   selectedDateTo,
   isLoading,
+  groupByThread,
+  onGroupByThreadChange,
 }: TracesToolsProps) {
   return (
     <div className={cn('flex flex-wrap gap-x-8 gap-y-4')}>
@@ -71,6 +76,11 @@ export function TracesTools({
           defaultTimeStrValue="11:59 PM"
           disabled={isLoading}
         />
+
+        <label className={cn('flex gap-2 items-center shrink-0 cursor-pointer')}>
+          <Switch checked={groupByThread} onCheckedChange={onGroupByThreadChange} disabled={isLoading} />
+          <span className={cn('text-ui-md text-neutral3')}>Group by thread</span>
+        </label>
 
         <Button variant="light" size="lg" className="min-w-32" onClick={onReset} disabled={isLoading}>
           <Icon>

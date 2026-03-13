@@ -347,8 +347,11 @@ describe('Mid-Loop Observation', () => {
       expect(recordAfterStep0?.activeObservations).toBeFalsy();
 
       // Step 1: Add more messages to cross threshold and trigger mid-step activation.
-      // Add 15 more messages (~750 tokens) to push total past 1000 threshold.
-      for (let i = 0; i < 15; i++) {
+      // Add 25 more messages (~1250 tokens) to push total well past 1000 threshold.
+      // We use a generous count so that the activation safety check
+      // (projectedRemaining <= maxRemaining) is satisfied even with tokenx's
+      // ~2-5% variance compared to tiktoken.
+      for (let i = 0; i < 25; i++) {
         const msg = createTestMessage(
           `Cross threshold ${i}: `.padEnd(200, 'y'),
           i % 2 === 0 ? 'user' : 'assistant',

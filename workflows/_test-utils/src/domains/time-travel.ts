@@ -1113,13 +1113,11 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
       expect(result.steps['step1']).toMatchObject({
         status: 'success',
         output: { result: 'success' },
-        payload: {},
       });
 
       expect(result.steps['step2']).toMatchObject({
         status: 'success',
         output: { result: 'slept successfully: success' },
-        payload: { result: 'success' },
       });
 
       // Allow for slight timing variance

@@ -13,7 +13,7 @@ import TabItem from "@theme/TabItem";
 
 The `DatabaseConfig` type allows you to specify database-specific configurations when using vector query tools. These configurations enable you to leverage unique features and optimizations offered by different vector stores.
 
-## Type Definition
+## Type definition
 
 ```typescript
 export type DatabaseConfig = {
@@ -24,47 +24,47 @@ export type DatabaseConfig = {
 }
 ```
 
-## Database-Specific Types
+## Database-specific types
 
-### PineconeConfig
+### `PineconeConfig`
 
 Configuration options specific to Pinecone vector store.
 
 <PropertiesTable
   content={[
-{
-name: "namespace",
-type: "string",
-description:
-"Pinecone namespace for organizing and isolating vectors within the same index. Useful for multi-tenancy or environment separation.",
-isOptional: true,
-},
-{
-name: "sparseVector",
-type: "{ indices: number[]; values: number[]; }",
-description:
-"Sparse vector for hybrid search combining dense and sparse embeddings. Enables better search quality for keyword-based queries.  The indices and values arrays must be the same length.",
-isOptional: true,
-properties: [
-{
-type: "object",
-parameters: [
-{
-name: "indices",
-description: "Array of indices for sparse vector components",
-isOptional: false,
-type: "number[]",
-},
-{
-name: "values",
-description: "Array of values corresponding to the indices",
-isOptional: false,
-type: "number[]",
-},
-],
-},
-],
-},
+  {
+    name: 'namespace',
+    type: 'string',
+    description:
+      'Pinecone namespace for organizing and isolating vectors within the same index. Useful for multi-tenancy or environment separation.',
+    isOptional: true,
+  },
+  {
+    name: 'sparseVector',
+    type: '{ indices: number[]; values: number[]; }',
+    description:
+      'Sparse vector for hybrid search combining dense and sparse embeddings. Enables better search quality for keyword-based queries.  The indices and values arrays must be the same length.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'indices',
+            description: 'Array of indices for sparse vector components',
+            isOptional: false,
+            type: 'number[]',
+          },
+          {
+            name: 'values',
+            description: 'Array of values corresponding to the indices',
+            isOptional: false,
+            type: 'number[]',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -74,33 +74,33 @@ type: "number[]",
 - Environment isolation (dev/staging/prod namespaces)
 - Hybrid search combining semantic and keyword matching
 
-### PgVectorConfig
+### `PgVectorConfig`
 
 Configuration options specific to PostgreSQL with pgvector extension.
 
 <PropertiesTable
   content={[
-{
-name: "minScore",
-type: "number",
-description:
-"Minimum similarity score threshold for results. Only vectors with similarity scores above this value will be returned.",
-isOptional: true,
-},
-{
-name: "ef",
-type: "number",
-description:
-"HNSW search parameter that controls the size of the dynamic candidate list during search. Higher values improve accuracy at the cost of speed. Typically set between topK and 200.",
-isOptional: true,
-},
-{
-name: "probes",
-type: "number",
-description:
-"IVFFlat probe parameter that specifies the number of index cells to visit during search. Higher values improve recall at the cost of speed.",
-isOptional: true,
-},
+  {
+    name: 'minScore',
+    type: 'number',
+    description:
+      'Minimum similarity score threshold for results. Only vectors with similarity scores above this value will be returned.',
+    isOptional: true,
+  },
+  {
+    name: 'ef',
+    type: 'number',
+    description:
+      'HNSW search parameter that controls the size of the dynamic candidate list during search. Higher values improve accuracy at the cost of speed. Typically set between topK and 200.',
+    isOptional: true,
+  },
+  {
+    name: 'probes',
+    type: 'number',
+    description:
+      'IVFFlat probe parameter that specifies the number of index cells to visit during search. Higher values improve recall at the cost of speed.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -116,26 +116,25 @@ isOptional: true,
 - Quality filtering to remove irrelevant results
 - Fine-tuning search accuracy vs speed tradeoffs
 
-### ChromaConfig
+### `ChromaConfig`
 
 Configuration options specific to Chroma vector store.
 
 <PropertiesTable
   content={[
-{
-name: "where",
-type: "Record<string, any>",
-description:
-"Metadata filtering conditions using MongoDB-style query syntax. Filters results based on metadata fields.",
-isOptional: true,
-},
-{
-name: "whereDocument",
-type: "Record<string, any>",
-description:
-"Document content filtering conditions. Allows filtering based on the actual document text content.",
-isOptional: true,
-},
+  {
+    name: 'where',
+    type: 'Record<string, any>',
+    description:
+      'Metadata filtering conditions using MongoDB-style query syntax. Filters results based on metadata fields.',
+    isOptional: true,
+  },
+  {
+    name: 'whereDocument',
+    type: 'Record<string, any>',
+    description: 'Document content filtering conditions. Allows filtering based on the actual document text content.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -164,7 +163,7 @@ whereDocument: { "$contains": "API documentation" }
 - Content-based document filtering
 - Complex query combinations
 
-## Usage Examples
+## Usage examples
 
 <Tabs>
   <TabItem value="basic-usage" label="Basic Usage">
@@ -315,7 +314,7 @@ const vectorTool = createVectorQueryTool({
 })
 ```
 
-## Best Practices
+## Best practices
 
 1. **Environment Configuration**: Use different namespaces or configurations for different environments
 1. **Performance Tuning**: Start with default values and adjust based on your specific needs
@@ -323,7 +322,7 @@ const vectorTool = createVectorQueryTool({
 1. **Runtime Flexibility**: Override configurations at runtime for dynamic scenarios
 1. **Documentation**: Document your specific configuration choices for team members
 
-## Migration Guide
+## Migration guide
 
 Existing vector query tools continue to work without changes. To add database configurations:
 

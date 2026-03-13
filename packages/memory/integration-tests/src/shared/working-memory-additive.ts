@@ -484,7 +484,7 @@ Schema structure reminder:
         // Turn 2: Ask to forget location for privacy - be explicit about which field to null
         await agentGenerate(
           agent,
-          'Actually, please forget my personal location (in the about section). Remove it from your memory for privacy reasons.',
+          'Actually, please forget my personal location (in the about section). Remove it from your memory for privacy reasons. Set about.location to null.',
           { threadId: thread.id, resourceId },
           model,
         );

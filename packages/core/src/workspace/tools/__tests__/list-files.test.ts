@@ -19,18 +19,20 @@ describe('workspace_list_files', () => {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
 
-  it('should list directory contents as tree (default depth 1)', async () => {
+  it('should list directory contents as compact paths (default depth 2)', async () => {
     await fs.mkdir(path.join(tempDir, 'dir'));
     await fs.writeFile(path.join(tempDir, 'dir', 'file1.txt'), 'content1');
     await fs.writeFile(path.join(tempDir, 'dir', 'file2.txt'), 'content2');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '/dir' }, { workspace });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: 'dir' }, { workspace });
 
     expect(typeof result).toBe('string');
     expect(result).toContain('file1.txt');
     expect(result).toContain('file2.txt');
+    expect(result).not.toContain('├──');
+    expect(result).not.toContain('└──');
     expect(result).toContain('0 directories, 2 files');
   });
 
@@ -43,7 +45,7 @@ describe('workspace_list_files', () => {
     const tools = createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
-      { path: '/dir', maxDepth: 5 },
+      { path: 'dir', maxDepth: 5 },
       { workspace },
     );
 
@@ -51,6 +53,9 @@ describe('workspace_list_files', () => {
     expect(result).toContain('subdir');
     expect(result).toContain('file1.txt');
     expect(result).toContain('file2.txt');
+    expect(result).toContain('\tfile2.txt');
+    expect(result).not.toContain('├──');
+    expect(result).not.toContain('└──');
     expect(result).toContain('1 directory');
     expect(result).toContain('2 files');
   });
@@ -63,10 +68,7 @@ describe('workspace_list_files', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
-      { path: '/', maxDepth: 2 },
-      { workspace },
-    );
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '', maxDepth: 2 }, { workspace });
 
     expect(typeof result).toBe('string');
     expect(result).toContain('level1');
@@ -76,7 +78,7 @@ describe('workspace_list_files', () => {
     expect(result).toContain('truncated at depth 2');
   });
 
-  it('should default maxDepth to 3', async () => {
+  it('should default maxDepth to 2', async () => {
     await fs.mkdir(path.join(tempDir, 'level1'));
     await fs.mkdir(path.join(tempDir, 'level1', 'level2'));
     await fs.mkdir(path.join(tempDir, 'level1', 'level2', 'level3'));
@@ -85,15 +87,15 @@ describe('workspace_list_files', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '/' }, { workspace });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '' }, { workspace });
 
     expect(typeof result).toBe('string');
     expect(result).toContain('level1');
     expect(result).toContain('level2');
-    expect(result).toContain('level3');
+    expect(result).not.toContain('level3');
     expect(result).not.toContain('level4');
     expect(result).not.toContain('deep.txt');
-    expect(result).toContain('truncated at depth 3');
+    expect(result).toContain('truncated at depth 2');
   });
 
   it('should filter by extension (tree -P flag)', async () => {
@@ -104,7 +106,7 @@ describe('workspace_list_files', () => {
     const tools = createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
-      { path: '/', extension: '.ts' },
+      { path: '', extension: '.ts' },
       { workspace },
     );
 
@@ -122,14 +124,14 @@ describe('workspace_list_files', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const resultHidden = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '/' }, { workspace });
+    const resultHidden = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '' }, { workspace });
     expect(resultHidden).not.toContain('.gitignore');
     expect(resultHidden).not.toContain('.hidden-dir');
     expect(resultHidden).toContain('visible.txt');
 
     const resultVisible = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
       {
-        path: '/',
+        path: '',
         showHidden: true,
       },
       { workspace },
@@ -149,7 +151,7 @@ describe('workspace_list_files', () => {
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
       {
-        path: '/',
+        path: '',
         maxDepth: 3,
         dirsOnly: true,
       },
@@ -174,7 +176,7 @@ describe('workspace_list_files', () => {
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
       {
-        path: '/',
+        path: '',
         maxDepth: 3,
         exclude: 'node_modules',
       },
@@ -188,6 +190,32 @@ describe('workspace_list_files', () => {
     expect(result).not.toContain('lodash');
   });
 
+  it('should respect .gitignore by default', async () => {
+    await fs.writeFile(path.join(tempDir, '.gitignore'), 'node_modules\n*.log\n');
+    await fs.mkdir(path.join(tempDir, 'node_modules'));
+    await fs.writeFile(path.join(tempDir, 'node_modules', 'index.js'), '');
+    await fs.writeFile(path.join(tempDir, 'app.log'), '');
+    await fs.writeFile(path.join(tempDir, 'src.ts'), '');
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = createWorkspaceTools(workspace);
+
+    const defaultResult = (await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
+      { path: '' },
+      { workspace },
+    )) as string;
+    expect(defaultResult).toContain('src.ts');
+    expect(defaultResult).not.toContain('node_modules');
+    expect(defaultResult).not.toContain('app.log');
+
+    const ignoreDisabledResult = (await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
+      { path: '', showHidden: true, respectGitignore: false },
+      { workspace },
+    )) as string;
+    expect(ignoreDisabledResult).toContain('.gitignore');
+    expect(ignoreDisabledResult).toContain('node_modules');
+    expect(ignoreDisabledResult).toContain('app.log');
+  });
+
   it('should filter files by glob pattern', async () => {
     await fs.mkdir(path.join(tempDir, 'src'));
     await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
@@ -198,7 +226,7 @@ describe('workspace_list_files', () => {
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
       {
-        path: '/',
+        path: '',
         maxDepth: 5,
         pattern: '**/*.ts',
       },
@@ -220,7 +248,7 @@ describe('workspace_list_files', () => {
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
       {
-        path: '/',
+        path: '',
         pattern: ['**/*.ts', '**/*.tsx'],
       },
       { workspace },
@@ -247,12 +275,47 @@ describe('workspace_list_files', () => {
 
     const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
       {
-        path: '/',
+        path: '',
         maxDepth: 5,
       },
       { workspace },
     )) as string;
 
     expect(result).toContain('[output truncated');
+  });
+
+  it('should respect .gitignore for directory patterns', async () => {
+    await fs.mkdir(path.join(tempDir, 'src'));
+    await fs.mkdir(path.join(tempDir, 'dist'));
+    await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
+    await fs.writeFile(path.join(tempDir, 'dist', 'bundle.js'), '');
+    await fs.writeFile(path.join(tempDir, '.gitignore'), 'dist/\n');
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
+      { path: '', maxDepth: 3, showHidden: true },
+      { workspace },
+    );
+
+    expect(result).toContain('src');
+    expect(result).toContain('index.ts');
+    expect(result).not.toContain('dist');
+    expect(result).not.toContain('bundle.js');
+  });
+
+  it('should still list an ignored directory when explicitly targeted', async () => {
+    await fs.mkdir(path.join(tempDir, 'dist'));
+    await fs.writeFile(path.join(tempDir, 'dist', 'bundle.js'), '');
+    await fs.writeFile(path.join(tempDir, '.gitignore'), 'dist/\n');
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
+      { path: 'dist', maxDepth: 3 },
+      { workspace },
+    );
+
+    expect(result).toContain('bundle.js');
   });
 });

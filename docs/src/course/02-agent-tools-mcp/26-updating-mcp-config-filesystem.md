@@ -16,7 +16,12 @@ const mcp = new MCPClient({
       },
     },
     github: {
-      url: new URL(process.env.COMPOSIO_MCP_GITHUB || ''),
+      url: new URL('https://api.githubcopilot.com/mcp/'),
+      requestInit: {
+        headers: {
+          Authorization: `Bearer ${process.env.GITHUB_PERSONAL_ACCESS_TOKEN}`,
+        },
+      },
     },
     hackernews: {
       command: 'npx',

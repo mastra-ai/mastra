@@ -1,9 +1,9 @@
+import { createUIMessageStream, createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
+import type { InferUIMessageChunk, UIMessage } from '@internal/ai-sdk-v5';
 import type { Mastra } from '@mastra/core/mastra';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
-import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
-import type { InferUIMessageChunk, UIMessage } from 'ai';
 import { toAISdkV5Stream } from './convert-streams';
 
 export type WorkflowStreamHandlerParams = {
@@ -34,7 +34,7 @@ export type WorkflowStreamHandlerOptions = {
  * ```ts
  * // Next.js App Router
  * import { handleWorkflowStream } from '@mastra/ai-sdk';
- * import { createUIMessageStreamResponse } from 'ai';
+ * import { createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
  * import { mastra } from '@/src/mastra';
  *
  * export async function POST(req: Request) {

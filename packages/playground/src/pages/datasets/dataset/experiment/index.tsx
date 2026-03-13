@@ -1,5 +1,3 @@
-import { useParams, Link } from 'react-router';
-import { Database } from 'lucide-react';
 import {
   Header,
   MainContentLayout,
@@ -10,29 +8,56 @@ import {
   useDataset,
   useDatasetExperiment,
   useDatasetExperimentResults,
-  ExperimentResultsListAndDetails,
+  ExperimentPageContent,
   ExperimentPageHeader,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { Database } from 'lucide-react';
+import { useParams, Link } from 'react-router';
 
 function DatasetExperimentPage() {
   const { datasetId, experimentId } = useParams<{ datasetId: string; experimentId: string }>();
 
   const { data: dataset } = useDataset(datasetId ?? '');
+
   const {
     data: experiment,
     isLoading: experimentLoading,
     error: experimentError,
   } = useDatasetExperiment(datasetId!, experimentId!);
-  const { data: resultsData, isLoading: resultsLoading } = useDatasetExperimentResults({
+
+  const {
+    data: results,
+    isLoading: resultsLoading,
+    setEndOfListElement,
+    isFetchingNextPage,
+    hasNextPage,
+  } = useDatasetExperimentResults({
     datasetId: datasetId!,
     experimentId: experimentId!,
     experimentStatus: experiment?.status,
   });
+
+  if (!datasetId || !experimentId) {
+    return null;
+  }
+
   if (experimentLoading) {
     return (
       <MainContentLayout>
         <div className="flex items-center justify-center h-full">
           <Spinner />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
+  if (experimentError && is403ForbiddenError(experimentError)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="datasets" />
         </div>
       </MainContentLayout>
     );
@@ -47,9 +72,6 @@ function DatasetExperimentPage() {
       </MainContentLayout>
     );
   }
-
-  // Transform results for the table
-  const results = resultsData?.results ?? [];
 
   return (
     <MainContentLayout>
@@ -71,9 +93,17 @@ function DatasetExperimentPage() {
       </Header>
 
       <div className="h-full overflow-hidden px-[3vw] pb-4">
-        <div className="grid gap-6 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full">
+        <div className="grid gap-1 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full">
           <ExperimentPageHeader experimentId={experimentId!} experiment={experiment} />
-          <ExperimentResultsListAndDetails results={results} isLoading={resultsLoading} />
+          <ExperimentPageContent
+            experimentId={experimentId!}
+            experimentStatus={experiment?.status}
+            results={results ?? []}
+            isLoading={resultsLoading}
+            setEndOfListElement={setEndOfListElement}
+            isFetchingNextPage={isFetchingNextPage}
+            hasNextPage={hasNextPage}
+          />
         </div>
       </div>
     </MainContentLayout>

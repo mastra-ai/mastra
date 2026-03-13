@@ -1,0 +1,10 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build", "@internal/playground#build"],
+      "outputs": ["dist/**"]
+    }
+  }
+}

@@ -1,5 +1,5 @@
 ---
-title: "Reference: Unicode Normalizer | Processors"
+title: "Reference: UnicodeNormalizer | Processors"
 description: "Documentation for the UnicodeNormalizer in Mastra, which normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters."
 packages:
   - "@mastra/core"
@@ -24,47 +24,50 @@ const processor = new UnicodeNormalizer({
 
 <PropertiesTable
   content={[
-{
-name: "options",
-type: "Options",
-description: "Configuration options for Unicode text normalization",
-isOptional: true,
-},
-]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
-{
-name: "stripControlChars",
-type: "boolean",
-description: "Whether to strip control characters. When enabled, removes control characters except \t, \n, \r",
-isOptional: true,
-default: "false",
-},
-{
-name: "preserveEmojis",
-type: "boolean",
-description: "Whether to preserve emojis. When disabled, emojis may be removed if they contain control characters",
-isOptional: true,
-default: "true",
-},
-{
-name: "collapseWhitespace",
-type: "boolean",
-description: "Whether to collapse consecutive whitespace. When enabled, multiple spaces/tabs/newlines are collapsed to single instances",
-isOptional: true,
-default: "true",
-},
-{
-name: "trim",
-type: "boolean",
-description: "Whether to trim leading and trailing whitespace",
-isOptional: true,
-default: "true",
-},
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options for Unicode text normalization',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'stripControlChars',
+            type: 'boolean',
+            description:
+              'Whether to strip control characters. When enabled, removes control characters except \t, \n, \r',
+            isOptional: true,
+            default: 'false',
+          },
+          {
+            name: 'preserveEmojis',
+            type: 'boolean',
+            description:
+              'Whether to preserve emojis. When disabled, emojis may be removed if they contain control characters',
+            isOptional: true,
+            default: 'true',
+          },
+          {
+            name: 'collapseWhitespace',
+            type: 'boolean',
+            description:
+              'Whether to collapse consecutive whitespace. When enabled, multiple spaces/tabs/newlines are collapsed to single instances',
+            isOptional: true,
+            default: 'true',
+          },
+          {
+            name: 'trim',
+            type: 'boolean',
+            description: 'Whether to trim leading and trailing whitespace',
+            isOptional: true,
+            default: 'true',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -72,24 +75,24 @@ default: "true",
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Processor identifier set to 'unicode-normalizer'",
-isOptional: false,
-},
-{
-name: "name",
-type: "string",
-description: "Optional processor display name",
-isOptional: true,
-},
-{
-name: "processInput",
-type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => MastraDBMessage[]",
-description: "Processes input messages to normalize Unicode text",
-isOptional: false,
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: "Processor identifier set to 'unicode-normalizer'",
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Optional processor display name',
+    isOptional: true,
+  },
+  {
+    name: 'processInput',
+    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => MastraDBMessage[]',
+    description: 'Processes input messages to normalize Unicode text',
+    isOptional: false,
+  },
 ]}
 />
 
