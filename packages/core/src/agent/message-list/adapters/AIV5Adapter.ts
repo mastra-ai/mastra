@@ -180,12 +180,16 @@ export class AIV5Adapter {
           // This handles OpenRouter models where reasoning is only preserved in provider-specific metadata
           if (!text && part.providerMetadata) {
             for (const provider of Object.values(part.providerMetadata)) {
+              if (!provider || typeof provider !== 'object') continue;
               const details = (provider as Record<string, unknown>)?.reasoning_details;
               if (Array.isArray(details)) {
                 text = details
-                  .map((d: Record<string, unknown>) => {
-                    if (d.type === 'reasoning.text' && typeof d.text === 'string') return d.text;
-                    if (d.type === 'reasoning.summary' && typeof d.summary === 'string') return d.summary;
+                  .map((d: unknown) => {
+                    if (!d || typeof d !== 'object') return '';
+                    const detail = d as Record<string, unknown>;
+                    if (detail.type === 'reasoning.text' && typeof detail.text === 'string') return detail.text;
+                    if (detail.type === 'reasoning.summary' && typeof detail.summary === 'string')
+                      return detail.summary;
                     return '';
                   })
                   .filter(Boolean)
