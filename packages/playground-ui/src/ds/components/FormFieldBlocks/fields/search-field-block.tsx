@@ -2,6 +2,7 @@ import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { SearchIcon, XIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '../../Input';
+import { Button } from '../../Button';
 import { transitions } from '@/ds/primitives/transitions';
 import { FieldBlock } from '../block/field-block';
 
@@ -21,7 +22,6 @@ export type SearchFieldBlockProps = {
   errorMsg?: string;
   size?: 'small' | 'default';
   layout?: 'horizontal' | 'vertical';
-  className?: string;
 };
 
 export function SearchFieldBlock({
@@ -38,10 +38,9 @@ export function SearchFieldBlock({
   placeholder = 'Search...',
   onChange,
   onReset,
-  className,
 }: SearchFieldBlockProps) {
   return (
-    <FieldBlock.Layout layout={layout} className={className}>
+    <FieldBlock.Layout layout={layout}>
       {layout === 'horizontal' ? (
         <FieldBlock.Column>
           <FieldBlock.Label name={name} required={required}>
