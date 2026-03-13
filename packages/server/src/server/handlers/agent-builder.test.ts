@@ -3,7 +3,7 @@ import { MockStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import z from 'zod';
+import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import {
@@ -33,16 +33,24 @@ vi.mock('@mastra/agent-builder', () => ({
 }));
 
 vi.mock('zod', async importOriginal => {
-  const actual: {} = await importOriginal();
+  const actual = (await importOriginal()) as { z?: Record<string, unknown> };
+
+  const object = vi.fn(() => ({
+    parse: vi.fn(input => input),
+    safeParse: vi.fn(input => ({ success: true, data: input })),
+  }));
+
+  const string = vi.fn(() => ({
+    parse: vi.fn(input => input),
+  }));
+
   return {
     ...actual,
-    object: vi.fn(() => ({
-      parse: vi.fn(input => input),
-      safeParse: vi.fn(input => ({ success: true, data: input })),
-    })),
-    string: vi.fn(() => ({
-      parse: vi.fn(input => input),
-    })),
+    z: {
+      ...(actual.z ?? {}),
+      object,
+      string,
+    },
   };
 });
 
