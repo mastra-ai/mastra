@@ -11,11 +11,6 @@ export const useAgents = () => {
   return useQuery({
     queryKey: ['agents', requestContext],
     queryFn: () => client.listAgents(requestContext),
-    select: data => {
-      const entries = Object.entries(data);
-      entries.sort(([, a], [, b]) => a.name.localeCompare(b.name));
-      return Object.fromEntries(entries);
-    },
   });
 };
 

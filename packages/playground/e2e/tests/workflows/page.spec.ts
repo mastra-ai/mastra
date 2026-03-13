@@ -18,7 +18,7 @@ test('has valid links', async ({ page }) => {
 test('clicking on the complex-workflow row redirects', async ({ page }) => {
   await page.goto('/workflows');
 
-  const el = page.locator('main').getByRole('listitem').filter({ hasText: 'complex-workflow' });
+  const el = await page.locator('tr:has-text("complex-workflow")');
   await el.click();
 
   await expect(page).toHaveURL(/\/workflows\/complexWorkflow\/graph$/);
