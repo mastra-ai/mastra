@@ -56,8 +56,15 @@ function convertToJsonSchema(
  */
 let _toJSONSchema: ((schema: unknown, options?: unknown) => unknown) | null = null;
 let _toJSONSchemaResolved = false;
-const __require = typeof require === 'function' ? require : createRequire(import.meta.url);
 
+let __require: ReturnType<typeof createRequire>;
+
+function getRequire(): ReturnType<typeof createRequire> {
+  if (!__require) {
+    __require = createRequire(import.meta.url);
+  }
+  return __require;
+}
 function pickToJSONSchema(mod: unknown): ((schema: unknown, options?: unknown) => unknown) | null {
   const candidate = mod as {
     toJSONSchema?: unknown;
@@ -99,7 +106,7 @@ function getToJSONSchema(): ((schema: unknown, options?: unknown) => unknown) | 
     return _toJSONSchema;
   }
 
-  _toJSONSchema = resolveToJSONSchema(moduleName => __require(moduleName));
+  _toJSONSchema = resolveToJSONSchema(moduleName => getRequire()(moduleName));
   _toJSONSchemaResolved = true;
   return _toJSONSchema;
 }
