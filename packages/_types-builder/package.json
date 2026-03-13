@@ -22,12 +22,12 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@microsoft/api-extractor": "^7.56.3",
+    "@microsoft/api-extractor": "^7.57.7",
     "globby": "^14.1.0",
     "local-pkg": "^1.1.2",
     "resolve.exports": "^2.0.3",
     "ts-morph": "^27.0.2",
-    "typescript": "catalog:"
+    "typescript": "^5.9.3"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",

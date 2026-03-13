@@ -36,7 +36,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "async-mutex": "^0.5.0",
-    "pg": "^8.16.3",
+    "pg": "^8.20.0",
     "xxhash-wasm": "^1.1.0"
   },
   "devDependencies": {
@@ -45,12 +45,12 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.19.13",
-    "@types/pg": "^8.16.0",
+    "@types/pg": "^8.18.0",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",
     "tsup": "^8.5.1",
-    "typescript": "catalog:",
+    "typescript": "^5.9.3",
     "vitest": "catalog:"
   },
   "peerDependencies": {

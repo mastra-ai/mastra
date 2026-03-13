@@ -35,8 +35,8 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@internal/types-builder": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.19.13",
     "@vitest/coverage-v8": "catalog:",
@@ -44,7 +44,7 @@
     "dotenv": "^17.3.1",
     "eslint": "^9.39.4",
     "tsup": "^8.5.1",
-    "typescript": "catalog:",
+    "typescript": "^5.9.3",
     "vitest": "catalog:"
   },
   "peerDependencies": {

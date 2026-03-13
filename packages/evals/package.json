@@ -63,7 +63,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "compromise": "^14.14.5",
+    "compromise": "^14.15.0",
     "keyword-extractor": "^0.0.28",
     "sentiment": "^5.0.2",
     "string-similarity": "^4.0.4"
@@ -86,7 +86,7 @@
     "dotenv": "^17.3.1",
     "eslint": "^9.39.4",
     "tsup": "^8.5.1",
-    "typescript": "catalog:",
+    "typescript": "^5.9.3",
     "vitest": "catalog:",
     "zod": "catalog:"
   },

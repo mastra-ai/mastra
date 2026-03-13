@@ -37,9 +37,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.1004.0",
-    "@aws-sdk/lib-dynamodb": "^3.1004.0",
-    "electrodb": "^3.5.3"
+    "@aws-sdk/client-dynamodb": "^3.1008.0",
+    "@aws-sdk/lib-dynamodb": "^3.1008.0",
+    "electrodb": "^3.7.1"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"
@@ -54,7 +54,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",
     "tsup": "^8.5.1",
-    "typescript": "catalog:",
+    "typescript": "^5.9.3",
     "vitest": "catalog:"
   },
   "homepage": "https://mastra.ai",

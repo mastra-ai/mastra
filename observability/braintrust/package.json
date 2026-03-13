@@ -35,7 +35,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/observability": "workspace:*",
-    "braintrust": "^2.2.0"
+    "braintrust": "^2.2.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -47,7 +47,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",
     "tsup": "^8.5.1",
-    "typescript": "catalog:",
+    "typescript": "^5.9.3",
     "vitest": "catalog:"
   },
   "peerDependencies": {
