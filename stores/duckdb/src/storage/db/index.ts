@@ -100,7 +100,7 @@ export class DuckDBConnection extends MastraBase {
     return rows.map(row => {
       const obj: Record<string, unknown> = {};
       columns.forEach((col, i) => {
-        obj[col] = row[i];
+        obj[col] = toJsValue(row[i]);
       });
       return obj as T;
     });
