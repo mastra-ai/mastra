@@ -50,7 +50,7 @@ export interface DeepCleanOptions {
 
 export const DEFAULT_DEEP_CLEAN_OPTIONS: DeepCleanOptions = Object.freeze({
   keysToStrip: DEFAULT_KEYS_TO_STRIP,
-  maxDepth: 8,
+  maxDepth: 16,
   maxStringLength: 128 * 1024, // 128KB - sufficient for large LLM prompts/responses
   maxArrayLength: 50,
   maxObjectKeys: 50,
@@ -204,7 +204,11 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
       ? keysToStrip
       : new Set(Array.isArray(keysToStrip) ? keysToStrip : Object.keys(keysToStrip));
 
-  const seen = new WeakSet<any>();
+  // Track objects on the current ancestor path to detect true circular
+  // references (A → B → A) without false-flagging shared references
+  // (A → X, B → X).  A shared (non-circular) reference is simply
+  // serialized again in each location where it appears.
+  const ancestors = new WeakSet<any>();
 
   function helper(val: any, depth: number): any {
     if (depth > maxDepth) {
@@ -248,79 +252,88 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
       };
     }
 
-    // Handle circular references
+    // Handle circular references — only flag when the same object is an
+    // ancestor of the current node (true cycle), not merely seen elsewhere.
     if (typeof val === 'object') {
-      if (seen.has(val)) {
+      if (ancestors.has(val)) {
         return '[Circular]';
       }
-      seen.add(val);
+      ancestors.add(val);
     }
 
-    // Handle arrays - enforce length limit
-    if (Array.isArray(val)) {
-      const limitedArray = val.slice(0, maxArrayLength);
-      const cleaned = limitedArray.map(item => helper(item, depth + 1));
-      if (val.length > maxArrayLength) {
-        cleaned.push(`[…${val.length - maxArrayLength} more items]`);
+    try {
+      // Handle arrays - enforce length limit
+      if (Array.isArray(val)) {
+        const limitedArray = val.slice(0, maxArrayLength);
+        const cleaned = limitedArray.map(item => helper(item, depth + 1));
+        if (val.length > maxArrayLength) {
+          cleaned.push(`[…${val.length - maxArrayLength} more items]`);
+        }
+        return cleaned;
       }
+
+      // Handle Buffer and typed arrays - don't serialize large binary data
+      if (typeof Buffer !== 'undefined' && Buffer.isBuffer(val)) {
+        return `[Buffer length=${val.length}]`;
+      }
+
+      if (ArrayBuffer.isView(val)) {
+        const ctor = (val as any).constructor?.name ?? 'TypedArray';
+        const byteLength = (val as any).byteLength ?? '?';
+        return `[${ctor} byteLength=${byteLength}]`;
+      }
+
+      if (val instanceof ArrayBuffer) {
+        return `[ArrayBuffer byteLength=${val.byteLength}]`;
+      }
+
+      // Handle objects with serializeForSpan() method - use their custom trace serialization
+      if (typeof val.serializeForSpan === 'function') {
+        try {
+          return helper(val.serializeForSpan(), depth);
+        } catch {
+          // If serializeForSpan() fails, fall through to default object handling
+        }
+      }
+
+      // Handle JSON Schema objects - compress to a more readable format
+      // Pass the compressed result back through helper to apply size limits
+      if (isJsonSchema(val)) {
+        return helper(compressJsonSchema(val), depth);
+      }
+
+      // Handle objects - enforce key limit
+      const cleaned: Record<string, any> = {};
+      const entries = Object.entries(val);
+      let keyCount = 0;
+
+      for (const [key, v] of entries) {
+        if (stripSet.has(key)) {
+          continue;
+        }
+
+        if (keyCount >= maxObjectKeys) {
+          cleaned['__truncated'] = `${entries.length - keyCount} more keys omitted`;
+          break;
+        }
+
+        try {
+          cleaned[key] = helper(v, depth + 1);
+          keyCount++;
+        } catch (error) {
+          cleaned[key] = `[${error instanceof Error ? error.message : String(error)}]`;
+          keyCount++;
+        }
+      }
+
       return cleaned;
-    }
-
-    // Handle Buffer and typed arrays - don't serialize large binary data
-    if (typeof Buffer !== 'undefined' && Buffer.isBuffer(val)) {
-      return `[Buffer length=${val.length}]`;
-    }
-
-    if (ArrayBuffer.isView(val)) {
-      const ctor = (val as any).constructor?.name ?? 'TypedArray';
-      const byteLength = (val as any).byteLength ?? '?';
-      return `[${ctor} byteLength=${byteLength}]`;
-    }
-
-    if (val instanceof ArrayBuffer) {
-      return `[ArrayBuffer byteLength=${val.byteLength}]`;
-    }
-
-    // Handle objects with serializeForSpan() method - use their custom trace serialization
-    if (typeof val.serializeForSpan === 'function') {
-      try {
-        return helper(val.serializeForSpan(), depth);
-      } catch {
-        // If serializeForSpan() fails, fall through to default object handling
+    } finally {
+      // Remove from ancestor set when leaving this node so parallel
+      // branches can serialize the same shared reference independently.
+      if (typeof val === 'object' && val !== null) {
+        ancestors.delete(val);
       }
     }
-
-    // Handle JSON Schema objects - compress to a more readable format
-    // Pass the compressed result back through helper to apply size limits
-    if (isJsonSchema(val)) {
-      return helper(compressJsonSchema(val), depth);
-    }
-
-    // Handle objects - enforce key limit
-    const cleaned: Record<string, any> = {};
-    const entries = Object.entries(val);
-    let keyCount = 0;
-
-    for (const [key, v] of entries) {
-      if (stripSet.has(key)) {
-        continue;
-      }
-
-      if (keyCount >= maxObjectKeys) {
-        cleaned['__truncated'] = `${entries.length - keyCount} more keys omitted`;
-        break;
-      }
-
-      try {
-        cleaned[key] = helper(v, depth + 1);
-        keyCount++;
-      } catch (error) {
-        cleaned[key] = `[${error instanceof Error ? error.message : String(error)}]`;
-        keyCount++;
-      }
-    }
-
-    return cleaned;
   }
 
   return helper(value, 0);

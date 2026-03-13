@@ -720,6 +720,58 @@ describe('Span', () => {
       expect(result.tracingContext).toBeUndefined();
     });
 
+    it('should preserve shared (non-circular) object references', () => {
+      // Simulate the tool-invocations scenario from issue #14262:
+      // toolInvocations[0] and parts[0].toolInvocation point to the SAME object.
+      const toolData = { args: { query: 'search term' }, result: { pages: [{ url: 'https://example.com' }] } };
+      const message = {
+        content: {
+          toolInvocations: [toolData],
+          parts: [{ type: 'tool-invocation', toolInvocation: toolData }],
+        },
+      };
+
+      const result = deepClean(message);
+
+      // Both locations should have the full data — no [Circular]
+      expect(result.content.toolInvocations[0].args.query).toBe('search term');
+      expect(result.content.toolInvocations[0].result.pages[0].url).toBe('https://example.com');
+      expect(result.content.parts[0].toolInvocation.args.query).toBe('search term');
+      expect(result.content.parts[0].toolInvocation.result.pages[0].url).toBe('https://example.com');
+    });
+
+    it('should still detect true circular references', () => {
+      const a: any = { name: 'a' };
+      const b: any = { name: 'b', parent: a };
+      a.child = b; // true cycle: a → b → a
+
+      const result = deepClean(a);
+      expect(result.name).toBe('a');
+      expect(result.child.name).toBe('b');
+      expect(result.child.parent).toBe('[Circular]');
+    });
+
+    it('should serialize deeply nested tool results with default depth', () => {
+      // 12-level deep object that mirrors real tool payloads
+      const payload: any = { level: 0 };
+      let current = payload;
+      for (let i = 1; i <= 12; i++) {
+        current.nested = { level: i, data: `value-${i}` };
+        current = current.nested;
+      }
+
+      const result = deepClean(payload);
+
+      // With maxDepth=16, all 12 levels should be intact
+      let node = result;
+      for (let i = 0; i <= 11; i++) {
+        expect(node.level).toBe(i);
+        node = node.nested;
+      }
+      expect(node.level).toBe(12);
+      expect(node.data).toBe('value-12');
+    });
+
     it('should handle max depth', () => {
       const deepObj: any = { level: 0 };
       let current = deepObj;
