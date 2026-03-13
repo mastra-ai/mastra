@@ -1,5 +1,18 @@
 # @mastra/playground-ui
 
+## 16.1.2
+
+### Patch Changes
+
+- Revert "New style for list-type pages (#14173)" - restores Table components that were replaced with List components ([#14278](https://github.com/mastra-ai/mastra/pull/14278))
+
+- Updated dependencies [[`42c585b`](https://github.com/mastra-ai/mastra/commit/42c585bf863ab0a5081e7445f24a821f32b31c91), [`0ce6035`](https://github.com/mastra-ai/mastra/commit/0ce603591189f547397704e53f23c77bc5630071), [`1978bc4`](https://github.com/mastra-ai/mastra/commit/1978bc424dbb04f5f7c5d8522f07f1166006fa3f)]:
+  - @mastra/client-js@1.8.4
+  - @mastra/core@1.13.2
+  - @mastra/schema-compat@1.2.4
+  - @mastra/react@0.2.14
+  - @mastra/ai-sdk@1.1.3
+
 ## 16.1.2-alpha.0
 
 ### Patch Changes
