@@ -8,6 +8,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
   GET_MEMORY_STATUS_ROUTE,
+  GET_MEMORY_CONFIG_ROUTE,
+  GET_WORKING_MEMORY_ROUTE,
   LIST_THREADS_ROUTE,
   GET_THREAD_BY_ID_ROUTE,
   SAVE_MESSAGES_ROUTE,
@@ -183,6 +185,71 @@ describe('Memory Handlers', () => {
 
       // This is the expected behavior - graceful empty response
       expect(result).toEqual({ messages: [], uiMessages: [] });
+    });
+  });
+
+  /**
+   * Issue #11765 (regression): GET_MEMORY_CONFIG_ROUTE should gracefully handle agents without memory
+   *
+   * The playground UI calls GET /memory/config?agentId=<agentId> for all agents.
+   * When memory is not configured, this should return null config instead of throwing HTTPException(400).
+   */
+  describe('getMemoryConfigHandler - Issue #11765 regression', () => {
+    it('should return null config when agent has no memory configured (not throw)', async () => {
+      const agentWithoutMemory = new Agent({
+        id: 'no-memory-agent',
+        name: 'Agent Without Memory',
+        instructions: 'test-instructions',
+        model: {} as any,
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: { 'no-memory-agent': agentWithoutMemory },
+      });
+
+      const result = await GET_MEMORY_CONFIG_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'no-memory-agent',
+      });
+
+      expect(result).toEqual({ config: null });
+    });
+  });
+
+  /**
+   * Issue #11765 (regression): GET_WORKING_MEMORY_ROUTE should gracefully handle agents without memory
+   *
+   * The playground UI calls GET /memory/threads/:threadId/working-memory?agentId=<agentId>.
+   * When memory is not configured, this should return null instead of throwing HTTPException(400).
+   */
+  describe('getWorkingMemoryHandler - Issue #11765 regression', () => {
+    it('should return null working memory when agent has no memory configured (not throw)', async () => {
+      const agentWithoutMemory = new Agent({
+        id: 'no-memory-agent',
+        name: 'Agent Without Memory',
+        instructions: 'test-instructions',
+        model: {} as any,
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: { 'no-memory-agent': agentWithoutMemory },
+      });
+
+      const result = await GET_WORKING_MEMORY_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'no-memory-agent',
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+      });
+
+      expect(result).toEqual({
+        workingMemory: null,
+        source: 'thread',
+        workingMemoryTemplate: null,
+        threadExists: false,
+      });
     });
   });
 
