@@ -111,10 +111,16 @@ exports[`DeepSeekSchemaCompatLayer > Snapshot Tests - Full JSON Schema Output > 
   "properties": {
     "metadata": {
       "additionalProperties": {
-        "type": [
-          "string",
-          "number",
-          "boolean",
+        "anyOf": [
+          {
+            "type": "string",
+          },
+          {
+            "type": "number",
+          },
+          {
+            "type": "boolean",
+          },
         ],
       },
       "type": "object",
@@ -608,9 +614,13 @@ exports[`DeepSeekSchemaCompatLayer > processZodType - Complex Schemas > should h
       "type": "string",
     },
     "unionField": {
-      "type": [
-        "string",
-        "number",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
       ],
     },
   },
@@ -948,6 +958,8 @@ exports[`DeepSeekSchemaCompatLayer > processZodType - Number Constraints > shoul
       "type": "number",
     },
     "score": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
       "type": "integer",
     },
   },
@@ -1083,9 +1095,13 @@ exports[`DeepSeekSchemaCompatLayer > processZodType - Unions > should handle opt
       "type": "string",
     },
     "value": {
-      "type": [
-        "string",
-        "number",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
       ],
     },
   },
@@ -1102,9 +1118,13 @@ exports[`DeepSeekSchemaCompatLayer > processZodType - Unions > should handle sim
   "additionalProperties": false,
   "properties": {
     "value": {
-      "type": [
-        "string",
-        "number",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
       ],
     },
   },

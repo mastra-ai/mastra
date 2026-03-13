@@ -842,5 +842,24 @@ describe('DeepSeekSchemaCompatLayer', () => {
       const layer = new DeepSeekSchemaCompatLayer(modelInfo);
       expect(() => layer.processToJSONSchema(schema)).not.toThrow();
     });
+
+    it('should handle intersection nested inside a union (allOf inside anyOf)', () => {
+      const schema = z.object({
+        locate: z.object({
+          prompt: z.union([
+            z.string(),
+            z.object({ prompt: z.string() }).and(
+              z.object({
+                images: z.array(z.object({ name: z.string(), url: z.string() })),
+                convertHttpImage2Base64: z.boolean(),
+              }),
+            ),
+          ]),
+        }),
+      });
+
+      const layer = new DeepSeekSchemaCompatLayer(modelInfo);
+      expect(() => layer.processToJSONSchema(schema)).not.toThrow();
+    });
   });
 });

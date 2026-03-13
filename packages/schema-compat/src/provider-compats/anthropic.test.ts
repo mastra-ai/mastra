@@ -849,5 +849,27 @@ describe('AnthropicSchemaCompatLayer', () => {
       const layer = new AnthropicSchemaCompatLayer(modelInfo);
       expect(() => layer.toJSONSchema(schema)).not.toThrow();
     });
+
+    it('should handle intersection nested inside a union (allOf inside anyOf)', () => {
+      // Mirrors JSON Schema pattern: anyOf: [string, allOf: [{object}, {object}]]
+      // The allOf creates a ZodIntersection via .and(), which previously threw:
+      // "<modelId> does not support zod type: ZodIntersection"
+      const schema = z.object({
+        locate: z.object({
+          prompt: z.union([
+            z.string(),
+            z.object({ prompt: z.string() }).and(
+              z.object({
+                images: z.array(z.object({ name: z.string(), url: z.string() })),
+                convertHttpImage2Base64: z.boolean(),
+              }),
+            ),
+          ]),
+        }),
+      });
+
+      const layer = new AnthropicSchemaCompatLayer(modelInfo);
+      expect(() => layer.toJSONSchema(schema)).not.toThrow();
+    });
   });
 });

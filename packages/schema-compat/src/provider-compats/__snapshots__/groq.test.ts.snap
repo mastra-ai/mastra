@@ -228,10 +228,16 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > Snapshot Tests - Full JSON Sc
   "properties": {
     "metadata": {
       "additionalProperties": {
-        "type": [
-          "string",
-          "number",
-          "boolean",
+        "anyOf": [
+          {
+            "type": "string",
+          },
+          {
+            "type": "number",
+          },
+          {
+            "type": "boolean",
+          },
         ],
       },
       "type": "object",
@@ -762,9 +768,13 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Complex Sche
       "type": "string",
     },
     "unionField": {
-      "type": [
-        "string",
-        "number",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
       ],
     },
   },
@@ -1182,6 +1192,8 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Number Const
       "type": "number",
     },
     "score": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
       "type": "integer",
     },
   },
@@ -1337,13 +1349,10 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Unions > sho
     "value": {
       "anyOf": [
         {
-          "type": [
-            "string",
-            "number",
-          ],
+          "type": "string",
         },
         {
-          "type": "null",
+          "type": "number",
         },
       ],
     },
@@ -1362,9 +1371,13 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Unions > sho
   "additionalProperties": false,
   "properties": {
     "value": {
-      "type": [
-        "string",
-        "number",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
       ],
     },
   },

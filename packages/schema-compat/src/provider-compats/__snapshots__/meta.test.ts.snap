@@ -188,10 +188,16 @@ exports[`MetaSchemaCompatLayer > Snapshot Tests - Full JSON Schema Output > shou
   "properties": {
     "metadata": {
       "additionalProperties": {
-        "type": [
-          "string",
-          "number",
-          "boolean",
+        "anyOf": [
+          {
+            "type": "string",
+          },
+          {
+            "type": "number",
+          },
+          {
+            "type": "boolean",
+          },
         ],
       },
       "type": "object",
@@ -640,9 +646,13 @@ exports[`MetaSchemaCompatLayer > processZodType - Complex Schemas > should handl
       "type": "string",
     },
     "unionField": {
-      "type": [
-        "string",
-        "number",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
       ],
     },
   },
@@ -1132,9 +1142,13 @@ exports[`MetaSchemaCompatLayer > processZodType - Unions > should handle optiona
       "type": "string",
     },
     "value": {
-      "type": [
-        "string",
-        "number",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
       ],
     },
   },
@@ -1151,9 +1165,13 @@ exports[`MetaSchemaCompatLayer > processZodType - Unions > should handle simple 
   "additionalProperties": false,
   "properties": {
     "value": {
-      "type": [
-        "string",
-        "number",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
       ],
     },
   },

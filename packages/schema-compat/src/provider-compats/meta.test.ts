@@ -862,5 +862,24 @@ describe('MetaSchemaCompatLayer', () => {
       const layer = new MetaSchemaCompatLayer(modelInfo);
       expect(() => layer.toJSONSchema(schema)).not.toThrow();
     });
+
+    it('should handle intersection nested inside a union (allOf inside anyOf)', () => {
+      const schema = z.object({
+        locate: z.object({
+          prompt: z.union([
+            z.string(),
+            z.object({ prompt: z.string() }).and(
+              z.object({
+                images: z.array(z.object({ name: z.string(), url: z.string() })),
+                convertHttpImage2Base64: z.boolean(),
+              }),
+            ),
+          ]),
+        }),
+      });
+
+      const layer = new MetaSchemaCompatLayer(modelInfo);
+      expect(() => layer.toJSONSchema(schema)).not.toThrow();
+    });
   });
 });
