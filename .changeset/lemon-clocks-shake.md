@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed reasoning text being lost after memory round-trip for OpenRouter models. When reasoning parts had empty text fields (common with xai/Grok's `reasoning.summary` format), `convertMessages(...).to("AIV5.UI")` now recovers the original content from `providerMetadata.reasoning_details`. Fixes #14094.
+Fixed an issue where recalled assistant reasoning could appear empty after a memory round-trip for OpenRouter models (including xai/Grok formats). Recalled reasoning text is now preserved and shown correctly. Fixes #14094.
