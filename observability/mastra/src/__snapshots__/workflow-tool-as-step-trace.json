@@ -46,6 +46,9 @@
             "attributes": {
               "status": "success"
             },
+            "metadata": {
+              "runId": "<runId-1>"
+            },
             "input": {
               "operation": "add",
               "a": 5,

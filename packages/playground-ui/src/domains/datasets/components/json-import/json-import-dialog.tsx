@@ -196,19 +196,13 @@ export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: J
   const renderFooter = () => {
     switch (step) {
       case 'upload':
-        return (
-          <Button variant="standard" size="default" onClick={handleClose}>
-            Cancel
-          </Button>
-        );
+        return <Button onClick={handleClose}>Cancel</Button>;
 
       case 'preview':
         return (
           <>
-            <Button variant="standard" size="default" onClick={() => setStep('upload')}>
-              Back
-            </Button>
-            <Button variant="cta" size="default" onClick={handleImport} disabled={!canImport}>
+            <Button onClick={() => setStep('upload')}>Back</Button>
+            <Button variant="primary" onClick={handleImport} disabled={!canImport}>
               Import {parsedJSON?.items.length ?? 0} Item{parsedJSON?.items.length !== 1 ? 's' : ''}
             </Button>
           </>
@@ -219,7 +213,7 @@ export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: J
 
       case 'complete':
         return (
-          <Button variant="cta" size="default" onClick={handleDone}>
+          <Button variant="primary" onClick={handleDone}>
             Done
           </Button>
         );

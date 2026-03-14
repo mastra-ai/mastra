@@ -115,6 +115,7 @@
                   "finishReason": "tool-calls"
                 },
                 "metadata": {
+                  "runId": "<runId-1>",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -154,6 +155,9 @@
                       "chunkType": "text",
                       "sequenceNumber": 0
                     },
+                    "metadata": {
+                      "runId": "<runId-1>"
+                    },
                     "output": {
                       "text": "Let me calculate that for you. "
                     }
@@ -174,6 +178,9 @@
                     "attributes": {
                       "chunkType": "tool-call",
                       "sequenceNumber": 1
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>"
                     },
                     "output": {
                       "toolName": "calculator",
@@ -203,6 +210,9 @@
                       "toolType": "tool",
                       "success": true
                     },
+                    "metadata": {
+                      "runId": "<runId-1>"
+                    },
                     "input": {
                       "operation": "add",
                       "a": 5,
@@ -230,6 +240,7 @@
                       "sequenceNumber": 2
                     },
                     "metadata": {
+                      "runId": "<runId-1>",
                       "toolCallId": "call-calc-1",
                       "toolName": "calculator"
                     },
@@ -263,6 +274,7 @@
                   "finishReason": "stop"
                 },
                 "metadata": {
+                  "runId": "<runId-1>",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -291,6 +303,9 @@
                     "attributes": {
                       "chunkType": "text",
                       "sequenceNumber": 0
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>"
                     },
                     "output": {
                       "text": "The result of 5 + 3 is 8."
