@@ -515,4 +515,93 @@ describe('wrapSchemaForQueryParams', () => {
       }
     });
   });
+
+  describe('observability date filter regression (issue #13962)', () => {
+    // Replicate the exact schema assembly from the observability handler
+    const dateRangeSchema = z.object({
+      start: z.coerce.date().optional(),
+      end: z.coerce.date().optional(),
+      startExclusive: z.boolean().optional(),
+      endExclusive: z.boolean().optional(),
+    });
+
+    const tracesFilterSchema = z.object({
+      startedAt: dateRangeSchema.optional(),
+      endedAt: dateRangeSchema.optional(),
+      entityId: z.string().optional(),
+      entityType: z.string().optional(),
+    });
+
+    const paginationArgsSchema = z.object({
+      page: z.coerce.number().default(0),
+      perPage: z.coerce.number().default(100),
+    });
+
+    const tracesOrderBySchema = z.object({
+      field: z.enum(['startedAt', 'endedAt']).default('startedAt'),
+      direction: z.enum(['ASC', 'DESC']).default('DESC'),
+    });
+
+    const combinedSchema = tracesFilterSchema
+      .extend(paginationArgsSchema.shape)
+      .extend(tracesOrderBySchema.shape)
+      .partial();
+
+    const querySchema = wrapSchemaForQueryParams(combinedSchema);
+
+    it('should parse JSON-stringified startedAt date range from query params', () => {
+      const result = querySchema.safeParse({
+        startedAt: '{"start":"2024-06-15T00:00:00.000Z"}',
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.startedAt?.start).toBeInstanceOf(Date);
+        expect(result.data.startedAt?.start?.toISOString()).toBe('2024-06-15T00:00:00.000Z');
+      }
+    });
+
+    it('should parse JSON-stringified endedAt date range from query params', () => {
+      const result = querySchema.safeParse({
+        endedAt: '{"end":"2024-06-20T23:59:59.999Z"}',
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.endedAt?.end).toBeInstanceOf(Date);
+        expect(result.data.endedAt?.end?.toISOString()).toBe('2024-06-20T23:59:59.999Z');
+      }
+    });
+
+    it('should parse combined date filters with pagination as query strings', () => {
+      // Simulates the exact query params sent by the playground client
+      const result = querySchema.safeParse({
+        page: '0',
+        perPage: '25',
+        startedAt: '{"start":"2024-06-15T00:00:00.000Z"}',
+        endedAt: '{"end":"2024-06-20T23:59:59.999Z"}',
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.startedAt?.start).toBeInstanceOf(Date);
+        expect(result.data.endedAt?.end).toBeInstanceOf(Date);
+        expect(result.data.page).toBe(0);
+        expect(result.data.perPage).toBe(25);
+      }
+    });
+
+    it('should work without any date filters', () => {
+      const result = querySchema.safeParse({
+        page: '0',
+        perPage: '25',
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.startedAt).toBeUndefined();
+        expect(result.data.endedAt).toBeUndefined();
+      }
+    });
+  });
 });
