@@ -503,6 +503,20 @@ async function processOutputStream<OUTPUT = undefined>({
         await options?.onError?.({ error });
         break;
 
+      case 'tool-result':
+        if (chunk.payload.result) {
+          messageList.updateToolInvocation({
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: chunk.payload.toolCallId,
+              toolName: chunk.payload.toolName,
+              args: chunk.payload.args,
+              result: chunk.payload.result,
+            },
+          });
+        }
+        safeEnqueue(controller, chunk);
       default:
         safeEnqueue(controller, chunk);
     }
