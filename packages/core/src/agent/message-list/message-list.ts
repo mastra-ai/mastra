@@ -635,11 +635,11 @@ export class MessageList {
    *
    * @returns true if the tool call was found and updated, false otherwise.
    */
-  public updateToolInvocation(resultPart: MastraMessagePart): boolean {
-    if (resultPart.type !== 'tool-invocation' || !resultPart.toolInvocation?.toolCallId) {
+  public updateToolInvocation(inputPart: MastraMessagePart): boolean {
+    if (inputPart.type !== 'tool-invocation' || !inputPart.toolInvocation?.toolCallId) {
       return false;
     }
-    const toolCallId = resultPart.toolInvocation.toolCallId;
+    const toolCallId = inputPart.toolInvocation.toolCallId;
 
     for (let m = this.messages.length - 1; m >= 0; m--) {
       const msg = this.messages[m]!;
@@ -648,7 +648,13 @@ export class MessageList {
       for (let i = 0; i < msg.content.parts.length; i++) {
         const part = msg.content.parts[i];
         if (part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId) {
-          msg.content.parts[i] = { ...resultPart };
+          msg.content.parts[i] = {
+            ...inputPart,
+            toolInvocation: {
+              ...inputPart.toolInvocation,
+              args: part.toolInvocation.args,
+            },
+          };
 
           // Move the message to the response source so it gets
           // picked up by drainUnsavedMessages for re-saving.
