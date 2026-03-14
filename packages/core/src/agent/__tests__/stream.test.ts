@@ -1,8 +1,10 @@
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { noopLogger } from '../../logger';
 import { MockMemory } from '../../memory/mock';
+import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { getDummyResponseModel, getEmptyResponseModel, getErrorResponseModel } from './mock-model';
 
@@ -368,3 +370,368 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
 runStreamTest('v1');
 runStreamTest('v2');
 runStreamTest('v3');
+
+// --- Tool-result JSON leak tests (#13268) ---
+// Some models (observed with gpt-oss-120b via OpenRouter) echo the JSON result
+// of a previous tool call as text-delta chunks in the next LLM step. This causes
+// raw JSON like {"priority":"critical","recommendation":"upgrade immediately"}
+// to appear in the chat UI as visible text.
+
+const TOOL_RESULT = {
+  priority: 'critical',
+  recommendation: 'upgrade immediately',
+  affectedVersions: ['1.0.0', '1.1.0'],
+};
+
+const TOOL_RESULT_JSON = JSON.stringify(TOOL_RESULT);
+
+const FINAL_ANSWER = 'The defect is critical. You should upgrade immediately to version 1.2.0.';
+
+const classifyDefectTool = createTool({
+  id: 'classifyDefect',
+  description: 'Classifies a defect and returns priority and recommendation',
+  inputSchema: z.object({
+    description: z.string(),
+  }),
+  execute: async () => TOOL_RESULT,
+});
+
+/**
+ * Creates a MockLanguageModelV2 that simulates the bug from #13268:
+ * - Step 1: model makes a tool call (classifyDefect)
+ * - Step 2: model echoes the tool result JSON as text-delta, then gives the real answer
+ *
+ * The `echoStyle` parameter controls how the model echoes the tool result:
+ * - 'before-answer': JSON appears as text before the actual answer text
+ * - 'standalone': JSON is the only text in an intermediate step, followed by another tool call
+ */
+function createLeakyModel(echoStyle: 'before-answer' | 'standalone' = 'before-answer') {
+  let callCount = 0;
+
+  return new MockLanguageModelV2({
+    doGenerate: async () => {
+      callCount++;
+
+      if (echoStyle === 'before-answer') {
+        if (callCount === 1) {
+          return {
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'call-1',
+                toolName: 'classifyDefect',
+                args: { description: 'system crash on startup' },
+                input: '{"description":"system crash on startup"}',
+              },
+            ],
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
+            warnings: [],
+            response: { id: 'resp-1', modelId: 'mock-leaky-model' },
+          };
+        } else {
+          // Step 2: model echoes tool result JSON + real answer
+          return {
+            content: [{ type: 'text' as const, text: TOOL_RESULT_JSON + '\n' + FINAL_ANSWER }],
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 20, outputTokens: 30, totalTokens: 50 },
+            warnings: [],
+            response: { id: 'resp-2', modelId: 'mock-leaky-model' },
+          };
+        }
+      }
+
+      // 'standalone' style: 3 steps
+      if (callCount === 1) {
+        return {
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'call-1',
+              toolName: 'classifyDefect',
+              args: { description: 'system crash on startup' },
+              input: '{"description":"system crash on startup"}',
+            },
+          ],
+          finishReason: 'tool-calls' as const,
+          usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
+          warnings: [],
+          response: { id: 'resp-1', modelId: 'mock-leaky-model' },
+        };
+      } else if (callCount === 2) {
+        // Model echoes tool result as text AND makes another tool call
+        return {
+          content: [
+            { type: 'text' as const, text: TOOL_RESULT_JSON },
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'call-2',
+              toolName: 'classifyDefect',
+              args: { description: 'follow-up check' },
+              input: '{"description":"follow-up check"}',
+            },
+          ],
+          finishReason: 'tool-calls' as const,
+          usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 },
+          warnings: [],
+          response: { id: 'resp-2', modelId: 'mock-leaky-model' },
+        };
+      } else {
+        return {
+          content: [{ type: 'text' as const, text: FINAL_ANSWER }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 30, outputTokens: 20, totalTokens: 50 },
+          warnings: [],
+          response: { id: 'resp-3', modelId: 'mock-leaky-model' },
+        };
+      }
+    },
+
+    doStream: async () => {
+      callCount++;
+
+      if (echoStyle === 'before-answer') {
+        if (callCount === 1) {
+          // Step 1: tool call only
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'response-metadata', id: 'resp-1', modelId: 'mock-leaky-model' },
+              { type: 'tool-input-start', id: 'call-1', toolName: 'classifyDefect' },
+              { type: 'tool-input-delta', id: 'call-1', delta: '{"description":"system crash on startup"}' },
+              { type: 'tool-input-end', id: 'call-1' },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: 'classifyDefect',
+                input: '{"description":"system crash on startup"}',
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
+              },
+            ]),
+          };
+        } else {
+          // Step 2: leaked JSON as text-delta THEN real answer
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'response-metadata', id: 'resp-2', modelId: 'mock-leaky-model' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: TOOL_RESULT_JSON },
+              { type: 'text-delta', id: 'text-1', delta: '\n' },
+              { type: 'text-delta', id: 'text-1', delta: FINAL_ANSWER },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 30, totalTokens: 50 } },
+            ]),
+          };
+        }
+      }
+
+      // 'standalone' style: 3 steps
+      if (callCount === 1) {
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: 'resp-1', modelId: 'mock-leaky-model' },
+            { type: 'tool-input-start', id: 'call-1', toolName: 'classifyDefect' },
+            { type: 'tool-input-delta', id: 'call-1', delta: '{"description":"system crash on startup"}' },
+            { type: 'tool-input-end', id: 'call-1' },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'classifyDefect',
+              input: '{"description":"system crash on startup"}',
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
+            },
+          ]),
+        };
+      } else if (callCount === 2) {
+        // Step 2: leaked JSON as text + another tool call
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: 'resp-2', modelId: 'mock-leaky-model' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: TOOL_RESULT_JSON },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'tool-input-start', id: 'call-2', toolName: 'classifyDefect' },
+            { type: 'tool-input-delta', id: 'call-2', delta: '{"description":"follow-up check"}' },
+            { type: 'tool-input-end', id: 'call-2' },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-2',
+              toolName: 'classifyDefect',
+              input: '{"description":"follow-up check"}',
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 20, outputTokens: 25, totalTokens: 45 },
+            },
+          ]),
+        };
+      } else {
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: 'resp-3', modelId: 'mock-leaky-model' },
+            { type: 'text-start', id: 'text-2' },
+            { type: 'text-delta', id: 'text-2', delta: FINAL_ANSWER },
+            { type: 'text-end', id: 'text-2' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 30, outputTokens: 20, totalTokens: 50 } },
+          ]),
+        };
+      }
+    },
+  });
+}
+
+describe('tool-result JSON leak (#13268)', () => {
+  describe('stream() - textStream', () => {
+    it('should not contain leaked tool-result JSON when model echoes it before the answer', async () => {
+      const agent = new Agent({
+        id: 'leak-test-agent',
+        name: 'Leak Test Agent',
+        instructions: 'Classify defects using the classifyDefect tool.',
+        model: createLeakyModel('before-answer'),
+        tools: { classifyDefect: classifyDefectTool },
+      });
+
+      const result = await agent.stream('Classify this defect: system crash on startup');
+
+      let fullText = '';
+      for await (const chunk of result.textStream) {
+        fullText += chunk;
+      }
+
+      // The leaked JSON should NOT appear in textStream
+      expect(fullText).not.toContain(TOOL_RESULT_JSON);
+      // The actual answer should still be there
+      expect(fullText).toContain(FINAL_ANSWER);
+    });
+
+    it('should not contain leaked tool-result JSON in 3-step standalone echo scenario', async () => {
+      const agent = new Agent({
+        id: 'leak-test-agent-standalone',
+        name: 'Leak Test Agent',
+        instructions: 'Classify defects using the classifyDefect tool.',
+        model: createLeakyModel('standalone'),
+        tools: { classifyDefect: classifyDefectTool },
+      });
+
+      const result = await agent.stream('Classify this defect: system crash on startup');
+
+      let fullText = '';
+      for await (const chunk of result.textStream) {
+        fullText += chunk;
+      }
+
+      // The leaked JSON should NOT appear in textStream
+      expect(fullText).not.toContain(TOOL_RESULT_JSON);
+      // The actual answer should still be there
+      expect(fullText).toContain(FINAL_ANSWER);
+    });
+  });
+
+  describe('stream() - fullStream', () => {
+    it('should not emit text-delta chunks containing leaked tool-result JSON', async () => {
+      const agent = new Agent({
+        id: 'leak-test-agent-fullstream',
+        name: 'Leak Test Agent',
+        instructions: 'Classify defects using the classifyDefect tool.',
+        model: createLeakyModel('before-answer'),
+        tools: { classifyDefect: classifyDefectTool },
+      });
+
+      const result = await agent.stream('Classify this defect: system crash on startup');
+
+      const textDeltas: string[] = [];
+      for await (const chunk of result.fullStream) {
+        if (chunk.type === 'text-delta') {
+          textDeltas.push(chunk.payload.text);
+        }
+      }
+
+      const joinedText = textDeltas.join('');
+      // Leaked JSON should NOT appear in any text-delta chunks
+      expect(joinedText).not.toContain(TOOL_RESULT_JSON);
+      // Real answer should be present
+      expect(joinedText).toContain(FINAL_ANSWER);
+    });
+  });
+
+  describe('generate()', () => {
+    it('should not contain leaked tool-result JSON in the final text', async () => {
+      const agent = new Agent({
+        id: 'leak-test-agent-generate',
+        name: 'Leak Test Agent',
+        instructions: 'Classify defects using the classifyDefect tool.',
+        model: createLeakyModel('before-answer'),
+        tools: { classifyDefect: classifyDefectTool },
+      });
+
+      const result = await agent.generate('Classify this defect: system crash on startup');
+
+      // The leaked JSON should NOT appear in result.text
+      expect(result.text).not.toContain(TOOL_RESULT_JSON);
+      // The actual answer should still be there
+      expect(result.text).toContain(FINAL_ANSWER);
+    });
+
+    it('should not contain leaked tool-result JSON in 3-step standalone scenario', async () => {
+      const agent = new Agent({
+        id: 'leak-test-agent-generate-standalone',
+        name: 'Leak Test Agent',
+        instructions: 'Classify defects using the classifyDefect tool.',
+        model: createLeakyModel('standalone'),
+        tools: { classifyDefect: classifyDefectTool },
+      });
+
+      const result = await agent.generate('Classify this defect: system crash on startup');
+
+      // The leaked JSON should NOT appear in result.text
+      expect(result.text).not.toContain(TOOL_RESULT_JSON);
+      // The actual answer should still be there
+      expect(result.text).toContain(FINAL_ANSWER);
+    });
+  });
+
+  describe('stream() - step isolation', () => {
+    it('should have correct step results with tool calls isolated per step', async () => {
+      const agent = new Agent({
+        id: 'leak-test-agent-steps',
+        name: 'Leak Test Agent',
+        instructions: 'Classify defects using the classifyDefect tool.',
+        model: createLeakyModel('before-answer'),
+        tools: { classifyDefect: classifyDefectTool },
+      });
+
+      const result = await agent.stream('Classify this defect: system crash on startup');
+
+      const steps: Array<{ text: string; toolCalls: string[]; finishReason: string }> = [];
+
+      for await (const chunk of result.fullStream) {
+        if (chunk.type === 'step-finish') {
+          steps.push({
+            text: chunk.payload.output?.text ?? '',
+            toolCalls: (chunk.payload.output?.toolCalls ?? []).map((tc: any) => tc.toolName),
+            finishReason: chunk.payload.stepResult?.reason ?? '',
+          });
+        }
+      }
+
+      expect(steps.length).toBe(2);
+
+      // Step 1: tool call step
+      expect(steps[0]!.toolCalls).toContain('classifyDefect');
+      expect(steps[0]!.finishReason).toBe('tool-calls');
+
+      // Step 2: text answer step — should NOT contain leaked JSON
+      expect(steps[1]!.text).not.toContain(TOOL_RESULT_JSON);
+      expect(steps[1]!.text).toContain(FINAL_ANSWER);
+      expect(steps[1]!.finishReason).toBe('stop');
+    });
+  });
+});
