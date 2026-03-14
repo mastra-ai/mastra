@@ -10,7 +10,6 @@ import type {
 } from '@ai-sdk/provider-v6';
 import { asSchema, tool as toolFn } from '@internal/ai-sdk-v5';
 import type { Tool, ToolChoice } from '@internal/ai-sdk-v5';
-import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '../../../../schema';
 
 /** Model specification version for tool type conversion */
 export type ModelSpecVersion = 'v2' | 'v3';
@@ -158,24 +157,12 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
             case undefined:
             case 'dynamic':
             case 'function':
-              // Convert tool input schema to JSON Schema
+              // Extract JSON Schema from AI SDK schema
+              // All schemas should have been converted to AI SDK format by AISDKToolConverter
               let parameters;
               if (sdkTool.inputSchema) {
-                if (
-                  '$schema' in sdkTool.inputSchema &&
-                  typeof sdkTool.inputSchema.$schema === 'string' &&
-                  sdkTool.inputSchema.$schema.startsWith('http://json-schema.org/')
-                ) {
-                  parameters = sdkTool.inputSchema;
-                } else if (isStandardSchemaWithJSON(sdkTool.inputSchema)) {
-                  parameters = standardSchemaToJSONSchema(sdkTool.inputSchema, {
-                    io: 'input',
-                    target: 'draft-07',
-                  });
-                } else {
-                  // Fallback to AI SDK's asSchema for non-standard schemas
-                  parameters = asSchema(sdkTool.inputSchema).jsonSchema;
-                }
+                // Use AI SDK's asSchema to extract the JSON Schema
+                parameters = asSchema(sdkTool.inputSchema).jsonSchema;
 
                 // Normalize $schema field to draft-07 for consistency
                 // Some tools (created with tool() helper) use Zod v4's native generation

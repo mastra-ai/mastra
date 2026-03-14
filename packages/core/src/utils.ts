@@ -13,7 +13,7 @@ import type { ObservabilityContext, TracingPolicy } from './observability';
 import type { RequestContext } from './request-context';
 import type { CoreTool, VercelTool, VercelToolV5 } from './tools';
 import { Tool } from './tools/tool';
-import { CoreToolBuilder } from './tools/tool-builder/builder';
+import { AISDKToolConverter } from './tools/tool-builder/builder';
 import type { ToolToConvert } from './tools/tool-builder/builder';
 import { isVercelTool } from './tools/toolchecks';
 import type { OutputWriter } from './workflows/types';
@@ -405,7 +405,7 @@ export function makeCoreTool(
   logType?: 'tool' | 'toolset' | 'client-tool',
   autoResumeSuspendedTools?: boolean,
 ): CoreTool {
-  return new CoreToolBuilder({ originalTool, options, logType, autoResumeSuspendedTools }).build();
+  return new AISDKToolConverter({ originalTool, options, logType, autoResumeSuspendedTools }).build();
 }
 
 export function makeCoreToolV5(
@@ -414,7 +414,7 @@ export function makeCoreToolV5(
   logType?: 'tool' | 'toolset' | 'client-tool',
   autoResumeSuspendedTools?: boolean,
 ): VercelToolV5 {
-  return new CoreToolBuilder({ originalTool, options, logType, autoResumeSuspendedTools }).buildV5();
+  return new AISDKToolConverter({ originalTool, options, logType, autoResumeSuspendedTools }).buildV5();
 }
 
 /**

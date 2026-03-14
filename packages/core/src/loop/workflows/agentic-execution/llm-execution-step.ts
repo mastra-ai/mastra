@@ -30,6 +30,7 @@ import type {
   TextStartPayload,
 } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
+import { normalizeToMastraTool } from '../../../tools/normalize';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { isMastraTool } from '../../../tools/toolchecks';
 import { makeCoreTool } from '../../../utils';
@@ -691,14 +692,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
             Object.assign(currentStep, processInputStepResult);
 
-            // Convert any raw Mastra Tool objects returned by processors into CoreTool format.
+            // Convert any raw Tool objects (Mastra or Vercel) returned by processors into CoreTool format.
             // Processors like ToolSearchProcessor return raw Tool instances that lack requestContext binding.
             if (processInputStepResult.tools && currentStep.tools) {
               const convertedTools: Record<string, unknown> = {};
               for (const [name, tool] of Object.entries(currentStep.tools)) {
-                if (isMastraTool(tool)) {
+                if (isMastraTool(tool) || (tool && typeof tool === 'object')) {
+                  // Normalize Vercel tools to Mastra format first
+                  const normalizedTool = normalizeToMastraTool(tool as unknown as ToolToConvert);
+
                   convertedTools[name] = makeCoreTool(
-                    tool as unknown as ToolToConvert,
+                    normalizedTool,
                     {
                       name,
                       runId,
