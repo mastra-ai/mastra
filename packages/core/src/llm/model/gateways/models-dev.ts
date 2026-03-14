@@ -213,7 +213,7 @@ export class ModelsDevGateway extends MastraModelGateway {
       case 'groq':
         return createGroq({ apiKey, headers: mastraHeaders })(modelId);
       case 'openrouter':
-        return createOpenRouter({ apiKey, headers: mastraHeaders })(modelId);
+        return createOpenRouter({ apiKey, headers: mastraHeaders })(modelId) as unknown as GatewayLanguageModel;
       case 'xai':
         return createXai({ apiKey, headers: mastraHeaders })(modelId);
       case 'deepseek':

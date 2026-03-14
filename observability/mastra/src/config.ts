@@ -13,6 +13,7 @@ import type {
   SpanOutputProcessor,
   ConfigSelector,
   SerializationOptions,
+  CardinalityConfig,
 } from '@mastra/core/observability';
 import { z } from 'zod/v4';
 
@@ -80,6 +81,12 @@ export interface ObservabilityInstanceConfig {
    * Use these to customize truncation limits for large payloads.
    */
   serializationOptions?: SerializationOptions;
+  /**
+   * Cardinality protection settings for metrics.
+   * Controls which labels are blocked and whether UUID-like values are filtered.
+   * Applied to all metrics (auto-extracted and user-defined).
+   */
+  cardinality?: CardinalityConfig;
 }
 
 /**
@@ -152,6 +159,7 @@ export const observabilityInstanceConfigSchema = z
     includeInternalSpans: z.boolean().optional(),
     requestContextKeys: z.array(z.string()).optional(),
     serializationOptions: serializationOptionsSchema,
+    cardinality: z.any().optional(),
   })
   .refine(
     data => {

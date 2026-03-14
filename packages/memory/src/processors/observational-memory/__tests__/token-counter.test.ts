@@ -1,4 +1,3 @@
-import o200k_base from 'js-tiktoken/ranks/o200k_base';
 import probeImageSize from 'probe-image-size';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -7,16 +6,6 @@ import { TokenCounter } from '../token-counter';
 vi.mock('probe-image-size', () => ({
   default: vi.fn(),
 }));
-
-let sharedCustomCounter: TokenCounter | undefined;
-
-function getSharedCustomCounter() {
-  if (!sharedCustomCounter) {
-    sharedCustomCounter = new TokenCounter(o200k_base);
-  }
-
-  return sharedCustomCounter;
-}
 
 function createMessage(content: any) {
   return {
@@ -72,49 +61,32 @@ describe('TokenCounter', () => {
     vi.unstubAllEnvs();
   });
 
-  describe('shared default encoder', () => {
-    it('two default TokenCounter instances share the same encoder reference', () => {
-      const a = new TokenCounter();
-      const b = new TokenCounter();
-
-      const encoderA = (a as any).encoder;
-      const encoderB = (b as any).encoder;
-
-      expect(encoderA).toBe(encoderB);
-    });
-
-    it('default encoder produces correct token counts', () => {
+  describe('tokenx estimation', () => {
+    it('produces correct token counts for basic input', () => {
       const counter = new TokenCounter();
       const tokens = counter.countString('hello world');
       expect(tokens).toBeGreaterThan(0);
       expect(typeof tokens).toBe('number');
     });
 
-    it('two default instances produce identical counts for the same input', () => {
+    it('two instances produce identical counts for the same input', () => {
       const a = new TokenCounter();
       const b = new TokenCounter();
       const text = 'The quick brown fox jumps over the lazy dog';
 
       expect(a.countString(text)).toBe(b.countString(text));
     });
-  });
 
-  describe('custom encoding', () => {
-    it('constructor with explicit encoding creates a separate encoder instance', { timeout: 15_000 }, () => {
-      const defaultCounter = new TokenCounter();
-      const customCounter = getSharedCustomCounter();
+    it('uses a tokenx cache source marker', () => {
+      const message = createMessage({
+        format: 2,
+        parts: [{ type: 'text', text: 'tokenx cache marker sample' }],
+      });
 
-      const encoderDefault = (defaultCounter as any).encoder;
-      const encoderCustom = (customCounter as any).encoder;
+      const counter = new TokenCounter();
+      counter.countMessage(message);
 
-      expect(encoderCustom).not.toBe(encoderDefault);
-    });
-
-    it('custom encoding still produces valid token counts', () => {
-      const counter = getSharedCustomCounter();
-
-      const tokens = counter.countString('hello world');
-      expect(tokens).toBeGreaterThan(0);
+      expect(message.content.parts[0].providerMetadata.mastra.tokenEstimate.source).toContain('tokenx');
     });
   });
 
@@ -165,7 +137,7 @@ describe('TokenCounter', () => {
     it('probes remote image url dimensions during async local fallback when metadata is missing', async () => {
       vi.mocked(probeImageSize as any).mockResolvedValue({ width: 2048, height: 1024 });
 
-      const counter = new TokenCounter(undefined, { model: 'test-model' as any });
+      const counter = new TokenCounter({ model: 'test-model' as any });
       const message = createMessage({
         format: 2,
         parts: [{ type: 'image', image: 'https://example.com/cat.png' }],
@@ -196,7 +168,7 @@ describe('TokenCounter', () => {
       });
       globalThis.fetch = fetchMock as typeof fetch;
 
-      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const counter = new TokenCounter({ model: 'openai/gpt-4o' });
       const message = createMessage({
         format: 2,
         parts: [{ type: 'image', image: 'https://example.com/cat.png' }],
@@ -218,7 +190,7 @@ describe('TokenCounter', () => {
       });
       globalThis.fetch = fetchMock as typeof fetch;
 
-      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const counter = new TokenCounter({ model: 'openai/gpt-4o' });
       const message = createMessage({
         format: 2,
         parts: [{ type: 'image', image: 'https://example.com/cat.png' }],
@@ -246,7 +218,7 @@ describe('TokenCounter', () => {
       );
       globalThis.fetch = fetchMock as typeof fetch;
 
-      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const counter = new TokenCounter({ model: 'openai/gpt-4o' });
       const createPdfMessage = () =>
         createMessage({
           format: 2,
@@ -274,7 +246,7 @@ describe('TokenCounter', () => {
       const fetchMock = vi.fn();
       globalThis.fetch = fetchMock as typeof fetch;
 
-      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const counter = new TokenCounter({ model: 'openai/gpt-4o' });
       const message = createMessage({
         format: 2,
         parts: [
@@ -289,7 +261,7 @@ describe('TokenCounter', () => {
     });
 
     it('extracts inline image dimensions from image bytes when metadata is missing', () => {
-      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const counter = new TokenCounter({ model: 'openai/gpt-4o' });
       const message = createMessage({
         format: 2,
         parts: [
@@ -310,7 +282,7 @@ describe('TokenCounter', () => {
     });
 
     it('counts data-uri image parts with deterministic fallback sizing', () => {
-      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const counter = new TokenCounter({ model: 'openai/gpt-4o' });
       const dataUriImage = `data:image/png;base64,${'a'.repeat(2000000)}`;
       const message = createMessage({
         format: 2,
@@ -325,7 +297,7 @@ describe('TokenCounter', () => {
     });
 
     it('counts image-like file parts by mime type instead of serializing the full payload', () => {
-      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const counter = new TokenCounter({ model: 'openai/gpt-4o' });
       const dataUriImage = `data:image/png;base64,${'a'.repeat(2000000)}`;
       const message = createMessage({
         format: 2,
@@ -395,31 +367,20 @@ describe('TokenCounter', () => {
       expect(Math.abs(uploadedPdfTokens - pdfUrlTokens)).toBeLessThan(50);
     });
 
-    it('reuses cached image estimates without re-encoding text payloads', () => {
+    it('reuses cached image estimates across repeated counts', () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
         parts: [{ type: 'image', image: new URL('https://example.com/cached.png') }],
       });
 
-      const encoder = (counter as any).encoder;
-      const originalEncode = encoder.encode.bind(encoder);
-      let encodeCalls = 0;
+      const first = counter.countMessage(message);
+      const firstEntry = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
+      const second = counter.countMessage(message);
+      const secondEntry = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
 
-      try {
-        encoder.encode = (...args: any[]) => {
-          encodeCalls += 1;
-          return originalEncode(...args);
-        };
-
-        const first = counter.countMessage(message);
-        const second = counter.countMessage(message);
-
-        expect(second).toBe(first);
-        expect(encodeCalls).toBe(2);
-      } finally {
-        encoder.encode = originalEncode;
-      }
+      expect(second).toBe(first);
+      expect(secondEntry).toEqual(firstEntry);
     });
 
     it('changes image estimates when resolved model context changes', () => {
@@ -446,8 +407,8 @@ describe('TokenCounter', () => {
         ],
       });
 
-      const defaultCounter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
-      const miniCounter = new TokenCounter(undefined, { model: 'openai/gpt-4o-mini' });
+      const defaultCounter = new TokenCounter({ model: 'openai/gpt-4o' });
+      const miniCounter = new TokenCounter({ model: 'openai/gpt-4o-mini' });
 
       const defaultTokens = defaultCounter.countMessage(message);
       const defaultCache = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
@@ -466,7 +427,7 @@ describe('TokenCounter', () => {
     });
 
     it('uses google media resolution when the provider is google', () => {
-      const counter = new TokenCounter(undefined, {
+      const counter = new TokenCounter({
         model: { provider: 'google', modelId: 'gemini-3-flash-preview' },
       });
       const message = createMessage({
@@ -491,7 +452,7 @@ describe('TokenCounter', () => {
     });
 
     it('uses anthropic image sizing when the provider is anthropic even if the model id looks openai-ish', () => {
-      const counter = new TokenCounter(undefined, {
+      const counter = new TokenCounter({
         model: { provider: 'anthropic', modelId: 'gpt-4o' },
       });
       const message = createMessage({
@@ -519,7 +480,7 @@ describe('TokenCounter', () => {
     });
 
     it('uses legacy google tiling for pre-gemini-3 google models', () => {
-      const counter = new TokenCounter(undefined, {
+      const counter = new TokenCounter({
         model: { provider: 'google', modelId: 'gemini-2.5-flash' },
       });
       const message = createMessage({
@@ -548,48 +509,35 @@ describe('TokenCounter', () => {
   });
 
   describe('token estimate cache', () => {
-    it('writes and reuses part-level token estimates on text parts without re-encoding payload on cache hit', () => {
+    it('writes and reuses part-level token estimates on text parts across repeated counts', () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
         parts: [{ type: 'text', text: 'Hello from cached text part' }],
       });
 
-      const encoder = (counter as any).encoder;
-      const originalEncode = encoder.encode.bind(encoder);
-      let encodeCalls = 0;
+      const first = counter.countMessage(message);
+      expect(first).toBeGreaterThan(0);
+      const firstEntry = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
+      expect(firstEntry).toBeTruthy();
 
-      try {
-        encoder.encode = (...args: any[]) => {
-          encodeCalls += 1;
-          return originalEncode(...args);
-        };
+      const second = counter.countMessage(message);
+      const secondEntry = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
 
-        const first = counter.countMessage(message);
-        expect(first).toBeGreaterThan(0);
-        expect(message.content.parts[0].providerMetadata?.mastra?.tokenEstimate).toBeTruthy();
+      expect(second).toBe(first);
+      expect(secondEntry).toEqual(firstEntry);
 
-        const callsAfterFirst = encodeCalls;
-        const second = counter.countMessage(message);
-        const callsAfterSecond = encodeCalls;
+      const reloaded = {
+        ...JSON.parse(JSON.stringify(message)),
+        createdAt: new Date(message.createdAt),
+      };
 
-        expect(second).toBe(first);
-        expect(callsAfterSecond - callsAfterFirst).toBe(1);
+      const third = counter.countMessage(reloaded as any);
+      const thirdEntry = reloaded.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
 
-        const reloaded = {
-          ...JSON.parse(JSON.stringify(message)),
-          createdAt: new Date(message.createdAt),
-        };
-
-        const third = counter.countMessage(reloaded as any);
-        const callsAfterThird = encodeCalls;
-
-        expect(third).toBe(first);
-        expect(callsAfterThird - callsAfterSecond).toBe(1);
-        expect(reloaded.content.parts[0].providerMetadata?.mastra?.tokenEstimate).toBeTruthy();
-      } finally {
-        encoder.encode = originalEncode;
-      }
+      expect(third).toBe(first);
+      expect(thirdEntry).toEqual(firstEntry);
+      expect(reloaded.content.parts[0].providerMetadata?.mastra?.tokenEstimate).toBeTruthy();
     });
 
     it('ignores stale cache entries when the cache key no longer matches', () => {
@@ -639,22 +587,22 @@ describe('TokenCounter', () => {
       expect(sourceRefreshed.source).toBe(entry.source);
     });
 
-    it('scopes cache source by encoding identity', () => {
+    it('uses a stable estimator-scoped cache source', () => {
       const message = createMessage({
         format: 2,
-        parts: [{ type: 'text', text: 'Same payload, different encoding identity' }],
+        parts: [{ type: 'text', text: 'Same payload, stable estimator identity' }],
       });
 
-      const defaultCounter = new TokenCounter();
-      defaultCounter.countMessage(message);
-      const defaultEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
+      const firstCounter = new TokenCounter();
+      firstCounter.countMessage(message);
+      const firstEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
 
-      const customCounter = getSharedCustomCounter();
-      customCounter.countMessage(message);
+      const secondCounter = new TokenCounter();
+      secondCounter.countMessage(message);
 
       const refreshedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
-      expect(refreshedEntry.source).not.toBe(defaultEntry.source);
-      expect(refreshedEntry.source).toContain('custom:');
+      expect(refreshedEntry.source).toBe(firstEntry.source);
+      expect(refreshedEntry.source).toContain('tokenx');
     });
 
     it('keeps data-* and reasoning skipped/uncached while caching eligible parts', () => {
