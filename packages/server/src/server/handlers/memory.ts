@@ -397,7 +397,9 @@ export const GET_MEMORY_CONFIG_ROUTE = createRoute({
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        // Return null config when memory is not configured (Issue #11765)
+        // This allows the playground UI to gracefully handle agents without memory
+        return { config: null };
       }
 
       // Get the merged configuration (defaults + custom)
@@ -685,7 +687,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
   description: 'Returns a paginated list of messages in a conversation thread',
   tags: ['Memory'],
   requiresAuth: true,
-  handler: async ({
+  handler: (async ({
     mastra,
     agentId,
     threadId,
@@ -696,7 +698,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
     include,
     filter,
     requestContext,
-  }) => {
+  }: any) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
@@ -759,7 +761,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, 'Error getting messages');
     }
-  },
+  }) as any,
 });
 
 export const GET_WORKING_MEMORY_ROUTE = createRoute({
@@ -780,7 +782,9 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       validateBody({ threadId: effectiveThreadId });
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        // Return null working memory when memory is not configured (Issue #11765)
+        // This allows the playground UI to gracefully handle agents without memory
+        return { workingMemory: null, source: 'thread' as const, workingMemoryTemplate: null, threadExists: false };
       }
       const thread = await memory.getThreadById({ threadId: effectiveThreadId! });
       if (thread) {

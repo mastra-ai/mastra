@@ -1,5 +1,5 @@
 ---
-title: "Reference: PostgreSQL Storage | Storage"
+title: "Reference: PostgreSQL storage | Storage"
 description: Documentation for the PostgreSQL storage implementation in Mastra.
 packages:
   - "@mastra/core"
@@ -7,7 +7,7 @@ packages:
   - "@mastra/pg"
 ---
 
-# PostgreSQL Storage
+# PostgreSQL storage
 
 The PostgreSQL storage implementation provides a production-ready storage solution using PostgreSQL databases.
 
@@ -130,7 +130,7 @@ const storage = new PostgresStore({
 ]}
 />
 
-## Constructor Examples
+## Constructor examples
 
 You can instantiate `PostgresStore` in the following ways:
 
@@ -178,7 +178,7 @@ const store4 = new PostgresStore({
 })
 ```
 
-## Additional Notes
+## Additional notes
 
 ### Schema Management
 
@@ -237,7 +237,7 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 ```
 
 :::warning
-If `init()` is not called, tables won't be created and storage operations will fail silently or throw errors.
+If `init()` isn't called, tables won't be created and storage operations will fail silently or throw errors.
 :::
 
 ### Using an Existing Pool
@@ -262,7 +262,7 @@ const storage = new PostgresStore({
 
 **Pool lifecycle behavior:**
 
-- When you **provide a pool**: Mastra uses your pool but does **not** close it when `store.close()` is called. You manage the pool lifecycle.
+- When you **provide a pool**: Mastra uses your pool but **doesn't** close it when `store.close()` is called. You manage the pool lifecycle.
 - When Mastra **creates a pool**: Mastra owns the pool and will close it when `store.close()` is called.
 
 ### Direct Database and Pool Access
@@ -379,7 +379,7 @@ This pattern ensures only one `PostgresStore` instance is created regardless of 
 This singleton pattern is only necessary during local development with HMR. In production builds, modules are only loaded once.
 :::
 
-## Usage Example
+## Usage example
 
 ### Adding memory to an agent
 
@@ -450,7 +450,7 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-## Index Management
+## Index management
 
 PostgreSQL storage provides index management to optimize query performance.
 

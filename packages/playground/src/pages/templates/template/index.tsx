@@ -95,7 +95,8 @@ export default function Template() {
               setFailure(errorMessage);
               setCompletedRunValidationErrors(errors || []);
             } else {
-              setFailure(snapshot?.result?.message || snapshot?.result?.error || 'Template installation failed');
+              const errorValue = snapshot?.result?.message || snapshot?.result?.error || 'Template installation failed';
+              setFailure(typeof errorValue === 'string' ? errorValue : String(errorValue));
             }
           }
         })
@@ -239,7 +240,7 @@ export default function Template() {
     const result = streamResult || observeStreamResult;
 
     if (result?.phase === 'error' && result?.error) {
-      setFailure(result.error);
+      setFailure(typeof result.error === 'string' ? result.error : String(result.error));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streamResult?.phase, streamResult?.error, observeStreamResult?.phase, observeStreamResult?.error]);

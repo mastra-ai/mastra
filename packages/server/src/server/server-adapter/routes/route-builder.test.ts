@@ -75,7 +75,12 @@ describe('jsonQueryParam', () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.errors[0].message).toContain('Invalid JSON');
+        // Zod v4 union errors nest branch errors under issues[0].errors
+        const unionIssue = result.error.issues[0] as any;
+        const allMessages = unionIssue.errors
+          ? unionIssue.errors.flat().map((e: any) => e.message)
+          : [unionIssue.message];
+        expect(allMessages.some((m: string) => m.includes('Invalid JSON'))).toBe(true);
       }
     });
 
@@ -84,7 +89,7 @@ describe('jsonQueryParam', () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.errors.length).toBeGreaterThan(0);
+        expect(result.error.issues.length).toBeGreaterThan(0);
       }
     });
 
@@ -93,7 +98,7 @@ describe('jsonQueryParam', () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.errors.length).toBeGreaterThan(0);
+        expect(result.error.issues.length).toBeGreaterThan(0);
       }
     });
   });
@@ -194,8 +199,12 @@ describe('jsonQueryParam', () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        const errorMessage = result.error.errors.map(e => e.message).join(', ');
-        expect(errorMessage).toContain('Invalid JSON');
+        // Zod v4 union errors nest branch errors under issues[0].errors
+        const unionIssue = result.error.issues[0] as any;
+        const allMessages = unionIssue.errors
+          ? unionIssue.errors.flat().map((e: any) => e.message)
+          : [unionIssue.message];
+        expect(allMessages.some((m: string) => m.includes('Invalid JSON'))).toBe(true);
       }
     });
 
@@ -205,7 +214,7 @@ describe('jsonQueryParam', () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         // Should have validation error, not JSON parse error
-        const errorMessage = result.error.errors.map(e => e.message).join(', ');
+        const errorMessage = result.error.issues.map(e => e.message).join(', ');
         expect(errorMessage).not.toContain('Invalid JSON');
       }
     });
@@ -470,7 +479,7 @@ describe('wrapSchemaForQueryParams', () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         // Should have multiple errors
-        expect(result.error.errors.length).toBeGreaterThanOrEqual(2);
+        expect(result.error.issues.length).toBeGreaterThanOrEqual(2);
       }
     });
   });

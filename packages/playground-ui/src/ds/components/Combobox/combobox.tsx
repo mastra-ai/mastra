@@ -1,5 +1,5 @@
 import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
-import { buttonVariants } from '@/ds/components/Button/Button';
+import { ButtonProps, buttonVariants } from '@/ds/components/Button/Button';
 import { cn } from '@/lib/utils';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import * as React from 'react';
@@ -23,8 +23,8 @@ export type ComboboxProps = {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'light' | 'outline' | 'ghost';
-  size?: FormElementSize;
+  variant?: Extract<ButtonProps['variant'], 'inputLike' | 'ghost'>;
+  size?: Exclude<FormElementSize, 'lg'>;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
@@ -40,8 +40,8 @@ export function Combobox({
   emptyText = 'No option found.',
   className,
   disabled = false,
-  variant = 'default',
-  size = 'md',
+  variant = 'inputLike',
+  size = 'default',
   open,
   onOpenChange,
   container,

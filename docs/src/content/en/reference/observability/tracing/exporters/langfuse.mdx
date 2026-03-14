@@ -18,7 +18,7 @@ Sends Tracing data to Langfuse for observability.
 new LangfuseExporter(config: LangfuseExporterConfig)
 ```
 
-## LangfuseExporterConfig
+## `LangfuseExporterConfig`
 
 ```typescript
 interface LangfuseExporterConfig extends BaseExporterConfig {
@@ -78,7 +78,7 @@ Extends `BaseExporterConfig`, which includes:
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -134,14 +134,14 @@ const exporter = new LangfuseExporter({
 })
 ```
 
-## Span Mapping
+## Span mapping
 
 - Root spans → Langfuse traces
 - `MODEL_GENERATION` spans → Langfuse generations
 - All other spans → Langfuse spans
 - Event spans → Langfuse events
 
-## Prompt Linking
+## Prompt linking
 
 Link LLM generations to [Langfuse Prompt Management](https://langfuse.com/docs/prompt-management) using the `withLangfusePrompt` helper:
 

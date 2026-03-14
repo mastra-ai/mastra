@@ -50,6 +50,9 @@
             "attributes": {
               "status": "success"
             },
+            "metadata": {
+              "runId": "<runId-1>"
+            },
             "input": {
               "query": "test query"
             },
@@ -72,6 +75,9 @@
             "entityId": "workflow-agent",
             "attributes": {
               "status": "success"
+            },
+            "metadata": {
+              "runId": "<runId-1>"
             },
             "input": {
               "prompt": "test query"
@@ -185,6 +191,7 @@
                           "finishReason": "stop"
                         },
                         "metadata": {
+                          "runId": "<runId-2>",
                           "modelMetadata": {
                             "modelId": "mock-model-id",
                             "modelVersion": "v2",
@@ -214,6 +221,9 @@
                               "chunkType": "text",
                               "sequenceNumber": 0
                             },
+                            "metadata": {
+                              "runId": "<runId-2>"
+                            },
                             "output": {
                               "text": "Test response from agent"
                             }
@@ -241,6 +251,9 @@
             "entityId": "mapping_<mapping-2>",
             "attributes": {
               "status": "success"
+            },
+            "metadata": {
+              "runId": "<runId-1>"
             },
             "input": {
               "text": "Test response from agent"

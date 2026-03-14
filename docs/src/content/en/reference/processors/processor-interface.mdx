@@ -1,11 +1,11 @@
 ---
-title: "Reference: Processor Interface | Processors"
+title: "Reference: Processor interface | Processors"
 description: "API reference for the Processor interface in Mastra, which defines the contract for transforming, validating, and controlling messages in agent pipelines."
 packages:
   - "@mastra/core"
 ---
 
-# Processor Interface
+# Processor interface
 
 The `Processor` interface defines the contract for all processors in Mastra. Processors can implement one or more methods to handle different stages of the agent execution pipeline.
 
@@ -106,15 +106,15 @@ interface Processor<TId extends string = string> {
 
 ## Methods
 
-### processInput
+### `processInput`
 
-Processes input messages before they are sent to the LLM. Runs once at the start of agent execution.
+Processes input messages before they're sent to the LLM. Runs once at the start of agent execution.
 
 ```typescript prettier:false
 processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInputResult;
 ```
 
-#### ProcessInputArgs
+#### `ProcessInputArgs`
 
 <PropertiesTable
   content={[
@@ -166,7 +166,7 @@ processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInpu
 ]}
 />
 
-#### ProcessInputResult
+#### `ProcessInputResult`
 
 The method can return one of three types:
 
@@ -192,9 +192,9 @@ The method can return one of three types:
 
 ---
 
-### processInputStep
+### `processInputStep`
 
-Processes input messages at each step of the agentic loop, before they are sent to the LLM. Unlike `processInput` which runs once at the start, this runs at every step including tool call continuations.
+Processes input messages at each step of the agentic loop, before they're sent to the LLM. Unlike `processInput` which runs once at the start, this runs at every step including tool call continuations.
 
 ```typescript prettier:false
 processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
@@ -209,7 +209,7 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
 1. Tool execution (if needed)
 1. Repeat from step 2 if tools were called
 
-#### ProcessInputStepArgs
+#### `ProcessInputStepArgs`
 
 <PropertiesTable
   content={[
@@ -306,7 +306,7 @@ processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
 ]}
 />
 
-#### ProcessInputStepResult
+#### `ProcessInputStepResult`
 
 The method can return any combination of these properties:
 
@@ -402,7 +402,7 @@ System messages are **reset to their original values** at the start of each step
 
 ---
 
-### processOutputStream
+### `processOutputStream`
 
 Processes streaming output chunks with built-in state management. Allows processors to accumulate chunks and make decisions based on larger context.
 
@@ -410,7 +410,7 @@ Processes streaming output chunks with built-in state management. Allows process
 processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined>;
 ```
 
-#### ProcessOutputStreamArgs
+#### `ProcessOutputStreamArgs`
 
 <PropertiesTable
   content={[
@@ -473,7 +473,7 @@ processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | 
 
 ---
 
-### processOutputResult
+### `processOutputResult`
 
 Processes the complete output result after streaming or generation is finished.
 
@@ -481,7 +481,7 @@ Processes the complete output result after streaming or generation is finished.
 processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
 ```
 
-#### ProcessOutputResultArgs
+#### `ProcessOutputResultArgs`
 
 <PropertiesTable
   content={[
@@ -495,6 +495,20 @@ processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
     name: 'messageList',
     type: 'MessageList',
     description: 'MessageList instance for managing messages.',
+    isOptional: false,
+  },
+  {
+    name: 'state',
+    type: 'Record<string, unknown>',
+    description:
+      'Per-processor state that persists across all method calls within this request. Shared with processOutputStream and other methods.',
+    isOptional: false,
+  },
+  {
+    name: 'result',
+    type: 'OutputResult',
+    description:
+      'Resolved generation result containing `text` (accumulated text), `usage` (token usage with inputTokens, outputTokens, totalTokens), `finishReason` (why generation ended), and `steps` (all LLM step results, each with toolCalls, toolResults, reasoning, sources, files, etc.).',
     isOptional: false,
   },
   {
@@ -527,7 +541,7 @@ processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
 
 ---
 
-### processOutputStep
+### `processOutputStep`
 
 Processes output after each LLM response in the agentic loop, before tool execution. Unlike `processOutputResult` which runs once at the end, this runs at every step. This is the ideal method for implementing guardrails that can trigger retries.
 
@@ -535,7 +549,7 @@ Processes output after each LLM response in the agentic loop, before tool execut
 processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult;
 ```
 
-#### ProcessOutputStepArgs
+#### `ProcessOutputStepArgs`
 
 <PropertiesTable
   content={[
@@ -685,7 +699,7 @@ export class LowercaseProcessor implements Processor {
 }
 ```
 
-### Per-step processor with processInputStep
+### Per-step processor with `processInputStep`
 
 ```typescript title="src/mastra/processors/dynamic-model.ts"
 import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from '@mastra/core'
@@ -718,7 +732,7 @@ export class DynamicModelProcessor implements Processor {
 }
 ```
 
-### Message transformer with processInputStep
+### Message transformer with `processInputStep`
 
 ```typescript title="src/mastra/processors/reasoning-transformer.ts"
 import type { Processor, MastraDBMessage } from '@mastra/core'

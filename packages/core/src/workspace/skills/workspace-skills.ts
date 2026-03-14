@@ -498,11 +498,22 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         return;
       }
     } catch (error) {
-      if (error instanceof Error) {
-        console.warn(`[WorkspaceSkills] Cannot access skills path "${skillsPath}": ${error.message}`);
-      } else {
-        console.warn(`[WorkspaceSkills] Cannot access skills path "${skillsPath}": ${String(error)}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      let hint = '';
+
+      // If an absolute path like "/skills" fails, check if the relative equivalent exists
+      if (skillsPath.startsWith('/') && msg.includes('Permission denied')) {
+        const relativePath = skillsPath.slice(1);
+        try {
+          if (await this.#source.exists(relativePath)) {
+            hint = ` (did you mean to use the relative path "${relativePath}"?)`;
+          }
+        } catch {
+          // ignore — just skip the hint
+        }
       }
+
+      console.warn(`[WorkspaceSkills] Cannot access skills path "${skillsPath}": ${msg}${hint}`);
       return;
     }
 

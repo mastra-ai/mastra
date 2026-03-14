@@ -7,7 +7,7 @@ import type {
   ToolSet,
 } from '@internal/ai-sdk-v5';
 import type { StopCondition as StopConditionV6 } from '@internal/ai-v6';
-import z from 'zod';
+import z from 'zod/v4';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
@@ -17,7 +17,7 @@ import type { ModelMethodType } from '../llm/model/model.loop.types';
 import type { MastraLanguageModelV2, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { MastraMemory, MemoryConfig } from '../memory';
+import type { MastraMemory, MemoryConfigInternal } from '../memory';
 import type { IModelSpanTracker, ObservabilityContext } from '../observability';
 import type {
   InputProcessorOrWorkflow,
@@ -45,7 +45,7 @@ export type StreamInternal = {
   generateId?: IdGenerator;
   currentDate?: () => Date;
   saveQueueManager?: SaveQueueManager; // SaveQueueManager from agent/save-queue
-  memoryConfig?: MemoryConfig; // MemoryConfig from memory/types
+  memoryConfig?: MemoryConfigInternal; // MemoryConfig from memory/types
   threadId?: string;
   resourceId?: string;
   memory?: MastraMemory; // MastraMemory from memory/memory

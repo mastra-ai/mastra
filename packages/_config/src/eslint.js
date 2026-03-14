@@ -172,6 +172,7 @@ export const createConfig = async () =>
             '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: false }],
 
             '@typescript-eslint/no-floating-promises': 'error',
+            '@typescript-eslint/no-require-imports': ERROR,
 
             '@typescript-eslint/ban-ts-comment': [
               ERROR,

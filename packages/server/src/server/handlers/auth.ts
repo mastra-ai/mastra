@@ -18,7 +18,6 @@ import type {
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { MastraAuthProvider } from '@mastra/core/server';
 
-import { isDevPlaygroundRequest } from '../auth/helpers';
 import { HTTPException } from '../http-exception';
 import {
   capabilitiesResponseSchema,
@@ -70,8 +69,8 @@ function getAuthProvider(mastra: any): MastraAuthProvider | null {
  * Always uses https when behind a proxy — Knative's queue-proxy overwrites
  * X-Forwarded-Proto based on the internal HTTP connection, so it's unreliable.
  */
-function getPublicOrigin(request: Request): string {
-  const forwardedHost = request.headers.get('x-forwarded-host');
+export function getPublicOrigin(request: Request): string {
+  const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
   if (forwardedHost) {
     return `https://${forwardedHost}`;
   }
@@ -110,17 +109,12 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
     try {
       const { mastra, request, routePrefix } = ctx as any;
 
-      // In dev playground mode, return auth as disabled so the UI doesn't show login gates.
-      // The server already bypasses auth for dev playground requests, so the UI should match.
-      const serverConfig = mastra.getServer?.();
-      const authConfig = serverConfig?.auth || {};
-      const getHeader = (name: string) => request.headers.get(name) ?? undefined;
+      const auth = getAuthProvider(mastra);
 
-      if (isDevPlaygroundRequest('/api/auth/capabilities', 'GET', getHeader, authConfig)) {
+      if (!auth) {
         return { enabled: false, login: null };
       }
 
-      const auth = getAuthProvider(mastra);
       const rbac = getRBACProvider(mastra);
 
       const buildCapabilities = await loadBuildCapabilities();
@@ -562,4 +556,4 @@ export const AUTH_ROUTES = [
   POST_LOGOUT_ROUTE,
   POST_CREDENTIALS_SIGN_IN_ROUTE,
   POST_CREDENTIALS_SIGN_UP_ROUTE,
-];
+] as const;

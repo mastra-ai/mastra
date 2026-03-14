@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { Harness, taskWriteTool, taskCheckTool } from '@mastra/core/harness';
+import { Harness } from '@mastra/core/harness';
 import type {
   CustomAvailableModel,
   HeartbeatHandler,
@@ -23,6 +23,7 @@ import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
+import type { McpServerConfig } from './mcp/index.js';
 import type { ProviderAccess } from './onboarding/packs.js';
 import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs.js';
 import {
@@ -38,14 +39,7 @@ import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 
 import { stateSchema } from './schema.js';
-import {
-  createViewTool,
-  createGrepTool,
-  createGlobTool,
-  createExecuteCommandTool,
-  createWriteFileTool,
-  createStringReplaceLspTool,
-} from './tools/index.js';
+
 import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
 import { detectProject, getStorageConfig, getResourceIdOverride } from './utils/project.js';
@@ -89,6 +83,8 @@ export interface MastraCodeConfig {
   heartbeatHandlers?: HeartbeatHandler[];
   /** Override the workspace. Default: local filesystem + local sandbox based on detected project */
   workspace?: HarnessConfig['workspace'];
+  /** Programmatic MCP server configurations, merged with (and overriding) file-based configs. */
+  mcpServers?: Record<string, McpServerConfig>;
   /** Disable MCP server discovery. Default: false */
   disableMcp?: boolean;
   /** Disable hooks. Default: false */
@@ -129,7 +125,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const memory = getDynamicMemory(storage);
 
   // MCP
-  const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath);
+  const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, config?.mcpServers);
 
   // Hooks
   const hookManager = config?.disableHooks ? undefined : new HookManager(project.rootPath, 'session-init');
@@ -149,63 +145,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     tools: createDynamicTools(mcpManager, config?.extraTools, hookManager, config?.disabledTools),
   });
 
-  // Build subagent definitions with project-scoped tools
-  const viewTool = createViewTool(project.rootPath);
-  const grepTool = createGrepTool(project.rootPath);
-  const globTool = createGlobTool(project.rootPath);
-  const executeCommandTool = createExecuteCommandTool(project.rootPath);
-  const writeFileTool = createWriteFileTool(project.rootPath);
-  const stringReplaceLspTool = createStringReplaceLspTool(project.rootPath);
-
-  // Filter disabled tools from a tool map so subagents respect disabledTools config.
-  const filterDisabled = <T extends Record<string, unknown>>(tools: T): T => {
-    if (!config?.disabledTools?.length) return tools;
-    const filtered = { ...tools };
-    for (const name of config.disabledTools) {
-      delete (filtered as Record<string, unknown>)[name];
-    }
-    return filtered;
-  };
-
-  const readOnlyTools = filterDisabled({
-    view: viewTool,
-    search_content: grepTool,
-    find_files: globTool,
-  });
-
-  const defaultSubagents: HarnessSubagent[] = [
-    {
-      id: exploreSubagent.id,
-      name: exploreSubagent.name,
-      description:
-        "Read-only codebase exploration. Use for questions like 'find all usages of X', 'how does module Y work'.",
-      instructions: exploreSubagent.instructions,
-      tools: readOnlyTools,
-    },
-    {
-      id: planSubagent.id,
-      name: planSubagent.name,
-      description:
-        "Read-only analysis and planning. Use for 'create an implementation plan for X', 'analyze the architecture of Y'.",
-      instructions: planSubagent.instructions,
-      tools: readOnlyTools,
-    },
-    {
-      id: executeSubagent.id,
-      name: executeSubagent.name,
-      description:
-        "Task execution with write capabilities. Use for 'implement feature X', 'fix bug Y', 'refactor module Z'.",
-      instructions: executeSubagent.instructions,
-      tools: filterDisabled({
-        ...readOnlyTools,
-        string_replace_lsp: stringReplaceLspTool,
-        write_file: writeFileTool,
-        execute_command: executeCommandTool,
-        task_write: taskWriteTool,
-        task_check: taskCheckTool,
-      }),
-    },
-  ];
+  const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
 
   const defaultModes: HarnessMode[] = [
     {
@@ -290,10 +230,27 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Map subagent types to mode models: explore→fast, plan→plan, execute→build
   const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
+  // Subagents inherit workspace tools from the parent agent's workspace automatically.
+  // Apply disabledTools filter to both default and custom subagents.
   const subagents = (config?.subagents ?? defaultSubagents).map(sa => {
     const modeId = subagentModeMap[sa.id];
     const model = modeId ? effectiveDefaults[modeId] : undefined;
-    return model ? { ...sa, defaultModelId: model } : sa;
+    let filtered = sa;
+    if (config?.disabledTools?.length) {
+      if (sa.allowedWorkspaceTools) {
+        filtered = {
+          ...filtered,
+          allowedWorkspaceTools: sa.allowedWorkspaceTools.filter(t => !config.disabledTools!.includes(t)),
+        };
+      }
+      if (sa.tools) {
+        filtered = {
+          ...filtered,
+          tools: Object.fromEntries(Object.entries(sa.tools).filter(([k]) => !config.disabledTools!.includes(k))),
+        };
+      }
+    }
+    return model ? { ...filtered, defaultModelId: model } : filtered;
   });
 
   // Build initial state with global preferences

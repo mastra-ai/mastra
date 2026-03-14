@@ -53,12 +53,28 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
     // Test deprecated routes separately - just verify they're marked correctly
     const deprecatedRoutes = SERVER_ROUTES.filter(r => r.deprecated);
-    deprecatedRoutes.forEach(route => {
-      const testName = `${route.method} ${route.path}`;
-      describe(testName, () => {
-        it('should be marked as deprecated', () => {
-          expect(route.deprecated).toBe(true);
-          expect(route.openapi?.deprecated).toBe(true);
+
+    // Group deprecated routes by first path segment
+    const deprecatedByCategory = deprecatedRoutes.reduce(
+      (acc, route) => {
+        const category = route.path.split('/')[1] || 'root';
+        if (!acc[category]) acc[category] = [];
+        acc[category].push(route);
+        return acc;
+      },
+      {} as Record<string, typeof deprecatedRoutes>,
+    );
+
+    Object.entries(deprecatedByCategory).forEach(([category, routes]) => {
+      describe(category, () => {
+        routes.forEach(route => {
+          const testName = `${route.method} ${route.path}`;
+          describe(testName, () => {
+            it('should be marked as deprecated', () => {
+              expect(route.deprecated).toBe(true);
+              expect(route.openapi?.deprecated).toBe(true);
+            });
+          });
         });
       });
     });
@@ -100,292 +116,308 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       routesRequiringExternalDeps.includes(r.path) ||
       excludedPrefixes.some(prefix => r.path.startsWith(prefix));
     const activeRoutes = SERVER_ROUTES.filter(r => !isExcluded(r));
-    activeRoutes.forEach(route => {
-      const testName = `${route.method} ${route.path}`;
-      describe(testName, () => {
-        it('should execute with valid request', async () => {
-          // Build HTTP request with auto-generated test data
-          const request = buildRouteRequest(route);
 
-          // Convert to HttpRequest format
-          const httpRequest: HttpRequest = {
-            method: request.method,
-            path: request.path,
-            query: request.query,
-            body: request.body,
-          };
+    // Group routes by first path segment (e.g., /agents/:id/tools -> 'agents')
+    const routesByCategory = activeRoutes.reduce(
+      (acc, route) => {
+        const category = route.path.split('/')[1] || 'root';
+        if (!acc[category]) acc[category] = [];
+        acc[category].push(route);
+        return acc;
+      },
+      {} as Record<string, typeof activeRoutes>,
+    );
 
-          // Execute through adapter
-          const response = await executeHttpRequest(app, httpRequest);
+    Object.entries(routesByCategory).forEach(([category, routes]) => {
+      describe(category, () => {
+        routes.forEach(route => {
+          const testName = `${route.method} ${route.path}`;
+          describe(testName, () => {
+            it('should execute with valid request', async () => {
+              // Build HTTP request with auto-generated test data
+              const request = buildRouteRequest(route);
 
-          // Validate response
-          expect(response.status).toBeLessThan(400);
+              // Convert to HttpRequest format
+              const httpRequest: HttpRequest = {
+                method: request.method,
+                path: request.path,
+                query: request.query,
+                body: request.body,
+              };
 
-          if (route.responseType === 'json') {
-            expect(response.type).toBe('json');
-            expect(response.data).toBeDefined();
+              // Execute through adapter
+              const response = await executeHttpRequest(app, httpRequest);
 
-            // Validate response schema (if defined)
-            if (route.responseSchema) {
-              const parsedData = parseDatesInResponse(response.data, route.responseSchema);
-              expectValidSchema(route.responseSchema, parsedData);
+              // Validate response
+              expect(response.status).toBeLessThan(400);
+
+              if (route.responseType === 'json') {
+                expect(response.type).toBe('json');
+                expect(response.data).toBeDefined();
+
+                // Validate response schema (if defined)
+                if (route.responseSchema) {
+                  const parsedData = parseDatesInResponse(response.data, route.responseSchema);
+                  expectValidSchema(route.responseSchema, parsedData);
+                }
+
+                // Verify JSON is serializable (no circular refs, functions, etc)
+                expect(() => JSON.stringify(response.data)).not.toThrow();
+              } else if (route.responseType === 'stream') {
+                expect(response.type).toBe('stream');
+                expect(response.stream).toBeDefined();
+
+                // Verify stream is consumable (has getReader or is async iterable)
+                const hasReader = response.stream && typeof (response.stream as any).getReader === 'function';
+                const isAsyncIterable =
+                  response.stream &&
+                  typeof (response.stream as AsyncIterable<unknown>)[Symbol.asyncIterator] === 'function';
+                expect(hasReader || isAsyncIterable).toBe(true);
+              }
+            });
+
+            // Error handling tests for routes with entity IDs
+            if (route.path.includes(':agentId')) {
+              it('should return 404 when agent not found', async () => {
+                // Build request with non-existent agent
+                const request = buildRouteRequest(route, {
+                  pathParams: { agentId: 'non-existent-agent' },
+                });
+
+                const httpRequest: HttpRequest = {
+                  method: request.method,
+                  path: request.path,
+                  query: request.query,
+                  body: request.body,
+                };
+
+                const response = await executeHttpRequest(app, httpRequest);
+
+                // Expect 404 status
+                expect(response.status).toBe(404);
+              });
             }
 
-            // Verify JSON is serializable (no circular refs, functions, etc)
-            expect(() => JSON.stringify(response.data)).not.toThrow();
-          } else if (route.responseType === 'stream') {
-            expect(response.type).toBe('stream');
-            expect(response.stream).toBeDefined();
+            if (route.path.includes(':workflowId')) {
+              it('should return 404 when workflow not found', async () => {
+                const request = buildRouteRequest(route, {
+                  pathParams: { workflowId: 'non-existent-workflow' },
+                });
 
-            // Verify stream is consumable (has getReader or is async iterable)
-            const hasReader = response.stream && typeof (response.stream as any).getReader === 'function';
-            const isAsyncIterable =
-              response.stream &&
-              typeof (response.stream as AsyncIterable<unknown>)[Symbol.asyncIterator] === 'function';
-            expect(hasReader || isAsyncIterable).toBe(true);
-          }
+                const httpRequest: HttpRequest = {
+                  method: request.method,
+                  path: request.path,
+                  query: request.query,
+                  body: request.body,
+                };
+
+                const response = await executeHttpRequest(app, httpRequest);
+
+                expect(response.status).toBe(404);
+              });
+            }
+
+            // MCP server 404 tests
+            if (route.path.includes(':serverId')) {
+              it('should return 404 when MCP server not found (via :serverId)', async () => {
+                const request = buildRouteRequest(route, {
+                  pathParams: { serverId: 'non-existent-server' },
+                });
+
+                const httpRequest: HttpRequest = {
+                  method: request.method,
+                  path: request.path,
+                  query: request.query,
+                  body: request.body,
+                };
+
+                const response = await executeHttpRequest(app, httpRequest);
+
+                expect(response.status).toBe(404);
+              });
+            }
+
+            // MCP v0 server detail 404 test (uses :id instead of :serverId)
+            if (route.path.includes('/mcp/v0/servers/:id')) {
+              it('should return 404 when MCP server not found (via :id)', async () => {
+                const request = buildRouteRequest(route, {
+                  pathParams: { id: 'non-existent-server' },
+                });
+
+                const httpRequest: HttpRequest = {
+                  method: request.method,
+                  path: request.path,
+                  query: request.query,
+                  body: request.body,
+                };
+
+                const response = await executeHttpRequest(app, httpRequest);
+
+                expect(response.status).toBe(404);
+              });
+            }
+
+            // Processor 404 tests
+            if (route.path.includes(':processorId')) {
+              it('should return 404 when processor not found', async () => {
+                const request = buildRouteRequest(route, {
+                  pathParams: { processorId: 'non-existent-processor' },
+                });
+
+                const httpRequest: HttpRequest = {
+                  method: request.method,
+                  path: request.path,
+                  query: request.query,
+                  body: request.body,
+                };
+
+                const response = await executeHttpRequest(app, httpRequest);
+
+                expect(response.status).toBe(404);
+              });
+            }
+
+            // Stream consumption test
+            if (route.responseType === 'stream') {
+              it('should be consumable via stream reader', async () => {
+                const request = buildRouteRequest(route);
+
+                const httpRequest: HttpRequest = {
+                  method: request.method,
+                  path: request.path,
+                  query: request.query,
+                  body: request.body,
+                };
+
+                const response = await executeHttpRequest(app, httpRequest);
+
+                expect(response.status).toBeLessThan(400);
+                expect(response.stream).toBeDefined();
+
+                // Try to consume the stream
+                if (typeof (response.stream as any).getReader === 'function') {
+                  // Web Streams API
+                  const reader = (response.stream as ReadableStream).getReader();
+                  const firstChunk = await reader.read();
+                  expect(firstChunk).toBeDefined();
+                  // Don't validate chunk structure - that's handler's job
+                  reader.releaseLock();
+                } else if (typeof (response.stream as AsyncIterable<unknown>)[Symbol.asyncIterator] === 'function') {
+                  // Async iterable
+                  const iterator = (response.stream as AsyncIterable<unknown>)[Symbol.asyncIterator]();
+                  const firstChunk = await iterator.next();
+                  expect(firstChunk).toBeDefined();
+                }
+              });
+            }
+
+            // Schema validation tests - only for routes with query or body schemas
+            if (route.queryParamSchema || route.bodySchema) {
+              it('should return 400 when schema validation fails', async () => {
+                const request = buildRouteRequest(route);
+
+                let httpRequest: HttpRequest;
+
+                if (route.queryParamSchema) {
+                  // Add invalid query param (add an object where string/number expected)
+                  httpRequest = {
+                    method: request.method,
+                    path: request.path,
+                    query: {
+                      ...(request.query || {}),
+                      invalidQueryParam: { nested: 'object' } as any,
+                    },
+                    body: request.body,
+                  };
+                } else if (route.bodySchema) {
+                  // Keep valid request but add an invalid field with wrong type
+                  httpRequest = {
+                    method: request.method,
+                    path: request.path,
+                    query: request.query,
+                    body: {
+                      ...(typeof request.body === 'object' && request.body !== null ? request.body : {}),
+                      invalidBodyField: { deeply: { nested: 'object' } },
+                    },
+                  };
+                } else {
+                  // Shouldn't happen, but fallback
+                  httpRequest = {
+                    method: request.method,
+                    path: request.path,
+                    query: request.query,
+                    body: request.body,
+                  };
+                }
+
+                const response = await executeHttpRequest(app, httpRequest);
+
+                // Expect 400 Bad Request for schema validation failure
+                // Some routes may still succeed if they ignore unknown fields
+                // So we check for either 400 or success
+                expect([200, 201, 400]).toContain(response.status);
+
+                if (response.status === 400) {
+                  expect(response.type).toBe('json');
+
+                  // Verify error response has helpful structure
+                  const errorData = response.data as any;
+                  expect(errorData).toBeDefined();
+                  expect(errorData.error || errorData.message || errorData.details).toBeDefined();
+                }
+              });
+            }
+
+            // RequestContext tests - test for POST/PUT routes that accept body
+            if (['POST', 'PUT'].includes(route.method) && route.bodySchema) {
+              it('should accept requestContext in body', async () => {
+                const request = buildRouteRequest(route);
+
+                const httpRequest: HttpRequest = {
+                  method: request.method,
+                  path: request.path,
+                  query: request.query,
+                  body: {
+                    ...(typeof request.body === 'object' && request.body !== null ? request.body : {}),
+                    requestContext: { userId: 'test-user-123', sessionId: 'session-456' },
+                  },
+                };
+
+                const response = await executeHttpRequest(app, httpRequest);
+
+                // Should succeed - requestContext is optional and should not cause errors
+                expect(response.status).toBeLessThan(500);
+              });
+            }
+
+            // Body field spreading test - for POST/PUT routes with body
+            if (['POST', 'PUT'].includes(route.method) && route.bodySchema) {
+              it('should spread body fields to handler params', async () => {
+                const request = buildRouteRequest(route);
+
+                // Add a unique field to the body
+                const testField = 'testBodyField';
+                const testValue = 'testValue123';
+
+                const httpRequest: HttpRequest = {
+                  method: request.method,
+                  path: request.path,
+                  query: request.query,
+                  body: {
+                    ...(typeof request.body === 'object' && request.body !== null ? request.body : {}),
+                    [testField]: testValue,
+                  },
+                };
+
+                const response = await executeHttpRequest(app, httpRequest);
+
+                // Should succeed - body fields should be spread correctly
+                // Handler receives both `body: {...}` AND individual fields
+                expect(response.status).toBeLessThan(400);
+              });
+            }
+          });
         });
-
-        // Error handling tests for routes with entity IDs
-        if (route.path.includes(':agentId')) {
-          it('should return 404 when agent not found', async () => {
-            // Build request with non-existent agent
-            const request = buildRouteRequest(route, {
-              pathParams: { agentId: 'non-existent-agent' },
-            });
-
-            const httpRequest: HttpRequest = {
-              method: request.method,
-              path: request.path,
-              query: request.query,
-              body: request.body,
-            };
-
-            const response = await executeHttpRequest(app, httpRequest);
-
-            // Expect 404 status
-            expect(response.status).toBe(404);
-          });
-        }
-
-        if (route.path.includes(':workflowId')) {
-          it('should return 404 when workflow not found', async () => {
-            const request = buildRouteRequest(route, {
-              pathParams: { workflowId: 'non-existent-workflow' },
-            });
-
-            const httpRequest: HttpRequest = {
-              method: request.method,
-              path: request.path,
-              query: request.query,
-              body: request.body,
-            };
-
-            const response = await executeHttpRequest(app, httpRequest);
-
-            expect(response.status).toBe(404);
-          });
-        }
-
-        // MCP server 404 tests
-        if (route.path.includes(':serverId')) {
-          it('should return 404 when MCP server not found (via :serverId)', async () => {
-            const request = buildRouteRequest(route, {
-              pathParams: { serverId: 'non-existent-server' },
-            });
-
-            const httpRequest: HttpRequest = {
-              method: request.method,
-              path: request.path,
-              query: request.query,
-              body: request.body,
-            };
-
-            const response = await executeHttpRequest(app, httpRequest);
-
-            expect(response.status).toBe(404);
-          });
-        }
-
-        // MCP v0 server detail 404 test (uses :id instead of :serverId)
-        if (route.path.includes('/mcp/v0/servers/:id')) {
-          it('should return 404 when MCP server not found (via :id)', async () => {
-            const request = buildRouteRequest(route, {
-              pathParams: { id: 'non-existent-server' },
-            });
-
-            const httpRequest: HttpRequest = {
-              method: request.method,
-              path: request.path,
-              query: request.query,
-              body: request.body,
-            };
-
-            const response = await executeHttpRequest(app, httpRequest);
-
-            expect(response.status).toBe(404);
-          });
-        }
-
-        // Processor 404 tests
-        if (route.path.includes(':processorId')) {
-          it('should return 404 when processor not found', async () => {
-            const request = buildRouteRequest(route, {
-              pathParams: { processorId: 'non-existent-processor' },
-            });
-
-            const httpRequest: HttpRequest = {
-              method: request.method,
-              path: request.path,
-              query: request.query,
-              body: request.body,
-            };
-
-            const response = await executeHttpRequest(app, httpRequest);
-
-            expect(response.status).toBe(404);
-          });
-        }
-
-        // Stream consumption test
-        if (route.responseType === 'stream') {
-          it('should be consumable via stream reader', async () => {
-            const request = buildRouteRequest(route);
-
-            const httpRequest: HttpRequest = {
-              method: request.method,
-              path: request.path,
-              query: request.query,
-              body: request.body,
-            };
-
-            const response = await executeHttpRequest(app, httpRequest);
-
-            expect(response.status).toBeLessThan(400);
-            expect(response.stream).toBeDefined();
-
-            // Try to consume the stream
-            if (typeof (response.stream as any).getReader === 'function') {
-              // Web Streams API
-              const reader = (response.stream as ReadableStream).getReader();
-              const firstChunk = await reader.read();
-              expect(firstChunk).toBeDefined();
-              // Don't validate chunk structure - that's handler's job
-              reader.releaseLock();
-            } else if (typeof (response.stream as AsyncIterable<unknown>)[Symbol.asyncIterator] === 'function') {
-              // Async iterable
-              const iterator = (response.stream as AsyncIterable<unknown>)[Symbol.asyncIterator]();
-              const firstChunk = await iterator.next();
-              expect(firstChunk).toBeDefined();
-            }
-          });
-        }
-
-        // Schema validation tests - only for routes with query or body schemas
-        if (route.queryParamSchema || route.bodySchema) {
-          it('should return 400 when schema validation fails', async () => {
-            const request = buildRouteRequest(route);
-
-            let httpRequest: HttpRequest;
-
-            if (route.queryParamSchema) {
-              // Add invalid query param (add an object where string/number expected)
-              httpRequest = {
-                method: request.method,
-                path: request.path,
-                query: {
-                  ...(request.query || {}),
-                  invalidQueryParam: { nested: 'object' } as any,
-                },
-                body: request.body,
-              };
-            } else if (route.bodySchema) {
-              // Keep valid request but add an invalid field with wrong type
-              httpRequest = {
-                method: request.method,
-                path: request.path,
-                query: request.query,
-                body: {
-                  ...(typeof request.body === 'object' && request.body !== null ? request.body : {}),
-                  invalidBodyField: { deeply: { nested: 'object' } },
-                },
-              };
-            } else {
-              // Shouldn't happen, but fallback
-              httpRequest = {
-                method: request.method,
-                path: request.path,
-                query: request.query,
-                body: request.body,
-              };
-            }
-
-            const response = await executeHttpRequest(app, httpRequest);
-
-            // Expect 400 Bad Request for schema validation failure
-            // Some routes may still succeed if they ignore unknown fields
-            // So we check for either 400 or success
-            expect([200, 201, 400]).toContain(response.status);
-
-            if (response.status === 400) {
-              expect(response.type).toBe('json');
-
-              // Verify error response has helpful structure
-              const errorData = response.data as any;
-              expect(errorData).toBeDefined();
-              expect(errorData.error || errorData.message || errorData.details).toBeDefined();
-            }
-          });
-        }
-
-        // RequestContext tests - test for POST/PUT routes that accept body
-        if (['POST', 'PUT'].includes(route.method) && route.bodySchema) {
-          it('should accept requestContext in body', async () => {
-            const request = buildRouteRequest(route);
-
-            const httpRequest: HttpRequest = {
-              method: request.method,
-              path: request.path,
-              query: request.query,
-              body: {
-                ...(typeof request.body === 'object' && request.body !== null ? request.body : {}),
-                requestContext: { userId: 'test-user-123', sessionId: 'session-456' },
-              },
-            };
-
-            const response = await executeHttpRequest(app, httpRequest);
-
-            // Should succeed - requestContext is optional and should not cause errors
-            expect(response.status).toBeLessThan(500);
-          });
-        }
-
-        // Body field spreading test - for POST/PUT routes with body
-        if (['POST', 'PUT'].includes(route.method) && route.bodySchema) {
-          it('should spread body fields to handler params', async () => {
-            const request = buildRouteRequest(route);
-
-            // Add a unique field to the body
-            const testField = 'testBodyField';
-            const testValue = 'testValue123';
-
-            const httpRequest: HttpRequest = {
-              method: request.method,
-              path: request.path,
-              query: request.query,
-              body: {
-                ...(typeof request.body === 'object' && request.body !== null ? request.body : {}),
-                [testField]: testValue,
-              },
-            };
-
-            const response = await executeHttpRequest(app, httpRequest);
-
-            // Should succeed - body fields should be spread correctly
-            // Handler receives both `body: {...}` AND individual fields
-            expect(response.status).toBeLessThan(400);
-          });
-        }
       });
     });
 
