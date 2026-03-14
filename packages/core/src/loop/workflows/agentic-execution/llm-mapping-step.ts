@@ -124,7 +124,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         return hasMetadata ? providerMetadata : undefined;
       }
 
-      if (inputData?.some(toolCall => toolCall?.result === undefined)) {
+      if (inputData?.some(toolCall => toolCall?.result === undefined && !toolCall.providerExecuted)) {
         const errorResults = inputData.filter(toolCall => toolCall?.error);
 
         if (errorResults?.length) {
