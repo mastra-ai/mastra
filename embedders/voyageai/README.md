@@ -248,13 +248,13 @@ VoyageAI rerankers implement the `RelevanceScoreProvider` interface for use with
 import { voyage, voyageReranker, createVoyageReranker } from '@mastra/voyageai';
 
 // Use pre-configured reranker (rerank-2.5)
-const reranker = voyage.reranker;
+const defaultReranker = voyage.reranker;
 
 // Or create with specific model
-const reranker = createVoyageReranker('rerank-2.5-lite');
+const liteReranker = createVoyageReranker('rerank-2.5-lite');
 
 // Or with full config
-const reranker = createVoyageReranker({
+const customReranker = createVoyageReranker({
   model: 'rerank-2.5',
   truncation: true,
 });

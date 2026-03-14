@@ -38,7 +38,7 @@ async function createTokenAwareBatches(
   let currentTokens = 0;
 
   for (let i = 0; i < texts.length; i++) {
-    const tokenCount = tokenResults[i]!.ids.length;
+    const tokenCount = tokenResults[i]?.ids.length ?? 0;
 
     if (currentBatch.length > 0 && currentTokens + tokenCount > maxTokens) {
       batches.push(currentBatch);

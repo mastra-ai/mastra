@@ -9,12 +9,13 @@ import {
 // Mock functions
 const mockEmbed = vi.fn();
 const mockTokenize = vi.fn();
+const mockConstructor = vi.fn();
 
 // Mock the voyageai module
 vi.mock('voyageai', () => {
   return {
     VoyageAIClient: class MockVoyageAIClient {
-      constructor() {}
+      constructor(opts: any) { mockConstructor(opts); }
       embed = mockEmbed;
       tokenize = mockTokenize;
     },
@@ -54,6 +55,7 @@ describe('VoyageTextEmbeddingModelV2', () => {
     });
 
     expect(model.modelId).toBe('voyage-3.5');
+    expect(mockConstructor).toHaveBeenCalledWith({ apiKey: 'custom-key' });
   });
 
   it('should throw error if no API key is available', () => {

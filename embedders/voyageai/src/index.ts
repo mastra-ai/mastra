@@ -231,56 +231,74 @@ export const voyage: VoyageTextEmbeddingModelV3 & {
   multimodalEmbedding: typeof createVoyageMultimodalEmbedding;
   contextualizedEmbedding: typeof createVoyageContextualizedEmbedding;
   createReranker: typeof createVoyageReranker;
-} = Object.assign(createVoyageTextEmbedding('voyage-3.5'), {
-  // Text models (V3) - voyage-4 series
-  v4large: createVoyageTextEmbedding('voyage-4-large'),
-  v4: createVoyageTextEmbedding('voyage-4'),
-  v4lite: createVoyageTextEmbedding('voyage-4-lite'),
+} = (() => {
+  // Lazy cache to avoid import-time crashes when VOYAGE_API_KEY is not set
+  const cache = new Map<string, any>();
+  function lazy<T>(key: string, factory: () => T): T {
+    let instance = cache.get(key);
+    if (!instance) {
+      instance = factory();
+      cache.set(key, instance);
+    }
+    return instance as T;
+  }
 
-  // Text models (V3) - voyage-3 series
-  large: createVoyageTextEmbedding('voyage-3-large'),
-  v35: createVoyageTextEmbedding('voyage-3.5'),
-  v35lite: createVoyageTextEmbedding('voyage-3.5-lite'),
-  code: createVoyageTextEmbedding('voyage-code-3'),
-  finance: createVoyageTextEmbedding('voyage-finance-2'),
-  law: createVoyageTextEmbedding('voyage-law-2'),
+  // The base object delegates doEmbed to a lazily-created default model
+  const base = {
+    get specificationVersion() { return 'v3' as const; },
+    get provider() { return 'voyage' as const; },
+    get modelId() { return 'voyage-3.5'; },
+    get maxEmbeddingsPerCall() { return 1000; },
+    get supportsParallelCalls() { return true; },
+    doEmbed(args: any) {
+      return lazy('_default', () => createVoyageTextEmbedding('voyage-3.5')).doEmbed(args);
+    },
+  };
 
-  // Text models (V2) - voyage-4 series for AI SDK v5 compatibility
-  v4largeV2: createVoyageTextEmbeddingV2('voyage-4-large'),
-  v4V2: createVoyageTextEmbeddingV2('voyage-4'),
-  v4liteV2: createVoyageTextEmbeddingV2('voyage-4-lite'),
-
-  // Text models (V2) - voyage-3 series for AI SDK v5 compatibility
-  largeV2: createVoyageTextEmbeddingV2('voyage-3-large'),
-  v35V2: createVoyageTextEmbeddingV2('voyage-3.5'),
-  v35liteV2: createVoyageTextEmbeddingV2('voyage-3.5-lite'),
-  codeV2: createVoyageTextEmbeddingV2('voyage-code-3'),
-  financeV2: createVoyageTextEmbeddingV2('voyage-finance-2'),
-  lawV2: createVoyageTextEmbeddingV2('voyage-law-2'),
-
-  // Multimodal models
-  multimodal: createVoyageMultimodalEmbedding('voyage-multimodal-3.5'),
-  multimodal3: createVoyageMultimodalEmbedding('voyage-multimodal-3'),
-  multimodal35: createVoyageMultimodalEmbedding('voyage-multimodal-3.5'),
-
-  // Contextualized model
-  contextualized: createVoyageContextualizedEmbedding('voyage-context-3'),
-  context3: createVoyageContextualizedEmbedding('voyage-context-3'),
-
-  // Reranker models
-  reranker: createVoyageReranker('rerank-2.5'),
-  reranker25: createVoyageReranker('rerank-2.5'),
-  reranker25lite: createVoyageReranker('rerank-2.5-lite'),
-  reranker2: createVoyageReranker('rerank-2'),
-  reranker2lite: createVoyageReranker('rerank-2-lite'),
-
-  // Factory functions for custom configurations
-  embedding: createVoyageTextEmbedding,
-  embeddingV2: createVoyageTextEmbeddingV2,
-  multimodalEmbedding: createVoyageMultimodalEmbedding,
-  contextualizedEmbedding: createVoyageContextualizedEmbedding,
-  createReranker: createVoyageReranker,
-});
+  return Object.defineProperties(base, {
+    // Text models (V3) - voyage-4 series
+    v4large: { get: () => lazy('v4large', () => createVoyageTextEmbedding('voyage-4-large')) },
+    v4: { get: () => lazy('v4', () => createVoyageTextEmbedding('voyage-4')) },
+    v4lite: { get: () => lazy('v4lite', () => createVoyageTextEmbedding('voyage-4-lite')) },
+    // Text models (V3) - voyage-3 series
+    large: { get: () => lazy('large', () => createVoyageTextEmbedding('voyage-3-large')) },
+    v35: { get: () => lazy('v35', () => createVoyageTextEmbedding('voyage-3.5')) },
+    v35lite: { get: () => lazy('v35lite', () => createVoyageTextEmbedding('voyage-3.5-lite')) },
+    code: { get: () => lazy('code', () => createVoyageTextEmbedding('voyage-code-3')) },
+    finance: { get: () => lazy('finance', () => createVoyageTextEmbedding('voyage-finance-2')) },
+    law: { get: () => lazy('law', () => createVoyageTextEmbedding('voyage-law-2')) },
+    // Text models (V2) - voyage-4 series
+    v4largeV2: { get: () => lazy('v4largeV2', () => createVoyageTextEmbeddingV2('voyage-4-large')) },
+    v4V2: { get: () => lazy('v4V2', () => createVoyageTextEmbeddingV2('voyage-4')) },
+    v4liteV2: { get: () => lazy('v4liteV2', () => createVoyageTextEmbeddingV2('voyage-4-lite')) },
+    // Text models (V2) - voyage-3 series
+    largeV2: { get: () => lazy('largeV2', () => createVoyageTextEmbeddingV2('voyage-3-large')) },
+    v35V2: { get: () => lazy('v35V2', () => createVoyageTextEmbeddingV2('voyage-3.5')) },
+    v35liteV2: { get: () => lazy('v35liteV2', () => createVoyageTextEmbeddingV2('voyage-3.5-lite')) },
+    codeV2: { get: () => lazy('codeV2', () => createVoyageTextEmbeddingV2('voyage-code-3')) },
+    financeV2: { get: () => lazy('financeV2', () => createVoyageTextEmbeddingV2('voyage-finance-2')) },
+    lawV2: { get: () => lazy('lawV2', () => createVoyageTextEmbeddingV2('voyage-law-2')) },
+    // Multimodal models
+    multimodal: { get: () => lazy('multimodal', () => createVoyageMultimodalEmbedding('voyage-multimodal-3.5')) },
+    multimodal3: { get: () => lazy('multimodal3', () => createVoyageMultimodalEmbedding('voyage-multimodal-3')) },
+    multimodal35: { get: () => lazy('multimodal35', () => createVoyageMultimodalEmbedding('voyage-multimodal-3.5')) },
+    // Contextualized model
+    contextualized: { get: () => lazy('contextualized', () => createVoyageContextualizedEmbedding('voyage-context-3')) },
+    context3: { get: () => lazy('context3', () => createVoyageContextualizedEmbedding('voyage-context-3')) },
+    // Reranker models
+    reranker: { get: () => lazy('reranker', () => createVoyageReranker('rerank-2.5')) },
+    reranker25: { get: () => lazy('reranker25', () => createVoyageReranker('rerank-2.5')) },
+    reranker25lite: { get: () => lazy('reranker25lite', () => createVoyageReranker('rerank-2.5-lite')) },
+    reranker2: { get: () => lazy('reranker2', () => createVoyageReranker('rerank-2')) },
+    reranker2lite: { get: () => lazy('reranker2lite', () => createVoyageReranker('rerank-2-lite')) },
+    // Factory functions (no lazy needed - they are factories themselves)
+    embedding: { value: createVoyageTextEmbedding },
+    embeddingV2: { value: createVoyageTextEmbeddingV2 },
+    multimodalEmbedding: { value: createVoyageMultimodalEmbedding },
+    contextualizedEmbedding: { value: createVoyageContextualizedEmbedding },
+    createReranker: { value: createVoyageReranker },
+  }) as any;
+})();
 
 // Default export
 export default voyage;

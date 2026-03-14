@@ -1,14 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { VoyageRelevanceScorer, createVoyageReranker, voyageReranker } from '../reranker';
 
-// Mock function for rerank
+// Mock functions
 const mockRerank = vi.fn();
+const mockConstructor = vi.fn();
 
 // Mock the voyageai module
 vi.mock('voyageai', () => {
   return {
     VoyageAIClient: class MockVoyageAIClient {
-      constructor() {}
+      constructor(opts: any) { mockConstructor(opts); }
       rerank = mockRerank;
     },
   };
@@ -39,6 +40,7 @@ describe('VoyageRelevanceScorer', () => {
     });
 
     expect(scorer.modelId).toBe('rerank-2.5');
+    expect(mockConstructor).toHaveBeenCalledWith({ apiKey: 'custom-key' });
   });
 
   it('should throw error if no API key is available', () => {
