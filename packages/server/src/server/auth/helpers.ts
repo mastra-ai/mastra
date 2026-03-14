@@ -285,7 +285,7 @@ export const preAuthenticateUser = async (ctx: {
         }
       }
     } catch {
-      // Non-fatal; per-route auth will retry
+      // Non-fatal; coreAuthMiddleware will retry RBAC loading
     }
   } catch {
     // Non-fatal; per-route auth will reject later
@@ -334,35 +334,35 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       }
 
       requestContext.set('user', user);
-
-      try {
-        const serverConfig = mastra.getServer();
-        const rbacProvider = serverConfig?.rbac as IRBACProvider<EEUser> | undefined;
-
-        if (rbacProvider) {
-          if (!user || typeof user !== 'object' || !('id' in user)) {
-            mastra
-              .getLogger()
-              ?.warn('RBAC: authenticated user missing required "id" field, skipping permission loading');
-          } else {
-            const permissions = await rbacProvider.getPermissions(user as EEUser);
-            requestContext.set('userPermissions', permissions);
-
-            const roles = await rbacProvider.getRoles(user as EEUser);
-            requestContext.set('userRoles', roles);
-          }
-        }
-      } catch (rbacError) {
-        mastra.getLogger()?.error('RBAC: failed to load user permissions/roles', {
-          error: rbacError instanceof Error ? { message: rbacError.message, stack: rbacError.stack } : rbacError,
-        });
-      }
     } catch (err) {
       mastra.getLogger()?.error('Authentication error', {
         error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
       });
       return { action: 'error', status: 401, body: { error: 'Invalid or expired token' } };
     }
+  }
+
+  // Load RBAC permissions/roles if configured and not already loaded
+  // (handles both fresh auth and pre-authenticated requests where RBAC may have failed)
+  try {
+    const serverConfig = mastra.getServer();
+    const rbacProvider = serverConfig?.rbac as IRBACProvider<EEUser> | undefined;
+
+    if (rbacProvider && !requestContext.get('userPermissions')) {
+      if (!user || typeof user !== 'object' || !('id' in user)) {
+        mastra.getLogger()?.warn('RBAC: authenticated user missing required "id" field, skipping permission loading');
+      } else {
+        const permissions = await rbacProvider.getPermissions(user as EEUser);
+        requestContext.set('userPermissions', permissions);
+
+        const roles = await rbacProvider.getRoles(user as EEUser);
+        requestContext.set('userRoles', roles);
+      }
+    }
+  } catch (rbacError) {
+    mastra.getLogger()?.error('RBAC: failed to load user permissions/roles', {
+      error: rbacError instanceof Error ? { message: rbacError.message, stack: rbacError.stack } : rbacError,
+    });
   }
 
   // ── Authorization ──
