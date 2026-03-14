@@ -7,6 +7,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 import type { LSPConfig } from '@mastra/core/workspace';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { stateSchema } from '../schema';
 import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
@@ -16,16 +17,10 @@ import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
 // =============================================================================
 
 // We support multiple skill locations for compatibility:
-// 1. Project-local: .mastracode/skills (project-specific mastracode skills)
+// 1. Project-local: <configDir>/skills (project-specific mastracode skills)
 // 2. Project-local: .claude/skills (Claude Code compatible skills)
-// 3. Global: ~/.mastracode/skills (user-wide mastracode skills)
+// 3. Global: ~/<configDir>/skills (user-wide mastracode skills)
 // 4. Global: ~/.claude/skills (user-wide Claude Code skills)
-
-const mastraCodeLocalSkillsPath = path.join(process.cwd(), '.mastracode', 'skills');
-
-const claudeLocalSkillsPath = path.join(process.cwd(), '.claude', 'skills');
-
-const mastraCodeGlobalSkillsPath = path.join(os.homedir(), '.mastracode', 'skills');
 
 const claudeGlobalSkillsPath = path.join(os.homedir(), '.claude', 'skills');
 
@@ -74,12 +69,21 @@ function collectSkillPaths(skillsDirs: string[]): string[] {
   return paths;
 }
 
-export const skillPaths = collectSkillPaths([
-  mastraCodeLocalSkillsPath,
-  claudeLocalSkillsPath,
-  mastraCodeGlobalSkillsPath,
-  claudeGlobalSkillsPath,
-]);
+// Claude skill paths that remain static (always use .claude)
+const claudeLocalSkillsPath = (projectPath: string) => path.join(projectPath, '.claude', 'skills');
+
+// Build skill paths dynamically based on configDir and projectPath
+export function buildSkillPaths(projectPath: string, configDir: string): string[] {
+  const mastraCodeLocalSkillsPath = path.join(projectPath, configDir, 'skills');
+  const mastraCodeGlobalSkillsPath = path.join(os.homedir(), configDir, 'skills');
+
+  return collectSkillPaths([
+    mastraCodeLocalSkillsPath,
+    claudeLocalSkillsPath(projectPath),
+    mastraCodeGlobalSkillsPath,
+    claudeGlobalSkillsPath,
+  ]);
+}
 
 const WORKSPACE_ID_PREFIX = 'mastra-code-workspace';
 
@@ -106,6 +110,8 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
   }
 
   const projectPath = path.resolve(rawProjectPath);
+  const configDir = state?.configDir ?? DEFAULT_CONFIG_DIR;
+  const skillPaths = buildSkillPaths(projectPath, configDir);
   const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
   const allowedPaths = [...skillPaths, ...sandboxPaths.map((p: string) => path.resolve(p))];
@@ -163,11 +169,4 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
     ...(skillPaths.length > 0 ? { skills: skillPaths } : {}),
     lsp: lspConfig,
   });
-}
-
-if (skillPaths.length > 0) {
-  console.info(`Skills loaded from:`);
-  for (const p of skillPaths) {
-    console.info(`  - ${p}`);
-  }
 }

@@ -38,6 +38,7 @@ import { getToolCategory } from './permissions.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 
+import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
 import { stateSchema } from './schema.js';
 
 import { mastra } from './tui/theme.js';
@@ -83,6 +84,8 @@ export interface MastraCodeConfig {
   heartbeatHandlers?: HeartbeatHandler[];
   /** Override the workspace. Default: local filesystem + local sandbox based on detected project */
   workspace?: HarnessConfig['workspace'];
+  /** Override the config directory name. Default: '.mastracode'. Replaces '.mastracode' in all project-level and global config paths (MCP, hooks, commands, database, skills, agent instructions). */
+  configDir?: string;
   /** Programmatic MCP server configurations, merged with (and overriding) file-based configs. */
   mcpServers?: Record<string, McpServerConfig>;
   /** Disable MCP server discovery. Default: false */
@@ -100,6 +103,10 @@ export function createAuthStorage() {
 
 export async function createMastraCode(config?: MastraCodeConfig) {
   const cwd = config?.cwd ?? process.cwd();
+  const configDir = config?.configDir ?? DEFAULT_CONFIG_DIR;
+  if (configDir !== DEFAULT_CONFIG_DIR) {
+    validateConfigDirName(configDir);
+  }
 
   // Auth storage (shared with Claude Max / OpenAI providers and Harness)
   const authStorage = createAuthStorage();
@@ -107,7 +114,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   // Project detection
   const project = detectProject(cwd);
 
-  const resourceIdOverride = getResourceIdOverride(project.rootPath);
+  const resourceIdOverride = getResourceIdOverride(project.rootPath, configDir);
   if (resourceIdOverride) {
     project.resourceId = resourceIdOverride;
     project.resourceIdOverride = true;
@@ -117,7 +124,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const globalSettings = loadSettings();
 
   // Storage
-  const storageConfig = config?.storage ?? getStorageConfig(project.rootPath, globalSettings.storage);
+  const storageConfig = config?.storage ?? getStorageConfig(project.rootPath, globalSettings.storage, configDir);
   const storageResult = await createStorage(storageConfig);
   const storage = storageResult.storage;
   const storageWarning = storageResult.warning;
@@ -125,10 +132,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const memory = getDynamicMemory(storage);
 
   // MCP
-  const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, config?.mcpServers);
+  const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, configDir, config?.mcpServers);
 
   // Hooks
-  const hookManager = config?.disableHooks ? undefined : new HookManager(project.rootPath, 'session-init');
+  const hookManager = config?.disableHooks ? undefined : new HookManager(project.rootPath, 'session-init', configDir);
 
   if (hookManager?.hasHooks()) {
     const hookConfig = hookManager.getConfig();
@@ -290,6 +297,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       yolo: true,
       ...globalInitialState,
       ...config?.initialState,
+      // configDir must always win over initialState spreads to stay in sync
+      // with MCP/hooks/storage which were already initialized with this value.
+      configDir,
     },
     workspace: config?.workspace ?? getDynamicWorkspace,
     modes,
