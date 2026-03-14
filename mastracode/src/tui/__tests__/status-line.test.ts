@@ -79,7 +79,10 @@ function createState() {
     editor: {},
     gradientAnimator: undefined,
     modelAuthStatus: { hasAuth: true, apiKeyEnvVar: undefined },
-    projectInfo: { rootPath: '/Users/tylerbarnes/code/mastra-ai/mastra--feat-mc-queueing-ux', gitBranch: 'feat/mc-queueing-ux' },
+    projectInfo: {
+      rootPath: '/Users/tylerbarnes/code/mastra-ai/mastra--feat-mc-queueing-ux',
+      gitBranch: 'feat/mc-queueing-ux',
+    },
     pendingQueuedActions: [],
     ui: { requestRender: vi.fn() },
   } as any;

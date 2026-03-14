@@ -47,10 +47,7 @@ export class CustomEditor extends Editor {
 
   constructor(tui: TUI, theme: EditorTheme) {
     super(tui, theme);
-    (this as any).getBestAutocompleteMatchIndex = (
-      items: Array<{ value: string }>,
-      prefix: string,
-    ): number => {
+    (this as any).getBestAutocompleteMatchIndex = (items: Array<{ value: string }>, prefix: string): number => {
       if (!prefix) {
         return -1;
       }
