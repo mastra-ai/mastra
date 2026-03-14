@@ -66,12 +66,18 @@ export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema
 
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
-          <Button type="button" className="mx-auto">
+          <Button
+            type="button"
+            className="flex items-center gap-2 text-ui-sm py-1.5 px-2 rounded-md bg-transparent border-transparent hover:bg-surface2 text-neutral3 hover:text-neutral6 w-fit focus-visible:outline-none focus-visible:ring-0"
+          >
+            <Icon>
+              <PlusIcon />
+            </Icon>
             Add Instruction block
             <ChevronDownIcon />
           </Button>
         </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="center" className="w-[240px]">
+        <DropdownMenu.Content align="start" className="w-[240px]">
           <DropdownMenu.Item onSelect={handleAddInline}>
             <Icon>
               <PenLine />

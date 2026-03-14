@@ -1,5 +1,126 @@
 # @mastra/playground-ui
 
+## 16.1.2
+
+### Patch Changes
+
+- Revert "New style for list-type pages (#14173)" - restores Table components that were replaced with List components ([#14278](https://github.com/mastra-ai/mastra/pull/14278))
+
+- Updated dependencies [[`42c585b`](https://github.com/mastra-ai/mastra/commit/42c585bf863ab0a5081e7445f24a821f32b31c91), [`0ce6035`](https://github.com/mastra-ai/mastra/commit/0ce603591189f547397704e53f23c77bc5630071), [`1978bc4`](https://github.com/mastra-ai/mastra/commit/1978bc424dbb04f5f7c5d8522f07f1166006fa3f)]:
+  - @mastra/client-js@1.8.4
+  - @mastra/core@1.13.2
+  - @mastra/schema-compat@1.2.4
+  - @mastra/react@0.2.14
+  - @mastra/ai-sdk@1.1.3
+
+## 16.1.2-alpha.0
+
+### Patch Changes
+
+- Revert "New style for list-type pages (#14173)" - restores Table components that were replaced with List components ([#14278](https://github.com/mastra-ai/mastra/pull/14278))
+
+- Updated dependencies [[`0ce6035`](https://github.com/mastra-ai/mastra/commit/0ce603591189f547397704e53f23c77bc5630071), [`1978bc4`](https://github.com/mastra-ai/mastra/commit/1978bc424dbb04f5f7c5d8522f07f1166006fa3f)]:
+  - @mastra/core@1.13.2-alpha.0
+  - @mastra/schema-compat@1.2.4-alpha.0
+  - @mastra/client-js@1.8.4-alpha.0
+  - @mastra/react@0.2.14-alpha.0
+  - @mastra/ai-sdk@1.1.3
+
+## 16.1.1
+
+### Patch Changes
+
+- Updated dependencies [[`c4e600e`](https://github.com/mastra-ai/mastra/commit/c4e600e39a04309c3a7ff182bd806ab2b3c788ea), [`205e76c`](https://github.com/mastra-ai/mastra/commit/205e76c3ba652205dafb037f50a4a8eea73f6736)]:
+  - @mastra/schema-compat@1.2.3
+  - @mastra/core@1.13.1
+  - @mastra/client-js@1.8.3
+  - @mastra/react@0.2.13
+  - @mastra/ai-sdk@1.1.3
+
+## 16.1.0
+
+### Minor Changes
+
+- Added group-by-thread utility for the Observability tab. Traces can now be grouped by their conversation thread ID, making it easier to follow multi-turn agent conversations in Studio. See [#14004](https://github.com/mastra-ai/mastra/issues/14004). ([#14112](https://github.com/mastra-ai/mastra/pull/14112))
+
+### Patch Changes
+
+- Fixed agent playground panels growing together when content overflows. Left and right columns now scroll independently. ([#14244](https://github.com/mastra-ai/mastra/pull/14244))
+
+- Fixed an agent chat editor crash in Playground UI caused by duplicate CodeMirror state instances. ([#14241](https://github.com/mastra-ai/mastra/pull/14241))
+
+- Improved studio loading performance by lazy-loading the Prettier code formatter. Prettier and its plugins are now loaded on-demand when formatting is triggered, rather than being bundled in the initial page load. ([#13934](https://github.com/mastra-ai/mastra/pull/13934))
+
+- Improved list-style pages across the Playground UI (agents, datasets, MCPs, processors, prompt blocks, scorers, tools, workflows) with a new list layout and updated empty states. ([#14173](https://github.com/mastra-ai/mastra/pull/14173))
+
+- Updated dependencies [[`ea86967`](https://github.com/mastra-ai/mastra/commit/ea86967449426e0a3673253bd1c2c052a99d970d), [`db21c21`](https://github.com/mastra-ai/mastra/commit/db21c21a6ae5f33539262cc535342fa8757eb359), [`a1d6b9c`](https://github.com/mastra-ai/mastra/commit/a1d6b9c907c909f259632a7ea26e9e3c221fb691), [`11f5dbe`](https://github.com/mastra-ai/mastra/commit/11f5dbe9a1e7ad8ef3b1ea34fb4a9fa3631d1587), [`c562ec2`](https://github.com/mastra-ai/mastra/commit/c562ec228f1af63693e2984ffa9712aa6db8fea8), [`6751354`](https://github.com/mastra-ai/mastra/commit/67513544d1a64be891d9de7624d40aadc895d56e), [`c958cd3`](https://github.com/mastra-ai/mastra/commit/c958cd36627c1eea122ec241b2b15492977a263a), [`86f2426`](https://github.com/mastra-ai/mastra/commit/86f242631d252a172d2f9f9a2ea0feb8647a76b0), [`950eb07`](https://github.com/mastra-ai/mastra/commit/950eb07b7e7354629630e218d49550fdd299c452)]:
+  - @mastra/core@1.13.0
+  - @mastra/schema-compat@1.2.2
+  - @mastra/client-js@1.8.2
+  - @mastra/ai-sdk@1.1.3
+  - @mastra/react@0.2.12
+
+## 16.1.0-alpha.0
+
+### Minor Changes
+
+- Added group-by-thread utility for the Observability tab. Traces can now be grouped by their conversation thread ID, making it easier to follow multi-turn agent conversations in Studio. See [#14004](https://github.com/mastra-ai/mastra/issues/14004). ([#14112](https://github.com/mastra-ai/mastra/pull/14112))
+
+### Patch Changes
+
+- Fixed agent playground panels growing together when content overflows. Left and right columns now scroll independently. ([#14244](https://github.com/mastra-ai/mastra/pull/14244))
+
+- Fixed an agent chat editor crash in Playground UI caused by duplicate CodeMirror state instances. ([#14241](https://github.com/mastra-ai/mastra/pull/14241))
+
+- Improved studio loading performance by lazy-loading the Prettier code formatter. Prettier and its plugins are now loaded on-demand when formatting is triggered, rather than being bundled in the initial page load. ([#13934](https://github.com/mastra-ai/mastra/pull/13934))
+
+- Improved list-style pages across the Playground UI (agents, datasets, MCPs, processors, prompt blocks, scorers, tools, workflows) with a new list layout and updated empty states. ([#14173](https://github.com/mastra-ai/mastra/pull/14173))
+
+- Updated dependencies [[`ea86967`](https://github.com/mastra-ai/mastra/commit/ea86967449426e0a3673253bd1c2c052a99d970d), [`db21c21`](https://github.com/mastra-ai/mastra/commit/db21c21a6ae5f33539262cc535342fa8757eb359), [`a1d6b9c`](https://github.com/mastra-ai/mastra/commit/a1d6b9c907c909f259632a7ea26e9e3c221fb691), [`11f5dbe`](https://github.com/mastra-ai/mastra/commit/11f5dbe9a1e7ad8ef3b1ea34fb4a9fa3631d1587), [`c562ec2`](https://github.com/mastra-ai/mastra/commit/c562ec228f1af63693e2984ffa9712aa6db8fea8), [`6751354`](https://github.com/mastra-ai/mastra/commit/67513544d1a64be891d9de7624d40aadc895d56e), [`c958cd3`](https://github.com/mastra-ai/mastra/commit/c958cd36627c1eea122ec241b2b15492977a263a), [`86f2426`](https://github.com/mastra-ai/mastra/commit/86f242631d252a172d2f9f9a2ea0feb8647a76b0), [`950eb07`](https://github.com/mastra-ai/mastra/commit/950eb07b7e7354629630e218d49550fdd299c452)]:
+  - @mastra/core@1.13.0-alpha.0
+  - @mastra/schema-compat@1.2.2-alpha.0
+  - @mastra/client-js@1.8.2-alpha.0
+  - @mastra/ai-sdk@1.1.3
+  - @mastra/react@0.2.12-alpha.0
+
+## 16.0.1
+
+### Patch Changes
+
+- dependencies updates: ([#14125](https://github.com/mastra-ai/mastra/pull/14125))
+  - Updated dependency [`zustand@^5.0.11` ↗︎](https://www.npmjs.com/package/zustand/v/5.0.11) (from `^5.0.9`, in `dependencies`)
+
+- Updated form field components in Studio to use the new FieldBlock design system pattern. Replaced legacy SelectField, InputField, and SearchField with SelectFieldBlock, TextFieldBlock, and SearchFieldBlock across all domain components (observability, scores, datasets, templates). Refined button styles and layout improvements. ([#14138](https://github.com/mastra-ai/mastra/pull/14138))
+
+- Fixed Studio form crash when workflow input schemas contain `z.array()` fields with Zod v4. Array, union, and intersection fields now render and accept input correctly in the workflow run form. ([#14131](https://github.com/mastra-ai/mastra/pull/14131))
+
+- Added MCP-specific icon and color in trace timeline for `mcp_tool_call` spans. ([#13274](https://github.com/mastra-ai/mastra/pull/13274))
+
+- Change file browser root path from `/` to `.` so workspace navigation starts from the workspace directory instead of the host filesystem root. ([#13804](https://github.com/mastra-ai/mastra/pull/13804))
+
+- Updated dependencies [[`709362d`](https://github.com/mastra-ai/mastra/commit/709362d67b80d8832729bbf9e449cad27640a5d2), [`cddf895`](https://github.com/mastra-ai/mastra/commit/cddf895532b8ee7f9fa814136ec672f53d37a9ba), [`9cede11`](https://github.com/mastra-ai/mastra/commit/9cede110abac9d93072e0521bb3c8bcafb9fdadf), [`a59f126`](https://github.com/mastra-ai/mastra/commit/a59f1269104f54726699c5cdb98c72c93606d2df), [`ed8fd75`](https://github.com/mastra-ai/mastra/commit/ed8fd75cbff03bb5e19971ddb30ab7040fc60447), [`c510833`](https://github.com/mastra-ai/mastra/commit/c5108333e8cbc19dafee5f8bfefbcb5ee935335c), [`c4c7dad`](https://github.com/mastra-ai/mastra/commit/c4c7dadfe2e4584f079f6c24bfabdb8c4981827f), [`787f3ac`](https://github.com/mastra-ai/mastra/commit/787f3ac08b3bb77413645a7ab5c447fa851708fd), [`45c3112`](https://github.com/mastra-ai/mastra/commit/45c31122666a0cc56b94727099fcb1871ed1b3f6), [`7296fcc`](https://github.com/mastra-ai/mastra/commit/7296fcc599c876a68699a71c7054a16d5aaf2337), [`00c27f9`](https://github.com/mastra-ai/mastra/commit/00c27f9080731433230a61be69c44e39a7a7b4c7), [`5e7c287`](https://github.com/mastra-ai/mastra/commit/5e7c28701f2bce795dd5c811e4c3060bf2ea2242), [`7e17d3f`](https://github.com/mastra-ai/mastra/commit/7e17d3f656fdda2aad47c4beb8c491636d70820c), [`ee19c9b`](https://github.com/mastra-ai/mastra/commit/ee19c9ba3ec3ed91feb214ad539bdc766c53bb01)]:
+  - @mastra/schema-compat@1.2.1
+  - @mastra/core@1.12.0
+  - @mastra/client-js@1.8.1
+  - @mastra/ai-sdk@1.1.3
+  - @mastra/react@0.2.11
+
+## 16.0.1-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#14125](https://github.com/mastra-ai/mastra/pull/14125))
+  - Updated dependency [`zustand@^5.0.11` ↗︎](https://www.npmjs.com/package/zustand/v/5.0.11) (from `^5.0.9`, in `dependencies`)
+
+- Change file browser root path from `/` to `.` so workspace navigation starts from the workspace directory instead of the host filesystem root. ([#13804](https://github.com/mastra-ai/mastra/pull/13804))
+
+- Updated dependencies [[`709362d`](https://github.com/mastra-ai/mastra/commit/709362d67b80d8832729bbf9e449cad27640a5d2), [`9cede11`](https://github.com/mastra-ai/mastra/commit/9cede110abac9d93072e0521bb3c8bcafb9fdadf), [`a59f126`](https://github.com/mastra-ai/mastra/commit/a59f1269104f54726699c5cdb98c72c93606d2df), [`c510833`](https://github.com/mastra-ai/mastra/commit/c5108333e8cbc19dafee5f8bfefbcb5ee935335c), [`7296fcc`](https://github.com/mastra-ai/mastra/commit/7296fcc599c876a68699a71c7054a16d5aaf2337), [`00c27f9`](https://github.com/mastra-ai/mastra/commit/00c27f9080731433230a61be69c44e39a7a7b4c7), [`ee19c9b`](https://github.com/mastra-ai/mastra/commit/ee19c9ba3ec3ed91feb214ad539bdc766c53bb01)]:
+  - @mastra/schema-compat@1.2.1-alpha.1
+  - @mastra/core@1.12.0-alpha.1
+  - @mastra/client-js@1.8.1-alpha.1
+  - @mastra/ai-sdk@1.1.3
+  - @mastra/react@0.2.11-alpha.1
+
 ## 16.0.1-alpha.0
 
 ### Patch Changes

@@ -17,6 +17,7 @@ import {
   EntryListSkeleton,
   getToNextEntryFn,
   getToPreviousEntryFn,
+  groupTracesByThread,
   useAgents,
   useWorkflows,
   useScorers,
@@ -43,6 +44,7 @@ export default function Observability() {
   });
   const [selectedDateFrom, setSelectedDateFrom] = useState<Date | undefined>(undefined);
   const [selectedDateTo, setSelectedDateTo] = useState<Date | undefined>(undefined);
+  const [groupByThread, setGroupByThread] = useState<boolean>(false);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
   const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
@@ -56,7 +58,7 @@ export default function Observability() {
   const scoreId = searchParams.get('scoreId');
 
   const {
-    data: traces = [],
+    data: tracesData,
     isLoading: isTracesLoading,
     isFetchingNextPage,
     hasNextPage,
@@ -81,6 +83,9 @@ export default function Observability() {
       }),
     },
   });
+
+  const traces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
+  const threadTitles = tracesData?.threadTitles ?? {};
 
   // Sync URL traceId to state
   if (traceId && traceId !== selectedTraceId) {
@@ -126,6 +131,7 @@ export default function Observability() {
     setDialogIsOpen(false);
     setSelectedDateFrom(undefined);
     setSelectedDateTo(undefined);
+    setGroupByThread(false);
   };
 
   const handleDataChange = (value: Date | undefined, type: 'from' | 'to') => {
@@ -149,6 +155,23 @@ export default function Observability() {
   };
 
   const error = isTracesError ? parseError(TracesError) : undefined;
+
+  const orderedTraceEntries = useMemo(() => {
+    if (!groupByThread) {
+      return traces.map(item => ({ id: item.traceId }));
+    }
+    const { groups, ungrouped } = groupTracesByThread(traces);
+    const ordered: { id: string }[] = [];
+    for (const group of groups) {
+      for (const trace of group.traces) {
+        ordered.push({ id: trace.traceId });
+      }
+    }
+    for (const trace of ungrouped) {
+      ordered.push({ id: trace.traceId });
+    }
+    return ordered;
+  }, [traces, groupByThread]);
 
   // 403 check - permission denied for traces
   if (TracesError && is403ForbiddenError(TracesError)) {
@@ -186,12 +209,12 @@ export default function Observability() {
   const filtersApplied = selectedEntityOption?.value !== 'all' || selectedDateFrom || selectedDateTo;
 
   const toNextTrace = getToNextEntryFn({
-    entries: traces.map(item => ({ id: item.traceId })),
+    entries: orderedTraceEntries,
     id: selectedTraceId,
     update: setSelectedTraceId,
   });
   const toPreviousTrace = getToPreviousEntryFn({
-    entries: traces.map(item => ({ id: item.traceId })),
+    entries: orderedTraceEntries,
     id: selectedTraceId,
     update: setSelectedTraceId,
   });
@@ -238,6 +261,8 @@ export default function Observability() {
               selectedDateFrom={selectedDateFrom}
               selectedDateTo={selectedDateTo}
               isLoading={isTracesLoading || isLoadingAgents || isLoadingWorkflows}
+              groupByThread={groupByThread}
+              onGroupByThreadChange={setGroupByThread}
             />
 
             {isTracesLoading ? (
@@ -252,6 +277,8 @@ export default function Observability() {
                 filtersApplied={Boolean(filtersApplied)}
                 isFetchingNextPage={isFetchingNextPage}
                 hasNextPage={hasNextPage}
+                groupByThread={groupByThread}
+                threadTitles={threadTitles}
               />
             )}
           </div>

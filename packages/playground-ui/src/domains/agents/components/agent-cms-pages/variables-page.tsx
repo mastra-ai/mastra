@@ -3,7 +3,6 @@ import { useWatch } from 'react-hook-form';
 import { Plus, PlusIcon } from 'lucide-react';
 
 import { ScrollArea } from '@/ds/components/ScrollArea';
-import { SectionHeader } from '@/domains/cms';
 import { JSONSchemaForm, type SchemaField, jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
 import type { JsonSchema } from '@/lib/json-schema';
 
@@ -70,16 +69,6 @@ export function VariablesPage() {
   return (
     <ScrollArea className="h-full">
       <section className="flex flex-col gap-6">
-        <SectionHeader
-          title="Variables"
-          subtitle={
-            <>
-              Variables are dynamic values that change based on the context of each request. Use them in your agent's
-              instructions with the <code className="text-accent1 font-medium">{'{{variableName}}'}</code> syntax.
-            </>
-          }
-        />
-
         <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
           <JSONSchemaForm.Root onChange={handleVariablesChange} defaultValue={initialFields} maxDepth={5}>
             <JSONSchemaForm.FieldList>

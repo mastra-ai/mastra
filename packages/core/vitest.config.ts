@@ -16,6 +16,9 @@ export default defineConfig({
   test: {
     projects: [
       {
+        define: {
+          __MASTRA_VERSION__: JSON.stringify(pkg.version),
+        },
         resolve: {
           alias: {
             '@internal/workflow-test-utils': path.resolve(__dirname, '../../workflows/_test-utils/src'),
