@@ -1,19 +1,23 @@
 import {
+  Header,
+  HeaderTitle,
+  MainContentLayout,
+  MainContentContent,
+  Icon,
   Button,
+  HeaderAction,
+  useLinkComponent,
+  DocsIcon,
   useAgents,
-  AgentList,
+  AgentsTable,
   AgentIcon,
   useIsCmsAvailable,
   usePermissions,
-  useLinkComponent,
-  PageContent,
-  MainHeader,
 } from '@mastra/playground-ui';
-import { ExternalLinkIcon, Plus } from 'lucide-react';
-import { Link } from 'react-router';
+import { Plus } from 'lucide-react';
 
 function Agents() {
-  const { navigate } = useLinkComponent();
+  const { Link, navigate } = useLinkComponent();
   const { data: agents = {}, isLoading, error } = useAgents();
   const { isCmsAvailable } = useIsCmsAvailable();
   const { canEdit } = usePermissions();
@@ -25,47 +29,38 @@ function Agents() {
   };
 
   return (
-    <PageContent>
-      <PageContent.TopBar>
-        <Button
-          as="a"
-          href="https://mastra.ai/en/docs/agents/overview"
-          target="_blank"
-          rel="noopener noreferrer"
-          variant="ghost"
-          size="md"
-        >
-          Agents Documentation
-          <ExternalLinkIcon />
-        </Button>
-      </PageContent.TopBar>
-      <PageContent.Main>
-        <div className="w-full max-w-[90rem] px-10 mx-auto grid h-full grid-rows-[auto_1fr] overflow-y-auto">
-          <MainHeader>
-            <MainHeader.Column>
-              <MainHeader.Title isLoading={isLoading}>
-                <AgentIcon /> Agents
-              </MainHeader.Title>
-            </MainHeader.Column>
-            {canCreateAgent && (
-              <MainHeader.Column>
-                <Button as={Link} to="/cms/agents/create" variant="primary">
-                  <Plus />
-                  Create Agent
-                </Button>
-              </MainHeader.Column>
-            )}
-          </MainHeader>
+    <MainContentLayout>
+      <Header>
+        <HeaderTitle>
+          <Icon>
+            <AgentIcon />
+          </Icon>
+          Agents
+        </HeaderTitle>
 
-          <AgentList
-            agents={agents}
-            isLoading={isLoading}
-            error={error}
-            onCreateClick={canCreateAgent ? handleCreateClick : undefined}
-          />
-        </div>
-      </PageContent.Main>
-    </PageContent>
+        <HeaderAction>
+          {canCreateAgent && (
+            <Button as={Link} to="/cms/agents/create">
+              <Plus />
+              Create an agent
+            </Button>
+          )}
+          <Button variant="ghost" size="md" as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
+            <DocsIcon />
+            Agents documentation
+          </Button>
+        </HeaderAction>
+      </Header>
+
+      <MainContentContent isCentered={!isLoading && Object.keys(agents || {}).length === 0}>
+        <AgentsTable
+          agents={agents}
+          isLoading={isLoading}
+          error={error}
+          onCreateClick={canCreateAgent ? handleCreateClick : undefined}
+        />
+      </MainContentContent>
+    </MainContentLayout>
   );
 }
 

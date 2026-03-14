@@ -117,10 +117,7 @@ test.describe('Viewer Role', () => {
       await expect(page.locator('h1')).toHaveText('Workflows');
 
       // Should see workflows in the list
-      const workflowRow = page
-        .locator('main')
-        .getByRole('listitem')
-        .filter({ hasText: /workflow/i });
+      const workflowRow = page.getByRole('row').filter({ hasText: /workflow/i });
       await expect(workflowRow.first()).toBeVisible();
     });
 
@@ -130,8 +127,7 @@ test.describe('Viewer Role', () => {
 
       // Click on a workflow
       await page
-        .locator('main')
-        .getByRole('listitem')
+        .getByRole('row')
         .filter({ hasText: /workflow/i })
         .first()
         .click();
@@ -410,7 +406,7 @@ test.describe('Viewer Role', () => {
       await expect(page.locator('h1')).toHaveText('Agents');
 
       // Create/Add buttons should not be visible for viewer
-      const createButton = page.getByRole('button', { name: /create agent|create workflow|new agent|add agent/i });
+      const createButton = page.getByRole('button', { name: /create|add|new/i });
       await expect(createButton).not.toBeVisible();
     });
 
@@ -422,7 +418,7 @@ test.describe('Viewer Role', () => {
       await expect(page.locator('h1')).toHaveText('Workflows');
 
       // Create/Add buttons should not be visible for viewer
-      const createButton = page.getByRole('button', { name: /create agent|create workflow|new agent|add agent/i });
+      const createButton = page.getByRole('button', { name: /create|add|new/i });
       await expect(createButton).not.toBeVisible();
     });
 

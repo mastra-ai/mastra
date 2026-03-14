@@ -66,5 +66,10 @@
   },
   "engines": {
     "node": ">=22.13.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "fast-xml-parser@<=5.3.8": "5.3.8"
+    }
   }
 }

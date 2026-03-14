@@ -2020,6 +2020,7 @@ Notes:
             bufferTokens: omConfig.observation.bufferTokens,
             bufferActivation: omConfig.observation.bufferActivation,
             blockAfter: omConfig.observation.blockAfter,
+            previousObserverTokens: omConfig.observation.previousObserverTokens,
             instruction: omConfig.observation.instruction,
           }
         : undefined,
