@@ -2,5 +2,5 @@
 '@mastra/core': patch
 ---
 
-Fix doGenerate() in AISDKV5LanguageModel and AISDKV6LanguageModel to spread all properties from the underlying model result instead of only returning request, response, and stream. This preserves usage, finishReason, and other metadata required by ModelRouterLanguageModel.
+Fixed crashes when using `ModelRouterLanguageModel` with AI SDK v6's `generateObject()` or `generateText()`. The model router now correctly preserves usage and metadata from underlying models.
 
