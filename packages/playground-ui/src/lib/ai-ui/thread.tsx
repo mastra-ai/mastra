@@ -122,7 +122,7 @@ const Composer = ({ hasMemory, agentId, hasModelList, hideModelSwitcher }: Compo
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
               ref={textareaRef}
-              autoFocus={document.activeElement === document.body}
+              autoFocus={false}
               className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-none resize-none outline-none disabled:cursor-not-allowed disabled:opacity-50"
               placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
               name=""

@@ -12,17 +12,21 @@ import {
   usePlaygroundStore,
   useRequestContextPresets,
 } from '@mastra/playground-ui';
+import { useState } from 'react';
 
 export const SessionHeader = () => {
   const presets = useRequestContextPresets();
   const { setRequestContext } = usePlaygroundStore();
+  const [selectedPreset, setSelectedPreset] = useState<string>();
 
   const handlePresetChange = (presetKey: string) => {
     if (!presets || presetKey === '__custom__') return;
+
     const presetValue = presets[presetKey];
-    if (presetValue) {
-      setRequestContext(presetValue);
-    }
+    if (!presetValue) return;
+
+    setSelectedPreset(presetKey);
+    setRequestContext(presetValue);
   };
 
   return (
@@ -35,7 +39,7 @@ export const SessionHeader = () => {
 
       {presets && Object.keys(presets).length > 0 && (
         <HeaderAction>
-          <Select onValueChange={handlePresetChange}>
+          <Select value={selectedPreset} onValueChange={handlePresetChange}>
             <SelectTrigger size="sm" className="w-[200px]">
               <SelectValue placeholder="Select a preset..." />
             </SelectTrigger>
