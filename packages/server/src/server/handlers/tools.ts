@@ -116,8 +116,13 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
       // Try explicit registeredTools first, then fallback to mastra
       if (registeredTools && Object.keys(registeredTools).length > 0) {
         tool = Object.values(registeredTools).find((t: any) => t.id === toolId);
-      } else {
-        tool = mastra.getToolById(toolId);
+      }
+      if (!tool) {
+        try {
+          tool = mastra.getToolById(toolId);
+        } catch {
+          // tool not found in global registry, continue to agent fallback
+        }
       }
 
       if (!tool) {
@@ -154,8 +159,13 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
       // Try explicit registeredTools first, then fallback to mastra
       if (registeredTools && Object.keys(registeredTools).length > 0) {
         tool = Object.values(registeredTools).find((t: any) => t.id === toolId);
-      } else {
-        tool = mastra.getToolById(toolId);
+      }
+      if (!tool) {
+        try {
+          tool = mastra.getToolById(toolId);
+        } catch {
+          // tool not found in global registry, continue to agent fallback
+        }
       }
 
       // Fallback: search dynamically-resolved agent tools (toolsResolver)

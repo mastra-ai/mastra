@@ -193,6 +193,43 @@ describe('Tools Handlers', () => {
       expect(result).toEqual(mockResult);
       expect(mockVercelTool.execute).toHaveBeenCalledWith({ test: 'data' });
     });
+
+    it('should find and execute a dynamically-resolved tool via agent toolsResolver', async () => {
+      const mockResult = { success: true, dynamic: true };
+      const dynamicToolExecute = vi.fn().mockResolvedValue(mockResult);
+
+      const dynamicTool = createTool({
+        id: 'dynamic-tool',
+        description: 'A dynamically resolved tool',
+        execute: dynamicToolExecute,
+      });
+
+      // Agent uses toolsResolver to provide dynamic tools
+      const agentWithDynamicTools = new Agent({
+        id: 'dynamic-agent',
+        name: 'dynamic-agent',
+        instructions: 'You are a helpful assistant',
+        model: 'gpt-4o' as any,
+        tools: async () => ({
+          'dynamic-tool': dynamicTool,
+        }),
+      });
+
+      const mockMastra = new Mastra({
+        logger: false,
+        agents: { 'dynamic-agent': agentWithDynamicTools as any },
+      });
+
+      // registeredTools does NOT contain the dynamic tool
+      const result = await EXECUTE_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        registeredTools: {},
+        toolId: 'dynamic-tool',
+        data: {},
+      });
+
+      expect(result).toEqual(mockResult);
+    });
   });
 
   describe('executeAgentToolHandler', () => {
