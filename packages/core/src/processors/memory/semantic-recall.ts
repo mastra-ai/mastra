@@ -472,7 +472,8 @@ export class SemanticRecall implements Processor {
    */
   private async ensureVectorIndex(indexName: string, dimension: number): Promise<void> {
     // Check global cache first — if already validated in this process, skip
-    const cached = globalIndexValidationCache.get(indexName);
+    const cacheKey = `${this.vector.id}:${indexName}`;
+    const cached = globalIndexValidationCache.get(cacheKey);
     if (cached?.dimension === dimension) {
       return;
     }
@@ -486,7 +487,7 @@ export class SemanticRecall implements Processor {
     });
 
     // Cache the validated dimension globally to avoid redundant calls across instances
-    globalIndexValidationCache.set(indexName, { dimension });
+    globalIndexValidationCache.set(cacheKey, { dimension });
   }
 
   /**

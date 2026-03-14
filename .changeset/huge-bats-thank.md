@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-fix(memory): eliminate redundant createIndex call on semantic recall read path
+Fixed slow semantic recall on follow-up messages when using remote vector stores such as Upstash.
