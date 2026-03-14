@@ -1150,47 +1150,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         messageList.add(message, 'response');
       }
 
-      /**
-       * Handles deferred provider-executed tool results (e.g. Anthropic web_search).
-       * The provider may non-deterministically defer server tool execution — particularly
-       * when a provider-executed tool is requested alongside a client tool. The deferred
-       * result arrives on a subsequent API call as a tool-result with no matching tool call
-       * in the current turn. This function finds those orphaned results and resolves them
-       * via messageList.updateToolInvocation, which updates the state:'call' part to state:'result'
-       * and ensures the message is re-saved.
-       */
-      const currentTurnToolCallIds = new Set(toolCalls.map(tc => tc.toolCallId));
-      logger?.debug(
-        `[llm-execution-step] toolCalls: ${toolCalls.map(tc => `${tc.toolName}(${tc.toolCallId})`).join(', ')}`,
-      );
-      logger?.debug(
-        `[llm-execution-step] toolResultChunks: ${toolResultChunks.map(c => `${c.payload.toolName}(${c.payload.toolCallId}, providerExecuted=${c.payload.providerExecuted})`).join(', ')}`,
-      );
-      // toolResultChunks only contains results from the provider stream (not client tool execution),
-      // so any result whose toolCallId isn't in the current turn's tool calls is an orphaned/deferred result.
-      // Note: we don't filter on providerExecuted because the Anthropic provider's web_search_tool_result
-      // stream chunk does not include providerExecuted on the tool-result payload.
-      const defferedProviderResults = toolResultChunks.filter(
-        chunk => !currentTurnToolCallIds.has(chunk.payload.toolCallId),
-      );
-      logger?.debug(`[llm-execution-step] deferredProviderResults: ${defferedProviderResults.length}`);
-
-      for (const deffered of defferedProviderResults) {
-        logger?.debug(
-          `[llm-execution-step] resolving deferred: ${deffered.payload.toolName} toolCallId=${deffered.payload.toolCallId}`,
-        );
-        messageList.updateToolInvocation({
-          type: 'tool-invocation' as const,
-          toolInvocation: {
-            state: 'result' as const,
-            toolCallId: deffered.payload.toolCallId,
-            toolName: deffered.payload.toolName,
-            args: deffered.payload.args,
-            result: deffered.payload.result,
-          },
-        });
-      }
-
       // Call processOutputStep for processors (runs AFTER LLM response, BEFORE tool execution)
       // This allows processors to validate/modify the response and trigger retries if needed
       let processOutputStepTripwire: TripWire | null = null;
