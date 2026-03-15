@@ -633,6 +633,12 @@ export class Memory extends MastraMemory {
     memoryConfig?: MemoryConfigInternal;
     tracingContext?: TracingContext;
   }): Promise<void> {
+    const config = this.getMergedThreadConfig(memoryConfig || {});
+
+    if (!config.workingMemory?.enabled) {
+      throw new Error('Working memory is not enabled for this memory instance');
+    }
+
     const span = this.createMemorySpan(
       'update_working',
       tracingContext,
@@ -645,12 +651,6 @@ export class Memory extends MastraMemory {
     );
 
     try {
-      const config = this.getMergedThreadConfig(memoryConfig || {});
-
-      if (!config.workingMemory?.enabled) {
-        throw new Error('Working memory is not enabled for this memory instance');
-      }
-
       const scope = config.workingMemory.scope || 'resource';
 
       // Guard: If resource-scoped working memory is enabled but no resourceId is provided, throw an error

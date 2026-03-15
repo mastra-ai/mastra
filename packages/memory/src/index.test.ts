@@ -2397,7 +2397,7 @@ describe('Memory', () => {
       expect(childSpan.end.mock.calls[0][0].attributes.success).toBe(true);
     });
 
-    it('updateWorkingMemory records error on span when working memory is disabled', async () => {
+    it('updateWorkingMemory throws without creating a span when working memory is disabled', async () => {
       const memory = createTracedMemory();
       const { parentSpan, childSpan } = createMockSpan();
 
@@ -2409,8 +2409,8 @@ describe('Memory', () => {
         }),
       ).rejects.toThrow('Working memory is not enabled');
 
-      expect(childSpan.error).toHaveBeenCalledTimes(1);
-      expect(childSpan.error.mock.calls[0][0].attributes.success).toBe(false);
+      expect(parentSpan.createChildSpan).not.toHaveBeenCalled();
+      expect(childSpan.error).not.toHaveBeenCalled();
     });
   });
 });
