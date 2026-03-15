@@ -1,0 +1,303 @@
+---
+title: "MastraAuthGitHub class | Auth"
+description: "Documentation for the MastraAuthGitHub class, which authenticates Mastra applications using GitHub OAuth."
+packages:
+  - "@mastra/auth-github"
+  - "@mastra/client-js"
+  - "@mastra/core"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# MastraAuthGitHub class
+
+The `MastraAuthGitHub` class provides authentication for Mastra using GitHub OAuth. It verifies incoming requests using GitHub access tokens and supports SSO login flows through the GitHub OAuth authorization flow.
+
+## Prerequisites
+
+1. Create a GitHub account at [github.com](https://github.com/)
+1. Register a new OAuth App at [github.com/settings/developers](https://github.com/settings/developers) under **OAuth Apps > New OAuth App**
+1. Set the **Authorization callback URL** to `http://localhost:4111/api/auth/sso/callback`
+1. Copy the **Client ID** and generate a **Client Secret**
+
+```env title=".env"
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
+```
+
+:::note
+
+For detailed setup instructions, refer to the [GitHub OAuth documentation](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app).
+
+:::
+
+## Installation
+
+Before you can use the `MastraAuthGitHub` class you have to install the `@mastra/auth-github` package.
+
+```bash
+npm install @mastra/auth-github@latest
+```
+
+## Usage example
+
+```typescript {2,6-10} title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthGitHub } from '@mastra/auth-github'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthGitHub({
+      clientId: process.env.GITHUB_CLIENT_ID,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET,
+      allowedOrgs: ['mastra-ai'],
+    }),
+  },
+})
+```
+
+## Configuration
+
+### Access restrictions
+
+`MastraAuthGitHub` requires at least one access restriction — `allowedUsers`, `allowedOrgs`, `allowedTeams`, or a custom `authorizeUser` function. The constructor throws an error if none are provided, preventing accidental open access.
+
+If multiple options are set, access is granted when any one of them matches (OR logic).
+
+#### By username
+
+The simplest option — list the GitHub usernames that should have access. Username matching is case-sensitive.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthGitHub } from '@mastra/auth-github'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthGitHub({
+      clientId: process.env.GITHUB_CLIENT_ID,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET,
+      allowedUsers: ['paulchristo', 'teammate'],
+    }),
+  },
+})
+```
+
+#### By organization
+
+Restrict access to members of specific GitHub organizations. Organization name matching is case-insensitive.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthGitHub } from '@mastra/auth-github'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthGitHub({
+      clientId: process.env.GITHUB_CLIENT_ID,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET,
+      allowedOrgs: ['mastra-ai'],
+    }),
+  },
+})
+```
+
+:::warning
+
+Organization-based access requires additional setup:
+
+- The `read:org` scope is automatically included in the login URL when `allowedOrgs` or `allowedTeams` are configured
+- If the organization has **OAuth App access restrictions** enabled, an org admin must approve the OAuth App at `https://github.com/organizations/{org}/settings/oauth_application_policy`
+- Users may need to **grant org access** when authorizing — look for the "Grant" button next to each org on the GitHub authorization screen
+- If users don't see the grant screen, they can go to `https://github.com/settings/connections/applications/{client_id}` and grant access there
+
+:::
+
+#### By team
+
+Restrict access to members of specific GitHub teams. Use the `org/team-slug` format. Team name matching is case-insensitive.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthGitHub } from '@mastra/auth-github'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthGitHub({
+      clientId: process.env.GITHUB_CLIENT_ID,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET,
+      allowedTeams: ['mastra-ai/engineering'],
+    }),
+  },
+})
+```
+
+:::note
+
+Team-based access has the same organization approval requirements as `allowedOrgs`.
+
+:::
+
+### Custom authorization
+
+For more complex authorization logic, provide a custom `authorizeUser` function:
+
+```typescript title="src/mastra/auth.ts"
+import { MastraAuthGitHub } from '@mastra/auth-github'
+
+const githubProvider = new MastraAuthGitHub({
+  clientId: process.env.GITHUB_CLIENT_ID,
+  clientSecret: process.env.GITHUB_CLIENT_SECRET,
+  authorizeUser: async user => {
+    return user.login === 'allowed-user'
+  },
+})
+```
+
+:::info
+
+Visit [MastraAuthGitHub](/reference/auth/github) for all available configuration options.
+
+:::
+
+## Re-authorization
+
+If you change your configuration to add `allowedOrgs` or `allowedTeams` after users have already signed in, those users must re-authorize to get the new `read:org` scope. To do this:
+
+1. Users should revoke the app at `https://github.com/settings/applications`
+1. Clear the `mastra-token` cookie from the browser
+1. Sign in again — the new login URL will request the required scopes
+
+## Client-side setup
+
+When using GitHub auth with Mastra Studio, the SSO flow is handled automatically — users click "Sign in with GitHub" and the provider manages the OAuth redirect, token exchange, and session cookie.
+
+For custom client applications, you'll need to implement the GitHub OAuth flow to authenticate users and retrieve their access tokens to pass to your Mastra requests.
+
+### Implementing the GitHub OAuth flow
+
+First, redirect users to GitHub's authorization URL. After they authorize your app, GitHub redirects back to your callback URL with a `code` parameter that you exchange for an access token.
+
+```typescript title="lib/auth.ts"
+const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID!
+
+export const getGitHubLoginUrl = (redirectUri: string) => {
+  const params = new URLSearchParams({
+    client_id: GITHUB_CLIENT_ID,
+    redirect_uri: redirectUri,
+    scope: 'read:user user:email read:org',
+  })
+  return `https://github.com/login/oauth/authorize?${params}`
+}
+```
+
+### Handling the OAuth callback
+
+After the user authorizes your app, exchange the authorization code for an access token on your server:
+
+```typescript title="api/auth/callback.ts"
+export async function handleGitHubCallback(code: string) {
+  const response = await fetch('https://github.com/login/oauth/access_token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      client_id: process.env.GITHUB_CLIENT_ID,
+      client_secret: process.env.GITHUB_CLIENT_SECRET,
+      code,
+    }),
+  })
+
+  const data = await response.json()
+  return data.access_token
+}
+```
+
+:::note
+
+Refer to the [GitHub OAuth documentation](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps) for more authentication methods and configuration options.
+
+:::
+
+## Configuring `MastraClient`
+
+When `auth` is enabled, all requests made with `MastraClient` must include a valid GitHub access token in the `Authorization` header:
+
+```typescript title="lib/mastra/mastra-client.ts"
+import { MastraClient } from '@mastra/client-js'
+
+export const createMastraClient = (accessToken: string) => {
+  return new MastraClient({
+    baseUrl: 'https://<mastra-api-url>',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+}
+```
+
+:::info
+
+The access token must be prefixed with `Bearer` in the Authorization header.
+
+Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration options.
+
+:::
+
+### Making authenticated requests
+
+Once `MastraClient` is configured with the GitHub access token, you can send authenticated requests:
+
+<Tabs>
+  <TabItem value="react" label="React">
+    ```tsx title="src/components/mastra-api-test.tsx"
+    import React, { useState } from 'react'
+    import { MastraClient } from '@mastra/client-js'
+
+    export const MastraApiTest = ({ accessToken }: { accessToken: string }) => {
+      const [result, setResult] = useState(null)
+
+      const callMastraApi = async () => {
+        const mastra = new MastraClient({
+          baseUrl: 'http://localhost:4111',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        })
+
+        const weatherAgent = mastra.getAgent('weatherAgent')
+        const response = await weatherAgent.generate("What's the weather like in New York")
+
+        setResult(response.text)
+      }
+
+      return (
+        <div>
+          <button onClick={callMastraApi}>Test Mastra API</button>
+
+          {result && (
+            <div className="result">
+              <h6>Result:</h6>
+              <pre>{result}</pre>
+            </div>
+          )}
+        </div>
+      )
+    }
+    ```
+  </TabItem>
+
+  <TabItem value="curl" label="cURL">
+    ```bash
+    curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <your-github-access-token>" \
+      -d '{
+        "messages": "Weather in London"
+      }'
+    ```
+  </TabItem>
+</Tabs>
