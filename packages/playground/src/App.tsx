@@ -13,6 +13,7 @@ declare global {
     MASTRA_SERVER_PROTOCOL: string;
     MASTRA_CLOUD_API_ENDPOINT: string;
     MASTRA_EXPERIMENTAL_FEATURES?: string;
+    MASTRA_TEMPLATES?: string;
     MASTRA_AUTO_DETECT_URL?: string;
     MASTRA_REQUEST_CONTEXT_PRESETS?: string;
   }
