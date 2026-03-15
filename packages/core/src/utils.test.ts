@@ -6,7 +6,7 @@ import { ConsoleLogger } from './logger';
 import { RequestContext } from './request-context';
 import { toStandardSchema } from './schema';
 import { createTool, isVercelTool } from './tools';
-import { fetchWithRetry, makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
+import { generateEmptyFromSchema, makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
 
 describe('maskStreamTags', () => {
   async function* makeStream(chunks: string[]) {
@@ -345,6 +345,141 @@ it('should log correctly for Vercel tool execution', async () => {
   debugSpy.mockRestore();
 });
 
+<<<<<<< fix/issue-14152
+describe('generateEmptyFromSchema', () => {
+  it('should handle a JSON string schema with flat properties', () => {
+    const schema = JSON.stringify({
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        age: { type: 'number' },
+        active: { type: 'boolean' },
+        tags: { type: 'array' },
+        count: { type: 'integer' },
+      },
+    });
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      name: '',
+      age: 0,
+      active: false,
+      tags: [],
+      count: 0,
+    });
+  });
+
+  it('should handle a pre-parsed object schema', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        age: { type: 'number' },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      name: '',
+      age: 0,
+    });
+  });
+
+  it('should recurse into nested object properties', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        user: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            preferences: {
+              type: 'object',
+              properties: {
+                theme: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      user: {
+        name: '',
+        preferences: {
+          theme: '',
+        },
+      },
+    });
+  });
+
+  it('should respect default values', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        name: { type: 'string', default: 'unknown' },
+        count: { type: 'number', default: 42 },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      name: 'unknown',
+      count: 42,
+    });
+  });
+
+  it('should return {} for invalid JSON string', () => {
+    expect(generateEmptyFromSchema('not json')).toEqual({});
+  });
+
+  it('should return {} for schema without properties', () => {
+    expect(generateEmptyFromSchema(JSON.stringify({ type: 'object' }))).toEqual({});
+  });
+
+  it('should return {} for non-object type schema', () => {
+    expect(generateEmptyFromSchema(JSON.stringify({ type: 'string' }))).toEqual({});
+  });
+
+  it('should return null for unknown property types', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        data: { type: 'unknown_type' },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({ data: null });
+  });
+
+  it('should handle deeply nested schemas from JSON string', () => {
+    const schema = JSON.stringify({
+      type: 'object',
+      properties: {
+        level1: {
+          type: 'object',
+          properties: {
+            level2: {
+              type: 'object',
+              properties: {
+                value: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      level1: {
+        level2: {
+          value: '',
+        },
+      },
+    });
+  });
+
+  it('should return {} for object property without nested properties', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        data: { type: 'object' },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({ data: {} });
+=======
 describe('fetchWithRetry', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -378,5 +513,25 @@ describe('fetchWithRetry', () => {
     expect(delays[1]).toBe(4000); // 1000 * 2^2
     expect(delays[2]).toBe(8000); // 1000 * 2^3
     expect(delays[3]).toBe(10000); // 1000 * 2^4 = 16000, capped at 10000
+>>>>>>> main
+  });
+
+  it('should clone non-primitive default values to prevent reference aliasing', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        prefs: { type: 'object', default: { theme: 'dark' } },
+        tags: { type: 'array', default: ['a', 'b'] },
+      },
+    };
+    const result = generateEmptyFromSchema(schema);
+
+    // Mutate the result
+    result.prefs.theme = 'light';
+    result.tags.push('c');
+
+    // Verify original schema defaults are unchanged
+    expect(schema.properties.prefs.default).toEqual({ theme: 'dark' });
+    expect(schema.properties.tags.default).toEqual(['a', 'b']);
   });
 });

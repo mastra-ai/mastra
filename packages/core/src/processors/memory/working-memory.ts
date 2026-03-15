@@ -154,21 +154,8 @@ export class WorkingMemory implements Processor {
 
   private generateEmptyFromSchema(schema: any): Record<string, any> | null {
     try {
-      if (typeof schema === 'object' && schema !== null) {
-        const empty: Record<string, any> = {};
-        for (const key in schema) {
-          if (schema[key]?.type === 'object') {
-            empty[key] = this.generateEmptyFromSchema(schema[key].properties);
-          } else if (schema[key]?.type === 'array') {
-            empty[key] = [];
-          } else {
-            empty[key] = '';
-          }
-        }
-        return empty;
-      }
-
-      return generateEmptyFromSchema(schema);
+      const result = generateEmptyFromSchema(schema);
+      return Object.keys(result).length > 0 ? result : null;
     } catch {
       return null;
     }
