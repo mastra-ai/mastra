@@ -16,6 +16,8 @@ import type {
   ObservationalMemoryOptions,
   MemoryConfig,
 } from '@mastra/core/memory';
+import { SpanType, EntityType, getOrCreateSpan } from '@mastra/core/observability';
+import type { TracingContext } from '@mastra/core/observability';
 import type {
   InputProcessor,
   InputProcessorOrWorkflow,
@@ -148,11 +150,30 @@ export class Memory extends MastraMemory {
     }
   }
 
+  private createMemorySpan(
+    operationType: 'recall' | 'save' | 'delete' | 'update_working',
+    tracingContext?: TracingContext,
+    input?: any,
+    attributes?: Record<string, any>,
+  ) {
+    if (!tracingContext) return undefined;
+    return getOrCreateSpan({
+      type: SpanType.MEMORY_OPERATION,
+      name: `memory: ${operationType}`,
+      entityType: EntityType.MEMORY,
+      entityName: 'Memory',
+      input,
+      attributes: { operationType, ...attributes },
+      tracingContext,
+    });
+  }
+
   async recall(
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
       threadId: string;
+      tracingContext?: TracingContext;
     },
   ): Promise<{
     messages: MastraDBMessage[];
@@ -164,151 +185,191 @@ export class Memory extends MastraMemory {
   }> {
     const { threadId, resourceId, perPage: perPageArg, page, orderBy, threadConfig, vectorSearchString, filter } = args;
     const config = this.getMergedThreadConfig(threadConfig || {});
-    if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
+    const semanticRecallEnabled = Boolean(config.semanticRecall);
 
-    // Use perPage from args if provided, otherwise use threadConfig.lastMessages
-    const perPage = perPageArg !== undefined ? perPageArg : config.lastMessages;
+    const span = this.createMemorySpan(
+      'recall',
+      args.tracingContext,
+      { threadId, resourceId, vectorSearchString },
+      {
+        threadId,
+        resourceId,
+        semanticRecallEnabled,
+        lastMessages: config.lastMessages,
+      },
+    );
 
-    // lastMessages: false means "disable conversation history entirely".
-    // When the resolved perPage is false from config (not an explicit caller override),
-    // return empty messages. This prevents recall() from treating false as "no limit"
-    // and returning ALL messages when the user intended to disable history.
-    const historyDisabledByConfig = config.lastMessages === false && perPageArg === undefined;
+    try {
+      if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
 
-    // When limiting messages (perPage !== false) without explicit orderBy, we need to:
-    // 1. Query DESC to get the NEWEST messages (not oldest)
-    // 2. Reverse results to restore chronological order for the LLM
-    // Without this fix, "lastMessages: 64" returns the OLDEST 64 messages, not the last 64.
-    const shouldGetNewestAndReverse = !orderBy && perPage !== false;
-    const effectiveOrderBy = shouldGetNewestAndReverse
-      ? { field: 'createdAt' as const, direction: 'DESC' as const }
-      : orderBy;
+      // Use perPage from args if provided, otherwise use threadConfig.lastMessages
+      const perPage = perPageArg !== undefined ? perPageArg : config.lastMessages;
 
-    const vectorResults: {
-      id: string;
-      score: number;
-      metadata?: Record<string, any>;
-      vector?: number[];
-    }[] = [];
+      // lastMessages: false means "disable conversation history entirely".
+      // When the resolved perPage is false from config (not an explicit caller override),
+      // return empty messages. This prevents recall() from treating false as "no limit"
+      // and returning ALL messages when the user intended to disable history.
+      const historyDisabledByConfig = config.lastMessages === false && perPageArg === undefined;
 
-    // Log memory recall parameters, excluding potentially large schema objects
-    this.logger.debug(`Memory recall() with:`, {
-      threadId,
-      perPage,
-      page,
-      orderBy: effectiveOrderBy,
-      hasWorkingMemorySchema: Boolean(config.workingMemory?.schema),
-      workingMemoryEnabled: config.workingMemory?.enabled,
-      semanticRecallEnabled: Boolean(config.semanticRecall),
-      historyDisabledByConfig,
-    });
+      // When limiting messages (perPage !== false) without explicit orderBy, we need to:
+      // 1. Query DESC to get the NEWEST messages (not oldest)
+      // 2. Reverse results to restore chronological order for the LLM
+      // Without this fix, "lastMessages: 64" returns the OLDEST 64 messages, not the last 64.
+      const shouldGetNewestAndReverse = !orderBy && perPage !== false;
+      const effectiveOrderBy = shouldGetNewestAndReverse
+        ? { field: 'createdAt' as const, direction: 'DESC' as const }
+        : orderBy;
 
-    const defaultRange = DEFAULT_MESSAGE_RANGE;
-    const defaultTopK = DEFAULT_TOP_K;
+      const vectorResults: {
+        id: string;
+        score: number;
+        metadata?: Record<string, any>;
+        vector?: number[];
+      }[] = [];
 
-    const vectorConfig =
-      typeof config?.semanticRecall === `boolean`
-        ? {
-            topK: defaultTopK,
-            messageRange: defaultRange,
-          }
-        : {
-            topK: config?.semanticRecall?.topK ?? defaultTopK,
-            messageRange: config?.semanticRecall?.messageRange ?? defaultRange,
-          };
+      // Log memory recall parameters, excluding potentially large schema objects
+      this.logger.debug(`Memory recall() with:`, {
+        threadId,
+        perPage,
+        page,
+        orderBy: effectiveOrderBy,
+        hasWorkingMemorySchema: Boolean(config.workingMemory?.schema),
+        workingMemoryEnabled: config.workingMemory?.enabled,
+        semanticRecallEnabled,
+        historyDisabledByConfig,
+      });
 
-    const resourceScope =
-      (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
-      config.semanticRecall === true;
+      const defaultRange = DEFAULT_MESSAGE_RANGE;
+      const defaultTopK = DEFAULT_TOP_K;
 
-    // Guard: If resource-scoped semantic recall is enabled but no resourceId is provided, throw an error
-    if (resourceScope && !resourceId && config?.semanticRecall && vectorSearchString) {
-      throw new Error(
-        `Memory error: Resource-scoped semantic recall is enabled but no resourceId was provided. ` +
-          `Either provide a resourceId or explicitly set semanticRecall.scope to 'thread'.`,
-      );
-    }
+      const vectorConfig =
+        typeof config?.semanticRecall === `boolean`
+          ? {
+              topK: defaultTopK,
+              messageRange: defaultRange,
+            }
+          : {
+              topK: config?.semanticRecall?.topK ?? defaultTopK,
+              messageRange: config?.semanticRecall?.messageRange ?? defaultRange,
+            };
 
-    let usage: { tokens: number } | undefined;
+      const resourceScope =
+        (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
+        config.semanticRecall === true;
 
-    // If history is disabled and there's no semantic recall to perform, return empty immediately
-    if (historyDisabledByConfig && (!config.semanticRecall || !vectorSearchString || !this.vector)) {
-      return { messages: [], usage: undefined, total: 0, page: page ?? 0, perPage: 0, hasMore: false };
-    }
+      // Guard: If resource-scoped semantic recall is enabled but no resourceId is provided, throw an error
+      if (resourceScope && !resourceId && config?.semanticRecall && vectorSearchString) {
+        throw new Error(
+          `Memory error: Resource-scoped semantic recall is enabled but no resourceId was provided. ` +
+            `Either provide a resourceId or explicitly set semanticRecall.scope to 'thread'.`,
+        );
+      }
 
-    if (config?.semanticRecall && vectorSearchString && this.vector) {
-      const result = await this.embedMessageContent(vectorSearchString!);
-      usage = result.usage;
-      const { embeddings, dimension } = result;
-      const { indexName } = await this.createEmbeddingIndex(dimension, config);
+      let usage: { tokens: number } | undefined;
 
-      await Promise.all(
-        embeddings.map(async embedding => {
-          if (typeof this.vector === `undefined`) {
-            throw new Error(
-              `Tried to query vector index ${indexName} but this Memory instance doesn't have an attached vector db.`,
+      // If history is disabled and there's no semantic recall to perform, return empty immediately
+      if (historyDisabledByConfig && (!config.semanticRecall || !vectorSearchString || !this.vector)) {
+        const result = {
+          messages: [],
+          usage: undefined,
+          total: 0,
+          page: page ?? 0,
+          perPage: 0 as const,
+          hasMore: false,
+        };
+        span?.end({ output: { messageCount: 0 }, attributes: { success: true, messageCount: 0 } });
+        return result;
+      }
+
+      if (config?.semanticRecall && vectorSearchString && this.vector) {
+        const result = await this.embedMessageContent(vectorSearchString!);
+        usage = result.usage;
+        const { embeddings, dimension } = result;
+        const { indexName } = await this.createEmbeddingIndex(dimension, config);
+
+        await Promise.all(
+          embeddings.map(async embedding => {
+            if (typeof this.vector === `undefined`) {
+              throw new Error(
+                `Tried to query vector index ${indexName} but this Memory instance doesn't have an attached vector db.`,
+              );
+            }
+
+            vectorResults.push(
+              ...(await this.vector.query({
+                indexName,
+                queryVector: embedding,
+                topK: vectorConfig.topK,
+                filter: resourceScope
+                  ? {
+                      resource_id: resourceId,
+                    }
+                  : {
+                      thread_id: threadId,
+                    },
+              })),
             );
-          }
+          }),
+        );
+      }
 
-          vectorResults.push(
-            ...(await this.vector.query({
-              indexName,
-              queryVector: embedding,
-              topK: vectorConfig.topK,
-              filter: resourceScope
-                ? {
-                    resource_id: resourceId,
-                  }
-                : {
-                    thread_id: threadId,
-                  },
-            })),
-          );
-        }),
-      );
+      // Get raw messages from storage
+      const memoryStore = await this.getMemoryStore();
+
+      // When history is disabled by config, use perPage: 0 so only semantic recall
+      // include results are returned (not the full message history)
+      const effectivePerPage = historyDisabledByConfig ? 0 : perPage;
+
+      const paginatedResult = await memoryStore.listMessages({
+        threadId,
+        resourceId,
+        perPage: effectivePerPage,
+        page,
+        orderBy: effectiveOrderBy,
+        filter,
+        ...(vectorResults?.length
+          ? {
+              include: vectorResults.map(r => ({
+                id: r.metadata?.message_id,
+                threadId: r.metadata?.thread_id,
+                withNextMessages:
+                  typeof vectorConfig.messageRange === 'number'
+                    ? vectorConfig.messageRange
+                    : vectorConfig.messageRange.after,
+                withPreviousMessages:
+                  typeof vectorConfig.messageRange === 'number'
+                    ? vectorConfig.messageRange
+                    : vectorConfig.messageRange.before,
+              })),
+            }
+          : {}),
+      });
+      // Reverse to restore chronological order if we queried DESC to get newest messages
+      const rawMessages = shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages;
+
+      const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
+
+      // Always return mastra-db format (V2)
+      const messages = list.get.all.db();
+
+      const { total, page: resultPage, perPage: resultPerPage, hasMore } = paginatedResult;
+      const recallResult = { messages, usage, total, page: resultPage, perPage: resultPerPage, hasMore };
+
+      span?.end({
+        output: { messageCount: messages.length, total, hasMore },
+        attributes: {
+          success: true,
+          messageCount: messages.length,
+          embeddingTokens: usage?.tokens,
+          vectorResultCount: vectorResults.length,
+        },
+      });
+
+      return recallResult;
+    } catch (error) {
+      span?.error({ error: error as Error, endSpan: true, attributes: { success: false } });
+      throw error;
     }
-
-    // Get raw messages from storage
-    const memoryStore = await this.getMemoryStore();
-
-    // When history is disabled by config, use perPage: 0 so only semantic recall
-    // include results are returned (not the full message history)
-    const effectivePerPage = historyDisabledByConfig ? 0 : perPage;
-
-    const paginatedResult = await memoryStore.listMessages({
-      threadId,
-      resourceId,
-      perPage: effectivePerPage,
-      page,
-      orderBy: effectiveOrderBy,
-      filter,
-      ...(vectorResults?.length
-        ? {
-            include: vectorResults.map(r => ({
-              id: r.metadata?.message_id,
-              threadId: r.metadata?.thread_id,
-              withNextMessages:
-                typeof vectorConfig.messageRange === 'number'
-                  ? vectorConfig.messageRange
-                  : vectorConfig.messageRange.after,
-              withPreviousMessages:
-                typeof vectorConfig.messageRange === 'number'
-                  ? vectorConfig.messageRange
-                  : vectorConfig.messageRange.before,
-            })),
-          }
-        : {}),
-    });
-    // Reverse to restore chronological order if we queried DESC to get newest messages
-    const rawMessages = shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages;
-
-    const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
-
-    // Always return mastra-db format (V2)
-    const messages = list.get.all.db();
-
-    const { total, page: resultPage, perPage: resultPerPage, hasMore } = paginatedResult;
-    return { messages, usage, total, page: resultPage, perPage: resultPerPage, hasMore };
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -451,62 +512,80 @@ export class Memory extends MastraMemory {
     resourceId,
     workingMemory,
     memoryConfig,
+    tracingContext,
   }: {
     threadId: string;
     resourceId?: string;
     workingMemory: string;
     memoryConfig?: MemoryConfigInternal;
+    tracingContext?: TracingContext;
   }): Promise<void> {
-    const config = this.getMergedThreadConfig(memoryConfig || {});
-
-    if (!config.workingMemory?.enabled) {
-      throw new Error('Working memory is not enabled for this memory instance');
-    }
-
-    const scope = config.workingMemory.scope || 'resource';
-
-    // Guard: If resource-scoped working memory is enabled but no resourceId is provided, throw an error
-    if (scope === 'resource' && !resourceId) {
-      throw new Error(
-        `Memory error: Resource-scoped working memory is enabled but no resourceId was provided. ` +
-          `Either provide a resourceId or explicitly set workingMemory.scope to 'thread'.`,
-      );
-    }
-
-    // Use mutex to prevent race conditions when multiple concurrent calls update the same resource/thread
-    const mutexKey = scope === 'resource' ? `resource-${resourceId}` : `thread-${threadId}`;
-    const mutex = this.updateWorkingMemoryMutexes.has(mutexKey)
-      ? this.updateWorkingMemoryMutexes.get(mutexKey)!
-      : new Mutex();
-    this.updateWorkingMemoryMutexes.set(mutexKey, mutex);
-    const release = await mutex.acquire();
+    const span = this.createMemorySpan(
+      'update_working',
+      tracingContext,
+      { threadId, resourceId },
+      {
+        threadId,
+        resourceId,
+        workingMemoryEnabled: true,
+      },
+    );
 
     try {
-      const memoryStore = await this.getMemoryStore();
-      if (scope === 'resource' && resourceId) {
-        // Update working memory in resource table
-        await memoryStore.updateResource({
-          resourceId,
-          workingMemory,
-        });
-      } else {
-        // Update working memory in thread metadata (existing behavior)
-        const thread = await this.getThreadById({ threadId });
-        if (!thread) {
-          throw new Error(`Thread ${threadId} not found`);
-        }
+      const config = this.getMergedThreadConfig(memoryConfig || {});
 
-        await memoryStore.updateThread({
-          id: threadId,
-          title: thread.title || '',
-          metadata: {
-            ...thread.metadata,
-            workingMemory,
-          },
-        });
+      if (!config.workingMemory?.enabled) {
+        throw new Error('Working memory is not enabled for this memory instance');
       }
-    } finally {
-      release();
+
+      const scope = config.workingMemory.scope || 'resource';
+
+      // Guard: If resource-scoped working memory is enabled but no resourceId is provided, throw an error
+      if (scope === 'resource' && !resourceId) {
+        throw new Error(
+          `Memory error: Resource-scoped working memory is enabled but no resourceId was provided. ` +
+            `Either provide a resourceId or explicitly set workingMemory.scope to 'thread'.`,
+        );
+      }
+
+      // Use mutex to prevent race conditions when multiple concurrent calls update the same resource/thread
+      const mutexKey = scope === 'resource' ? `resource-${resourceId}` : `thread-${threadId}`;
+      const mutex = this.updateWorkingMemoryMutexes.has(mutexKey)
+        ? this.updateWorkingMemoryMutexes.get(mutexKey)!
+        : new Mutex();
+      this.updateWorkingMemoryMutexes.set(mutexKey, mutex);
+      const release = await mutex.acquire();
+
+      try {
+        const memoryStore = await this.getMemoryStore();
+        if (scope === 'resource' && resourceId) {
+          await memoryStore.updateResource({
+            resourceId,
+            workingMemory,
+          });
+        } else {
+          const thread = await this.getThreadById({ threadId });
+          if (!thread) {
+            throw new Error(`Thread ${threadId} not found`);
+          }
+
+          await memoryStore.updateThread({
+            id: threadId,
+            title: thread.title || '',
+            metadata: {
+              ...thread.metadata,
+              workingMemory,
+            },
+          });
+        }
+      } finally {
+        release();
+      }
+
+      span?.end({ attributes: { success: true } });
+    } catch (error) {
+      span?.error({ error: error as Error, endSpan: true, attributes: { success: false } });
+      throw error;
     }
   }
 
@@ -757,111 +836,141 @@ ${workingMemory}`;
   async saveMessages({
     messages,
     memoryConfig,
+    tracingContext,
   }: {
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
+    tracingContext?: TracingContext;
   }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
-    // Then strip working memory tags from all messages
-    const updatedMessages = messages
-      .map(m => {
-        return this.updateMessageToHideWorkingMemoryV2(m);
+    const span = this.createMemorySpan(
+      'save',
+      tracingContext,
+      { messageCount: messages.length },
+      {
+        threadId: messages[0]?.threadId,
+        resourceId: messages[0]?.resourceId,
+        messageCount: messages.length,
+      },
+    );
+
+    try {
+      // Then strip working memory tags from all messages
+      const updatedMessages = messages
+        .map(m => {
+          return this.updateMessageToHideWorkingMemoryV2(m);
+        })
+        .filter((m): m is MastraDBMessage => Boolean(m));
+
+      const config = this.getMergedThreadConfig(memoryConfig);
+
+      // Convert messages to MastraDBMessage format if needed
+      const dbMessages = new MessageList({
+        generateMessageId: () => this.generateId(),
       })
-      .filter((m): m is MastraDBMessage => Boolean(m));
+        .add(updatedMessages, 'memory')
+        .get.all.db();
 
-    const config = this.getMergedThreadConfig(memoryConfig);
+      const memoryStore = await this.getMemoryStore();
+      const result = await memoryStore.saveMessages({
+        messages: dbMessages,
+      });
 
-    // Convert messages to MastraDBMessage format if needed
-    const dbMessages = new MessageList({
-      generateMessageId: () => this.generateId(),
-    })
-      .add(updatedMessages, 'memory')
-      .get.all.db();
+      let totalTokens = 0;
 
-    const memoryStore = await this.getMemoryStore();
-    const result = await memoryStore.saveMessages({
-      messages: dbMessages,
-    });
-
-    let totalTokens = 0;
-
-    if (this.vector && config.semanticRecall) {
-      // Collect all embeddings first (embedding is CPU-bound, doesn't use pool connections)
-      const embeddingData: Array<{
-        embeddings: number[][];
-        metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
-      }> = [];
-      let dimension: number | undefined;
-
-      // Process embeddings concurrently - this doesn't use DB connections
-      await Promise.all(
-        updatedMessages.map(async message => {
-          let textForEmbedding: string | null = null;
-
-          if (
-            message.content.content &&
-            typeof message.content.content === 'string' &&
-            message.content.content.trim() !== ''
-          ) {
-            textForEmbedding = message.content.content;
-          } else if (message.content.parts && message.content.parts.length > 0) {
-            // Extract text from all text parts, concatenate
-            const joined = message.content.parts
-              .filter(part => part.type === 'text')
-              .map(part => (part as TextPart).text)
-              .join(' ')
-              .trim();
-            if (joined) textForEmbedding = joined;
-          }
-
-          if (!textForEmbedding) return;
-
-          const result = await this.embedMessageContent(textForEmbedding);
-          dimension = result.dimension;
-          if (result.usage?.tokens) {
-            totalTokens += result.usage.tokens;
-          }
-
-          embeddingData.push({
-            embeddings: result.embeddings,
-            metadata: result.chunks.map(() => ({
-              message_id: message.id,
-              thread_id: message.threadId,
-              resource_id: message.resourceId,
-            })),
-          });
-        }),
-      );
-
-      // Batch all vectors into a single upsert call to avoid pool exhaustion
-      if (embeddingData.length > 0 && dimension !== undefined) {
-        if (typeof this.vector === `undefined`) {
-          throw new Error(`Tried to upsert embeddings but this Memory instance doesn't have an attached vector db.`);
-        }
-
-        const { indexName } = await this.createEmbeddingIndex(dimension, config);
-
-        // Flatten all embeddings and metadata into single arrays
-        const allVectors: number[][] = [];
-        const allMetadata: Array<{
-          message_id: string;
-          thread_id: string | undefined;
-          resource_id: string | undefined;
+      if (this.vector && config.semanticRecall) {
+        // Collect all embeddings first (embedding is CPU-bound, doesn't use pool connections)
+        const embeddingData: Array<{
+          embeddings: number[][];
+          metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
         }> = [];
+        let dimension: number | undefined;
 
-        for (const data of embeddingData) {
-          allVectors.push(...data.embeddings);
-          allMetadata.push(...data.metadata);
+        // Process embeddings concurrently - this doesn't use DB connections
+        await Promise.all(
+          updatedMessages.map(async message => {
+            let textForEmbedding: string | null = null;
+
+            if (
+              message.content.content &&
+              typeof message.content.content === 'string' &&
+              message.content.content.trim() !== ''
+            ) {
+              textForEmbedding = message.content.content;
+            } else if (message.content.parts && message.content.parts.length > 0) {
+              // Extract text from all text parts, concatenate
+              const joined = message.content.parts
+                .filter(part => part.type === 'text')
+                .map(part => (part as TextPart).text)
+                .join(' ')
+                .trim();
+              if (joined) textForEmbedding = joined;
+            }
+
+            if (!textForEmbedding) return;
+
+            const result = await this.embedMessageContent(textForEmbedding);
+            dimension = result.dimension;
+            if (result.usage?.tokens) {
+              totalTokens += result.usage.tokens;
+            }
+
+            embeddingData.push({
+              embeddings: result.embeddings,
+              metadata: result.chunks.map(() => ({
+                message_id: message.id,
+                thread_id: message.threadId,
+                resource_id: message.resourceId,
+              })),
+            });
+          }),
+        );
+
+        // Batch all vectors into a single upsert call to avoid pool exhaustion
+        if (embeddingData.length > 0 && dimension !== undefined) {
+          if (typeof this.vector === `undefined`) {
+            throw new Error(`Tried to upsert embeddings but this Memory instance doesn't have an attached vector db.`);
+          }
+
+          const { indexName } = await this.createEmbeddingIndex(dimension, config);
+
+          // Flatten all embeddings and metadata into single arrays
+          const allVectors: number[][] = [];
+          const allMetadata: Array<{
+            message_id: string;
+            thread_id: string | undefined;
+            resource_id: string | undefined;
+          }> = [];
+
+          for (const data of embeddingData) {
+            allVectors.push(...data.embeddings);
+            allMetadata.push(...data.metadata);
+          }
+
+          await this.vector.upsert({
+            indexName,
+            vectors: allVectors,
+            metadata: allMetadata,
+          });
         }
-
-        await this.vector.upsert({
-          indexName,
-          vectors: allVectors,
-          metadata: allMetadata,
-        });
       }
-    }
 
-    return { ...result, usage: totalTokens > 0 ? { tokens: totalTokens } : undefined };
+      const saveResult = { ...result, usage: totalTokens > 0 ? { tokens: totalTokens } : undefined };
+
+      span?.end({
+        output: { messageCount: dbMessages.length },
+        attributes: {
+          success: true,
+          messageCount: dbMessages.length,
+          embeddingTokens: saveResult.usage?.tokens,
+          semanticRecallEnabled: Boolean(config.semanticRecall),
+        },
+      });
+
+      return saveResult;
+    } catch (error) {
+      span?.error({ error: error as Error, endSpan: true, attributes: { success: false } });
+      throw error;
+    }
   }
 
   protected updateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {
@@ -1364,40 +1473,47 @@ Notes:
    *   - Message objects with 'id' properties
    * @returns Promise that resolves when all messages are deleted
    */
-  public async deleteMessages(input: MessageDeleteInput): Promise<void> {
-    // Normalize input to array of IDs
-    let messageIds: string[];
+  public async deleteMessages(input: MessageDeleteInput, tracingContext?: TracingContext): Promise<void> {
+    const span = this.createMemorySpan('delete', tracingContext, { input });
 
-    if (!Array.isArray(input)) {
-      throw new Error('Invalid input: must be an array of message IDs or message objects');
-    }
+    try {
+      let messageIds: string[];
 
-    if (input.length === 0) {
-      return; // No-op for empty array
-    }
-
-    messageIds = input.map(item => {
-      if (typeof item === 'string') {
-        return item;
-      } else if (item && typeof item === 'object' && 'id' in item) {
-        return item.id;
-      } else {
-        throw new Error('Invalid input: array items must be strings or objects with an id property');
+      if (!Array.isArray(input)) {
+        throw new Error('Invalid input: must be an array of message IDs or message objects');
       }
-    });
 
-    // Validate all IDs are non-empty strings
-    const invalidIds = messageIds.filter(id => !id || typeof id !== 'string');
-    if (invalidIds.length > 0) {
-      throw new Error('All message IDs must be non-empty strings');
-    }
+      if (input.length === 0) {
+        span?.end({ attributes: { success: true, messageCount: 0 } });
+        return;
+      }
 
-    // Delete from storage, then fire-and-forget vector cleanup
-    const memoryStore = await this.getMemoryStore();
+      messageIds = input.map(item => {
+        if (typeof item === 'string') {
+          return item;
+        } else if (item && typeof item === 'object' && 'id' in item) {
+          return item.id;
+        } else {
+          throw new Error('Invalid input: array items must be strings or objects with an id property');
+        }
+      });
 
-    await memoryStore.deleteMessages(messageIds);
-    if (this.vector) {
-      void this.deleteMessageVectors(messageIds);
+      const invalidIds = messageIds.filter(id => !id || typeof id !== 'string');
+      if (invalidIds.length > 0) {
+        throw new Error('All message IDs must be non-empty strings');
+      }
+
+      const memoryStore = await this.getMemoryStore();
+
+      await memoryStore.deleteMessages(messageIds);
+      if (this.vector) {
+        void this.deleteMessageVectors(messageIds);
+      }
+
+      span?.end({ attributes: { success: true, messageCount: messageIds.length } });
+    } catch (error) {
+      span?.error({ error: error as Error, endSpan: true, attributes: { success: false } });
+      throw error;
     }
   }
 
