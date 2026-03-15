@@ -1108,6 +1108,24 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           content: {
             format: 2,
             parts: toolCalls.map(toolCall => {
+              // Provider-executed tools (e.g. Anthropic web_search) may already have their
+              // result when executed in the same turn. Store them directly as state:'result'.
+              // When deferred (mixed with client tools), the result arrives in a later turn
+              // and is handled by the orphaned-results logic below.
+              if (toolCall.providerExecuted && toolCall.output != null) {
+                return {
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'result' as const,
+                    toolCallId: toolCall.toolCallId,
+                    toolName: toolCall.toolName,
+                    args: toolCall.args,
+                    result: toolCall.output,
+                  },
+                  providerMetadata: toolCall.providerMetadata,
+                  providerExecuted: toolCall.providerExecuted,
+                };
+              }
               return {
                 type: 'tool-invocation' as const,
                 toolInvocation: {
@@ -1125,6 +1143,51 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           createdAt: new Date(),
         };
         messageList.add(message, 'response');
+      }
+
+      // Handle deferred provider-executed tool results (e.g. Anthropic web_search).
+      // The provider may non-deterministically defer server tool execution — particularly
+      // when a provider-executed tool is requested alongside a client tool. In that case
+      // the provider returns stop_reason:tool_use without executing the server tool, and
+      // the deferred result arrives on a subsequent API call as a tool-result with no
+      // matching tool-call in this turn.
+      // Find these orphaned results and update the existing state:'call' parts in the messageList.
+      const matchedToolCallIds = new Set(
+        toolCalls.filter(tc => tc.providerExecuted && tc.output != null).map(tc => tc.toolCallId),
+      );
+      const orphanedResults = toolResultChunks.filter(
+        chunk => chunk.payload.providerExecuted && !matchedToolCallIds.has(chunk.payload.toolCallId),
+      );
+
+      if (orphanedResults.length > 0) {
+        // Update existing state:'call' parts in the messageList to state:'result'.
+        // We mutate in place rather than using messageList.add() because the message
+        // containing the call may not be the latest message (a tool-role message from
+        // the client tool may follow it), and MessageMerger only merges into the latest.
+        const allMessages = messageList.get.all.db();
+        for (const orphan of orphanedResults) {
+          for (const msg of allMessages) {
+            if (msg.role !== 'assistant' || !msg.content?.parts) continue;
+            for (let i = 0; i < msg.content.parts.length; i++) {
+              const part = msg.content.parts[i] as any;
+              if (
+                part?.type === 'tool-invocation' &&
+                part.toolInvocation?.toolCallId === orphan.payload.toolCallId &&
+                part.toolInvocation?.state === 'call'
+              ) {
+                // Update in place: call → result
+                msg.content.parts[i] = {
+                  ...part,
+                  toolInvocation: {
+                    ...part.toolInvocation,
+                    state: 'result' as const,
+                    result: orphan.payload.result,
+                  },
+                };
+              }
+            }
+          }
+        }
       }
 
       // Call processOutputStep for processors (runs AFTER LLM response, BEFORE tool execution)
