@@ -20,7 +20,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model'
  * This test reproduces the issue at the agent level by simulating the network loop's
  * behavior: passing an assistant-role message as input with structuredOutput + memory.
  */
-describe('Structured output with memory - assistant message in final position (#12800)', () => {
+describe('Trailing assistant message guard (#12800)', () => {
   it('should not send prompt ending with assistant message when input is assistant-role with structuredOutput and memory', async () => {
     const threadId = randomUUID();
     const resourceId = 'user-12800';
@@ -326,6 +326,129 @@ describe('Structured output with memory - assistant message in final position (#
       `Expected last message role to NOT be 'assistant', but got 'assistant'. ` +
         `This causes Anthropic API error: "When using output format, pre-filling the ` +
         `assistant response is not supported." ` +
+        `Message roles in prompt: ${prompt.map((m: any) => m.role).join(', ')}`,
+    ).not.toBe('assistant');
+  });
+
+  it('should not send prompt ending with assistant message even WITHOUT structuredOutput (plain streaming)', async () => {
+    const threadId = randomUUID();
+    const resourceId = 'user-prefill-plain';
+
+    const mockMemory = new MockMemory();
+
+    // Track what prompts are sent to the model
+    const capturedPrompts: any[] = [];
+
+    const mockModel = new MockLanguageModelV2({
+      provider: 'anthropic',
+      modelId: 'claude-opus-4-6',
+      doGenerate: async options => {
+        capturedPrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: 'Hello!' }],
+          warnings: [],
+        };
+      },
+      doStream: async options => {
+        capturedPrompts.push((options as any).prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'response-metadata',
+              id: 'response-1',
+              modelId: 'mock-model',
+              timestamp: new Date(0),
+            },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello!' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'plain-streaming-prefill-test',
+      name: 'Plain Agent',
+      instructions: 'You are a helpful assistant.',
+      model: mockModel,
+      memory: mockMemory,
+    });
+
+    await mockMemory.createThread({ threadId, resourceId });
+
+    // Pre-populate memory ending with an assistant message
+    const now = new Date();
+    await mockMemory.saveMessages({
+      messages: [
+        {
+          id: randomUUID(),
+          role: 'user' as const,
+          content: {
+            format: 2 as const,
+            parts: [{ type: 'text' as const, text: 'Hello' }],
+          },
+          threadId,
+          createdAt: new Date(now.getTime() - 2000),
+          resourceId,
+          type: 'text' as const,
+        },
+        {
+          id: randomUUID(),
+          role: 'assistant' as const,
+          content: {
+            format: 2 as const,
+            parts: [{ type: 'text' as const, text: 'Hi there!' }],
+          },
+          threadId,
+          createdAt: new Date(now.getTime() - 1000),
+          resourceId,
+          type: 'text' as const,
+        },
+      ],
+    });
+
+    // Call with an assistant-role input but NO structuredOutput.
+    // This simulates the scenario where memory + assistant input produces
+    // a trailing assistant message during plain streaming.
+    const response = await agent.stream(
+      [
+        {
+          role: 'assistant' as const,
+          content: 'Let me help you with that...',
+        },
+      ],
+      {
+        memory: {
+          thread: threadId,
+          resource: resourceId,
+        },
+        // No structuredOutput — plain streaming
+      },
+    );
+
+    await response.consumeStream();
+
+    // The critical assertion: Claude 4.6 rejects assistant prefill in ALL cases,
+    // not just structured output.
+    expect(capturedPrompts.length).toBeGreaterThan(0);
+    const prompt = capturedPrompts[0]!;
+    const lastMessage = prompt[prompt.length - 1];
+    expect(
+      lastMessage.role,
+      `Expected last message role to NOT be 'assistant', but got 'assistant'. ` +
+        `Claude 4.6 rejects assistant message prefill regardless of structured output. ` +
         `Message roles in prompt: ${prompt.map((m: any) => m.role).join(', ')}`,
     ).not.toBe('assistant');
   });
