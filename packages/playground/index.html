@@ -19,27 +19,51 @@
       window.MASTRA_AUTO_DETECT_URL = '%%MASTRA_AUTO_DETECT_URL%%';
       window.MASTRA_REQUEST_CONTEXT_PRESETS = '%%MASTRA_REQUEST_CONTEXT_PRESETS%%';
 
-      function connectSSE() {
-        const basePath = window.MASTRA_STUDIO_BASE_PATH || '';
-        const events = new EventSource(`${basePath}/refresh-events`);
+      (function () {
+        let retryCount = 0;
+        let currentEvents = null;
+        const baseDelay = 1000;
+        const maxDelay = 30000;
 
-        events.onmessage = event => {
-          if (event.data === 'refresh') {
-            window.location.reload();
-          }
-        };
+        function getRetryDelay() {
+          // Exponential backoff: 1s, 2s, 4s, 8s... capped at 30s
+          const exponentialDelay = Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
+          // Add jitter: random value between 0 and 50% of the delay
+          const jitter = Math.random() * exponentialDelay * 0.5;
+          return exponentialDelay + jitter;
+        }
 
-        events.onerror = () => {
-          events.close();
-          setTimeout(connectSSE, 1000);
-        };
+        function connectSSE() {
+          const basePath = window.MASTRA_STUDIO_BASE_PATH || '';
+          currentEvents = new EventSource(`${basePath}/refresh-events`);
+
+          currentEvents.onopen = () => {
+            // Reset retry count on successful connection
+            retryCount = 0;
+          };
+
+          currentEvents.onmessage = event => {
+            if (event.data === 'refresh') {
+              window.location.reload();
+            }
+          };
+
+          currentEvents.onerror = () => {
+            currentEvents.close();
+            const delay = getRetryDelay();
+            retryCount++;
+            setTimeout(connectSSE, delay);
+          };
+        }
 
         window.addEventListener('beforeunload', () => {
-          events.close();
+          if (currentEvents) {
+            currentEvents.close();
+          }
         });
-      }
 
-      connectSSE();
+        connectSSE();
+      })();
     </script>
   </head>
 
