@@ -14,6 +14,7 @@ export interface PinoLoggerOptions {
   overrideDefaultTransports?: boolean;
   formatters?: pino.LoggerOptions['formatters'];
   redact?: pino.LoggerOptions['redact'];
+  prettyPrint?: boolean;
 }
 
 interface PinoLoggerInternalOptions extends PinoLoggerOptions {
@@ -35,8 +36,9 @@ export class PinoLogger extends MastraLogger {
       return;
     }
 
+    const shouldPrettyPrint = options.prettyPrint ?? true;
     let prettyStream: ReturnType<typeof pretty> | undefined = undefined;
-    if (!options.overrideDefaultTransports) {
+    if (!options.overrideDefaultTransports && shouldPrettyPrint) {
       prettyStream = pretty({
         colorize: true,
         levelFirst: true,
@@ -58,16 +60,15 @@ export class PinoLogger extends MastraLogger {
       options.overrideDefaultTransports
         ? options?.transports?.default
         : transportsAry.length === 0
-          ? prettyStream
+          ? prettyStream // undefined when prettyPrint:false → pino native JSON
           : pino.multistream([
               ...transportsAry.map(([, transport]) => ({
                 stream: transport,
                 level: options.level || LogLevel.INFO,
               })),
-              {
-                stream: prettyStream!,
-                level: options.level || LogLevel.INFO,
-              },
+              ...(prettyStream // only add prettyStream to multistream if it exists
+                ? [{ stream: prettyStream, level: options.level || LogLevel.INFO }]
+                : []),
             ]),
     );
   }
