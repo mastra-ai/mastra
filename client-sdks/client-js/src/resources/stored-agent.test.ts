@@ -1,5 +1,6 @@
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
+import type { CreateStoredAgentParams } from '../types';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -141,15 +142,14 @@ describe('StoredAgent Resource', () => {
         description: 'A fully configured agent',
         instructions: 'You are a helpful assistant',
         model: { provider: 'openai', name: 'gpt-4' },
-        tools: ['calculator', 'weather'],
-        workflows: ['workflow-1'],
-        agents: ['sub-agent-1'],
-        memory: 'my-memory',
+        tools: { calculator: {}, weather: {} },
+        workflows: { 'workflow-1': {} },
+        agents: { 'sub-agent-1': {} },
         scorers: {
           'my-scorer': { sampling: { type: 'ratio' as const, rate: 0.5 } },
         },
         metadata: { version: '1.0' },
-      };
+      } satisfies CreateStoredAgentParams;
       const mockResponse = {
         ...createParams,
         createdAt: '2024-01-01T00:00:00.000Z',
@@ -305,12 +305,11 @@ describe('StoredAgent Resource', () => {
         const result = await storedAgent.listVersions({
           page: 1,
           perPage: 5,
-          orderBy: 'createdAt',
-          sortDirection: 'DESC',
+          orderBy: { field: 'createdAt', direction: 'DESC' },
         });
         expect(result).toEqual(mockResponse);
         expect(global.fetch).toHaveBeenCalledWith(
-          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions?page=1&perPage=5&orderBy=createdAt&sortDirection=DESC`,
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions?page=1&perPage=5&orderBy=${encodeURIComponent(JSON.stringify({ field: 'createdAt', direction: 'DESC' }))}`,
           expect.objectContaining({
             headers: expect.objectContaining(clientOptions.headers),
           }),

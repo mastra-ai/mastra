@@ -65,7 +65,7 @@ export function AgentPlaygroundVersionBar({
 
   const { data } = useAgentVersions({
     agentId,
-    params: { sortDirection: 'DESC' },
+    params: { orderBy: { direction: 'DESC' } },
   });
 
   const versions = data?.versions ?? [];

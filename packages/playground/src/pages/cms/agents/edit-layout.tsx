@@ -142,7 +142,7 @@ function EditLayoutWrapper() {
   });
   const { data: versionsData } = useAgentVersions({
     agentId: agentId ?? '',
-    params: { sortDirection: 'DESC' },
+    params: { orderBy: { direction: 'DESC' } },
   });
 
   const activeVersionId = agent?.activeVersionId;
