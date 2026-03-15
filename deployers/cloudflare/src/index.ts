@@ -83,9 +83,16 @@ export class CloudflareDeployer extends Deployer {
       kvNamespaces?: unknown;
     };
     const loadedEnvVars = await this.loadEnvVars();
+    const envsAsObject = Object.assign({}, userVars);
 
-    // Merge env vars from .env files with user-provided vars
-    const envsAsObject = Object.assign({}, Object.fromEntries(loadedEnvVars.entries()), userVars);
+    if (loadedEnvVars.size > 0) {
+      const envKeys = [...loadedEnvVars.keys()].join(', ');
+      this.logger.warn(
+        `Environment variables from .env (${envKeys}) were not written to wrangler.jsonc.\n` +
+          `  Upload them as Cloudflare Secrets instead:\n` +
+          `    npx wrangler secret bulk .env`,
+      );
+    }
 
     // Write TypeScript stub to prevent bundling the full TypeScript library (~10MB)
     // The agent-builder package dynamically imports TypeScript for code validation,
