@@ -16,6 +16,8 @@ import { AuthStorage } from '../auth/storage.js';
 
 // Codex API endpoint (not standard OpenAI API)
 const CODEX_API_ENDPOINT = 'https://chatgpt.com/backend-api/codex/responses';
+const OPENAI_API_KEY_ENV_VAR = 'OPENAI_API_KEY';
+const OPENAI_BASE_URL_ENV_VAR = 'OPENAI_BASE_URL';
 
 // Singleton auth storage instance (shared with claude-max.ts)
 let authStorageInstance: AuthStorage | null = null;
@@ -46,6 +48,23 @@ IMPORTANT: You should be concise, direct, and helpful. Focus on solving the user
 export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
 
 const GPT5_MODEL_RE = /^gpt-5(?:\.|-|$)/;
+
+function getEnvValue(envVarName: string): string | undefined {
+  const value = process.env[envVarName]?.trim();
+  return value ? value : undefined;
+}
+
+function getOpenAIApiKey(): string | undefined {
+  return getEnvValue(OPENAI_API_KEY_ENV_VAR);
+}
+
+function getOpenAIBaseUrl(): string | undefined {
+  return getEnvValue(OPENAI_BASE_URL_ENV_VAR);
+}
+
+function getCodexApiEndpoint(): string {
+  return CODEX_API_ENDPOINT;
+}
 
 export function getEffectiveThinkingLevel(modelId: string, level: ThinkingLevel): ThinkingLevel {
   // GPT-5.* models on Codex require at least low reasoning.
@@ -118,15 +137,20 @@ export function openaiCodexProvider(
   const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
   const middleware = createCodexMiddleware(reasoningEffort);
 
-  // Test environment: use API key
+  // Test environment: use direct API key auth when explicitly configured by the test.
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
-    const openai = createOpenAI({
-      apiKey: 'test-api-key',
-    });
-    return wrapLanguageModel({
-      model: openai.responses(modelId),
-      middleware: [middleware],
-    });
+    const apiKey = getOpenAIApiKey();
+    if (apiKey) {
+      const baseURL = getOpenAIBaseUrl();
+      const openai = createOpenAI({
+        apiKey,
+        ...(baseURL ? { baseURL } : {}),
+      });
+      return wrapLanguageModel({
+        model: openai.responses(modelId),
+        middleware: [middleware],
+      });
+    }
   }
 
   // Custom fetch that handles OAuth and URL rewriting
@@ -195,7 +219,7 @@ export function openaiCodexProvider(
     const parsed = url instanceof URL ? url : new URL(typeof url === 'string' ? url : (url as Request).url);
 
     const shouldRewrite = parsed.pathname.includes('/v1/responses') || parsed.pathname.includes('/chat/completions');
-    const finalUrl = shouldRewrite ? new URL(CODEX_API_ENDPOINT) : parsed;
+    const finalUrl = shouldRewrite ? new URL(getCodexApiEndpoint()) : parsed;
 
     return fetch(finalUrl, {
       ...init,
@@ -203,9 +227,11 @@ export function openaiCodexProvider(
     });
   };
 
+  const baseURL = getOpenAIBaseUrl();
   const openai = createOpenAI({
     // Use a dummy API key since we're using OAuth
     apiKey: 'oauth-dummy-key',
+    ...(baseURL ? { baseURL } : {}),
     fetch: oauthFetch as any,
   });
 
