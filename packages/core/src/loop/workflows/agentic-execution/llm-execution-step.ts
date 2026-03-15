@@ -471,6 +471,20 @@ async function processOutputStream<OUTPUT = undefined>({
         await options?.onError?.({ error });
         break;
 
+      case 'tool-result':
+        if (chunk.payload.result) {
+          messageList.updateToolInvocation({
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: chunk.payload.toolCallId,
+              toolName: chunk.payload.toolName,
+              args: chunk.payload.args,
+              result: chunk.payload.result,
+            },
+          });
+        }
+        safeEnqueue(controller, chunk);
       default:
         safeEnqueue(controller, chunk);
     }
@@ -1108,14 +1122,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           content: {
             format: 2,
             parts: toolCalls.map(toolCall => {
+              const hasProviderResult = toolCall.providerExecuted && toolCall.output != null;
               return {
                 type: 'tool-invocation' as const,
-                toolInvocation: {
-                  state: 'call' as const,
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  args: toolCall.args,
-                },
+                toolInvocation: hasProviderResult
+                  ? {
+                      state: 'result' as const, // single-turn provider tool calls arrive immediately with a result
+                      toolCallId: toolCall.toolCallId,
+                      toolName: toolCall.toolName,
+                      args: toolCall.args,
+                      result: toolCall.output,
+                    }
+                  : {
+                      state: 'call' as const,
+                      toolCallId: toolCall.toolCallId,
+                      toolName: toolCall.toolName,
+                      args: toolCall.args,
+                    },
                 providerMetadata: toolCall.providerMetadata,
                 providerExecuted: toolCall.providerExecuted,
               };

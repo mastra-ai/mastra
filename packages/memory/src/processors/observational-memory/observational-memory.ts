@@ -28,6 +28,19 @@ function omDebug(msg: string) {
     // ignore write errors
   }
 }
+/**
+ * Returns the parts from the latest step of a message (after the last step-start marker).
+ * If no step-start marker exists, returns all parts.
+ */
+function getLatestStepParts(parts: MastraDBMessage['content']['parts']): MastraDBMessage['content']['parts'] {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (parts[i]?.type === 'step-start') {
+      return parts.slice(i + 1);
+    }
+  }
+  return parts;
+}
+
 function omError(msg: string, err?: unknown) {
   const errStr = err instanceof Error ? (err.stack ?? err.message) : err !== undefined ? String(err) : '';
   const full = errStr ? `${msg}: ${errStr}` : msg;
@@ -3384,6 +3397,23 @@ ${suggestedResponse}
         state.sealedIds = sealedIds;
         const lockKey = this.getLockKey(threadId, resourceId);
 
+        // Defer observation/buffering if the latest step of the last message has a pending
+        // provider-executed tool call (state: 'call'). Provider-executed tools (e.g. Anthropic
+        // web_search) may have their result deferred to a later step. We skip this cycle and let
+        // the next step observe with complete data.
+        const lastMessage = allMessages[allMessages.length - 1];
+        omDebug(`OM DEBUG: lastMessage=${JSON.stringify(lastMessage, null, 2)}`);
+
+        const latestStepParts = getLatestStepParts(lastMessage?.content?.parts ?? []);
+        omDebug(`OM DEBUG: latestStepParts=${JSON.stringify(latestStepParts, null, 2)}`);
+
+        const hasIncompleteProviderToolCalls = latestStepParts.some(
+          part => part?.type === 'tool-invocation' && part.toolInvocation?.state === 'call',
+          // &&
+          // (part as { providerExecuted?: boolean }).providerExecuted === true,
+        );
+        omDebug(`OM DEBUG: hasIncompleteProviderToolCalls=${hasIncompleteProviderToolCalls}`);
+
         // ════════════════════════════════════════════════════════════════════════
         // ASYNC BUFFERING: Trigger background observation at bufferTokens intervals
         // ════════════════════════════════════════════════════════════════════════
@@ -3391,9 +3421,9 @@ ${suggestedResponse}
         if (this.isAsyncObservationEnabled() && totalPendingTokens < threshold) {
           const shouldTrigger = this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey, record, threshold);
           omDebug(
-            `[OM:async-obs] belowThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, shouldTrigger=${shouldTrigger}, isBufferingObs=${record.isBufferingObservation}, lastBufferedAt=${record.lastBufferedAtTokens}`,
+            `[OM:async-obs] belowThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, shouldTrigger=${shouldTrigger}, isBufferingObs=${record.isBufferingObservation}, lastBufferedAt=${record.lastBufferedAtTokens}, hasIncompleteProviderToolCalls=${hasIncompleteProviderToolCalls}`,
           );
-          if (shouldTrigger) {
+          if (shouldTrigger && !hasIncompleteProviderToolCalls) {
             void this.startAsyncBufferedObservation(
               record,
               threadId,
@@ -3410,9 +3440,9 @@ ${suggestedResponse}
           // - Below blockAfter, sync observation won't run, so we need chunks ready
           const shouldTrigger = this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey, record, threshold);
           omDebug(
-            `[OM:async-obs] atOrAboveThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, step=${stepNumber}, shouldTrigger=${shouldTrigger}`,
+            `[OM:async-obs] atOrAboveThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, step=${stepNumber}, shouldTrigger=${shouldTrigger}, hasIncompleteProviderToolCalls=${hasIncompleteProviderToolCalls}`,
           );
-          if (shouldTrigger) {
+          if (shouldTrigger && !hasIncompleteProviderToolCalls) {
             void this.startAsyncBufferedObservation(
               record,
               threadId,
@@ -3438,7 +3468,7 @@ ${suggestedResponse}
         // ════════════════════════════════════════════════════════════════════════
         // THRESHOLD REACHED: Observe and clean up
         // ════════════════════════════════════════════════════════════════════════
-        if (stepNumber > 0 && totalPendingTokens >= threshold) {
+        if (stepNumber > 0 && !hasIncompleteProviderToolCalls && totalPendingTokens >= threshold) {
           reproCaptureDetails.thresholdReached = true;
           const { observationSucceeded, updatedRecord, activatedMessageIds } = await this.handleThresholdReached(
             messageList,

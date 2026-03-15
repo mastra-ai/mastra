@@ -214,11 +214,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
       };
 
-      // If the tool was already executed by the provider, skip execution
+      // If the tool was already executed by the provider, skip execution.
+      // If the provider deferred execution (no output yet), leave result undefined —
+      // the result will arrive in a later step.
       if (inputData.providerExecuted) {
         return {
           ...inputData,
-          result: inputData.output ?? { providerExecuted: true, toolName: inputData.toolName },
+          result: inputData.output,
         };
       }
 
