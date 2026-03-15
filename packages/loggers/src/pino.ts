@@ -14,6 +14,12 @@ export interface PinoLoggerOptions {
   overrideDefaultTransports?: boolean;
   formatters?: pino.LoggerOptions['formatters'];
   redact?: pino.LoggerOptions['redact'];
+  /**
+   * When false, disables pino-pretty and outputs raw JSON.
+   * Useful when sending logs to aggregators like Datadog,
+   * Loki, or CloudWatch that expect single-line JSON per entry.
+   * @default true
+   */
   prettyPrint?: boolean;
 }
 
