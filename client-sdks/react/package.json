@@ -73,7 +73,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",
-    "eslint-plugin-storybook": "^10.2.16",
+    "eslint-plugin-storybook": "^10.2.17",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
     "storybook": "^9.1.10",
