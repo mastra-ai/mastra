@@ -2535,6 +2535,220 @@ describe('MessageList', () => {
         },
       ]);
     });
+
+    it('should insert step-start between tool calls from separate LLM turns', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      const turn1: MastraDBMessage = {
+        id: 'turn-1',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'call-A',
+                toolName: 'weatherTool',
+                args: { location: 'London' },
+              },
+            },
+          ],
+        },
+        threadId,
+        resourceId,
+      };
+
+      const turn1Result: MastraDBMessage = {
+        id: 'turn-1-result',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-A',
+                toolName: 'weatherTool',
+                args: { location: 'London' },
+                result: { temperature: 10 },
+              },
+            },
+          ],
+        },
+        threadId,
+        resourceId,
+      };
+
+      const turn2: MastraDBMessage = {
+        id: 'turn-2',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'call-B',
+                toolName: 'weatherTool',
+                args: { location: 'Paris' },
+              },
+            },
+          ],
+        },
+        threadId,
+        resourceId,
+      };
+
+      list.add(turn1, 'response');
+      list.add(turn1Result, 'response');
+      list.add(turn2, 'response');
+
+      const messages = list.get.all.db();
+      expect(messages).toHaveLength(1);
+      expect(messages[0].content.parts).toEqual([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'call-A',
+            toolName: 'weatherTool',
+            args: { location: 'London' },
+            result: { temperature: 10 },
+          },
+        },
+        { type: 'step-start' },
+        {
+          type: 'tool-invocation',
+          toolInvocation: { state: 'call', toolCallId: 'call-B', toolName: 'weatherTool', args: { location: 'Paris' } },
+        },
+      ]);
+    });
+
+    it('should not insert step-start for tool calls from the same LLM turn', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      const textPart: MastraDBMessage = {
+        id: 'same-turn',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Let me check both cities.' }],
+        },
+        threadId,
+        resourceId,
+      };
+
+      const toolCalls: MastraDBMessage = {
+        id: 'same-turn',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'call-X',
+                toolName: 'weatherTool',
+                args: { location: 'London' },
+              },
+            },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'call-Y',
+                toolName: 'weatherTool',
+                args: { location: 'Paris' },
+              },
+            },
+          ],
+        },
+        threadId,
+        resourceId,
+      };
+
+      list.add(textPart, 'response');
+      list.add(toolCalls, 'response');
+
+      const messages = list.get.all.db();
+      expect(messages).toHaveLength(1);
+      // No step-start between the tool calls — they are parallel calls from the same turn
+      const stepStarts = messages[0].content.parts.filter(p => p.type === 'step-start');
+      expect(stepStarts).toHaveLength(0);
+    });
+
+    it('should still merge tool-result updates across different message IDs', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      const assistantMsg: MastraDBMessage = {
+        id: 'msg-llm',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'call-Z', toolName: 'searchTool', args: { q: 'test' } },
+            },
+          ],
+        },
+        threadId,
+        resourceId,
+      };
+
+      const resultMsg: MastraDBMessage = {
+        id: 'msg-result',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-Z',
+                toolName: 'searchTool',
+                args: { q: 'test' },
+                result: { data: 'found' },
+              },
+            },
+          ],
+        },
+        threadId,
+        resourceId,
+      };
+
+      list.add(assistantMsg, 'response');
+      list.add(resultMsg, 'response');
+
+      const messages = list.get.all.db();
+      expect(messages).toHaveLength(1);
+      // No step-start inserted — this is a result update, not a new turn
+      expect(messages[0].content.parts).toEqual([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'call-Z',
+            toolName: 'searchTool',
+            args: { q: 'test' },
+            result: { data: 'found' },
+          },
+        },
+      ]);
+    });
   });
 
   describe('core message sanitization', () => {
