@@ -40,7 +40,14 @@ async function getPackageRootPath(packageName, parentPath) {
   return rootPath;
 }
 
-export async function replaceTypes(file, rootDir, bundledPackages) {
+/**
+ * @param {string} file
+ * @param {string} rootDir
+ * @param {Set<string>} bundledPackages
+ * @param {Record<string, string>} [typeAliases] - Map of bundled package names to their public module names.
+ *   When set, the import is rewritten to the alias instead of copying vendored types.
+ */
+export async function replaceTypes(file, rootDir, bundledPackages, typeAliases = {}) {
   const normalizedBundledPackages = Array.from(bundledPackages).map(pkg => pkg.replace('*', ''));
   const shouldRunEmbed = await new Promise((resolve, reject) => {
     let found = false;
@@ -105,7 +112,16 @@ export async function replaceTypes(file, rootDir, bundledPackages) {
     const typesDestDir = join(rootDir, 'dist', '_types');
 
     for (const moduleSpecifier of importsToReplace) {
-      const pkgName = await getPackageName(moduleSpecifier.getLiteralValue());
+      const specifierValue = moduleSpecifier.getLiteralValue();
+      const pkgName = await getPackageName(specifierValue);
+
+      if (typeAliases[pkgName]) {
+        const aliasTarget = typeAliases[pkgName];
+        const subpath = specifierValue.slice(pkgName.length);
+        moduleSpecifier.setLiteralValue(aliasTarget + subpath);
+        continue;
+      }
+
       const pkgRootPath = await getPackageRootPath(pkgName, file);
       if (pkgRootPath) {
         const pkgJson = JSON.parse(await readFile(join(pkgRootPath, 'package.json'), 'utf8'));

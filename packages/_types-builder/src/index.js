@@ -31,9 +31,10 @@ function getFilteredEnv() {
  *
  * @param {string} rootDir
  * @param {Set<string>} bundledPackages
+ * @param {Record<string, string>} [typeAliases] - Map of bundled package names to their public module names.
  * @returns {Promise<void>}
  */
-export async function generateTypes(rootDir, bundledPackages = new Set()) {
+export async function generateTypes(rootDir, bundledPackages = new Set(), typeAliases = {}) {
   try {
     // Use spawn instead of exec to properly inherit stdio
     // Use shell: true for cross-platform compatibility
@@ -65,7 +66,7 @@ export async function generateTypes(rootDir, bundledPackages = new Set()) {
       const fullPath = path.join(rootDir, dtsFile);
       if (bundledPackages.size) {
         try {
-          await replaceTypes(fullPath, rootDir, bundledPackages);
+          await replaceTypes(fullPath, rootDir, bundledPackages, typeAliases);
         } catch (err) {
           // eslint-disable-next-line no-console
           console.log(`failed to embed types: ${fullPath}`, err);
