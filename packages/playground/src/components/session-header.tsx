@@ -12,20 +12,39 @@ import {
   usePlaygroundStore,
   useRequestContextPresets,
 } from '@mastra/playground-ui';
-import { useState } from 'react';
+import { useMemo } from 'react';
+
+const CUSTOM_PRESET_KEY = '__custom__';
 
 export const SessionHeader = () => {
   const presets = useRequestContextPresets();
-  const { setRequestContext } = usePlaygroundStore();
-  const [selectedPreset, setSelectedPreset] = useState<string>();
+  const { requestContext, setRequestContext } = usePlaygroundStore();
+
+  const selectedPreset = useMemo(() => {
+    if (!presets) return CUSTOM_PRESET_KEY;
+
+    const requestContextStr = JSON.stringify(requestContext ?? {});
+
+    for (const [presetKey, presetValue] of Object.entries(presets)) {
+      if (JSON.stringify(presetValue) === requestContextStr) {
+        return presetKey;
+      }
+    }
+
+    return CUSTOM_PRESET_KEY;
+  }, [presets, requestContext]);
 
   const handlePresetChange = (presetKey: string) => {
-    if (!presets || presetKey === '__custom__') return;
+    if (presetKey === CUSTOM_PRESET_KEY) {
+      setRequestContext({});
+      return;
+    }
+
+    if (!presets) return;
 
     const presetValue = presets[presetKey];
     if (!presetValue) return;
 
-    setSelectedPreset(presetKey);
     setRequestContext(presetValue);
   };
 
@@ -44,6 +63,7 @@ export const SessionHeader = () => {
               <SelectValue placeholder="Select a preset..." />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value={CUSTOM_PRESET_KEY}>Custom</SelectItem>
               {Object.keys(presets).map(key => (
                 <SelectItem key={key} value={key}>
                   {key}
