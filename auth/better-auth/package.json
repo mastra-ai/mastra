@@ -36,7 +36,7 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.19.13",
-    "hono": "^4.11.9",
+    "hono": "^4.12.7",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",

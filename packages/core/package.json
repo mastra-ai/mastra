@@ -236,7 +236,7 @@
     "dotenv": "^17.2.3",
     "execa": "^9.6.1",
     "gray-matter": "^4.0.3",
-    "hono": "^4.11.9",
+    "hono": "^4.12.7",
     "hono-openapi": "^1.1.1",
     "ignore": "^7.0.5",
     "js-tiktoken": "^1.0.21",
