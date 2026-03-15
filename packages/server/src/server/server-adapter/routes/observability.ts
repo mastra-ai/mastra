@@ -1,13 +1,1 @@
-import {
-  LIST_TRACES_ROUTE,
-  GET_TRACE_ROUTE,
-  SCORE_TRACES_ROUTE,
-  LIST_SCORES_BY_SPAN_ROUTE,
-} from '../../handlers/observability';
-
-export const OBSERVABILITY_ROUTES = [
-  LIST_TRACES_ROUTE,
-  GET_TRACE_ROUTE,
-  SCORE_TRACES_ROUTE,
-  LIST_SCORES_BY_SPAN_ROUTE,
-] as const;
+export { OBSERVABILITY_ROUTES } from '../../handlers/observability';
