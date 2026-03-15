@@ -1,5 +1,4 @@
 ---
-'@internal/playground': minor
 '@mastra/playground-ui': minor
 ---
 
