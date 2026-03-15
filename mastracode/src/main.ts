@@ -2,6 +2,13 @@
 /**
  * Main entry point for Mastra Code TUI.
  */
+import {
+  parseChromeFlag,
+  findClaudeBinary,
+  runChromeDiagnostics,
+  buildChromeMcpConfig,
+  CHROME_MCP_SERVER_NAME,
+} from './chrome/index.js';
 import { isStreamDestroyedError } from './error-classification.js';
 import { hasHeadlessFlag, headlessMain } from './headless.js';
 import { loadSettings } from './onboarding/settings.js';
@@ -31,7 +38,29 @@ process.on('unhandledRejection', reason => {
 });
 
 async function tuiMain() {
-  const result = await createMastraCode();
+  // Chrome browser automation
+  const chromeFlag = parseChromeFlag();
+  let chromeEnabled = false;
+  const chromeMcpServers: Record<string, ReturnType<typeof buildChromeMcpConfig>> = {};
+
+  if (chromeFlag) {
+    const claudeBinary = findClaudeBinary();
+    if (claudeBinary) {
+      runChromeDiagnostics();
+      chromeMcpServers[CHROME_MCP_SERVER_NAME] = buildChromeMcpConfig(claudeBinary);
+      chromeEnabled = true;
+      console.info(`Chrome: enabled (using ${claudeBinary})`);
+    } else {
+      console.error('Chrome: --chrome specified but `claude` CLI not found in PATH. Chrome integration disabled.');
+    }
+  }
+
+  const result = await createMastraCode({
+    ...(chromeEnabled && {
+      mcpServers: chromeMcpServers,
+      initialState: { chromeEnabled: true },
+    }),
+  });
   harness = result.harness;
   mcpManager = result.mcpManager;
   hookManager = result.hookManager;

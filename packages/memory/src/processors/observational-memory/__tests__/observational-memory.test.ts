@@ -1044,6 +1044,85 @@ describe('Observer Agent Helpers', () => {
         ),
       ).toBe(true);
     });
+
+    it('should extract images from tool results with ToolResultOutput media content', () => {
+      const LARGE_BASE64 = 'A'.repeat(100_000);
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'screenshot',
+              result: {
+                type: 'content',
+                value: [
+                  { type: 'text', text: 'Screenshot captured' },
+                  { type: 'media', data: LARGE_BASE64, mediaType: 'image/png' },
+                ],
+              },
+            },
+          } as any,
+        ],
+      };
+
+      const historyMessage = buildObserverHistoryMessage([msg]) as any;
+
+      // The base64 data should NOT appear in any text content
+      const allText = historyMessage.content
+        .filter((p: any) => p.type === 'text')
+        .map((p: any) => p.text)
+        .join('');
+      expect(allText).not.toContain(LARGE_BASE64);
+
+      // Should contain a placeholder for the image
+      expect(allText).toContain('[Image #1: image/png]');
+      // Should preserve the text part from the tool result
+      expect(allText).toContain('Screenshot captured');
+      // Should contain the tool name
+      expect(allText).toContain('[Tool Result: screenshot]');
+
+      // The image should be extracted as an attachment
+      const imageAttachments = historyMessage.content.filter((p: any) => p.type === 'image');
+      expect(imageAttachments).toHaveLength(1);
+      expect(imageAttachments[0].image).toBe(LARGE_BASE64);
+      expect(imageAttachments[0].mimeType).toBe('image/png');
+    });
+
+    it('should NOT extract images from regular tool results without media content', () => {
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'search',
+              result: { query: 'hello', results: ['result1', 'result2'] },
+            },
+          } as any,
+        ],
+      };
+
+      const historyMessage = buildObserverHistoryMessage([msg]) as any;
+
+      // Should NOT have any image attachments
+      const imageAttachments = historyMessage.content.filter((p: any) => p.type === 'image');
+      expect(imageAttachments).toHaveLength(0);
+
+      // Should contain the stringified result normally
+      const allText = historyMessage.content
+        .filter((p: any) => p.type === 'text')
+        .map((p: any) => p.text)
+        .join('');
+      expect(allText).toContain('result1');
+      expect(allText).toContain('result2');
+    });
   });
 
   describe('parseObserverOutput', () => {
