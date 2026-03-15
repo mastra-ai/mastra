@@ -308,11 +308,12 @@ export type ProviderModelsMap = {
     'google/gemini-2.5-flash',
     'google/gemini-2.5-pro',
     'google/gemini-3-flash-preview',
-    'google/gemini-3-pro-preview',
     'google/gemini-3.1-pro-preview',
+    'nvidia/nemotron-3-super-120b-a12b',
     'openai/gpt-5-mini',
     'openai/gpt-5.1',
     'openai/gpt-5.2',
+    'openai/gpt-5.4',
     'perplexity/sonar',
     'xai/grok-4-1-fast-non-reasoning',
   ];
