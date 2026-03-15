@@ -59,7 +59,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'agents/using-tools',
-          label: 'Using Tools',
+          label: 'Tools',
         },
         {
           type: 'doc',
@@ -75,11 +75,9 @@ const sidebars = {
           type: 'doc',
           id: 'agents/supervisor-agents',
           label: 'Supervisor Agents',
-        },
-        {
-          type: 'doc',
-          id: 'agents/networks',
-          label: 'Networks',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',
@@ -98,13 +96,16 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/network-approval',
-          label: 'Network Approval',
+          id: 'agents/adding-voice',
+          label: 'Voice',
         },
         {
           type: 'doc',
-          id: 'agents/adding-voice',
-          label: 'Voice',
+          id: 'agents/networks',
+          label: 'Networks',
+          customProps: {
+            tags: ['deprecated'],
+          },
         },
       ],
     },
