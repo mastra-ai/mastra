@@ -1,12 +1,12 @@
 ---
-title: "Reference: Faithfulness Scorer | Evals"
+title: "Reference: Faithfulness scorer | Evals"
 description: Documentation for the Faithfulness Scorer in Mastra, which evaluates the factual accuracy of LLM outputs compared to the provided context.
 packages:
   - "@mastra/core"
   - "@mastra/evals"
 ---
 
-# Faithfulness Scorer
+# Faithfulness scorer
 
 The `createFaithfulnessScorer()` function evaluates how factually accurate an LLM's output is compared to the provided context. It extracts claims from the output and verifies them against the context, making it essential to measure RAG pipeline responses' reliability.
 
@@ -40,7 +40,7 @@ The `createFaithfulnessScorer()` function accepts a single options object with t
 
 This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes LLM-specific fields as documented below.
 
-## .run() Returns
+## `.run()` returns
 
 <PropertiesTable
   content={[
@@ -89,7 +89,7 @@ This function returns an instance of the MastraScorer class. The `.run()` method
 ]}
 />
 
-## Scoring Details
+## Scoring details
 
 The scorer evaluates faithfulness through claim verification against provided context.
 

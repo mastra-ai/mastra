@@ -126,7 +126,7 @@ You can mount multiple providers at different paths. Each mount path must be uni
 
 :::note
 
-`filesystem` and `mounts` are mutually exclusive — you cannot use both in the same workspace. Use `filesystem` for a single provider without a sandbox, or `mounts` when you need to combine cloud storage with a sandbox.
+`filesystem` and `mounts` are mutually exclusive — you can't use both in the same workspace. Use `filesystem` for a single provider without a sandbox, or `mounts` when you need to combine cloud storage with a sandbox.
 
 :::
 
@@ -276,7 +276,7 @@ const workspace = new Workspace({
 await workspace.init()
 ```
 
-### What init() does
+### What `init()` does
 
 Initialization runs setup logic for each configured provider:
 

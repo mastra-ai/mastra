@@ -1,5 +1,5 @@
 ---
-title: "Memory Processors | Memory"
+title: "Memory processors | Memory"
 description: "Learn how to use memory processors in Mastra to filter, trim, and transform messages before they're sent to the language model to manage context window limits."
 packages:
   - "@mastra/core"
@@ -9,7 +9,7 @@ packages:
   - "@mastra/pinecone"
 ---
 
-# Memory Processors
+# Memory processors
 
 Memory processors transform and filter messages as they pass through an agent with memory enabled. They manage context window limits, remove unnecessary content, and optimize the information sent to the language model.
 
@@ -17,11 +17,11 @@ When memory is enabled on an agent, Mastra adds memory processors to the agent's
 
 Memory processors are [processors](/docs/agents/processors) that operate specifically on memory-related messages and state.
 
-## Built-in Memory Processors
+## Built-in memory processors
 
 Mastra automatically adds these processors when memory is enabled:
 
-### MessageHistory
+### `MessageHistory`
 
 Retrieves message history and persists new messages.
 
@@ -67,7 +67,7 @@ const agent = new Agent({
 })
 ```
 
-### SemanticRecall
+### `SemanticRecall`
 
 Retrieves semantically relevant messages based on the current input and creates embeddings for new messages.
 
@@ -125,7 +125,7 @@ const agent = new Agent({
 })
 ```
 
-### WorkingMemory
+### `WorkingMemory`
 
 Manages working memory state across conversations.
 
@@ -170,9 +170,9 @@ const agent = new Agent({
 })
 ```
 
-## Manual Control and Deduplication
+## Manual control and deduplication
 
-If you manually add a memory processor to `inputProcessors` or `outputProcessors`, Mastra will **not** automatically add it. This gives you full control over processor ordering:
+If you manually add a memory processor to `inputProcessors` or `outputProcessors`, Mastra **won't** automatically add it. This gives you full control over processor ordering:
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
@@ -203,7 +203,7 @@ const agent = new Agent({
 })
 ```
 
-## Processor Execution Order
+## Processor execution order
 
 Understanding the execution order is important when combining guardrails with memory:
 
@@ -229,7 +229,7 @@ This means memory loads message history before your processors can validate or f
 
 This ordering is designed to be **safe by default**: if your output guardrail calls `abort()`, the memory processors never run and **no messages are saved**.
 
-## Guardrails and Memory
+## Guardrails and memory
 
 The default execution order provides safe guardrail behavior:
 

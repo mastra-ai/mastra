@@ -111,7 +111,7 @@ for (const config of result.agents) {
 ]}
 />
 
-## Primitive Resolution
+## Primitive resolution
 
 When creating `Agent` instances (default behavior), each stored agent's configuration is resolved against registered primitives:
 
@@ -121,9 +121,9 @@ When creating `Agent` instances (default behavior), each stored agent's configur
 - **Memory**: Resolved from `memory` registered in Mastra config
 - **Scorers**: Resolved from `scorers` registered in Mastra config
 
-If a referenced primitive is not found, a warning is logged but the agent is still created.
+If a referenced primitive isn't found, a warning is logged but the agent is still created.
 
-## Example: Iterating Through All Stored Agents
+## Example: Iterating through all stored agents
 
 ```typescript
 async function getAllStoredAgents(mastra: Mastra) {

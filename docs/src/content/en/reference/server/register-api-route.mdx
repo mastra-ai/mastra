@@ -27,7 +27,7 @@ The URL path for the route. Supports path parameters using `:param` syntax.
 registerApiRoute("/items/:itemId", { ... })
 ```
 
-**Note:** Paths cannot start with `/api/` as this prefix is reserved for Mastra server routes.
+**Note:** Paths can't start with `/api/` as this prefix is reserved for Mastra server routes.
 
 ### options
 
@@ -66,9 +66,9 @@ registerApiRoute("/items/:itemId", { ... })
 ]}
 />
 
-## OpenAPI Options
+## OpenAPI options
 
-The `openapi` property accepts standard OpenAPI 3.1 operation fields from [hono-openapi](https://github.com/honojs/middleware/tree/main/packages/openapi). Routes without an `openapi` property are not included in Swagger UI.
+The `openapi` property accepts standard OpenAPI 3.1 operation fields from [hono-openapi](https://github.com/honojs/middleware/tree/main/packages/openapi). Routes without an `openapi` property aren't included in Swagger UI.
 
 <PropertiesTable
   content={[
@@ -123,11 +123,11 @@ The `openapi` property accepts standard OpenAPI 3.1 operation fields from [hono-
 ]}
 />
 
-## Return Value
+## Return value
 
 Returns an `ApiRoute` object to be passed to `server.apiRoutes` in the Mastra configuration.
 
-## Handler Context
+## Handler context
 
 The handler receives a Hono `Context` object with access to:
 
@@ -272,7 +272,7 @@ registerApiRoute('/items/:itemId', {
 })
 ```
 
-### Using createHandler
+### Using `createHandler()`
 
 For routes that need async initialization:
 
@@ -290,7 +290,7 @@ registerApiRoute('/dynamic', {
 })
 ```
 
-## Error Handling
+## Error handling
 
 Throw errors with status codes using Hono's `HTTPException`:
 

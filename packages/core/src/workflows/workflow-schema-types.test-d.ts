@@ -1,5 +1,5 @@
 import { describe, expectTypeOf, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { createStep, createWorkflow } from './workflow';
 
 describe('Workflow schema type inference', () => {

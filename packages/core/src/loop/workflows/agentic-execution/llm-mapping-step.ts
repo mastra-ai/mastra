@@ -1,11 +1,11 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
-import z from 'zod';
+import z from 'zod/v4';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
 import type { MastraDBMessage } from '../../../memory';
 import { createObservabilityContext } from '../../../observability';
 import type { ProcessorState } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
-import type { ChunkType } from '../../../stream/types';
+import type { ChunkType, ProviderMetadata } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
@@ -141,7 +141,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 args: toolCall.args,
                 toolCallId: toolCall.toolCallId,
                 toolName: toolCall.toolName,
-                providerMetadata: toolCall.providerMetadata,
+                providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
               },
             };
             const processed = await processAndEnqueueChunk(chunk);
@@ -164,7 +164,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                     result: toolCallErrorResult.error?.message ?? toolCallErrorResult.error,
                   },
                   ...(toolCallErrorResult.providerMetadata
-                    ? { providerMetadata: toolCallErrorResult.providerMetadata }
+                    ? { providerMetadata: toolCallErrorResult.providerMetadata as ProviderMetadata }
                     : {}),
                 };
               }),
@@ -310,7 +310,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
               result: toolCall.result,
-              providerMetadata: toolCall.providerMetadata,
+              providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
               providerExecuted: toolCall.providerExecuted,
             },
           };

@@ -1,12 +1,14 @@
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import z from 'zod';
+import z from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
-import type { ObservabilityContext } from '../../observability';
 import { resolveObservabilityContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
+import type { PublicSchema } from '../../schema';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { Processor } from '../index';
 
 /**
@@ -202,7 +204,6 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
     const prompt = this.createDetectionPrompt(content);
     try {
       const model = await this.detectionAgent.getModel();
-      let response;
 
       const baseSchema = z.object({
         categories: z
@@ -232,11 +233,12 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
         });
       }
 
+      let result: PromptInjectionResult;
       if (isSupportedLanguageModel(model)) {
-        response = await this.detectionAgent.generate(prompt, {
+        const response = await this.detectionAgent.generate(prompt, {
           structuredOutput: {
-            schema,
             ...(this.structuredOutputOptions ?? {}),
+            schema,
           },
           modelSettings: {
             temperature: 0,
@@ -244,16 +246,25 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
           providerOptions: this.providerOptions,
           ...observabilityContext,
         });
+
+        if (!response.object) {
+          throw new Error('Structured output returned no object');
+        }
+        result = response.object;
       } else {
-        response = await this.detectionAgent.generateLegacy(prompt, {
-          output: schema,
+        const standardSchema = toStandardSchema(schema as PublicSchema);
+        const response = await this.detectionAgent.generateLegacy(prompt, {
+          output: standardSchemaToJSONSchema(standardSchema),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
           ...observabilityContext,
         });
-      }
 
-      const result = response.object satisfies PromptInjectionResult;
+        if (!response.object) {
+          throw new Error('Legacy output returned no object');
+        }
+        result = response.object as PromptInjectionResult;
+      }
 
       return result;
     } catch (error) {

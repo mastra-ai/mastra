@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { MastraMemory } from '../../../memory/memory';
 import type { StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';

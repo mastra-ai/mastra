@@ -32,10 +32,10 @@
     "@opentelemetry/resources": "2.2.0",
     "@opentelemetry/sdk-node": "0.208.0",
     "@opentelemetry/semantic-conventions": "1.38.0",
-    "fastify": "5.6.0",
+    "fastify": "5.7.3",
     "fastify-plugin": "5.0.1",
     "fastify-type-provider-zod": "4.0.2",
-    "pino": "9.11.0",
+    "pino": "10.1.1",
     "specifier-resolution-node": "1.1.4",
     "uri-template": "2.0.0",
     "zod": "3.25.76"
@@ -56,7 +56,10 @@
       "@mastra/observability": "link:../../../mastra",
       "@mastra/otel-bridge": "link:../../../otel-bridge",
       "@mastra/server": "link:../../../../packages/server",
-      "systeminformation": "^5.27.14"
+      "systeminformation": "5.31.0",
+      "ajv@<=8.18.0": "8.18.0",
+      "minimatch@<=10.2.1": "10.2.1",
+      "@isaacs/brace-expansion@<=5.0.1": "5.0.1"
     }
   }
 }

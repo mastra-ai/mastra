@@ -1,12 +1,12 @@
 ---
-title: "Guide: Building a Research Paper Assistant with RAG"
+title: "Guide: Building a research paper assistant with RAG"
 description: Guide on creating an AI research assistant that can analyze and answer questions about academic papers using RAG.
 ---
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Building a Research Paper Assistant with RAG
+# Building a research paper assistant with RAG
 
 In this guide, you'll create an AI research assistant that can analyze academic papers and answer specific questions about their content using Retrieval Augmented Generation (RAG).
 
@@ -47,7 +47,7 @@ Your implementation will:
 1. Use similarity search to find relevant sections
 1. Generate accurate responses using retrieved context
 
-## Creating the Agent
+## Creating the agent
 
 Let's define the agent's behavior, connect it to your Mastra project, and create the vector store.
 
@@ -271,7 +271,7 @@ In the following steps you'll fetch the research paper, split it into smaller ch
   </StepItem>
 </Steps>
 
-## Test the Assistant
+## Test the assistant
 
 Now that the vector database has all embeddings, you can test the research assistant with different types of queries.
 
@@ -353,7 +353,7 @@ curl -X POST http://localhost:4111/api/agents/researchAgent/generate \
   }'
 ```
 
-## Advanced RAG Examples
+## Advanced RAG examples
 
 Explore these examples for more advanced RAG techniques:
 

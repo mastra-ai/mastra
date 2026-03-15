@@ -163,6 +163,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/clarifai',
+          label: 'Clarifai',
+        },
+        {
+          type: 'doc',
           id: 'providers/cloudferro-sherlock',
           label: 'CloudFerro Sherlock',
         },

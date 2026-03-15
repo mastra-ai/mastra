@@ -1,5 +1,5 @@
 ---
-title: "Reference: Koa Adapter | Server"
+title: "Reference: Koa adapter | Server"
 description: "API reference for the @mastra/koa server adapter."
 packages:
   - "@mastra/koa"
@@ -9,7 +9,7 @@ import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
-# Koa Adapter
+# Koa adapter
 
 The `@mastra/koa` package provides a server adapter for running Mastra with [Koa](https://koajs.com).
 
@@ -147,7 +147,7 @@ const server = new MastraServer({ app, mastra })
 await server.init()
 ```
 
-The [`server.onError`](/reference/configuration#serveronerror) hook is also supported. When configured, it is called before the error propagates to middleware, and its response is used directly:
+The [`server.onError`](/reference/configuration#serveronerror) hook is also supported. When configured, it's called before the error propagates to middleware, and its response is used directly:
 
 ```typescript title="src/mastra/index.ts"
 const mastra = new Mastra({

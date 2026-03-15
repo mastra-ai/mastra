@@ -9,6 +9,12 @@ import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsPropert
 
 # Agent.network()
 
+:::warning[Deprecated]
+
+Agent networks are deprecated and will be removed in a future release. Use the [supervisor pattern](/docs/agents/supervisor-agents) with `agent.stream()` or `agent.generate()` instead. See the [migration guide](/guides/migrations/network-to-supervisor) to upgrade.
+
+:::
+
 The `.network()` method enables multi-agent collaboration and routing. This method accepts messages and optional execution options.
 
 ## Usage example
@@ -376,7 +382,7 @@ await agent.network(`
 ]}
 />
 
-## Structured Output
+## Structured output
 
 When you need typed, validated results from your network, use the `structuredOutput` option. The network will generate a response matching your schema after task completion.
 
@@ -432,9 +438,9 @@ When using structured output, additional chunk types are emitted:
 - `network-object`: Emitted with partial objects during streaming
 - `network-object-result`: Emitted with the final structured object
 
-## Aborting a Network
+## Aborting a network
 
-Use `abortSignal` to cancel a running network. When aborted, the network stops routing, cancels any in-progress sub-agent, tool, or workflow execution, and does not save partial results to memory.
+Use `abortSignal` to cancel a running network. When aborted, the network stops routing, cancels any in-progress sub-agent, tool, or workflow execution, and doesn't save partial results to memory.
 
 ```typescript
 const controller = new AbortController()

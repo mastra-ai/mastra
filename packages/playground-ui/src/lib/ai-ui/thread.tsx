@@ -22,6 +22,7 @@ import { useThreadInput } from '@/domains/conversation';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { ComposerModelSwitcher } from '@/domains/agents/components/composer-model-switcher';
 import { BracketOverlay } from './components/bracket-overlay';
+import { SaveFullConversationAction } from './messages/dataset-save-action';
 
 export interface ThreadProps {
   agentName?: string;
@@ -56,6 +57,9 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadPr
         </div>
 
         <ThreadPrimitive.If empty={false}>
+          <ThreadPrimitive.If running={false}>
+            <SaveFullConversationAction />
+          </ThreadPrimitive.If>
           <div />
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
@@ -80,7 +84,7 @@ export interface ThreadWelcomeProps {
 const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
   return (
     <ThreadPrimitive.Empty>
-      <div className="flex w-full flex-grow flex-col items-center justify-center">
+      <div className="flex w-full flex-grow flex-col items-center pt-[15vh]">
         <Avatar name={agentName || 'Agent'} size="lg" />
         <p className="mt-4 font-medium">How can I help you today?</p>
       </div>
@@ -212,12 +216,12 @@ const EditComposer = () => {
 
       <div>
         <ComposerPrimitive.Cancel asChild>
-          <button className="bg-surface2 border border-border1 px-2 text-ui-md inline-flex items-center justify-center rounded-md border h-form-sm gap-1 hover:bg-surface4 text-neutral3 hover:text-neutral6">
+          <button className="bg-surface2 border border-border1 px-2 text-ui-md inline-flex items-center justify-center rounded-md  h-form-sm gap-1 hover:bg-surface4 text-neutral3 hover:text-neutral6">
             Cancel
           </button>
         </ComposerPrimitive.Cancel>
         <ComposerPrimitive.Send asChild>
-          <button className="bg-surface2 border border-border1 px-2 text-ui-md inline-flex items-center justify-center rounded-md border h-form-sm gap-1 hover:bg-surface4 text-neutral3 hover:text-neutral6">
+          <button className="bg-surface2 border border-border1 px-2 text-ui-md inline-flex items-center justify-center rounded-md  h-form-sm gap-1 hover:bg-surface4 text-neutral3 hover:text-neutral6">
             Send
           </button>
         </ComposerPrimitive.Send>

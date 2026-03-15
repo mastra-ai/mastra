@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { createGatewayMock } from '@internal/test-utils';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { MockMemory } from '../../memory/mock';
 import { createTool } from '../../tools';
 import { delay } from '../../utils';
 import { Agent } from '../agent';
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 describe('Tool suspension memory persistence', () => {
   it('should save thread and messages to memory before suspension when tool calls suspend()', async () => {

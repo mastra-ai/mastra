@@ -43,7 +43,6 @@ import {
 } from '../schemas/agents';
 import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
 import { getAgentSkillResponseSchema } from '../schemas/workspace';
-import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
@@ -946,10 +945,7 @@ export const CLONE_AGENT_ROUTE = createRoute({
   },
 });
 
-export const GENERATE_AGENT_ROUTE: ServerRoute<
-  z.infer<typeof agentIdPathParams> & z.infer<typeof agentExecutionBodySchema>,
-  unknown
-> = createRoute({
+export const GENERATE_AGENT_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/generate',
   responseType: 'json',
@@ -1009,12 +1005,18 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
         };
       }
 
-      const result = await agent.generate<unknown>(messages, {
-        ...rest,
+      const { structuredOutput, ...restOptions } = rest;
+
+      const options = {
+        ...restOptions,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
-      });
+      };
+
+      const result = structuredOutput
+        ? await agent.generate(messages, { ...options, structuredOutput })
+        : await agent.generate(messages, options);
 
       return result;
     } catch (error) {
@@ -1205,10 +1207,7 @@ export const GET_PROVIDERS_ROUTE = createRoute({
   },
 });
 
-export const GENERATE_AGENT_VNEXT_ROUTE: ServerRoute<
-  z.infer<typeof agentIdPathParams> & z.infer<typeof agentExecutionBodySchema>,
-  unknown
-> = createRoute({
+export const GENERATE_AGENT_VNEXT_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/generate/vnext',
   responseType: 'json',
@@ -1282,12 +1281,18 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         };
       }
 
-      const streamResult = await agent.stream<unknown>(messages, {
-        ...rest,
+      const { structuredOutput, ...restOptions } = rest;
+
+      const options = {
+        ...restOptions,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
-      });
+      };
+
+      const streamResult = structuredOutput
+        ? await agent.stream(messages, { ...options, structuredOutput })
+        : await agent.stream(messages, options);
 
       return streamResult.fullStream;
     } catch (error) {
