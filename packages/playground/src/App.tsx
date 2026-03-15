@@ -33,6 +33,7 @@ import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/framework';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
+import AgentSession from './pages/agents/agent/session';
 import AgentPlayground from './pages/agents/agent-playground';
 import AgentTraces from './pages/agents/agent-traces';
 import CmsAgentAgentsPage from './pages/cms/agents/agents';
@@ -78,6 +79,7 @@ import { Workflow } from './pages/workflows/workflow';
 import Workspace from './pages/workspace';
 import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
 import { Layout } from '@/components/layout';
+import { MinimalLayout } from '@/components/minimal-layout';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import { Processors } from '@/pages/processors';
 import { Processor } from '@/pages/processors/processor';
@@ -139,6 +141,19 @@ const RootLayout = () => {
   );
 };
 
+const MinimalRootLayout = () => {
+  const navigate = useNavigate();
+  const frameworkNavigate = (path: string) => navigate(path, { viewTransition: true });
+
+  return (
+    <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
+      <MinimalLayout>
+        <Outlet />
+      </MinimalLayout>
+    </LinkComponentProvider>
+  );
+};
+
 // Determine platform status at module level for route configuration
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
 const isExperimentalFeatures = coreFeatures.has('datasets');
@@ -159,6 +174,13 @@ const routes = [
   // Auth pages - no layout
   { path: '/login', element: <Login /> },
   { path: '/signup', element: <SignUp /> },
+  {
+    element: <MinimalRootLayout />,
+    children: [
+      { path: '/agents/:agentId/session', element: <AgentSession /> },
+      { path: '/agents/:agentId/session/:threadId', element: <AgentSession /> },
+    ],
+  },
   {
     element: <RootLayout />,
     children: [
