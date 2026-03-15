@@ -1133,20 +1133,20 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
 
       const streamResponse = rest.output
         ? streamResult.toTextStreamResponse({
-            headers: {
-              'Transfer-Encoding': 'chunked',
-            },
-          })
+          headers: {
+            'Transfer-Encoding': 'chunked',
+          },
+        })
         : streamResult.toDataStreamResponse({
-            sendUsage: true,
-            sendReasoning: true,
-            getErrorMessage: (error: any) => {
-              return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
-            },
-            headers: {
-              'Transfer-Encoding': 'chunked',
-            },
-          });
+          sendUsage: true,
+          sendReasoning: true,
+          getErrorMessage: (error: any) => {
+            return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
+          },
+          headers: {
+            'Transfer-Encoding': 'chunked',
+          },
+        });
 
       return streamResponse;
     } catch (error) {
@@ -1179,7 +1179,10 @@ export const GET_PROVIDERS_ROUTE = createRoute({
             try {
               const customProviders = await gateway.fetchProviders();
               for (const [providerId, config] of Object.entries(customProviders)) {
-                allProviders[providerId] = config;
+                const normalizedKey = providerId === gateway.id
+                  ? gateway.id
+                  : `${gateway.id}/${providerId}`;
+                allProviders[normalizedKey] = config;
               }
             } catch (error) {
               console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
