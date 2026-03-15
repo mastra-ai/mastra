@@ -314,4 +314,116 @@ describe('convertMessages', () => {
       expect((uploadPart as any).data.percent).toBe(100);
     });
   });
+
+  describe('reasoning text round-trip (issue #14094)', () => {
+    it('should preserve reasoning text through Mastra V2 → AIV5 UI round-trip when text is in details', () => {
+      // Simulates a DB message stored after an agent streams reasoning from a model
+      // The reasoning text is stored in details[].text (reasoning.text format)
+      const mastraV2WithReasoning: MastraDBMessage = {
+        id: 'msg-reasoning-1',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'reasoning',
+              reasoning: '',
+              details: [{ type: 'text', text: 'Let me think about this step by step...' }],
+            },
+            { type: 'text', text: 'The answer is 42.' },
+          ],
+          content: 'The answer is 42.',
+          reasoning: '',
+        },
+      };
+
+      const result = convertMessages(mastraV2WithReasoning).to('AIV5.UI');
+      expect(result).toHaveLength(1);
+
+      const reasoningPart = result[0].parts.find(p => p.type === 'reasoning');
+      expect(reasoningPart).toBeDefined();
+      expect(reasoningPart?.type).toBe('reasoning');
+      expect((reasoningPart as any).text).toBe('Let me think about this step by step...');
+    });
+
+    it('should recover reasoning text from providerMetadata when reasoning and details are empty', () => {
+      // Simulates a DB message where reasoning text was only preserved in providerMetadata
+      // This happens with OpenRouter models where part.text was empty at ingestion time
+      // but providerMetadata.openrouter.reasoning_details contains the actual content
+      const mastraV2WithReasoningInProviderMetadata: MastraDBMessage = {
+        id: 'msg-reasoning-2',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'reasoning',
+              reasoning: '',
+              details: [{ type: 'text', text: '' }],
+              providerMetadata: {
+                openrouter: {
+                  reasoning_details: [
+                    { type: 'reasoning.text', text: 'Analyzing the problem carefully...', format: 'unknown' },
+                  ],
+                },
+              },
+            },
+            { type: 'text', text: 'Here is my answer.' },
+          ],
+          content: 'Here is my answer.',
+          reasoning: '',
+        },
+      };
+
+      const result = convertMessages(mastraV2WithReasoningInProviderMetadata).to('AIV5.UI');
+      expect(result).toHaveLength(1);
+
+      const reasoningPart = result[0].parts.find(p => p.type === 'reasoning');
+      expect(reasoningPart).toBeDefined();
+      expect((reasoningPart as any).text).toBe('Analyzing the problem carefully...');
+    });
+
+    it('should recover reasoning text from reasoning.summary entries in providerMetadata', () => {
+      // Simulates xai/Grok via OpenRouter which uses reasoning.summary format
+      // The reasoning content is in d.summary, not d.text
+      const mastraV2WithReasoningSummary: MastraDBMessage = {
+        id: 'msg-reasoning-3',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'reasoning',
+              reasoning: '',
+              details: [{ type: 'text', text: '' }],
+              providerMetadata: {
+                openrouter: {
+                  reasoning_details: [
+                    {
+                      type: 'reasoning.summary',
+                      summary: 'I considered multiple approaches and chose the optimal one.',
+                      format: 'xai-responses-v1',
+                    },
+                  ],
+                },
+              },
+            },
+            { type: 'text', text: 'The optimal approach is X.' },
+          ],
+          content: 'The optimal approach is X.',
+          reasoning: '',
+        },
+      };
+
+      const result = convertMessages(mastraV2WithReasoningSummary).to('AIV5.UI');
+      expect(result).toHaveLength(1);
+
+      const reasoningPart = result[0].parts.find(p => p.type === 'reasoning');
+      expect(reasoningPart).toBeDefined();
+      expect((reasoningPart as any).text).toBe('I considered multiple approaches and chose the optimal one.');
+    });
+  });
 });
