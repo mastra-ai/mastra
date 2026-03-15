@@ -20,6 +20,8 @@ export enum EntityType {
   TOOL = 'tool',
   /** Workflow */
   WORKFLOW_RUN = 'workflow_run',
+  /** Memory */
+  MEMORY = 'memory',
 }
 
 /**
