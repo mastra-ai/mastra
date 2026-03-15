@@ -110,3 +110,7 @@ The easiest way to generate one is using [jwt.io](https://www.jwt.io/):
 1. Enter your secret (for example: `supersecretdevkeythatishs256safe!`).
 1. Click **Generate example** to create a valid JWT.
 1. Copy the generated token and set it as `MASTRA_JWT_TOKEN` in your `.env` file.
+
+## Related
+
+- [Authorization middleware](/docs/server/middleware#authorization-user-isolation) — how to access the decoded user in middleware to set `resource_id`
