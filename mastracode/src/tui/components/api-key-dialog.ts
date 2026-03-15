@@ -46,9 +46,7 @@ export class ApiKeyDialogComponent extends Box implements Focusable {
     // Description
     this.addChild(new Text(theme.fg('text', `Enter an API key for ${options.providerName}:`), 0, 0));
     if (options.apiKeyEnvVar) {
-      this.addChild(
-        new Text(theme.fg('dim', `You can also set ${options.apiKeyEnvVar} in your environment.`), 0, 0),
-      );
+      this.addChild(new Text(theme.fg('dim', `You can also set ${options.apiKeyEnvVar} in your environment.`), 0, 0));
     }
     this.addChild(new Spacer(1));
 
