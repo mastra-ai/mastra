@@ -1,5 +1,25 @@
 # mastracode
 
+## 0.9.0-alpha.0
+
+### Minor Changes
+
+- Added interactive API key prompt when selecting a model without a configured key. When you choose a model from the model selector that lacks an API key, Mastra Code now displays a dialog to enter the key. The key is stored persistently in auth.json and loaded into the environment on subsequent startups. Environment variables always take priority over stored keys. Press Escape to dismiss the prompt and keep the previous behavior. ([#13573](https://github.com/mastra-ai/mastra/pull/13573))
+
+### Patch Changes
+
+- Improved Mastra Code terminal queueing and slash-command behavior while the agent is busy. ([#14250](https://github.com/mastra-ai/mastra/pull/14250))
+  - Press `Enter` to send a message normally, or queue a follow-up while the current run is still streaming.
+  - Queued follow-up messages and slash commands now drain in the same FIFO order they were entered.
+  - Custom slash commands use `//command` so they stay distinct from built-in `/command` entries, including when names overlap.
+  - Slash-command autocomplete now defaults to the first visible matching entry instead of jumping to a later custom command match.
+  - `/help` and related shortcut text now reflect the updated behavior.
+
+- Fixed setup flow to detect API keys for all providers in the model registry, not just the five hardcoded ones (Anthropic, OpenAI, Cerebras, Google, DeepSeek). Users with API keys for other supported providers like Groq, Mistral, or any provider in the registry will no longer see a "No model providers configured" error. Changed the missing provider error to a warning that allows users to continue setup. ([#13573](https://github.com/mastra-ai/mastra/pull/13573))
+
+- Updated dependencies [[`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1)]:
+  - @mastra/core@1.13.3-alpha.0
+
 ## 0.8.3
 
 ### Patch Changes

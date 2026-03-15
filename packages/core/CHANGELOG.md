@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 1.13.3-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5))
+
+- Fixed processor state not persisting between processOutputStream and processOutputResult when processors are wrapped in workflows. State set during stream processing is now correctly accessible in processOutputResult. ([#14279](https://github.com/mastra-ai/mastra/pull/14279))
+
 ## 1.13.2
 
 ### Patch Changes

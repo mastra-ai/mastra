@@ -1,5 +1,18 @@
 # @mastra/playground-ui
 
+## 16.1.3-alpha.0
+
+### Patch Changes
+
+- Fixed crash during template installation by ensuring error values from stream events are converted to strings before being passed to the UI. This prevents the 'e?.includes is not a function' TypeError when the server returns non-string error payloads. ([#14267](https://github.com/mastra-ai/mastra/pull/14267))
+
+- Fixed crash when template installation errors are non-string values (e.g. objects). The error is now safely converted to a string before calling .includes(), preventing the 'e?.includes is not a function' TypeError in the studio. ([#14267](https://github.com/mastra-ai/mastra/pull/14267))
+
+- Updated dependencies [[`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1)]:
+  - @mastra/core@1.13.3-alpha.0
+  - @mastra/client-js@1.8.5-alpha.0
+  - @mastra/react@0.2.15-alpha.0
+
 ## 16.1.2
 
 ### Patch Changes
