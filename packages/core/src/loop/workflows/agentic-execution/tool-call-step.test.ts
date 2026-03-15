@@ -460,6 +460,423 @@ describe('createToolCallStep requestContext forwarding', () => {
   });
 });
 
+describe('createToolCallStep empty resumeData normalization', () => {
+  let controller: { enqueue: Mock };
+  let suspend: Mock;
+  let streamState: { serialize: Mock };
+  let messageList: MessageList;
+
+  const makeExecuteParams = (overrides: any = {}) => ({
+    runId: 'test-run-id',
+    workflowId: 'test-workflow-id',
+    mastra: {} as any,
+    requestContext: new RequestContext(),
+    state: {},
+    setState: vi.fn(),
+    retryCount: 1,
+    tracingContext: {} as any,
+    getInitData: vi.fn(),
+    getStepResult: vi.fn(),
+    suspend,
+    bail: vi.fn(),
+    abort: vi.fn(),
+    engine: 'default' as any,
+    abortSignal: new AbortController().signal,
+    writer: new ToolStream({
+      prefix: 'tool',
+      callId: 'test-call-id',
+      name: 'workflow-test',
+      runId: 'test-run-id',
+    }),
+    validateSchemas: false,
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    controller = { enqueue: vi.fn() };
+    suspend = vi.fn();
+    streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [] },
+        all: {
+          db: () => [],
+          aiV5: { model: () => [] },
+        },
+      },
+    } as unknown as MessageList;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('should not trigger runId lookup when workflowResumeData is an empty object', async () => {
+    // Bug: When workflowResumeData is {}, it's truthy, causing needsRunIdLookup to fire
+    // on fresh workflow tool calls. This injects a stale suspendedToolRunId from message
+    // history into args, making the workflow try to resume a non-existent run.
+    let capturedArgs: any;
+    const tools = {
+      'workflow-test': {
+        execute: vi.fn((args: any) => {
+          capturedArgs = args;
+          return Promise.resolve({ success: true });
+        }),
+      },
+    };
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+    } as any);
+
+    const inputData = {
+      toolCallId: 'call-1',
+      toolName: 'workflow-test',
+      args: { taskId: 'task-123' },
+    };
+
+    // workflowResumeData = {} simulates the scenario where the workflow step
+    // receives an empty resume data object (which is truthy but has no content)
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData: {} }));
+
+    expect(result.result).toEqual({ success: true });
+    // The key assertion: suspendedToolRunId should NOT be injected into args
+    expect(capturedArgs).not.toHaveProperty('suspendedToolRunId');
+  });
+
+  it('should execute tool normally when resumeData in args is an empty object', async () => {
+    // When LLM generates args with resumeData: {}, it should be treated as
+    // a fresh call, not a resume. The empty {} should be normalized to undefined.
+    let capturedOptions: MastraToolInvocationOptions | undefined;
+    const tools = {
+      'workflow-test': {
+        execute: vi.fn((_args: any, opts: MastraToolInvocationOptions) => {
+          capturedOptions = opts;
+          return Promise.resolve({ done: true });
+        }),
+      },
+    };
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+    } as any);
+
+    const inputData = {
+      toolCallId: 'call-2',
+      toolName: 'workflow-test',
+      // LLM generates args with empty resumeData and suspendedToolRunId
+      args: { taskId: 'task-456', resumeData: {} },
+    };
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData }));
+
+    expect(result.result).toEqual({ done: true });
+    // resumeData passed to tool options should be undefined (not {})
+    expect(capturedOptions!.resumeData).toBeUndefined();
+  });
+
+  it('should still pass non-empty resumeData through correctly', async () => {
+    // Ensure the fix doesn't break legitimate resume scenarios
+    let capturedOptions: MastraToolInvocationOptions | undefined;
+    const tools = {
+      'workflow-test': {
+        execute: vi.fn((_args: any, opts: MastraToolInvocationOptions) => {
+          capturedOptions = opts;
+          return Promise.resolve({ resumed: true });
+        }),
+      },
+    };
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+    } as any);
+
+    const inputData = {
+      toolCallId: 'call-3',
+      toolName: 'workflow-test',
+      args: { taskId: 'task-789', resumeData: { stepResult: 'completed' } },
+    };
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData }));
+
+    expect(result.result).toEqual({ resumed: true });
+    // Non-empty resumeData should be passed through
+    expect(capturedOptions!.resumeData).toEqual({ stepResult: 'completed' });
+  });
+
+  it('should not use LLM-hallucinated suspendedToolRunId with empty resumeData (Ruslan scenario)', async () => {
+    // This reproduces the exact bug from the Discord thread:
+    // The LLM hallucinates both suspendedToolRunId and resumeData: {} in tool args
+    // after seeing suspended tool metadata in conversation history.
+    //
+    // Ruslan's error output showed:
+    //   {"inputData": {"taskId": "cmm..."}, "suspendedToolRunId": "run_7y1us0b7xn", "resumeData": {}}
+    //
+    // The expected behavior: empty resumeData should be normalized to undefined,
+    // and the hallucinated suspendedToolRunId should NOT be passed downstream
+    // to cause the workflow to try resuming a stale/completed run.
+    let capturedArgs: any;
+    let capturedOptions: MastraToolInvocationOptions | undefined;
+    const tools = {
+      'workflow-fetch-task': {
+        execute: vi.fn((args: any, opts: MastraToolInvocationOptions) => {
+          capturedArgs = args;
+          capturedOptions = opts;
+          return Promise.resolve({ task: { id: 'task-123', status: 'pending' } });
+        }),
+      },
+    };
+
+    // Message history contains metadata from a previous suspension of this same tool
+    const suspendedMessages = [
+      {
+        role: 'assistant',
+        content: {
+          metadata: {
+            suspendedTools: {
+              'workflow-fetch-task': { runId: 'run_7y1us0b7xn', toolCallId: 'old-call-id' },
+            },
+          },
+          parts: [],
+        },
+      },
+    ];
+
+    const messageListWithHistory = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [] },
+        all: {
+          db: () => suspendedMessages,
+          aiV5: { model: () => [] },
+        },
+      },
+    } as unknown as MessageList;
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList: messageListWithHistory,
+      controller,
+      runId: 'test-run',
+      streamState,
+    } as any);
+
+    const inputData = {
+      toolCallId: 'call-new',
+      toolName: 'workflow-fetch-task',
+      // LLM hallucinates both fields after seeing suspended tool metadata
+      args: {
+        taskId: 'cmmmimw7i00otxvewo8qgqaea',
+        suspendedToolRunId: 'run_7y1us0b7xn',
+        resumeData: {},
+      },
+    };
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData }));
+
+    expect(result.result).toEqual({ task: { id: 'task-123', status: 'pending' } });
+    // Empty resumeData should be normalized to undefined in tool options
+    expect(capturedOptions!.resumeData).toBeUndefined();
+    // The hallucinated suspendedToolRunId should NOT be used for workflow execution.
+    // Even though the LLM put it in args, with empty resumeData it's a fresh call.
+    // The downstream workflow tool should use a new runId, not the stale one.
+    //
+    // NOTE: Currently, args.suspendedToolRunId passes through because
+    // isResumeToolCall=true (LLM provided resumeData:{}) which causes
+    // needsRunIdLookup=false (the lookup is skipped since args already has the ID).
+    // The fix needs to strip suspendedToolRunId from args when resumeData is empty.
+    expect(capturedArgs.suspendedToolRunId).toBeUndefined();
+  });
+
+  it('should not inject suspendedToolRunId when workflowResumeData is {} for workflow-prefixed tools', async () => {
+    // This specifically tests the needsRunIdLookup guard with a workflow-prefixed tool name
+    // When resumeData is {}, even with suspended tool metadata in message history,
+    // the runId should NOT be looked up or injected.
+    const suspendedMessages = [
+      {
+        role: 'assistant',
+        content: {
+          metadata: {
+            suspendedTools: {
+              'workflow-deploy': { runId: 'old-stale-run-id', toolCallId: 'old-call' },
+            },
+          },
+          parts: [],
+        },
+      },
+    ];
+
+    const messageListWithHistory = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [] },
+        all: {
+          db: () => suspendedMessages,
+          aiV5: { model: () => [] },
+        },
+      },
+    } as unknown as MessageList;
+
+    let capturedArgs: any;
+    const tools = {
+      'workflow-deploy': {
+        execute: vi.fn((args: any) => {
+          capturedArgs = args;
+          return Promise.resolve({ deployed: true });
+        }),
+      },
+    };
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList: messageListWithHistory,
+      controller,
+      runId: 'test-run',
+      streamState,
+    } as any);
+
+    const inputData = {
+      toolCallId: 'call-4',
+      toolName: 'workflow-deploy',
+      args: { taskId: 'task-abc' },
+    };
+
+    // Empty resumeData should NOT trigger runId lookup
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData: {} }));
+
+    expect(result.result).toEqual({ deployed: true });
+    // Even though message history has a suspended 'workflow-deploy' tool,
+    // suspendedToolRunId should NOT be injected because this is a fresh call
+    expect(capturedArgs).not.toHaveProperty('suspendedToolRunId');
+  });
+
+  it('should preserve suspendedToolRunId and resumeData when resume is legitimate', async () => {
+    // A legitimate resume: LLM provides non-empty resumeData AND a valid suspendedToolRunId.
+    // Both should pass through to the tool — the runId is used to resume the correct workflow run,
+    // and resumeData carries the user's response (e.g., { serverRegion: 'eu-west' }).
+    let capturedArgs: any;
+    let capturedOptions: MastraToolInvocationOptions | undefined;
+    const tools = {
+      'workflow-deploy': {
+        execute: vi.fn((args: any, opts: MastraToolInvocationOptions) => {
+          capturedArgs = args;
+          capturedOptions = opts;
+          return Promise.resolve({ deployed: true });
+        }),
+      },
+    };
+
+    const suspendedMessages = [
+      {
+        role: 'assistant',
+        content: {
+          metadata: {
+            suspendedTools: {
+              'workflow-deploy': { runId: 'run_valid_123', toolCallId: 'old-call' },
+            },
+          },
+          parts: [],
+        },
+      },
+    ];
+
+    const messageListWithHistory = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [] },
+        all: {
+          db: () => suspendedMessages,
+          aiV5: { model: () => [] },
+        },
+      },
+    } as unknown as MessageList;
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList: messageListWithHistory,
+      controller,
+      runId: 'test-run',
+      streamState,
+    } as any);
+
+    const inputData = {
+      toolCallId: 'call-resume',
+      toolName: 'workflow-deploy',
+      // LLM correctly provides both fields for a legitimate resume
+      args: {
+        taskId: 'task-xyz',
+        suspendedToolRunId: 'run_valid_123',
+        resumeData: { serverRegion: 'eu-west' },
+      },
+    };
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData }));
+
+    expect(result.result).toEqual({ deployed: true });
+    // Non-empty resumeData should be passed through to tool options
+    expect(capturedOptions!.resumeData).toEqual({ serverRegion: 'eu-west' });
+    // The valid suspendedToolRunId should be preserved in args (needed by workflow tool execute)
+    expect(capturedArgs.suspendedToolRunId).toBe('run_valid_123');
+  });
+
+  it('should strip suspendedToolRunId when LLM hallucinates only suspendedToolRunId without resumeData', async () => {
+    // Edge case: LLM hallucinates a stale suspendedToolRunId but does NOT include resumeData.
+    // Without a guard, the stale ID passes through and can be used downstream as a workflow run ID
+    // on what should be a fresh call.
+    let capturedArgs: any;
+    let capturedOptions: MastraToolInvocationOptions | undefined;
+    const tools = {
+      'workflow-deploy': {
+        execute: vi.fn((args: any, opts: MastraToolInvocationOptions) => {
+          capturedArgs = args;
+          capturedOptions = opts;
+          return Promise.resolve({ deployed: true });
+        }),
+      },
+    };
+
+    const toolCallStep = createToolCallStep({
+      tools: tools as any,
+      controller: { enqueue: controller.enqueue } as any,
+      messageList,
+      suspend,
+      streamState: streamState as any,
+    });
+
+    const inputData = {
+      toolCallId: 'call-1',
+      toolName: 'workflow-deploy',
+      // LLM hallucinated only suspendedToolRunId, no resumeData
+      args: {
+        taskId: 'task-fresh',
+        suspendedToolRunId: 'run_stale_from_history',
+      },
+    };
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData }));
+
+    expect(result.result).toEqual({ deployed: true });
+    // resumeData should be undefined (none was provided)
+    expect(capturedOptions!.resumeData).toBeUndefined();
+    // Stale suspendedToolRunId should be stripped since this is a fresh call (no resumeData)
+    expect(capturedArgs).not.toHaveProperty('suspendedToolRunId');
+  });
+});
+
 describe('createToolCallStep malformed JSON args (issue #9815)', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;
