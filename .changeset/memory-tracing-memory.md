@@ -7,14 +7,19 @@ Added tracing support to Memory operations (recall, save, delete, update working
 **Example usage:**
 
 ```typescript
-// tracingContext flows automatically from agent runs
-const agent = new Agent({
-  memory: new Memory({ storage }),
-});
+import { Memory } from '@mastra/memory';
+import { InMemoryStore } from '@mastra/core/storage';
 
-// Or pass explicitly when calling memory directly
+const memory = new Memory({ storage: new InMemoryStore() });
+
+// Pass tracingContext to create observable spans
 await memory.recall({
   threadId: 'thread-1',
+  tracingContext: { currentSpan: parentSpan },
+});
+
+await memory.saveMessages({
+  messages: [userMessage, assistantMessage],
   tracingContext: { currentSpan: parentSpan },
 });
 ```
