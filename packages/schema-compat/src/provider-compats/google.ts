@@ -5,6 +5,7 @@ import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import type { Schema } from '../json-schema';
 import {
+  isAllOfSchema,
   isArraySchema,
   isNumberSchema,
   isObjectSchema,
@@ -14,7 +15,7 @@ import {
 } from '../json-schema/utils';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ModelInformation } from '../types';
-import { isOptional, isNullable, isNull, isObj, isArr, isUnion, isString, isNumber } from '../zodTypes';
+import { isOptional, isNullable, isNull, isObj, isArr, isUnion, isString, isNumber, isIntersection } from '../zodTypes';
 
 /**
  * Recursively converts union type arrays (e.g., `type: ["string", "null"]`) to
@@ -141,6 +142,8 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
       // Google models support these properties but the model doesn't respect them, but it respects them when they're
       // added to the tool description
       return this.defaultZodNumberHandler(value);
+    } else if (isIntersection(z)(value)) {
+      return this.defaultZodIntersectionHandler(value);
     }
     return this.defaultUnsupportedZodTypeHandler(value as ZodObjectV4<any> | ZodObjectV3<any>);
   }
@@ -159,6 +162,10 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
   }
 
   preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
+    if (isAllOfSchema(schema)) {
+      this.defaultAllOfHandler(schema);
+    }
+
     if (isObjectSchema(schema)) {
       this.defaultObjectHandler(schema);
     } else if (isArraySchema(schema)) {
