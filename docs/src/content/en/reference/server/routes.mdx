@@ -138,6 +138,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 | `GET` | `/api/memory/threads` | List threads |
 | `GET` | `/api/memory/threads/:threadId` | Get thread |
 | `POST` | `/api/memory/threads` | Create thread |
+| `PATCH` | `/api/memory/threads/:threadId` | Update thread |
 | `DELETE` | `/api/memory/threads/:threadId` | Delete thread |
 | `POST` | `/api/memory/threads/:threadId/clone` | Clone thread |
 | `GET` | `/api/memory/threads/:threadId/messages` | Get thread messages |
@@ -152,6 +153,18 @@ Server adapters register these routes when you call `server.init()`. All routes 
   metadata?: Record<string, unknown>;
 }
 ```
+
+### Update thread request body
+
+```typescript prettier:false
+{
+  title?: string;
+  metadata?: Record<string, unknown>;
+  resourceId?: string;             // Transfer ownership (trusted server context only)
+}
+```
+
+When `MASTRA_RESOURCE_ID_KEY` is set by middleware, the `resourceId` field is locked to the middleware value and cannot be changed. In a trusted server context (no middleware), passing a new `resourceId` transfers thread ownership.
 
 ### Clone thread request body
 

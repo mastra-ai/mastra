@@ -153,9 +153,12 @@ With this middleware, the server automatically:
 - **Filters thread listing** to only return threads owned by the user
 - **Validates thread access** and returns 403 if accessing another user's thread
 - **Forces thread creation** to use the authenticated user's ID
+- **Prevents thread ownership transfer** by locking the `resourceId` to the middleware-set value
 - **Validates message operations** including deletion, ensuring messages belong to owned threads
 
 Even if a client passes `?resourceId=other-user-id`, the middleware-set value takes precedence. Attempts to access threads or messages owned by other users will return a 403 error.
+
+When `MASTRA_RESOURCE_ID_KEY` is **not** set (trusted server context), thread ownership can be transferred by passing a new `resourceId` when updating a thread. This is useful for server-side operations like moving a thread from one user to another after your own authorization checks.
 
 #### Using `MASTRA_THREAD_ID_KEY`
 
