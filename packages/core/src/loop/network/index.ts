@@ -10,7 +10,7 @@ import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraLLMVNext } from '../../llm/model/model.loop';
 import { noopLogger } from '../../logger';
-import type { ObservabilityContext } from '../../observability';
+import type { ObservabilityContext, TracingContext } from '../../observability';
 import { createObservabilityContext, resolveObservabilityContext } from '../../observability';
 import { ProcessorRunner } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
@@ -307,6 +307,7 @@ export async function prepareMemoryStep({
               resourceId: thread?.resourceId,
             },
           ] as MastraDBMessage[],
+          tracingContext: observabilityContext.tracingContext,
         }),
       );
     }
@@ -322,6 +323,7 @@ export async function prepareMemoryStep({
       promises.push(
         memory.saveMessages({
           messages: messagesToSave,
+          tracingContext: observabilityContext.tracingContext,
         }),
       );
     }
@@ -350,6 +352,7 @@ export async function prepareMemoryStep({
       const existingMessages = await memory.recall({
         threadId: thread.id,
         resourceId: thread.resourceId,
+        tracingContext: observabilityContext.tracingContext,
       });
       const existingUserMessages = existingMessages.messages.filter(m => m.role === 'user');
       const isFirstUserMessage = existingUserMessages.length === 0;
@@ -393,7 +396,12 @@ export async function prepareMemoryStep({
  */
 async function saveMessagesWithProcessors(
   memory:
-    | { saveMessages: (params: { messages: MastraDBMessage[] }) => Promise<{ messages: MastraDBMessage[] }> }
+    | {
+        saveMessages: (params: {
+          messages: MastraDBMessage[];
+          tracingContext?: TracingContext;
+        }) => Promise<{ messages: MastraDBMessage[] }>;
+      }
     | undefined,
   messages: MastraDBMessage[],
   processorRunner: ProcessorRunner | null,
@@ -403,8 +411,11 @@ async function saveMessagesWithProcessors(
 ): Promise<void> {
   if (!memory) return;
 
+  const { requestContext, ...observabilityContext } = context ?? {};
+  const resolved = resolveObservabilityContext(observabilityContext);
+
   if (!processorRunner || messages.length === 0) {
-    await memory.saveMessages({ messages });
+    await memory.saveMessages({ messages, tracingContext: resolved.tracingContext });
     return;
   }
 
@@ -414,17 +425,11 @@ async function saveMessagesWithProcessors(
     messageList.add(msg, 'response');
   }
 
-  // Run output processors on the messages
-  const { requestContext, ...observabilityContext } = context ?? {};
-  await processorRunner.runOutputProcessors(
-    messageList,
-    resolveObservabilityContext(observabilityContext),
-    requestContext,
-  );
+  await processorRunner.runOutputProcessors(messageList, resolved, requestContext);
 
   // Get the processed messages and save them
   const processedMessages = messageList.get.response.db();
-  await memory.saveMessages({ messages: processedMessages });
+  await memory.saveMessages({ messages: processedMessages, tracingContext: resolved.tracingContext });
 }
 
 async function saveFinalResultIfProvided({

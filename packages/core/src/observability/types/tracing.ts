@@ -68,6 +68,8 @@ export enum SpanType {
   WORKFLOW_SLEEP = 'workflow_sleep',
   /** Workflow wait for event operation */
   WORKFLOW_WAIT_EVENT = 'workflow_wait_event',
+  /** Memory operation (recall, save, delete, update working memory) */
+  MEMORY_OPERATION = 'memory_operation',
 }
 
 export { EntityType };
@@ -389,6 +391,20 @@ export interface WorkflowWaitEventAttributes extends AIBaseAttributes {
 }
 
 /**
+ * Memory operation attributes
+ */
+export interface MemoryOperationAttributes extends AIBaseAttributes {
+  operationType?: 'recall' | 'save' | 'delete' | 'update_working';
+  messageCount?: number;
+  embeddingTokens?: number;
+  semanticRecallEnabled?: boolean;
+  vectorResultCount?: number;
+  workingMemoryEnabled?: boolean;
+  lastMessages?: number | false;
+  success?: boolean;
+}
+
+/**
  * AI-specific span types mapped to their attributes
  */
 export interface SpanTypeMap {
@@ -410,6 +426,7 @@ export interface SpanTypeMap {
   [SpanType.WORKFLOW_SLEEP]: WorkflowSleepAttributes;
   [SpanType.WORKFLOW_WAIT_EVENT]: WorkflowWaitEventAttributes;
   [SpanType.GENERIC]: AIBaseAttributes;
+  [SpanType.MEMORY_OPERATION]: MemoryOperationAttributes;
 }
 
 /**
