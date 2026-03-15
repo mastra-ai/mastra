@@ -403,67 +403,42 @@ describe('Observability Methods', () => {
     });
   });
 
-  describe('listScoresBySpan()', () => {
-    it('should fetch scores by trace ID and span ID without pagination', async () => {
+  describe('listScores()', () => {
+    it('should fetch scores without filters', async () => {
       mockSuccessfulResponse();
 
-      await client.listScoresBySpan({
-        traceId: 'trace-123',
-        spanId: 'span-456',
-      });
+      await client.listScores();
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces/trace-123/span-456/scores`,
+        `${clientOptions.baseUrl}/api/observability/scores`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
       );
     });
 
-    it('should fetch scores by trace ID and span ID with pagination', async () => {
+    it('should fetch scores with filters and pagination', async () => {
       mockSuccessfulResponse();
 
-      await client.listScoresBySpan({
-        traceId: 'trace-123',
-        spanId: 'span-456',
-        page: 2,
-        perPage: 10,
+      await client.listScores({
+        filters: { traceId: 'trace-123', spanId: 'span-456' },
+        pagination: { page: 2, perPage: 10 },
       });
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces/trace-123/span-456/scores?page=2&perPage=10`,
-        expect.objectContaining({
-          headers: expect.objectContaining(clientOptions.headers),
-        }),
-      );
-    });
-
-    it('should properly encode trace ID and span ID in URL', async () => {
-      mockSuccessfulResponse();
-
-      await client.listScoresBySpan({
-        traceId: 'trace with spaces',
-        spanId: 'span/with/slashes',
-      });
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/traces/trace%20with%20spaces/span%2Fwith%2Fslashes/scores`,
-        expect.objectContaining({
-          headers: expect.objectContaining(clientOptions.headers),
-        }),
-      );
+      const fetchCall = (global.fetch as any).mock.calls[0];
+      const url = fetchCall[0] as string;
+      expect(url).toContain('/api/observability/scores?');
+      expect(url).toContain('traceId=trace-123');
+      expect(url).toContain('spanId=span-456');
+      expect(url).toContain('page=2');
+      expect(url).toContain('perPage=10');
     });
 
     it('should handle HTTP errors gracefully', async () => {
       const errorResponse = new Response('Not Found', { status: 404, statusText: 'Not Found' });
       (global.fetch as any).mockResolvedValueOnce(errorResponse);
 
-      await expect(
-        client.listScoresBySpan({
-          traceId: 'invalid-trace',
-          spanId: 'invalid-span',
-        }),
-      ).rejects.toThrow();
+      await expect(client.listScores()).rejects.toThrow();
     });
   });
 
@@ -472,7 +447,7 @@ describe('Observability Methods', () => {
       mockSuccessfulResponse();
 
       await client.score({
-        scorerName: 'test-scorer',
+        scorerId: 'test-scorer',
         targets: [{ traceId: 'trace-123' }],
       });
 
@@ -485,7 +460,7 @@ describe('Observability Methods', () => {
             'content-type': 'application/json',
           }),
           body: JSON.stringify({
-            scorerName: 'test-scorer',
+            scorerId: 'test-scorer',
             targets: [{ traceId: 'trace-123' }],
           }),
         }),
@@ -496,7 +471,7 @@ describe('Observability Methods', () => {
       mockSuccessfulResponse();
 
       await client.score({
-        scorerName: 'test-scorer',
+        scorerId: 'test-scorer',
         targets: [{ traceId: 'trace-123' }, { traceId: 'trace-456', spanId: 'span-789' }],
       });
 
@@ -509,7 +484,7 @@ describe('Observability Methods', () => {
             'content-type': 'application/json',
           }),
           body: JSON.stringify({
-            scorerName: 'test-scorer',
+            scorerId: 'test-scorer',
             targets: [{ traceId: 'trace-123' }, { traceId: 'trace-456', spanId: 'span-789' }],
           }),
         }),
@@ -522,7 +497,7 @@ describe('Observability Methods', () => {
 
       await expect(
         client.score({
-          scorerName: 'invalid-scorer',
+          scorerId: 'invalid-scorer',
           targets: [{ traceId: 'trace-123' }],
         }),
       ).rejects.toThrow();

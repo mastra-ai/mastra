@@ -11,7 +11,7 @@ import {
 import { TraceSpanUsage, type TokenUsage } from './trace-span-usage';
 import { SpanDetails } from './span-details';
 import { CircleGaugeIcon } from 'lucide-react';
-import type { ListScoresResponse } from '@mastra/core/evals';
+import type { ListScoresResponse } from '@mastra/core/storage';
 import type { GetScorerResponse } from '@mastra/client-js';
 import { SpanRecord } from '@mastra/core/storage';
 import { EntityType } from '@mastra/core/observability';

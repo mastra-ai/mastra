@@ -3,7 +3,7 @@ import { type KeyValueListItemData } from '@/ds/components/KeyValueList';
 import { TextAndIcon, getShortId } from '@/ds/components/Text';
 import { PanelTopIcon, ChevronsLeftRightEllipsisIcon, HashIcon, EyeIcon } from 'lucide-react';
 import { SpanRecord } from '@mastra/core/storage';
-import type { ListScoresResponse } from '@mastra/core/evals';
+import type { ListScoresResponse } from '@mastra/core/storage';
 import type { GetScorerResponse } from '@mastra/client-js';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { SpanTabs } from './span-tabs';

@@ -167,7 +167,7 @@ export function TraceDialog({
         `${computeTraceLink(
           traceId,
           hierarchicalSpans?.[0]?.id,
-        )}&tab=scores&scoreId=${spanScoresData?.scores?.[0]?.id}`,
+        )}&tab=scores&scoreId=${spanScoresData?.scores?.[0] ? `${spanScoresData.scores[0].scorerId}-${spanScoresData.scores[0].timestamp.getTime()}` : ''}`,
       );
     }
   };
