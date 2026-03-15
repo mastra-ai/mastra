@@ -511,6 +511,6 @@ describe('generateEmptyFromSchema', () => {
         data: { type: 'object' },
       },
     };
-    expect(generateEmptyFromSchema(schema)).toEqual({ data: null });
+    expect(generateEmptyFromSchema(schema)).toEqual({ data: {} });
   });
 });

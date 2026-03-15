@@ -99,6 +99,11 @@ export function deepEqual(a: unknown, b: unknown): boolean {
   return false;
 }
 
+/**
+ * Generate an empty object from a JSON Schema definition.
+ * Accepts both a JSON string and a pre-parsed object.
+ * Recursively initializes nested object properties and respects default values.
+ */
 export function generateEmptyFromSchema(schema: string | Record<string, any>): Record<string, any> {
   try {
     const parsedSchema = typeof schema === 'string' ? JSON.parse(schema) : schema;
@@ -109,6 +114,8 @@ export function generateEmptyFromSchema(schema: string | Record<string, any>): R
         obj[key] = prop.default;
       } else if (prop.type === 'object' && prop.properties) {
         obj[key] = generateEmptyFromSchema(prop);
+      } else if (prop.type === 'object') {
+        obj[key] = {};
       } else if (prop.type === 'string') {
         obj[key] = '';
       } else if (prop.type === 'array') {
