@@ -22,7 +22,7 @@ packages:
   - e2e-tests/workspace-compat
 
 catalog:
-  "@microsoft/api-extractor": "^7.56.3"
+  "@microsoft/api-extractor": "^7.57.7"
   "@vitest/coverage-v8": 4.0.18
   "@vitest/ui": 4.0.18
   typescript: ^5.9.3
