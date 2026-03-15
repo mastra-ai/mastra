@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@types/node": "22.19.13",
-    "typescript": "^5.9.3"
+    "typescript": "catalog:"
   },
   "pnpm": {
     "overrides": {

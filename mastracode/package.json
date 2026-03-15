@@ -65,6 +65,7 @@
     "@mastra/libsql": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
+    "@mastra/pg": "workspace:*",
     "@tavily/core": "latest",
     "ai": "latest",
     "chalk": "latest",
@@ -72,14 +73,13 @@
     "execa": "^9.6.1",
     "fastest-levenshtein": "latest",
     "js-tiktoken": "^1.0.21",
-    "js-yaml": "latest",
+    "js-yaml": "^4.1.0",
     "partial-json": "^0.1.7",
-    "strip-ansi": "^7.1.2",
+    "strip-ansi": "^7.2.0",
     "tree-kill": "latest",
     "vscode-jsonrpc": "latest",
     "vscode-languageserver-protocol": "latest",
-    "@mastra/pg": "workspace:*",
-    "zod": "^4.0.0"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

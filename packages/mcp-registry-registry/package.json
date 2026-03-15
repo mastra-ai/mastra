@@ -31,12 +31,12 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.17.5",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "uuid": "^13.0.0",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.19.9",
+    "@hono/node-server": "^1.19.11",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
@@ -47,7 +47,7 @@
     "@wong2/mcp-cli": "^1.13.0",
     "cross-env": "^10.1.0",
     "eslint": "^9.39.4",
-    "hono": "^4.11.9",
+    "hono": "^4.12.7",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "catalog:",

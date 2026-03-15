@@ -33,10 +33,10 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@google/genai": "latest",
-    "google-auth-library": "^10.5.0",
+    "google-auth-library": "^10.6.1",
     "ws": "^8.19.0",
     "zod": "catalog:",
-    "zod-to-json-schema": "^3.24.6"
+    "zod-to-json-schema": "^3.25.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

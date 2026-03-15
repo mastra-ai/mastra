@@ -56,12 +56,7 @@ async function setupTestServer(withSessionManagement: boolean) {
 
   mcpServer.prompt('greet', 'A simple greeting prompt', () => {
     return {
-      prompt: {
-        name: 'greet',
-        version: 'v1',
-        description: 'A simple greeting prompt',
-        mimeType: 'application/json',
-      },
+      description: 'A simple greeting prompt',
       messages: [
         {
           role: 'assistant',
@@ -157,17 +152,11 @@ describe('MastraMCPClient with Streamable HTTP', () => {
 
     it('should get a specific prompt', async () => {
       const result = await client.getPrompt({ name: 'greet' });
-      const { prompt, messages } = result;
-      expect(prompt).toBeDefined();
-      expect(prompt).toMatchObject({
-        name: 'greet',
-        version: 'v1',
-        description: expect.any(String),
-        mimeType: 'application/json',
-      });
+      const { description, messages } = result;
+      expect(description).toBe('A simple greeting prompt');
       expect(messages).toBeDefined();
       const messageItem = messages[0];
-      expect(messageItem.content.text).toBe('Hello, World!');
+      expect(messageItem.content.type === 'text' && messageItem.content.text).toBe('Hello, World!');
     });
   });
 
