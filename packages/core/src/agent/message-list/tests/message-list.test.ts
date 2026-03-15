@@ -955,13 +955,17 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
+      // With the fix for issue #14124, tool calls from different turns should NOT be merged.
+      // msg1 (tool-a call) + msg2 (tool-a result) merge into one message.
+      // msg3 (tool-b call) has a new toolCallId, so it becomes a separate message.
+      // msg4 (tool-b result) merges into msg3 (updating call→result).
+      // msg5 (text only) merges into the latest assistant message (msg3/msg4).
       expect(list.get.all.db()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
           content: {
-            content: 'Final response.',
             format: 2,
             parts: [
               { type: 'text', text: 'Step 1: Call tool A' },
@@ -975,7 +979,28 @@ describe('MessageList', () => {
                   result: 'Result A',
                 },
               },
-              { type: 'step-start' },
+            ],
+            toolInvocations: [
+              {
+                state: 'result',
+                toolName: 'tool-a',
+                toolCallId: 'call-a-1',
+                args: {},
+                result: 'Result A',
+              },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MastraDBMessage,
+        {
+          id: expect.any(String),
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          content: {
+            content: 'Final response.',
+            format: 2,
+            parts: [
               { type: 'text', text: 'Step 2: Call tool B' },
               {
                 type: 'tool-invocation',
@@ -991,13 +1016,6 @@ describe('MessageList', () => {
               { type: 'text', text: 'Final response.' },
             ],
             toolInvocations: [
-              {
-                state: 'result',
-                toolName: 'tool-a',
-                toolCallId: 'call-a-1',
-                args: {},
-                result: 'Result A',
-              },
               {
                 state: 'result',
                 toolName: 'tool-b',
@@ -4070,6 +4088,233 @@ describe('MessageList', () => {
       const uiMessages = list.get.all.ui();
       expect(uiMessages).toHaveLength(1);
       expect(uiMessages[0].content).toBe('Content with empty parts');
+    });
+  });
+
+  describe('Consecutive tool-only turns (issue #14124)', () => {
+    it('should NOT merge tool calls from different steps into one message', () => {
+      const list = new MessageList({ threadId: 'test-thread' });
+
+      // User message
+      list.add(
+        {
+          id: 'user-msg-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Call tool A then tool B' }] },
+          createdAt: new Date('2024-01-01T00:00:00Z'),
+          threadId: 'test-thread',
+        } as MastraDBMessage,
+        'input',
+      );
+
+      // Step 1: LLM produces tool call A (state: "call")
+      list.add(
+        {
+          id: 'assistant-msg-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'call', toolCallId: 'call-A', toolName: 'toolA', args: { x: 1 } },
+              },
+            ],
+          },
+          createdAt: new Date('2024-01-01T00:00:01Z'),
+          threadId: 'test-thread',
+        } as MastraDBMessage,
+        'response',
+      );
+
+      // Tool A result comes back (state: "result") — should merge to update call→result
+      list.add(
+        {
+          id: 'assistant-msg-1-result',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call-A',
+                  toolName: 'toolA',
+                  args: { x: 1 },
+                  result: 'result-A',
+                },
+              },
+            ],
+          },
+          createdAt: new Date('2024-01-01T00:00:02Z'),
+          threadId: 'test-thread',
+        } as MastraDBMessage,
+        'response',
+      );
+
+      // Step 2: LLM produces tool call B (state: "call") — should NOT merge
+      list.add(
+        {
+          id: 'assistant-msg-2',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'call', toolCallId: 'call-B', toolName: 'toolB', args: { y: 2 } },
+              },
+            ],
+          },
+          createdAt: new Date('2024-01-01T00:00:03Z'),
+          threadId: 'test-thread',
+        } as MastraDBMessage,
+        'response',
+      );
+
+      const dbMessages = list.get.all.db();
+      const assistantMessages = dbMessages.filter(m => m.role === 'assistant');
+
+      // There should be 2 separate assistant messages, not 1 merged one
+      expect(assistantMessages).toHaveLength(2);
+
+      // First message: Tool A (updated to result)
+      const firstMsg = assistantMessages[0];
+      expect(firstMsg.content.parts).toHaveLength(1);
+      expect(firstMsg.content.parts[0].type).toBe('tool-invocation');
+      if (firstMsg.content.parts[0].type === 'tool-invocation') {
+        expect(firstMsg.content.parts[0].toolInvocation.toolCallId).toBe('call-A');
+        expect(firstMsg.content.parts[0].toolInvocation.state).toBe('result');
+      }
+
+      // Second message: Tool B (still a call)
+      const secondMsg = assistantMessages[1];
+      expect(secondMsg.content.parts).toHaveLength(1);
+      expect(secondMsg.content.parts[0].type).toBe('tool-invocation');
+      if (secondMsg.content.parts[0].type === 'tool-invocation') {
+        expect(secondMsg.content.parts[0].toolInvocation.toolCallId).toBe('call-B');
+        expect(secondMsg.content.parts[0].toolInvocation.state).toBe('call');
+      }
+    });
+
+    it('should still merge tool result updates into the same message', () => {
+      const list = new MessageList({ threadId: 'test-thread' });
+
+      // Assistant message with tool call
+      list.add(
+        {
+          id: 'assistant-msg-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'call', toolCallId: 'call-X', toolName: 'toolX', args: {} },
+              },
+            ],
+          },
+          createdAt: new Date('2024-01-01T00:00:01Z'),
+          threadId: 'test-thread',
+        } as MastraDBMessage,
+        'response',
+      );
+
+      // Tool result for the same call — should merge
+      list.add(
+        {
+          id: 'assistant-msg-1-result',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call-X',
+                  toolName: 'toolX',
+                  args: {},
+                  result: 'done',
+                },
+              },
+            ],
+          },
+          createdAt: new Date('2024-01-01T00:00:02Z'),
+          threadId: 'test-thread',
+        } as MastraDBMessage,
+        'response',
+      );
+
+      const dbMessages = list.get.all.db();
+      const assistantMessages = dbMessages.filter(m => m.role === 'assistant');
+
+      // Should remain as 1 message — result merged into existing call
+      expect(assistantMessages).toHaveLength(1);
+      expect(assistantMessages[0].content.parts).toHaveLength(1);
+      const part = assistantMessages[0].content.parts[0];
+      expect(part.type).toBe('tool-invocation');
+      if (part.type === 'tool-invocation') {
+        expect(part.toolInvocation.state).toBe('result');
+        expect(part.toolInvocation.toolCallId).toBe('call-X');
+        expect((part.toolInvocation as any).result).toBe('done');
+      }
+    });
+
+    it('should still merge text content into an assistant message with tool calls', () => {
+      const list = new MessageList({ threadId: 'test-thread' });
+
+      // Assistant message with tool call (result already)
+      list.add(
+        {
+          id: 'assistant-msg-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call-X',
+                  toolName: 'toolX',
+                  args: {},
+                  result: 'done',
+                },
+              },
+            ],
+          },
+          createdAt: new Date('2024-01-01T00:00:01Z'),
+          threadId: 'test-thread',
+        } as MastraDBMessage,
+        'response',
+      );
+
+      // Text response from the LLM after seeing the tool result — should merge
+      list.add(
+        {
+          id: 'assistant-msg-1-text',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Here is what I found' }],
+          },
+          createdAt: new Date('2024-01-01T00:00:02Z'),
+          threadId: 'test-thread',
+        } as MastraDBMessage,
+        'response',
+      );
+
+      const dbMessages = list.get.all.db();
+      const assistantMessages = dbMessages.filter(m => m.role === 'assistant');
+
+      // Should remain as 1 message — text merged into existing message
+      expect(assistantMessages).toHaveLength(1);
+      // Should have 3 parts: tool-invocation, step-start, text
+      const parts = assistantMessages[0].content.parts;
+      expect(parts.some(p => p.type === 'tool-invocation')).toBe(true);
+      expect(parts.some(p => p.type === 'text')).toBe(true);
     });
   });
 });
