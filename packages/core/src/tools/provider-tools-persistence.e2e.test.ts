@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import { anthropic } from '@ai-sdk/anthropic-v5';
 import { createGatewayMock } from '@internal/test-utils';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -94,25 +93,36 @@ describe('provider-executed tool message persistence', () => {
         },
       );
 
-      const chunkTypes = ['text-delta', 'tool-call', 'tool-result'];
-      let chunks = [];
+      const toolCallChunks: any[] = [];
+      const toolResultChunks: any[] = [];
       for await (const chunk of result.fullStream) {
-        if (chunkTypes.includes(chunk.type)) {
-          chunks.push(chunk);
-          console.log(`chunk ${chunk.type}:`, JSON.stringify(chunk, null, 2));
-        }
+        if (chunk.type === 'tool-call') toolCallChunks.push(chunk);
+        if (chunk.type === 'tool-result') toolResultChunks.push(chunk);
       }
 
-      fs.writeFileSync('./full-stream.json', JSON.stringify(chunks, null, 2));
-
       await result.consumeStream();
-
-      // const fullOutput = await result.getFullOutput();
-      // console.log('toolCalls', JSON.stringify(fullOutput.toolCalls, null, 2));
 
       const text = await result.text;
       expect(text).toBeDefined();
       expect(text.length).toBeGreaterThan(0);
+
+      // ── Stream chunk assertions ──
+
+      // Should have tool-call chunks for both tools
+      expect(toolCallChunks).toHaveLength(2);
+      expect(toolCallChunks.map((c: any) => c.payload.toolName).sort()).toEqual(['lookup', 'web_search']);
+
+      // Every tool-result chunk must have a defined result (no empty/deferred stubs)
+      for (const chunk of toolResultChunks) {
+        expect(chunk.payload.result).toBeDefined();
+        expect(chunk.payload.result).not.toBeNull();
+      }
+
+      // No duplicate tool-result chunks for the same toolCallId
+      const resultCallIds = toolResultChunks.map((c: any) => c.payload.toolCallId);
+      expect(resultCallIds.length).toBe(new Set(resultCallIds).size);
+
+      // ── Persistence assertions ──
 
       // Verify persistence in storage
       const { messages } = await mockMemory.recall({ threadId, resourceId });
