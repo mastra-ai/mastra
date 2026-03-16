@@ -28,7 +28,7 @@ import type { SubagentExecutionComponent } from './components/subagent-execution
 import type { TaskProgressComponent } from './components/task-progress.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import type { UserMessageComponent } from './components/user-message.js';
-import { getEditorTheme, TERM_WIDTH_BUFFER } from './theme.js';
+import { getEditorTheme } from './theme.js';
 // =============================================================================
 // MastraTUIOptions
 // =============================================================================
@@ -181,10 +181,6 @@ export interface TUIState {
  */
 export function createTUIState(options: MastraTUIOptions): TUIState {
   const terminal = new ProcessTerminal();
-  // Override columns getter to prevent line wrapping in nested terminal emulators
-  Object.defineProperty(terminal, 'columns', {
-    get: () => (process.stdout.columns || 80) - TERM_WIDTH_BUFFER,
-  });
   const ui = new TUI(terminal);
 
   // Perf profiling removed
