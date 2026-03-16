@@ -1,5 +1,35 @@
 # @mastra/elasticsearch
 
+## 1.2.0-alpha.0
+
+### Minor Changes
+
+- Added support for constructing `ElasticSearchVector` with a pre-configured Elasticsearch client. You can now pass either a `client` instance or connection parameters (`url` and optional `auth`), giving you full control over client configuration when needed. ([#12802](https://github.com/mastra-ai/mastra/pull/12802))
+
+  **Using connection parameters:**
+
+  ```typescript
+  const vectorDB = new ElasticSearchVector({
+    id: 'my-store',
+    url: 'http://localhost:9200',
+    auth: { apiKey: 'my-key' },
+  });
+  ```
+
+  **Using a pre-configured client:**
+
+  ```typescript
+  import { Client } from '@elastic/elasticsearch';
+
+  const client = new Client({ node: 'http://localhost:9200' });
+  const vectorDB = new ElasticSearchVector({ id: 'my-store', client });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`085e371`](https://github.com/mastra-ai/mastra/commit/085e3718a7d0fe9a210fe7dd1c867b9bdfe8d16b), [`ce26fe2`](https://github.com/mastra-ai/mastra/commit/ce26fe2166dd90254f8bee5776e55977143e97de), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1)]:
+  - @mastra/core@1.13.3-alpha.0
+
 ## 1.1.2
 
 ### Patch Changes
