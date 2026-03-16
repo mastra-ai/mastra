@@ -392,7 +392,7 @@ export async function createHonoServer(
       // Inject the server configuration into index.html placeholders
       const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
       const hideCloudCta = process.env.MASTRA_HIDE_CLOUD_CTA === 'true';
-      const host = serverOptions?.host ?? 'localhost';
+      const host = serverOptions?.host ?? process.env.MASTRA_HOST ?? 'localhost';
       const key =
         serverOptions?.https?.key ??
         (process.env.MASTRA_HTTPS_KEY ? Buffer.from(process.env.MASTRA_HTTPS_KEY, 'base64') : undefined);
@@ -474,7 +474,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     (process.env.MASTRA_HTTPS_CERT ? Buffer.from(process.env.MASTRA_HTTPS_CERT, 'base64') : undefined);
   const isHttpsEnabled = Boolean(key && cert);
 
-  const host = serverOptions?.host ?? 'localhost';
+  const host = serverOptions?.host ?? process.env.MASTRA_HOST ?? 'localhost';
   const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
   const protocol = isHttpsEnabled ? 'https' : 'http';
 
@@ -482,7 +482,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     {
       fetch: app.fetch,
       port,
-      hostname: serverOptions?.host,
+      hostname: host,
       ...(isHttpsEnabled
         ? {
             createServer: https.createServer,

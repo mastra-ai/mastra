@@ -29,7 +29,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@qdrant/js-client-rest": "^1.15.1"
+    "@qdrant/js-client-rest": "^1.17.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

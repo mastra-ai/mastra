@@ -587,7 +587,6 @@ To fix this you have three different options:
        * @param params.serverName - Name of the server to retrieve from
        * @param params.name - Name of the prompt to retrieve
        * @param params.args - Optional arguments to populate the prompt template
-       * @param params.version - Optional specific version of the prompt
        * @returns Promise resolving to the prompt result with messages
        * @throws {MastraError} If fetching the prompt fails
        *
@@ -597,25 +596,14 @@ To fix this you have three different options:
        *   serverName: 'weatherServer',
        *   name: 'forecast',
        *   args: { city: 'London' },
-       *   version: '1.0'
        * });
        * console.log(prompt.messages);
        * ```
        */
-      get: async ({
-        serverName,
-        name,
-        args,
-        version,
-      }: {
-        serverName: string;
-        name: string;
-        args?: Record<string, any>;
-        version?: string;
-      }) => {
+      get: async ({ serverName, name, args }: { serverName: string; name: string; args?: Record<string, any> }) => {
         try {
           const internalClient = await this.getConnectedClientForServer(serverName);
-          return internalClient.prompts.get({ name, args, version });
+          return internalClient.prompts.get({ name, args });
         } catch (error) {
           throw new MastraError(
             {
