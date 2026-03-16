@@ -20,5 +20,4 @@ export const coreFeatures = new Set<string>([
   'request-response-id-rotation',
   'workspaces-v1',
   'datasets',
-  'observability:v1.13.2',
 ]);
