@@ -1,6 +1,14 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 
+import {
+  DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS,
+  formatToolResultForObserver,
+  resolveToolResultValue,
+} from './tool-result-helpers';
+
+type ObserverFormatOptions = { maxPartLength?: number; maxToolResultTokens?: number };
+
 /**
  * The core extraction instructions for the Observer.
  * This is exported so the Reflector can understand how observations were created.
@@ -596,9 +604,10 @@ function formatObserverAttachmentPlaceholder(part: ObserverAttachmentPart, count
 function formatObserverMessage(
   msg: MastraDBMessage,
   counter: ObserverAttachmentCounter,
-  options?: { maxPartLength?: number },
+  options?: ObserverFormatOptions,
 ): ObserverFormattedMessage {
   const maxLen = options?.maxPartLength;
+  const maxToolResultTokens = options?.maxToolResultTokens ?? DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS;
   const timestamp = formatObserverTimestamp(msg.createdAt);
   const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
   const timestampStr = timestamp ? ` (${timestamp})` : '';
@@ -614,7 +623,11 @@ function formatObserverMessage(
         if (part.type === 'tool-invocation') {
           const inv = part.toolInvocation;
           if (inv.state === 'result') {
-            const resultStr = JSON.stringify(inv.result, null, 2);
+            const { value: resultForObserver } = resolveToolResultValue(
+              part as { providerMetadata?: Record<string, any> },
+              inv.result,
+            );
+            const resultStr = formatToolResultForObserver(resultForObserver, { maxTokens: maxToolResultTokens });
             return `[Tool Result: ${inv.toolName}]\n${maybeTruncate(resultStr, maxLen)}`;
           }
           const argsStr = JSON.stringify(inv.args, null, 2);
@@ -645,17 +658,17 @@ function formatObserverMessage(
   };
 }
 
-export function formatMessagesForObserver(messages: MastraDBMessage[], options?: { maxPartLength?: number }): string {
+export function formatMessagesForObserver(messages: MastraDBMessage[], options?: ObserverFormatOptions): string {
   const counter = { nextImageId: 1, nextFileId: 1 };
   return messages.map(msg => formatObserverMessage(msg, counter, options).text).join('\n\n---\n\n');
 }
 
-export function buildObserverHistoryMessage(messages: MastraDBMessage[]): CoreMessage {
+export function buildObserverHistoryMessage(messages: MastraDBMessage[], options?: ObserverFormatOptions): CoreMessage {
   const counter = { nextImageId: 1, nextFileId: 1 };
   const content: any[] = [{ type: 'text', text: '## New Message History to Observe\n\n' }];
 
   messages.forEach((message, index) => {
-    const formatted = formatObserverMessage(message, counter);
+    const formatted = formatObserverMessage(message, counter, options);
     content.push({ type: 'text', text: formatted.text });
     content.push(...formatted.attachments);
     if (index < messages.length - 1) {
@@ -684,6 +697,7 @@ function maybeTruncate(str: string, maxLen?: number): string {
 export function formatMultiThreadMessagesForObserver(
   messagesByThread: Map<string, MastraDBMessage[]>,
   threadOrder: string[],
+  options?: ObserverFormatOptions,
 ): string {
   const sections: string[] = [];
 
@@ -691,7 +705,7 @@ export function formatMultiThreadMessagesForObserver(
     const messages = messagesByThread.get(threadId);
     if (!messages || messages.length === 0) continue;
 
-    const formattedMessages = formatMessagesForObserver(messages);
+    const formattedMessages = formatMessagesForObserver(messages, options);
     sections.push(`<thread id="${threadId}">\n${formattedMessages}\n</thread>`);
   }
 
@@ -701,6 +715,7 @@ export function formatMultiThreadMessagesForObserver(
 export function buildMultiThreadObserverHistoryMessage(
   messagesByThread: Map<string, MastraDBMessage[]>,
   threadOrder: string[],
+  options?: ObserverFormatOptions,
 ): CoreMessage {
   const counter = { nextImageId: 1, nextFileId: 1 };
   const content: any[] = [
@@ -717,7 +732,7 @@ export function buildMultiThreadObserverHistoryMessage(
     content.push({ type: 'text', text: `<thread id="${threadId}">\n` });
 
     messages.forEach((message, messageIndex) => {
-      const formatted = formatObserverMessage(message, counter);
+      const formatted = formatObserverMessage(message, counter, options);
       content.push({ type: 'text', text: formatted.text });
       content.push(...formatted.attachments);
       if (messageIndex < messages.length - 1) {
@@ -774,8 +789,9 @@ export function buildMultiThreadObserverPrompt(
   existingObservations: string | undefined,
   messagesByThread: Map<string, MastraDBMessage[]>,
   threadOrder: string[],
+  options?: ObserverFormatOptions,
 ): string {
-  const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder);
+  const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder, options);
   return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(existingObservations)}`;
 }
 
