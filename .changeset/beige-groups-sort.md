@@ -2,4 +2,16 @@
 '@mastra/mcp': patch
 ---
 
-Updated @modelcontextprotocol/sdk from ^1.17.5 to ^1.27.1. The `version` field on MCP prompts is now deprecated — it was never part of the official MCP wire protocol and will be removed in a future release. Use distinct prompt names instead of versioning. The `MastraPrompt` type (extending `Prompt` with an optional `version`) is available for migration but is also deprecated.
+**Improved**
+- Updated `@modelcontextprotocol/sdk` from `^1.17.5` to `^1.27.1`.
+
+**Deprecated**
+- Deprecated prompt `version` usage in `@mastra/mcp`.
+- Prompt versions are not part of MCP protocol behavior and will be removed.
+
+**Migration**
+- Use unique prompt names instead of prompt versions.
+- Before: `client.prompts.get({ name: 'explain-code', version: 'v1', args })`
+- After: `client.prompts.get({ name: 'explain-code-v1', args })`
+
+- `MastraPrompt` is available for migration and is also deprecated.
