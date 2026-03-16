@@ -197,16 +197,16 @@ async function main() {
       await memory.saveMessages({
         messages: responseMessages,
       });
+
+      const postTurnStatus = await om.getStatus({ threadId });
+      if (postTurnStatus.shouldObserve) {
+        await om.observe({ threadId });
+      }
     },
   });
 
   await result.consumeStream();
   const finalText = await result.text;
-
-  const postTurnStatus = await om.getStatus({ threadId });
-  if (postTurnStatus.shouldObserve) {
-    await om.observe({ threadId });
-  }
 
   const afterRecord = await om.getRecord(threadId);
   const afterStatus = await om.getStatus({ threadId });
