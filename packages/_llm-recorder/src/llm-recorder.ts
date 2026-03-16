@@ -746,7 +746,13 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
 
             recordings.push({
               hash,
-              request: { url, method: 'POST', body, timestamp: currentDate, ...(requestBinaryArtifact ? { binaryArtifact: requestBinaryArtifact } : {}) },
+              request: {
+                url,
+                method: 'POST',
+                body,
+                timestamp: currentDate,
+                ...(requestBinaryArtifact ? { binaryArtifact: requestBinaryArtifact } : {}),
+              },
               response: {
                 status: realResponse.status,
                 statusText: realResponse.statusText,
@@ -802,7 +808,13 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
 
             recordings.push({
               hash,
-              request: { url, method: 'POST', body, timestamp: currentDate, ...(requestBinaryArtifact ? { binaryArtifact: requestBinaryArtifact } : {}) },
+              request: {
+                url,
+                method: 'POST',
+                body,
+                timestamp: currentDate,
+                ...(requestBinaryArtifact ? { binaryArtifact: requestBinaryArtifact } : {}),
+              },
               response: {
                 status: realResponse.status,
                 statusText: realResponse.statusText,
