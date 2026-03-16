@@ -380,7 +380,7 @@ async function parseRequestBody(request: Request): Promise<ParsedRequestBody> {
   const contentType = request.headers.get('content-type')?.toLowerCase() || '';
   const cloned = request.clone();
 
-  if (contentType.includes('application/json')) {
+  if (contentType.includes('application/json') || contentType.includes('+json')) {
     const json = await cloned.json().catch(() => ({}));
     return { value: json };
   }
