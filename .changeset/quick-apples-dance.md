@@ -3,4 +3,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Fix subagent tool approval cards in the dev server and preserve nested tool state when restoring agent tool results.
+Fix restored subagent tool results so approval cards and nested tool state appear correctly in the dev server.
