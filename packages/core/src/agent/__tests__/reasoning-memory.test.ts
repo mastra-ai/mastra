@@ -18,6 +18,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
+import { sanitizeV5UIMessages } from '../message-list/conversion/output-converter';
 import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model';
 
 /**
@@ -1055,5 +1056,115 @@ describe('Reasoning Data Spy: Response vs Request Comparison (Issue #12980)', ()
     expect(turn2Text).toBeDefined();
     expect(turn2Text.text).toBe('The answer is 42.');
     expect(turn2Text.providerOptions?.openai).toBeUndefined();
+  });
+});
+
+/**
+ * Edge Case: Messages stored without reasoning parts but with OpenAI metadata on tool parts.
+ *
+ * When a message was stored after a prior agent loop already stripped reasoning parts,
+ * the tool parts may still carry callProviderMetadata.openai with fc_* item IDs.
+ * The hasOpenAIReasoning check (now hasOpenAIMetadata) must detect this and strip it.
+ *
+ * @see https://github.com/mastra-ai/mastra/pull/13418
+ */
+describe('OpenAI metadata stripping edge cases', () => {
+  it('should strip callProviderMetadata.openai from tool parts even when no reasoning parts exist', () => {
+    // Simulate a message that was stored after reasoning was already stripped
+    // but tool parts still carry fc_* item IDs from OpenAI
+    const messages = sanitizeV5UIMessages(
+      [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: 'Let me look that up.',
+            },
+            {
+              type: 'tool-test_tool',
+              toolCallId: 'call_abc123',
+              toolName: 'test_tool',
+              state: 'output-available',
+              input: { query: 'test' },
+              output: { result: 'found' },
+              // This is the fc_* metadata that causes the error
+              callProviderMetadata: {
+                openai: {
+                  itemId: 'fc_028774610c0921f40069b84da227688193a5cfce509762f5ae',
+                },
+              },
+            } as any,
+          ],
+        },
+      ],
+      true, // filterIncompleteToolCalls=true (building prompt TO the LLM)
+    );
+
+    expect(messages).toHaveLength(1);
+    const toolPart = messages[0].parts.find(p => p.type === 'tool-test_tool') as any;
+    expect(toolPart).toBeDefined();
+
+    // The callProviderMetadata.openai should be stripped
+    expect(toolPart.callProviderMetadata?.openai).toBeUndefined();
+  });
+
+  it('should strip providerMetadata.openai from text parts even when no reasoning parts exist', () => {
+    // Simulate a message where reasoning was already stripped but text still has msg_* metadata
+    const messages = sanitizeV5UIMessages(
+      [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: 'The answer is 42.',
+              providerMetadata: {
+                openai: {
+                  itemId: 'msg_test987654321',
+                },
+              },
+            } as any,
+          ],
+        },
+      ],
+      true,
+    );
+
+    expect(messages).toHaveLength(1);
+    const textPart = messages[0].parts.find(p => p.type === 'text') as any;
+    expect(textPart).toBeDefined();
+    expect(textPart.text).toBe('The answer is 42.');
+    // providerMetadata.openai should be stripped
+    expect(textPart.providerMetadata?.openai).toBeUndefined();
+  });
+
+  it('should preserve non-openai providerMetadata when stripping openai metadata', () => {
+    const messages = sanitizeV5UIMessages(
+      [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: 'Hello',
+              providerMetadata: {
+                openai: { itemId: 'msg_123' },
+                customProvider: { someField: 'value' },
+              },
+            } as any,
+          ],
+        },
+      ],
+      true,
+    );
+
+    expect(messages).toHaveLength(1);
+    const textPart = messages[0].parts[0] as any;
+    expect(textPart.providerMetadata?.openai).toBeUndefined();
+    expect(textPart.providerMetadata?.customProvider).toEqual({ someField: 'value' });
   });
 });
