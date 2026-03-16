@@ -230,6 +230,45 @@ describe('Tools Handlers', () => {
 
       expect(result).toEqual(mockResult);
     });
+    it('should continue searching other agents when one toolsResolver throws', async () => {
+      const mockResult = { success: true, dynamic: true };
+      const dynamicToolExecute = vi.fn().mockResolvedValue(mockResult);
+      const dynamicTool = createTool({
+        id: 'dynamic-tool',
+        description: 'A dynamically resolved tool',
+        execute: dynamicToolExecute,
+      });
+      const failingAgent = new Agent({
+        id: 'failing-agent',
+        name: 'failing-agent',
+        instructions: 'You are a helpful assistant',
+        model: 'gpt-4o' as any,
+        tools: async () => {
+          throw new Error('toolsResolver failed');
+        },
+      });
+      const workingAgent = new Agent({
+        id: 'working-agent',
+        name: 'working-agent',
+        instructions: 'You are a helpful assistant',
+        model: 'gpt-4o' as any,
+        tools: async () => ({ 'dynamic-tool': dynamicTool }),
+      });
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'failing-agent': failingAgent as any,
+          'working-agent': workingAgent as any,
+        },
+      });
+      const result = await EXECUTE_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        registeredTools: {},
+        toolId: 'dynamic-tool',
+        data: {},
+      });
+      expect(result).toEqual(mockResult);
+    });
   });
 
   describe('executeAgentToolHandler', () => {
