@@ -19,7 +19,6 @@ describe('span-utils', () => {
     input: null,
     output: null,
     error: null,
-    requestContext: null,
     createdAt: new Date('2025-01-01T00:00:00Z'),
     updatedAt: new Date('2025-01-01T00:00:01Z'),
     isEvent: false,
@@ -40,6 +39,8 @@ describe('span-utils', () => {
     environment: null,
     source: null,
     serviceName: null,
+    // Request context
+    requestContext: null,
   });
 
   describe('isTokenLimitExceeded', () => {

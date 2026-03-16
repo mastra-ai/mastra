@@ -1,15 +1,48 @@
-import type { ListScoresResponse } from '@mastra/core/evals';
 import type { SpanType } from '@mastra/core/observability';
 import type {
   TraceRecord,
   ListTracesArgs,
   ListTracesResponse,
-  SpanIds,
-  PaginationArgs,
   SpanRecord,
   PaginationInfo,
   ScoreTracesRequest,
   ScoreTracesResponse,
+  // Logs
+  ListLogsArgs,
+  ListLogsResponse,
+  // Scores (observability)
+  ListScoresArgs,
+  ListScoresResponse,
+  CreateScoreRecord,
+  CreateScoreResponse,
+  // Feedback
+  ListFeedbackArgs,
+  ListFeedbackResponse,
+  CreateFeedbackRecord,
+  CreateFeedbackResponse,
+  // Metrics OLAP
+  GetMetricAggregateArgs,
+  GetMetricAggregateResponse,
+  GetMetricBreakdownArgs,
+  GetMetricBreakdownResponse,
+  GetMetricTimeSeriesArgs,
+  GetMetricTimeSeriesResponse,
+  GetMetricPercentilesArgs,
+  GetMetricPercentilesResponse,
+  // Discovery
+  GetMetricNamesArgs,
+  GetMetricNamesResponse,
+  GetMetricLabelKeysArgs,
+  GetMetricLabelKeysResponse,
+  GetMetricLabelValuesArgs,
+  GetMetricLabelValuesResponse,
+  GetEntityTypesResponse,
+  GetEntityNamesArgs,
+  GetEntityNamesResponse,
+  GetServiceNamesResponse,
+  GetEnvironmentsResponse,
+  GetTagsArgs,
+  GetTagsResponse,
 } from '@mastra/core/storage';
 import type { ClientOptions } from '../types';
 import { toQueryParams } from '../utils';
@@ -55,16 +88,19 @@ export interface LegacyGetTracesResponse {
   pagination: PaginationInfo;
 }
 
-export type ListScoresBySpanParams = SpanIds & PaginationArgs;
-
 // ============================================================================
 // Observability Resource
 // ============================================================================
 
+/** Client resource for interacting with the Mastra observability API (traces, logs, scores, feedback, and metrics). */
 export class Observability extends BaseResource {
   constructor(options: ClientOptions) {
     super(options);
   }
+
+  // --------------------------------------------------------------------------
+  // Traces
+  // --------------------------------------------------------------------------
 
   /**
    * Retrieves a specific trace by ID
@@ -131,19 +167,6 @@ export class Observability extends BaseResource {
   }
 
   /**
-   * Retrieves scores by trace ID and span ID
-   * @param params - Parameters containing trace ID, span ID, and pagination options
-   * @returns Promise containing scores and pagination info
-   */
-  listScoresBySpan(params: ListScoresBySpanParams): Promise<ListScoresResponse> {
-    const { traceId, spanId, ...pagination } = params;
-    const queryString = toQueryParams(pagination);
-    return this.request(
-      `/observability/traces/${encodeURIComponent(traceId)}/${encodeURIComponent(spanId)}/scores${queryString ? `?${queryString}` : ''}`,
-    );
-  }
-
-  /**
    * Scores one or more traces using a specified scorer.
    * @param params - Scorer name and targets to score
    * @returns Promise containing the scoring status
@@ -153,5 +176,170 @@ export class Observability extends BaseResource {
       method: 'POST',
       body: { ...params },
     });
+  }
+
+  // --------------------------------------------------------------------------
+  // Logs
+  // --------------------------------------------------------------------------
+
+  /**
+   * Retrieves a paginated list of logs with optional filtering and sorting.
+   */
+  listLogs(params: ListLogsArgs = {}): Promise<ListLogsResponse> {
+    const queryString = toQueryParams(params, ['filters', 'pagination', 'orderBy']);
+    return this.request(`/observability/logs${queryString ? `?${queryString}` : ''}`);
+  }
+
+  // --------------------------------------------------------------------------
+  // Scores (observability storage)
+  // --------------------------------------------------------------------------
+
+  /**
+   * Retrieves a paginated list of scores with optional filtering and sorting.
+   */
+  listScores(params: ListScoresArgs = {}): Promise<ListScoresResponse> {
+    const queryString = toQueryParams(params, ['filters', 'pagination', 'orderBy']);
+    return this.request(`/observability/scores${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a single score record in the observability store.
+   */
+  createScore(score: CreateScoreRecord): Promise<CreateScoreResponse> {
+    return this.request(`/observability/scores`, {
+      method: 'POST',
+      body: { score },
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // Feedback
+  // --------------------------------------------------------------------------
+
+  /**
+   * Retrieves a paginated list of feedback with optional filtering and sorting.
+   */
+  listFeedback(params: ListFeedbackArgs = {}): Promise<ListFeedbackResponse> {
+    const queryString = toQueryParams(params, ['filters', 'pagination', 'orderBy']);
+    return this.request(`/observability/feedback${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a single feedback record in the observability store.
+   */
+  createFeedback(feedback: CreateFeedbackRecord): Promise<CreateFeedbackResponse> {
+    return this.request(`/observability/feedback`, {
+      method: 'POST',
+      body: { feedback },
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // Metrics OLAP
+  // --------------------------------------------------------------------------
+
+  /**
+   * Returns an aggregated metric value with optional period-over-period comparison.
+   */
+  getMetricAggregate(params: GetMetricAggregateArgs): Promise<GetMetricAggregateResponse> {
+    return this.request(`/observability/metrics/aggregate`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Returns metric values grouped by specified dimensions.
+   */
+  getMetricBreakdown(params: GetMetricBreakdownArgs): Promise<GetMetricBreakdownResponse> {
+    return this.request(`/observability/metrics/breakdown`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Returns metric values bucketed by time interval with optional grouping.
+   */
+  getMetricTimeSeries(params: GetMetricTimeSeriesArgs): Promise<GetMetricTimeSeriesResponse> {
+    return this.request(`/observability/metrics/timeseries`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Returns percentile values for a metric bucketed by time interval.
+   */
+  getMetricPercentiles(params: GetMetricPercentilesArgs): Promise<GetMetricPercentilesResponse> {
+    return this.request(`/observability/metrics/percentiles`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // Discovery
+  // --------------------------------------------------------------------------
+
+  /**
+   * Returns distinct metric names with optional prefix filtering.
+   */
+  getMetricNames(params: GetMetricNamesArgs = {}): Promise<GetMetricNamesResponse> {
+    const queryString = toQueryParams(params);
+    return this.request(`/observability/discovery/metric-names${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Returns distinct label keys for a given metric.
+   */
+  getMetricLabelKeys(params: GetMetricLabelKeysArgs): Promise<GetMetricLabelKeysResponse> {
+    const queryString = toQueryParams(params);
+    return this.request(`/observability/discovery/metric-label-keys?${queryString}`);
+  }
+
+  /**
+   * Returns distinct values for a given metric label key.
+   */
+  getMetricLabelValues(params: GetMetricLabelValuesArgs): Promise<GetMetricLabelValuesResponse> {
+    const queryString = toQueryParams(params);
+    return this.request(`/observability/discovery/metric-label-values?${queryString}`);
+  }
+
+  /**
+   * Returns distinct entity types from observability data.
+   */
+  getEntityTypes(): Promise<GetEntityTypesResponse> {
+    return this.request(`/observability/discovery/entity-types`);
+  }
+
+  /**
+   * Returns distinct entity names with optional type filtering.
+   */
+  getEntityNames(params: GetEntityNamesArgs = {}): Promise<GetEntityNamesResponse> {
+    const queryString = toQueryParams(params);
+    return this.request(`/observability/discovery/entity-names${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Returns distinct service names from observability data.
+   */
+  getServiceNames(): Promise<GetServiceNamesResponse> {
+    return this.request(`/observability/discovery/service-names`);
+  }
+
+  /**
+   * Returns distinct environments from observability data.
+   */
+  getEnvironments(): Promise<GetEnvironmentsResponse> {
+    return this.request(`/observability/discovery/environments`);
+  }
+
+  /**
+   * Returns distinct tags with optional entity type filtering.
+   */
+  getTags(params: GetTagsArgs = {}): Promise<GetTagsResponse> {
+    const queryString = toQueryParams(params);
+    return this.request(`/observability/discovery/tags${queryString ? `?${queryString}` : ''}`);
   }
 }

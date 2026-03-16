@@ -58,11 +58,9 @@ async function demonstrateAllPaginationMethods() {
     },
   });
 
-  await client.listScoresBySpan({
-    traceId: 'trace-xyz-789',
-    spanId: 'span-abc-456',
-    offset: 0,
-    limit: 10,
+  await client.listScores({
+    filters: { traceId: 'trace-xyz-789', spanId: 'span-abc-456' },
+    pagination: { offset: 0, limit: 10 },
   });
 
   const memoryThread = client.getMemoryThread({

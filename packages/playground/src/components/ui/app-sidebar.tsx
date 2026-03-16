@@ -17,6 +17,7 @@ import {
 } from '@mastra/playground-ui';
 import type { NavLink, NavSection } from '@mastra/playground-ui';
 import {
+  BarChart3,
   GaugeIcon,
   EyeIcon,
   PackageIcon,
@@ -101,6 +102,12 @@ const mainNavigation: NavSection[] = [
         url: '/observability',
         icon: <EyeIcon />,
         isOnMastraPlatform: true,
+      },
+      {
+        name: 'Metrics & Logs',
+        url: '/metrics',
+        icon: <BarChart3 />,
+        isOnMastraPlatform: false,
       },
       {
         name: 'Datasets',
