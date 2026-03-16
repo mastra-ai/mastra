@@ -10,7 +10,7 @@ import TabItem from "@theme/TabItem";
 
 # Agents overview
 
-Agents use LLMs and tools to solve open-ended tasks. They reason about goals, decide which tools to use, retain conversation memory, and iterate internally until the model emits a final answer or an optional stop condition is met. Agents produce structured responses you can render in your UI or process programmatically. Use agents directly or compose them into workflows or agent networks.
+Agents use LLMs and tools to solve open-ended tasks. They reason about goals, decide which tools to use, retain conversation memory, and iterate internally until the model emits a final answer or an optional stop condition is met. Agents produce structured responses you can render in your UI or process programmatically. Use agents directly or compose them into workflows or multi-agent systems.
 
 ## When to use agents
 
@@ -24,7 +24,7 @@ Watch an introduction to agents, and how they compare to workflows on [YouTube (
 
 ## Quickstart
 
-Create an agent by instantiating the `Agent` class from `@mastra/core` and provide the required properties: `id`, `name`, `instructions`, and `model`.
+Create an agent by instantiating the `Agent` class from `@mastra/core` and provide the required properties:
 
 ```typescript title="src/mastra/agents/test-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -37,9 +37,7 @@ export const testAgent = new Agent({
 })
 ```
 
-Specify a unique `id` for your agent and provide a descriptive `name`.
-
-The `instructions` define the agent's behavior, personality, and capabilities. They're system-level prompts that establish the agent's core identity and expertise. The `model` is specified as `provider/model-name` using Mastra's [model router](/models).
+The `instructions` define the agent's behavior, personality, and capabilities. They're system-level prompts that establish the agent's core identity and expertise. The `model` is specified as `'provider/model-name'` using Mastra's [model router](/models).
 
 To make the agent available throughout your application, register it in your Mastra instance (typically located in `src/mastra/index.ts`):
 
@@ -54,7 +52,11 @@ export const mastra = new Mastra({
 
 Once registered, it can be called from workflows, tools, or other agents, and has access to shared resources such as memory, logging, and observability features.
 
+:::tip
+
 Use [Studio](/docs/getting-started/studio) to test your agent with different messages, inspect tool calls and responses, and debug agent behavior.
+
+:::
 
 :::note
 
@@ -64,7 +66,9 @@ Visit the [agent reference](/reference/agents/agent) for more information on ava
 
 ## Use your agent
 
-After registration, retrieve your agent with [`mastra.getAgentById()`](/reference/core/getAgentById). Call `.generate()` for a complete response or `.stream()` to deliver tokens in real time. You can call agents from workflow steps, tools, the Mastra Client, or the command line.
+After registration, retrieve your agent with [`mastra.getAgentById()`](/reference/core/getAgentById). Call `.generate()` for a complete response or `.stream()` to deliver tokens in real time. You can call agents from [workflow steps](/docs/workflows/agents-and-tools), [tools](/docs/agents/using-tools), the [Mastra Client](/reference/client-js/mastra-client), route handlers, [server adapters](/docs/server/server-adapters), or the command line. Visit the [guides section](/guides) to learn how to use agents in your framework of choice.
+
+When referencing an agent, use `mastra.getAgentById()` instead of a direct import. `mastra.getAgentById()` wires up shared services (storage, logging, other agents, etc.). A directly imported agent skips this setup, so features like memory, tool approval, and subagent delegation won't work.
 
 <Tabs>
   <TabItem value="generate" label="Generate">
@@ -91,12 +95,6 @@ After registration, retrieve your agent with [`mastra.getAgentById()`](/referenc
   </TabItem>
 </Tabs>
 
-:::note
-
-`mastra.getAgentById()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, etc.).
-
-:::
-
 ## Expand your agent
 
 Once your agent is running, use this table to find the right page for what you want to do next:
@@ -106,12 +104,12 @@ Once your agent is running, use this table to find the right page for what you w
 | Give your agent tools to call external APIs or services | [Tools](/docs/agents/using-tools) |
 | Keep context and preferences across conversations | [Memory](/docs/agents/agent-memory) |
 | Get typed objects back instead of plain text | [Structured output](/docs/agents/structured-output) |
-| Intercept or transform messages before and after generation | [Processors](/docs/agents/processors) |
-| Swap instructions or models based on request context | [Dynamic configuration](/docs/server/request-context) |
-| Have one agent delegate tasks to other agents | [Supervisor agents](/docs/agents/supervisor-agents) |
+| Human-in-the-loop: Pause execution and wait for human approval | [Approval](/docs/agents/agent-approval) |
+| Build a multi-agent network | [Supervisor agents](/docs/agents/supervisor-agents) |
 | Register subagents | [Tools](/docs/agents/using-tools#agents-as-tools) |
-| Validate what goes in or comes out of an agent | [Guardrails](/docs/agents/guardrails) |
-| Pause execution and wait for human approval | [Approval](/docs/agents/agent-approval) |
+| Intercept or transform messages before and after generation | [Processors](/docs/agents/processors) |
+| Keep your agent safe | [Guardrails](/docs/agents/guardrails) |
+| Swap instructions or models based on request context | [Dynamic configuration](/docs/server/request-context) |
 | Add speech-to-text or text-to-speech | [Voice](/docs/agents/adding-voice) |
 
 ## Multi-agent systems
@@ -134,13 +132,7 @@ For tasks that a single agent can handle with a few tools, adding more agents in
 
 Each subagent runs with its own thread and resource ID. This means memory stays isolated: subagents receive the conversation context they need but store only their own delegation prompt and response. The supervisor's memory is unaffected.
 
-You can control delegation behavior with hooks (`onDelegationStart`, `onDelegationComplete`), filter which messages are forwarded (`messageFilter`), and score task completion (`taskCompletionCriteria`). See [Supervisor agents](/docs/agents/supervisor-agents) for a full walkthrough with code examples.
-
-:::tip
-
 Follow the [Build a research coordinator with supervisor agents](/guides/guide/research-coordinator) guide for a step-by-step walkthrough.
-
-:::
 
 ### Council
 

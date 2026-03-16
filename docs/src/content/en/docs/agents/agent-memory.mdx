@@ -12,13 +12,14 @@ import StepItem from "@site/src/components/StepItem";
 
 # Agent memory
 
-Agents use memory to maintain context across interactions. Without memory, each call to an agent is independent, and the agent has no access to past messages.
+Memory enables your agent to remember user messages, agent replies, and tool results across interactions, giving it the context it needs to stay consistent, maintain conversation flow, and produce better answers over time.
 
-Memory stores message history. Mastra supports three additional memory modes:
+Mastra supports four complementary memory types:
 
-- [Observational memory](../memory/observational-memory) for automatic long-term memory that compresses conversations as they grow.
-- [Working memory](../memory/working-memory) to maintain a small, structured scratchpad of recent context.
-- [Semantic recall](../memory/semantic-recall) to retrieve past messages based on meaning.
+- [Message history](/docs/memory/message-history) keeps recent messages from the current conversation so they can be rendered in the UI and used to maintain short-term context.
+- [Observational memory](../memory/observational-memory) uses background agents (Observer and Reflector) to maintain a dense observation log that replaces raw message history as it grows. This keeps the context window small while preserving long-term memory.
+- [Working memory](../memory/working-memory) stores persistent, structured user data such as names, preferences, and goals.
+- [Semantic recall](../memory/semantic-recall) retrieves relevant past messages on semantic meaning rather than exact keywords.
 
 ## When to use memory
 
@@ -153,17 +154,7 @@ Each thread has an owner (`resourceId`) that can't be changed after creation. Av
 
 :::
 
-To list all threads for a resource, or retrieve a specific thread, use the memory API directly:
-
-```typescript
-// List all threads for a resource
-const { threads } = await memory.listThreads({
-  filter: { resourceId: 'user-123' },
-})
-
-// Get a specific thread by ID
-const thread = await memory.getThreadById({ threadId: 'conversation-123' })
-```
+To list all threads for a resource, or retrieve a specific thread, [use the memory API directly](/docs/memory/message-history#querying).
 
 ## Observational memory
 
@@ -203,7 +194,7 @@ Each delegation creates a fresh `threadId` and a deterministic `resourceId` for 
 - **Resource ID**: Derived as `{parentResourceId}-{agentName}`. Because the resource ID is stable across delegations, resource-scoped memory persists between calls. A subagent remembers facts from previous delegations by the same user.
 - **Memory instance**: If a subagent has no memory configured, it inherits the supervisor's `Memory` instance. If the subagent defines its own, that takes precedence.
 
-The supervisor forwards its conversation context to the subagent so it has enough background to complete the task. Only the delegation prompt and the subagent's response are saved — the full parent conversation is not stored. You can control which messages reach the subagent with the [`messageFilter`](/docs/agents/supervisor-agents) callback.
+The supervisor forwards its conversation context to the subagent so it has enough background to complete the task. Only the delegation prompt and the subagent's response are saved — the full parent conversation is not stored. You can control which messages reach the subagent with the [`messageFilter`](/docs/agents/supervisor-agents#message-filtering) callback.
 
 :::note
 
@@ -217,7 +208,7 @@ To go beyond this default isolation, you can share memory between agents by pass
 
 When you call agents directly (outside the delegation flow), memory sharing is controlled by two identifiers: `resourceId` and `threadId`. Agents that use the same values read and write to the same data. This is useful when agents collaborate on a shared context — for example, a researcher that saves notes and a writer that reads them.
 
-**Resource-scoped sharing** is the most common pattern. [Observational memory](../memory/observational-memory), [working memory](../memory/working-memory), and [semantic recall](../memory/semantic-recall) all default to `scope: 'resource'`. If two agents share a `resourceId`, they share observations, working memory, and embeddings — even across different threads:
+**Resource-scoped sharing** is the most common pattern. [Working memory](../memory/working-memory) and [semantic recall](../memory/semantic-recall) default to `scope: 'resource'`. If two agents share a `resourceId`, they share observations, working memory, and embeddings — even across different threads:
 
 ```typescript
 // Both agents share the same resource-scoped memory
@@ -232,7 +223,7 @@ await writer.generate('Write a summary from the research notes.', {
 
 Because both calls use `resource: 'project-42'`, the writer can access the researcher's observations, working memory, and semantic embeddings. Each agent still has its own thread, so message histories stay separate.
 
-**Thread-scoped sharing** gives tighter coupling. If two agents use the same `resource` _and_ `thread`, they share the full message history — each agent sees every message the other has written. This is useful when agents need to build on each other's exact outputs.
+**Thread-scoped sharing** gives tighter coupling. [Observational memory](../memory/observational-memory) uses `scope: 'thread'` by default. If two agents use the same `resource` _and_ `thread`, they share the full message history. Each agent sees every message the other has written. This is useful when agents need to build on each other's exact outputs.
 
 ## Switch memory per request
 
