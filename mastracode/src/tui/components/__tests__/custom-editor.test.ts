@@ -57,6 +57,45 @@ describe('CustomEditor image paste handling', () => {
     mocks.readFileSync.mockReturnValue(Buffer.from('dragged-image-binary'));
   });
 
+  it('highlights the first visible slash-command match when autocomplete opens', () => {
+    const editor = new CustomEditor({} as any, {} as any);
+
+    const items = [{ value: 'new' }, { value: 'diff' }, { value: '/deploy' }];
+
+    expect((editor as any).getBestAutocompleteMatchIndex(items, '/')).toBe(0);
+    expect((editor as any).getBestAutocompleteMatchIndex(items, '/d')).toBe(1);
+  });
+
+  it('submits a selected slash command on Enter after autocomplete inserts it', () => {
+    mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'enter');
+
+    const editor = new CustomEditor({} as any, {} as any);
+    const followUp = vi.fn(() => true);
+    editor.onAction('followUp', followUp);
+    editor.getText = vi.fn(() => '/help ');
+    editor.isShowingAutocomplete = vi.fn(() => true);
+
+    editor.handleInput('\r');
+
+    expect(mocks.superHandleInput).toHaveBeenCalledWith('\t');
+    expect(followUp).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not submit non-slash autocomplete selections on Enter', () => {
+    mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'enter');
+
+    const editor = new CustomEditor({} as any, {} as any);
+    const followUp = vi.fn(() => true);
+    editor.onAction('followUp', followUp);
+    editor.getText = vi.fn(() => '@package/file.ts');
+    editor.isShowingAutocomplete = vi.fn(() => true);
+
+    editor.handleInput('\r');
+
+    expect(mocks.superHandleInput).toHaveBeenCalledWith('\t');
+    expect(followUp).not.toHaveBeenCalled();
+  });
+
   it('converts a pasted local image path into an image attachment', () => {
     mocks.getClipboardImage.mockReturnValue({ data: 'clipboard-image', mimeType: 'image/png' });
 

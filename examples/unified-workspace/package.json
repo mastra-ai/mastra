@@ -19,7 +19,7 @@
     "ai": "^6.0.1",
     "mastra": "latest",
     "typescript": "^5.8.3",
-    "zod": "^3"
+    "zod": "^4.3.6"
   },
   "pnpm": {
     "overrides": {
