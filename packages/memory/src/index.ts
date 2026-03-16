@@ -263,8 +263,6 @@ export class Memory extends MastraMemory {
       args.tracingContext,
       { threadId, resourceId, vectorSearchString },
       {
-        threadId,
-        resourceId,
         semanticRecallEnabled,
         lastMessages: config.lastMessages,
       },
@@ -348,7 +346,7 @@ export class Memory extends MastraMemory {
           perPage: 0 as const,
           hasMore: false,
         };
-        span?.end({ output: { messageCount: 0 }, attributes: { success: true, messageCount: 0 } });
+        span?.end({ attributes: { success: true, messageCount: 0 } });
         return result;
       }
 
@@ -427,7 +425,6 @@ export class Memory extends MastraMemory {
       const recallResult = { messages, usage, total, page: resultPage, perPage: resultPerPage, hasMore };
 
       span?.end({
-        output: { messageCount: messages.length, total, hasMore },
         attributes: {
           success: true,
           messageCount: messages.length,
@@ -644,8 +641,6 @@ export class Memory extends MastraMemory {
       tracingContext,
       { threadId, resourceId },
       {
-        threadId,
-        resourceId,
         workingMemoryEnabled: true,
       },
     );
@@ -965,8 +960,6 @@ ${workingMemory}`;
       tracingContext,
       { messageCount: messages.length },
       {
-        threadId: messages[0]?.threadId,
-        resourceId: messages[0]?.resourceId,
         messageCount: messages.length,
       },
     );
@@ -1075,7 +1068,6 @@ ${workingMemory}`;
       const saveResult = { ...result, usage: totalTokens > 0 ? { tokens: totalTokens } : undefined };
 
       span?.end({
-        output: { messageCount: dbMessages.length },
         attributes: {
           success: true,
           messageCount: dbMessages.length,

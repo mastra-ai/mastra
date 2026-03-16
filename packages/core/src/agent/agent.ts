@@ -36,7 +36,7 @@ import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal } from '../memory/types';
-import type { DefinitionSource, TracingContext, TracingProperties, ObservabilityContext } from '../observability';
+import type { DefinitionSource, TracingProperties, ObservabilityContext } from '../observability';
 import {
   EntityType,
   InternalSpans,
@@ -2642,14 +2642,12 @@ export class Agent<
     vectorMessageSearch,
     memoryConfig,
     requestContext,
-    tracingContext,
   }: {
     resourceId?: string;
     threadId: string;
     vectorMessageSearch: string;
     memoryConfig?: MemoryConfigInternal;
     requestContext: RequestContext;
-    tracingContext?: TracingContext;
   }): Promise<{ messages: MastraDBMessage[] }> {
     const memory = await this.getMemory({ requestContext });
     if (!memory) {
@@ -2671,7 +2669,6 @@ export class Agent<
       threadConfig: memoryConfig,
       // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
       vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
-      tracingContext,
     });
   }
 

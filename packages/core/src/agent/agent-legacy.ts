@@ -20,7 +20,7 @@ import type { MastraModelConfig, TripwireProperties } from '../llm/model/shared.
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
-import type { Span, TracingContext, TracingOptions, TracingProperties, ObservabilityContext } from '../observability';
+import type { Span, TracingOptions, TracingProperties, ObservabilityContext } from '../observability';
 import {
   EntityType,
   SpanType,
@@ -89,7 +89,6 @@ export interface AgentLegacyCapabilities {
     vectorMessageSearch: string;
     memoryConfig?: MemoryConfigInternal;
     requestContext: RequestContext;
-    tracingContext?: TracingContext;
   }): Promise<{ messages: MastraDBMessage[] }>;
   /** Convert tools for LLM */
   convertTools(
