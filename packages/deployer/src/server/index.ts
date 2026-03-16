@@ -146,7 +146,7 @@ export async function createHonoServer(
     openapiPath: options?.isDev || server?.build?.openAPIDocs ? '/openapi.json' : undefined,
     customRouteAuthConfig,
     customApiRoutes: processedRoutes,
-    prefix: server?.apiPrefix,
+    prefix: apiPrefix,
   });
 
   // Register context middleware FIRST - this sets mastra, requestContext, tools, taskStore in context
@@ -426,7 +426,7 @@ export async function createHonoServer(
         host: `'${host}'`,
         port: `'${port}'`,
         protocol: `'${protocol}'`,
-        apiPrefix: `'${serverOptions?.apiPrefix ?? '/api'}'`,
+        apiPrefix: `'${apiPrefix}'`,
         basePath: studioBasePath,
         hideCloudCta: `'${hideCloudCta}'`,
         cloudApiEndpoint: `'${cloudApiEndpoint}'`,
@@ -467,6 +467,7 @@ export async function createHonoServer(
 export async function createNodeServer(mastra: Mastra, options: ServerBundleOptions = { tools: {} }) {
   const app = await createHonoServer(mastra, options);
   const serverOptions = mastra.getServer();
+  const apiPrefix = serverOptions?.apiPrefix ?? '/api';
 
   const key =
     serverOptions?.https?.key ??
@@ -497,7 +498,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     },
     () => {
       const logger = mastra.getLogger();
-      logger.info(` Mastra API running on ${protocol}://${host}:${port}${serverOptions?.apiPrefix ?? '/api'}`);
+      logger.info(` Mastra API running on ${protocol}://${host}:${port}${apiPrefix}`);
       if (options?.studio) {
         const studioBasePath = normalizeStudioBase(serverOptions?.studioBase ?? '/');
         const studioUrl = `${protocol}://${host}:${port}${studioBasePath}`;
