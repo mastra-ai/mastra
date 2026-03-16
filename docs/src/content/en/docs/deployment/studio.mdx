@@ -47,8 +47,6 @@ MASTRA_STUDIO_BASE_PATH=/agents mastra studio
 
 This updates the HTML base URL and static asset routing so the standalone Studio works correctly under that subpath.
 
-Studio also supports optional runtime feature flags through `MASTRA_*` environment variables. For example, set `MASTRA_THEME_TOGGLE=true` to enable the Settings page theme switch and allow users to persist a light/dark preference in local storage. If the flag is unset (or set to any value other than `true`), Studio keeps the default dark-only behavior and hides the theme switch.
-
 The command uses Node's built-in `http` module and [`serve-handler`](https://www.npmjs.com/package/serve-handler) to serve the static files.
 
 ## Running a server
