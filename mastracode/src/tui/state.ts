@@ -190,15 +190,6 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   const footer = new Container();
   const editor = new CustomEditor(ui, getEditorTheme());
   editor.getModeColor = () => options.harness.getCurrentMode()?.color;
-  // Wire up gradient animation info for editor border animation
-  editor.getGradientInfo = () => {
-    const ga = state?.gradientAnimator;
-    if (!ga) return undefined;
-    return { offset: ga.getOffset(), fade: ga.getFadeProgress(), running: ga.isRunning() };
-  };
-
-  // Need a reference to state for the gradient callback above
-  let state: TUIState | undefined;
   const result: TUIState = {
     // Core dependencies
     harness: options.harness,
@@ -254,6 +245,5 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     lastCtrlCTime: 0,
     userInitiatedAbort: false,
   };
-  state = result;
   return result;
 }
