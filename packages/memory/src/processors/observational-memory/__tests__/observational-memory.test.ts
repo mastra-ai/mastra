@@ -9156,6 +9156,57 @@ describe('Single-thread replay red tests', () => {
     expect(partial?.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : p.type))).toEqual(['fresh-tail']);
   });
 
+  it('T2-C2: cleanupMessages mutates MessageList in place using the shared cleanup primitive', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'remove-me',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'fully observed text' }] },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'trim-me',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'observed-prefix' },
+            { type: 'data-om-observation-end', data: { cycleId: 'cleanup-cycle' } },
+            { type: 'text', text: 'fresh-tail' },
+          ],
+        },
+        createdAt: new Date(t0.getTime() + 1),
+      } as any,
+      'memory',
+    );
+
+    await om.cleanupMessages({
+      threadId,
+      resourceId,
+      messages: messageList,
+      observedMessageIds: ['remove-me', 'trim-me'],
+    });
+
+    const remainingIds = messageList.get.all.db().map((m: any) => m.id);
+    const visibleText = getModelVisibleText(messageList);
+
+    expect(remainingIds).toEqual(['trim-me']);
+    expect(visibleText).toContain('fresh-tail');
+    expect(visibleText).not.toContain('observed-prefix');
+  });
+
   it('T2-D: getObservedMessageIdsForCleanup respects retention floor before removing observed messages', async () => {
     const { om, messageList, threadId, resourceId } = await createReplayFixture();
 
@@ -9191,6 +9242,49 @@ describe('Single-thread replay red tests', () => {
     });
 
     expect(idsToRemove).toEqual([]);
+  });
+
+  it('T2-D2: cleanupMessages mutates plain arrays too', async () => {
+    const { om, threadId, resourceId } = await createReplayFixture();
+
+    const messages: any[] = [
+      {
+        id: 'remove-array',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'fully observed array text' }] },
+        createdAt: new Date('2025-01-01T10:00:00.000Z'),
+      },
+      {
+        id: 'trim-array',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'array observed-prefix' },
+            { type: 'data-om-observation-end', data: { cycleId: 'cleanup-cycle' } },
+            { type: 'text', text: 'array fresh-tail' },
+          ],
+        },
+        createdAt: new Date('2025-01-01T10:00:00.001Z'),
+      },
+    ];
+
+    const cleaned = await om.cleanupMessages({
+      threadId,
+      resourceId,
+      messages,
+      observedMessageIds: ['remove-array', 'trim-array'],
+    });
+
+    expect(cleaned).toBe(messages);
+    expect(messages.map((m: any) => m.id)).toEqual(['trim-array']);
+    expect(messages[0]?.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : p.type))).toEqual([
+      'array fresh-tail',
+    ]);
   });
 
   it('T3-A: sealed remint (id=A->id=B) should not replay sealed prefix', async () => {

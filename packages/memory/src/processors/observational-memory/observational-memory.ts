@@ -4252,14 +4252,29 @@ ${formattedMessages}
     return shouldTrigger;
   }
 
+  private isMessageList(value: MessageList | MastraDBMessage[]): value is MessageList {
+    return !!value && typeof value === 'object' && 'get' in value && 'removeByIds' in value;
+  }
+
+  private removeIdsFromArray(messages: MastraDBMessage[], ids: string[]) {
+    if (ids.length === 0) return;
+    const idsSet = new Set(ids);
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg?.id && idsSet.has(msg.id)) {
+        messages.splice(i, 1);
+      }
+    }
+  }
+
   /**
    * Mutate partially observed messages in place and return the fully observed
    * message IDs that should be removed from the live context.
    *
-   * This is the cleanup decision logic used after activation-based cleanup:
-   * callers pass the current live messages, OM trims any partially observed
-   * messages down to their unobserved parts, and OM returns only the IDs that
-   * are safe to remove entirely.
+   * This is the shared activation-cleanup primitive used by both the processor
+   * and AI SDK integrations: callers pass the current live messages, OM trims
+   * any partially observed messages down to their unobserved parts, and OM
+   * returns only the IDs that are safe to remove entirely.
    */
   async getObservedMessageIdsForCleanup(opts: {
     threadId: string;
@@ -4338,23 +4353,28 @@ ${formattedMessages}
   }
 
   /**
-   * Clean up the message context after a successful observation.
+   * Clean up observed content from either a live MessageList or a plain message array.
    *
-   * Handles both activation-based cleanup (using observedMessageIds) and
-   * marker-based cleanup (using observation boundary markers). Respects
-   * retention floors to prevent removing too many messages.
+   * - MessageList input: mutates the live container in place and returns the remaining messages
+   * - Array input: mutates the array in place and returns it
+   *
+   * This is the shared cleanup primitive intended for both processor and non-processor
+   * integrations. The processor may still pass sealedIds/state so marker/fallback cleanup
+   * can persist messages safely, but callers that do not need that bookkeeping can omit it.
    */
-  async cleanupObservedContext(opts: {
-    messageList: MessageList;
-    sealedIds: Set<string>;
+  async cleanupMessages(opts: {
     threadId: string;
     resourceId?: string;
-    state?: Record<string, unknown>;
+    messages: MessageList | MastraDBMessage[];
     observedMessageIds?: string[];
     retentionFloor?: number;
-  }): Promise<void> {
-    const { messageList, sealedIds, threadId, resourceId, state, observedMessageIds, retentionFloor } = opts;
-    const allMsgs = messageList.get.all.db();
+    sealedIds?: Set<string>;
+    state?: Record<string, unknown>;
+  }): Promise<MastraDBMessage[]> {
+    const { threadId, resourceId, observedMessageIds, retentionFloor, sealedIds, state } = opts;
+    const messageList = this.isMessageList(opts.messages) ? opts.messages : undefined;
+    const allMsgs: MastraDBMessage[] = messageList ? messageList.get.all.db() : (opts.messages as MastraDBMessage[]);
+
     let markerIdx = -1;
     let markerMsg: MastraDBMessage | null = null;
 
@@ -4380,11 +4400,19 @@ ${formattedMessages}
         observedMessageIds,
         retentionFloor,
       });
-      if (idsToRemoveList.length > 0) {
-        messageList.removeByIds(idsToRemoveList);
+
+      if (messageList) {
+        if (idsToRemoveList.length > 0) {
+          messageList.removeByIds(idsToRemoveList);
+        }
+        return messageList.get.all.db();
       }
-    } else if (markerMsg && markerIdx !== -1) {
-      // Marker-based cleanup
+
+      this.removeIdsFromArray(allMsgs, idsToRemoveList);
+      return allMsgs;
+    }
+
+    if (markerMsg && markerIdx !== -1) {
       const idsToRemove: string[] = [];
       const messagesToSave: MastraDBMessage[] = [];
 
@@ -4405,26 +4433,62 @@ ${formattedMessages}
         markerMsg.content.parts = unobservedParts;
       }
 
-      if (idsToRemove.length > 0) {
-        messageList.removeByIds(idsToRemove);
+      if (messageList) {
+        if (idsToRemove.length > 0) {
+          messageList.removeByIds(idsToRemove);
+        }
+
+        if (messagesToSave.length > 0 && sealedIds) {
+          await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state ?? {});
+        }
+
+        omDebug(`[OM:cleanupMarker] removed ${idsToRemove.length} messages, saved ${messagesToSave.length}`);
+        return messageList.get.all.db();
       }
 
-      if (messagesToSave.length > 0) {
-        await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state ?? {});
-      }
+      this.removeIdsFromArray(allMsgs, idsToRemove);
+      return allMsgs;
+    }
 
-      omDebug(`[OM:cleanupMarker] removed ${idsToRemove.length} messages, saved ${messagesToSave.length}`);
-    } else {
-      // No marker found — save current input/response messages first, then clear.
-      // Keeping them in MessageList until save finishes avoids brief under-inclusion windows
-      // where fresh-next-turn context can disappear during async persistence.
+    if (messageList) {
       const newInput = messageList.get.input.db();
       const newOutput = messageList.get.response.db();
       const msgsToSave = [...newInput, ...newOutput];
-      if (msgsToSave.length > 0) {
+      if (msgsToSave.length > 0 && sealedIds) {
         await this.saveMessagesWithSealedIdTracking(msgsToSave, sealedIds, threadId, resourceId, state ?? {});
       }
+      return messageList.get.all.db();
     }
+
+    return allMsgs;
+  }
+
+  /**
+   * Clean up the message context after a successful observation.
+   *
+   * Handles both activation-based cleanup (using observedMessageIds) and
+   * marker-based cleanup (using observation boundary markers). Respects
+   * retention floors to prevent removing too many messages.
+   */
+  async cleanupObservedContext(opts: {
+    messageList: MessageList;
+    sealedIds: Set<string>;
+    threadId: string;
+    resourceId?: string;
+    state?: Record<string, unknown>;
+    observedMessageIds?: string[];
+    retentionFloor?: number;
+  }): Promise<void> {
+    const { messageList, sealedIds, threadId, resourceId, state, observedMessageIds, retentionFloor } = opts;
+    await this.cleanupMessages({
+      threadId,
+      resourceId,
+      messages: messageList,
+      observedMessageIds,
+      retentionFloor,
+      sealedIds,
+      state,
+    });
   }
 
   /**

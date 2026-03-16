@@ -281,14 +281,14 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
 
               omDebug(`[OM:cleanup] observedIds=${observedIds.length}, minRemaining=${minRemaining}`);
 
-              await this.engine.cleanupObservedContext({
-                messageList,
-                sealedIds,
+              await this.engine.cleanupMessages({
                 threadId,
                 resourceId,
-                state,
+                messages: messageList,
                 observedMessageIds: observedIds,
                 retentionFloor: minRemaining,
+                sealedIds,
+                state,
               });
 
               if (status.asyncObservationEnabled) {

@@ -14,7 +14,7 @@ import { seedThreadAndEnsureObservations } from './seed-phase';
  *
  * Closes the gaps between Demos 1-4 and the processor:
  *   - Fire-and-forget buffer (non-blocking, like the processor)
- *   - Context cleanup via OM-computed removal IDs + MessageList.removeByIds()
+ *   - Context cleanup via the same OM cleanup primitive the processor now uses
  *   - Threshold-aware activation (skips activation for tiny chunks)
  *   - Full finalize with reflection
  *   - awaitBuffering before observe (coordinates with in-flight buffer)
@@ -253,16 +253,13 @@ async function main() {
         ? await om.buildContextSystemMessage({ threadId, record })
         : undefined;
 
-      // Ask OM which fully observed messages are safe to remove.
-      // Any partially observed messages are trimmed in place by the OM helper.
-      const idsToRemove = await om.getObservedMessageIdsForCleanup({
+      // Shared cleanup primitive: OM applies observation-aware cleanup directly
+      // to the live MessageList, just like the processor path.
+      await om.cleanupMessages({
         threadId,
-        messages: messageList.get.all.db(),
+        messages: messageList,
         observedMessageIds: record?.observedMessageIds ?? [],
       });
-      if (idsToRemove.length > 0) {
-        messageList.removeByIds(idsToRemove);
-      }
       stepLog.push(`prepareStep ${stepNumber}: pruned to ${messageList.get.all.db().length} messages`);
 
       return freshSystem ? { system: freshSystem } : undefined;
