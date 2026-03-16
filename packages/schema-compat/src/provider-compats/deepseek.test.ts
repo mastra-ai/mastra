@@ -818,7 +818,38 @@ describe('DeepSeekSchemaCompatLayer', () => {
       const schema = z.object({ person: schemaA.and(schemaB).and(schemaC) });
 
       const layer = new DeepSeekSchemaCompatLayer(modelInfo);
-      expect(() => layer.processToJSONSchema(schema)).not.toThrow();
+      expect(layer.processToJSONSchema(schema)).toMatchInlineSnapshot(`
+        {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false,
+          "properties": {
+            "person": {
+              "additionalProperties": false,
+              "properties": {
+                "age": {
+                  "type": "number",
+                },
+                "email": {
+                  "type": "string",
+                },
+                "name": {
+                  "type": "string",
+                },
+              },
+              "required": [
+                "name",
+                "age",
+                "email",
+              ],
+              "type": "object",
+            },
+          },
+          "required": [
+            "person",
+          ],
+          "type": "object",
+        }
+      `);
     });
 
     it('should handle intersection inside a parent object', () => {
@@ -828,7 +859,38 @@ describe('DeepSeekSchemaCompatLayer', () => {
       });
 
       const layer = new DeepSeekSchemaCompatLayer(modelInfo);
-      expect(() => layer.processToJSONSchema(schema)).not.toThrow();
+      expect(layer.processToJSONSchema(schema)).toMatchInlineSnapshot(`
+        {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false,
+          "properties": {
+            "label": {
+              "type": "string",
+            },
+            "metadata": {
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "type": "string",
+                },
+                "value": {
+                  "type": "number",
+                },
+              },
+              "required": [
+                "key",
+                "value",
+              ],
+              "type": "object",
+            },
+          },
+          "required": [
+            "metadata",
+            "label",
+          ],
+          "type": "object",
+        }
+      `);
     });
 
     it('should handle optional intersection wrapper', () => {
@@ -840,7 +902,31 @@ describe('DeepSeekSchemaCompatLayer', () => {
       });
 
       const layer = new DeepSeekSchemaCompatLayer(modelInfo);
-      expect(() => layer.processToJSONSchema(schema)).not.toThrow();
+      expect(layer.processToJSONSchema(schema)).toMatchInlineSnapshot(`
+        {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false,
+          "properties": {
+            "data": {
+              "additionalProperties": false,
+              "properties": {
+                "a": {
+                  "type": "string",
+                },
+                "b": {
+                  "type": "number",
+                },
+              },
+              "required": [
+                "a",
+                "b",
+              ],
+              "type": "object",
+            },
+          },
+          "type": "object",
+        }
+      `);
     });
 
     it('should handle intersection nested inside a union (allOf inside anyOf)', () => {
@@ -859,7 +945,70 @@ describe('DeepSeekSchemaCompatLayer', () => {
       });
 
       const layer = new DeepSeekSchemaCompatLayer(modelInfo);
-      expect(() => layer.processToJSONSchema(schema)).not.toThrow();
+      expect(layer.processToJSONSchema(schema)).toMatchInlineSnapshot(`
+        {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false,
+          "properties": {
+            "locate": {
+              "additionalProperties": false,
+              "properties": {
+                "prompt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "convertHttpImage2Base64": {
+                          "type": "boolean",
+                        },
+                        "images": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                              },
+                              "url": {
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "name",
+                              "url",
+                            ],
+                            "type": "object",
+                          },
+                          "type": "array",
+                        },
+                        "prompt": {
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "prompt",
+                        "images",
+                        "convertHttpImage2Base64",
+                      ],
+                      "type": "object",
+                    },
+                  ],
+                },
+              },
+              "required": [
+                "prompt",
+              ],
+              "type": "object",
+            },
+          },
+          "required": [
+            "locate",
+          ],
+          "type": "object",
+        }
+      `);
     });
   });
 });
