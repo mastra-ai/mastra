@@ -700,7 +700,12 @@ export class SchemaCompatLayer {
     if (processed.every(p => p instanceof ZodObject)) {
       const mergedShape: Record<string, ZodType> = {};
       for (const obj of processed as ZodObject<any, any>[]) {
-        Object.assign(mergedShape, obj.shape);
+        for (const [key, field] of Object.entries(obj.shape)) {
+          if (key in mergedShape) {
+            throw new Error('Cannot flatten intersections with overlapping keys');
+          }
+          mergedShape[key] = field as ZodType;
+        }
       }
       let result: ZodType = z.object(mergedShape);
       if (value.description) {
