@@ -7,6 +7,6 @@ Exposes `messageMetadata` option in `handleChatStream` for attaching custom meta
 ```ts
 const stream = await handleChatStream({
   mastra, agentId: 'my-agent', params,
-  messageMetadata: () => { createdAt: new Date().toISOString() },
+  messageMetadata: () => ({ createdAt: new Date().toISOString() }),
 })
 ```
