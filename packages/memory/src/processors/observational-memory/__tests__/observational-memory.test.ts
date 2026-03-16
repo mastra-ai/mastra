@@ -9106,6 +9106,93 @@ describe('Single-thread replay red tests', () => {
     expect(remainingText).toContain('fresh-post-marker-tail');
   });
 
+  it('T2-C: getObservedMessageIdsForCleanup trims partial messages and returns only fully observed ids', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'full-observed',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'remove-me' }] },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'partial-observed',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'observed-prefix' },
+            { type: 'data-om-observation-end', data: { cycleId: 'cleanup-cycle' } },
+            { type: 'text', text: 'fresh-tail' },
+          ],
+        },
+        createdAt: new Date(t0.getTime() + 1),
+      } as any,
+      'memory',
+    );
+
+    const allMessages = messageList.get.all.db();
+    const idsToRemove = await om.getObservedMessageIdsForCleanup({
+      threadId,
+      resourceId,
+      messages: allMessages,
+      observedMessageIds: ['full-observed', 'partial-observed'],
+    });
+
+    expect(idsToRemove).toEqual(['full-observed']);
+
+    const partial = allMessages.find((m: any) => m.id === 'partial-observed');
+    expect(partial?.content?.parts?.map((p: any) => (p.type === 'text' ? p.text : p.type))).toEqual(['fresh-tail']);
+  });
+
+  it('T2-D: getObservedMessageIdsForCleanup respects retention floor before removing observed messages', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    messageList.add(
+      {
+        id: 'obs-keep-1',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'first observed message' }] },
+        createdAt: new Date('2025-01-01T10:00:00.000Z'),
+      } as any,
+      'memory',
+    );
+    messageList.add(
+      {
+        id: 'obs-keep-2',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'second observed message' }] },
+        createdAt: new Date('2025-01-01T10:00:00.001Z'),
+      } as any,
+      'memory',
+    );
+
+    const idsToRemove = await om.getObservedMessageIdsForCleanup({
+      threadId,
+      resourceId,
+      messages: messageList.get.all.db(),
+      observedMessageIds: ['obs-keep-1', 'obs-keep-2'],
+      retentionFloor: 100_000,
+    });
+
+    expect(idsToRemove).toEqual([]);
+  });
+
   it('T3-A: sealed remint (id=A->id=B) should not replay sealed prefix', async () => {
     const { om, messageList, threadId, resourceId } = await createReplayFixture();
 

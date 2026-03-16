@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai-v5';
 import { streamText, stepCountIs, tool } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
-import { convertMessages } from '@mastra/core/agent';
+import { convertMessages, MessageList } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { z } from 'zod';
 
@@ -14,12 +14,12 @@ import { seedThreadAndEnsureObservations } from './seed-phase';
  *
  * Closes the gaps between Demos 1-4 and the processor:
  *   - Fire-and-forget buffer (non-blocking, like the processor)
- *   - Context pruning via pruneObserved (prevents unbounded growth)
+ *   - Context cleanup via OM-computed removal IDs + MessageList.removeByIds()
  *   - Threshold-aware activation (skips activation for tiny chunks)
  *   - Full finalize with reflection
  *   - awaitBuffering before observe (coordinates with in-flight buffer)
  *
- * Uses plain MastraDBMessage[] — no MessageList required.
+ * Uses a MessageList for live in-memory state, but OM still owns the cleanup logic.
  */
 
 const model = openai('gpt-4o-mini');
@@ -169,16 +169,19 @@ async function main() {
   const beforeStatus = await om.getStatus({ threadId });
   printSnapshot('BEFORE (seeded observations)', beforeStatus, beforeRecord);
 
-  // ── Load history into plain array ──────────────────────────────────────
+  // ── Load history into MessageList ───────────────────────────────────────
 
   const ctx = await memory.getContext({ threadId });
-  let messages: MastraDBMessage[] = [...ctx.messages];
+  const messageList = new MessageList({ threadId });
+  for (const msg of ctx.messages) {
+    messageList.add(msg, 'memory');
+  }
 
   const userPrompt =
     'Check the weather in both Helsinki and Tokyo, then tell me which city is better for outdoor sightseeing today.';
 
   const userMsg = createMessage(userPrompt, 'user', threadId, 'turn-u1');
-  messages.push(userMsg);
+  messageList.add(userMsg, 'input');
   await memory.saveMessages({ messages: [userMsg] });
 
   // ── Run multi-step streamText with production OM hooks ─────────────────
@@ -201,13 +204,16 @@ async function main() {
     onStepFinish: async event => {
       const stepNum = stepLog.length;
 
-      // Add step messages to in-memory array (no storage persistence between steps)
+      // Add step messages to MessageList (in-memory, no storage persistence between steps)
       const stepMsgs = convertMessages(event.response.messages)
         .to('Mastra.V2')
         .map(msg => ({ ...msg, threadId }));
-      messages.push(...stepMsgs);
+      for (const msg of stepMsgs) {
+        messageList.add(msg, 'response');
+      }
 
       // Check status with in-memory messages
+      const messages = messageList.get.all.db();
       const status = await om.getStatus({ threadId, messages });
 
       if (status.shouldBuffer) {
@@ -234,6 +240,7 @@ async function main() {
       if (stepNumber === 0) return undefined;
 
       // Activate with threshold check — skips activation for tiny chunks
+      const messages = messageList.get.all.db();
       const status = await om.getStatus({ threadId, messages });
       if (status.canActivate) {
         await om.activate({ threadId, checkThreshold: true, messages });
@@ -246,9 +253,17 @@ async function main() {
         ? await om.buildContextSystemMessage({ threadId, record })
         : undefined;
 
-      // Prune observed messages from context to prevent unbounded growth
-      messages = await om.pruneObserved({ threadId, messages });
-      stepLog.push(`prepareStep ${stepNumber}: pruned to ${messages.length} messages`);
+      // Ask OM which fully observed messages are safe to remove.
+      // Any partially observed messages are trimmed in place by the OM helper.
+      const idsToRemove = await om.getObservedMessageIdsForCleanup({
+        threadId,
+        messages: messageList.get.all.db(),
+        observedMessageIds: record?.observedMessageIds ?? [],
+      });
+      if (idsToRemove.length > 0) {
+        messageList.removeByIds(idsToRemove);
+      }
+      stepLog.push(`prepareStep ${stepNumber}: pruned to ${messageList.get.all.db().length} messages`);
 
       return freshSystem ? { system: freshSystem } : undefined;
     },
@@ -268,8 +283,9 @@ async function main() {
 
   // ── Persist + finalize (activate + observe + reflect) ──────────────────
 
-  await memory.saveMessages({ messages });
-  const finalResult = await om.finalize({ threadId, messages });
+  const allMessages = messageList.get.all.db();
+  await memory.saveMessages({ messages: allMessages });
+  const finalResult = await om.finalize({ threadId, messages: allMessages });
   if (finalResult.activated) console.log('\n  [Final] Activated remaining buffered chunks');
   if (finalResult.observed) console.log('  [Final] Ran observe() to catch up remaining messages');
   if (finalResult.reflected) console.log('  [Final] Ran reflection to consolidate observations');
@@ -279,7 +295,9 @@ async function main() {
   printSnapshot('AFTER (all steps complete)', afterStatus, afterRecord);
 
   console.log('\n=== DELTA ===');
-  console.log(`- observation token delta: ${(afterRecord?.observationTokenCount ?? 0) - (beforeRecord?.observationTokenCount ?? 0)}`);
+  console.log(
+    `- observation token delta: ${(afterRecord?.observationTokenCount ?? 0) - (beforeRecord?.observationTokenCount ?? 0)}`,
+  );
   console.log(`- final pending: ${afterStatus.pendingTokens}/${afterStatus.threshold}`);
 }
 

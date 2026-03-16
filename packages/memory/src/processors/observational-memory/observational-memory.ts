@@ -4253,6 +4253,91 @@ ${formattedMessages}
   }
 
   /**
+   * Mutate partially observed messages in place and return the fully observed
+   * message IDs that should be removed from the live context.
+   *
+   * This is the cleanup decision logic used after activation-based cleanup:
+   * callers pass the current live messages, OM trims any partially observed
+   * messages down to their unobserved parts, and OM returns only the IDs that
+   * are safe to remove entirely.
+   */
+  async getObservedMessageIdsForCleanup(opts: {
+    threadId: string;
+    resourceId?: string;
+    messages: MastraDBMessage[];
+    observedMessageIds?: string[];
+    retentionFloor?: number;
+  }): Promise<string[]> {
+    const { threadId, resourceId, messages, observedMessageIds, retentionFloor } = opts;
+
+    const record = await this.getOrCreateRecord(threadId, resourceId);
+    const effectiveObservedIds =
+      observedMessageIds && observedMessageIds.length > 0
+        ? observedMessageIds
+        : Array.isArray(record.observedMessageIds)
+          ? record.observedMessageIds
+          : [];
+
+    if (effectiveObservedIds.length === 0) {
+      return [];
+    }
+
+    const observedSet = new Set(effectiveObservedIds);
+    const idsToRemove = new Set<string>();
+    const removalOrder: string[] = [];
+    let skipped = 0;
+    let backoffTriggered = false;
+    const retentionCounter = typeof retentionFloor === 'number' ? new TokenCounter() : null;
+
+    for (const msg of messages) {
+      if (!msg?.id || msg.id === 'om-continuation' || !observedSet.has(msg.id)) continue;
+
+      const unobservedParts = this.getUnobservedParts(msg);
+      const totalParts = msg.content?.parts?.length ?? 0;
+
+      if (unobservedParts.length > 0 && unobservedParts.length < totalParts) {
+        msg.content.parts = unobservedParts;
+        continue;
+      }
+
+      if (retentionCounter && typeof retentionFloor === 'number') {
+        const nextRemainingMessages = messages.filter(
+          m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id) && m.id !== msg.id,
+        );
+        const remainingIfRemoved = retentionCounter.countMessages(nextRemainingMessages);
+        if (remainingIfRemoved < retentionFloor) {
+          skipped += 1;
+          backoffTriggered = true;
+          break;
+        }
+      }
+
+      idsToRemove.add(msg.id);
+      removalOrder.push(msg.id);
+    }
+
+    if (retentionCounter && typeof retentionFloor === 'number' && idsToRemove.size > 0) {
+      let remainingMessages = messages.filter(m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id));
+      let remainingTokens = retentionCounter.countMessages(remainingMessages);
+
+      while (remainingTokens < retentionFloor && removalOrder.length > 0) {
+        const restoreId = removalOrder.pop()!;
+        idsToRemove.delete(restoreId);
+        skipped += 1;
+        backoffTriggered = true;
+        remainingMessages = messages.filter(m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id));
+        remainingTokens = retentionCounter.countMessages(remainingMessages);
+      }
+    }
+
+    omDebug(
+      `[OM:cleanupActivation] matched=${idsToRemove.size}, skipped=${skipped}, backoffTriggered=${backoffTriggered}`,
+    );
+
+    return [...idsToRemove];
+  }
+
+  /**
    * Clean up the message context after a successful observation.
    *
    * Handles both activation-based cleanup (using observedMessageIds) and
@@ -4288,60 +4373,13 @@ ${formattedMessages}
     );
 
     if (observedMessageIds && observedMessageIds.length > 0) {
-      // Activation-based cleanup
-      const observedSet = new Set(observedMessageIds);
-      const idsToRemove = new Set<string>();
-      const removalOrder: string[] = [];
-      let skipped = 0;
-      let backoffTriggered = false;
-      const retentionCounter = typeof retentionFloor === 'number' ? new TokenCounter() : null;
-
-      for (const msg of allMsgs) {
-        if (!msg?.id || msg.id === 'om-continuation' || !observedSet.has(msg.id)) continue;
-
-        const unobservedParts = this.getUnobservedParts(msg);
-        const totalParts = msg.content?.parts?.length ?? 0;
-
-        if (unobservedParts.length > 0 && unobservedParts.length < totalParts) {
-          msg.content.parts = unobservedParts;
-          continue;
-        }
-
-        if (retentionCounter && typeof retentionFloor === 'number') {
-          const nextRemainingMessages = allMsgs.filter(
-            m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id) && m.id !== msg.id,
-          );
-          const remainingIfRemoved = retentionCounter.countMessages(nextRemainingMessages);
-          if (remainingIfRemoved < retentionFloor) {
-            skipped += 1;
-            backoffTriggered = true;
-            break;
-          }
-        }
-
-        idsToRemove.add(msg.id);
-        removalOrder.push(msg.id);
-      }
-
-      if (retentionCounter && typeof retentionFloor === 'number' && idsToRemove.size > 0) {
-        let remainingMessages = allMsgs.filter(m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id));
-        let remainingTokens = retentionCounter.countMessages(remainingMessages);
-
-        while (remainingTokens < retentionFloor && removalOrder.length > 0) {
-          const restoreId = removalOrder.pop()!;
-          idsToRemove.delete(restoreId);
-          skipped += 1;
-          backoffTriggered = true;
-          remainingMessages = allMsgs.filter(m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id));
-          remainingTokens = retentionCounter.countMessages(remainingMessages);
-        }
-      }
-
-      omDebug(
-        `[OM:cleanupActivation] matched=${idsToRemove.size}, skipped=${skipped}, backoffTriggered=${backoffTriggered}`,
-      );
-
-      const idsToRemoveList = [...idsToRemove];
+      const idsToRemoveList = await this.getObservedMessageIdsForCleanup({
+        threadId,
+        resourceId,
+        messages: allMsgs,
+        observedMessageIds,
+        retentionFloor,
+      });
       if (idsToRemoveList.length > 0) {
         messageList.removeByIds(idsToRemoveList);
       }
