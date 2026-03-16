@@ -1400,6 +1400,44 @@ describe('resolveToChildMessages', () => {
       expect((result[0].metadata as any).requireApprovalMetadata.weather).toBeUndefined();
     });
 
+    it('should ignore malformed pending approvals when restoring stream metadata', () => {
+      const messages: MastraUIMessage[] = [
+        {
+          id: 'msg-13b',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'search',
+              toolCallId: 'tool-2',
+              state: 'input-available',
+              input: { query: 'latest forecast' },
+            } as any,
+          ],
+          metadata: {
+            pendingToolApprovals: {
+              malformedNull: null,
+              malformedString: 'invalid',
+              malformedObject: { toolName: 'weather' },
+              search: { toolCallId: 'tool-2', toolName: 'search' },
+            },
+          } as any,
+        },
+      ];
+
+      const result = resolveInitialMessages(messages);
+
+      expect(result[0].metadata).toMatchObject({
+        mode: 'stream',
+        requireApprovalMetadata: {
+          search: { toolCallId: 'tool-2', toolName: 'search' },
+        },
+      });
+      expect((result[0].metadata as any).requireApprovalMetadata.malformedNull).toBeUndefined();
+      expect((result[0].metadata as any).requireApprovalMetadata.malformedString).toBeUndefined();
+      expect((result[0].metadata as any).requireApprovalMetadata.malformedObject).toBeUndefined();
+    });
+
     it('should handle empty text content', () => {
       const messages: MastraUIMessage[] = [
         {

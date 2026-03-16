@@ -179,6 +179,10 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
       if (pendingToolApprovals && typeof pendingToolApprovals === 'object') {
         const stillPending = Object.fromEntries(
           Object.entries(pendingToolApprovals).filter(([_, approval]) => {
+            if (!approval || typeof approval !== 'object' || !('toolCallId' in approval)) {
+              return false;
+            }
+
             const toolCallId = approval.toolCallId;
             // Check if this tool already has a result in the message parts
             return !message.parts.some(
