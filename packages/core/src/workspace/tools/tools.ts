@@ -120,6 +120,12 @@ function wrapWithReadTracker(
           if (check.needsReRead) {
             throw new FileReadRequiredError(input.path, check.reason!);
           }
+          // Pass the mtime from the last read through to the tool so it can
+          // forward it to filesystem.writeFile() for optimistic concurrency.
+          const record = readTracker.getReadRecord(input.path);
+          if (record) {
+            context = { ...context, __expectedMtime: record.modifiedAtRead };
+          }
         } catch (error) {
           if (!(error instanceof FileNotFoundError)) {
             throw error;
