@@ -7,30 +7,11 @@ import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
 import { formatObservationStatus, formatReflectionStatus } from './components/om-progress.js';
 import type { TUIState } from './state.js';
-import { theme, mastra, tintHex, getThemeMode } from './theme.js';
+import { theme, mastra, tintHex, getTermWidth } from './theme.js';
 
-// Colors for OM modes
-const OBSERVER_COLOR = mastra.orange;
-const REFLECTOR_COLOR = mastra.pink;
-
-/**
- * Lighten a color by blending toward white. factor 0 = original, 1 = white.
- */
-function lighten(r: number, g: number, b: number, factor: number): [number, number, number] {
-  return [Math.floor(r + (255 - r) * factor), Math.floor(g + (255 - g) * factor), Math.floor(b + (255 - b) * factor)];
-}
-
-/**
- * For light mode, purple and blue badge backgrounds are too dark.
- * Lighten them slightly so they look better on light terminals.
- */
-function adjustBadgeColor(r: number, g: number, b: number, modeColor: string): [number, number, number] {
-  if (getThemeMode() !== 'light') return [r, g, b];
-  if (modeColor === mastra.purple || modeColor === mastra.blue) {
-    return lighten(r, g, b, 0.25);
-  }
-  return [r, g, b];
-}
+// Colors for OM modes — read from proxy at render time so they pick up contrast adaptation
+const getObserverColor = () => mastra.orange;
+const getReflectorColor = () => mastra.pink;
 
 /**
  * Update the status line at the bottom of the TUI.
@@ -38,7 +19,7 @@ function adjustBadgeColor(r: number, g: number, b: number, modeColor: string): [
  */
 export function updateStatusLine(state: TUIState): void {
   if (!state.statusLine) return;
-  const termWidth = (process.stdout.columns || 80) - 1; // buffer to prevent jitter
+  const termWidth = getTermWidth();
   const SEP = '  '; // double-space separator between parts
 
   // --- Determine if we're showing observer/reflector instead of main mode ---
@@ -54,7 +35,9 @@ export function updateStatusLine(state: TUIState): void {
   const currentMode = modes.length > 1 ? state.harness.getCurrentMode() : undefined;
   // Use OM color when observing/reflecting, otherwise mode color
   const mainModeColor = currentMode?.color;
-  const modeColor = showOMMode ? (isObserving ? OBSERVER_COLOR : REFLECTOR_COLOR) : mainModeColor;
+  const modeColor = showOMMode ? (isObserving ? getObserverColor() : getReflectorColor()) : mainModeColor;
+  // Tinted near-black background from mode color (shared between badge and model ID)
+  const tintBg = modeColor ? tintHex(modeColor, 0.15) : undefined;
   // Badge name: use OM mode name when observing/reflecting, otherwise main mode name
   const badgeName = showOMMode
     ? isObserving
@@ -73,37 +56,23 @@ export function updateStatusLine(state: TUIState): void {
     let badgeBrightness = 0.9;
     if (state.gradientAnimator?.isRunning()) {
       const fade = state.gradientAnimator.getFadeProgress();
-      if (fade < 1) {
-        const offset = state.gradientAnimator.getOffset() % 1;
-        // Inverted phase (+ PI), range 0.65-0.95
-        const animBrightness = 0.65 + 0.3 * (0.5 + 0.5 * Math.sin(offset * Math.PI * 2 + Math.PI));
-        // Interpolate toward idle (0.9) as fade progresses
-        badgeBrightness = animBrightness + (0.9 - animBrightness) * fade;
-      }
+      const easedFade = fade * fade * (3 - 2 * fade); // smoothstep
+      const offset = state.gradientAnimator.getOffset() % 1;
+      // Inverted phase (+ PI), range 0.65-0.95
+      const animBrightness = 0.65 + 0.3 * (0.5 + 0.5 * Math.sin(offset * Math.PI * 2 + Math.PI));
+      // Interpolate toward idle (0.9) as fade progresses
+      badgeBrightness = animBrightness + (0.9 - animBrightness) * easedFade;
     }
-    const [mr, mg, mb] = adjustBadgeColor(
-      Math.floor(mcr * badgeBrightness),
-      Math.floor(mcg * badgeBrightness),
-      Math.floor(mcb * badgeBrightness),
-      modeColor,
-    );
-    modeBadge = chalk.bgRgb(mr, mg, mb).hex('#000000').bold(` ${badgeName.toLowerCase()} `);
+    const mr = Math.floor(mcr * badgeBrightness);
+    const mg = Math.floor(mcg * badgeBrightness);
+    const mb = Math.floor(mcb * badgeBrightness);
+    const rightHalf = tintBg ? chalk.rgb(mr, mg, mb).bgHex(tintBg)('▌') : chalk.rgb(mr, mg, mb)('▌');
+    modeBadge =
+      chalk.rgb(mr, mg, mb)('▐') + chalk.bgRgb(mr, mg, mb).hex('#000000').bold(badgeName.toLowerCase()) + rightHalf;
     modeBadgeWidth = badgeName.length + 2;
   } else if (badgeName) {
-    modeBadge = theme.fg('dim', badgeName) + ' ';
-    modeBadgeWidth = badgeName.length + 1;
-  }
-
-  // --- Update editor border to match mode color (not OM color) ---
-  if (mainModeColor) {
-    const [br, bg, bb] = [
-      parseInt(mainModeColor.slice(1, 3), 16),
-      parseInt(mainModeColor.slice(3, 5), 16),
-      parseInt(mainModeColor.slice(5, 7), 16),
-    ];
-    const dim = 0.35;
-    state.editor.borderColor = (text: string) =>
-      chalk.rgb(Math.floor(br * dim), Math.floor(bg * dim), Math.floor(bb * dim))(text);
+    modeBadge = ' ' + theme.fg('dim', badgeName) + ' ';
+    modeBadgeWidth = badgeName.length + 2;
   }
 
   // --- Collect raw data ---
@@ -134,42 +103,37 @@ export function updateStatusLine(state: TUIState): void {
   const dirBranchShort = branch && branch.length > 24 ? branch.slice(0, 12) + '..' + branch.slice(-8) : dirBranchOnly;
 
   // --- Helper to style the model ID ---
-  const isYolo = (state.harness.getState() as any).yolo === true;
+  const modelTrail = tintBg ? chalk.hex(tintBg)('▌') : '';
   const styleModelId = (id: string): string => {
     if (!state.modelAuthStatus.hasAuth) {
       const envVar = state.modelAuthStatus.apiKeyEnvVar;
       return theme.fg('dim', id) + theme.fg('error', ' ✗') + theme.fg('muted', envVar ? ` (${envVar})` : ' (no key)');
     }
-    // Tinted near-black background from mode color
-    const tintBg = modeColor ? tintHex(modeColor, 0.15) : undefined;
-    const padded = ` ${id} `;
 
     if (state.gradientAnimator?.isRunning() && modeColor) {
       const fade = state.gradientAnimator.getFadeProgress();
-      if (fade < 1) {
-        // During active or fade-out: interpolate gradient toward idle color
-        const text = applyGradientSweep(
-          padded,
-          state.gradientAnimator.getOffset(),
-          modeColor,
-          fade, // pass fade progress to flatten the gradient
-        );
-        return tintBg ? chalk.bgHex(tintBg)(text) : text;
-      }
+      const easedFade = fade * fade * (3 - 2 * fade); // smoothstep
+      const text = applyGradientSweep(id, state.gradientAnimator.getOffset(), modeColor, easedFade);
+      const styled = chalk.italic(text);
+      const bg = tintBg ? chalk.bgHex(tintBg)(styled) : styled;
+      return bg + modelTrail;
     }
     if (modeColor) {
-      // Idle state
-      const [r, g, b] = adjustBadgeColor(
+      // Use same idle brightness as gradient animation convergence (0.8)
+      // so there's no color jump when animation stops
+      const [cr, cg, cb] = [
         parseInt(modeColor.slice(1, 3), 16),
         parseInt(modeColor.slice(3, 5), 16),
         parseInt(modeColor.slice(5, 7), 16),
-        modeColor,
-      );
-      const dim = 0.8;
-      const fgStyled = chalk.rgb(Math.floor(r * dim), Math.floor(g * dim), Math.floor(b * dim)).bold(padded);
-      return tintBg ? chalk.bgHex(tintBg)(fgStyled) : fgStyled;
+      ];
+      const idleBright = 0.8;
+      const fgStyled = chalk
+        .rgb(Math.floor(cr * idleBright), Math.floor(cg * idleBright), Math.floor(cb * idleBright))
+        .bold.italic(id);
+      const bg = tintBg ? chalk.bgHex(tintBg)(fgStyled) : fgStyled;
+      return bg + modelTrail;
     }
-    return chalk.hex(mastra.specialGray).bold(id);
+    return chalk.hex(mastra.specialGray).bold.italic(id);
   };
 
   // --- Build line with progressive reduction ---
@@ -195,18 +159,17 @@ export function updateStatusLine(state: TUIState): void {
         sBadgeBrightness = animBrightness + (0.9 - animBrightness) * fade;
       }
     }
-    const [sr, sg, sb] = adjustBadgeColor(
-      Math.floor(mcr * sBadgeBrightness),
-      Math.floor(mcg * sBadgeBrightness),
-      Math.floor(mcb * sBadgeBrightness),
-      modeColor,
-    );
-    shortModeBadge = chalk.bgRgb(sr, sg, sb).hex('#000000').bold(` ${shortName} `);
+    const sr = Math.floor(mcr * sBadgeBrightness);
+    const sg = Math.floor(mcg * sBadgeBrightness);
+    const sb = Math.floor(mcb * sBadgeBrightness);
+    const shortRightHalf = tintBg ? chalk.rgb(sr, sg, sb).bgHex(tintBg)('▌') : chalk.rgb(sr, sg, sb)('▌');
+    shortModeBadge =
+      chalk.rgb(sr, sg, sb)('▐') + chalk.bgRgb(sr, sg, sb).hex('#000000').bold(shortName) + shortRightHalf;
     shortModeBadgeWidth = shortName.length + 2;
   } else if (badgeName) {
     const shortName = badgeName.toLowerCase().charAt(0);
-    shortModeBadge = theme.fg('dim', shortName) + ' ';
-    shortModeBadgeWidth = shortName.length + 1;
+    shortModeBadge = ' ' + theme.fg('dim', shortName) + ' ';
+    shortModeBadgeWidth = shortName.length + 2;
   }
 
   const buildLine = (opts: {
@@ -219,19 +182,10 @@ export function updateStatusLine(state: TUIState): void {
   }): { plain: string; styled: string } | null => {
     const parts: Array<{ plain: string; styled: string }> = [];
     // Model ID (always present) — styleModelId adds padding spaces
-    // When YOLO, append ⚒ box flush (no SEP gap)
-    if (isYolo && modeColor) {
-      const yBox = chalk.bgHex(tintHex(modeColor, 0.25)).hex(tintHex(modeColor, 0.9)).bold(' ⚒ ');
-      parts.push({
-        plain: ` ${opts.modelId}  ⚒ `,
-        styled: styleModelId(opts.modelId) + yBox,
-      });
-    } else {
-      parts.push({
-        plain: ` ${opts.modelId} `,
-        styled: styleModelId(opts.modelId),
-      });
-    }
+    parts.push({
+      plain: `${opts.modelId}${tintBg ? ' ' : ''}`,
+      styled: styleModelId(opts.modelId),
+    });
     const useBadge = opts.badge === 'short' ? shortModeBadge : modeBadge;
     const useBadgeWidth = opts.badge === 'short' ? shortModeBadgeWidth : modeBadgeWidth;
     // Memory info — animate label text when buffering is active
@@ -242,7 +196,7 @@ export function updateStatusLine(state: TUIState): void {
             applyGradientSweep(
               label,
               state.gradientAnimator!.getOffset(),
-              OBSERVER_COLOR,
+              getObserverColor(),
               state.gradientAnimator!.getFadeProgress(),
             )
         : undefined;
@@ -252,7 +206,7 @@ export function updateStatusLine(state: TUIState): void {
             applyGradientSweep(
               label,
               state.gradientAnimator!.getOffset(),
-              REFLECTOR_COLOR,
+              getReflectorColor(),
               state.gradientAnimator!.getFadeProgress(),
             )
         : undefined;
@@ -282,7 +236,7 @@ export function updateStatusLine(state: TUIState): void {
     const totalPlain =
       useBadgeWidth + parts.reduce((sum, p, i) => sum + visibleWidth(p.plain) + (i > 0 ? SEP.length : 0), 0);
 
-    if (totalPlain > termWidth) return null;
+    if (totalPlain + 1 > termWidth) return null; // +1 buffer for ambiguous-width chars (▐▌)
 
     let styledLine: string;
     const hasDir = !!dirText;
@@ -368,12 +322,7 @@ export function updateStatusLine(state: TUIState): void {
     // 14. Badge only
     buildLine({ modelId: '', showDir: false, badge: 'short' });
 
-  state.statusLine.setText(
-    result?.styled ??
-      shortModeBadge +
-        styleModelId(tinyModelId) +
-        (isYolo && modeColor ? chalk.bgHex(tintHex(modeColor, 0.25)).hex(tintHex(modeColor, 0.9)).bold(' ⚒ ') : ''),
-  );
+  state.statusLine.setText(result?.styled ?? shortModeBadge + styleModelId(tinyModelId));
 
   // Line 2: hidden — dir only shows on line 1 when it fits
   if (state.memoryStatusLine) {
