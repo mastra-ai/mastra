@@ -1,5 +1,5 @@
 import { createUIMessageStream, createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
-import type { InferUIMessageChunk, UIMessage } from '@internal/ai-sdk-v5';
+import type { InferUIMessageChunk, UIMessage, UIMessageStreamOptions } from '@internal/ai-sdk-v5';
 import type { AgentExecutionOptions, AgentExecutionOptionsBase } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -25,6 +25,7 @@ export type ChatStreamHandlerOptions<UI_MESSAGE extends UIMessage, OUTPUT = unde
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
+  messageMetadata?: UIMessageStreamOptions<UI_MESSAGE>['messageMetadata'];
 };
 
 /**
@@ -58,6 +59,7 @@ export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT = un
   sendFinish = true,
   sendReasoning = false,
   sendSources = false,
+  messageMetadata,
 }: ChatStreamHandlerOptions<UI_MESSAGE, OUTPUT>): Promise<ReadableStream<InferUIMessageChunk<UI_MESSAGE>>> {
   const { messages, resumeData, runId, requestContext, trigger, ...rest } = params;
 
@@ -126,6 +128,7 @@ export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT = un
         sendFinish,
         sendReasoning,
         sendSources,
+        messageMetadata,
       })!) {
         writer.write(part as InferUIMessageChunk<UI_MESSAGE>);
       }
