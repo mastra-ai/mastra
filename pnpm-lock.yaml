@@ -5781,7 +5781,7 @@ importers:
   voice/google-gemini-live-api:
     dependencies:
       '@google/genai':
-        specifier: latest
+        specifier: ^1.45.0
         version: 1.45.0(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))
       google-auth-library:
         specifier: ^10.6.1
@@ -5789,12 +5789,6 @@ importers:
       ws:
         specifier: ^8.19.0
         version: 8.19.0
-      zod:
-        specifier: 'catalog:'
-        version: 4.3.6
-      zod-to-json-schema:
-        specifier: ^3.25.1
-        version: 3.25.1(zod@4.3.6)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -5824,7 +5818,7 @@ importers:
         specifier: ^8.5.1
         version: 8.5.1(@microsoft/api-extractor@7.57.7(@types/node@22.19.13))(@swc/core@1.15.18(@swc/helpers@0.5.19))(jiti@2.6.1)(postcss@8.5.8)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.2)
       tsx:
-        specifier: latest
+        specifier: ^4.21.0
         version: 4.21.0
       typescript:
         specifier: ^5.9.3
@@ -5832,6 +5826,12 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.13)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.12.11(@types/node@22.19.13)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
+      zod:
+        specifier: 'catalog:'
+        version: 4.3.6
+      zod-to-json-schema:
+        specifier: ^3.25.1
+        version: 3.25.1(zod@4.3.6)
 
   voice/modelslab:
     devDependencies:
