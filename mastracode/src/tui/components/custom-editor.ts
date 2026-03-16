@@ -42,13 +42,6 @@ export type AppAction =
 const ANSI_STRIP_RE = /\x1b\[[0-9;]*m/g;
 const SLASH_CURSOR_RE = /\x1b\[7m\/\x1b\[0m/;
 const AT_CURSOR_RE = /\x1b\[7m@\x1b\[0m/;
-const GRADIENT_COLORS: [number, number, number][] = [
-  [94, 158, 255], // soft blue
-  [167, 139, 250], // violet
-  [232, 121, 168], // rose pink
-  [244, 162, 97], // warm peach
-];
-
 function parseHex(hex: string): [number, number, number] {
   const h = hex.replace('#', '');
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
@@ -61,19 +54,9 @@ export class CustomEditor extends Editor {
   public escapeEnabled = true;
   public onImagePaste?: (image: ClipboardImage) => void;
   public getModeColor?: () => string | undefined;
-  public getGradientInfo?: () => { offset: number; fade: number; running: boolean } | undefined;
-
   private pendingBracketedPaste: string | null = null;
 
-  // Render caches
   private _cachedModeColorHex?: string;
-  private _cachedModeColorRgb?: [number, number, number];
-  // Border cache — keyed on (offset, fade, width, contentLineCount, color)
-  private _borderCacheKey = '';
-  private _cachedTopBorder = '';
-  private _cachedBottomBorder = '';
-  private _cachedLeftBorders: string[] = [];
-  private _cachedRightBorders: string[] = [];
   private _cachedColorFn?: (s: string) => string;
 
   constructor(tui: TUI, theme: EditorTheme) {
@@ -119,9 +102,7 @@ export class CustomEditor extends Editor {
     // Cache colorFn and prompt — only recreate when color changes
     if (this._cachedModeColorHex !== color) {
       this._cachedModeColorHex = color;
-      this._cachedModeColorRgb = parseHex(color);
       this._cachedColorFn = chalk.hex(color);
-      this._borderCacheKey = ''; // invalidate border cache on color change
     }
     const colorFn = this._cachedColorFn!;
     const b = colorFn;
@@ -173,110 +154,19 @@ export class CustomEditor extends Editor {
     const result: string[] = [];
     const hBarLen = width - 2;
 
-    // Gradient animation for border
-    const gradInfo = this.getGradientInfo?.();
-    const animating = gradInfo?.running;
-    const modeColorRgb = this._cachedModeColorRgb!;
+    // Solid mode-color border
+    const top = b('╭') + b('─').repeat(hBarLen) + b('╮');
+    const leftBorder = b('│');
+    const rightBorder = b('│');
+    const bottom = b('╰') + b('─').repeat(hBarLen) + b('╯');
 
-    // Build a cache key from animation state + dimensions
-    // Borders only change when animation params or box dimensions change
-    const cacheKey = animating
-      ? `${gradInfo!.offset.toFixed(4)}:${gradInfo!.fade.toFixed(3)}:${width}:${contentLines.length}:${color}`
-      : `static:${width}:${contentLines.length}:${color}`;
-
-    if (cacheKey !== this._borderCacheKey) {
-      // Recompute all border strings
-      this._borderCacheKey = cacheKey;
-      const perimeterLen = width * 2 + contentLines.length * 2;
-
-      // Pre-compute shared animation values (constant for all chars in this frame)
-      let breath = 0;
-      let inhaleBright = 0;
-      let inhaleR = 0,
-        inhaleG = 0,
-        inhaleB = 0;
-      let exhaleBright = 0;
-      let easedFade = 0;
-      let offsetVal = 0;
-
-      if (animating) {
-        const { offset, fade } = gradInfo!;
-        offsetVal = offset;
-        const breathPhase = offset * 0.6 * Math.PI * 2;
-        const breathRaw = (Math.sin(breathPhase - Math.PI / 2) + 1) / 2;
-        breath = breathRaw * breathRaw * (3 - 2 * breathRaw); // smoothstep
-        inhaleBright = 0.4 + 0.5 * breath;
-        inhaleR = modeColorRgb[0] * inhaleBright;
-        inhaleG = modeColorRgb[1] * inhaleBright;
-        inhaleB = modeColorRgb[2] * inhaleBright;
-        exhaleBright = 0.55 + 0.25 * (1 - breath);
-        easedFade = fade * fade * (3 - 2 * fade);
-      }
-
-      const borderChar = (ch: string, perimPos: number): string => {
-        if (!animating) return b(ch);
-
-        // Exhale: gradient colors spinning radially (per-char computation)
-        const norm = perimPos / perimeterLen;
-        const radialPos = (norm + offsetVal * 0.15) % 1;
-        const stopCount = GRADIENT_COLORS.length;
-        const scaledPos = radialPos * stopCount;
-        const si = Math.floor(scaledPos) % stopCount;
-        const frac = scaledPos - Math.floor(scaledPos);
-        const ni = (si + 1) % stopCount;
-        const eA = GRADIENT_COLORS[si]!,
-          eB = GRADIENT_COLORS[ni]!;
-        const exR = (eA[0] + (eB[0] - eA[0]) * frac) * exhaleBright;
-        const exG = (eA[1] + (eB[1] - eA[1]) * frac) * exhaleBright;
-        const exB = (eA[2] + (eB[2] - eA[2]) * frac) * exhaleBright;
-
-        // Crossfade exhale → inhale based on breath
-        const bR = exR + (inhaleR - exR) * breath;
-        const bG = exG + (inhaleG - exG) * breath;
-        const bB = exB + (inhaleB - exB) * breath;
-
-        // Fade toward static mode color
-        const fR = bR + (modeColorRgb[0] - bR) * easedFade;
-        const fG = bG + (modeColorRgb[1] - bG) * easedFade;
-        const fB = bB + (modeColorRgb[2] - bB) * easedFade;
-
-        return chalk.rgb(Math.round(fR), Math.round(fG), Math.round(fB))(ch);
-      };
-
-      // Top border
-      let top = borderChar('╭', 0);
-      for (let i = 0; i < hBarLen; i++) top += borderChar('─', i + 1);
-      top += borderChar('╮', width - 1);
-      this._cachedTopBorder = top;
-
-      // Side borders
-      this._cachedLeftBorders = [];
-      this._cachedRightBorders = [];
-      for (let i = 0; i < contentLines.length; i++) {
-        const leftPerim = perimeterLen - 1 - i;
-        const rightPerim = width + i;
-        this._cachedLeftBorders.push(borderChar('│', leftPerim));
-        this._cachedRightBorders.push(borderChar('│', rightPerim));
-      }
-
-      // Bottom border
-      const bottomStart = width + contentLines.length;
-      let bottom = borderChar('╰', bottomStart + width - 1);
-      for (let i = 0; i < hBarLen; i++) bottom += borderChar('─', bottomStart + width - 2 - i);
-      bottom += borderChar('╯', bottomStart);
-      this._cachedBottomBorder = bottom;
-    }
-
-    // Assemble box from cached borders + fresh content
-    // Wrap editor content with explicit text color so it adapts to light/dark mode
+    // Assemble box
     const textColorOpen = `\x1b[38;2;${parseHex(theme.getTheme().text).join(';')}m`;
     const textColorClose = '\x1b[39m';
-    result.push(this._cachedTopBorder);
+    result.push(top);
 
     for (let i = 0; i < contentLines.length; i++) {
       const line = `${textColorOpen}${contentLines[i]!}${textColorClose}`;
-      const leftBorder = this._cachedLeftBorders[i] ?? b('│');
-      const rightBorder = this._cachedRightBorders[i] ?? b('│');
       if (i === 0) {
         result.push(`${leftBorder} ${prompt} ${line} ${rightBorder}`);
       } else {
@@ -284,7 +174,7 @@ export class CustomEditor extends Editor {
       }
     }
 
-    result.push(this._cachedBottomBorder);
+    result.push(bottom);
 
     // Scroll indicators below the box
     for (const ind of scrollIndicators) {
