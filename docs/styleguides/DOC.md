@@ -194,7 +194,7 @@ Use Tabs when the reader can choose between multiple approaches.
 1. **Title format**: Use `"$FEATURE | $CATEGORY"` (e.g. `"Working memory | Memory"`).
 2. **Opening paragraph**: One to two sentences. State what the feature **is** and what it **does**.
 3. **"When to use" section**: Include this when the feature has clear alternatives or when the reader may be unsure if it's the right choice.
-4. **Quick start**: Show the shortest working example. The reader should be able to copy this block and have something functional. Use line highlighting (`{2,5-7}`) to draw attention to the relevant lines.
+4. **Quickstart**: Show the shortest working example. The reader should be able to copy this block and have something functional. Use line highlighting (`{2,5-7}`) to draw attention to the relevant lines.
 5. **Code examples**: Always include TypeScript code in a fenced block with syntax highlighting. Add a `title` attribute for file paths. Use the `npm2yarn` flag on `bash` blocks for install commands.
 6. **Tabs**: Use `<Tabs>` when the reader must choose between mutually exclusive approaches (e.g. Zod vs JSON Schema, generate vs stream, different providers).
 7. **Steps**: Use `<Steps>` and `<StepItem>` for setup/installation sequences where order matters.
