@@ -15,7 +15,7 @@ import type { Mastra } from '../../mastra';
 import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
 import type { OutputResult, Processor } from '../../processors';
-import { ProcessorRunner, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
+import { ProcessorRunner, ProcessorState, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
 import type { ProcessorStepOutput } from '../../processors/step-schema';
 import { toStandardSchema } from '../../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../../schema';
@@ -723,7 +723,10 @@ function createStepFromProcessor<TProcessorId extends string>(
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
-      const input = inputData as ProcessorStepOutput & { abortSignal?: AbortSignal };
+      const input = inputData as ProcessorStepOutput & {
+        processorStates?: Map<string, ProcessorState>;
+        abortSignal?: AbortSignal;
+      };
       const {
         phase,
         messages,
@@ -749,6 +752,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         steps,
         messageId,
         rotateResponseMessageId,
+        // Shared processor states map for accessing persisted state
+        processorStates,
         // Abort signal for cancelling in-flight processor work (e.g. OM observations)
         abortSignal,
       } = input;
@@ -806,14 +811,30 @@ function createStepFromProcessor<TProcessorId extends string>(
         processorSpan ? { currentSpan: processorSpan } : observabilityContext.tracingContext,
       );
 
+      // If processorStates map is provided (from ProcessorRunner), use it to get this processor's state
+      // Otherwise fall back to the state passed in inputData
+      let processorState: Record<string, unknown>;
+      if (processorStates) {
+        // Get or create the ProcessorState for this processor
+        let ps = processorStates.get(processor.id);
+        if (!ps) {
+          ps = new ProcessorState();
+          processorStates.set(processor.id, ps);
+        }
+        processorState = ps.customState;
+      } else {
+        processorState = state ?? {};
+      }
+
       // Base context for all processor methods - includes requestContext for memory processors
       // and observabilityContext for proper span nesting when processors call internal agents
+      // state is per-processor state that persists across all method calls within this request
       const baseContext = {
         abort,
         retryCount: retryCount ?? 0,
         requestContext,
         ...processorObservabilityContext,
-        state: state ?? {},
+        state: processorState,
         abortSignal,
         messageId: currentMessageId,
         rotateResponseMessageId: rotateCurrentResponseMessageId,
@@ -1013,7 +1034,9 @@ function createStepFromProcessor<TProcessorId extends string>(
               // Manage per-processor span lifecycle across stream chunks
               // Use unique key to store span on shared state object
               const spanKey = `__outputStreamSpan_${processor.id}`;
-              const mutableState = (state ?? {}) as Record<string, unknown>;
+              // Use processorState (from the shared processorStates Map) so state persists
+              // across processOutputStream and processOutputResult calls
+              const mutableState = processorState;
               let processorSpan = mutableState[spanKey] as
                 | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
                 | undefined;
