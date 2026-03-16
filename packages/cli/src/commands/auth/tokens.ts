@@ -13,11 +13,7 @@ interface TokenInfo {
   createdAt: string;
 }
 
-export async function createTokenAction(name: string) {
-  const token = await getToken();
-  const orgId = await resolveOrgId();
-  if (!orgId) throw new Error('No organization selected. Run: mastra auth orgs switch');
-
+export async function createToken(token: string, orgId: string, name: string): Promise<{ id: string; secret: string }> {
   const resp = await fetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/tokens`, {
     method: 'POST',
     headers: {
@@ -33,12 +29,21 @@ export async function createTokenAction(name: string) {
   }
 
   const data = (await resp.json()) as { token: TokenInfo; secret: string };
+  return { id: data.token.id, secret: data.secret };
+}
+
+export async function createTokenAction(name: string) {
+  const token = await getToken();
+  const orgId = await resolveOrgId();
+  if (!orgId) throw new Error('No organization selected. Run: mastra auth orgs switch');
+
+  const result = await createToken(token, orgId, name);
 
   console.info('\nToken created successfully!\n');
-  console.info(`  Name:    ${data.token.name}`);
-  console.info(`  ID:      ${data.token.id}`);
+  console.info(`  Name:    ${name}`);
+  console.info(`  ID:      ${result.id}`);
   console.info('');
-  console.info(`  Secret:  ${data.secret}`);
+  console.info(`  Secret:  ${result.secret}`);
   console.info('');
   console.info('  Save this secret — it will not be shown again.');
   console.info('  Set it as MASTRA_API_TOKEN in your CI environment.\n');

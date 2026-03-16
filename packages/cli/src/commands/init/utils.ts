@@ -517,7 +517,7 @@ export const mastra = new Mastra({
         serviceName: 'mastra',
         exporters: [
           new DefaultExporter(), // Persists traces to storage for Mastra Studio
-          new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+          new CloudExporter(), // Sends traces to Mastra Cloud (requires MASTRA_CLOUD_ACCESS_TOKEN in .env)
         ],
         spanOutputProcessors: [
           new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
@@ -671,6 +671,7 @@ interface InteractivePromptArgs {
     gitInit?: boolean;
     skills?: boolean;
     mcpServer?: boolean;
+    observability?: boolean;
   };
 }
 
@@ -904,6 +905,21 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
 
         return { skills: undefined, mcpServer: undefined };
       },
+      setupObservability: async () => {
+        if (skip?.observability) return undefined;
+
+        const choice = await p.select({
+          message: 'Set up observability? (sends traces to Mastra Cloud)',
+          options: [
+            { value: 'yes', label: 'Yes', hint: 'log in and create an access token' },
+            { value: 'skip', label: 'Skip for now' },
+          ],
+          initialValue: 'skip',
+        });
+
+        if (p.isCancel(choice) || choice === 'skip') return undefined;
+        return 'yes' as const;
+      },
       initGit: async () => {
         if (skip?.gitInit) return false;
 
@@ -922,11 +938,12 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
   );
 
   // Flatten the configureMastraToolingForAgents return value
-  const { configureMastraToolingForAgents, ...rest } = mastraProject;
+  const { configureMastraToolingForAgents, setupObservability, ...rest } = mastraProject;
   return {
     ...rest,
     skills: configureMastraToolingForAgents?.skills as string[] | undefined,
     mcpServer: configureMastraToolingForAgents?.mcpServer as Editor | undefined,
+    setupObservability: setupObservability as 'yes' | undefined,
   };
 };
 

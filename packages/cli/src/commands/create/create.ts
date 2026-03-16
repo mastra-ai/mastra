@@ -1,13 +1,18 @@
+import child_process from 'node:child_process';
 import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
+import util from 'node:util';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
+import shellQuote from 'shell-quote';
 import pkgJson from '../../../package.json';
 import type { PosthogAnalytics } from '../../analytics/index';
 import { getAnalytics } from '../../analytics/index';
 import { cloneTemplate, installDependencies } from '../../utils/clone-template';
 import { loadTemplates, selectTemplate, findTemplateByName, getDefaultProjectName } from '../../utils/template-utils';
 import type { Template } from '../../utils/template-utils';
+import { login } from '../auth/credentials.js';
+import { createToken } from '../auth/tokens.js';
 import { init } from '../init/init';
 import type { Editor } from '../init/mcp-docs-server-install';
 import type { Component, LLMProvider } from '../init/utils';
@@ -15,6 +20,8 @@ import { LLM_PROVIDERS } from '../init/utils';
 import { getPackageManager, gitInit } from '../utils.js';
 
 import { createMastraProject } from './utils';
+
+const exec = util.promisify(child_process.exec);
 
 const version = pkgJson.version;
 
@@ -80,6 +87,11 @@ export const create = async (args: {
       mcpServer: result?.mcpServer || args.mcpServer,
       versionTag: args.createVersionTag,
     });
+
+    if (result?.setupObservability === 'yes') {
+      await provisionObservabilityToken();
+    }
+
     postCreate({ projectName });
     return;
   }
@@ -118,6 +130,20 @@ const postCreate = ({ projectName }: { projectName: string }) => {
     ${color.cyan(`${packageManager} run dev`)}
   `);
 };
+
+async function provisionObservabilityToken() {
+  try {
+    const creds = await login();
+    const orgId = creds.currentOrgId ?? creds.organizationId;
+    const { secret } = await createToken(creds.token, orgId, 'mastra-observability');
+    const escapedSecret = shellQuote.quote([secret]);
+    await exec(`echo MASTRA_CLOUD_ACCESS_TOKEN=${escapedSecret} >> .env`);
+    p.log.success('Observability configured — traces will be sent to Mastra Cloud');
+  } catch (err) {
+    p.log.warning(`Could not set up observability: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    p.log.info('You can set this up later by running: mastra auth login');
+  }
+}
 
 function isGitHubUrl(url: string): boolean {
   try {
