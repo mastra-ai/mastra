@@ -2,11 +2,8 @@
 "@mastra/loggers": patch
 ---
 
-Add `prettyPrint` option to PinoLogger for clean JSON output compatible with Datadog, Loki, and CloudWatch.
-```ts
-// Single-line JSON output for log aggregators
-new PinoLogger({ prettyPrint: false })
+Fixed: PinoLogger now supports JSON output for log aggregators
 
-// Default pretty output (unchanged behavior)
-new PinoLogger({ prettyPrint: true })
-```
+Previously, PinoLogger always used pino-pretty which produced multiline
+colored output, breaking log aggregators like Datadog, Loki, and CloudWatch.
+A new prettyPrint option allows switching to single-line JSON output.
