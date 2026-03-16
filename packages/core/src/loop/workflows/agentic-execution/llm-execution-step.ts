@@ -517,6 +517,7 @@ async function processOutputStream<OUTPUT = undefined>({
           });
         }
         safeEnqueue(controller, chunk);
+        break;
       default:
         safeEnqueue(controller, chunk);
     }
