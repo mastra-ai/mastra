@@ -1,7 +1,8 @@
 import * as React from 'react';
 import { Trash2Icon } from 'lucide-react';
-import { IconButton, type IconButtonProps } from '@/ds/components/IconButton';
+import { type IconButtonProps } from '@/ds/components/IconButton';
 import { useJSONSchemaFormField } from './json-schema-form-field-context';
+import { ButtonWithTooltip } from '../Button';
 
 export type JSONSchemaFormFieldRemoveProps = Omit<IconButtonProps, 'onClick' | 'tooltip' | 'children'> & {
   tooltip?: React.ReactNode;
@@ -12,8 +13,8 @@ export function FieldRemove({ children, tooltip = 'Remove field', ...props }: JS
   const { remove } = useJSONSchemaFormField();
 
   return (
-    <IconButton {...props} tooltip={tooltip} onClick={remove}>
+    <ButtonWithTooltip tooltipContent={tooltip} onClick={remove} size="md" {...props}>
       {children || <Trash2Icon />}
-    </IconButton>
+    </ButtonWithTooltip>
   );
 }

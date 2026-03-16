@@ -143,6 +143,75 @@ describe('createMcpManager', () => {
     });
   });
 
+  describe('extraServers parameter', () => {
+    it('merges programmatic servers with file-based config', async () => {
+      setupConfig({ mcpServers: { fs: { command: 'npx', args: ['-y', 'mcp-fs'] } } });
+
+      const mockListTools = vi.fn().mockResolvedValue({ fs_read: {}, remote_weather: {} });
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listTools = mockListTools;
+        this.disconnect = vi.fn();
+      } as any);
+
+      const manager = createMcpManager('/tmp/test', {
+        remote: { url: 'https://mcp.example.com/sse' },
+      });
+      await manager.init();
+
+      const call = MockedMCPClient.mock.calls[0]![0]!;
+      expect(call.servers).toHaveProperty('fs');
+      expect(call.servers).toHaveProperty('remote');
+    });
+
+    it('programmatic servers override file-based servers with the same name', async () => {
+      setupConfig({ mcpServers: { myserver: { command: 'old-cmd' } } });
+
+      const mockListTools = vi.fn().mockResolvedValue({});
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listTools = mockListTools;
+        this.disconnect = vi.fn();
+      } as any);
+
+      const manager = createMcpManager('/tmp/test', {
+        myserver: { command: 'new-cmd', args: ['--flag'] },
+      });
+      await manager.init();
+
+      const call = MockedMCPClient.mock.calls[0]![0]!;
+      expect((call.servers['myserver'] as any).command).toBe('new-cmd');
+      expect((call.servers['myserver'] as any).args).toEqual(['--flag']);
+    });
+
+    it('hasServers returns true when only extraServers provided and config is empty', () => {
+      setupConfig({});
+      const manager = createMcpManager('/tmp/test', {
+        extra: { url: 'https://example.com/mcp' },
+      });
+      expect(manager.hasServers()).toBe(true);
+    });
+
+    it('preserves extra servers after reload', async () => {
+      setupConfig({ mcpServers: { fs: { command: 'npx' } } });
+
+      const mockListTools = vi.fn().mockResolvedValue({ fs_tool: {}, extra_tool: {} });
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listTools = mockListTools;
+        this.disconnect = vi.fn();
+      } as any);
+
+      const manager = createMcpManager('/tmp/test', {
+        extra: { url: 'https://example.com/mcp' },
+      });
+      await manager.init();
+      await manager.reload();
+
+      // After reload, extra servers should still be included
+      const lastCall = MockedMCPClient.mock.calls[MockedMCPClient.mock.calls.length - 1]![0]!;
+      expect(lastCall.servers).toHaveProperty('extra');
+      expect(lastCall.servers).toHaveProperty('fs');
+    });
+  });
+
   describe('server statuses include transport', () => {
     it('sets transport to stdio for command-based servers', async () => {
       setupConfig({ mcpServers: { fs: { command: 'npx' } } });

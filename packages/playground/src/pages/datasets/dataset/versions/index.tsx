@@ -138,7 +138,7 @@ function DatasetCompareVersionsPage() {
               </MainHeader.Description>
             </MainHeader.Column>
             <MainHeader.Column>
-              <Button as={Link} to={`/datasets/${datasetId}`} variant="standard" size="default">
+              <Button as={Link} to={`/datasets/${datasetId}`}>
                 <ArrowLeft />
                 Back to Dataset
               </Button>

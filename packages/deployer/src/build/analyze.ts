@@ -13,6 +13,7 @@ import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
 import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS } from './analyze/constants';
 import { checkConfigExport } from './babel/check-config-export';
+import { detectPinoTransports } from './babel/detect-pino-transports';
 import type { BundlerOptions, DependencyMetadata, ExternalDependencyInfo } from './types';
 import { getPackageName, isBuiltinModule, isDependencyPartOfPackage, slash } from './utils';
 import type { BundlerPlatform } from './utils';
@@ -307,7 +308,7 @@ export async function analyzeBundle(
     projectRoot: string;
     platform: BundlerPlatform;
     isDev?: boolean;
-    bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap'> | null;
+    bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap' | 'dynamicPackages'> | null;
   },
   logger: IMastraLogger,
 ) {
@@ -336,6 +337,7 @@ If you think your configuration is valid, please open an issue.`);
   let externalsPreset = false;
 
   const userExternals = Array.isArray(bundlerOptions?.externals) ? bundlerOptions?.externals : [];
+  const userDynamicPackages = bundlerOptions?.dynamicPackages ?? [];
   if (bundlerOptions?.externals === true) {
     externalsPreset = true;
   }
@@ -343,6 +345,9 @@ If you think your configuration is valid, please open an issue.`);
   let index = 0;
   const depsToOptimize = new Map<string, DependencyMetadata>();
   const allExternals: string[] = [...GLOBAL_EXTERNALS, ...userExternals].filter(Boolean) as string[];
+
+  // Collect pino transports detected across all entries
+  const detectedPinoTransports = new Set<string>();
 
   logger.info('Analyzing dependencies...');
 
@@ -356,6 +361,14 @@ If you think your configuration is valid, please open an issue.`);
       workspaceMap,
       projectRoot,
       shouldCheckTransitiveDependencies: isDev || externalsPreset,
+    });
+
+    // Detect pino transports in the bundled output
+    babel.transformSync(analyzeResult.output.code, {
+      filename: 'pino-detection.js',
+      plugins: [detectPinoTransports(detectedPinoTransports)],
+      configFile: false,
+      babelrc: false,
     });
 
     // Write the entry file to the output dir so that we can use it for workspace resolution stuff
@@ -482,13 +495,32 @@ If you think your configuration is valid, please open an issue.`);
     logger,
   );
 
-  // Merge external dependencies from validateOutput and allUsedExternals
-  // Prefer entries with version info over entries without
+  /**
+   * Build the final set of external dependencies from four sources:
+   * 1. result.externalDependencies - externals discovered during bundle validation
+   * 2. allUsedExternals - packages detected via static analysis that matched the externals config
+   * 3. detectedPinoTransports - pino transports detected by the plugin during bundling
+   * 4. userDynamicPackages - user-specified packages loaded dynamically at runtime
+   *
+   * Prefer entries with version info over entries without
+   */
   const mergedExternalDeps = new Map<string, ExternalDependencyInfo>(result.externalDependencies);
   for (const [dep, info] of allUsedExternals) {
     const existing = mergedExternalDeps.get(dep);
     if (!existing || (!existing.version && info.version)) {
       mergedExternalDeps.set(dep, info);
+    }
+  }
+
+  // Add pino transports and user dynamic packages (no version info needed)
+  for (const transport of detectedPinoTransports) {
+    if (!mergedExternalDeps.has(transport)) {
+      mergedExternalDeps.set(transport, {});
+    }
+  }
+  for (const pkg of userDynamicPackages) {
+    if (!mergedExternalDeps.has(pkg)) {
+      mergedExternalDeps.set(pkg, {});
     }
   }
 

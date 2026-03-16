@@ -59,11 +59,11 @@ export function ExperimentResultPanel({
           nextAriaLabel="View next result details"
         />
         <ButtonsGroup>
-          <Button variant="standard" size="default" onClick={onShowTrace} disabled={!result.traceId}>
+          <Button onClick={onShowTrace} disabled={!result.traceId}>
             <PanelRightIcon />
             Show Trace
           </Button>
-          <Button variant="standard" size="default" onClick={onClose} aria-label="Close result details panel">
+          <Button onClick={onClose} aria-label="Close result details panel">
             <XIcon />
           </Button>
         </ButtonsGroup>
