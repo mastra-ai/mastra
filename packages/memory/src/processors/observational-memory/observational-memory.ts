@@ -5180,11 +5180,16 @@ ${formattedMessages}
   async finalize(opts: { threadId: string; resourceId?: string; messages?: MastraDBMessage[] }): Promise<{
     activated: boolean;
     observed: boolean;
+    reflected: boolean;
     record: ObservationalMemoryRecord;
   }> {
     const { threadId, resourceId, messages } = opts;
     let activated = false;
     let observed = false;
+    let reflected = false;
+
+    // Wait for any in-flight buffer operations to complete
+    await ObservationalMemory.awaitBuffering(threadId, resourceId ?? null, this.scope);
 
     // Activate any remaining buffered chunks
     const preStatus = await this.getStatus({ threadId, resourceId, messages });
@@ -5200,8 +5205,38 @@ ${formattedMessages}
       observed = obsResult.observed;
     }
 
+    // Reflect if observation tokens exceed reflection threshold
+    const reflectStatus = await this.getStatus({ threadId, resourceId });
+    if (reflectStatus.shouldReflect) {
+      const refResult = await this.reflect(threadId, resourceId);
+      reflected = refResult.reflected;
+    }
+
     const record = await this.getOrCreateRecord(threadId, resourceId);
-    return { activated, observed, record };
+    return { activated, observed, reflected, record };
+  }
+
+  /**
+   * Return only the messages that haven't been fully observed yet.
+   *
+   * Use this to prune observed messages from an in-memory message array,
+   * preventing unbounded context growth across steps in a multi-step loop.
+   * This is the array-based equivalent of the processor's `cleanupObservedContext()`.
+   *
+   * @example
+   * ```ts
+   * // In a prepareStep hook, prune before sending to the model
+   * messages = await om.pruneObserved({ threadId, messages });
+   * ```
+   */
+  async pruneObserved(opts: {
+    threadId: string;
+    resourceId?: string;
+    messages: MastraDBMessage[];
+  }): Promise<MastraDBMessage[]> {
+    const { threadId, resourceId, messages } = opts;
+    const record = await this.getOrCreateRecord(threadId, resourceId);
+    return this.getUnobservedMessages(messages, record);
   }
 
   /**
@@ -5457,7 +5492,15 @@ ${formattedMessages}
    * }
    * ```
    */
-  async activate(opts: { threadId: string; resourceId?: string }): Promise<{
+  async activate(opts: {
+    threadId: string;
+    resourceId?: string;
+    /** When true, skip activation if pending tokens are below the observation threshold.
+     *  Matches the guard in tryStep0Activation — avoids activating tiny chunks. */
+    checkThreshold?: boolean;
+    /** Messages to use for threshold check (in-memory). If omitted, loads from storage. */
+    messages?: MastraDBMessage[];
+  }): Promise<{
     activated: boolean;
     record: ObservationalMemoryRecord;
     activatedMessageIds?: string[];
@@ -5470,6 +5513,14 @@ ${formattedMessages}
     const chunks = this.getBufferedChunks(record);
     if (!chunks.length) {
       return { activated: false, record };
+    }
+
+    // Optional threshold guard — skip activation if pending tokens are below threshold
+    if (opts.checkThreshold) {
+      const status = await this.getStatus({ threadId, resourceId, messages: opts.messages });
+      if (status.pendingTokens < status.threshold) {
+        return { activated: false, record };
+      }
     }
 
     // Wait for any in-progress buffering to complete (check DB flag)
