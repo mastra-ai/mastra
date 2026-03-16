@@ -162,6 +162,7 @@ export async function executeStep(
       entityId: step.id,
       input: inputData,
       tracingPolicy: engine.options?.tracingPolicy,
+      requestContext,
     },
     executionContext,
   });

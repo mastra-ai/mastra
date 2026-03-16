@@ -1,15 +1,15 @@
 ---
-title: "Guide: Building an AI Stock Agent"
-description: Guide on creating a simple stock agent in Mastra to fetch the last day's closing stock price for a given symbol.
+title: "Guide: Building an AI stock agent"
+description: Guide on creating a stock agent in Mastra to fetch the last day's closing stock price for a given symbol.
 ---
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 import YouTube from "@site/src/components/YouTube-player";
 
-# Building an AI Stock Agent
+# Building an AI stock agent
 
-In this guide, you're going to create a simple agent that fetches the last day's closing stock price for a given symbol. You'll learn how to create a tool, add it to an agent, and use the agent to fetch stock prices.
+In this guide, you're going to create an agent that fetches the last day's closing stock price for a given symbol. You'll learn how to create a tool, add it to an agent, and use the agent to fetch stock prices.
 
 <YouTube id="rIaZ4l7y9wo" />
 
@@ -19,7 +19,7 @@ In this guide, you're going to create a simple agent that fetches the last day's
 - An API key from a supported [Model Provider](/models)
 - An existing Mastra project (Follow the [installation guide](/guides/getting-started/quickstart) to set up a new project)
 
-## Creating the Agent
+## Creating the agent
 
 To create an agent in Mastra use the `Agent` class to define it and then register it with Mastra.
 
@@ -54,9 +54,9 @@ To create an agent in Mastra use the `Agent` class to define it and then registe
   </StepItem>
 </Steps>
 
-## Creating the Stock Price Tool
+## Creating the stock price tool
 
-So far the Stock Agent doesn't know anything about the current stock prices. To change this, create a tool and add it to the agent.
+The Stock Agent doesn't yet know anything about current stock prices. To change this, create a tool and add it to the agent.
 
 <Steps>
   <StepItem>
@@ -111,7 +111,7 @@ So far the Stock Agent doesn't know anything about the current stock prices. To 
   </StepItem>
 </Steps>
 
-## Running the Agent Server
+## Running the agent server
 
 Learn how to interact with your agent through Mastra's API.
 

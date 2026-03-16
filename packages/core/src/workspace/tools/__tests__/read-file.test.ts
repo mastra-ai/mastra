@@ -24,10 +24,10 @@ describe('workspace_read_file', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: '/test.txt' }, { workspace });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: 'test.txt' }, { workspace });
 
     expect(typeof result).toBe('string');
-    expect(result).toContain('/test.txt');
+    expect(result).toContain('test.txt');
     expect(result).toContain('11 bytes');
     expect(result).toContain('1→Hello World');
   });
@@ -39,7 +39,7 @@ describe('workspace_read_file', () => {
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
       {
-        path: '/test.txt',
+        path: 'test.txt',
         showLineNumbers: false,
       },
       { workspace },
@@ -58,7 +58,7 @@ describe('workspace_read_file', () => {
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
       {
-        path: '/test.txt',
+        path: 'test.txt',
         offset: 2,
         limit: 2,
         showLineNumbers: false,
@@ -77,10 +77,10 @@ describe('workspace_read_file', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: '/binary.bin' }, { workspace });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: 'binary.bin' }, { workspace });
 
     expect(typeof result).toBe('string');
-    expect(result).toContain('/binary.bin');
+    expect(result).toContain('binary.bin');
     expect(result).toContain('4 bytes');
   });
 
@@ -93,7 +93,7 @@ describe('workspace_read_file', () => {
     const tools = createWorkspaceTools(workspace);
 
     const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
-      { path: '/huge.txt' },
+      { path: 'huge.txt' },
       { workspace },
     )) as string;
 

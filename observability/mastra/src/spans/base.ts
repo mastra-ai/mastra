@@ -130,6 +130,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     details?: Record<string, any>;
   };
   public metadata?: Record<string, any>;
+  public requestContext?: Record<string, any>;
   public tags?: string[];
   public traceState?: TraceState;
   /** Entity type that created the span (e.g., agent, workflow) */
@@ -151,7 +152,14 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.name = options.name;
     this.type = options.type;
     this.attributes = deepClean(options.attributes, this.deepCleanOptions) || ({} as SpanTypeMap[TType]);
-    this.metadata = deepClean(options.metadata, this.deepCleanOptions);
+    // Metadata - inherit from parent if not explicitly provided, merge if both exist
+    this.metadata = deepClean(
+      options.parent?.metadata || options.metadata ? { ...options.parent?.metadata, ...options.metadata } : undefined,
+      this.deepCleanOptions,
+    );
+    if (options.requestContext && options.requestContext.size() > 0) {
+      this.requestContext = deepClean(options.requestContext.all, this.deepCleanOptions);
+    }
     this.parent = options.parent;
     this.startTime = options.startTime ?? new Date();
     this.observabilityInstance = observabilityInstance;
@@ -274,6 +282,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       input: hideInput ? undefined : this.input,
       output: hideOutput ? undefined : this.output,
       errorInfo: this.errorInfo,
+      requestContext: this.requestContext,
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
       parentSpanId: this.getParentSpanId(includeInternalSpans),

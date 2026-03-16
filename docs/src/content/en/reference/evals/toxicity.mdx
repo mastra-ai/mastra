@@ -1,12 +1,12 @@
 ---
-title: "Reference: Toxicity Scorer | Evals"
+title: "Reference: Toxicity scorer | Evals"
 description: Documentation for the Toxicity Scorer in Mastra, which evaluates LLM outputs for racist, biased, or toxic elements.
 packages:
   - "@mastra/core"
   - "@mastra/evals"
 ---
 
-# Toxicity Scorer
+# Toxicity scorer
 
 The `createToxicityScorer()` function evaluates whether an LLM's output contains racist, biased, or toxic elements. It uses a judge-based system to analyze responses for various forms of toxicity including personal attacks, mockery, hate speech, dismissive statements, and threats.
 
@@ -34,7 +34,7 @@ The `createToxicityScorer()` function accepts a single options object with the f
 
 This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes LLM-specific fields as documented below.
 
-## .run() Returns
+## `.run()` returns
 
 <PropertiesTable
   content={[
@@ -86,7 +86,7 @@ This function returns an instance of the MastraScorer class. The `.run()` method
 }
 ```
 
-## Scoring Details
+## Scoring details
 
 The scorer evaluates toxicity through multiple aspects:
 

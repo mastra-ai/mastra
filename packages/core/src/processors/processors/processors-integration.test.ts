@@ -137,10 +137,25 @@ describe('Processors Integration Tests', () => {
     // TokenLimiter with a low limit should further reduce messages
     const tokenLimiter = new TokenLimiterProcessor({ limit: 50 });
 
-    const limitedMessages = await tokenLimiter.processInput({
-      messages: filteredMessages,
+    // Create a new MessageList with the filtered messages for the token limiter
+    const limiterMessageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
+    for (const msg of filteredMessages) {
+      limiterMessageList.add(msg, 'input');
+    }
+
+    await tokenLimiter.processInputStep({
+      messageList: limiterMessageList,
+      messages: limiterMessageList.get.all.db(),
       abort: mockAbort,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      systemMessages: [],
+      model: { modelId: 'test-model' } as any,
+      retryCount: 0,
     });
+
+    const limitedMessages = limiterMessageList.get.all.db();
 
     // Verify TokenLimiter further reduced messages
     expect(limitedMessages.length).toBeLessThanOrEqual(filteredMessages.length);
@@ -278,10 +293,24 @@ describe('Processors Integration Tests', () => {
 
     // Apply TokenLimiter
     const tokenLimiter = new TokenLimiterProcessor({ limit: 100 });
-    const limitedMessages = await tokenLimiter.processInput({
-      messages: filteredMessages,
+    const limiterMessageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
+    for (const msg of filteredMessages) {
+      limiterMessageList.add(msg, 'input');
+    }
+
+    await tokenLimiter.processInputStep({
+      messageList: limiterMessageList,
+      messages: limiterMessageList.get.all.db(),
       abort: mockAbort,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      systemMessages: [],
+      model: { modelId: 'test-model' } as any,
+      retryCount: 0,
     });
+
+    const limitedMessages = limiterMessageList.get.all.db();
 
     // Verify no duplicates by checking unique IDs
     const messageIds = limitedMessages.map(m => m.id);
@@ -447,10 +476,26 @@ describe('Processors Integration Tests', () => {
     // The limiter uses ~24 tokens for conversation overhead + ~3.8 per message
     // With 6 messages, we need a limit that keeps some but not all messages
     const tokenLimiter = new TokenLimiterProcessor({ limit: 50 });
-    const tokenLimitedResult = await tokenLimiter.processInput({
-      messages: messageList.get.all.db(),
+
+    // Create a separate MessageList for token limiting (processInputStep mutates in-place)
+    const limiterMessageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
+    for (const msg of messageList.get.all.db()) {
+      limiterMessageList.add(msg, 'input');
+    }
+
+    await tokenLimiter.processInputStep({
+      messageList: limiterMessageList,
+      messages: limiterMessageList.get.all.db(),
       abort: mockAbort,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      systemMessages: [],
+      model: { modelId: 'test-model' } as any,
+      retryCount: 0,
     });
+
+    const tokenLimitedResult = limiterMessageList.get.all.db();
 
     // Should have fewer messages due to token limit (prioritizes recent messages)
     expect(tokenLimitedResult.length).toBeLessThan(messages.length);
@@ -469,10 +514,24 @@ describe('Processors Integration Tests', () => {
       : combinedFilteredResult.get.all.db();
 
     // Then apply token limiter
-    const finalResult = await tokenLimiter.processInput({
-      messages: combinedFilteredMessages,
+    const finalMessageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
+    for (const msg of combinedFilteredMessages) {
+      finalMessageList.add(msg, 'input');
+    }
+
+    await tokenLimiter.processInputStep({
+      messageList: finalMessageList,
+      messages: finalMessageList.get.all.db(),
       abort: mockAbort,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      systemMessages: [],
+      model: { modelId: 'test-model' } as any,
+      retryCount: 0,
     });
+
+    const finalResult = finalMessageList.get.all.db();
 
     // Should have no tool call messages
     expect(combinedFilteredMessages.some(m => m.id === 'msg-2')).toBe(false);

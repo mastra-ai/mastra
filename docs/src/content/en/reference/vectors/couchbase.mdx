@@ -1,11 +1,11 @@
 ---
-title: "Reference: Couchbase Vector Store | Vectors"
+title: "Reference: Couchbase vector store | Vectors"
 description: Documentation for the CouchbaseVector class in Mastra, which provides vector search using Couchbase Vector Search.
 packages:
   - "@mastra/couchbase"
 ---
 
-# Couchbase Vector Store
+# Couchbase vector store
 
 The `CouchbaseVector` class provides vector search using [Couchbase Vector Search](https://docs.couchbase.com/server/current/vector-search/vector-search.html). It enables efficient similarity search and metadata filtering within your Couchbase collections.
 
@@ -20,7 +20,7 @@ The `CouchbaseVector` class provides vector search using [Couchbase Vector Searc
 npm install @mastra/couchbase@latest
 ```
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { CouchbaseVector } from '@mastra/couchbase'
@@ -36,7 +36,7 @@ const store = new CouchbaseVector({
 })
 ```
 
-## Constructor Options
+## Constructor options
 
 <PropertiesTable
   content={[
@@ -86,7 +86,7 @@ const store = new CouchbaseVector({
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 Creates a new vector index in Couchbase.
 
@@ -118,13 +118,13 @@ Index creation is asynchronous. After calling `createIndex`, allow time (typical
 ]}
 />
 
-### upsert()
+### `upsert()`
 
 Adds or updates vectors and their metadata in the collection.
 
 :::note
 
-You can upsert data before or after creating the index. The `upsert` method does not require the index to exist. Couchbase allows multiple Search indexes over the same collection.
+You can upsert data before or after creating the index. The `upsert` method doesn't require the index to exist. Couchbase allows multiple Search indexes over the same collection.
 
 :::
 
@@ -155,13 +155,13 @@ You can upsert data before or after creating the index. The `upsert` method does
 ]}
 />
 
-### query()
+### `query()`
 
 Searches for similar vectors.
 
 :::warning
 
-The `filter` and `includeVector` parameters are not currently supported. Filtering must be performed client-side after retrieving results, or by using the Couchbase SDK's Search capabilities directly. To retrieve the vector embedding, fetch the full document by ID using the Couchbase SDK.
+The `filter` and `includeVector` parameters aren't currently supported. Filtering must be performed client-side after retrieving results, or by using the Couchbase SDK's Search capabilities directly. To retrieve the vector embedding, fetch the full document by ID using the Couchbase SDK.
 
 :::
 
@@ -207,7 +207,7 @@ The `filter` and `includeVector` parameters are not currently supported. Filteri
 ]}
 />
 
-### describeIndex()
+### `describeIndex()`
 
 Returns information about the index.
 
@@ -231,7 +231,7 @@ interface IndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 Deletes an index and all its data.
 
@@ -245,15 +245,15 @@ Deletes an index and all its data.
 ]}
 />
 
-### listIndexes()
+### `listIndexes()`
 
 Lists all vector indexes in the Couchbase bucket.
 
 Returns: `Promise<string[]>`
 
-### updateVector()
+### `updateVector()`
 
-Updates a specific vector entry by its ID with new vector data and/or metadata. **Note:** Filter-based updates are not yet implemented for Couchbase.
+Updates a specific vector entry by its ID with new vector data and/or metadata. **Note:** Filter-based updates aren't yet implemented for Couchbase.
 
 <PropertiesTable
   content={[
@@ -275,7 +275,7 @@ Updates a specific vector entry by its ID with new vector data and/or metadata. 
 ]}
 />
 
-### deleteVector()
+### `deleteVector()`
 
 Deletes a single vector by its ID from the index.
 
@@ -294,9 +294,9 @@ Deletes a single vector by its ID from the index.
 ]}
 />
 
-### deleteVectors()
+### `deleteVectors()`
 
-Deletes multiple vectors by their IDs. **Note:** Filter-based deletion is not yet implemented for Couchbase.
+Deletes multiple vectors by their IDs. **Note:** Filter-based deletion isn't yet implemented for Couchbase.
 
 <PropertiesTable
   content={[
@@ -313,11 +313,11 @@ Deletes multiple vectors by their IDs. **Note:** Filter-based deletion is not ye
 ]}
 />
 
-### disconnect()
+### `disconnect()`
 
 Closes the Couchbase client connection. Should be called when done using the store.
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -330,7 +330,7 @@ interface QueryResult {
 }
 ```
 
-## Error Handling
+## Error handling
 
 The store throws typed errors that can be caught:
 
@@ -356,7 +356,7 @@ try {
 
 ## Notes
 
-- **Index Deletion Caveat:** Deleting a Search index does NOT delete the vectors/documents in the associated Couchbase collection. Data remains unless explicitly removed.
+- **Index Deletion Caveat:** Deleting a Search index doesn't delete the vectors/documents in the associated Couchbase collection. Data remains unless explicitly removed.
 - **Required Permissions:** The Couchbase user must have permissions to connect, read/write documents in the target collection (`kv` role), and manage Search Indexes (`search_admin` role on the relevant bucket/scope).
 - **Index Definition Details & Document Structure:** The `createIndex` method constructs a Search Index definition that indexes the `embedding` field (as type `vector`) and the `content` field (as type `text`), targeting documents within the specified `scopeName.collectionName`. Each document stores the vector in the `embedding` field and metadata in the `metadata` field. If `metadata` contains a `text` property, its value is also copied to a top-level `content` field, which is indexed for text search.
 - **Replication & Durability:** Consider using Couchbase's built-in replication and persistence features for data durability. Monitor index statistics regularly to ensure efficient search.
@@ -365,7 +365,7 @@ try {
 
 - Index creation delays may impact immediate querying after creation.
 - No hard enforcement of vector dimension at ingest time (dimension mismatches will error at query time).
-- Vector insertion and index updates are eventually consistent; strong consistency is not guaranteed immediately after writes.
+- Vector insertion and index updates are eventually consistent; strong consistency isn't guaranteed immediately after writes.
 
 ## Related
 

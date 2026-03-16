@@ -12,7 +12,7 @@ export interface AgentCmsFormShellProps {
   isSubmitting: boolean;
   isSavingDraft?: boolean;
   handlePublish: () => Promise<void>;
-  handleSaveDraft?: () => Promise<void>;
+  handleSaveDraft?: (changeMessage?: string) => Promise<void>;
   readOnly?: boolean;
   isCodeAgentOverride?: boolean;
   basePath: string;
