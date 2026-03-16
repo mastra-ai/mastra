@@ -654,9 +654,9 @@ export const mastra = new Mastra({
 ### server.host
 
 **Type:** `string`\
-**Default:** `localhost`
+**Default:** `localhost` (or `MASTRA_HOST` environment variable if set)
 
-Host address the Mastra development server binds to.
+Host address the Mastra development server binds to. If the `MASTRA_HOST` environment variable is set, it takes precedence over the default.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
