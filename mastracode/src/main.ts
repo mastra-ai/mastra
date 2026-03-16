@@ -9,7 +9,7 @@ import { hasHeadlessFlag, headlessMain } from './headless.js';
 import { loadSettings } from './onboarding/settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
-import { applyThemeMode } from './tui/theme.js';
+import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
 import { setupDebugLogging } from './utils/debug-log.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { getCurrentVersion } from './utils/update-check.js';
@@ -105,6 +105,7 @@ process.on('beforeExit', () => {
   void asyncCleanup();
 });
 process.on('exit', () => {
+  restoreTerminalForeground();
   releaseAllThreadLocks();
 });
 process.on('SIGINT', () => {

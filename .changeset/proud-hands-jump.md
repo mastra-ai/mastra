@@ -2,4 +2,4 @@
 'mastracode': minor
 ---
 
-Added theme system with WCAG-compliant color palette, light/dark mode support, and refined TUI styling. Editor input, user messages, tool execution, and ask-question components now use adaptive colors with rounded borders. Improved text readability across terminal themes.
+Added adaptive light and dark terminal themes with WCAG-compliant contrast. Editor input, messages, tool output, and interactive components now automatically adjust colors and borders for readability across terminal backgrounds.

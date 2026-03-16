@@ -203,7 +203,7 @@ export class ErrorDisplayComponent extends Container {
     }
 
     // Add bottom border
-    const borderBottom = new Text(theme.fg('error', '╰' + '─'.repeat(60) + '╯'), 0, 0);
+    const borderBottom = new Text(theme.fg('error', '╰' + '─'.repeat(59) + '╯'), 0, 0);
     box.addChild(borderBottom);
 
     this.addChild(new Spacer(1));

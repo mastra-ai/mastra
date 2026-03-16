@@ -82,12 +82,14 @@ class AskQuestionBorderedBox {
   }
 
   setAnswered(selectedValue: string, isNegative: boolean) {
+    this.streaming = false;
     this.answered = true;
     this.selectedValue = selectedValue;
     this.answerIsNegative = isNegative;
   }
 
   setCancelled() {
+    this.streaming = false;
     this.answered = true;
     this.cancelled = true;
   }

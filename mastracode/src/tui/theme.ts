@@ -447,13 +447,25 @@ export function applyThemeMode(mode: ThemeMode, terminalBgHex?: string): void {
   computeAdaptedColors();
   // Set terminal default foreground via OSC 10 so unstyled text (e.g. editor input)
   // adapts to the theme. Convert hex to rgb/ format for OSC.
-  const textHex = currentTheme.text;
-  const r = parseInt(textHex.slice(1, 3), 16);
-  const g = parseInt(textHex.slice(3, 5), 16);
-  const b = parseInt(textHex.slice(5, 7), 16);
-  process.stdout.write(
-    `\x1b]10;rgb:${r.toString(16).padStart(2, '0')}/${g.toString(16).padStart(2, '0')}/${b.toString(16).padStart(2, '0')}\x07`,
-  );
+  if (process.stdout.isTTY) {
+    const textHex = currentTheme.text;
+    const r = parseInt(textHex.slice(1, 3), 16);
+    const g = parseInt(textHex.slice(3, 5), 16);
+    const b = parseInt(textHex.slice(5, 7), 16);
+    process.stdout.write(
+      `\x1b]10;rgb:${r.toString(16).padStart(2, '0')}/${g.toString(16).padStart(2, '0')}/${b.toString(16).padStart(2, '0')}\x07`,
+    );
+  }
+}
+
+/**
+ * Restore terminal foreground to default. Call on exit to undo OSC 10 changes.
+ */
+export function restoreTerminalForeground(): void {
+  if (process.stdout.isTTY) {
+    // OSC 110 resets the terminal's default foreground to its original value.
+    process.stdout.write('\x1b]110\x07');
+  }
 }
 
 // =============================================================================
