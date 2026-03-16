@@ -10,7 +10,9 @@ import type {
   OutputProcessorOrWorkflow,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
-import { asJsonSchema, zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
+import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
+import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
+import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
 
 import { z } from 'zod';
@@ -144,6 +146,14 @@ function resolveLazySchema(schema: unknown): unknown {
   return schema;
 }
 
+function schemaToJsonSchema(schema: PublicSchema<unknown> | undefined) {
+  if (!schema) {
+    return undefined;
+  }
+
+  return standardSchemaToJSONSchema(toStandardSchema(schema));
+}
+
 export interface SerializedWorkflow {
   name: string;
   steps?: Record<string, { id: string; description?: string }>;
@@ -204,18 +214,22 @@ export async function getSerializedAgentTools(
     // Only process schemas if not in partial mode
     if (!partial) {
       try {
-        const inputSchema = asJsonSchema(resolveLazySchema(tool.inputSchema) as Parameters<typeof asJsonSchema>[0]);
+        const inputSchema = schemaToJsonSchema(
+          resolveLazySchema(tool.inputSchema) as PublicSchema<unknown> | undefined,
+        );
         if (inputSchema !== undefined) {
           inputSchemaForReturn = stringify(inputSchema);
         }
 
-        const outputSchema = asJsonSchema(resolveLazySchema(tool.outputSchema) as Parameters<typeof asJsonSchema>[0]);
+        const outputSchema = schemaToJsonSchema(
+          resolveLazySchema(tool.outputSchema) as PublicSchema<unknown> | undefined,
+        );
         if (outputSchema !== undefined) {
           outputSchemaForReturn = stringify(outputSchema);
         }
 
-        const requestContextSchema = asJsonSchema(
-          resolveLazySchema(tool.requestContextSchema) as Parameters<typeof asJsonSchema>[0],
+        const requestContextSchema = schemaToJsonSchema(
+          resolveLazySchema(tool.requestContextSchema) as PublicSchema<unknown> | undefined,
         );
         if (requestContextSchema !== undefined) {
           requestContextSchemaForReturn = stringify(requestContextSchema);
