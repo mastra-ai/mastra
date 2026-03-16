@@ -96,6 +96,47 @@ function convertLogLevelToLoggerMethod(level: LoggingLevel): 'debug' | 'info' | 
 }
 
 /**
+ * Convert an MCP CallToolResult with image content into a ToolResultOutput
+ * for the model. When the raw result contains `type: 'image'` parts, returns
+ * `{ type: 'content', value: [...] }` so the AI SDK sends actual image data
+ * to the model instead of a JSON-serialised base64 blob.
+ *
+ * Used as `toModelOutput` on MCP tools — this means the raw CallToolResult is
+ * stored as `toolCall.result` (for app logic) while the converted form is
+ * stored separately as `providerMetadata.mastra.modelOutput` and applied by
+ * output-converter before sending to the LLM.
+ *
+ * Returns `undefined` for text-only results so no modelOutput is stored
+ * (avoids double-storage for the common case).
+ */
+function mcpResultToModelOutput(
+  res: unknown,
+):
+  | {
+      type: 'content';
+      value: Array<{ type: 'text'; text: string } | { type: 'media'; data: string; mediaType: string }>;
+    }
+  | undefined {
+  if (typeof res !== 'object' || res == null) return undefined;
+  const obj = res as { content?: Array<{ type: string; text?: string; data?: string; mimeType?: string }> };
+  if (!Array.isArray(obj.content)) return undefined;
+
+  const hasImage = obj.content.some(part => part.type === 'image');
+  if (!hasImage) return undefined;
+
+  const value: Array<{ type: 'text'; text: string } | { type: 'media'; data: string; mediaType: string }> = [];
+  for (const part of obj.content) {
+    if (part.type === 'text' && part.text != null) {
+      value.push({ type: 'text', text: part.text });
+    } else if (part.type === 'image' && part.data != null) {
+      value.push({ type: 'media', data: part.data, mediaType: part.mimeType || 'image/png' });
+    }
+  }
+
+  return { type: 'content', value };
+}
+
+/**
  * Internal MCP client implementation for connecting to a single MCP server.
  *
  * This class handles the low-level connection, transport management, and protocol
@@ -735,6 +776,7 @@ export class InternalMastraMCPClient extends MastraBase {
           description: tool.description || '',
           inputSchema: await this.convertInputSchema(tool.inputSchema),
           outputSchema: await this.convertOutputSchema(tool.outputSchema),
+          toModelOutput: mcpResultToModelOutput,
           mcpMetadata: {
             serverName: this.name,
             serverVersion: this.client.getServerVersion()?.version,

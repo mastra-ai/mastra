@@ -593,6 +593,58 @@ function formatObserverAttachmentPlaceholder(part: ObserverAttachmentPart, count
   return label ? `[${attachmentType} #${attachmentId}: ${label}]` : `[${attachmentType} #${attachmentId}]`;
 }
 
+/**
+ * Detect and extract image data from a tool result. Handles two shapes:
+ *
+ * 1. AI SDK ToolResultOutput (from toModelOutput / modelOutput):
+ *    `{ type: 'content', value: [{ type: 'media', data, mediaType }, ...] }`
+ *
+ * 2. Raw MCP CallToolResult (from execute):
+ *    `{ content: [{ type: 'image', data, mimeType }, ...] }`
+ *
+ * Returns extracted images and text parts, or `undefined` if no images found.
+ */
+function extractToolResultMedia(
+  result: unknown,
+): { images: Array<{ data: string; mediaType: string }>; textParts: string[] } | undefined {
+  if (typeof result !== 'object' || result === null) return undefined;
+  const obj = result as Record<string, unknown>;
+
+  // Shape 1: AI SDK ToolResultOutput { type: 'content', value: [...] }
+  if (obj.type === 'content' && Array.isArray(obj.value)) {
+    const parts = obj.value as Array<Record<string, unknown>>;
+    const images: Array<{ data: string; mediaType: string }> = [];
+    const textParts: string[] = [];
+    for (const p of parts) {
+      if (p.type === 'media' && typeof p.data === 'string' && typeof p.mediaType === 'string') {
+        images.push({ data: p.data, mediaType: p.mediaType });
+      } else if (p.type === 'text' && typeof p.text === 'string') {
+        textParts.push(p.text);
+      }
+    }
+    if (images.length > 0) return { images, textParts };
+  }
+
+  // Shape 2: Raw MCP CallToolResult { content: [{ type: 'image', data, mimeType }, ...] }
+  if (Array.isArray(obj.content)) {
+    const parts = obj.content as Array<Record<string, unknown>>;
+    const hasImage = parts.some(p => p.type === 'image');
+    if (!hasImage) return undefined;
+    const images: Array<{ data: string; mediaType: string }> = [];
+    const textParts: string[] = [];
+    for (const p of parts) {
+      if (p.type === 'image' && typeof p.data === 'string') {
+        images.push({ data: p.data, mediaType: (p.mimeType as string) || 'image/png' });
+      } else if (p.type === 'text' && typeof p.text === 'string') {
+        textParts.push(p.text);
+      }
+    }
+    if (images.length > 0) return { images, textParts };
+  }
+
+  return undefined;
+}
+
 function formatObserverMessage(
   msg: MastraDBMessage,
   counter: ObserverAttachmentCounter,
@@ -614,6 +666,27 @@ function formatObserverMessage(
         if (part.type === 'tool-invocation') {
           const inv = part.toolInvocation;
           if (inv.state === 'result') {
+            // Handle AI SDK ToolResultOutput with embedded media (e.g. MCP screenshot results).
+            // Extract images as observer attachments and replace with placeholders
+            // instead of stringifying base64 data.
+            const mediaContent = extractToolResultMedia(inv.result);
+            if (mediaContent) {
+              const pieces: string[] = [];
+              for (const img of mediaContent.images) {
+                const inputAttachment: ObserverInputAttachmentPart = {
+                  type: 'image',
+                  image: img.data,
+                  mimeType: img.mediaType,
+                };
+                attachments.push(inputAttachment);
+                const label = img.mediaType || 'image';
+                pieces.push(`[Image #${counter.nextImageId++}: ${label}]`);
+              }
+              if (mediaContent.textParts.length > 0) {
+                pieces.push(...mediaContent.textParts);
+              }
+              return `[Tool Result: ${inv.toolName}]\n${maybeTruncate(pieces.join('\n'), maxLen)}`;
+            }
             const resultStr = JSON.stringify(inv.result, null, 2);
             return `[Tool Result: ${inv.toolName}]\n${maybeTruncate(resultStr, maxLen)}`;
           }

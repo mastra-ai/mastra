@@ -12,6 +12,7 @@ import { loadAgentInstructions, formatAgentInstructions } from './agent-instruct
 import { buildBasePrompt } from './base.js';
 import type { PromptContext as BasePromptContext } from './base.js';
 import { buildModePromptFn } from './build.js';
+import { chromePrompt } from './chrome.js';
 import { fastModePrompt } from './fast.js';
 import { planModePrompt } from './plan.js';
 import { buildToolGuidance } from './tool-guidance.js';
@@ -22,6 +23,7 @@ export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   state?: any;
   currentDate: string;
   workingDir: string;
+  chromeEnabled?: boolean;
 }
 
 const modePrompts: Record<string, string | ((ctx: PromptContext) => string)> = {
@@ -83,5 +85,8 @@ export function buildFullPrompt(ctx: PromptContext): string {
   const instructionSources = loadAgentInstructions(ctx.workingDir);
   const instructionsSection = formatAgentInstructions(instructionSources);
 
-  return base + taskSection + instructionsSection + '\n' + modeSpecific;
+  // Inject Chrome browser automation guidelines if enabled
+  const chromeSection = ctx.chromeEnabled ? '\n' + chromePrompt + '\n' : '';
+
+  return base + taskSection + instructionsSection + chromeSection + '\n' + modeSpecific;
 }

@@ -23,6 +23,7 @@ export function getDynamicInstructions({ requestContext }: { requestContext: { g
     currentDate: new Date().toISOString().split('T')[0]!,
     workingDir: state?.projectPath ?? process.cwd(),
     state: state,
+    chromeEnabled: state?.chromeEnabled ?? false,
   };
 
   return buildFullPrompt(promptCtx);
