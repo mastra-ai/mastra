@@ -32,7 +32,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@google-cloud/speech": "^6.7.1",
-    "@google-cloud/text-to-speech": "^6.3.1"
+    "@google-cloud/text-to-speech": "^6.4.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

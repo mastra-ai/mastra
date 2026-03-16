@@ -33,7 +33,7 @@
   "dependencies": {
     "@mastra/observability": "workspace:*",
     "@mastra/otel-exporter": "workspace:*",
-    "@sentry/node": "^10.32.1"
+    "@sentry/node": "^10.43.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
