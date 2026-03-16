@@ -55,7 +55,7 @@ export const AgentBadgeWrapper = ({
   // 1. childMessages (built during live streaming by toUIMessageFromAgent)
   // 2. subAgentToolResults (from backend tool-result, available after approval or on refresh)
   // 3. resolveToChildMessages (fetched from subagent thread via API)
-  let childMessages = result?.childMessages;
+  let childMessages = result?.childMessages?.length ? result.childMessages : undefined;
 
   if (!childMessages && result?.subAgentToolResults?.length) {
     const toolMessages: AgentMessage[] = result.subAgentToolResults.map(tr => ({
