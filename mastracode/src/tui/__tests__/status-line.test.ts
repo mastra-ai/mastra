@@ -9,23 +9,19 @@ vi.mock('@mariozechner/pi-tui', () => ({
 }));
 
 vi.mock('chalk', () => {
-  const passthrough = (value: string) => value;
-  const chain = Object.assign((value: string) => value, {
-    bold: passthrough,
-    hex: () => chain,
-    bgHex: () => chain,
-    bgRgb: () => chain,
-    rgb: () => chain,
-  });
+  // Recursive proxy that supports arbitrary chaining (e.g. chalk.hex(...).bold.italic(...))
+  const makeChain = (): any =>
+    new Proxy((value: string) => value, {
+      get: (_target, prop) => {
+        if (prop === 'call' || prop === 'apply' || prop === 'bind') return Reflect.get(_target, prop);
+        // Methods that take args (hex, bgHex, rgb, bgRgb) return a new chain
+        if (['hex', 'bgHex', 'rgb', 'bgRgb'].includes(prop as string)) return () => makeChain();
+        // Properties like bold, italic, dim return a new chain
+        return makeChain();
+      },
+    });
 
-  return {
-    default: {
-      hex: () => chain,
-      bgHex: () => chain,
-      bgRgb: () => chain,
-      rgb: () => chain,
-    },
-  };
+  return { default: makeChain() };
 });
 
 vi.mock('../components/obi-loader.js', () => ({
@@ -50,6 +46,9 @@ vi.mock('../theme.js', () => ({
   },
   tintHex: (_color: string, _amount: number) => '#111111',
   getThemeMode: () => 'dark',
+  ensureContrast: (_color: string) => _color,
+  TUI_MIN_CONTRAST: 5.5,
+  getTermWidth: () => 200,
 }));
 
 import { updateStatusLine } from '../status-line.js';

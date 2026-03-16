@@ -28,7 +28,7 @@ import type { SubagentExecutionComponent } from './components/subagent-execution
 import type { TaskProgressComponent } from './components/task-progress.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import type { UserMessageComponent } from './components/user-message.js';
-import { getEditorTheme } from './theme.js';
+import { getEditorTheme, TERM_WIDTH_BUFFER } from './theme.js';
 // =============================================================================
 // MastraTUIOptions
 // =============================================================================
@@ -117,8 +117,10 @@ export interface TUIState {
   pendingNewThread: boolean;
 
   // ── Inline interaction ────────────────────────────────────────────────
-  /** Track the most recent ask_user tool for inline question placement */
-  lastAskUserComponent?: IToolExecutionComponent;
+  /** Track the most recent ask_user component for inline question activation */
+  lastAskUserComponent?: AskQuestionInlineComponent;
+  /** Map toolCallId → AskQuestionInlineComponent for streaming arg updates */
+  pendingAskUserComponents: Map<string, AskQuestionInlineComponent>;
   /** Saved editor text for Alt+Z undo */
   lastClearedText: string;
   activeInlineQuestion?: AskQuestionInlineComponent;
@@ -179,13 +181,29 @@ export interface TUIState {
  */
 export function createTUIState(options: MastraTUIOptions): TUIState {
   const terminal = new ProcessTerminal();
+  // Override columns getter to prevent line wrapping in nested terminal emulators
+  Object.defineProperty(terminal, 'columns', {
+    get: () => (process.stdout.columns || 80) - TERM_WIDTH_BUFFER,
+  });
   const ui = new TUI(terminal);
+
+  // Perf profiling removed
+
   const chatContainer = new Container();
   const editorContainer = new Container();
   const footer = new Container();
   const editor = new CustomEditor(ui, getEditorTheme());
+  editor.getModeColor = () => options.harness.getCurrentMode()?.color;
+  // Wire up gradient animation info for editor border animation
+  editor.getGradientInfo = () => {
+    const ga = state?.gradientAnimator;
+    if (!ga) return undefined;
+    return { offset: ga.getOffset(), fade: ga.getFadeProgress(), running: ga.isRunning() };
+  };
 
-  return {
+  // Need a reference to state for the gradient callback above
+  let state: TUIState | undefined;
+  const result: TUIState = {
     // Core dependencies
     harness: options.harness,
     options,
@@ -220,6 +238,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Inline interaction
     lastClearedText: '',
+    pendingAskUserComponents: new Map(),
     pendingInlineQuestions: [],
     pendingFollowUpMessages: [],
     pendingQueuedActions: [],
@@ -239,4 +258,6 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     lastCtrlCTime: 0,
     userInitiatedAbort: false,
   };
+  state = result;
+  return result;
 }
