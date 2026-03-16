@@ -1,11 +1,14 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { openai } from '@ai-sdk/openai-v5';
+import { useLLMRecording } from '@internal/llm-recorder';
 import { describe, expect, it, beforeAll } from 'vitest';
 
 import { CompositeVoice } from '../../composite-voice';
 
 describe('CompositeVoice with AI SDK Models', () => {
+  useLLMRecording('core-src-voice-aisdk-__tests__-composite-voice.e2e');
+
   const outputDir = path.join(process.cwd(), 'test-outputs');
 
   beforeAll(() => {
