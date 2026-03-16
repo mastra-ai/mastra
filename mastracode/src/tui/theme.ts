@@ -651,7 +651,7 @@ export function getMarkdownTheme(): MarkdownTheme {
     link: (text: string) => chalk.hex(t.textHighlight)(text),
     linkUrl: (text: string) => chalk.hex(t.muted)(text),
     code: (text: string) => chalk.hex(t.textHighlight).bold(text),
-    codeBlock: (text: string) => text,
+    codeBlock: (text: string) => chalk.hex(t.text)(text),
     codeBlockBorder: (text: string) => chalk.hex(t.dim)(text),
     quote: (text: string) => chalk.hex(t.muted).italic(text),
     quoteBorder: (text: string) => chalk.hex(t.borderMuted)(text),
