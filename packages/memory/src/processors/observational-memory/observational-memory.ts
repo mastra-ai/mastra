@@ -2317,9 +2317,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     return trimmed
-      .split(/\n{2,}--- message boundary ---\n{2,}/)
+      .split(/\n{2,}--- message boundary \([^)]+\) ---\n{2,}/)
       .map(chunk => chunk.trim())
       .filter(Boolean);
+  }
+
+  /**
+   * Create a message boundary delimiter with an ISO 8601 date.
+   * The date should be the lastObservedAt timestamp — the latest message
+   * timestamp that was observed to produce the observations following this boundary.
+   */
+  static createMessageBoundary(date: Date): string {
+    return `\n\n--- message boundary (${date.toISOString()}) ---\n\n`;
   }
 
   /**
@@ -3939,6 +3948,7 @@ ${formattedMessages}
     existingObservations: string,
     _threadId: string,
     newThreadSection: string,
+    lastObservedAt: Date,
   ): string {
     if (!existingObservations) {
       return newThreadSection;
@@ -3949,8 +3959,8 @@ ${formattedMessages}
     const dateMatch = newThreadSection.match(/Date:\s*([A-Za-z]+\s+\d+,\s+\d+)/);
 
     if (!threadIdMatch || !dateMatch) {
-      // Can't parse, just append
-      return `${existingObservations}\n\n${newThreadSection}`;
+      // Can't parse, just append with message boundary for cache stability
+      return `${existingObservations}${ObservationalMemory.createMessageBoundary(lastObservedAt)}${newThreadSection}`;
     }
 
     const newThreadId = threadIdMatch[1]!;
@@ -3998,8 +4008,8 @@ ${formattedMessages}
       }
     }
 
-    // No existing section with same thread ID and date - append
-    return `${existingObservations}\n\n${newThreadSection}`;
+    // No existing section with same thread ID and date - append with message boundary for cache stability
+    return `${existingObservations}${ObservationalMemory.createMessageBoundary(lastObservedAt)}${newThreadSection}`;
   }
 
   /**
@@ -4125,17 +4135,25 @@ ${formattedMessages}
         wasTruncated,
       });
 
+      // Use the max message timestamp as cursor — only for the messages we actually observed
+      const lastObservedAt = this.getMaxMessageTimestamp(messagesToObserve);
+
       // Build new observations (use freshRecord if available)
       const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
       let newObservations: string;
       if (this.scope === 'resource') {
         // In resource scope: wrap with thread tag and replace/append
         const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
-        newObservations = this.replaceOrAppendThreadSection(existingObservations, threadId, threadSection);
+        newObservations = this.replaceOrAppendThreadSection(
+          existingObservations,
+          threadId,
+          threadSection,
+          lastObservedAt,
+        );
       } else {
-        // In thread scope: simple append
+        // In thread scope: simple append with message boundary delimiter for cache stability
         newObservations = existingObservations
-          ? `${existingObservations}\n\n${result.observations}`
+          ? `${existingObservations}${ObservationalMemory.createMessageBoundary(lastObservedAt)}${result.observations}`
           : result.observations;
       }
 
@@ -4143,9 +4161,6 @@ ${formattedMessages}
 
       // Calculate tokens generated in THIS cycle only (for UI marker)
       const cycleObservationTokens = this.tokenCounter.countObservations(result.observations);
-
-      // Use the max message timestamp as cursor — only for the messages we actually observed
-      const lastObservedAt = this.getMaxMessageTimestamp(messagesToObserve);
 
       // Collect message IDs being observed for the safeguard
       // Only mark the messages we actually observed, not the ones we kept
@@ -5464,14 +5479,17 @@ ${formattedMessages}
         // Track tokens generated for this thread
         cycleObservationTokens += this.tokenCounter.countObservations(result.observations);
 
+        // Use the max message timestamp as cursor — only for the messages we actually observed
+        const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
+
         // Wrap with thread tag and append (in thread order for consistency)
         const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
-        currentObservations = this.replaceOrAppendThreadSection(currentObservations, threadId, threadSection);
-
-        // Update thread-specific metadata:
-        // - lastObservedAt: ALWAYS update to track per-thread observation progress
-        // - currentTask, suggestedResponse: explicitly clear when omitted to avoid stale hints
-        const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
+        currentObservations = this.replaceOrAppendThreadSection(
+          currentObservations,
+          threadId,
+          threadSection,
+          threadLastObservedAt,
+        );
         const thread = await this.storage.getThreadById({ threadId });
         if (thread) {
           const newMetadata = setThreadOMMetadata(thread.metadata, {
@@ -6070,4 +6088,52 @@ ${formattedMessages}
   getReflectionConfig(): ResolvedReflectionConfig {
     return this.reflectionConfig;
   }
+}
+
+// Regex that captures the ISO date from each message boundary delimiter
+const BOUNDARY_WITH_DATE_RE = /\n{2,}--- message boundary \(([^)]+)\) ---\n{2,}/;
+
+/**
+ * Given a raw `activeObservations` string (from an `ObservationalMemoryRecord`),
+ * return only the observation text that would have been visible at `asOf`.
+ *
+ * Each chunk boundary contains the `lastObservedAt` timestamp of the messages
+ * that were observed to produce the chunk that follows it. A chunk is included
+ * when its boundary date is ≤ `asOf` (meaning those observations existed before
+ * or at the target moment). The very first chunk has no preceding boundary and
+ * is always included.
+ *
+ * @param activeObservations - The full `activeObservations` string from the OM record
+ * @param asOf - The point in time to query (e.g. a message's `createdAt`)
+ * @returns The filtered observations string, or an empty string if none match
+ */
+export function getObservationsAsOf(activeObservations: string, asOf: Date): string {
+  const trimmed = activeObservations.trim();
+  if (!trimmed) return '';
+
+  // Split while keeping the delimiter (with captured date) interleaved
+  const parts = trimmed.split(BOUNDARY_WITH_DATE_RE);
+
+  // parts is: [chunk0, date1, chunk1, date2, chunk2, ...]
+  // chunk0 has no boundary date — always included
+  const chunks: string[] = [];
+  const firstChunk = parts[0]?.trim();
+  if (firstChunk) {
+    chunks.push(firstChunk);
+  }
+
+  for (let i = 1; i < parts.length; i += 2) {
+    const dateStr = parts[i]!;
+    const chunk = parts[i + 1]?.trim();
+    if (!chunk) continue;
+
+    const boundaryDate = new Date(dateStr);
+    if (isNaN(boundaryDate.getTime())) continue;
+
+    if (boundaryDate <= asOf) {
+      chunks.push(chunk);
+    }
+  }
+
+  return chunks.join('\n\n');
 }

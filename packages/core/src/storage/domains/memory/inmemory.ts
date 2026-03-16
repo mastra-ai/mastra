@@ -1029,9 +1029,10 @@ export class InMemoryMemory extends MemoryStorage {
     const derivedLastObservedAt =
       lastObservedAt ?? (latestChunk?.lastObservedAt ? new Date(latestChunk.lastObservedAt) : new Date());
 
-    // Append activated content to active observations
+    // Append activated content to active observations with message boundary for cache stability
     if (record.activeObservations) {
-      record.activeObservations = `${record.activeObservations}\n\n${activatedContent}`;
+      const boundary = `\n\n--- message boundary (${derivedLastObservedAt.toISOString()}) ---\n\n`;
+      record.activeObservations = `${record.activeObservations}${boundary}${activatedContent}`;
     } else {
       record.activeObservations = activatedContent;
     }
