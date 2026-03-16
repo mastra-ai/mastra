@@ -49,7 +49,7 @@ describe('AIV5Adapter — suspended tool state rehydration', () => {
 
     // The UI message should contain the tool-invocation part
     const toolParts = uiMessage.parts.filter(p => p.type.startsWith('tool-'));
-    expect(toolParts.length).toBe(1);
+    expect(toolParts).toHaveLength(1);
     expect(toolParts[0]).toMatchObject({
       type: 'tool-process-data',
       toolCallId: 'tc-1',
@@ -60,7 +60,7 @@ describe('AIV5Adapter — suspended tool state rehydration', () => {
     // The UI message should also contain a data-tool-call-suspended part
     // so the client can render the suspended state after page refresh.
     const suspendedParts = uiMessage.parts.filter((p: any) => p.type === 'data-tool-call-suspended');
-    expect(suspendedParts.length).toBe(1);
+    expect(suspendedParts).toHaveLength(1);
     expect((suspendedParts[0] as any).data).toMatchObject({
       toolCallId: 'tc-1',
       toolName: 'process-data',
@@ -117,7 +117,7 @@ describe('AIV5Adapter — suspended tool state rehydration', () => {
     });
 
     const approvalParts = uiMessage.parts.filter((p: any) => p.type === 'data-tool-call-approval');
-    expect(approvalParts.length).toBe(1);
+    expect(approvalParts).toHaveLength(1);
     expect((approvalParts[0] as any).data).toMatchObject({
       toolCallId: 'tc-2',
       toolName: 'delete-file',
@@ -214,8 +214,8 @@ describe('AIV5Adapter — suspended tool state rehydration', () => {
   });
 
   it('should NOT produce data-tool-call-suspended parts for already-resumed tools', () => {
-    // When data-tool-call-suspended parts exist in content.parts but are marked as resumed,
-    // they should NOT be re-synthesized
+    // When a tool has been resumed/completed, metadata.suspendedTools is cleared,
+    // so no data-tool-call-suspended parts should be synthesized
     const dbMessage: MastraDBMessage = {
       id: 'msg-3',
       role: 'assistant',
@@ -242,6 +242,6 @@ describe('AIV5Adapter — suspended tool state rehydration', () => {
     const uiMessage = AIV5Adapter.toUIMessage(dbMessage);
 
     const suspendedParts = uiMessage.parts.filter((p: any) => p.type === 'data-tool-call-suspended');
-    expect(suspendedParts.length).toBe(0);
+    expect(suspendedParts).toHaveLength(0);
   });
 });
