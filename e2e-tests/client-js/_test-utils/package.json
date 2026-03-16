@@ -16,7 +16,7 @@
     "@mastra/libsql": "workspace:*",
     "@mastra/observability": "workspace:*",
     "get-port": "^7.1.0",
-    "hono": "^4.12.7",
+    "hono": "^4.12.8",
     "vitest": "catalog:"
   },
   "devDependencies": {

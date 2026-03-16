@@ -47,7 +47,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "convex": "^1.33.0"
+    "convex": "^1.33.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

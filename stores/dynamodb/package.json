@@ -37,9 +37,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.1008.0",
-    "@aws-sdk/lib-dynamodb": "^3.1008.0",
-    "electrodb": "^3.7.1"
+    "@aws-sdk/client-dynamodb": "^3.1009.0",
+    "@aws-sdk/lib-dynamodb": "^3.1009.0",
+    "electrodb": "^3.7.2"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"

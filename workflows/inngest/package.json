@@ -59,7 +59,7 @@
     "express": "^5.2.1",
     "fastify": "^5.8.2",
     "get-port": "7.1.0",
-    "hono": "^4.12.7",
+    "hono": "^4.12.8",
     "inngest-cli": "^1.17.5",
     "koa": "^3.1.2",
     "koa-bodyparser": "^4.4.1",

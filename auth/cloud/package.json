@@ -39,7 +39,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",
-    "hono": "^4.12.7",
+    "hono": "^4.12.8",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

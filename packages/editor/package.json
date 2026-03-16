@@ -70,9 +70,9 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "dependencies": {
-    "@arcadeai/arcadejs": "^2.2.0",
-    "@composio/core": "^0.6.4",
-    "@composio/mastra": "^0.6.4",
+    "@arcadeai/arcadejs": "^2.3.0",
+    "@composio/core": "^0.6.5",
+    "@composio/mastra": "^0.6.5",
     "@mastra/memory": "workspace:*",
     "@mastra/schema-compat": "workspace:*"
   },
@@ -85,7 +85,7 @@
     "@mastra/hono": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/mcp": "workspace:*",
-    "hono": "^4.12.7",
+    "hono": "^4.12.8",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",

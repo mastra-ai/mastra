@@ -73,7 +73,7 @@
     "execa": "^9.6.1",
     "fastest-levenshtein": "latest",
     "js-tiktoken": "^1.0.21",
-    "js-yaml": "^4.1.0",
+    "js-yaml": "^3.14.2",
     "partial-json": "^0.1.7",
     "strip-ansi": "^7.2.0",
     "tree-kill": "latest",
@@ -92,7 +92,7 @@
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "catalog:",
-    "typescript-eslint": "^8.51.0",
+    "typescript-eslint": "^8.57.0",
     "vitest": "catalog:"
   },
   "engines": {

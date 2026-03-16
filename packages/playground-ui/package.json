@@ -118,7 +118,7 @@
     "react-hook-form": "^7.71.2",
     "react-horizontal-scrolling-menu": "^8.2.0",
     "react-markdown": "^9.1.0",
-    "react-resizable-panels": "^4.7.2",
+    "react-resizable-panels": "^4.7.3",
     "react-syntax-highlighter": "^15.6.6",
     "remark-gfm": "^4.0.1",
     "semver": "^7.7.4",
@@ -127,7 +127,7 @@
     "superjson": "^2.2.6",
     "tailwindcss-animate": "^1.0.7",
     "use-debounce": "^10.1.0",
-    "zustand": "^5.0.11"
+    "zustand": "^5.0.12"
   },
   "peerDependencies": {
     "@mastra/ai-sdk": "workspace:^",

@@ -43,7 +43,7 @@
     "@mastra/observability": "workspace:*",
     "@types/node": "22.19.13",
     "eslint": "^9.39.4",
-    "hono": "^4.12.7",
+    "hono": "^4.12.8",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",

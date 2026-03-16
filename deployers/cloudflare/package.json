@@ -62,7 +62,7 @@
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "wrangler": "^4.72.0",
+    "wrangler": "^4.73.0",
     "zod": "^3.25.76"
   },
   "homepage": "https://mastra.ai",
