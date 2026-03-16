@@ -53,7 +53,7 @@ describe('provider-executed tool message persistence', () => {
   // On main, the deferred web_search result was persisted as a stub
   // { providerExecuted: true, toolName: 'web_search' } instead of real data.
   it(
-    'stream - deferred web_search result should persist with real data when used alongside a client tool',
+    'stream - deferred web_search should persist with real data in correct part order when used alongside a client tool',
     { timeout: 60000 },
     async () => {
       const mockMemory = new MockMemory();
@@ -154,6 +154,123 @@ describe('provider-executed tool message persistence', () => {
 
       // No tool call should be split across messages
       assertNoSplitToolCalls(assistantMessages);
+
+      // ── Part ordering assertions ──
+      // Verify persisted parts match the stream order from the provider.
+      // Anthropic sends: text → server_tool_use(web_search) → tool_use(lookup)
+      // The persisted message should preserve this order.
+      const turn1Message = assistantMessages[0];
+      const turn1Parts = turn1Message.content.parts;
+      const turn1Types = turn1Parts.map((p: any) => {
+        if (p.type === 'tool-invocation') return `tool-invocation(${p.toolInvocation.toolName})`;
+        return p.type;
+      });
+
+      // text must come before tool invocations
+      const textIndex = turn1Types.findIndex((t: string) => t === 'text');
+      const webSearchIndex = turn1Types.findIndex((t: string) => t === 'tool-invocation(web_search)');
+      const lookupIndex = turn1Types.findIndex((t: string) => t === 'tool-invocation(lookup)');
+
+      expect(textIndex).toBeGreaterThanOrEqual(0);
+      expect(webSearchIndex).toBeGreaterThanOrEqual(0);
+      expect(lookupIndex).toBeGreaterThanOrEqual(0);
+
+      // Stream order: text < web_search < lookup
+      expect(textIndex).toBeLessThan(webSearchIndex);
+      expect(webSearchIndex).toBeLessThan(lookupIndex);
+    },
+  );
+
+  // Single-turn: only web_search, no client tools, so Anthropic executes it immediately
+  // (no deferral). Verifies that the tool-call + tool-result flow works for non-deferred
+  // provider tool calls.
+  it(
+    'stream - single-turn web_search (no client tools) should persist with real data in correct part order',
+    { timeout: 60000 },
+    async () => {
+      const mockMemory = new MockMemory();
+      const webSearch = anthropic.tools.webSearch_20250305({});
+
+      const agent = new Agent({
+        id: 'test-anthropic-single-turn-provider-tool-agent',
+        name: 'test-anthropic-single-turn-provider-tool-agent',
+        instructions: 'You are a research assistant. When asked about a topic, use web search to find information.',
+        model: 'anthropic/claude-haiku-4-5-20251001',
+        memory: mockMemory,
+        tools: { web_search: webSearch },
+      });
+
+      const threadId = 'thread-provider-tool-single-turn';
+      const resourceId = 'resource-provider-tool-single-turn';
+
+      const result = await agent.stream('What is the current population of Tokyo?', {
+        memory: { thread: threadId, resource: resourceId },
+      });
+
+      const toolCallChunks: any[] = [];
+      const toolResultChunks: any[] = [];
+      for await (const chunk of result.fullStream) {
+        if (chunk.type === 'tool-call') toolCallChunks.push(chunk);
+        if (chunk.type === 'tool-result') toolResultChunks.push(chunk);
+      }
+
+      await result.consumeStream();
+
+      const text = await result.text;
+      expect(text).toBeDefined();
+      expect(text.length).toBeGreaterThan(0);
+
+      // Should have a tool-call chunk for web_search
+      expect(toolCallChunks.length).toBeGreaterThanOrEqual(1);
+      expect(toolCallChunks.some((c: any) => c.payload.toolName === 'web_search')).toBe(true);
+
+      // Every tool-result chunk must have a defined result
+      for (const chunk of toolResultChunks) {
+        expect(chunk.payload.result).toBeDefined();
+        expect(chunk.payload.result).not.toBeNull();
+      }
+
+      // ── Persistence assertions ──
+      const { messages } = await mockMemory.recall({ threadId, resourceId });
+      const assistantMessages = messages.filter((m: any) => m.role === 'assistant');
+      expect(assistantMessages.length).toBeGreaterThan(0);
+
+      // All web_search parts must be state:'result' with real data
+      const webSearchParts = assistantMessages.flatMap((m: any) =>
+        m.content.parts.filter((p: any) => p.type === 'tool-invocation' && p.toolInvocation.toolName === 'web_search'),
+      );
+      expect(webSearchParts.length).toBeGreaterThan(0);
+
+      for (const part of webSearchParts) {
+        expect(part.toolInvocation.state).toBe('result');
+        expect(part.toolInvocation.result).toBeDefined();
+        expect(part.toolInvocation.result).not.toBeNull();
+        expect(part.toolInvocation.result).not.toEqual({ providerExecuted: true, toolName: 'web_search' });
+      }
+
+      // No orphaned call-only parts
+      const orphanedCalls = webSearchParts.filter((p: any) => p.toolInvocation.state === 'call');
+      expect(orphanedCalls).toHaveLength(0);
+
+      // No tool call should be split across messages
+      assertNoSplitToolCalls(assistantMessages);
+
+      // ── Part ordering assertions ──
+      // Single-turn: Anthropic sends web_search (tool call + result) before text.
+      const lastAssistantMessage = assistantMessages[assistantMessages.length - 1];
+      const parts = lastAssistantMessage.content.parts;
+      const partTypes = parts.map((p: any) => {
+        if (p.type === 'tool-invocation') return `tool-invocation(${p.toolInvocation.toolName})`;
+        return p.type;
+      });
+
+      const wsIndex = partTypes.findIndex((t: string) => t === 'tool-invocation(web_search)');
+      const textIndex = partTypes.findIndex((t: string) => t === 'text');
+
+      expect(wsIndex).toBeGreaterThanOrEqual(0);
+      expect(textIndex).toBeGreaterThanOrEqual(0);
+      // web_search should come before text in single-turn
+      expect(wsIndex).toBeLessThan(textIndex);
     },
   );
 });

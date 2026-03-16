@@ -4,7 +4,7 @@ import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError, generateId } from '@internal/ai-sdk-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
-import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
+import type { MastraDBMessage, MastraMessagePart, MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { getErrorFromUnknown } from '../../../error/utils.js';
@@ -30,7 +30,6 @@ import type {
   TextStartPayload,
 } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
-import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { isMastraTool } from '../../../tools/toolchecks';
 import { makeCoreTool } from '../../../utils';
@@ -57,7 +56,6 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   logger?: IMastraLogger;
   transportRef?: StreamTransportRef;
   transportResolver?: () => StreamTransport | undefined;
-  persistedToolCallIds?: Set<string>;
 };
 
 function buildResponseModelMetadata(runState: AgenticRunState): { metadata: Record<string, unknown> } | undefined {
@@ -78,7 +76,6 @@ async function processOutputStream<OUTPUT = undefined>({
   logger,
   transportRef,
   transportResolver,
-  persistedToolCallIds,
 }: ProcessOutputStreamOptions<OUTPUT>) {
   let transportSet = false;
 
@@ -288,36 +285,6 @@ async function processOutputStream<OUTPUT = undefined>({
         break;
       }
 
-      case 'tool-call': {
-        const message: MastraDBMessage = {
-          id: messageId,
-          role: 'assistant' as const,
-          content: {
-            format: 2,
-            parts: [
-              {
-                type: 'tool-invocation' as const,
-                toolInvocation: {
-                  state: 'call' as const,
-                  toolCallId: chunk.payload.toolCallId,
-                  toolName: chunk.payload.toolName,
-                  args: chunk.payload.args ?? {},
-                },
-                providerMetadata: chunk.payload.providerMetadata,
-                ...({ providerExecuted: chunk.payload.providerExecuted } as { providerExecuted: boolean | undefined }),
-              },
-            ],
-            ...buildResponseModelMetadata(runState),
-          },
-          createdAt: new Date(),
-        };
-
-        messageList.add(message, 'response');
-        persistedToolCallIds?.add(chunk.payload.toolCallId);
-        safeEnqueue(controller, chunk);
-        break;
-      }
-
       case 'tool-call-input-streaming-end': {
         safeEnqueue(controller, chunk);
         break;
@@ -514,8 +481,40 @@ async function processOutputStream<OUTPUT = undefined>({
               args: chunk.payload.args,
               result: chunk.payload.result,
             },
+            providerMetadata: chunk.payload.providerMetadata,
+            // @ts-expect-error - providerExecuted is not in the type, but output-convert.ts checks providerExecuted to decide whether to include deferred provider calls for the next step
+            providerExecuted: chunk.payload.providerExecuted,
           });
         }
+        safeEnqueue(controller, chunk);
+        break;
+
+      case 'tool-call':
+        const toolCallPart: MastraMessagePart = {
+          type: 'tool-invocation' as const,
+          toolInvocation: {
+            state: 'call' as const,
+            toolCallId: chunk.payload.toolCallId,
+            toolName: chunk.payload.toolName,
+            args: chunk.payload.args,
+          },
+          providerMetadata: chunk.payload.providerMetadata,
+          // @ts-expect-error - providerExecuted is not in the type, but output-convert.ts checks providerExecuted to decide whether to include deferred provider calls for the next step
+          providerExecuted: chunk.payload.providerExecuted,
+        };
+
+        const message: MastraDBMessage = {
+          id: messageId,
+          role: 'assistant' as const,
+          content: {
+            format: 2,
+            parts: [toolCallPart],
+            ...buildResponseModelMetadata(runState),
+          },
+          createdAt: new Date(),
+        };
+        messageList.add(message, 'response');
+
         safeEnqueue(controller, chunk);
         break;
       default:
@@ -643,8 +642,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let warnings: any;
       let request: any;
       let rawResponse: any;
-      const persistedToolCallIds = new Set<string>();
-
       const { outputStream, callBail, runState, stepTools, stepWorkspace } = await executeStreamWithFallbackModels<{
         outputStream: MastraModelOutput<OUTPUT>;
         runState: AgenticRunState;
@@ -1008,7 +1005,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             logger,
             transportRef: _internal?.transportRef,
             transportResolver,
-            persistedToolCallIds,
           });
         } catch (error) {
           const provider = model?.provider;
@@ -1135,100 +1131,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         });
       }
 
-      /**
-       * Add tool calls to the message list.
-       * For PTC (programmatic tool calling from code execution), merge matching tool-result
-       * so providerExecuted tool calls include output for the tool-call-step.
-       */
-      const toolResults = outputStream._getImmediateToolResults()?.map(chunk => chunk.payload) ?? [];
-      const toolResultById = new Map(toolResults.map(result => [result.toolCallId, result]));
-      const toolCalls =
-        outputStream._getImmediateToolCalls()?.map(chunk => {
-          const toolResult = toolResultById.get(chunk.payload.toolCallId);
-          const output = chunk.payload.output ?? toolResult?.result;
-          const tool = findProviderToolByName(stepTools, chunk.payload.toolName);
-          const providerExecuted = inferProviderExecuted(
-            chunk.payload.providerExecuted ?? toolResult?.providerExecuted,
-            tool,
-          );
-
-          return {
-            ...chunk.payload,
-            args: chunk.payload.args ?? toolResult?.args ?? {},
-            ...(output !== undefined ? { output } : {}),
-            providerExecuted,
-            providerMetadata: chunk.payload.providerMetadata ?? toolResult?.providerMetadata,
-          };
-        }) ?? [];
-
-      const toolCallsToPersist = toolCalls.filter(toolCall => !persistedToolCallIds.has(toolCall.toolCallId));
-
-      if (toolCallsToPersist.length > 0) {
-        const message: MastraDBMessage = {
-          id: outputStream.messageId,
-          role: 'assistant' as const,
-          content: {
-            format: 2,
-            parts: toolCallsToPersist.map(toolCall => {
-              return {
-                type: 'tool-invocation' as const,
-                toolInvocation: {
-                  state: 'call' as const,
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  args: toolCall.args ?? {},
-                },
-                providerMetadata: toolCall.providerMetadata,
-                ...({ providerExecuted: toolCall.providerExecuted } as { providerExecuted: boolean | undefined }),
-              };
-            }),
-            ...buildResponseModelMetadata(runState),
-          },
-          createdAt: new Date(),
-        };
-        messageList.add(message, 'response');
-      }
-
-      /**
-       * Handles deferred provider-executed tool results (e.g. Anthropic web_search).
-       * The provider may non-deterministically defer server tool execution — particularly
-       * when a provider-executed tool is requested alongside a client tool. The deferred
-       * result arrives on a subsequent API call as a tool-result with no matching tool call
-       * in the current turn. This function finds those orphaned results and resolves them
-       * via messageList.updateToolInvocation, which updates the state:'call' part to state:'result'
-       * and ensures the message is re-saved.
-       */
-      const currentTurnToolCallIds = new Set(toolCalls.map(tc => tc.toolCallId));
-      logger?.debug(
-        `[llm-execution-step] toolCalls: ${toolCalls.map(tc => `${tc.toolName}(${tc.toolCallId})`).join(', ')}`,
-      );
-      logger?.debug(
-        `[llm-execution-step] toolResults: ${toolResults.map(r => `${r.toolName}(${r.toolCallId}, providerExecuted=${r.providerExecuted})`).join(', ')}`,
-      );
-      // toolResults only contains results from the provider stream (not client tool execution),
-      // so any result whose toolCallId isn't in the current turn's tool calls is an orphaned/deferred result.
-      // Note: we don't filter on providerExecuted because the Anthropic provider's web_search_tool_result
-      // stream chunk does not include providerExecuted on the tool-result payload.
-      const deferredProviderResults = toolResults.filter(
-        result => !currentTurnToolCallIds.has(result.toolCallId),
-      );
-      logger?.debug(`[llm-execution-step] deferredProviderResults: ${deferredProviderResults.length}`);
-
-      for (const deferred of deferredProviderResults) {
-        logger?.debug(
-          `[llm-execution-step] resolving deferred: ${deferred.toolName} toolCallId=${deferred.toolCallId}`,
-        );
-        messageList.updateToolInvocation({
-          type: 'tool-invocation' as const,
-          toolInvocation: {
-            state: 'result' as const,
-            toolCallId: deferred.toolCallId,
-            toolName: deferred.toolName,
-            args: deferred.args,
-            result: deferred.result,
-          },
-        });
-      }
+      // Tool calls are added to the message list inline during stream processing (case 'tool-call').
+      // Tool results (including deferred provider results) are handled inline (case 'tool-result').
+      const toolCalls = (outputStream._getImmediateToolCalls() ?? []).map(chunk => chunk.payload);
 
       // Call processOutputStep for processors (runs AFTER LLM response, BEFORE tool execution)
       // This allows processors to validate/modify the response and trigger retries if needed
