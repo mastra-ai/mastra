@@ -7,7 +7,7 @@ import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
 import { formatObservationStatus, formatReflectionStatus } from './components/om-progress.js';
 import type { TUIState } from './state.js';
-import { theme, mastra, tintHex, getTermWidth, getContrastText } from './theme.js';
+import { theme, mastra, tintHex, getTermWidth } from './theme.js';
 
 // Colors for OM modes — read from proxy at render time so they pick up contrast adaptation
 const getObserverColor = () => mastra.orange;
@@ -67,9 +67,8 @@ export function updateStatusLine(state: TUIState): void {
     const mg = Math.floor(mcg * badgeBrightness);
     const mb = Math.floor(mcb * badgeBrightness);
     const rightHalf = tintBg ? chalk.rgb(mr, mg, mb).bgHex(tintBg)('▌') : chalk.rgb(mr, mg, mb)('▌');
-    const badgeFg = getContrastText(`#${mr.toString(16).padStart(2, '0')}${mg.toString(16).padStart(2, '0')}${mb.toString(16).padStart(2, '0')}`);
     modeBadge =
-      chalk.rgb(mr, mg, mb)('▐') + chalk.bgRgb(mr, mg, mb).hex(badgeFg).bold(badgeName.toLowerCase()) + rightHalf;
+      chalk.rgb(mr, mg, mb)('▐') + chalk.bgRgb(mr, mg, mb).hex('#000000').bold(badgeName.toLowerCase()) + rightHalf;
     modeBadgeWidth = badgeName.length + 2;
   } else if (badgeName) {
     modeBadge = ' ' + theme.fg('dim', badgeName) + ' ';
@@ -164,9 +163,8 @@ export function updateStatusLine(state: TUIState): void {
     const sg = Math.floor(mcg * sBadgeBrightness);
     const sb = Math.floor(mcb * sBadgeBrightness);
     const shortRightHalf = tintBg ? chalk.rgb(sr, sg, sb).bgHex(tintBg)('▌') : chalk.rgb(sr, sg, sb)('▌');
-    const shortBadgeFg = getContrastText(`#${sr.toString(16).padStart(2, '0')}${sg.toString(16).padStart(2, '0')}${sb.toString(16).padStart(2, '0')}`);
     shortModeBadge =
-      chalk.rgb(sr, sg, sb)('▐') + chalk.bgRgb(sr, sg, sb).hex(shortBadgeFg).bold(shortName) + shortRightHalf;
+      chalk.rgb(sr, sg, sb)('▐') + chalk.bgRgb(sr, sg, sb).hex('#000000').bold(shortName) + shortRightHalf;
     shortModeBadgeWidth = shortName.length + 2;
   } else if (badgeName) {
     const shortName = badgeName.toLowerCase().charAt(0);
