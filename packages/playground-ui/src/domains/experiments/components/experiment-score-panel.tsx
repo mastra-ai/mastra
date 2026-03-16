@@ -36,7 +36,7 @@ export function ExperimentScorePanel({ score, onNext, onPrevious, onClose }: Exp
           previousAriaLabel="View previous score details"
           nextAriaLabel="View next score details"
         />
-        <Button variant="standard" size="default" onClick={onClose} aria-label="Close score details">
+        <Button onClick={onClose} aria-label="Close score details">
           <XIcon />
         </Button>
       </Column.Toolbar>

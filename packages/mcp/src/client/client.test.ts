@@ -1,8 +1,12 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
+import { RequestContext } from '@mastra/core/di';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -1790,6 +1794,246 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
 
     expect(client.roots).toHaveLength(2);
     expect(client.roots[1].uri).toBe('file:///var');
+
+    await client.disconnect();
+  }, 30000);
+});
+
+describe('MastraMCPClient - mcpMetadata on tools', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'metadata-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should set mcpMetadata.serverName on created tools', async () => {
+    const tools = await client.tools();
+    const greetTool = tools.greet;
+    expect(greetTool).toBeDefined();
+    expect(greetTool.mcpMetadata).toBeDefined();
+    expect(greetTool.mcpMetadata!.serverName).toBe('metadata-test-client');
+  });
+
+  it('should set mcpMetadata.serverVersion after connection', async () => {
+    const tools = await client.tools();
+    const greetTool = tools.greet;
+    expect(greetTool.mcpMetadata).toBeDefined();
+    expect(greetTool.mcpMetadata!.serverVersion).toBe('1.0.0');
+  });
+});
+
+describe('MastraMCPClient fetch with requestContext', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should pass requestContext to the custom fetch function during tool execution', async () => {
+    testServer = await setupTestServer(false);
+    const fetchSpy = vi.fn((url: string | URL, init?: RequestInit, _requestContext?: RequestContext | null) => {
+      return fetch(url, init);
+    });
+
+    client = new InternalMastraMCPClient({
+      name: 'fetch-context-test',
+      server: {
+        url: testServer.baseUrl,
+        fetch: fetchSpy,
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+    const greetTool = tools['greet'];
+    expect(greetTool).toBeDefined();
+
+    type TestContext = { userId: string; authToken: string };
+    const requestContext = new RequestContext<TestContext>();
+    requestContext.set('userId', 'user-123');
+    requestContext.set('authToken', 'bearer-abc');
+
+    await greetTool.execute({ name: 'Test' }, { requestContext });
+
+    // Find a fetch call that was made with the requestContext (during tool execution)
+    const callsWithContext = fetchSpy.mock.calls.filter(call => {
+      const ctx = call[2];
+      return ctx && typeof ctx.get === 'function' && ctx.get('userId') === 'user-123';
+    });
+
+    expect(callsWithContext.length).toBeGreaterThan(0);
+    const capturedContext = callsWithContext[0]![2]!;
+    expect(capturedContext.get('userId')).toBe('user-123');
+    expect(capturedContext.get('authToken')).toBe('bearer-abc');
+  }, 15000);
+
+  it('should pass different requestContexts for sequential tool calls', async () => {
+    testServer = await setupTestServer(false);
+    const fetchSpy = vi.fn((url: string | URL, init?: RequestInit, _requestContext?: RequestContext | null) => {
+      return fetch(url, init);
+    });
+
+    client = new InternalMastraMCPClient({
+      name: 'fetch-seq-context-test',
+      server: {
+        url: testServer.baseUrl,
+        fetch: fetchSpy,
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+    const greetTool = tools['greet'];
+
+    // First call with context A
+    type ContextA = { sessionId: string };
+    const contextA = new RequestContext<ContextA>();
+    contextA.set('sessionId', 'session-A');
+    await greetTool.execute({ name: 'Alice' }, { requestContext: contextA });
+
+    const callsWithA = fetchSpy.mock.calls.filter(call => {
+      const ctx = call[2];
+      return ctx && typeof ctx.get === 'function' && ctx.get('sessionId') === 'session-A';
+    });
+    expect(callsWithA.length).toBeGreaterThan(0);
+
+    fetchSpy.mockClear();
+
+    // Second call with context B
+    type ContextB = { sessionId: string };
+    const contextB = new RequestContext<ContextB>();
+    contextB.set('sessionId', 'session-B');
+    await greetTool.execute({ name: 'Bob' }, { requestContext: contextB });
+
+    const callsWithB = fetchSpy.mock.calls.filter(call => {
+      const ctx = call[2];
+      return ctx && typeof ctx.get === 'function' && ctx.get('sessionId') === 'session-B';
+    });
+    expect(callsWithB.length).toBeGreaterThan(0);
+
+    // Ensure context A didn't leak into context B's calls
+    const contextALeak = fetchSpy.mock.calls.some(call => {
+      const ctx = call[2];
+      return ctx && typeof ctx.get === 'function' && ctx.get('sessionId') === 'session-A';
+    });
+    expect(contextALeak).toBe(false);
+  }, 15000);
+
+  it('should pass requestContext to fetch even when an empty context is auto-created', async () => {
+    testServer = await setupTestServer(false);
+    const fetchSpy = vi.fn((url: string | URL, init?: RequestInit, _requestContext?: RequestContext | null) => {
+      return fetch(url, init);
+    });
+
+    client = new InternalMastraMCPClient({
+      name: 'fetch-no-context-test',
+      server: {
+        url: testServer.baseUrl,
+        fetch: fetchSpy,
+      },
+    });
+
+    await client.connect();
+
+    // Clear fetch calls from the connection phase
+    fetchSpy.mockClear();
+
+    const tools = await client.tools();
+    const greetTool = tools['greet'];
+
+    // Call without explicit requestContext — the tool framework auto-creates an empty one
+    await greetTool.execute({ name: 'NoContext' });
+
+    // Fetch should still have been called with the third argument (requestContext)
+    const callsDuringToolExec = fetchSpy.mock.calls;
+    expect(callsDuringToolExec.length).toBeGreaterThan(0);
+    // The third argument should be defined (either null or an empty RequestContext)
+    const lastToolCallFetch = callsDuringToolExec[callsDuringToolExec.length - 1];
+    expect(lastToolCallFetch!.length).toBeGreaterThanOrEqual(3);
+  }, 15000);
+});
+
+describe('MastraMCPClient - Stdio stderr and cwd forwarding', () => {
+  // Resolve the tsx CLI binary from the workspace instead of using npx -y,
+  // which can be flaky in CI when tsx needs to be downloaded on-the-fly.
+  const tsxCli = path.join(path.dirname(require.resolve('tsx/package.json')), 'dist', 'cli.mjs');
+
+  it('should pipe stderr instead of inheriting it when stderr is set to "pipe"', async () => {
+    const STDERR_MARKER = 'noisy-server: startup log';
+
+    // Spy on parent process stderr to verify the marker does NOT appear
+    const stderrSpy = vi.spyOn(process.stderr, 'write');
+
+    const client = new InternalMastraMCPClient({
+      name: 'noisy',
+      server: {
+        command: process.execPath,
+        args: [tsxCli, path.join(__dirname, '..', '__fixtures__/noisy-server.ts')],
+        stderr: 'pipe',
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+    expect(tools).toBeDefined();
+
+    // Verify the child's stderr marker was NOT inherited to the parent's stderr
+    const stderrOutput = stderrSpy.mock.calls.map(call => String(call[0])).join('');
+    expect(stderrOutput).not.toContain(STDERR_MARKER);
+
+    stderrSpy.mockRestore();
+    await client.disconnect();
+  }, 30000);
+
+  it('should forward cwd option to the child process', async () => {
+    const targetDir = fs.realpathSync(os.tmpdir());
+
+    const client = new InternalMastraMCPClient({
+      name: 'cwd-test',
+      server: {
+        command: process.execPath,
+        args: [tsxCli, path.join(__dirname, '..', '__fixtures__/cwd-reporter.ts')],
+        cwd: targetDir,
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+    const getCwdTool = tools['getCwd'];
+    expect(getCwdTool).toBeDefined();
+
+    // Execute the tool and verify the child process cwd matches
+    const result = (await getCwdTool!.execute({}, {})) as { content: Array<{ type: string; text: string }> };
+    expect(result.content[0]!.text).toBe(targetDir);
 
     await client.disconnect();
   }, 30000);

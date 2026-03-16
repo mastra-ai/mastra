@@ -1981,5 +1981,68 @@ describe('ProcessorRunner', () => {
       expect(receivedResult.finishReason).toBe('stop');
       expect(receivedResult.steps).toEqual([]);
     });
+
+    it('should share state across two separate runners sharing the same processorStates map (real agent architecture)', async () => {
+      const stateInOutputResult: Record<string, unknown> = {};
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'cross-runner-state-test',
+          processOutputStream: async ({ part, state }) => {
+            if (part.type === 'tool-error') {
+              state.errorInfo = { toolName: 'myTool', error: 'something broke' };
+            }
+            return part;
+          },
+          processOutputResult: ({ state, messages }) => {
+            Object.assign(stateInOutputResult, state);
+            return messages;
+          },
+        },
+      ];
+
+      // Shared processorStates map (created in prepare-memory-step.ts in real flow)
+      const processorStates = new Map();
+
+      // Inner runner (created in MastraModelOutput for LLM execution step)
+      const innerRunner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'inner-runner',
+        processorStates,
+      });
+
+      // Outer runner (created in MastraModelOutput for the final output)
+      const outerRunner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'outer-runner',
+        processorStates,
+      });
+
+      // 1. Inner runner processes stream chunks (processOutputStream)
+      await innerRunner.processPart(
+        { type: 'text-delta', payload: { text: 'hello' }, runId: '1', from: ChunkFrom.AGENT },
+        processorStates,
+      );
+      await innerRunner.processPart(
+        {
+          type: 'tool-error',
+          payload: { toolName: 'myTool', toolCallId: 'tc1', args: {} },
+          runId: '1',
+          from: ChunkFrom.AGENT,
+        } as ChunkType,
+        processorStates,
+      );
+
+      // 2. Outer runner runs processOutputResult
+      messageList.add(createMessage('test response', 'assistant'), 'response');
+      await outerRunner.runOutputProcessors(messageList);
+
+      // State set in inner runner's processOutputStream should be accessible in outer runner's processOutputResult
+      expect(stateInOutputResult.errorInfo).toEqual({ toolName: 'myTool', error: 'something broke' });
+    });
   });
 });

@@ -37,10 +37,14 @@ export const McpServerPage = () => {
         </Breadcrumb>
 
         <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/en/docs/tools-mcp/mcp-overview" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
+          <Button
+            as={Link}
+            to="https://mastra.ai/en/docs/tools-mcp/mcp-overview"
+            target="_blank"
+            variant="ghost"
+            size="md"
+          >
+            <DocsIcon />
             MCP documentation
           </Button>
         </HeaderAction>

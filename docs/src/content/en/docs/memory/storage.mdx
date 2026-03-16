@@ -1,6 +1,6 @@
 ---
 title: "Storage | Memory"
-description: Configure storage for Mastra's memory system to persist conversations, workflows, and traces.
+description: Configure storage for Mastra to persist conversations and other runtime state.
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
@@ -14,7 +14,7 @@ import TabItem from "@theme/TabItem";
 
 # Storage
 
-For agents to remember previous interactions, Mastra needs a database. Use a storage adapter for one of the [supported databases](#supported-providers) and pass it to your Mastra instance.
+For agents to remember previous interactions, Mastra needs a storage adapter. Use one of the [supported providers](#supported-providers) and pass it to your Mastra instance.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -40,7 +40,7 @@ Relative paths like `file:./mastra.db` resolve based on each process's working d
 
 This configures instance-level storage, which all agents share by default. You can also configure [agent-level storage](#agent-level-storage) for isolated data boundaries.
 
-Mastra automatically creates the necessary tables on first interaction. See the [core schema](/reference/storage/overview#core-schema) for details on what gets created, including tables for messages, threads, resources, workflows, traces, and evaluation datasets.
+Mastra automatically initializes the necessary storage structures on first interaction. See [Storage Overview](/reference/storage/overview) for domain coverage and the schema used by the built-in database-backed domains.
 
 ## Supported providers
 
@@ -51,7 +51,7 @@ Each provider page includes installation instructions, configuration parameters,
 - [MongoDB](/reference/storage/mongodb)
 - [Upstash](/reference/storage/upstash)
 - [Cloudflare D1](/reference/storage/cloudflare-d1)
-- [Cloudflare Durable Objects](/reference/storage/cloudflare)
+- [Cloudflare KV & Durable Objects](/reference/storage/cloudflare)
 - [Convex](/reference/storage/convex)
 - [DynamoDB](/reference/storage/dynamodb)
 - [LanceDB](/reference/storage/lance)
@@ -67,7 +67,7 @@ Storage can be configured at the instance level (shared by all agents) or at the
 
 ### Instance-level storage
 
-Add storage to your Mastra instance so all agents, workflows, observability traces and scores share the same memory provider:
+Add storage to your Mastra instance so all agents, workflows, observability traces, and scores share the same storage backend:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -89,7 +89,7 @@ This is useful when all primitives share the same storage backend and have simil
 
 #### Composite storage
 
-[Composite storage](/reference/storage/composite) is an alternative way to configure instance-level storage. Use `MastraCompositeStore` to set the `memory` domain (and any other [domains](/reference/storage/composite#storage-domains) you need) to different storage providers.
+[Composite storage](/reference/storage/composite) is an alternative way to configure instance-level storage. Use `MastraCompositeStore` to route `memory` and any other [supported domains](/reference/storage/composite#storage-domains) to different storage providers.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'

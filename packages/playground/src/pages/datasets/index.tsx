@@ -6,15 +6,17 @@ import {
   Icon,
   Button,
   HeaderAction,
-  useLinkComponent,
   useDatasets,
   DatasetsTable,
   CreateDatasetDialog,
+  useLinkComponent,
+  DocsIcon,
 } from '@mastra/playground-ui';
 import { Plus, Database } from 'lucide-react';
 import { useState } from 'react';
 
 function Datasets() {
+  const { Link } = useLinkComponent();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { navigate, paths } = useLinkComponent();
   const { data, isLoading, error } = useDatasets();
@@ -40,6 +42,10 @@ function Datasets() {
               <Plus />
             </Icon>
             Create Dataset
+          </Button>
+          <Button as={Link} to="https://mastra.ai/reference/datasets/dataset" target="_blank" variant="ghost" size="md">
+            <DocsIcon />
+            Datasets documentation
           </Button>
         </HeaderAction>
       </Header>
