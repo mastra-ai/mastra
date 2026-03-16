@@ -2208,13 +2208,11 @@ describe('Memory', () => {
       const spanArgs = parentSpan.createChildSpan.mock.calls[0][0];
       expect(spanArgs.type).toBe('memory_operation');
       expect(spanArgs.attributes.operationType).toBe('recall');
-      expect(spanArgs.attributes.threadId).toBe('thread-1');
 
       expect(childSpan.end).toHaveBeenCalledTimes(1);
       const endArgs = childSpan.end.mock.calls[0][0];
       expect(endArgs.attributes.success).toBe(true);
       expect(endArgs.attributes.messageCount).toBe(result.messages.length);
-      expect(endArgs.output.messageCount).toBe(result.messages.length);
     });
 
     it('recall records error on span when it fails', async () => {

@@ -105,8 +105,6 @@ export class MessageHistory implements Processor {
       tracingContext,
       { threadId, resourceId },
       {
-        threadId,
-        resourceId,
         lastMessages: this.lastMessages ?? false,
       },
     );
@@ -137,7 +135,6 @@ export class MessageHistory implements Processor {
 
       if (chronologicalMessages.length === 0) {
         span?.end({
-          output: { messageCount: 0 },
           attributes: { success: true, messageCount: 0 },
         });
         return messageList;
@@ -153,7 +150,6 @@ export class MessageHistory implements Processor {
       }
 
       span?.end({
-        output: { messageCount: chronologicalMessages.length },
         attributes: { success: true, messageCount: chronologicalMessages.length },
       });
 
@@ -259,8 +255,6 @@ export class MessageHistory implements Processor {
       tracingContext,
       { messageCount: messagesToSave.length },
       {
-        threadId,
-        resourceId,
         messageCount: messagesToSave.length,
       },
     );
@@ -271,7 +265,6 @@ export class MessageHistory implements Processor {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       span?.end({
-        output: { messageCount: messagesToSave.length },
         attributes: { success: true, messageCount: messagesToSave.length },
       });
 
