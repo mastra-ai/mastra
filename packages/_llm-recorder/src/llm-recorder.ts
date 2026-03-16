@@ -467,10 +467,10 @@ function writeBinaryArtifact(params: {
           ? 'webm'
           : 'bin';
 
-  const fileName = `${params.hash}-${params.kind}.${ext}`;
+  const payloadDigest = crypto.createHash('md5').update(params.bytes).digest('hex').slice(0, 12);
+  const fileName = `${params.hash}-${params.kind}-${payloadDigest}.${ext}`;
   const absolutePath = path.join(params.recordingsDir, fileName);
   fs.writeFileSync(absolutePath, Buffer.from(params.bytes));
-
   return {
     path: fileName,
     contentType: params.contentType,
@@ -479,7 +479,11 @@ function writeBinaryArtifact(params: {
 }
 
 function readBinaryArtifact(recordingsDir: string, artifact: LLMBinaryArtifact): Uint8Array {
-  const absolutePath = path.join(recordingsDir, artifact.path);
+  const baseDir = path.resolve(recordingsDir);
+  const absolutePath = path.resolve(baseDir, artifact.path);
+  if (!absolutePath.startsWith(`${baseDir}${path.sep}`)) {
+    throw new Error(`[llm-recorder] Invalid binary artifact path: ${artifact.path}`);
+  }
   return new Uint8Array(fs.readFileSync(absolutePath));
 }
 
