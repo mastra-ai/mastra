@@ -1141,6 +1141,70 @@ describe('OpenAI metadata stripping edge cases', () => {
     expect(textPart.providerMetadata?.openai).toBeUndefined();
   });
 
+  it('should strip OpenAI metadata when reasoning and tool-call are separate messages', () => {
+    // This reproduces the exact user-reported scenario:
+    // Message 1 (separate DB row): reasoning with providerMetadata.openai (rs_*)
+    // Message 2 (separate DB row): tool-invocation with callProviderMetadata.openai (fc_*)
+    // The old check only looked for reasoning parts within each message, so message 2
+    // was never detected and its fc_* metadata was sent to OpenAI, causing:
+    //   "function_call was provided without its required reasoning item"
+    const messages = sanitizeV5UIMessages(
+      [
+        {
+          id: 'msg-reasoning',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'reasoning',
+              reasoning: 'Let me think step by step...',
+              details: [{ type: 'text', text: 'Let me think step by step...' }],
+              providerMetadata: {
+                openai: {
+                  itemId: 'rs_028774610c0921f40069b84d9fb0c4819393e150afb58a0e03',
+                  reasoningEncryptedContent: null,
+                },
+              },
+            } as any,
+          ],
+        },
+        {
+          id: 'msg-tool-call',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'tool-search_tool',
+              toolCallId: 'call_VF123',
+              toolName: 'search_tool',
+              state: 'output-available',
+              input: { query: 'test' },
+              output: { results: ['item1'] },
+              callProviderMetadata: {
+                openai: {
+                  itemId: 'fc_028774610c0921f40069b84da227688193a5cfce509762f5ae',
+                },
+              },
+            } as any,
+          ],
+        },
+      ],
+      true,
+    );
+
+    // Message 1: reasoning should be fully stripped
+    const reasoningMsg = messages.find(m => m.id === 'msg-reasoning');
+    // Either the message is removed entirely (no parts left) or reasoning parts are gone
+    if (reasoningMsg) {
+      const reasoningPart = reasoningMsg.parts.find(p => p.type === 'reasoning');
+      expect(reasoningPart).toBeUndefined();
+    }
+
+    // Message 2: tool part should survive but WITHOUT callProviderMetadata.openai
+    const toolMsg = messages.find(m => m.id === 'msg-tool-call');
+    expect(toolMsg).toBeDefined();
+    const toolPart = toolMsg!.parts[0] as any;
+    expect(toolPart.callProviderMetadata?.openai).toBeUndefined();
+  });
+
   it('should preserve non-openai providerMetadata when stripping openai metadata', () => {
     const messages = sanitizeV5UIMessages(
       [
