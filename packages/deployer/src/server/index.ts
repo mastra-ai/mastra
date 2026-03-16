@@ -145,6 +145,7 @@ export async function createHonoServer(
     openapiPath: options?.isDev || server?.build?.openAPIDocs ? '/openapi.json' : undefined,
     customRouteAuthConfig,
     customApiRoutes: processedRoutes,
+    prefix: server?.apiPrefix,
   });
 
   // Register context middleware FIRST - this sets mastra, requestContext, tools, taskStore in context
