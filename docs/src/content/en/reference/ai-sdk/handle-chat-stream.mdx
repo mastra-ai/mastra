@@ -30,10 +30,8 @@ export async function POST(req: Request) {
     mastra,
     agentId: 'weatherAgent',
     params,
-    messageMetadata: ({ part }) => {
-      if (part.type === 'start') {
-        return { createdAt: new Date().toISOString() }
-      }
+    messageMetadata: () => {
+      createdAt: new Date().toISOString()
     },
   })
   return createUIMessageStreamResponse({ stream })
