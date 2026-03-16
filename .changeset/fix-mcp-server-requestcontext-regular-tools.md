@@ -2,7 +2,8 @@
 "@mastra/mcp": patch
 ---
 
-Fix MCPServer regular tools missing requestContext populated from mcp.extra
+Fixed: MCPServer regular tools now receive requestContext consistently
 
-Regular tools executed via CallToolRequestSchema now receive requestContext
-populated from mcp.extra, consistent with agent tools and workflow tools.
+Previously, regular tools in MCPServer did not receive requestContext from
+mcp.extra, causing inconsistent auth context access compared to agent and
+workflow tools. This is now unified across all tool types.
