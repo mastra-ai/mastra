@@ -784,7 +784,7 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
             let responseBody: unknown;
             let responseBinaryArtifact: LLMBinaryArtifact | undefined;
 
-            if (responseContentType.includes('application/json')) {
+            if (responseContentType.includes('application/json') || responseContentType.includes('+json')) {
               const responseText = await realResponse.text();
               try {
                 responseBody = JSON.parse(responseText);
