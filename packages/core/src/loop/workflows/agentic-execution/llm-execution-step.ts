@@ -30,6 +30,7 @@ import type {
   TextStartPayload,
 } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
+import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { isMastraTool } from '../../../tools/toolchecks';
 import { makeCoreTool } from '../../../utils';
@@ -1126,16 +1127,21 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
        */
       const toolResults = outputStream._getImmediateToolResults()?.map(chunk => chunk.payload) ?? [];
       const toolResultById = new Map(toolResults.map(result => [result.toolCallId, result]));
-
       const toolCalls =
         outputStream._getImmediateToolCalls()?.map(chunk => {
           const toolResult = toolResultById.get(chunk.payload.toolCallId);
           const output = chunk.payload.output ?? toolResult?.result;
+          const tool = findProviderToolByName(stepTools, chunk.payload.toolName);
+          const providerExecuted = inferProviderExecuted(
+            chunk.payload.providerExecuted ?? toolResult?.providerExecuted,
+            tool,
+          );
+
           return {
             ...chunk.payload,
             args: chunk.payload.args ?? toolResult?.args ?? {},
             ...(output !== undefined ? { output } : {}),
-            providerExecuted: chunk.payload.providerExecuted ?? toolResult?.providerExecuted,
+            providerExecuted,
             providerMetadata: chunk.payload.providerMetadata ?? toolResult?.providerMetadata,
           };
         }) ?? [];

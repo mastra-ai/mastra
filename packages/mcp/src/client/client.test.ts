@@ -56,12 +56,7 @@ async function setupTestServer(withSessionManagement: boolean) {
 
   mcpServer.prompt('greet', 'A simple greeting prompt', () => {
     return {
-      prompt: {
-        name: 'greet',
-        version: 'v1',
-        description: 'A simple greeting prompt',
-        mimeType: 'application/json',
-      },
+      description: 'A simple greeting prompt',
       messages: [
         {
           role: 'assistant',
@@ -71,14 +66,34 @@ async function setupTestServer(withSessionManagement: boolean) {
     };
   });
 
-  const serverTransport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: withSessionManagement ? () => randomUUID() : undefined,
-  });
+  if (withSessionManagement) {
+    const serverTransport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+    });
 
-  await mcpServer.connect(serverTransport);
+    await mcpServer.connect(serverTransport);
 
+    httpServer.on('request', async (req, res) => {
+      await serverTransport.handleRequest(req, res);
+    });
+
+    const baseUrl = await new Promise<URL>(resolve => {
+      httpServer.listen(0, '127.0.0.1', () => {
+        const addr = httpServer.address() as AddressInfo;
+        resolve(new URL(`http://127.0.0.1:${addr.port}/mcp`));
+      });
+    });
+
+    return { httpServer, mcpServer, serverTransport, baseUrl };
+  }
+
+  // Stateless mode: SDK 1.27+ requires a new transport per request.
+  // We must close the previous connection before reconnecting.
   httpServer.on('request', async (req, res) => {
-    await serverTransport.handleRequest(req, res);
+    await mcpServer.close().catch(() => {});
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    await mcpServer.connect(transport);
+    await transport.handleRequest(req, res);
   });
 
   const baseUrl = await new Promise<URL>(resolve => {
@@ -88,7 +103,7 @@ async function setupTestServer(withSessionManagement: boolean) {
     });
   });
 
-  return { httpServer, mcpServer, serverTransport, baseUrl };
+  return { httpServer, mcpServer, serverTransport: undefined as any, baseUrl };
 }
 
 describe('MastraMCPClient with Streamable HTTP', () => {
@@ -115,7 +130,7 @@ describe('MastraMCPClient with Streamable HTTP', () => {
     afterEach(async () => {
       await client?.disconnect().catch(() => {});
       await testServer?.mcpServer.close().catch(() => {});
-      await testServer?.serverTransport.close().catch(() => {});
+      await testServer?.serverTransport?.close().catch(() => {});
       testServer?.httpServer.close();
     });
 
@@ -157,17 +172,11 @@ describe('MastraMCPClient with Streamable HTTP', () => {
 
     it('should get a specific prompt', async () => {
       const result = await client.getPrompt({ name: 'greet' });
-      const { prompt, messages } = result;
-      expect(prompt).toBeDefined();
-      expect(prompt).toMatchObject({
-        name: 'greet',
-        version: 'v1',
-        description: expect.any(String),
-        mimeType: 'application/json',
-      });
+      const { description, messages } = result;
+      expect(description).toBe('A simple greeting prompt');
       expect(messages).toBeDefined();
       const messageItem = messages[0];
-      expect(messageItem.content.text).toBe('Hello, World!');
+      expect(messageItem.content.type === 'text' && messageItem.content.text).toBe('Hello, World!');
     });
   });
 
@@ -186,7 +195,7 @@ describe('MastraMCPClient with Streamable HTTP', () => {
     afterEach(async () => {
       await client?.disconnect().catch(() => {});
       await testServer?.mcpServer.close().catch(() => {});
-      await testServer?.serverTransport.close().catch(() => {});
+      await testServer?.serverTransport?.close().catch(() => {});
       testServer?.httpServer.close();
     });
 
@@ -240,7 +249,7 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
   afterEach(async () => {
     await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -319,7 +328,7 @@ describe('MastraMCPClient - outputSchema Zod stripping', () => {
   afterEach(async () => {
     await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -442,7 +451,7 @@ describe('MastraMCPClient - AbortSignal forwarding', () => {
   afterEach(async () => {
     await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -499,7 +508,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
   let client: InternalMastraMCPClient;
 
   beforeEach(async () => {
-    testServer = await setupTestServer(false);
+    testServer = await setupTestServer(true);
 
     // Add elicitation-enabled tools to the test server
     testServer.mcpServer.tool(
@@ -580,7 +589,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
   afterEach(async () => {
     await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -796,7 +805,7 @@ describe('MastraMCPClient - Progress Tests', () => {
   let client: InternalMastraMCPClient;
 
   beforeEach(async () => {
-    testServer = await setupTestServer(false);
+    testServer = await setupTestServer(true);
 
     // Add a tool that emits progress notifications while running
     testServer.mcpServer.tool(
@@ -835,7 +844,7 @@ describe('MastraMCPClient - Progress Tests', () => {
   afterEach(async () => {
     await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -910,7 +919,7 @@ describe('MastraMCPClient - AuthProvider Tests', () => {
   afterEach(async () => {
     await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -975,7 +984,7 @@ describe('MastraMCPClient - Timeout Parameter Position Tests', () => {
   afterEach(async () => {
     await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -1119,7 +1128,7 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
 
   afterEach(async () => {
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -1254,14 +1263,12 @@ describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
       return { content: [{ type: 'text', text: message }] };
     });
 
-    const serverTransport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-    });
-
-    await mcpServer.connect(serverTransport);
-
+    // Stateless mode: SDK 1.27+ requires a new transport per request
     httpServer.on('request', async (req, res) => {
-      await serverTransport.handleRequest(req, res);
+      await mcpServer.close().catch(() => {});
+      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      await mcpServer.connect(transport);
+      await transport.handleRequest(req, res);
     });
 
     const baseUrl = await new Promise<URL>(resolve => {
@@ -1271,12 +1278,12 @@ describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
       });
     });
 
-    testServer = { httpServer, mcpServer, serverTransport, baseUrl };
+    testServer = { httpServer, mcpServer, serverTransport: undefined as any, baseUrl };
   });
 
   afterEach(async () => {
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -1822,7 +1829,7 @@ describe('MastraMCPClient - mcpMetadata on tools', () => {
   afterEach(async () => {
     await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -1854,7 +1861,7 @@ describe('MastraMCPClient fetch with requestContext', () => {
   afterEach(async () => {
     await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
