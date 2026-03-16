@@ -1,13 +1,69 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const readSource = (relativePath: string) => readFileSync(resolve(import.meta.dirname, relativePath), 'utf-8');
+const mockUseAgentMessages = vi.fn();
+const mockResolveToChildMessages = vi.fn();
+const mockAgentBadge = vi.fn(() => null);
+
+vi.mock('@/hooks/use-agent-messages', () => ({
+  useAgentMessages: mockUseAgentMessages,
+}));
+
+vi.mock('@mastra/react', async () => {
+  const actual = await vi.importActual<typeof import('@mastra/react')>('@mastra/react');
+
+  return {
+    ...actual,
+    resolveToChildMessages: mockResolveToChildMessages,
+  };
+});
+
+vi.mock('../badges/agent-badge', () => ({
+  AgentBadge: mockAgentBadge,
+}));
+
+vi.mock('./loading-badge', () => ({
+  LoadingBadge: () => null,
+}));
 
 describe('agent badge regressions', () => {
-  it('treats empty childMessages arrays as missing in AgentBadgeWrapper', () => {
-    const source = readSource('../badges/agent-badge-wrapper.tsx');
+  beforeEach(() => {
+    mockUseAgentMessages.mockReset();
+    mockResolveToChildMessages.mockReset();
+    mockAgentBadge.mockReset();
 
-    expect(source).toContain('let childMessages = result?.childMessages?.length ? result.childMessages : undefined;');
+    mockUseAgentMessages.mockReturnValue({
+      data: { messages: [] },
+      isLoading: false,
+    });
+  });
+
+  it('falls back to resolved child messages when the streamed childMessages array is empty', async () => {
+    const fallbackMessages = [{ type: 'text', content: 'resolved from thread' }];
+    mockResolveToChildMessages.mockReturnValue(fallbackMessages);
+
+    const { AgentBadgeWrapper } = await import('../badges/agent-badge-wrapper');
+
+    renderToStaticMarkup(
+      AgentBadgeWrapper({
+        agentId: 'agent-1',
+        result: {
+          childMessages: [],
+          subAgentThreadId: 'thread-1',
+        },
+        toolCallId: 'tool-call-1',
+        toolName: 'subagent-tool',
+        toolApprovalMetadata: undefined,
+        isNetwork: false,
+      }),
+    );
+
+    expect(mockResolveToChildMessages).toHaveBeenCalledWith([]);
+    expect(mockAgentBadge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: fallbackMessages,
+      }),
+      undefined,
+    );
   });
 });
