@@ -48,8 +48,6 @@ jobs:
           cd packages/mcp-docs-server
           pnpm version prerelease --preid alpha --no-git-tag-version
           cd ../..
-          git add packages/mcp-docs-server/package.json
-          git commit -m "chore: bump @mastra/mcp-docs-server prerelease version" || echo "No mcp-docs-server version change"
 
       - name: Version packages (alpha prerelease)
         env:
@@ -60,7 +58,7 @@ jobs:
       - name: Check for changes
         id: check-changes
         run: |
-          if git diff --quiet; then
+          if git diff --quiet && git diff --cached --quiet; then
             echo "No version changes detected"
             echo "has_changes=false" >> $GITHUB_OUTPUT
           else
