@@ -183,8 +183,7 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
             // Check if this tool already has a result in the message parts
             return !message.parts.some(
               (part: any) =>
-                part.toolCallId === toolCallId &&
-                (part.state === 'output-available' || part.output != null),
+                part.toolCallId === toolCallId && (part.state === 'output-available' || part.output != null),
             );
           }),
         );
