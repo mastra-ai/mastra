@@ -93,7 +93,7 @@ export const weatherAgent = new Agent({
   instructions: `
       You are a helpful weather assistant.
       Use the weatherTool to fetch current weather data.`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   tools: { weatherTool },
 })
 ```
@@ -125,7 +125,7 @@ export const parentAgent = new Agent({
   name: 'Parent Agent',
   description: 'Take care in writing a good description here',
   instructions: `Instructions`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   agents: {
     // highlight-next-line
     subAgent,
@@ -138,7 +138,7 @@ const subAgent = new Agent({
   name: 'Sub Agent',
   description: 'Take care in writing a good description here',
   instructions: `Instructions`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
 })
 // highlight-end
 ```
@@ -159,7 +159,7 @@ export const researchAgent = new Agent({
   instructions: `
       You are a research assistant.
       Use the research workflow to gather and compile information on topics.`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   tools: {
     weatherTool,
   },
