@@ -104,12 +104,14 @@ export function deepEqual(a: unknown, b: unknown): boolean {
  * Accepts both a JSON string and a pre-parsed object.
  * Recursively initializes nested object properties and respects default values.
  */
-export function generateEmptyFromSchema(schema: string | Record<string, any>): Record<string, any> {
+export function generateEmptyFromSchema(schema: string | Record<string, unknown>): Record<string, unknown> {
   try {
     const parsedSchema = typeof schema === 'string' ? JSON.parse(schema) : schema;
     if (!parsedSchema || parsedSchema.type !== 'object' || !parsedSchema.properties) return {};
-    const obj: Record<string, any> = {};
-    for (const [key, prop] of Object.entries<any>(parsedSchema.properties)) {
+    const obj: Record<string, unknown> = {};
+    for (const [key, prop] of Object.entries<Record<string, unknown>>(
+      parsedSchema.properties as Record<string, Record<string, unknown>>,
+    )) {
       if (prop.default !== undefined) {
         obj[key] = prop.default;
       } else if (prop.type === 'object' && prop.properties) {
