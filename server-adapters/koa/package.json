@@ -42,7 +42,7 @@
     "@mastra/observability": "workspace:*",
     "@types/koa": "^2.15.0",
     "@types/koa-bodyparser": "^4.3.13",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "eslint": "^9.39.4",
     "koa": "^3.1.2",
     "koa-bodyparser": "^4.4.1",

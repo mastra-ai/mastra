@@ -284,7 +284,7 @@
     "@openrouter/ai-sdk-provider-v5": "npm:@openrouter/ai-sdk-provider@1.2.3",
     "@types/babel__core": "^7.20.5",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "@types/picomatch": "4.0.2",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "catalog:",

@@ -41,7 +41,7 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "@types/string-similarity": "^4.0.2",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
