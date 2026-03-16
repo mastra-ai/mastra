@@ -402,6 +402,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'server/auth/github',
+              label: 'GitHub',
+            },
+            {
+              type: 'doc',
               id: 'server/auth/composite-auth',
               label: 'Composite Auth',
             },
