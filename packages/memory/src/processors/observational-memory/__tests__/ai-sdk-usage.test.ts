@@ -746,3 +746,112 @@ describe('AI SDK: multi-turn buffer→activate lifecycle invariants', () => {
     expect(statusPostObserve.shouldObserve).toBe(false);
   });
 });
+
+// =============================================================================
+// CASE 7 — getStatus with in-memory messages
+//
+//   Validates that getStatus({ messages }) produces the same results as
+//   the storage-backed getStatus() when messages match storage contents.
+// =============================================================================
+
+describe('AI SDK: getStatus with in-memory messages', () => {
+  let storage: InMemoryMemory;
+  let om: ObservationalMemory;
+  const threadId = 'inmemory-status-thread';
+
+  beforeEach(() => {
+    storage = createInMemoryStorage();
+    om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
+  });
+
+  it('getStatus with messages matches storage-backed getStatus', async () => {
+    const messages = createMessagesExceedingThreshold(5, threadId);
+    await storage.saveMessages({ messages });
+
+    // Storage-backed
+    const storageStatus = await om.getStatus({ threadId });
+
+    // In-memory
+    const inMemoryStatus = await om.getStatus({ threadId, messages });
+
+    expect(inMemoryStatus.pendingTokens).toBe(storageStatus.pendingTokens);
+    expect(inMemoryStatus.threshold).toBe(storageStatus.threshold);
+    expect(inMemoryStatus.shouldObserve).toBe(storageStatus.shouldObserve);
+    expect(inMemoryStatus.shouldBuffer).toBe(storageStatus.shouldBuffer);
+    expect(inMemoryStatus.canActivate).toBe(storageStatus.canActivate);
+  });
+
+  it('getStatus with messages sees unpersisted messages', async () => {
+    // Don't save to storage — only pass in-memory
+    const messages = createMessagesExceedingThreshold(10, threadId);
+
+    const storageStatus = await om.getStatus({ threadId });
+    expect(storageStatus.pendingTokens).toBe(0); // nothing in storage
+
+    const inMemoryStatus = await om.getStatus({ threadId, messages });
+    expect(inMemoryStatus.pendingTokens).toBeGreaterThan(0); // sees the messages
+  });
+});
+
+// =============================================================================
+// CASE 8 — finalize() produces clean terminal state
+// =============================================================================
+
+describe('AI SDK: finalize()', () => {
+  let storage: InMemoryMemory;
+  const threadId = 'finalize-thread';
+
+  beforeEach(() => {
+    storage = createInMemoryStorage();
+  });
+
+  it('activates remaining chunks and observes if threshold crossed', async () => {
+    // Low threshold so observe triggers
+    const om = createOM(storage, { messageTokens: 50, bufferTokens: 0.2 });
+
+    await storage.saveMessages({ messages: createMessagesExceedingThreshold(5, threadId) });
+    await om.buffer({ threadId });
+
+    // Before finalize: chunks exist, pending tokens > 0
+    const before = await om.getStatus({ threadId });
+    expect(before.canActivate).toBe(true);
+    expect(before.pendingTokens).toBeGreaterThan(0);
+
+    const result = await om.finalize({ threadId });
+
+    expect(result.activated).toBe(true);
+    expect(result.record.activeObservations).toBeTruthy();
+
+    // After finalize: clean state
+    const after = await om.getStatus({ threadId });
+    expect(after.canActivate).toBe(false);
+    expect(after.bufferedChunkCount).toBe(0);
+  });
+
+  it('is a no-op when nothing to activate or observe', async () => {
+    const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
+
+    const result = await om.finalize({ threadId });
+
+    expect(result.activated).toBe(false);
+    expect(result.observed).toBe(false);
+  });
+
+  it('only activates when below observe threshold', async () => {
+    // High threshold so observe doesn't trigger, but buffer+activate works
+    const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
+
+    await storage.saveMessages({ messages: createMessagesExceedingThreshold(5, threadId) });
+    await om.buffer({ threadId });
+
+    const result = await om.finalize({ threadId });
+
+    expect(result.activated).toBe(true);
+    expect(result.observed).toBe(false);
+    expect(result.record.activeObservations).toBeTruthy();
+
+    const after = await om.getStatus({ threadId });
+    expect(after.canActivate).toBe(false);
+    expect(after.bufferedChunkCount).toBe(0);
+  });
+});

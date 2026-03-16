@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai-v5';
 import { streamText, stepCountIs, tool } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
-import { convertMessages } from '@mastra/core/agent';
+import { convertMessages, MessageList } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { z } from 'zod';
 
@@ -10,21 +10,19 @@ import { ObservationalMemory } from '../observational-memory';
 import { seedThreadAndEnsureObservations } from './seed-phase';
 
 /**
- * Demo 2: Multi-turn buffer → activate lifecycle with AI SDK.
+ * Demo 3: Multi-step agent loop with MessageList + OM.
  *
- * Unlike Demo 1 which uses `observe()` directly, this demo shows the staged
- * observation path: `buffer()` extracts observations into a staging area during
- * a turn, and `activate()` promotes them to active at the start of the next turn.
- * This is the pattern the OM processor uses for async observation.
+ * Unlike Demo 2 which uses separate `streamText` calls per turn (between-turn
+ * pattern), this demo runs a single `streamText` call with multiple steps
+ * via tool use. OM operations happen inside the AI SDK's `onStepFinish` and
+ * `prepareStep` hooks, working with in-memory messages via MessageList.
  *
- * Each turn follows a consistent per-turn pattern (see `runTurn()`):
- *   1. activate() — promote any buffered observations from the previous turn
- *   2. save user message + getContext (now includes activated observations)
- *   3. streamText with tool use + persist via onFinish
- *   4. buffer() — stage new observations for the next turn
- *
- * After all turns, a final observe() catches up any remaining unprocessed
- * messages and advances the observation cursor.
+ * Key differences from Demo 2:
+ *   - Messages live in a MessageList (in-memory), not just in storage
+ *   - `getStatus({ messages })` checks thresholds against in-memory messages
+ *   - `buffer({ messages })` handles sealing automatically
+ *   - `prepareStep` activates buffered chunks and rebuilds the system message
+ *   - `finalize()` cleans up after the loop
  */
 
 const model = openai('gpt-4o-mini');
@@ -110,97 +108,6 @@ function printSnapshot(
   console.log(preview(record?.activeObservations ?? '<none>'));
 }
 
-function printTurnResult(label: string, text: string, action: string) {
-  console.log(`\n--- ${label} ---`);
-  console.log(`  response: ${text.slice(0, 200)}${text.length > 200 ? '...' : ''}`);
-  console.log(`  OM action: ${action}`);
-}
-
-function printFinalDelta(
-  afterRecord: any,
-  afterStatus: { pendingTokens: number; threshold: number },
-  beforeObservationTokens: number,
-  beforeObservationText: string,
-) {
-  console.log('\n=== FINAL DELTA ===');
-  console.log(`- observation token delta: ${(afterRecord?.observationTokenCount ?? 0) - beforeObservationTokens}`);
-  console.log(`- observations changed: ${beforeObservationText !== (afterRecord?.activeObservations ?? '')}`);
-  console.log(`- final pending: ${afterStatus.pendingTokens}/${afterStatus.threshold}`);
-}
-
-// ─── Turn runner ─────────────────────────────────────────────────────────────
-
-/**
- * Run a single conversational turn with the buffer→activate lifecycle baked in.
- *
- * Per-turn pattern:
- * 1. activate() — promote any buffered observations from the previous turn
- * 2. save user message + getContext (now includes activated observations)
- * 3. streamText with tool use + persist via onFinish
- * 4. buffer() — stage new observations for the next turn
- *
- * Returns the final text and what OM actions were taken.
- */
-async function runTurn(opts: {
-  om: ObservationalMemory;
-  memory: Memory;
-  threadId: string;
-  userPrompt: string;
-  userMessageId: string;
-}): Promise<{ text: string; actions: string[] }> {
-  const { om, memory, threadId, userPrompt, userMessageId } = opts;
-  const actions: string[] = [];
-
-  // 1. Activate buffered observations from previous turn (if any)
-  const preStatus = await om.getStatus({ threadId });
-  if (preStatus.canActivate) {
-    await om.activate({ threadId });
-    actions.push('activate');
-  }
-
-  // 2. Save user message to storage
-  await memory.saveMessages({
-    messages: [createMessage(userPrompt, 'user', threadId, userMessageId)],
-  });
-
-  // 3. Load context (includes activated observations if step 1 ran)
-  const ctx = await memory.getContext({ threadId });
-
-  // 4. Stream model response with tool use
-  const result = streamText({
-    model,
-    stopWhen: stepCountIs(4),
-    system: ctx.systemMessage,
-    tools: { get_weather: weatherTool },
-    messages: [
-      ...ctx.messages.map(toAiSdkMessage),
-      {
-        role: 'user',
-        content: `${userPrompt} Use tools if needed, then always end with a concise final answer.`,
-      },
-    ],
-    onFinish: async event => {
-      // Persist all response messages (tool calls, tool results, assistant text)
-      const responseMessages = convertMessages(event.response.messages)
-        .to('Mastra.V2')
-        .map(msg => ({ ...msg, threadId }));
-
-      if (responseMessages.length > 0) {
-        await memory.saveMessages({ messages: responseMessages });
-      }
-    },
-  });
-
-  // 5. Wait for stream + onFinish persistence to complete
-  await result.consumeStream();
-
-  // 6. Buffer new observations from this turn for the next turn
-  await om.buffer({ threadId });
-  actions.push('buffer');
-
-  return { text: await result.text, actions };
-}
-
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -208,7 +115,7 @@ async function main() {
     throw new Error('OPENAI_API_KEY is required to run this demo.');
   }
 
-  const threadId = 'buffer-demo-thread';
+  const threadId = 'multi-step-demo-thread';
   const memory = createMemory();
   const om = (await (memory as any).getOMEngine()) as ObservationalMemory;
   if (!om) throw new Error('Failed to initialize OM engine from Memory.');
@@ -263,46 +170,115 @@ async function main() {
 
   const beforeRecord = await om.getRecord(threadId);
   const beforeStatus = await om.getStatus({ threadId });
-  const beforeObservationText = beforeRecord?.activeObservations ?? '';
-  const beforeObservationTokens = beforeRecord?.observationTokenCount ?? 0;
   printSnapshot('BEFORE (seeded observations)', beforeStatus, beforeRecord);
 
-  // ── Turn 1: Helsinki weather ───────────────────────────────────────────
+  // ── Build MessageList with history ─────────────────────────────────────
 
-  const turn1 = await runTurn({
-    om,
-    memory,
-    threadId,
-    userPrompt: "What's the weather like in Helsinki right now?",
-    userMessageId: 'turn1-u1',
+  const messageList = new MessageList({ threadId });
+  const ctx = await memory.getContext({ threadId });
+
+  // Load historical messages into the list
+  for (const msg of ctx.messages) {
+    messageList.add(msg, 'memory');
+  }
+
+  // Add the system message with observations
+  if (ctx.systemMessage) {
+    messageList.addSystem(ctx.systemMessage, 'observational-memory');
+  }
+
+  const userPrompt =
+    'Check the weather in both Helsinki and Tokyo, then tell me which city is better for outdoor sightseeing today.';
+
+  // Save the user message
+  await memory.saveMessages({
+    messages: [createMessage(userPrompt, 'user', threadId, 'turn-u1')],
   });
-  printTurnResult('Turn 1: Helsinki weather', turn1.text, turn1.actions.join(' → '));
-  printSnapshot('After Turn 1', await om.getStatus({ threadId }), await om.getRecord(threadId));
 
-  // ── Turn 2: Tokyo weather ──────────────────────────────────────────────
+  // ── Run multi-step streamText with OM hooks ────────────────────────────
 
-  const turn2 = await runTurn({
-    om,
-    memory,
-    threadId,
-    userPrompt: "And what's the current weather in Tokyo?",
-    userMessageId: 'turn2-u1',
+  const stepLog: string[] = [];
+
+  const result = streamText({
+    model,
+    stopWhen: stepCountIs(6),
+    system: ctx.systemMessage,
+    tools: { get_weather: weatherTool },
+    messages: [
+      ...ctx.messages.map(toAiSdkMessage),
+      {
+        role: 'user',
+        content: `${userPrompt} Use tools to check both cities, then give a concise final comparison.`,
+      },
+    ],
+
+    onStepFinish: async event => {
+      const stepNum = stepLog.length;
+
+      // Persist step messages
+      const stepMessages = convertMessages(event.response.messages)
+        .to('Mastra.V2')
+        .map(msg => ({ ...msg, threadId }));
+      if (stepMessages.length > 0) {
+        await memory.saveMessages({ messages: stepMessages });
+        // Also add to MessageList so in-memory status check sees them
+        for (const msg of stepMessages) {
+          messageList.add(msg, 'response');
+        }
+      }
+
+      // Check status with in-memory messages — the key pattern
+      const allMessages = messageList.get.all.db();
+      const status = await om.getStatus({ threadId, messages: allMessages });
+
+      if (status.shouldBuffer) {
+        // buffer() auto-seals when messages are passed without beforeBuffer
+        await om.buffer({ threadId, messages: allMessages });
+        stepLog.push(`step ${stepNum}: buffer (pending ${status.pendingTokens}/${status.threshold})`);
+      } else if (status.shouldObserve) {
+        if (status.canActivate) {
+          await om.activate({ threadId });
+        }
+        await om.observe({ threadId });
+        stepLog.push(`step ${stepNum}: observe (pending ${status.pendingTokens}/${status.threshold})`);
+      } else {
+        stepLog.push(`step ${stepNum}: noop (pending ${status.pendingTokens}/${status.threshold})`);
+      }
+    },
+
+    prepareStep: async ({ stepNumber }: any) => {
+      if (stepNumber === 0) return undefined;
+
+      // Activate buffered observations from previous steps
+      const status = await om.getStatus({ threadId });
+      if (status.canActivate) {
+        await om.activate({ threadId });
+        stepLog.push(`prepareStep ${stepNumber}: activate`);
+      }
+
+      // Rebuild system message with latest observations
+      const record = await om.getRecord(threadId);
+      const freshSystem = record?.activeObservations
+        ? await om.buildContextSystemMessage({ threadId, record })
+        : undefined;
+
+      return freshSystem ? { system: freshSystem } : undefined;
+    },
   });
-  printTurnResult('Turn 2: Tokyo weather', turn2.text, turn2.actions.join(' → '));
-  printSnapshot('After Turn 2', await om.getStatus({ threadId }), await om.getRecord(threadId));
 
-  // ── Turn 3: Comparison ─────────────────────────────────────────────────
+  await result.consumeStream();
+  const finalText = await result.text;
 
-  const turn3 = await runTurn({
-    om,
-    memory,
-    threadId,
-    userPrompt: 'Compare Helsinki and Tokyo weather — which city is better for outdoor sightseeing today?',
-    userMessageId: 'turn3-u1',
-  });
-  printTurnResult('Turn 3: Comparison', turn3.text, turn3.actions.join(' → '));
+  // ── Print step log ─────────────────────────────────────────────────────
 
-  // ── Final: flush remaining buffered chunks and advance cursor ──────────
+  console.log('\n--- Step Log ---');
+  for (const entry of stepLog) {
+    console.log(`  ${entry}`);
+  }
+  console.log(`\n--- Final Response ---`);
+  console.log(`  ${finalText.slice(0, 300)}${finalText.length > 300 ? '...' : ''}`);
+
+  // ── Finalize ───────────────────────────────────────────────────────────
 
   const finalResult = await om.finalize({ threadId });
   if (finalResult.activated) console.log('\n  [Final] Activated remaining buffered chunks');
@@ -310,8 +286,11 @@ async function main() {
 
   const afterRecord = await om.getRecord(threadId);
   const afterStatus = await om.getStatus({ threadId });
-  printSnapshot('AFTER (all turns complete)', afterStatus, afterRecord);
-  printFinalDelta(afterRecord, afterStatus, beforeObservationTokens, beforeObservationText);
+  printSnapshot('AFTER (all steps complete)', afterStatus, afterRecord);
+
+  console.log('\n=== DELTA ===');
+  console.log(`- observation token delta: ${(afterRecord?.observationTokenCount ?? 0) - (beforeRecord?.observationTokenCount ?? 0)}`);
+  console.log(`- final pending: ${afterStatus.pendingTokens}/${afterStatus.threshold}`);
 }
 
 void main();

@@ -5085,7 +5085,7 @@ ${formattedMessages}
    * }
    * ```
    */
-  async getStatus(opts: { threadId: string; resourceId?: string }): Promise<{
+  async getStatus(opts: { threadId: string; resourceId?: string; messages?: MastraDBMessage[] }): Promise<{
     record: ObservationalMemoryRecord;
     pendingTokens: number;
     threshold: number;
@@ -5100,13 +5100,18 @@ ${formattedMessages}
     const record = await this.getOrCreateRecord(threadId, resourceId);
     const currentObservationTokens = record.observationTokenCount ?? 0;
 
-    // Load unobserved messages from storage
-    const rawMessages = await this.loadUnobservedMessages(
-      threadId,
-      resourceId,
-      record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
-    );
-    const unobservedMessages = this.getUnobservedMessages(rawMessages, record);
+    // Use provided messages or load from storage
+    let unobservedMessages: MastraDBMessage[];
+    if (opts.messages) {
+      unobservedMessages = this.getUnobservedMessages(opts.messages, record);
+    } else {
+      const rawMessages = await this.loadUnobservedMessages(
+        threadId,
+        resourceId,
+        record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
+      );
+      unobservedMessages = this.getUnobservedMessages(rawMessages, record);
+    }
 
     // Count tokens
     const contextWindowTokens = await this.tokenCounter.countMessagesAsync(unobservedMessages);
@@ -5154,6 +5159,49 @@ ${formattedMessages}
       bufferedChunkTokens,
       canActivate,
     };
+  }
+
+  /**
+   * Finalize the observation lifecycle: activate any remaining buffered chunks,
+   * then observe if the threshold is crossed.
+   *
+   * Call this at the end of a conversation, session, or turn sequence to ensure
+   * no buffered observations are left orphaned and the observation cursor is
+   * advanced. Produces a clean terminal state (no pending chunks, cursor up to date).
+   *
+   * @example
+   * ```ts
+   * // After all turns are complete
+   * const result = await om.finalize({ threadId });
+   * // result.activated: true if buffered chunks were promoted
+   * // result.observed: true if a full observation pass ran
+   * ```
+   */
+  async finalize(opts: { threadId: string; resourceId?: string; messages?: MastraDBMessage[] }): Promise<{
+    activated: boolean;
+    observed: boolean;
+    record: ObservationalMemoryRecord;
+  }> {
+    const { threadId, resourceId, messages } = opts;
+    let activated = false;
+    let observed = false;
+
+    // Activate any remaining buffered chunks
+    const preStatus = await this.getStatus({ threadId, resourceId, messages });
+    if (preStatus.canActivate) {
+      const actResult = await this.activate({ threadId, resourceId });
+      activated = actResult.activated;
+    }
+
+    // Observe if threshold is crossed (advances the cursor)
+    const postStatus = await this.getStatus({ threadId, resourceId, messages });
+    if (postStatus.shouldObserve) {
+      const obsResult = await this.observe({ threadId, resourceId, messages });
+      observed = obsResult.observed;
+    }
+
+    const record = await this.getOrCreateRecord(threadId, resourceId);
+    return { activated, observed, record };
   }
 
   /**
@@ -5295,9 +5343,13 @@ ${formattedMessages}
         return { buffered: false, record };
       }
 
-      // Allow the caller to seal/persist the final candidates before the observer runs
+      // Seal candidates before the observer runs.
+      // If a beforeBuffer callback is provided (processor path), it handles sealing + persistence.
+      // Otherwise, seal automatically so external consumers don't need to deal with it.
       if (opts.beforeBuffer) {
         await opts.beforeBuffer(candidateMessages);
+      } else if (opts.messages) {
+        this.sealMessagesForBuffering(candidateMessages);
       }
 
       // Track sealed message IDs in the static map so saveMessagesWithSealedIdTracking
