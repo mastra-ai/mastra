@@ -77,7 +77,7 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "@types/semver": "^7.7.1",
     "@types/serve-handler": "^6.1.4",
     "@types/shell-quote": "^1.7.5",

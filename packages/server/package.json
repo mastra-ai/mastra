@@ -111,7 +111,7 @@
     "@mastra/agent-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",
