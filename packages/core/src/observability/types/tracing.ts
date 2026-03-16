@@ -972,6 +972,8 @@ export interface TracingContext {
 export type TracingProperties = {
   /** Trace ID used on the execution (if the execution was traced). */
   traceId?: string;
+  /** Root span ID used on the execution (if the execution was traced). */
+  spanId?: string;
 };
 
 // ============================================================================
