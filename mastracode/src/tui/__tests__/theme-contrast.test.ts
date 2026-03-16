@@ -1,5 +1,13 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { luminance, contrastRatio, ensureContrast, getContrastText, mastraBrand, mastra, applyThemeMode } from '../theme.js';
+import {
+  luminance,
+  contrastRatio,
+  ensureContrast,
+  getContrastText,
+  mastraBrand,
+  mastra,
+  applyThemeMode,
+} from '../theme.js';
 
 describe('luminance', () => {
   it('returns 0 for black', () => {

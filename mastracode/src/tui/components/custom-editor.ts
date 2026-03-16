@@ -8,9 +8,9 @@ import { fileURLToPath } from 'node:url';
 import { Editor, matchesKey } from '@mariozechner/pi-tui';
 import type { EditorTheme, TUI } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
-import { mastra, theme } from '../theme.js';
 import { getClipboardImage, getClipboardText } from '../../clipboard/index.js';
 import type { ClipboardImage } from '../../clipboard/index.js';
+import { mastra, theme } from '../theme.js';
 
 const PASTE_START = '\x1b[200~';
 const PASTE_END = '\x1b[201~';
@@ -43,18 +43,16 @@ const ANSI_STRIP_RE = /\x1b\[[0-9;]*m/g;
 const SLASH_CURSOR_RE = /\x1b\[7m\/\x1b\[0m/;
 const AT_CURSOR_RE = /\x1b\[7m@\x1b\[0m/;
 const GRADIENT_COLORS: [number, number, number][] = [
-  [94, 158, 255],   // soft blue
-  [167, 139, 250],  // violet
-  [232, 121, 168],  // rose pink
-  [244, 162, 97],   // warm peach
+  [94, 158, 255], // soft blue
+  [167, 139, 250], // violet
+  [232, 121, 168], // rose pink
+  [244, 162, 97], // warm peach
 ];
 
 function parseHex(hex: string): [number, number, number] {
   const h = hex.replace('#', '');
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 }
-
-
 
 export class CustomEditor extends Editor {
   private actionHandlers: Map<AppAction, () => unknown> = new Map();
@@ -144,7 +142,10 @@ export class CustomEditor extends Editor {
     for (const line of editorLines) {
       const stripped = line.replace(ANSI_STRIP_RE, '');
       if (stripped.length > 0 && stripped[0] === '─') {
-        if (isTop) { isTop = false; continue; }
+        if (isTop) {
+          isTop = false;
+          continue;
+        }
         if (stripped.includes('↑') || stripped.includes('↓')) {
           scrollIndicators.push(b(stripped));
           continue;
@@ -191,7 +192,9 @@ export class CustomEditor extends Editor {
       // Pre-compute shared animation values (constant for all chars in this frame)
       let breath = 0;
       let inhaleBright = 0;
-      let inhaleR = 0, inhaleG = 0, inhaleB = 0;
+      let inhaleR = 0,
+        inhaleG = 0,
+        inhaleB = 0;
       let exhaleBright = 0;
       let easedFade = 0;
       let offsetVal = 0;
@@ -221,7 +224,8 @@ export class CustomEditor extends Editor {
         const si = Math.floor(scaledPos) % stopCount;
         const frac = scaledPos - Math.floor(scaledPos);
         const ni = (si + 1) % stopCount;
-        const eA = GRADIENT_COLORS[si]!, eB = GRADIENT_COLORS[ni]!;
+        const eA = GRADIENT_COLORS[si]!,
+          eB = GRADIENT_COLORS[ni]!;
         const exR = (eA[0] + (eB[0] - eA[0]) * frac) * exhaleBright;
         const exG = (eA[1] + (eB[1] - eA[1]) * frac) * exhaleBright;
         const exB = (eA[2] + (eB[2] - eA[2]) * frac) * exhaleBright;
@@ -550,7 +554,7 @@ export class CustomEditor extends Editor {
       // Let pi-tui handle \+Enter newline workaround
       const lines = (this as any).state?.lines;
       const cursorCol = (this as any).state?.cursorCol;
-      const currentLine = lines?.[((this as any).state?.cursorLine)] || '';
+      const currentLine = lines?.[(this as any).state?.cursorLine] || '';
       if (cursorCol > 0 && currentLine[cursorCol - 1] === '\\') {
         super.handleInput(data);
         return;

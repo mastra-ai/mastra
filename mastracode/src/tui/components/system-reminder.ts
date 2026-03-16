@@ -3,8 +3,8 @@
  * with a distinct orange/dim style to differentiate from user messages.
  */
 
-import chalk from 'chalk';
 import { Container, Markdown, Spacer } from '@mariozechner/pi-tui';
+import chalk from 'chalk';
 import { BOX_INDENT, ensureContrast, getMarkdownTheme, theme } from '../theme.js';
 
 export interface SystemReminderOptions {

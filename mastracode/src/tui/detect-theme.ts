@@ -8,7 +8,8 @@
  * 4. Default: 'dark'
  */
 
-import { luminance, type ThemeMode } from './theme.js';
+import { luminance  } from './theme.js';
+import type {ThemeMode} from './theme.js';
 
 /**
  * Query the terminal's background color via OSC 11 and compute luminance.
@@ -82,7 +83,10 @@ function queryTerminalBackground(timeoutMs = 200): Promise<ThemeDetectionResult 
         const b = normalize(bHex);
 
         // Convert to hex and compute WCAG relative luminance
-        const toHexByte = (v: number) => Math.round(v * 255).toString(16).padStart(2, '0');
+        const toHexByte = (v: number) =>
+          Math.round(v * 255)
+            .toString(16)
+            .padStart(2, '0');
         const detectedBgHex = `#${toHexByte(r)}${toHexByte(g)}${toHexByte(b)}`;
         const luma = luminance(detectedBgHex);
 

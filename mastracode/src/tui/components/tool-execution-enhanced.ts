@@ -250,7 +250,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     if (!this.result || this.isPartial) {
       const path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
       const status = this.getStatusIndicator();
-      const pathDisplay = fullPath ? fileLink(theme.fg('toolArgs', path), fullPath, startLine) : theme.fg('toolArgs', path);
+      const pathDisplay = fullPath
+        ? fileLink(theme.fg('toolArgs', path), fullPath, startLine)
+        : theme.fg('toolArgs', path);
       const footerText = `${theme.bold(theme.fg('toolTitle', 'view'))} ${pathDisplay}${rangeDisplay}${status}`;
       this.contentBox.addChild(new Text(border('╭──'), 0, 0));
       this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
@@ -268,7 +270,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       path = '…' + path.slice(-(availableForPath - 1));
     }
 
-    const pathDisplay = fullPath ? fileLink(theme.fg('toolArgs', path), fullPath, startLine) : theme.fg('toolArgs', path);
+    const pathDisplay = fullPath
+      ? fileLink(theme.fg('toolArgs', path), fullPath, startLine)
+      : theme.fg('toolArgs', path);
     const footerText = `${theme.bold(theme.fg('toolTitle', 'view'))} ${pathDisplay}${rangeDisplay}${status}`;
 
     // Empty line padding above
@@ -945,7 +949,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         const raw = this.getFormattedOutput();
         const parsed = JSON.parse(raw);
         if (parsed?.action?.query) query = String(parsed.action.query);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
     const status = this.getStatusIndicator();
 

@@ -12,7 +12,15 @@
  * 3. **Answered** — After the user responds, the box freezes with ✓/✗ icons.
  */
 
-import { Container, getEditorKeybindings, Input, SelectList, Spacer, visibleWidth, wrapTextWithAnsi } from '@mariozechner/pi-tui';
+import {
+  Container,
+  getEditorKeybindings,
+  Input,
+  SelectList,
+  Spacer,
+  visibleWidth,
+  wrapTextWithAnsi,
+} from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
 import { BOX_INDENT_STR, theme, getSelectListTheme } from '../theme.js';
 
@@ -89,7 +97,11 @@ class AskQuestionBorderedBox {
       return this._render(width);
     } catch {
       // Fallback: render a minimal box so the TUI doesn't crash
-      return [BOX_INDENT_STR + theme.fg('dim', '╭──── Question ────╮'), BOX_INDENT_STR + theme.fg('dim', '│ (render error)   │'), BOX_INDENT_STR + theme.fg('dim', '╰──────────────────╯')];
+      return [
+        BOX_INDENT_STR + theme.fg('dim', '╭──── Question ────╮'),
+        BOX_INDENT_STR + theme.fg('dim', '│ (render error)   │'),
+        BOX_INDENT_STR + theme.fg('dim', '╰──────────────────╯'),
+      ];
     }
   }
 
@@ -253,7 +265,11 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     try {
       return super.render(width);
     } catch {
-      return [BOX_INDENT_STR + theme.fg('dim', '╭──── Question ────╮'), BOX_INDENT_STR + theme.fg('dim', '│ (render error)   │'), BOX_INDENT_STR + theme.fg('dim', '╰──────────────────╯')];
+      return [
+        BOX_INDENT_STR + theme.fg('dim', '╭──── Question ────╮'),
+        BOX_INDENT_STR + theme.fg('dim', '│ (render error)   │'),
+        BOX_INDENT_STR + theme.fg('dim', '╰──────────────────╯'),
+      ];
     }
   }
 
@@ -281,7 +297,13 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
         this.buildInputMode();
       }
 
-      this.borderedBox = new AskQuestionBorderedBox(questionLines, hintText, options.options || [], this.selectList, this.input);
+      this.borderedBox = new AskQuestionBorderedBox(
+        questionLines,
+        hintText,
+        options.options || [],
+        this.selectList,
+        this.input,
+      );
     } else {
       // Streaming mode — empty bordered box, will be populated by updateArgs()
       this.borderedBox = new AskQuestionBorderedBox([], '', [], undefined, undefined, true);

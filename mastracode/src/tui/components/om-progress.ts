@@ -178,7 +178,9 @@ export function formatObservationStatus(
   const fraction = `${formatTokensValue(state.pendingTokens)}/${formatTokensThreshold(state.threshold)}`;
   const buffered =
     compact !== 'noBuffer' && state.buffered.observations.projectedMessageRemoval > 0
-      ? chalk.italic(theme.fg('muted', ` ↓${formatTokensThreshold(state.buffered.observations.projectedMessageRemoval)}`))
+      ? chalk.italic(
+          theme.fg('muted', ` ↓${formatTokensThreshold(state.buffered.observations.projectedMessageRemoval)}`),
+        )
       : '';
   return styleLabel(`${label} `) + colorByPercent(fraction, percent) + buffered;
 }

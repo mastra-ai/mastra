@@ -6,7 +6,6 @@
 import type { MarkdownTheme, EditorTheme, SettingsListTheme, SelectListTheme } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 
-
 // =============================================================================
 // Theme Mode
 // =============================================================================
@@ -162,9 +161,21 @@ const textSurfaceKeys: (keyof MastraSurface)[] = ['white', 'specialGray', 'mainG
 
 // Theme keys that are used as foreground text colors (not backgrounds/borders)
 const textThemeKeys: (keyof ThemeColors)[] = [
-  'accent', 'success', 'error', 'warning', 'muted', 'dim', 'text',
-  'thinkingText', 'userMessageText', 'toolTitle', 'toolOutput',
-  'textHighlight', 'path', 'number', 'function',
+  'accent',
+  'success',
+  'error',
+  'warning',
+  'muted',
+  'dim',
+  'text',
+  'thinkingText',
+  'userMessageText',
+  'toolTitle',
+  'toolOutput',
+  'textHighlight',
+  'path',
+  'number',
+  'function',
 ];
 
 // Comfortable minimum contrast for TUI body text — above WCAG AA (4.5:1) for better readability
@@ -183,7 +194,6 @@ export const CHAT_INDENT_STR = ' '.repeat(2);
 export const BOX_INDENT = 0;
 /** Precomputed indent string for boxes */
 export const BOX_INDENT_STR = '';
-
 
 // Brand accent colors (purple, blue, etc.) use standard WCAG AA to preserve vibrancy
 const BRAND_MIN_CONTRAST = 4.5;
@@ -441,7 +451,9 @@ export function applyThemeMode(mode: ThemeMode, terminalBgHex?: string): void {
   const r = parseInt(textHex.slice(1, 3), 16);
   const g = parseInt(textHex.slice(3, 5), 16);
   const b = parseInt(textHex.slice(5, 7), 16);
-  process.stdout.write(`\x1b]10;rgb:${r.toString(16).padStart(2, '0')}/${g.toString(16).padStart(2, '0')}/${b.toString(16).padStart(2, '0')}\x07`);
+  process.stdout.write(
+    `\x1b]10;rgb:${r.toString(16).padStart(2, '0')}/${g.toString(16).padStart(2, '0')}/${b.toString(16).padStart(2, '0')}\x07`,
+  );
 }
 
 // =============================================================================

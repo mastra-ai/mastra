@@ -42,7 +42,9 @@ export function applyGradientSweep(text: string, offset: number, color?: string,
   // Batch consecutive chars with same RGB to reduce chalk.rgb() calls
   let result = '';
   let batchChars = '';
-  let batchR = -1, batchG = -1, batchB = -1;
+  let batchR = -1,
+    batchG = -1,
+    batchB = -1;
 
   for (let i = 0; i < totalChars; i++) {
     const char = chars[i]!;
@@ -76,7 +78,9 @@ export function applyGradientSweep(text: string, offset: number, color?: string,
         result += chalk.rgb(batchR, batchG, batchB)(batchChars);
       }
       batchChars = char;
-      batchR = r; batchG = g; batchB = b;
+      batchR = r;
+      batchG = g;
+      batchB = b;
     }
   }
 

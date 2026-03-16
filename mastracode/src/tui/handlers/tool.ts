@@ -10,6 +10,7 @@ import type { TaskItem } from '@mastra/core/harness';
 import { parse as parsePartialJson } from 'partial-json';
 
 import { getToolCategory, TOOL_CATEGORIES } from '../../permissions.js';
+import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { ToolApprovalDialogComponent } from '../components/tool-approval-dialog.js';
 import type { ApprovalAction } from '../components/tool-approval-dialog.js';
@@ -18,7 +19,6 @@ import type { ToolResult } from '../components/tool-execution-enhanced.js';
 import { getMarkdownTheme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
-import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 
 /**
  * Format a tool result for display.

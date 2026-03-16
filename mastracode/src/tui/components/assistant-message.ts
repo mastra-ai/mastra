@@ -77,16 +77,20 @@ export class AssistantMessageComponent extends Container {
 
       if (content.type === 'text' && (content as any).text.trim()) {
         // Assistant text messages - trim the text
-        this.contentContainer.addChild(new Markdown((content as any).text.trim(), CHAT_INDENT, 0, this.markdownTheme, {
-          color: (text: string) => theme.fg('text', text),
-        }));
+        this.contentContainer.addChild(
+          new Markdown((content as any).text.trim(), CHAT_INDENT, 0, this.markdownTheme, {
+            color: (text: string) => theme.fg('text', text),
+          }),
+        );
       } else if (content.type === 'thinking' && (content as any).thinking.trim()) {
         // Check if there's text content after this thinking block
         const hasTextAfter = message.content.slice(i + 1).some(c => c.type === 'text' && (c as any).text.trim());
 
         if (this.hideThinkingBlock) {
           // Show static "Thinking..." label when hidden
-          this.contentContainer.addChild(new Text(theme.italic(theme.fg('thinkingText', 'Thinking...')), CHAT_INDENT, 0));
+          this.contentContainer.addChild(
+            new Text(theme.italic(theme.fg('thinkingText', 'Thinking...')), CHAT_INDENT, 0),
+          );
           if (hasTextAfter) {
             this.contentContainer.addChild(new Spacer(1));
           }

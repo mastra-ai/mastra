@@ -7,6 +7,7 @@ import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItem } from '@mastra/core/harness';
 import { parseSubagentMeta } from '@mastra/core/harness';
 import chalk from 'chalk';
+import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
 import { OMMarkerComponent } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
@@ -19,7 +20,6 @@ import { UserMessageComponent } from './components/user-message.js';
 import { formatToolResult } from './handlers/tool.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
-import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 
 // Re-export so existing consumers can still import from here
 export { formatToolResult };
@@ -243,8 +243,11 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
           // Render ask_user with the proper question component
           if (content.name === 'ask_user' && toolResult?.type === 'tool_result') {
-            const askArgs = content.args as { question?: string; options?: Array<{ label: string; description?: string }> } | undefined;
-            const answer = typeof toolResult.result === 'string' ? toolResult.result : formatToolResult(toolResult.result);
+            const askArgs = content.args as
+              | { question?: string; options?: Array<{ label: string; description?: string }> }
+              | undefined;
+            const answer =
+              typeof toolResult.result === 'string' ? toolResult.result : formatToolResult(toolResult.result);
             const cancelled = answer === '(skipped)';
             if (askArgs?.question) {
               const askComponent = AskQuestionInlineComponent.fromHistory(
