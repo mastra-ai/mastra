@@ -1007,6 +1007,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
         msg => msg.role === 'assistant' && msg.content.parts.some(p => p.type === 'tool-invocation'),
       );
       expect(assistantMsg).toBeDefined();
+      expect(assistantMsg?.content.metadata).toEqual({ modelId: 'claude-code-model' });
 
       const parts = assistantMsg!.content.parts;
       expect(parts.map(part => part.type)).toEqual(['text', 'tool-invocation', 'step-start', 'text']);
