@@ -14,6 +14,14 @@ Creates a chat route handler for streaming agent conversations using the AI SDK 
 
 Use [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream) if you need a framework-agnostic handler.
 
+:::note Disconnect behavior
+
+`chatRoute()` forwards the incoming request's `AbortSignal` to `agent.stream()`. If the client disconnects, Mastra aborts the in-flight generation.
+
+If you want the server to continue generation and persist the final response after disconnect, build a [custom API route](/docs/server/custom-api-routes#continue-generation-after-client-disconnect) around `agent.stream()` and call `consumeStream()` on the returned `MastraModelOutput`.
+
+:::
+
 ## Usage example
 
 This example shows how to set up a chat route at the `/chat` endpoint that uses an agent with the ID `weatherAgent`.
