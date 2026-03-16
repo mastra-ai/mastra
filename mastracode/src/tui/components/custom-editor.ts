@@ -42,7 +42,7 @@ export type AppAction =
 const ANSI_STRIP_RE = /\x1b\[[0-9;]*m/g;
 const SLASH_CURSOR_RE = /\x1b\[7m\/\x1b\[0m/;
 const AT_CURSOR_RE = /\x1b\[7m@\x1b\[0m/;
-const APPLE_COLORS: [number, number, number][] = [
+const GRADIENT_COLORS: [number, number, number][] = [
   [94, 158, 255],   // soft blue
   [167, 139, 250],  // violet
   [232, 121, 168],  // rose pink
@@ -213,15 +213,15 @@ export class CustomEditor extends Editor {
       const borderChar = (ch: string, perimPos: number): string => {
         if (!animating) return b(ch);
 
-        // Exhale: apple colors spinning radially (per-char computation)
+        // Exhale: gradient colors spinning radially (per-char computation)
         const norm = perimPos / perimeterLen;
         const radialPos = (norm + offsetVal * 0.15) % 1;
-        const stopCount = APPLE_COLORS.length;
+        const stopCount = GRADIENT_COLORS.length;
         const scaledPos = radialPos * stopCount;
         const si = Math.floor(scaledPos) % stopCount;
         const frac = scaledPos - Math.floor(scaledPos);
         const ni = (si + 1) % stopCount;
-        const eA = APPLE_COLORS[si]!, eB = APPLE_COLORS[ni]!;
+        const eA = GRADIENT_COLORS[si]!, eB = GRADIENT_COLORS[ni]!;
         const exR = (eA[0] + (eB[0] - eA[0]) * frac) * exhaleBright;
         const exG = (eA[1] + (eB[1] - eA[1]) * frac) * exhaleBright;
         const exB = (eA[2] + (eB[2] - eA[2]) * frac) * exhaleBright;
