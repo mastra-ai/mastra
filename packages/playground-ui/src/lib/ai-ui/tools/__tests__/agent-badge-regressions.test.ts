@@ -22,7 +22,7 @@ vi.mock('../badges/agent-badge', () => ({
   AgentBadge: mockAgentBadge,
 }));
 
-vi.mock('./loading-badge', () => ({
+vi.mock('../badges/loading-badge', () => ({
   LoadingBadge: () => null,
 }));
 
