@@ -1,5 +1,5 @@
 ---
-title: "Reference: Upstash Vector Store | Vectors"
+title: "Reference: Upstash vector store | Vectors"
 description: Documentation for the UpstashVector class in Mastra, which provides vector search using Upstash Vector.
 packages:
   - "@mastra/core"
@@ -8,11 +8,11 @@ packages:
   - "@mastra/upstash"
 ---
 
-# Upstash Vector Store
+# Upstash vector store
 
 The UpstashVector class provides vector search using [Upstash Vector](https://upstash.com/vector), a serverless vector database service that provides vector similarity search with metadata filtering capabilities and hybrid search support.
 
-## Constructor Options
+## Constructor options
 
 <PropertiesTable
   content={[
@@ -31,7 +31,7 @@ The UpstashVector class provides vector search using [Upstash Vector](https://up
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 Note: This method is a no-op for Upstash as indexes are created automatically.
 
@@ -57,7 +57,7 @@ Note: This method is a no-op for Upstash as indexes are created automatically.
 ]}
 />
 
-### upsert()
+### `upsert()`
 
 <PropertiesTable
   content={[
@@ -93,7 +93,7 @@ Note: This method is a no-op for Upstash as indexes are created automatically.
 ]}
 />
 
-### query()
+### `query()`
 
 <PropertiesTable
   content={[
@@ -149,11 +149,11 @@ Note: This method is a no-op for Upstash as indexes are created automatically.
 ]}
 />
 
-### listIndexes()
+### `listIndexes()`
 
 Returns an array of index names (namespaces) as strings.
 
-### describeIndex()
+### `describeIndex()`
 
 <PropertiesTable
   content={[
@@ -175,7 +175,7 @@ interface IndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 <PropertiesTable
   content={[
@@ -187,7 +187,7 @@ interface IndexStats {
 ]}
 />
 
-### updateVector()
+### `updateVector()`
 
 <PropertiesTable
   content={[
@@ -215,7 +215,7 @@ The `update` object can have the following properties:
 - `sparseVector` (optional): A sparse vector object with `indices` and `values` arrays for hybrid indexes.
 - `metadata` (optional): A record of key-value pairs for metadata.
 
-### deleteVector()
+### `deleteVector()`
 
 <PropertiesTable
   content={[
@@ -234,7 +234,7 @@ The `update` object can have the following properties:
 
 Attempts to delete an item by its ID from the specified index. Logs an error message if the deletion fails.
 
-## Hybrid Vector Search
+## Hybrid vector search
 
 Upstash Vector supports hybrid search that combines semantic search (dense vectors) with keyword-based search (sparse vectors) for improved relevance and accuracy.
 
@@ -322,7 +322,7 @@ await vectorStore.updateVector({
 })
 ```
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -335,7 +335,7 @@ interface QueryResult {
 }
 ```
 
-## Error Handling
+## Error handling
 
 The store throws typed errors that can be caught:
 
@@ -353,14 +353,14 @@ try {
 }
 ```
 
-## Environment Variables
+## Environment variables
 
 Required environment variables:
 
 - `UPSTASH_VECTOR_URL`: Your Upstash Vector database URL
 - `UPSTASH_VECTOR_TOKEN`: Your Upstash Vector API token
 
-## Usage Example
+## Usage example
 
 ### Local embeddings with fastembed
 

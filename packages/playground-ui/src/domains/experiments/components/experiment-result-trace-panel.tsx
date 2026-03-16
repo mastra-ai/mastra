@@ -84,7 +84,7 @@ export function ExperimentResultTracePanel({
   return (
     <>
       <Column.Toolbar>
-        <Button variant="standard" size="default" onClick={onClose} aria-label="Close trace panel">
+        <Button onClick={onClose} aria-label="Close trace panel">
           <XIcon />
         </Button>
       </Column.Toolbar>

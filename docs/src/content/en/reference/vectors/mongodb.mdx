@@ -1,5 +1,5 @@
 ---
-title: "Reference: MongoDB Vector Store | Vectors"
+title: "Reference: MongoDB vector store | Vectors"
 description: Documentation for the MongoDBVector class in Mastra, which provides vector search using MongoDB Atlas and Atlas Vector Search.
 packages:
   - "@mastra/core"
@@ -8,7 +8,7 @@ packages:
   - "@mastra/mongodb"
 ---
 
-# MongoDB Vector Store
+# MongoDB vector store
 
 The `MongoDBVector` class provides vector search using [MongoDB Atlas Vector Search](https://www.mongodb.com/docs/atlas/atlas-vector-search/). It enables efficient similarity search and metadata filtering within your MongoDB collections.
 
@@ -18,7 +18,7 @@ The `MongoDBVector` class provides vector search using [MongoDB Atlas Vector Sea
 npm install @mastra/mongodb@latest
 ```
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { MongoDBVector } from '@mastra/mongodb'
@@ -45,7 +45,7 @@ const store = new MongoDBVector({
 })
 ```
 
-## Constructor Options
+## Constructor options
 
 <PropertiesTable
   content={[
@@ -83,7 +83,7 @@ const store = new MongoDBVector({
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 Creates a new vector index (collection) in MongoDB.
 
@@ -109,7 +109,7 @@ Creates a new vector index (collection) in MongoDB.
 ]}
 />
 
-### upsert()
+### `upsert()`
 
 Adds or updates vectors and their metadata in the collection.
 
@@ -140,7 +140,7 @@ Adds or updates vectors and their metadata in the collection.
 ]}
 />
 
-### query()
+### `query()`
 
 Searches for similar vectors with optional metadata filtering.
 
@@ -192,7 +192,7 @@ Searches for similar vectors with optional metadata filtering.
 ]}
 />
 
-### describeIndex()
+### `describeIndex()`
 
 Returns information about the index (collection).
 
@@ -216,7 +216,7 @@ interface IndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 Deletes a collection and all its data.
 
@@ -230,13 +230,13 @@ Deletes a collection and all its data.
 ]}
 />
 
-### listIndexes()
+### `listIndexes()`
 
 Lists all vector collections in the MongoDB database.
 
 Returns: `Promise<string[]>`
 
-### updateVector()
+### `updateVector()`
 
 Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
@@ -279,7 +279,7 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 ]}
 />
 
-### deleteVector()
+### `deleteVector()`
 
 Deletes a specific vector entry from an index by its ID.
 
@@ -298,7 +298,7 @@ Deletes a specific vector entry from an index by its ID.
 ]}
 />
 
-### deleteVectors()
+### `deleteVectors()`
 
 Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
 
@@ -324,11 +324,11 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 ]}
 />
 
-### disconnect()
+### `disconnect()`
 
 Closes the MongoDB client connection. Should be called when done using the store.
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -341,7 +341,7 @@ interface QueryResult {
 }
 ```
 
-## Error Handling
+## Error handling
 
 The store throws typed errors that can be caught:
 
@@ -365,15 +365,15 @@ try {
 }
 ```
 
-## Best Practices
+## Best practices
 
 - Index metadata fields used in filters for optimal query performance.
 - Use consistent field naming in metadata to avoid unexpected query results.
 - Regularly monitor index and collection statistics to ensure efficient search.
 
-## Usage Example
+## Usage example
 
-### Vector embeddings with MongoDB
+### Vector embeddings with `MongoDB`
 
 Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords).
 

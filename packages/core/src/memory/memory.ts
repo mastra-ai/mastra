@@ -339,6 +339,10 @@ https://mastra.ai/en/docs/memory/overview`,
       if (indexConfig.hnsw) createParams.indexConfig.hnsw = indexConfig.hnsw;
     }
 
+    // Request btree indexes on metadata fields used for filtering
+    // This avoids sequential scans on large tables when querying by thread_id or resource_id
+    createParams.metadataIndexes = ['thread_id', 'resource_id'];
+
     await this.vector.createIndex(createParams);
     return { indexName };
   }
@@ -954,6 +958,7 @@ https://mastra.ai/en/docs/memory/overview`,
         bufferTokens: obs.bufferTokens,
         bufferActivation: obs.bufferActivation,
         blockAfter: obs.blockAfter,
+        previousObserverTokens: obs.previousObserverTokens,
       };
       const obsModelId = extractModelIdString(obs.model);
       if (obsModelId) {

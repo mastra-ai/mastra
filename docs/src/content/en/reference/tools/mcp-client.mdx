@@ -51,7 +51,7 @@ constructor({
 ]}
 />
 
-### MastraMCPServerDefinition
+### `MastraMCPServerDefinition`
 
 Each server in the `servers` map is configured using the `MastraMCPServerDefinition` type. The transport type is detected based on the provided parameters:
 
@@ -143,7 +143,7 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
 
 ## Methods
 
-### listTools()
+### `listTools()`
 
 Retrieves all tools from all configured servers, with tool names namespaced by their server name (in the format `serverName_toolName`) to prevent conflicts.
 Intended to be passed onto an Agent definition.
@@ -152,7 +152,7 @@ Intended to be passed onto an Agent definition.
 new Agent({ id: 'agent', tools: await mcp.listTools() })
 ```
 
-### listToolsets()
+### `listToolsets()`
 
 Returns an object mapping namespaced tool names (in the format `serverName.toolName`) to their tool implementations.
 Intended to be passed dynamically into the generate or stream method.
@@ -163,7 +163,7 @@ const res = await agent.stream(prompt, {
 })
 ```
 
-### disconnect()
+### `disconnect()`
 
 Disconnects from all MCP servers and cleans up resources.
 
@@ -329,7 +329,7 @@ mcpClient.elicitation.onRequest('serverName', async request => {
 
 Sets up a handler function that will be called when any connected MCP server sends an elicitation request. The handler receives the request and must return a response.
 
-##### ElicitationHandler Function
+##### `ElicitationHandler` Function
 
 The handler function receives a request object with:
 
@@ -624,7 +624,7 @@ mcpClient.elicitation.onRequest('interactiveServer', async request => {
 })
 ```
 
-### Response Types
+### Response types
 
 Your elicitation handler must return one of three response types:
 
@@ -681,7 +681,7 @@ await mcpClient.elicitation.onRequest('interactiveServer', async request => {
 })
 ```
 
-### Best Practices
+### Best practices
 
 - **Always handle elicitation**: Set up your handler before calling tools that might use elicitation
 - **Validate input**: Check that required fields are provided
@@ -689,7 +689,7 @@ await mcpClient.elicitation.onRequest('interactiveServer', async request => {
 - **Clear UI**: Make it obvious what information is being requested and why
 - **Security**: Never auto-accept requests for sensitive information
 
-## OAuth Authentication
+## OAuth authentication
 
 For connecting to MCP servers that require OAuth authentication per the [MCP Auth Specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization), use the `MCPOAuthClientProvider`:
 
@@ -908,7 +908,7 @@ const response = await agent.stream('How is AAPL doing and what is the weather?'
 })
 ```
 
-## Instance Management
+## Instance management
 
 The `MCPClient` class includes built-in memory leak prevention for managing multiple instances:
 
@@ -952,7 +952,7 @@ const mcp4 = new MCPClient({
 })
 ```
 
-## Server Lifecycle
+## Server lifecycle
 
 MCPClient handles server connections gracefully:
 
@@ -960,7 +960,7 @@ MCPClient handles server connections gracefully:
 1. Graceful server shutdown to prevent error messages during development
 1. Proper cleanup of resources when disconnecting
 
-## Using Custom Fetch for Dynamic Authentication
+## Using custom fetch for dynamic authentication
 
 For HTTP servers, you can provide a custom `fetch` function to handle dynamic authentication, request interception, or other custom behavior. This is particularly useful when you need to refresh tokens on each request or forward user credentials from the incoming request to the MCP server.
 
@@ -999,7 +999,7 @@ await agent.generate('Hello!', {
 })
 ```
 
-## Using SSE Request Headers
+## Using SSE request headers
 
 When using the legacy SSE MCP transport, you must configure both `requestInit` and `eventSourceInit` due to a bug in the MCP SDK. Alternatively, you can use a custom `fetch` function which will be automatically used for both POST requests and SSE connections:
 
@@ -1048,7 +1048,7 @@ const sseClientWithFetch = new MCPClient({
 })
 ```
 
-## Related Information
+## Related information
 
 - For creating MCP servers, see the [MCPServer documentation](./mcp-server).
 - For more about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/typescript-sdk).

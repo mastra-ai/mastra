@@ -19,7 +19,7 @@ interface RouteOpenAPIConfig {
   deprecated?: boolean;
 }
 
-interface OpenAPIRoute {
+export interface OpenAPIRoute {
   summary?: string;
   description?: string;
   tags?: string[];
@@ -210,7 +210,7 @@ function convertToJsonSchema(spec: OpenAPIRoute): any {
  * @returns Complete OpenAPI 3.1.0 document
  */
 export function generateOpenAPIDocument(
-  routes: ServerRoute[],
+  routes: readonly ServerRoute[],
   info: { title: string; version: string; description?: string },
 ): any {
   const paths: Record<string, any> = {};

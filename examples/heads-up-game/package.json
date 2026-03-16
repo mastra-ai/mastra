@@ -22,7 +22,7 @@
     "@mastra/libsql": "^0.16.4",
     "@mastra/loggers": "^0.10.19",
     "@mastra/memory": "^0.15.13",
-    "zod": "^3.25.76"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "22.19.7",

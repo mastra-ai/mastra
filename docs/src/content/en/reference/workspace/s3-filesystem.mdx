@@ -17,7 +17,7 @@ For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/
 
 ## Installation
 
-```bash
+```bash npm2yarn
 npm install @mastra/s3
 ```
 
@@ -236,7 +236,7 @@ const config = filesystem.getMountConfig()
 // { type: 's3', bucket: 'my-bucket', region: 'us-east-1', ... }
 ```
 
-## Mounting in E2B Sandboxes
+## Mounting in E2B sandboxes
 
 S3Filesystem can be mounted into E2B sandboxes, making the bucket accessible as a local directory:
 

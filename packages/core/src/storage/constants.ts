@@ -1,4 +1,4 @@
-import { spanRecordSchema } from './domains/observability/types';
+import { spanRecordSchema } from './domains/observability';
 import { buildStorageSchema } from './types';
 import type { StorageColumn, StorageTableConfig } from './types';
 
@@ -35,6 +35,7 @@ export const TABLE_DATASET_VERSIONS = 'mastra_dataset_versions';
 export const TABLE_EXPERIMENTS = 'mastra_experiments';
 export const TABLE_EXPERIMENT_RESULTS = 'mastra_experiment_results';
 
+/** Union of all core table name constants. */
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
   | typeof TABLE_MESSAGES

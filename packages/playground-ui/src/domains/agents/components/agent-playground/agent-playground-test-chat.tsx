@@ -29,9 +29,10 @@ export function AgentPlaygroundTestChat({ agentId, agentName, modelVersion, hasM
         requestContext={hasRequestContext ? mergedRequestContext : undefined}
       >
         <div className="flex flex-col h-full">
-          <div className="px-4 py-2 border-b border-border1">
-            <Txt variant="ui-xs" className="text-neutral2">
-              Test your agent configuration changes here. This uses the latest saved draft.
+          <div className="px-4 py-3 border-b border-border1">
+            <Txt variant="ui-sm" className="text-neutral3">
+              Chat with your agent to test configuration changes in real time. Each session uses a fresh thread with the
+              latest saved draft. Any request context values you've set will be included automatically.
             </Txt>
           </div>
           <div className="flex-1 min-h-0">

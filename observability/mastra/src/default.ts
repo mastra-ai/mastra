@@ -25,6 +25,10 @@ function isInstance(
   return obj instanceof BaseObservabilityInstance;
 }
 
+/**
+ * Top-level observability entrypoint. Manages a registry of ObservabilityInstance
+ * configurations and provides instance selection via config selectors.
+ */
 export class Observability extends MastraBase implements ObservabilityEntrypoint {
   #registry = new ObservabilityRegistry();
 
@@ -42,7 +46,10 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     const validationResult = observabilityRegistryConfigSchema.safeParse(config);
     if (!validationResult.success) {
       const errorMessages = validationResult.error.issues
-        .map(err => `${err.path.join('.') || 'config'}: ${err.message}`)
+        .map(
+          (err: { path: (string | number | symbol)[]; message: string }) =>
+            `${err.path.join('.') || 'config'}: ${err.message}`,
+        )
         .join('; ');
       throw new MastraError({
         id: 'OBSERVABILITY_INVALID_CONFIG',
@@ -62,7 +69,10 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
           const configValidation = observabilityConfigValueSchema.safeParse(configValue);
           if (!configValidation.success) {
             const errorMessages = configValidation.error.issues
-              .map(err => `${err.path.join('.')}: ${err.message}`)
+              .map(
+                (err: { path: (string | number | symbol)[]; message: string }) =>
+                  `${err.path.join('.')}: ${err.message}`,
+              )
               .join('; ');
             throw new MastraError({
               id: 'OBSERVABILITY_INVALID_INSTANCE_CONFIG',
@@ -120,6 +130,7 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     }
   }
 
+  /** Initialize all exporter instances with the Mastra context (storage, config, etc.). */
   setMastraContext(options: { mastra: Mastra }): void {
     const instances = this.listInstances();
     const { mastra } = options;
@@ -143,6 +154,7 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     });
   }
 
+  /** Propagate a logger to this instance and all registered observability instances. */
   setLogger(options: { logger: IMastraLogger }): void {
     super.__setLogger(options.logger);
     this.listInstances().forEach(instance => {
@@ -150,46 +162,52 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     });
   }
 
+  /** Get the observability instance chosen by the config selector for the given options. */
   getSelectedInstance(options: ConfigSelectorOptions): ObservabilityInstance | undefined {
     return this.#registry.getSelected(options);
   }
 
-  /**
-   * Registry management methods
-   */
-
+  /** Register a named observability instance, optionally marking it as default. */
   registerInstance(name: string, instance: ObservabilityInstance, isDefault = false): void {
     this.#registry.register(name, instance, isDefault);
   }
 
+  /** Get a registered instance by name. */
   getInstance(name: string): ObservabilityInstance | undefined {
     return this.#registry.get(name);
   }
 
+  /** Get the default observability instance. */
   getDefaultInstance(): ObservabilityInstance | undefined {
     return this.#registry.getDefault();
   }
 
+  /** List all registered observability instances. */
   listInstances(): ReadonlyMap<string, ObservabilityInstance> {
     return this.#registry.list();
   }
 
+  /** Unregister an instance by name. Returns true if it was found and removed. */
   unregisterInstance(name: string): boolean {
     return this.#registry.unregister(name);
   }
 
+  /** Check whether an instance with the given name is registered. */
   hasInstance(name: string): boolean {
     return !!this.#registry.get(name);
   }
 
+  /** Set the config selector used to choose an instance at runtime. */
   setConfigSelector(selector: ConfigSelector): void {
     this.#registry.setSelector(selector);
   }
 
+  /** Remove all registered instances and reset the registry. */
   clear(): void {
     this.#registry.clear();
   }
 
+  /** Shut down all registered instances, flushing any pending data. */
   async shutdown(): Promise<void> {
     await this.#registry.shutdown();
   }
