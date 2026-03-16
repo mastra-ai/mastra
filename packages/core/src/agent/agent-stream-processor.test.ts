@@ -137,6 +137,88 @@ describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () =
   });
 });
 
+describe('Processor state persistence across processOutputStream and processOutputResult', () => {
+  let mockModel: MockLanguageModelV2;
+  let stateInOutputStream: Record<string, unknown> | null = null;
+  let stateInOutputResult: Record<string, unknown> | null = null;
+
+  class StatePersistenceProcessor implements Processor {
+    readonly id = 'state-persistence-processor';
+    readonly name = 'State Persistence Processor';
+
+    async processOutputStream({ part, state }: any) {
+      if (part.type === 'text-delta') {
+        // Set state during stream processing
+        if (!state.chunks) state.chunks = [];
+        (state.chunks as string[]).push(part.payload.text);
+        state.streamProcessed = true;
+      }
+      stateInOutputStream = { ...state };
+      return part;
+    }
+
+    async processOutputResult({ state, messages }: any) {
+      // Read state set during stream processing
+      stateInOutputResult = { ...state };
+      return messages;
+    }
+  }
+
+  beforeEach(() => {
+    stateInOutputStream = null;
+    stateInOutputResult = null;
+
+    mockModel = new MockLanguageModelV2({
+      doStream: async () => {
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello ' },
+            { type: 'text-delta', id: 'text-1', delta: 'World' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+  });
+
+  it('should preserve state set in processOutputStream when reading in processOutputResult', async () => {
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'Test agent',
+      model: mockModel as any,
+      outputProcessors: [new StatePersistenceProcessor()],
+    });
+
+    const stream = await agent.stream('test message');
+
+    // Consume the stream to trigger both processOutputStream and processOutputResult
+    for await (const _chunk of stream.textStream) {
+      // consume
+    }
+
+    // Verify processOutputStream set the state
+    expect(stateInOutputStream).not.toBeNull();
+    expect(stateInOutputStream?.streamProcessed).toBe(true);
+    expect(stateInOutputStream?.chunks).toBeDefined();
+
+    // Verify processOutputResult can see the state set by processOutputStream
+    expect(stateInOutputResult).not.toBeNull();
+    expect(stateInOutputResult?.streamProcessed).toBe(true);
+    expect(stateInOutputResult?.chunks).toEqual(['Hello ', 'World']);
+  });
+});
+
 describe('OutputProcessor Metadata with Streaming (Issue #11454)', () => {
   let mockModel: MockLanguageModelV2;
 
