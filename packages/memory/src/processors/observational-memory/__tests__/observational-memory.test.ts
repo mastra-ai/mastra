@@ -10535,8 +10535,8 @@ describe('Processor behavioral regressions', () => {
     const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
 
     const engine = (processor as any).engine;
-    const originalObserveWithActivation = engine.observeWithActivation.bind(engine);
-    engine.observeWithActivation = async () => {
+    const originalObserve = engine.observe.bind(engine);
+    engine.observe = async () => {
       throw new Error('raw-observe-error');
     };
 
@@ -10582,7 +10582,7 @@ describe('Processor behavioral regressions', () => {
       expect(msg).toContain('abort-called:');
       expect(abortCalled).toBe(true);
     } finally {
-      engine.observeWithActivation = originalObserveWithActivation;
+      engine.observe = originalObserve;
     }
   });
 });

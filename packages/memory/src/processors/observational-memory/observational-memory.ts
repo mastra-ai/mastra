@@ -3890,7 +3890,7 @@ ${formattedMessages}
   /**
    * Check if async reflection should be triggered or activated.
    * Only handles the async path — will never do synchronous (blocking) reflection.
-   * @internal Used by observeWithActivation() and tryStep0Activation().
+   * @internal Used by tryStep0Activation().
    */
   private async maybeAsyncReflect(opts: {
     record: ObservationalMemoryRecord;
@@ -3959,7 +3959,7 @@ ${formattedMessages}
    *   messages: messageList.get.all.db(),
    * });
    * if (status.shouldObserve) {
-   *   await om.observeWithActivation({ ... });
+   *   await om.observe({ threadId, messages });
    * }
    * ```
    */
@@ -4031,189 +4031,6 @@ ${formattedMessages}
     };
   }
 
-  /**
-   * Run the full observation cycle — including async buffered activation, sync fallback,
-   * thread metadata updates, and async reflection triggering.
-   *
-   * This is the "batteries included" observation method. Unlike `observe()` which is
-   * a simpler manual API, this handles the complete async-buffering-aware lifecycle:
-   * 1. Acquires a lock
-   * 2. Re-checks threshold inside the lock
-   * 3. Tries to activate buffered observations (instant activation)
-   * 4. Falls back to synchronous observation if needed
-   * 5. Propagates continuation hints to thread metadata
-   * 6. Triggers async reflection if applicable
-   *
-   * @example
-   * ```ts
-   * const result = await om.observeWithActivation({
-   *   threadId: 'thread-1',
-   *   messages: messageList.get.all.db(),
-   *   messageList,
-   *   threshold: status.threshold,
-   * });
-   * if (result.succeeded) {
-   *   await om.cleanupObservedContext({ ... });
-   * }
-   * ```
-   */
-  async observeWithActivation(opts: {
-    threadId: string;
-    resourceId?: string;
-    messages: MastraDBMessage[];
-    messageList?: MessageList;
-    threshold: number;
-    otherThreadContext?: string;
-    writer?: ProcessorStreamWriter;
-    abortSignal?: AbortSignal;
-    requestContext?: RequestContext;
-  }): Promise<{
-    succeeded: boolean;
-    record: ObservationalMemoryRecord;
-    activatedMessageIds?: string[];
-  }> {
-    const { threadId, resourceId, messageList, threshold, writer, abortSignal, requestContext } = opts;
-    const lockKey = this.getLockKey(threadId, resourceId);
-
-    let observationSucceeded = false;
-    let updatedRecord = await this.getOrCreateRecord(threadId, resourceId);
-    let activatedMessageIds: string[] | undefined;
-
-    await this.withLock(lockKey, async () => {
-      let freshRecord = await this.getOrCreateRecord(threadId, resourceId);
-      const freshMessages = messageList ? messageList.get.all.db() : opts.messages;
-      let freshUnobservedMessages = this.getUnobservedMessages(freshMessages, freshRecord);
-
-      // Re-check threshold inside the lock
-      const freshContextTokens = await this.tokenCounter.countMessagesAsync(freshUnobservedMessages);
-      let freshOtherThreadTokens = 0;
-      if (this.scope === 'resource' && resourceId && opts.otherThreadContext) {
-        freshOtherThreadTokens = this.tokenCounter.countString(opts.otherThreadContext);
-      } else if (this.scope === 'resource' && resourceId) {
-        const freshOtherContext = await this.getOtherThreadsContext(resourceId, threadId);
-        freshOtherThreadTokens = freshOtherContext ? this.tokenCounter.countString(freshOtherContext) : 0;
-      }
-      const freshTotal = freshContextTokens + freshOtherThreadTokens;
-      omDebug(
-        `[OM:observeWithActivation] inside lock: freshTotal=${freshTotal}, threshold=${threshold}, freshUnobserved=${freshUnobservedMessages.length}`,
-      );
-      if (freshTotal < threshold) {
-        omDebug(`[OM:observeWithActivation] freshTotal < threshold, bailing out`);
-        return;
-      }
-
-      const preObservationTime = freshRecord.lastObservedAt?.getTime() ?? 0;
-
-      // Try to activate buffered observations first (instant activation)
-      let activationResult: {
-        success: boolean;
-        updatedRecord?: ObservationalMemoryRecord;
-        messageTokensActivated?: number;
-        activatedMessageIds?: string[];
-        suggestedContinuation?: string;
-        currentTask?: string;
-      } = { success: false };
-
-      if (this.isAsyncObservationEnabled()) {
-        // Wait for any in-flight async buffering to complete first
-        const bufferKey = this.getObservationBufferKey(lockKey);
-        const asyncOp = ObservationalMemory.asyncBufferingOps.get(bufferKey);
-        if (asyncOp) {
-          try {
-            await Promise.race([
-              asyncOp,
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 30000)),
-            ]);
-          } catch {
-            // Timeout or error - proceed with what we have
-          }
-        }
-
-        const recordAfterWait = await this.getOrCreateRecord(threadId, resourceId);
-        activationResult = await this.tryActivateBufferedObservations(
-          recordAfterWait,
-          lockKey,
-          freshTotal,
-          writer,
-          messageList,
-        );
-        omDebug(`[OM:observeWithActivation] activationResult: success=${activationResult.success}`);
-
-        if (activationResult.success) {
-          observationSucceeded = true;
-          updatedRecord = activationResult.updatedRecord ?? recordAfterWait;
-          activatedMessageIds = activationResult.activatedMessageIds;
-
-          // Propagate continuation hints to thread metadata
-          const thread = await this.storage.getThreadById({ threadId });
-          if (thread) {
-            const newMetadata = setThreadOMMetadata(thread.metadata, {
-              suggestedResponse: activationResult.suggestedContinuation,
-              currentTask: activationResult.currentTask,
-            });
-            await this.storage.updateThread({
-              id: threadId,
-              title: thread.title ?? '',
-              metadata: newMetadata,
-            });
-          }
-
-          // Trigger async reflection if applicable
-          await this.maybeAsyncReflect({
-            record: updatedRecord,
-            observationTokens: updatedRecord.observationTokenCount ?? 0,
-            writer,
-            messageList,
-            requestContext,
-          });
-          return;
-        }
-
-        // When async observation is enabled, don't fall through to synchronous observation
-        // unless blockAfter is set and we've exceeded it.
-        if (this.observationConfig.blockAfter && freshTotal >= this.observationConfig.blockAfter) {
-          omDebug(
-            `[OM:observeWithActivation] blockAfter exceeded (${freshTotal} >= ${this.observationConfig.blockAfter}), falling through to sync`,
-          );
-          freshRecord = await this.getOrCreateRecord(threadId, resourceId);
-          const refreshedAll = messageList ? messageList.get.all.db() : opts.messages;
-          freshUnobservedMessages = this.getUnobservedMessages(refreshedAll, freshRecord);
-        } else {
-          omDebug(`[OM:observeWithActivation] activation failed, below blockAfter — letting async catch up`);
-          return;
-        }
-      }
-
-      // Sync observation path
-      if (freshUnobservedMessages.length > 0) {
-        if (this.scope === 'resource' && resourceId) {
-          await this.doResourceScopedObservation({
-            record: freshRecord,
-            currentThreadId: threadId,
-            resourceId,
-            currentThreadMessages: freshUnobservedMessages,
-            writer,
-            abortSignal,
-            requestContext,
-          });
-        } else {
-          await this.doSynchronousObservation({
-            record: freshRecord,
-            threadId,
-            unobservedMessages: freshUnobservedMessages,
-            writer,
-            abortSignal,
-            requestContext,
-          });
-        }
-        updatedRecord = await this.getOrCreateRecord(threadId, resourceId);
-        const updatedTime = updatedRecord.lastObservedAt?.getTime() ?? 0;
-        observationSucceeded = updatedTime > preObservationTime;
-      }
-    });
-
-    return { succeeded: observationSucceeded, record: updatedRecord, activatedMessageIds };
-  }
 
   /**
    * Trigger async buffered observation if the token count has crossed a new interval.

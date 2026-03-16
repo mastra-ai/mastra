@@ -224,6 +224,7 @@ async function main() {
         });
         stepLog.push(`step ${stepNum}: buffer [fire-and-forget] (pending ${status.pendingTokens}/${status.threshold})`);
       } else if (status.shouldObserve) {
+        // Same observe primitives as the processor: wait -> activate -> observe
         // Wait for any in-flight buffer to complete before observing
         await ObservationalMemory.awaitBuffering(threadId, undefined, 'thread');
         if (status.canActivate) {
