@@ -174,7 +174,7 @@ export class Agent<
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
-  #requestContextSchema?: ZodSchema<TRequestContext>;
+  #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
 
@@ -314,7 +314,7 @@ export class Agent<
     }
 
     if (config.requestContextSchema) {
-      this.#requestContextSchema = config.requestContextSchema;
+      this.#requestContextSchema = toStandardSchema(config.requestContextSchema);
     }
 
     // @ts-expect-error Flag for agent network messages
