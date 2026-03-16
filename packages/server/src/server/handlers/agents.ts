@@ -11,6 +11,8 @@ import type {
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
+import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
+import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
 
 import { z } from 'zod';
@@ -137,6 +139,21 @@ interface SerializedToolInput {
   requestContextSchema?: { jsonSchema?: unknown } | unknown;
 }
 
+function resolveLazySchema(schema: unknown): unknown {
+  if (typeof schema === 'function') {
+    return resolveLazySchema(schema());
+  }
+  return schema;
+}
+
+function schemaToJsonSchema(schema: PublicSchema<unknown> | undefined) {
+  if (!schema) {
+    return undefined;
+  }
+
+  return standardSchemaToJSONSchema(toStandardSchema(schema), { target: 'draft-2020-12' });
+}
+
 export interface SerializedWorkflow {
   name: string;
   steps?: Record<string, { id: string; description?: string }>;
@@ -197,53 +214,25 @@ export async function getSerializedAgentTools(
     // Only process schemas if not in partial mode
     if (!partial) {
       try {
-        if (tool.inputSchema) {
-          if (tool.inputSchema && typeof tool.inputSchema === 'object' && 'jsonSchema' in tool.inputSchema) {
-            inputSchemaForReturn = stringify(tool.inputSchema.jsonSchema);
-          } else if (typeof tool.inputSchema === 'function') {
-            const inputSchema = tool.inputSchema();
-            if (inputSchema && inputSchema.jsonSchema) {
-              inputSchemaForReturn = stringify(inputSchema.jsonSchema);
-            }
-          } else if (tool.inputSchema) {
-            inputSchemaForReturn = stringify(
-              zodToJsonSchema(tool.inputSchema as Parameters<typeof zodToJsonSchema>[0]),
-            );
-          }
+        const inputSchema = schemaToJsonSchema(
+          resolveLazySchema(tool.inputSchema) as PublicSchema<unknown> | undefined,
+        );
+        if (inputSchema !== undefined) {
+          inputSchemaForReturn = stringify(inputSchema);
         }
 
-        if (tool.outputSchema) {
-          if (tool.outputSchema && typeof tool.outputSchema === 'object' && 'jsonSchema' in tool.outputSchema) {
-            outputSchemaForReturn = stringify(tool.outputSchema.jsonSchema);
-          } else if (typeof tool.outputSchema === 'function') {
-            const outputSchema = tool.outputSchema();
-            if (outputSchema && outputSchema.jsonSchema) {
-              outputSchemaForReturn = stringify(outputSchema.jsonSchema);
-            }
-          } else if (tool.outputSchema) {
-            outputSchemaForReturn = stringify(
-              zodToJsonSchema(tool.outputSchema as Parameters<typeof zodToJsonSchema>[0]),
-            );
-          }
+        const outputSchema = schemaToJsonSchema(
+          resolveLazySchema(tool.outputSchema) as PublicSchema<unknown> | undefined,
+        );
+        if (outputSchema !== undefined) {
+          outputSchemaForReturn = stringify(outputSchema);
         }
 
-        if (tool.requestContextSchema) {
-          if (
-            tool.requestContextSchema &&
-            typeof tool.requestContextSchema === 'object' &&
-            'jsonSchema' in tool.requestContextSchema
-          ) {
-            requestContextSchemaForReturn = stringify(tool.requestContextSchema.jsonSchema);
-          } else if (typeof tool.requestContextSchema === 'function') {
-            const requestContextSchema = (tool.requestContextSchema as () => { jsonSchema?: unknown })();
-            if (requestContextSchema && requestContextSchema.jsonSchema) {
-              requestContextSchemaForReturn = stringify(requestContextSchema.jsonSchema);
-            }
-          } else if (tool.requestContextSchema) {
-            requestContextSchemaForReturn = stringify(
-              zodToJsonSchema(tool.requestContextSchema as Parameters<typeof zodToJsonSchema>[0]),
-            );
-          }
+        const requestContextSchema = schemaToJsonSchema(
+          resolveLazySchema(tool.requestContextSchema) as PublicSchema<unknown> | undefined,
+        );
+        if (requestContextSchema !== undefined) {
+          requestContextSchemaForReturn = stringify(requestContextSchema);
         }
       } catch (error) {
         console.error(`Error getting serialized tool`, {

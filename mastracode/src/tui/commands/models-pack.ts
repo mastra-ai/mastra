@@ -14,6 +14,7 @@ import type { GlobalSettings } from '../../onboarding/settings.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
+import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import { updateStatusLine } from '../status-line.js';
 import { getSelectListTheme, mastra, theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
@@ -34,8 +35,9 @@ async function selectModel(
       currentModelId,
       title,
       titleColor: modeColor,
-      onSelect: (model: ModelItem) => {
+      onSelect: async (model: ModelItem) => {
         ctx.state.ui.hideOverlay();
+        await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
         resolve(model.id);
       },
       onCancel: () => {

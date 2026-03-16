@@ -36,6 +36,7 @@ import type { ModelItem } from './components/model-selector.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent } from './event-dispatch.js';
 import type { EventHandlerContext } from './handlers/types.js';
+import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
 
 import {
   addUserMessage,
@@ -139,6 +140,7 @@ export class MastraTUI {
     setupKeyboardShortcuts(this.state, {
       stop: () => this.stop(),
       doubleCtrlCMs: MastraTUI.DOUBLE_CTRL_C_MS,
+      queueFollowUpMessage: text => this.queueFollowUpMessage(text),
     });
   }
 
@@ -164,7 +166,7 @@ export class MastraTUI {
     }
 
     // Main interactive loop — never blocks on streaming,
-    // so the editor stays responsive for steer / follow-up.
+    // so the editor stays responsive for queued follow-ups.
     while (true) {
       const userInput = await this.getUserInput();
       if (!userInput.trim()) continue;
@@ -218,18 +220,8 @@ export class MastraTUI {
         });
         this.state.ui.requestRender();
 
-        if (this.state.harness.isRunning()) {
-          // Agent is streaming → steer (abort + resend)
-          // Clear follow-up tracking since steer replaces the current response
-          this.state.followUpComponents = [];
-          this.state.pendingSlashCommands = [];
-          this.state.harness.steer({ content }).catch(error => {
-            showError(this.state, error instanceof Error ? error.message : 'Steer failed');
-          });
-        } else {
-          // Normal send — fire and forget; events handle the rest
-          this.fireMessage(content, images);
-        }
+        // Normal send — fire and forget; events handle the rest
+        this.fireMessage(content, images);
       } catch (error) {
         showError(this.state, error instanceof Error ? error.message : 'Unknown error');
       }
@@ -245,6 +237,24 @@ export class MastraTUI {
     this.state.harness.sendMessage({ content, files }).catch(error => {
       showError(this.state, error instanceof Error ? error.message : 'Unknown error');
     });
+  }
+
+  private queueFollowUpMessage(text: string): void {
+    if (text.startsWith('/')) {
+      this.state.pendingSlashCommands.push(text);
+      this.state.pendingQueuedActions.push('slash');
+      updateStatusLine(this.state);
+      this.state.ui.requestRender();
+      return;
+    }
+
+    const { content, images } = consumePendingImages(text, this.state.pendingImages);
+    this.state.pendingImages = [];
+
+    this.state.pendingFollowUpMessages.push({ content, images });
+    this.state.pendingQueuedActions.push('message');
+    updateStatusLine(this.state);
+    this.state.ui.requestRender();
   }
 
   /**
@@ -498,6 +508,12 @@ export class MastraTUI {
           this.state.editor.addToHistory(text);
         }
         this.state.editor.setText('');
+
+        if (this.state.harness.isRunning()) {
+          this.queueFollowUpMessage(text);
+          return;
+        }
+
         resolve(text);
       };
     });
@@ -578,6 +594,7 @@ export class MastraTUI {
       addUserMessage: msg => addUserMessage(this.state, msg),
       addChildBeforeFollowUps: child => this.addChildBeforeFollowUps(child),
       fireMessage: (content, images) => this.fireMessage(content, images),
+      queueFollowUpMessage: content => this.queueFollowUpMessage(content),
       renderExistingMessages: () => renderExistingMessages(this.state),
       renderCompletedTasksInline: (tasks, insertIndex, collapsed) =>
         renderCompletedTasksInline(this.state, tasks, insertIndex, collapsed),
@@ -746,8 +763,9 @@ export class MastraTUI {
               currentModelId: undefined,
               title,
               titleColor: modeColor,
-              onSelect: (model: ModelItem) => {
+              onSelect: async (model: ModelItem) => {
                 this.state.ui.hideOverlay();
+                await promptForApiKeyIfNeeded(this.state.ui, model, this.state.authStorage);
                 resolveModel(model.id);
               },
               onCancel: () => {
