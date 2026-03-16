@@ -3,6 +3,7 @@ packages:
   - docs
   - packages/_vendored/*
   - packages/*
+  - embedders/*
   - deployers/*
   - stores/*
   - voice/*
