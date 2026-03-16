@@ -229,10 +229,16 @@ export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
 // New Observability Routes Loader (guarded import with fallback)
 // ============================================================================
 
-const _require = createRequire(import.meta.url);
-
 const NEW_OBSERVABILITY_ROUTES = { ...DUMMY_ROUTES };
 try {
+  // createRequire resolves relative to the given URL. With tsup's code splitting,
+  // this file's code may end up in a chunk in dist/ root, but the target module
+  // lives in dist/server/handlers/. We use import.meta.url to find where we are,
+  // then navigate to the handlers directory to resolve correctly.
+  const handlersUrl = new URL('.', import.meta.url).href.endsWith('/handlers/')
+    ? new URL('.', import.meta.url)
+    : new URL('./server/handlers/', new URL('.', import.meta.url));
+  const _require = createRequire(handlersUrl);
   Object.assign(NEW_OBSERVABILITY_ROUTES, _require('./observability-new-endpoints').NEW_ROUTES);
 } catch {
   // Real endpoints unavailable (older @mastra/core) — dummy routes remain as fallback

@@ -1,30 +1,12 @@
 import { createSampleScore } from '@internal/storage-test-utils';
 import type { Mastra } from '@mastra/core/mastra';
-import { SpanType } from '@mastra/core/observability';
-import type { MastraStorage, TraceRecord, SpanRecord } from '@mastra/core/storage';
+import { EntityType, SpanType } from '@mastra/core/observability';
+import type { MastraCompositeStore, TraceRecord, SpanRecord } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import * as errorHandler from './error';
 import { LIST_TRACES_ROUTE, GET_TRACE_ROUTE, SCORE_TRACES_ROUTE, LIST_SCORES_BY_SPAN_ROUTE } from './observability';
-import {
-  LIST_LOGS_ROUTE,
-  LIST_SCORES_ROUTE,
-  CREATE_SCORE_ROUTE,
-  LIST_FEEDBACK_ROUTE,
-  CREATE_FEEDBACK_ROUTE,
-  GET_METRIC_AGGREGATE_ROUTE,
-  GET_METRIC_BREAKDOWN_ROUTE,
-  GET_METRIC_TIME_SERIES_ROUTE,
-  GET_METRIC_PERCENTILES_ROUTE,
-  GET_METRIC_NAMES_ROUTE,
-  GET_METRIC_LABEL_KEYS_ROUTE,
-  GET_METRIC_LABEL_VALUES_ROUTE,
-  GET_ENTITY_TYPES_ROUTE,
-  GET_ENTITY_NAMES_ROUTE,
-  GET_SERVICE_NAMES_ROUTE,
-  GET_ENVIRONMENTS_ROUTE,
-  GET_TAGS_ROUTE,
-} from './observability-new-endpoints';
+import { NEW_ROUTES } from './observability-new-endpoints';
 import { createTestServerContext } from './test-utils';
 
 // Mock scoreTraces
@@ -71,18 +53,18 @@ const createMockScoresStore = () => ({
 const createMockStorage = (
   observabilityStore: ReturnType<typeof createMockObservabilityStore>,
   scoresStore: ReturnType<typeof createMockScoresStore>,
-): Partial<MastraStorage> => ({
+): Partial<MastraCompositeStore> => ({
   getStore: vi.fn((domain: string) => {
     if (domain === 'observability') return Promise.resolve(observabilityStore);
     if (domain === 'scores') return Promise.resolve(scoresStore);
     return Promise.resolve(undefined);
-  }) as MastraStorage['getStore'],
+  }) as MastraCompositeStore['getStore'],
 });
 
 // Mock Mastra instance
-const createMockMastra = (storage?: Partial<MastraStorage>): Mastra =>
+const createMockMastra = (storage?: Partial<MastraCompositeStore>): Mastra =>
   ({
-    getStorage: vi.fn(() => storage as MastraStorage),
+    getStorage: vi.fn(() => storage as MastraCompositeStore),
     getScorerById: vi.fn(),
     getLogger: vi.fn(() => ({ warn: vi.fn(), error: vi.fn() })),
   }) as unknown as Mastra;
@@ -582,7 +564,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.listLogs as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await LIST_LOGS_ROUTE.handler({
+      const result = await NEW_ROUTES.LIST_LOGS.handler({
         ...createTestServerContext({ mastra: mockMastra }),
       });
 
@@ -614,7 +596,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.listLogs as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await LIST_LOGS_ROUTE.handler({
+      const result = await NEW_ROUTES.LIST_LOGS.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         level: 'error',
         page: 1,
@@ -635,13 +617,13 @@ describe('Observability Handlers', () => {
       const mastraWithoutStorage = createMockMastra(undefined);
 
       await expect(
-        LIST_LOGS_ROUTE.handler({
+        NEW_ROUTES.LIST_LOGS.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
-        await LIST_LOGS_ROUTE.handler({
+        await NEW_ROUTES.LIST_LOGS.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
         });
       } catch (error) {
@@ -656,12 +638,12 @@ describe('Observability Handlers', () => {
       (mockObservabilityStore.listLogs as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
-        LIST_LOGS_ROUTE.handler({
+        NEW_ROUTES.LIST_LOGS.handler({
           ...createTestServerContext({ mastra: mockMastra }),
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error listing logs');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'list logs'");
     });
   });
 
@@ -679,7 +661,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.listScores as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await LIST_SCORES_ROUTE.handler({
+      const result = await NEW_ROUTES.LIST_SCORES.handler({
         ...createTestServerContext({ mastra: mockMastra }),
       });
 
@@ -712,7 +694,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.listScores as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await LIST_SCORES_ROUTE.handler({
+      const result = await NEW_ROUTES.LIST_SCORES.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         scorerId: 'accuracy',
         page: 0,
@@ -733,13 +715,13 @@ describe('Observability Handlers', () => {
       const mastraWithoutStorage = createMockMastra(undefined);
 
       await expect(
-        LIST_SCORES_ROUTE.handler({
+        NEW_ROUTES.LIST_SCORES.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
-        await LIST_SCORES_ROUTE.handler({
+        await NEW_ROUTES.LIST_SCORES.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
         });
       } catch (error) {
@@ -754,12 +736,12 @@ describe('Observability Handlers', () => {
       (mockObservabilityStore.listScores as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
-        LIST_SCORES_ROUTE.handler({
+        NEW_ROUTES.LIST_SCORES.handler({
           ...createTestServerContext({ mastra: mockMastra }),
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error listing scores');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'list scores'");
     });
   });
 
@@ -775,7 +757,7 @@ describe('Observability Handlers', () => {
         reason: 'High accuracy match',
       };
 
-      const result = await CREATE_SCORE_ROUTE.handler({
+      const result = await NEW_ROUTES.CREATE_SCORE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         score: scoreData,
       });
@@ -791,7 +773,7 @@ describe('Observability Handlers', () => {
       const mastraWithoutStorage = createMockMastra(undefined);
 
       await expect(
-        CREATE_SCORE_ROUTE.handler({
+        NEW_ROUTES.CREATE_SCORE.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
           score: {
             traceId: 'trace-123',
@@ -802,7 +784,7 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow(HTTPException);
 
       try {
-        await CREATE_SCORE_ROUTE.handler({
+        await NEW_ROUTES.CREATE_SCORE.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
           score: {
             traceId: 'trace-123',
@@ -822,7 +804,7 @@ describe('Observability Handlers', () => {
       (mockObservabilityStore.createScore as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
-        CREATE_SCORE_ROUTE.handler({
+        NEW_ROUTES.CREATE_SCORE.handler({
           ...createTestServerContext({ mastra: mockMastra }),
           score: {
             traceId: 'trace-123',
@@ -832,7 +814,7 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error creating score');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'create a score'");
     });
   });
 
@@ -850,7 +832,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.listFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await LIST_FEEDBACK_ROUTE.handler({
+      const result = await NEW_ROUTES.LIST_FEEDBACK.handler({
         ...createTestServerContext({ mastra: mockMastra }),
       });
 
@@ -884,7 +866,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.listFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await LIST_FEEDBACK_ROUTE.handler({
+      const result = await NEW_ROUTES.LIST_FEEDBACK.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         feedbackType: 'thumbs',
         source: 'user',
@@ -906,13 +888,13 @@ describe('Observability Handlers', () => {
       const mastraWithoutStorage = createMockMastra(undefined);
 
       await expect(
-        LIST_FEEDBACK_ROUTE.handler({
+        NEW_ROUTES.LIST_FEEDBACK.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
-        await LIST_FEEDBACK_ROUTE.handler({
+        await NEW_ROUTES.LIST_FEEDBACK.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
         });
       } catch (error) {
@@ -927,12 +909,12 @@ describe('Observability Handlers', () => {
       (mockObservabilityStore.listFeedback as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
-        LIST_FEEDBACK_ROUTE.handler({
+        NEW_ROUTES.LIST_FEEDBACK.handler({
           ...createTestServerContext({ mastra: mockMastra }),
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error listing feedback');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'list feedback'");
     });
   });
 
@@ -949,7 +931,7 @@ describe('Observability Handlers', () => {
         comment: 'Great response!',
       };
 
-      const result = await CREATE_FEEDBACK_ROUTE.handler({
+      const result = await NEW_ROUTES.CREATE_FEEDBACK.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         feedback: feedbackData,
       });
@@ -965,7 +947,7 @@ describe('Observability Handlers', () => {
       const mastraWithoutStorage = createMockMastra(undefined);
 
       await expect(
-        CREATE_FEEDBACK_ROUTE.handler({
+        NEW_ROUTES.CREATE_FEEDBACK.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
           feedback: {
             traceId: 'trace-123',
@@ -977,7 +959,7 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow(HTTPException);
 
       try {
-        await CREATE_FEEDBACK_ROUTE.handler({
+        await NEW_ROUTES.CREATE_FEEDBACK.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
           feedback: {
             traceId: 'trace-123',
@@ -998,7 +980,7 @@ describe('Observability Handlers', () => {
       (mockObservabilityStore.createFeedback as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
-        CREATE_FEEDBACK_ROUTE.handler({
+        NEW_ROUTES.CREATE_FEEDBACK.handler({
           ...createTestServerContext({ mastra: mockMastra }),
           feedback: {
             traceId: 'trace-123',
@@ -1009,7 +991,7 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error creating feedback');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'create feedback'");
     });
   });
 
@@ -1023,7 +1005,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.getMetricAggregate as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await GET_METRIC_AGGREGATE_ROUTE.handler({
+      const result = await NEW_ROUTES.GET_METRIC_AGGREGATE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         name: ['latency'],
         aggregation: 'avg',
@@ -1046,12 +1028,12 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.getMetricAggregate as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await GET_METRIC_AGGREGATE_ROUTE.handler({
+      const result = await NEW_ROUTES.GET_METRIC_AGGREGATE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         name: ['latency'],
         aggregation: 'avg',
         comparePeriod: 'previous_period',
-        filters: { entityType: 'agent' },
+        filters: { entityType: EntityType.AGENT },
       });
 
       expect(result).toEqual(mockResult);
@@ -1059,7 +1041,7 @@ describe('Observability Handlers', () => {
         name: ['latency'],
         aggregation: 'avg',
         comparePeriod: 'previous_period',
-        filters: { entityType: 'agent' },
+        filters: { entityType: EntityType.AGENT },
       });
     });
 
@@ -1067,7 +1049,7 @@ describe('Observability Handlers', () => {
       const mastraWithoutStorage = createMockMastra(undefined);
 
       await expect(
-        GET_METRIC_AGGREGATE_ROUTE.handler({
+        NEW_ROUTES.GET_METRIC_AGGREGATE.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
           name: ['latency'],
           aggregation: 'avg',
@@ -1075,7 +1057,7 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow(HTTPException);
 
       try {
-        await GET_METRIC_AGGREGATE_ROUTE.handler({
+        await NEW_ROUTES.GET_METRIC_AGGREGATE.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
           name: ['latency'],
           aggregation: 'avg',
@@ -1092,14 +1074,14 @@ describe('Observability Handlers', () => {
       (mockObservabilityStore.getMetricAggregate as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
-        GET_METRIC_AGGREGATE_ROUTE.handler({
+        NEW_ROUTES.GET_METRIC_AGGREGATE.handler({
           ...createTestServerContext({ mastra: mockMastra }),
           name: ['latency'],
           aggregation: 'avg',
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting metric aggregate');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get metric aggregate'");
     });
   });
 
@@ -1114,7 +1096,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.getMetricBreakdown as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await GET_METRIC_BREAKDOWN_ROUTE.handler({
+      const result = await NEW_ROUTES.GET_METRIC_BREAKDOWN.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         name: ['latency'],
         groupBy: ['entityType'],
@@ -1134,7 +1116,7 @@ describe('Observability Handlers', () => {
       const mastraWithoutStorage = createMockMastra(undefined);
 
       await expect(
-        GET_METRIC_BREAKDOWN_ROUTE.handler({
+        NEW_ROUTES.GET_METRIC_BREAKDOWN.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
           name: ['latency'],
           groupBy: ['entityType'],
@@ -1143,7 +1125,7 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow(HTTPException);
 
       try {
-        await GET_METRIC_BREAKDOWN_ROUTE.handler({
+        await NEW_ROUTES.GET_METRIC_BREAKDOWN.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
           name: ['latency'],
           groupBy: ['entityType'],
@@ -1161,7 +1143,7 @@ describe('Observability Handlers', () => {
       (mockObservabilityStore.getMetricBreakdown as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
-        GET_METRIC_BREAKDOWN_ROUTE.handler({
+        NEW_ROUTES.GET_METRIC_BREAKDOWN.handler({
           ...createTestServerContext({ mastra: mockMastra }),
           name: ['latency'],
           groupBy: ['entityType'],
@@ -1169,7 +1151,7 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting metric breakdown');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get metric breakdown'");
     });
   });
 
@@ -1189,7 +1171,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.getMetricTimeSeries as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await GET_METRIC_TIME_SERIES_ROUTE.handler({
+      const result = await NEW_ROUTES.GET_METRIC_TIME_SERIES.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         name: ['latency'],
         interval: '1h',
@@ -1210,13 +1192,13 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.getMetricTimeSeries as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await GET_METRIC_TIME_SERIES_ROUTE.handler({
+      const result = await NEW_ROUTES.GET_METRIC_TIME_SERIES.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         name: ['latency'],
         interval: '5m',
         aggregation: 'sum',
         groupBy: ['entityType'],
-        filters: { entityType: 'agent' },
+        filters: { entityType: EntityType.AGENT },
       });
 
       expect(result).toEqual(mockResult);
@@ -1225,7 +1207,7 @@ describe('Observability Handlers', () => {
         interval: '5m',
         aggregation: 'sum',
         groupBy: ['entityType'],
-        filters: { entityType: 'agent' },
+        filters: { entityType: EntityType.AGENT },
       });
     });
 
@@ -1233,7 +1215,7 @@ describe('Observability Handlers', () => {
       const mastraWithoutStorage = createMockMastra(undefined);
 
       await expect(
-        GET_METRIC_TIME_SERIES_ROUTE.handler({
+        NEW_ROUTES.GET_METRIC_TIME_SERIES.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
           name: ['latency'],
           interval: '1h',
@@ -1242,7 +1224,7 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow(HTTPException);
 
       try {
-        await GET_METRIC_TIME_SERIES_ROUTE.handler({
+        await NEW_ROUTES.GET_METRIC_TIME_SERIES.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
           name: ['latency'],
           interval: '1h',
@@ -1260,7 +1242,7 @@ describe('Observability Handlers', () => {
       (mockObservabilityStore.getMetricTimeSeries as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
-        GET_METRIC_TIME_SERIES_ROUTE.handler({
+        NEW_ROUTES.GET_METRIC_TIME_SERIES.handler({
           ...createTestServerContext({ mastra: mockMastra }),
           name: ['latency'],
           interval: '1h',
@@ -1268,7 +1250,7 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting metric time series');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get metric time series'");
     });
   });
 
@@ -1295,7 +1277,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.getMetricPercentiles as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await GET_METRIC_PERCENTILES_ROUTE.handler({
+      const result = await NEW_ROUTES.GET_METRIC_PERCENTILES.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         name: 'latency',
         percentiles: [0.5, 0.99],
@@ -1315,7 +1297,7 @@ describe('Observability Handlers', () => {
       const mastraWithoutStorage = createMockMastra(undefined);
 
       await expect(
-        GET_METRIC_PERCENTILES_ROUTE.handler({
+        NEW_ROUTES.GET_METRIC_PERCENTILES.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
           name: 'latency',
           percentiles: [0.5, 0.99],
@@ -1324,7 +1306,7 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow(HTTPException);
 
       try {
-        await GET_METRIC_PERCENTILES_ROUTE.handler({
+        await NEW_ROUTES.GET_METRIC_PERCENTILES.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
           name: 'latency',
           percentiles: [0.5, 0.99],
@@ -1342,7 +1324,7 @@ describe('Observability Handlers', () => {
       (mockObservabilityStore.getMetricPercentiles as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
-        GET_METRIC_PERCENTILES_ROUTE.handler({
+        NEW_ROUTES.GET_METRIC_PERCENTILES.handler({
           ...createTestServerContext({ mastra: mockMastra }),
           name: 'latency',
           percentiles: [0.5, 0.99],
@@ -1350,7 +1332,7 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting metric percentiles');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get metric percentiles'");
     });
   });
 
@@ -1362,7 +1344,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.getMetricNames as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await GET_METRIC_NAMES_ROUTE.handler({
+      const result = await NEW_ROUTES.GET_METRIC_NAMES.handler({
         ...createTestServerContext({ mastra: mockMastra }),
       });
 
@@ -1378,7 +1360,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.getMetricNames as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await GET_METRIC_NAMES_ROUTE.handler({
+      const result = await NEW_ROUTES.GET_METRIC_NAMES.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         prefix: 'latency',
         limit: 10,
@@ -1395,13 +1377,13 @@ describe('Observability Handlers', () => {
       const mastraWithoutStorage = createMockMastra(undefined);
 
       await expect(
-        GET_METRIC_NAMES_ROUTE.handler({
+        NEW_ROUTES.GET_METRIC_NAMES.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
-        await GET_METRIC_NAMES_ROUTE.handler({
+        await NEW_ROUTES.GET_METRIC_NAMES.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
         });
       } catch (error) {
@@ -1416,12 +1398,12 @@ describe('Observability Handlers', () => {
       (mockObservabilityStore.getMetricNames as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
-        GET_METRIC_NAMES_ROUTE.handler({
+        NEW_ROUTES.GET_METRIC_NAMES.handler({
           ...createTestServerContext({ mastra: mockMastra }),
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting metric names');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get metric names'");
     });
   });
 
@@ -1433,7 +1415,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.getMetricLabelKeys as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await GET_METRIC_LABEL_KEYS_ROUTE.handler({
+      const result = await NEW_ROUTES.GET_METRIC_LABEL_KEYS.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         metricName: 'latency',
       });
@@ -1449,14 +1431,14 @@ describe('Observability Handlers', () => {
       const mastraWithoutStorage = createMockMastra(undefined);
 
       await expect(
-        GET_METRIC_LABEL_KEYS_ROUTE.handler({
+        NEW_ROUTES.GET_METRIC_LABEL_KEYS.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
           metricName: 'latency',
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
-        await GET_METRIC_LABEL_KEYS_ROUTE.handler({
+        await NEW_ROUTES.GET_METRIC_LABEL_KEYS.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
           metricName: 'latency',
         });
@@ -1472,13 +1454,13 @@ describe('Observability Handlers', () => {
       (mockObservabilityStore.getMetricLabelKeys as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
-        GET_METRIC_LABEL_KEYS_ROUTE.handler({
+        NEW_ROUTES.GET_METRIC_LABEL_KEYS.handler({
           ...createTestServerContext({ mastra: mockMastra }),
           metricName: 'latency',
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting metric label keys');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get metric label keys'");
     });
   });
 
@@ -1490,7 +1472,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.getMetricLabelValues as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await GET_METRIC_LABEL_VALUES_ROUTE.handler({
+      const result = await NEW_ROUTES.GET_METRIC_LABEL_VALUES.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         metricName: 'latency',
         labelKey: 'model',
@@ -1511,7 +1493,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.getMetricLabelValues as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await GET_METRIC_LABEL_VALUES_ROUTE.handler({
+      const result = await NEW_ROUTES.GET_METRIC_LABEL_VALUES.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         metricName: 'latency',
         labelKey: 'model',
@@ -1532,7 +1514,7 @@ describe('Observability Handlers', () => {
       const mastraWithoutStorage = createMockMastra(undefined);
 
       await expect(
-        GET_METRIC_LABEL_VALUES_ROUTE.handler({
+        NEW_ROUTES.GET_METRIC_LABEL_VALUES.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
           metricName: 'latency',
           labelKey: 'model',
@@ -1540,7 +1522,7 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow(HTTPException);
 
       try {
-        await GET_METRIC_LABEL_VALUES_ROUTE.handler({
+        await NEW_ROUTES.GET_METRIC_LABEL_VALUES.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
           metricName: 'latency',
           labelKey: 'model',
@@ -1557,14 +1539,14 @@ describe('Observability Handlers', () => {
       (mockObservabilityStore.getMetricLabelValues as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
-        GET_METRIC_LABEL_VALUES_ROUTE.handler({
+        NEW_ROUTES.GET_METRIC_LABEL_VALUES.handler({
           ...createTestServerContext({ mastra: mockMastra }),
           metricName: 'latency',
           labelKey: 'model',
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting label values');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get label values'");
     });
   });
 
@@ -1576,7 +1558,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.getEntityTypes as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await GET_ENTITY_TYPES_ROUTE.handler({
+      const result = await NEW_ROUTES.GET_ENTITY_TYPES.handler({
         ...createTestServerContext({ mastra: mockMastra }),
       });
 
@@ -1589,13 +1571,13 @@ describe('Observability Handlers', () => {
       const mastraWithoutStorage = createMockMastra(undefined);
 
       await expect(
-        GET_ENTITY_TYPES_ROUTE.handler({
+        NEW_ROUTES.GET_ENTITY_TYPES.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
-        await GET_ENTITY_TYPES_ROUTE.handler({
+        await NEW_ROUTES.GET_ENTITY_TYPES.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
         });
       } catch (error) {
@@ -1610,12 +1592,12 @@ describe('Observability Handlers', () => {
       (mockObservabilityStore.getEntityTypes as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
-        GET_ENTITY_TYPES_ROUTE.handler({
+        NEW_ROUTES.GET_ENTITY_TYPES.handler({
           ...createTestServerContext({ mastra: mockMastra }),
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting entity types');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get entity types'");
     });
   });
 
@@ -1627,7 +1609,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.getEntityNames as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await GET_ENTITY_NAMES_ROUTE.handler({
+      const result = await NEW_ROUTES.GET_ENTITY_NAMES.handler({
         ...createTestServerContext({ mastra: mockMastra }),
       });
 
@@ -1643,7 +1625,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.getEntityNames as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await GET_ENTITY_NAMES_ROUTE.handler({
+      const result = await NEW_ROUTES.GET_ENTITY_NAMES.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         entityType: 'agent',
       });
@@ -1658,13 +1640,13 @@ describe('Observability Handlers', () => {
       const mastraWithoutStorage = createMockMastra(undefined);
 
       await expect(
-        GET_ENTITY_NAMES_ROUTE.handler({
+        NEW_ROUTES.GET_ENTITY_NAMES.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
-        await GET_ENTITY_NAMES_ROUTE.handler({
+        await NEW_ROUTES.GET_ENTITY_NAMES.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
         });
       } catch (error) {
@@ -1679,12 +1661,12 @@ describe('Observability Handlers', () => {
       (mockObservabilityStore.getEntityNames as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
-        GET_ENTITY_NAMES_ROUTE.handler({
+        NEW_ROUTES.GET_ENTITY_NAMES.handler({
           ...createTestServerContext({ mastra: mockMastra }),
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting entity names');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get entity names'");
     });
   });
 
@@ -1696,7 +1678,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.getServiceNames as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await GET_SERVICE_NAMES_ROUTE.handler({
+      const result = await NEW_ROUTES.GET_SERVICE_NAMES.handler({
         ...createTestServerContext({ mastra: mockMastra }),
       });
 
@@ -1709,13 +1691,13 @@ describe('Observability Handlers', () => {
       const mastraWithoutStorage = createMockMastra(undefined);
 
       await expect(
-        GET_SERVICE_NAMES_ROUTE.handler({
+        NEW_ROUTES.GET_SERVICE_NAMES.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
-        await GET_SERVICE_NAMES_ROUTE.handler({
+        await NEW_ROUTES.GET_SERVICE_NAMES.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
         });
       } catch (error) {
@@ -1730,12 +1712,12 @@ describe('Observability Handlers', () => {
       (mockObservabilityStore.getServiceNames as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
-        GET_SERVICE_NAMES_ROUTE.handler({
+        NEW_ROUTES.GET_SERVICE_NAMES.handler({
           ...createTestServerContext({ mastra: mockMastra }),
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting service names');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get service names'");
     });
   });
 
@@ -1747,7 +1729,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.getEnvironments as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await GET_ENVIRONMENTS_ROUTE.handler({
+      const result = await NEW_ROUTES.GET_ENVIRONMENTS.handler({
         ...createTestServerContext({ mastra: mockMastra }),
       });
 
@@ -1760,13 +1742,13 @@ describe('Observability Handlers', () => {
       const mastraWithoutStorage = createMockMastra(undefined);
 
       await expect(
-        GET_ENVIRONMENTS_ROUTE.handler({
+        NEW_ROUTES.GET_ENVIRONMENTS.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
-        await GET_ENVIRONMENTS_ROUTE.handler({
+        await NEW_ROUTES.GET_ENVIRONMENTS.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
         });
       } catch (error) {
@@ -1781,12 +1763,12 @@ describe('Observability Handlers', () => {
       (mockObservabilityStore.getEnvironments as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
-        GET_ENVIRONMENTS_ROUTE.handler({
+        NEW_ROUTES.GET_ENVIRONMENTS.handler({
           ...createTestServerContext({ mastra: mockMastra }),
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting environments');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get environments'");
     });
   });
 
@@ -1798,7 +1780,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.getTags as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await GET_TAGS_ROUTE.handler({
+      const result = await NEW_ROUTES.GET_TAGS.handler({
         ...createTestServerContext({ mastra: mockMastra }),
       });
 
@@ -1814,7 +1796,7 @@ describe('Observability Handlers', () => {
 
       (mockObservabilityStore.getTags as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
-      const result = await GET_TAGS_ROUTE.handler({
+      const result = await NEW_ROUTES.GET_TAGS.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         entityType: 'agent',
       });
@@ -1829,13 +1811,13 @@ describe('Observability Handlers', () => {
       const mastraWithoutStorage = createMockMastra(undefined);
 
       await expect(
-        GET_TAGS_ROUTE.handler({
+        NEW_ROUTES.GET_TAGS.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
-        await GET_TAGS_ROUTE.handler({
+        await NEW_ROUTES.GET_TAGS.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
         });
       } catch (error) {
@@ -1850,12 +1832,12 @@ describe('Observability Handlers', () => {
       (mockObservabilityStore.getTags as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
-        GET_TAGS_ROUTE.handler({
+        NEW_ROUTES.GET_TAGS.handler({
           ...createTestServerContext({ mastra: mockMastra }),
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting tags');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get tags'");
     });
   });
 });

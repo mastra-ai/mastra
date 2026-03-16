@@ -3,7 +3,6 @@ import { HTTPException } from '../http-exception';
 import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { NEW_OBSERVABILITY_UPGRADE_MESSAGE, NEW_ROUTE_DEFS } from './observability-shared';
-import type { NewRoutesKey } from './observability-shared';
 
 function createDummyRoute<TMethod extends ServerRoute['method'], TPath extends string>(config: {
   method: TMethod;
@@ -28,7 +27,7 @@ function createDummyRoute<TMethod extends ServerRoute['method'], TPath extends s
   });
 }
 
-export const DUMMY_ROUTES: Record<NewRoutesKey, ReturnType<typeof createDummyRoute>> = {
+export const DUMMY_ROUTES = {
   LIST_LOGS: createDummyRoute(NEW_ROUTE_DEFS.LIST_LOGS),
   LIST_SCORES: createDummyRoute(NEW_ROUTE_DEFS.LIST_SCORES),
   CREATE_SCORE: createDummyRoute(NEW_ROUTE_DEFS.CREATE_SCORE),

@@ -3,7 +3,8 @@ import type { MastraCompositeStore, ObservabilityStorage } from '@mastra/core/st
 import { HTTPException } from '../http-exception';
 import type { ServerRoute } from '../server-adapter/routes';
 
-export const NEW_OBSERVABILITY_UPGRADE_MESSAGE = 'New observability endpoints require @mastra/core >= 1.13.2';
+export const NEW_OBSERVABILITY_UPGRADE_MESSAGE =
+  'New observability endpoints require a newer @mastra/core. Please upgrade.';
 
 /** Retrieves MastraCompositeStore or throws 500 if unavailable. */
 export function getStorage(mastra: Mastra): MastraCompositeStore {

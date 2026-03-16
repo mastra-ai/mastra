@@ -45,7 +45,7 @@ import type { InferParams, ServerContext, ServerRouteHandler } from '../server-a
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 import { getObservabilityStore, NEW_ROUTE_DEFS } from './observability-shared';
-import type { NewRoutesKey, RouteDetails } from './observability-shared';
+import type { RouteDetails } from './observability-shared';
 
 function createNewRoute<
   TPathSchema extends z.ZodTypeAny | undefined = undefined,
@@ -73,7 +73,7 @@ function createNewRoute<
       try {
         return await handler(params);
       } catch (error) {
-        return handleError(error, `Error calling ${def.summary}`);
+        return handleError(error, `Error calling: '${def.summary.toLocaleLowerCase()}'`);
       }
     }) as ServerRouteHandler<
       InferParams<TPathSchema, TQuerySchema, TBodySchema>,
@@ -83,7 +83,7 @@ function createNewRoute<
   });
 }
 
-export const NEW_ROUTES: Record<NewRoutesKey, ReturnType<typeof createRoute>> = {
+export const NEW_ROUTES = {
   // ============================================================================
   // Log Routes
   // ============================================================================
