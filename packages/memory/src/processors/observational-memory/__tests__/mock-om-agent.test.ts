@@ -30,13 +30,14 @@ function createMockOmModel(
   toolName = 'test',
   toolInput: Record<string, unknown> = { action: 'trigger' },
 ) {
-  let callCount = 0;
+  let generateCallCount = 0;
+  let streamCallCount = 0;
 
   return new MockLanguageModelV2({
     doGenerate: async () => {
-      callCount++;
+      generateCallCount++;
 
-      if (callCount === 1) {
+      if (generateCallCount === 1) {
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'tool-calls' as const,
@@ -61,6 +62,62 @@ function createMockOmModel(
         text: responseText,
         content: [{ type: 'text' as const, text: responseText }],
         warnings: [],
+      };
+    },
+    doStream: async () => {
+      streamCallCount++;
+
+      if (streamCallCount === 1) {
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start' as const, warnings: [] },
+            {
+              type: 'response-metadata' as const,
+              id: 'mock-response',
+              modelId: 'mock-model',
+              timestamp: new Date(),
+            },
+            {
+              type: 'tool-input-start' as const,
+              id: 'call-1',
+              toolName,
+            },
+            {
+              type: 'tool-input-delta' as const,
+              id: 'call-1',
+              delta: JSON.stringify(toolInput),
+            },
+            {
+              type: 'tool-input-end' as const,
+              id: 'call-1',
+            },
+            {
+              type: 'finish' as const,
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 50, outputTokens: 20, totalTokens: 70 },
+            },
+          ]),
+        };
+      }
+
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start' as const, warnings: [] },
+          {
+            type: 'response-metadata' as const,
+            id: 'mock-response-2',
+            modelId: 'mock-model',
+            timestamp: new Date(),
+          },
+          { type: 'text-start' as const, id: 'text-1' },
+          { type: 'text-delta' as const, id: 'text-1', delta: responseText },
+          { type: 'text-end' as const, id: 'text-1' },
+          {
+            type: 'finish' as const,
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          },
+        ]),
       };
     },
   });
