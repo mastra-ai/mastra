@@ -68,14 +68,14 @@ export const FileTreeBadge = ({
   const { Link } = useLinkComponent();
 
   // Parse args
-  let parsedArgs: ParsedArgs = { path: '/' };
+  let parsedArgs: ParsedArgs = { path: '.' };
   try {
     parsedArgs = typeof args === 'object' ? (args as ParsedArgs) : JSON.parse(args);
   } catch {
     // ignore
   }
 
-  const { path = '/', maxDepth, showHidden, dirsOnly, exclude, extension } = parsedArgs;
+  const { path = '.', maxDepth, showHidden, dirsOnly, exclude, extension } = parsedArgs;
 
   // Build args display string
   const argsDisplay: string[] = [];

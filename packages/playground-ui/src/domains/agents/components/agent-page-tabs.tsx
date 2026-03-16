@@ -45,7 +45,7 @@ function TabLink({
 
 export function AgentPageTabs({ agentId, activeTab, showPlayground = false }: AgentPageTabsProps) {
   return (
-    <div className="flex items-center border-b border-border1 px-4 bg-surface1">
+    <div className="flex items-center border-b border-border1 px-4 bg-surface2">
       <TabLink
         href={`/agents/${agentId}/chat/new`}
         active={activeTab === 'chat'}
