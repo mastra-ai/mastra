@@ -4,7 +4,7 @@ import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { resolveModelConfig } from '@mastra/core/llm';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
-import type { ProcessInputStepArgs, ProcessorStreamWriter } from '@mastra/core/processors';
+import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, BufferedObservationChunk } from '@mastra/core/storage';
@@ -12,7 +12,6 @@ import xxhash from 'xxhash-wasm';
 
 import {
   OBSERVATIONAL_MEMORY_DEFAULTS,
-  OBSERVATION_CONTINUATION_HINT,
   OBSERVATION_CONTEXT_PROMPT,
   OBSERVATION_CONTEXT_INSTRUCTIONS,
 } from './constants';
@@ -53,7 +52,6 @@ import {
   resolveActivationRatio,
   resolveBlockAfter,
   resolveBufferTokens,
-  resolveRetentionFloor,
 } from './thresholds';
 import { TokenCounter } from './token-counter';
 import type { TokenCounterModelContext } from './token-counter';
@@ -303,51 +301,6 @@ export class ObservationalMemory {
       }
     }
     return [];
-  }
-
-  /**
-   * Refresh per-chunk messageTokens from the current in-memory message list.
-   *
-   * Buffered chunks store a messageTokens snapshot from when they were created,
-   * but messages can be edited/sealed between buffering and activation, changing
-   * their token weight. Using stale weights causes projected-removal math to
-   * over- or under-estimate, leading to skipped activations or over-activation.
-   *
-   * Token recount only runs when the full chunk is present in the message list.
-   * Partial recount is skipped because it would undercount and could cause
-   * over-activation of buffered chunks.
-   */
-  private refreshBufferedChunkMessageTokens(
-    chunks: BufferedObservationChunk[],
-    messageList: MessageList,
-  ): BufferedObservationChunk[] {
-    const allMessages = messageList.get.all.db();
-    const messageMap = new Map(allMessages.filter(m => m?.id).map(m => [m.id, m]));
-
-    return chunks.map(chunk => {
-      const chunkMessages = chunk.messageIds.map(id => messageMap.get(id)).filter((m): m is MastraDBMessage => !!m);
-
-      // Only recount when ALL chunk messages are present — partial recount
-      // would undercount and could over-activate buffered chunks.
-      if (chunkMessages.length !== chunk.messageIds.length) {
-        return chunk;
-      }
-
-      const refreshedTokens = this.tokenCounter.countMessages(chunkMessages);
-      const refreshedMessageTokens = chunk.messageIds.reduce<Record<string, number>>((acc, id) => {
-        const msg = messageMap.get(id);
-        if (msg) {
-          acc[id] = this.tokenCounter.countMessages([msg]);
-        }
-        return acc;
-      }, {});
-
-      return {
-        ...chunk,
-        messageTokens: refreshedTokens,
-        messageTokenCounts: refreshedMessageTokens,
-      };
-    });
   }
 
   /**
@@ -1169,13 +1122,6 @@ export class ObservationalMemory {
       const part = p as { type?: string };
       return !part?.type?.startsWith('data-om-observation-');
     });
-  }
-
-  /**
-   * Check if a message has any unobserved parts.
-   */
-  private hasUnobservedParts(message: MastraDBMessage): boolean {
-    return this.getUnobservedParts(message).length > 0;
   }
 
   /**
@@ -2636,176 +2582,6 @@ ${formattedMessages}
   }
 
   /**
-   * Try to activate buffered observations when threshold is reached.
-   * Returns true if activation succeeded, false if no buffered content or activation failed.
-   *
-   * @param record - Current OM record
-   * @param lockKey - Lock key for this scope
-   * @param writer - Optional writer for emitting UI markers
-   */
-  private async tryActivateBufferedObservations(
-    record: ObservationalMemoryRecord,
-    lockKey: string,
-    currentPendingTokens: number,
-    writer?: ProcessInputStepArgs['writer'],
-    messageList?: MessageList,
-  ): Promise<{
-    success: boolean;
-    updatedRecord?: ObservationalMemoryRecord;
-    messageTokensActivated?: number;
-    activatedMessageIds?: string[];
-    suggestedContinuation?: string;
-    currentTask?: string;
-  }> {
-    // Check if there's buffered content to activate
-    const chunks = this.getBufferedChunks(record);
-    omDebug(`[OM:tryActivate] chunks=${chunks.length}, recordId=${record.id}`);
-    if (!chunks.length) {
-      omDebug(`[OM:tryActivate] no chunks, returning false`);
-      return { success: false };
-    }
-
-    const bufferKey = this.getObservationBufferKey(lockKey);
-
-    // Wait for any in-progress async buffering to complete (with timeout)
-    // Use 60s timeout - buffering can take a while for large message batches
-    const asyncOp = ObservationalMemory.asyncBufferingOps.get(bufferKey);
-    if (asyncOp) {
-      try {
-        await Promise.race([
-          asyncOp,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 60_000)),
-        ]);
-      } catch {
-        // Timeout or error - proceed with what we have
-      }
-    }
-
-    // Re-fetch record to get latest buffered content
-    const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
-    if (!freshRecord) {
-      return { success: false };
-    }
-    const rawFreshChunks = this.getBufferedChunks(freshRecord);
-    if (!rawFreshChunks.length) {
-      return { success: false };
-    }
-
-    // Re-check whether activation is still needed. A previous activation on this
-    // turn (or an in-flight buffering op that just completed) may have already
-    // brought us well below the threshold. Activating unnecessarily invalidates
-    // the prompt cache, so we skip if we're already under the threshold.
-    const messageTokensThreshold = getMaxThreshold(this.observationConfig.messageTokens);
-    let effectivePendingTokens = currentPendingTokens;
-    if (messageList) {
-      effectivePendingTokens = await this.tokenCounter.countMessagesAsync(messageList.get.all.db());
-      if (effectivePendingTokens < messageTokensThreshold) {
-        omDebug(
-          `[OM:tryActivate] skipping activation: freshPendingTokens=${effectivePendingTokens} < threshold=${messageTokensThreshold}`,
-        );
-        return { success: false };
-      }
-    }
-
-    // Refresh chunk token weights from the current message list so projection
-    // math uses accurate values instead of stale buffering-time snapshots.
-    const freshChunks = messageList
-      ? this.refreshBufferedChunkMessageTokens(rawFreshChunks, messageList)
-      : rawFreshChunks;
-
-    // Perform partial swap with bufferActivation
-    const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
-    const activationRatio = resolveActivationRatio(bufferActivation, messageTokensThreshold);
-
-    // When above blockAfter, prefer the over boundary to reduce context, while still
-    // respecting the minimum remaining tokens safeguard.
-    const forceMaxActivation = !!(
-      this.observationConfig.blockAfter && effectivePendingTokens >= this.observationConfig.blockAfter
-    );
-
-    const bufferTokens = this.observationConfig.bufferTokens ?? 0;
-    const retentionFloor = resolveRetentionFloor(bufferActivation, messageTokensThreshold);
-    const projectedMessageRemoval = calculateProjectedMessageRemoval(
-      freshChunks,
-      bufferActivation,
-      messageTokensThreshold,
-      effectivePendingTokens,
-    );
-    const projectedRemaining = Math.max(0, effectivePendingTokens - projectedMessageRemoval);
-    const maxRemaining = retentionFloor + bufferTokens;
-
-    if (!forceMaxActivation && bufferTokens > 0 && projectedRemaining > maxRemaining) {
-      omDebug(
-        `[OM:tryActivate] skipping activation: projectedRemaining=${projectedRemaining} > maxRemaining=${maxRemaining} (retentionFloor=${retentionFloor}, bufferTokens=${bufferTokens})`,
-      );
-      return { success: false };
-    }
-
-    omDebug(
-      `[OM:tryActivate] swapping: freshChunks=${freshChunks.length}, bufferActivation=${bufferActivation}, activationRatio=${activationRatio}, forceMax=${forceMaxActivation}, totalChunkTokens=${freshChunks.reduce((s, c) => s + (c.tokenCount ?? 0), 0)}`,
-    );
-    const activationResult = await this.storage.swapBufferedToActive({
-      id: freshRecord.id,
-      activationRatio,
-      messageTokensThreshold,
-      currentPendingTokens: effectivePendingTokens,
-      forceMaxActivation,
-      bufferedChunks: freshChunks,
-    });
-    omDebug(
-      `[OM:tryActivate] swapResult: chunksActivated=${activationResult.chunksActivated}, tokensActivated=${activationResult.messageTokensActivated}, obsTokensActivated=${activationResult.observationTokensActivated}, activatedCycleIds=${activationResult.activatedCycleIds.join(',')}`,
-    );
-
-    // Clear the buffering flag but do NOT reset lastBufferedBoundary here.
-    // The caller sets the boundary to the post-activation context size so that
-    // interval tracking continues from the correct position. Deleting it here
-    // would reset to 0 and cause the next step to immediately re-trigger buffering.
-    await this.storage.setBufferingObservationFlag(freshRecord.id, false);
-    unregisterOp(freshRecord.id, 'bufferingObservation');
-
-    // Fetch updated record
-    const updatedRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
-
-    // Emit activation markers for UI feedback - one per activated cycleId
-    // Each marker gets its own chunk's data so the UI shows per-chunk breakdowns
-    if (writer && updatedRecord && activationResult.activatedCycleIds.length > 0) {
-      const perChunkMap = new Map(activationResult.perChunk?.map(c => [c.cycleId, c]));
-      for (const cycleId of activationResult.activatedCycleIds) {
-        const chunkData = perChunkMap.get(cycleId);
-        const activationMarker = createActivationMarker({
-          cycleId, // Use the original buffering cycleId so UI can link them
-          operationType: 'observation',
-          chunksActivated: 1,
-          tokensActivated: chunkData?.messageTokens ?? activationResult.messageTokensActivated,
-          observationTokens: chunkData?.observationTokens ?? activationResult.observationTokensActivated,
-          messagesActivated: chunkData?.messageCount ?? activationResult.messagesActivated,
-          recordId: updatedRecord.id,
-          threadId: updatedRecord.threadId ?? record.threadId ?? '',
-          generationCount: updatedRecord.generationCount ?? 0,
-          observations: chunkData?.observations ?? activationResult.observations,
-          config: this.getObservationMarkerConfig(),
-        });
-        void writer.custom(activationMarker).catch(() => {});
-        await this.persistMarkerToMessage(
-          activationMarker,
-          messageList,
-          record.threadId ?? '',
-          record.resourceId ?? undefined,
-        );
-      }
-    }
-
-    return {
-      success: true,
-      updatedRecord: updatedRecord ?? undefined,
-      messageTokensActivated: activationResult.messageTokensActivated,
-      activatedMessageIds: activationResult.activatedMessageIds,
-      suggestedContinuation: activationResult.suggestedContinuation,
-      currentTask: activationResult.currentTask,
-    };
-  }
-
-  /**
    * Start an async background reflection that stores results to bufferedReflection.
    * This is a fire-and-forget operation that runs in the background.
    * The results will be swapped to active when the main reflection threshold is reached.
@@ -3860,87 +3636,6 @@ ${formattedMessages}
     return shouldTrigger;
   }
 
-  /**
-   * Check if async reflection buffering should be triggered.
-   * Returns true if all conditions are met: async reflection enabled,
-   * no in-flight buffering op, no existing buffered reflection,
-   * and observation tokens have crossed the activation point.
-   * @internal Used by tests; logic is also inlined in maybeAsyncReflect/maybeReflect.
-   */
-  private shouldTriggerAsyncReflection(
-    observationTokens: number,
-    lockKey: string,
-    record: ObservationalMemoryRecord,
-  ): boolean {
-    if (!this.isAsyncReflectionEnabled()) return false;
-    if (record.isBufferingReflection) {
-      if (isOpActiveInProcess(record.id, 'bufferingReflection')) return false;
-      omDebug(`[OM:shouldTriggerAsyncRefl] isBufferingReflection=true but stale, clearing`);
-      this.storage.setBufferingReflectionFlag(record.id, false).catch(() => {});
-    }
-    const bufferKey = this.getReflectionBufferKey(lockKey);
-    if (this.isAsyncBufferingInProgress(bufferKey)) return false;
-    if (ObservationalMemory.lastBufferedBoundary.has(bufferKey)) return false;
-    if (record.bufferedReflection) return false;
-    const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
-    const activationPoint = reflectThreshold * this.reflectionConfig.bufferActivation!;
-    return observationTokens >= activationPoint;
-  }
-
-  /**
-   * Check if async reflection should be triggered or activated.
-   * Only handles the async path — will never do synchronous (blocking) reflection.
-   * @internal Used by tryStep0Activation().
-   */
-  private async maybeAsyncReflect(opts: {
-    record: ObservationalMemoryRecord;
-    observationTokens: number;
-    writer?: ProcessorStreamWriter;
-    messageList?: MessageList;
-    requestContext?: RequestContext;
-  }): Promise<void> {
-    if (!this.isAsyncReflectionEnabled()) return;
-
-    const { record, observationTokens, writer, messageList, requestContext } = opts;
-    const lockKey = this.getLockKey(record.threadId, record.resourceId);
-    const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
-
-    // Below threshold — check if we should start background buffering
-    if (observationTokens < reflectThreshold) {
-      const shouldTrigger = (() => {
-        if (record.isBufferingReflection) {
-          if (isOpActiveInProcess(record.id, 'bufferingReflection')) return false;
-          omDebug(`[OM:maybeAsyncReflect] isBufferingReflection=true but stale, clearing`);
-          this.storage.setBufferingReflectionFlag(record.id, false).catch(() => {});
-        }
-        const bufferKey = this.getReflectionBufferKey(lockKey);
-        if (this.isAsyncBufferingInProgress(bufferKey)) return false;
-        if (ObservationalMemory.lastBufferedBoundary.has(bufferKey)) return false;
-        if (record.bufferedReflection) return false;
-        const activationPoint = reflectThreshold * this.reflectionConfig.bufferActivation!;
-        return observationTokens >= activationPoint;
-      })();
-
-      if (shouldTrigger) {
-        this.startAsyncBufferedReflection(record, observationTokens, lockKey, writer, requestContext);
-      }
-      return;
-    }
-
-    // At/above threshold — try to activate buffered reflection
-    if (record.isReflecting) {
-      if (isOpActiveInProcess(record.id, 'reflecting')) return;
-      omDebug(`[OM:maybeAsyncReflect] isReflecting=true but stale, clearing`);
-      await this.storage.setReflectingFlag(record.id, false);
-    }
-
-    const activationSuccess = await this.tryActivateBufferedReflection(record, lockKey, writer, messageList);
-    if (activationSuccess) return;
-
-    // No buffered content — start background reflection
-    this.startAsyncBufferedReflection(record, observationTokens, lockKey, writer, requestContext);
-  }
-
   // ════════════════════════════════════════════════════════════════════════════
   // HIGH-LEVEL API — semantic operations for programmatic use
   // ════════════════════════════════════════════════════════════════════════════
@@ -4030,7 +3725,6 @@ ${formattedMessages}
       scope: this.scope,
     };
   }
-
 
   /**
    * Trigger async buffered observation if the token count has crossed a new interval.
@@ -4379,65 +4073,6 @@ ${formattedMessages}
   }
 
   /**
-   * Inject observations into the message list as a system message.
-   *
-   * Reads thread metadata for continuation hints, formats observations,
-   * clears any existing OM system messages, and adds a fresh one along
-   * with a continuation reminder.
-   */
-  private async injectObservationsIntoMessages(opts: {
-    messageList: MessageList;
-    record: ObservationalMemoryRecord;
-    threadId: string;
-    resourceId?: string;
-    unobservedContextBlocks?: string;
-    requestContext?: RequestContext;
-  }): Promise<void> {
-    const { messageList, record, threadId, unobservedContextBlocks, requestContext } = opts;
-
-    if (!record.activeObservations) return;
-
-    const rawCurrentDate = requestContext?.get('currentDate');
-    const currentDate =
-      rawCurrentDate instanceof Date
-        ? rawCurrentDate
-        : typeof rawCurrentDate === 'string'
-          ? new Date(rawCurrentDate)
-          : new Date();
-
-    const observationSystemMessage = await this.buildContextSystemMessage({
-      threadId,
-      resourceId: opts.resourceId,
-      record,
-      unobservedContextBlocks,
-      currentDate,
-    });
-
-    if (!observationSystemMessage) return;
-
-    messageList.clearSystemMessages('observational-memory');
-    messageList.addSystem(observationSystemMessage, 'observational-memory');
-
-    const continuationMessage: MastraDBMessage = {
-      id: `om-continuation`,
-      role: 'user',
-      createdAt: new Date(0),
-      content: {
-        format: 2,
-        parts: [
-          {
-            type: 'text',
-            text: `<system-reminder>${OBSERVATION_CONTINUATION_HINT}</system-reminder>`,
-          },
-        ],
-      },
-      threadId,
-      resourceId: opts.resourceId,
-    };
-    messageList.add(continuationMessage, 'memory');
-  }
-
-  /**
    * Filter out already-observed messages from the in-memory context.
    *
    * Uses marker-boundary pruning (safest at step 0) or record-based fallback
@@ -4599,40 +4234,6 @@ ${formattedMessages}
   }
 
   /**
-   * Load historical unobserved messages into the message list.
-   *
-   * Typically called at step 0 to restore conversation context from storage.
-   * In resource scope, loads only the current thread's messages.
-   * In thread scope, loads all unobserved messages for the thread.
-   */
-  private async loadHistory(opts: {
-    messageList: MessageList;
-    threadId: string;
-    resourceId?: string;
-    lastObservedAt?: Date;
-  }): Promise<void> {
-    const { messageList, threadId, resourceId, lastObservedAt } = opts;
-
-    if (this.scope === 'resource' && resourceId) {
-      const currentThreadMessages = await this.loadUnobservedMessages(threadId, undefined, lastObservedAt);
-      for (const msg of currentThreadMessages) {
-        if (msg.role !== 'system') {
-          if (!this.hasUnobservedParts(msg) && this.findLastCompletedObservationBoundary(msg) !== -1) continue;
-          messageList.add(msg, 'memory');
-        }
-      }
-    } else {
-      const historicalMessages = await this.loadUnobservedMessages(threadId, resourceId, lastObservedAt);
-      for (const msg of historicalMessages) {
-        if (msg.role !== 'system') {
-          if (!this.hasUnobservedParts(msg) && this.findLastCompletedObservationBoundary(msg) !== -1) continue;
-          messageList.add(msg, 'memory');
-        }
-      }
-    }
-  }
-
-  /**
    * Save messages incrementally during an agent step.
    *
    * Clears input/response messages from the message list, persists them to storage
@@ -4782,204 +4383,6 @@ ${formattedMessages}
       );
       await writer.custom(statusPart).catch(() => {});
     }
-  }
-
-  /**
-   * Check if we've crossed a step-0 buffered observation activation threshold
-   * and attempt activation. Also handles stale boundary resets.
-   *
-   * Returns the activation result and the refreshed record.
-   */
-  async tryStep0Activation(opts: {
-    messageList: MessageList;
-    record: ObservationalMemoryRecord;
-    threadId: string;
-    resourceId?: string;
-    messages: MastraDBMessage[];
-    otherThreadContext?: string;
-    currentObservationTokens: number;
-    writer?: ProcessorStreamWriter;
-    requestContext?: RequestContext;
-  }): Promise<{
-    activated: boolean;
-    record: ObservationalMemoryRecord;
-    activatedMessageIds?: string[];
-    activationDetails?: Record<string, unknown>;
-  }> {
-    const {
-      messageList,
-      record,
-      threadId,
-      resourceId,
-      messages,
-      otherThreadContext,
-      currentObservationTokens,
-      writer,
-      requestContext,
-    } = opts;
-
-    if (!this.isAsyncObservationEnabled()) {
-      return { activated: false, record };
-    }
-
-    const lockKey = this.getLockKey(threadId, resourceId);
-    const bufferedChunks = this.getBufferedChunks(record);
-    omDebug(
-      `[OM:step0-activation] asyncObsEnabled=true, bufferedChunks=${bufferedChunks.length}, isBufferingObs=${record.isBufferingObservation}`,
-    );
-
-    // Reset stale lastBufferedBoundary at the start of a new turn
-    const bufKey = this.getObservationBufferKey(lockKey);
-    const dbBoundary = record.lastBufferedAtTokens ?? 0;
-    const currentContextTokens = this.tokenCounter.countMessages(messages);
-    if (dbBoundary > 0 && currentContextTokens < dbBoundary * 0.5) {
-      omDebug(
-        `[OM:step0-activation] resetting stale lastBufferedBoundary: dbBoundary=${dbBoundary}, currentContextTokens=${currentContextTokens}`,
-      );
-      ObservationalMemory.lastBufferedBoundary.set(bufKey, 0);
-      await this.storage.setBufferingObservationFlag(record.id, false, 0).catch(() => {});
-    }
-
-    if (bufferedChunks.length === 0) {
-      return { activated: false, record };
-    }
-
-    // Calculate thresholds to decide if activation should happen
-    const unobservedMessages = this.getUnobservedMessages(messages, record);
-    const contextTokens = await this.tokenCounter.countMessagesAsync(unobservedMessages);
-    const otherThreadTokens = otherThreadContext ? this.tokenCounter.countString(otherThreadContext) : 0;
-    const pendingTokens = contextTokens + otherThreadTokens;
-    const threshold = calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
-
-    omDebug(
-      `[OM:step0-activation] pendingTokens=${pendingTokens}, threshold=${threshold}, blockAfter=${this.observationConfig.blockAfter}`,
-    );
-
-    if (pendingTokens < threshold) {
-      return { activated: false, record };
-    }
-
-    const activationResult = await this.tryActivateBufferedObservations(
-      record,
-      lockKey,
-      pendingTokens,
-      writer,
-      messageList,
-    );
-
-    const activationDetails: Record<string, unknown> = {
-      attempted: true,
-      success: activationResult.success,
-      messageTokensActivated: activationResult.messageTokensActivated,
-      activatedMessageIds: activationResult.activatedMessageIds,
-      hadUpdatedRecord: !!activationResult.updatedRecord,
-    };
-
-    if (!activationResult.success) {
-      return { activated: false, record, activationDetails };
-    }
-
-    const updatedRecord = activationResult.updatedRecord ?? record;
-
-    // Remove activated messages from context
-    if (activationResult.activatedMessageIds && activationResult.activatedMessageIds.length > 0) {
-      messageList.removeByIds(activationResult.activatedMessageIds);
-      this.cleanupStaticMaps(threadId, resourceId, activationResult.activatedMessageIds);
-    }
-
-    // Reset buffering state
-    await this.resetBufferingState({ threadId, resourceId, recordId: updatedRecord.id });
-
-    // Update thread metadata with continuation hints
-    const thread = await this.storage.getThreadById({ threadId });
-    if (thread) {
-      const newMeta = setThreadOMMetadata(thread.metadata, {
-        suggestedResponse: activationResult.suggestedContinuation,
-        currentTask: activationResult.currentTask,
-        lastObservedMessageCursor: this.getLastObservedMessageCursor(
-          unobservedMessages.filter(msg => !!msg?.id && !!msg.createdAt),
-        ),
-      });
-      await this.storage.updateThread({ id: threadId, title: thread.title ?? '', metadata: newMeta });
-    }
-
-    // Maybe trigger reflection
-    await this.maybeReflect({
-      record: updatedRecord,
-      observationTokens: updatedRecord.observationTokenCount ?? 0,
-      writer,
-      messageList,
-      requestContext,
-    });
-
-    // Check for standalone async reflection if no sync reflection happened
-    if (this.isAsyncReflectionEnabled()) {
-      const freshRecordAfterReflect = await this.getOrCreateRecord(threadId, resourceId);
-      const obsTokens = freshRecordAfterReflect.observationTokenCount ?? 0;
-      const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
-      if (obsTokens < reflectThreshold) {
-        await this.maybeAsyncReflect({
-          record: freshRecordAfterReflect,
-          observationTokens: obsTokens,
-          writer,
-          messageList,
-          requestContext,
-        });
-      }
-    }
-
-    // Re-fetch record after all operations
-    const finalRecord = await this.getOrCreateRecord(threadId, resourceId);
-
-    return {
-      activated: true,
-      record: finalRecord,
-      activatedMessageIds: activationResult.activatedMessageIds,
-      activationDetails,
-    };
-  }
-
-  /**
-   * Check if step-0 reflection should be triggered (standalone, outside of observation).
-   * Handles both sync and async reflection paths.
-   */
-  async maybeStep0Reflect(opts: {
-    record: ObservationalMemoryRecord;
-    threadId: string;
-    resourceId?: string;
-    writer?: ProcessorStreamWriter;
-    messageList?: MessageList;
-    requestContext?: RequestContext;
-  }): Promise<ObservationalMemoryRecord> {
-    const { record, threadId, resourceId, writer, messageList, requestContext } = opts;
-    const obsTokens = record.observationTokenCount ?? 0;
-    const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
-
-    // Sync reflection
-    if (obsTokens > reflectThreshold) {
-      await this.maybeReflect({
-        record,
-        observationTokens: obsTokens,
-        writer,
-        messageList,
-        requestContext,
-      });
-      return this.getOrCreateRecord(threadId, resourceId);
-    }
-
-    // Async reflection
-    if (this.isAsyncReflectionEnabled()) {
-      await this.maybeAsyncReflect({
-        record,
-        observationTokens: obsTokens,
-        writer,
-        messageList,
-        requestContext,
-      });
-      return this.getOrCreateRecord(threadId, resourceId);
-    }
-
-    return record;
   }
 
   /**
@@ -5414,8 +4817,7 @@ ${formattedMessages}
   async activate(opts: {
     threadId: string;
     resourceId?: string;
-    /** When true, skip activation if pending tokens are below the observation threshold.
-     *  Matches the guard in tryStep0Activation — avoids activating tiny chunks. */
+    /** When true, skip activation if pending tokens are below the observation threshold. */
     checkThreshold?: boolean;
     /** Messages to use for threshold check (in-memory). If omitted, loads from storage. */
     messages?: MastraDBMessage[];
@@ -5427,6 +4829,26 @@ ${formattedMessages}
     const { threadId, resourceId } = opts;
 
     const record = await this.getOrCreateRecord(threadId, resourceId);
+
+    // Reset stale lastBufferedBoundary at the start of a new turn.
+    // If the stored boundary is far above the current context size, it's
+    // leftover from a previous turn and would block future buffering triggers.
+    if (this.isAsyncObservationEnabled()) {
+      const lockKey = this.getLockKey(threadId, resourceId);
+      const bufKey = this.getObservationBufferKey(lockKey);
+      const dbBoundary = record.lastBufferedAtTokens ?? 0;
+      if (dbBoundary > 0 && opts.messages) {
+        const unobserved = this.getUnobservedMessages(opts.messages, record);
+        const currentContextTokens = this.tokenCounter.countMessages(unobserved);
+        if (currentContextTokens < dbBoundary * 0.5) {
+          omDebug(
+            `[OM:activate] resetting stale lastBufferedBoundary: dbBoundary=${dbBoundary}, currentContextTokens=${currentContextTokens}`,
+          );
+          ObservationalMemory.lastBufferedBoundary.set(bufKey, 0);
+          await this.storage.setBufferingObservationFlag(record.id, false, 0).catch(() => {});
+        }
+      }
+    }
 
     // Check for buffered chunks
     const chunks = this.getBufferedChunks(record);

@@ -290,33 +290,43 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       // STEP 1c: ACTIVATE BUFFERED OBSERVATIONS (step 0 only)
       // ════════════════════════════════════════════════════════════════════════
       if (stepNumber === 0 && !readOnly) {
-        const step0Messages = this.engine.getUnobservedMessages(messageList.get.all.db(), record);
-        const step0Result = await this.engine.tryStep0Activation({
-          messageList,
-          record,
+        const step0Messages = messageList.get.all.db();
+        const activation = await this.engine.activate({
           threadId,
           resourceId,
+          checkThreshold: true,
           messages: step0Messages,
-          otherThreadContext: otherThreadsContext,
-          currentObservationTokens: record.observationTokenCount ?? 0,
-          writer,
-          requestContext,
         });
 
-        reproCaptureDetails.step0Activation = step0Result.activationDetails ?? null;
+        reproCaptureDetails.step0Activation = activation.activated
+          ? { attempted: true, success: true, activatedMessageIds: activation.activatedMessageIds }
+          : null;
 
-        if (step0Result.activated) {
-          record = step0Result.record;
-        } else if (!step0Result.activated) {
-          // Check for standalone reflection even if activation didn't happen
-          record = await this.engine.maybeStep0Reflect({
-            record,
+        if (activation.activated) {
+          // Remove activated messages from context
+          if (activation.activatedMessageIds?.length) {
+            messageList.removeByIds(activation.activatedMessageIds);
+          }
+
+          // Reset buffering state after activation
+          await this.engine.resetBufferingState({
             threadId,
             resourceId,
-            writer,
-            messageList,
-            requestContext,
+            recordId: activation.record.id,
           });
+
+          record = activation.record;
+        }
+
+        // Check if reflection is needed (whether or not activation happened)
+        const reflectStatus = await this.engine.getStatus({
+          threadId,
+          resourceId,
+          messages: messageList.get.all.db(),
+        });
+        if (reflectStatus.shouldReflect) {
+          await this.engine.reflect(threadId, resourceId);
+          record = await this.engine.getOrCreateRecord(threadId, resourceId);
         }
       }
 
