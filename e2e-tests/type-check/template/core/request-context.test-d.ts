@@ -50,10 +50,7 @@ describe('RequestContext', () => {
       const ctx = new RequestContext<MyContext>();
       const entries = ctx.entries();
 
-      type ExpectedEntry =
-        | ['userId', string]
-        | ['tier', 'premium' | 'standard']
-        | ['count', number];
+      type ExpectedEntry = ['userId', string] | ['tier', 'premium' | 'standard'] | ['count', number];
       assertType<IterableIterator<ExpectedEntry>>(entries);
 
       for (const [key, value] of entries) {
