@@ -29,7 +29,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "agentfs-sdk": "^0.6.0"
+    "agentfs-sdk": "^0.6.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
