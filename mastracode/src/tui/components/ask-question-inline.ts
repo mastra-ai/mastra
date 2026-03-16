@@ -166,7 +166,8 @@ class AskQuestionBorderedBox {
           const isSelected = item.label === this.selectedValue;
           if (isSelected) {
             const icon = this.answerIsNegative ? theme.fg('error', '✗') : theme.fg('success', '✓');
-            const line = `${icon}  ${item.label}`;
+            const label = theme.fg('text', item.label);
+            const line = `${icon}  ${label}`;
             addLine(line, visibleWidth(line));
           } else {
             const line = theme.fg('dim', `   ${item.label}`);
@@ -178,7 +179,8 @@ class AskQuestionBorderedBox {
     } else if (this.answered && this.selectedValue != null) {
       // Free-text input answered
       const icon = this.answerIsNegative ? theme.fg('error', '✗') : theme.fg('success', '✓');
-      const line = `${icon}  ${this.selectedValue}`;
+      const label = theme.fg('text', this.selectedValue!);
+      const line = `${icon}  ${label}`;
       addLine(line, visibleWidth(line));
     } else if (this.answered && this.cancelled) {
       // Free-text cancelled
