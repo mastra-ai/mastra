@@ -5,8 +5,7 @@ permissions:
 
 on:
   schedule:
-    # Every 12 hours
-    - cron: '0 */12 * * *'
+    - cron: '0 4,16 * * *'
 
 concurrency:
   group: alpha-prerelease-main
@@ -40,15 +39,6 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Bump mcp-docs-server prerelease version
-        env:
-          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
-          HUSKY: 0
-        run: |
-          cd packages/mcp-docs-server
-          pnpm version prerelease --preid alpha --no-git-tag-version
-          cd ../..
-
       - name: Version packages (alpha prerelease)
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
@@ -66,6 +56,13 @@ jobs:
             git diff --stat
             echo "has_changes=true" >> $GITHUB_OUTPUT
           fi
+
+      - name: Bump mcp-docs-server prerelease version
+        if: steps.check-changes.outputs.has_changes == 'true'
+        run: |
+          cd packages/mcp-docs-server
+          pnpm version prerelease --preid alpha --no-git-tag-version
+          cd ../..
 
       - name: Commit and push version changes
         if: steps.check-changes.outputs.has_changes == 'true'
