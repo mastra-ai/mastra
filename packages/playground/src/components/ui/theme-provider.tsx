@@ -1,10 +1,12 @@
-import { createContext, useEffect, useState } from 'react';
+import { usePlaygroundStore, useStudioConfig } from '@mastra/playground-ui';
+import { createContext, useEffect } from 'react';
 
 type Theme = 'dark' | 'light' | 'system';
+type ResolvedTheme = 'dark' | 'light';
 
 type ThemeProviderProps = {
   children: React.ReactNode;
-  defaultTheme?: Theme;
+  defaultTheme?: ResolvedTheme;
   attribute?: string;
 };
 
@@ -12,25 +14,50 @@ const ThemeProviderContext = createContext<{
   theme: Theme;
   setTheme: (theme: Theme) => void;
 }>({
-  theme: 'system',
+  theme: 'dark',
   setTheme: () => null,
 });
 
-export function ThemeProvider({ children, defaultTheme = 'system' }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(defaultTheme);
+const resolveTheme = (theme: Theme): ResolvedTheme => {
+  if (theme !== 'system') {
+    return theme;
+  }
+
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+};
+
+export function ThemeProvider({ children, defaultTheme = 'dark' }: ThemeProviderProps) {
+  const { themeToggleEnabled } = useStudioConfig();
+  const { theme, setTheme } = usePlaygroundStore();
+
+  const persistedTheme: Theme = theme === 'light' || theme === 'system' ? theme : 'dark';
+  const selectedTheme: Theme = themeToggleEnabled ? persistedTheme : defaultTheme;
 
   useEffect(() => {
     const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
+    const applyTheme = (nextTheme: Theme) => {
+      const resolvedTheme = resolveTheme(nextTheme);
+      root.classList.remove('light', 'dark');
+      root.classList.add(resolvedTheme);
+    };
 
-    if (theme === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      root.classList.add(systemTheme);
+    applyTheme(selectedTheme);
+
+    if (selectedTheme !== 'system') {
       return;
     }
 
-    root.classList.add(theme);
-  }, [theme]);
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = () => applyTheme('system');
 
-  return <ThemeProviderContext.Provider value={{ theme, setTheme }}>{children}</ThemeProviderContext.Provider>;
+    mediaQuery.addEventListener('change', handleChange);
+
+    return () => {
+      mediaQuery.removeEventListener('change', handleChange);
+    };
+  }, [selectedTheme]);
+
+  return (
+    <ThemeProviderContext.Provider value={{ theme: selectedTheme, setTheme }}>{children}</ThemeProviderContext.Provider>
+  );
 }

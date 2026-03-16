@@ -65,8 +65,6 @@ export const ProviderLogo = ({ providerId, className = '', size = 20 }: Provider
         width: `${size}px`,
         height: `${size}px`,
         objectFit: 'contain',
-        filter: 'brightness(0) invert(1)', // Make the logo white
-        opacity: 0.9,
       }}
     />
   );

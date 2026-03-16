@@ -15,6 +15,7 @@ declare global {
     MASTRA_EXPERIMENTAL_FEATURES?: string;
     MASTRA_AUTO_DETECT_URL?: string;
     MASTRA_REQUEST_CONTEXT_PRESETS?: string;
+    MASTRA_THEME_TOGGLE?: string;
   }
 }
 
@@ -294,11 +295,12 @@ export default function AppWrapper() {
   const apiPrefix = window.MASTRA_API_PREFIX || '/api';
   const cloudApiEndpoint = window.MASTRA_CLOUD_API_ENDPOINT || '';
   const autoDetectUrl = window.MASTRA_AUTO_DETECT_URL === 'true';
+  const themeToggleEnabled = window.MASTRA_THEME_TOGGLE === 'true';
   const endpoint = cloudApiEndpoint || (autoDetectUrl ? window.location.origin : `${protocol}://${host}:${port}`);
 
   return (
     <PlaygroundQueryClient>
-      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix}>
+      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix} themeToggleEnabled={themeToggleEnabled}>
         <App />
       </StudioConfigProvider>
     </PlaygroundQueryClient>
