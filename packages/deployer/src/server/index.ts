@@ -91,6 +91,7 @@ export async function createHonoServer(
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
+  const apiPrefix = server?.apiPrefix ?? '/api';
   const a2aTaskStore = new InMemoryTaskStore();
   const routes = server?.apiRoutes;
 
@@ -145,6 +146,7 @@ export async function createHonoServer(
     openapiPath: options?.isDev || server?.build?.openAPIDocs ? '/openapi.json' : undefined,
     customRouteAuthConfig,
     customApiRoutes: processedRoutes,
+    prefix: apiPrefix,
   });
 
   // Register context middleware FIRST - this sets mastra, requestContext, tools, taskStore in context
@@ -216,7 +218,7 @@ export async function createHonoServer(
 
   if (options?.isDev || server?.build?.swaggerUI) {
     app.get(
-      '/api',
+      apiPrefix,
       describeRoute({
         description: 'API Welcome Page',
         tags: ['system'],
@@ -283,7 +285,7 @@ export async function createHonoServer(
       describeRoute({
         hide: true,
       }),
-      swaggerUI({ url: '/api/openapi.json' }),
+      swaggerUI({ url: `${apiPrefix}/openapi.json` }),
     );
   }
 
@@ -368,8 +370,8 @@ export async function createHonoServer(
 
     // Skip if it's an API route
     if (
-      requestPath === '/api' ||
-      requestPath.startsWith('/api/') ||
+      requestPath === apiPrefix ||
+      requestPath.startsWith(`${apiPrefix}/`) ||
       requestPath.startsWith('/swagger-ui') ||
       requestPath.startsWith('/openapi.json')
     ) {
@@ -424,7 +426,7 @@ export async function createHonoServer(
         host: `'${host}'`,
         port: `'${port}'`,
         protocol: `'${protocol}'`,
-        apiPrefix: `'${serverOptions?.apiPrefix ?? '/api'}'`,
+        apiPrefix: `'${apiPrefix}'`,
         basePath: studioBasePath,
         hideCloudCta: `'${hideCloudCta}'`,
         cloudApiEndpoint: `'${cloudApiEndpoint}'`,
@@ -465,6 +467,7 @@ export async function createHonoServer(
 export async function createNodeServer(mastra: Mastra, options: ServerBundleOptions = { tools: {} }) {
   const app = await createHonoServer(mastra, options);
   const serverOptions = mastra.getServer();
+  const apiPrefix = serverOptions?.apiPrefix ?? '/api';
 
   const key =
     serverOptions?.https?.key ??
@@ -495,7 +498,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     },
     () => {
       const logger = mastra.getLogger();
-      logger.info(` Mastra API running on ${protocol}://${host}:${port}/api`);
+      logger.info(` Mastra API running on ${protocol}://${host}:${port}${apiPrefix}`);
       if (options?.studio) {
         const studioBasePath = normalizeStudioBase(serverOptions?.studioBase ?? '/');
         const studioUrl = `${protocol}://${host}:${port}${studioBasePath}`;
