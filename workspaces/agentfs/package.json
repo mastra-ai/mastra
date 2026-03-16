@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agentfs",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "AgentFS (Turso/SQLite-backed) filesystem provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -23,24 +23,25 @@
     "build:lib": "pnpm build",
     "build:watch": "pnpm build --watch",
     "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
+    "test:cloud": "vitest run ./src/**/*.integration.test.ts",
     "test:watch": "vitest watch",
     "test": "vitest run",
     "lint": "eslint ."
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "agentfs-sdk": "^0.6.0"
+    "agentfs-sdk": "^0.6.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/workspace-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.7",
-    "dotenv": "^17.2.3",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.37.0",
+    "dotenv": "^17.3.1",
+    "eslint": "^9.39.4",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
