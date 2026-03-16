@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { Editor, matchesKey } from '@mariozechner/pi-tui';
 import type { EditorTheme, TUI } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
-import { mastra } from '../theme.js';
+import { mastra, theme } from '../theme.js';
 import { getClipboardImage, getClipboardText } from '../../clipboard/index.js';
 import type { ClipboardImage } from '../../clipboard/index.js';
 
@@ -264,10 +264,13 @@ export class CustomEditor extends Editor {
     }
 
     // Assemble box from cached borders + fresh content
+    // Wrap editor content with explicit text color so it adapts to light/dark mode
+    const textColorOpen = `\x1b[38;2;${parseHex(theme.getTheme().text).join(';')}m`;
+    const textColorClose = '\x1b[39m';
     result.push(this._cachedTopBorder);
 
     for (let i = 0; i < contentLines.length; i++) {
-      const line = contentLines[i]!;
+      const line = `${textColorOpen}${contentLines[i]!}${textColorClose}`;
       const leftBorder = this._cachedLeftBorders[i] ?? b('│');
       const rightBorder = this._cachedRightBorders[i] ?? b('│');
       if (i === 0) {
