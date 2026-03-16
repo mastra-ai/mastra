@@ -133,7 +133,6 @@ function createMockObserverModel() {
 
 ### Thread: test-thread
 - 🔴 User asked for help with a task
---- message boundary ---
 - Assistant provided a detailed response
 </observations>
 <current-task>Help the user with their request</current-task>
@@ -469,5 +468,96 @@ describe('Mock OM Agent Integration', () => {
     expect(subRecord).toBeTruthy();
     expect(subRecord!.resourceId).toBe(subAgentResourceId);
     expect(subRecord!.activeObservations).toContain('User asked for help');
+  });
+
+  it('should insert a message boundary with a date matching the observed messages', async () => {
+    // Create a model that supports multiple generate calls (alternating tool-call / text).
+    // The shared createMockOmModel only fires a tool call on the very first call,
+    // so a second agent.generate() would stay on step 0 and never trigger observation.
+    let genCount = 0;
+    const multiCallModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        genCount++;
+        // Odd calls → tool call, even calls → text response
+        if (genCount % 2 === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 50, outputTokens: 20, totalTokens: 70 },
+            text: '',
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: `call-${genCount}`,
+                toolName: 'test',
+                input: JSON.stringify({ action: 'trigger' }),
+              },
+            ],
+            warnings: [],
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          text: longResponseText,
+          content: [{ type: 'text' as const, text: longResponseText }],
+          warnings: [],
+        };
+      },
+    });
+
+    const boundaryAgent = new Agent({
+      id: 'test-om-boundary-agent',
+      name: 'Test OM Boundary Agent',
+      instructions: 'You are a helpful assistant. Always use the test tool first.',
+      model: multiCallModel as any,
+      tools: { test: omTriggerTool },
+      memory,
+    });
+
+    const threadId = 'test-thread-boundary-date';
+    const resourceId = 'test-resource';
+    const memoryOpts = { thread: threadId, resource: resourceId };
+
+    // First generate — creates initial observations (no boundary yet)
+    const beforeFirstCall = new Date();
+    await boundaryAgent.generate('Hello, I need help with something important.', { memory: memoryOpts });
+
+    const memoryStore = await store.getStore('memory');
+    const firstRecord = await memoryStore!.getObservationalMemory(threadId, resourceId);
+    expect(firstRecord).toBeTruthy();
+    expect(firstRecord!.activeObservations).toBeTruthy();
+    // No boundary in first observation
+    expect(firstRecord!.activeObservations).not.toMatch(/--- message boundary/);
+
+    // Second generate — appends observations with a boundary
+    await boundaryAgent.generate('Can you also help me with another task?', { memory: memoryOpts });
+    const afterSecondCall = new Date();
+
+    const secondRecord = await memoryStore!.getObservationalMemory(threadId, resourceId);
+    expect(secondRecord).toBeTruthy();
+
+    // Should now contain a message boundary delimiter with a date
+    const boundaryMatch = secondRecord!.activeObservations!.match(/--- message boundary \(([^)]+)\) ---/);
+    expect(boundaryMatch).toBeTruthy();
+
+    const boundaryDate = new Date(boundaryMatch![1]!);
+    expect(boundaryDate.getTime()).not.toBeNaN();
+
+    // The boundary date should be the max createdAt of the messages observed in the second cycle.
+    // Those messages were created between beforeFirstCall and afterSecondCall (wall-clock).
+    // Since getMaxMessageTimestamp picks the latest createdAt from the observed messages,
+    // and messages are saved at approximately wall-clock time, the boundary date should
+    // fall within this window.
+    expect(boundaryDate.getTime()).toBeGreaterThanOrEqual(beforeFirstCall.getTime());
+    expect(boundaryDate.getTime()).toBeLessThanOrEqual(afterSecondCall.getTime());
+
+    // The boundary date should also match the record's lastObservedAt
+    // (which is set from getMaxMessageTimestamp + a small offset in some paths)
+    expect(secondRecord!.lastObservedAt).toBeTruthy();
+    const lastObserved = new Date(secondRecord!.lastObservedAt!);
+    // lastObservedAt should be close to the boundary date (within a few seconds)
+    expect(Math.abs(lastObserved.getTime() - boundaryDate.getTime())).toBeLessThan(5000);
   });
 });
