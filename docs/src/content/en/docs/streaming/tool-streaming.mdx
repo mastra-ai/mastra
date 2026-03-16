@@ -20,6 +20,8 @@ By combining writable tool streams with agent streaming, you gain fine grained c
 
 Agent streaming can be combined with tool calls, allowing tool outputs to be written directly into the agent’s streaming response. This makes it possible to surface tool activity as part of the overall interaction.
 
+Some model providers can execute built-in tools on the provider side instead of calling your local `execute()` function. In those cases, Mastra marks the tool call as `providerExecuted`, emits the matching tool result in the stream, and persists that result so memory replay and resumed streams do not try to execute the tool again.
+
 ```typescript {2,9}
 import { Agent } from '@mastra/core/agent'
 import { testTool } from '../tools/test-tool'

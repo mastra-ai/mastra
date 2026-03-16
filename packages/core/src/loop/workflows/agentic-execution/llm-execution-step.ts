@@ -57,6 +57,7 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   logger?: IMastraLogger;
   transportRef?: StreamTransportRef;
   transportResolver?: () => StreamTransport | undefined;
+  persistedToolCallIds?: Set<string>;
 };
 
 function buildResponseModelMetadata(runState: AgenticRunState): { metadata: Record<string, unknown> } | undefined {
@@ -77,6 +78,7 @@ async function processOutputStream<OUTPUT = undefined>({
   logger,
   transportRef,
   transportResolver,
+  persistedToolCallIds,
 }: ProcessOutputStreamOptions<OUTPUT>) {
   let transportSet = false;
 
@@ -109,7 +111,6 @@ async function processOutputStream<OUTPUT = undefined>({
     // Streaming
     if (
       chunk.type !== 'text-delta' &&
-      chunk.type !== 'tool-call' &&
       // not 100% sure about this being the right fix.
       // basically for some llm providers they add response-metadata after each text-delta
       // we then flush the chunks by calling messageList.add (a few lines down)
@@ -283,6 +284,36 @@ async function processOutputStream<OUTPUT = undefined>({
             logger?.error('Error calling onInputDelta', error);
           }
         }
+        safeEnqueue(controller, chunk);
+        break;
+      }
+
+      case 'tool-call': {
+        const message: MastraDBMessage = {
+          id: messageId,
+          role: 'assistant' as const,
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: chunk.payload.toolCallId,
+                  toolName: chunk.payload.toolName,
+                  args: chunk.payload.args ?? {},
+                },
+                providerMetadata: chunk.payload.providerMetadata,
+                ...({ providerExecuted: chunk.payload.providerExecuted } as { providerExecuted: boolean | undefined }),
+              },
+            ],
+            ...buildResponseModelMetadata(runState),
+          },
+          createdAt: new Date(),
+        };
+
+        messageList.add(message, 'response');
+        persistedToolCallIds?.add(chunk.payload.toolCallId);
         safeEnqueue(controller, chunk);
         break;
       }
@@ -597,6 +628,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let warnings: any;
       let request: any;
       let rawResponse: any;
+      const persistedToolCallIds = new Set<string>();
 
       const { outputStream, callBail, runState, stepTools, stepWorkspace } = await executeStreamWithFallbackModels<{
         outputStream: MastraModelOutput<OUTPUT>;
@@ -961,6 +993,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             logger,
             transportRef: _internal?.transportRef,
             transportResolver,
+            persistedToolCallIds,
           });
         } catch (error) {
           const provider = model?.provider;
@@ -1092,53 +1125,36 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
        * For PTC (programmatic tool calling from code execution), merge matching tool-result
        * so providerExecuted tool calls include output for the tool-call-step.
        */
-      const toolResultChunks = outputStream._getImmediateToolResults() ?? [];
-      const toolCalls = (outputStream._getImmediateToolCalls() ?? []).map(chunk => {
-        const payload = { ...chunk.payload };
-        if (payload.providerExecuted) {
-          const match = toolResultChunks.find(t => t.payload.toolCallId === payload.toolCallId);
-          if (match) payload.output = match.payload.result;
-        }
-        return payload;
-      });
+      const toolResults = outputStream._getImmediateToolResults()?.map(chunk => chunk.payload) ?? [];
+      const toolResultById = new Map(toolResults.map(result => [result.toolCallId, result]));
+      const toolCalls =
+        outputStream._getImmediateToolCalls()?.map(chunk => {
+          const toolResult = toolResultById.get(chunk.payload.toolCallId);
+          const output = chunk.payload.output ?? toolResult?.result;
+          const tool = findProviderToolByName(stepTools, chunk.payload.toolName);
+          const providerExecuted = inferProviderExecuted(
+            chunk.payload.providerExecuted ?? toolResult?.providerExecuted,
+            tool,
+          );
 
-      /**
-       * Merge provider-executed tool results into their corresponding tool calls.
-       *
-       * For some provider-executed tools (like the ones from @ai-sdk/gateway),
-       * the response includes both tool-call and tool-result chunks.
-       * We need to:
-       * 1. Infer providerExecuted for provider tools when the stream doesn't set it
-       *    (gateway tools may not have providerExecuted set in the raw stream)
-       * 2. Pair tool results with their tool calls so the tool-call-step can skip
-       *    execution and return the actual provider result
-       */
-      const streamToolResults = outputStream._getImmediateToolResults();
+          return {
+            ...chunk.payload,
+            args: chunk.payload.args ?? toolResult?.args ?? {},
+            ...(output !== undefined ? { output } : {}),
+            providerExecuted,
+            providerMetadata: chunk.payload.providerMetadata ?? toolResult?.providerMetadata,
+          };
+        }) ?? [];
 
-      if (toolCalls.length > 0) {
-        for (const toolCall of toolCalls) {
-          const tool = findProviderToolByName(stepTools, toolCall.toolName);
-          const inferred = inferProviderExecuted(toolCall.providerExecuted, tool);
-          if (inferred !== undefined) {
-            toolCall.providerExecuted = inferred;
-          }
+      const toolCallsToPersist = toolCalls.filter(toolCall => !persistedToolCallIds.has(toolCall.toolCallId));
 
-          if (toolCall.providerExecuted) {
-            const match = streamToolResults?.find(r => r.payload.toolCallId === toolCall.toolCallId);
-            if (match) {
-              toolCall.output = match.payload.result;
-            }
-          }
-        }
-      }
-
-      if (toolCalls.length > 0) {
+      if (toolCallsToPersist.length > 0) {
         const message: MastraDBMessage = {
           id: outputStream.messageId,
           role: 'assistant' as const,
           content: {
             format: 2,
-            parts: toolCalls.map(toolCall => {
+            parts: toolCallsToPersist.map(toolCall => {
               return {
                 type: 'tool-invocation' as const,
                 toolInvocation: {
