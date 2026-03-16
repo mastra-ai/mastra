@@ -3597,7 +3597,7 @@ ${formattedMessages}
 
   /**
    * Check if we've crossed a new bufferTokens interval boundary for async observation.
-   * @internal Used by getObservationStatus() and triggerAsyncBuffering().
+   * @internal Used by getStatus() and triggerAsyncBuffering().
    */
   private shouldTriggerAsyncObservation(
     currentTokens: number,
@@ -3639,92 +3639,6 @@ ${formattedMessages}
   // ════════════════════════════════════════════════════════════════════════════
   // HIGH-LEVEL API — semantic operations for programmatic use
   // ════════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Get a complete observation status snapshot for a thread/resource.
-   *
-   * Computes pending tokens, thresholds, and buffering state in one call.
-   * Use this to decide whether to trigger observation, buffering, or reflection
-   * without directly accessing token counters or config.
-   *
-   * @example
-   * ```ts
-   * const status = await om.getObservationStatus({
-   *   threadId: 'thread-1',
-   *   messages: messageList.get.all.db(),
-   * });
-   * if (status.shouldObserve) {
-   *   await om.observe({ threadId, messages });
-   * }
-   * ```
-   */
-  async getObservationStatus(opts: {
-    threadId: string;
-    resourceId?: string;
-    messages: MastraDBMessage[];
-    otherThreadContext?: string;
-    currentObservationTokens?: number;
-  }): Promise<{
-    record: ObservationalMemoryRecord;
-    pendingTokens: number;
-    threshold: number;
-    effectiveObservationTokensThreshold: number;
-    bufferedChunkTokens: number;
-    unbufferedPendingTokens: number;
-    shouldObserve: boolean;
-    shouldBuffer: boolean;
-    asyncObservationEnabled: boolean;
-    asyncReflectionEnabled: boolean;
-    scope: 'resource' | 'thread';
-  }> {
-    const { threadId, resourceId, messages, otherThreadContext } = opts;
-    const record = await this.getOrCreateRecord(threadId, resourceId);
-    const currentObservationTokens = opts.currentObservationTokens ?? record.observationTokenCount ?? 0;
-
-    // Get unobserved messages and count tokens
-    const unobservedMessages = this.getUnobservedMessages(messages, record);
-    const contextWindowTokens = await this.tokenCounter.countMessagesAsync(unobservedMessages);
-    const otherThreadTokens = otherThreadContext ? this.tokenCounter.countString(otherThreadContext) : 0;
-    const pendingTokens = Math.max(0, contextWindowTokens + otherThreadTokens);
-
-    // Calculate threshold
-    const threshold = calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
-
-    // Calculate effective reflection threshold for UI display
-    const baseReflectionThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
-    const isSharedBudget = typeof this.observationConfig.messageTokens !== 'number';
-    const totalBudget = isSharedBudget ? (this.observationConfig.messageTokens as { min: number; max: number }).max : 0;
-    const effectiveObservationTokensThreshold = isSharedBudget
-      ? Math.max(totalBudget - threshold, 1000)
-      : baseReflectionThreshold;
-
-    // Calculate buffered chunk state
-    const bufferedChunks = this.getBufferedChunks(record);
-    const bufferedChunkTokens = bufferedChunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0);
-    const unbufferedPendingTokens = Math.max(0, pendingTokens - bufferedChunkTokens);
-
-    // Determine if async buffering should trigger
-    const asyncObservationEnabled = this.isAsyncObservationEnabled();
-    let shouldBuffer = false;
-    if (asyncObservationEnabled) {
-      const lockKey = this.getLockKey(threadId, resourceId);
-      shouldBuffer = this.shouldTriggerAsyncObservation(pendingTokens, lockKey, record, threshold);
-    }
-
-    return {
-      record,
-      pendingTokens,
-      threshold,
-      effectiveObservationTokensThreshold,
-      bufferedChunkTokens,
-      unbufferedPendingTokens,
-      shouldObserve: pendingTokens >= threshold,
-      shouldBuffer,
-      asyncObservationEnabled,
-      asyncReflectionEnabled: this.isAsyncReflectionEnabled(),
-      scope: this.scope,
-    };
-  }
 
   /**
    * Trigger async buffered observation if the token count has crossed a new interval.
@@ -4411,12 +4325,17 @@ ${formattedMessages}
     record: ObservationalMemoryRecord;
     pendingTokens: number;
     threshold: number;
+    effectiveObservationTokensThreshold: number;
+    unbufferedPendingTokens: number;
     shouldObserve: boolean;
     shouldBuffer: boolean;
     shouldReflect: boolean;
     bufferedChunkCount: number;
     bufferedChunkTokens: number;
     canActivate: boolean;
+    asyncObservationEnabled: boolean;
+    asyncReflectionEnabled: boolean;
+    scope: 'resource' | 'thread';
   }> {
     const { threadId, resourceId } = opts;
     const record = await this.getOrCreateRecord(threadId, resourceId);
@@ -4470,16 +4389,30 @@ ${formattedMessages}
     // Can activate?
     const canActivate = bufferedChunkCount > 0;
 
+    // Effective observation tokens threshold (for shared budget UI display)
+    const isSharedBudget = typeof this.observationConfig.messageTokens !== 'number';
+    const totalBudget = isSharedBudget ? (this.observationConfig.messageTokens as { min: number; max: number }).max : 0;
+    const effectiveObservationTokensThreshold = isSharedBudget
+      ? Math.max(totalBudget - threshold, 1000)
+      : reflectThreshold;
+
+    const unbufferedPendingTokens = Math.max(0, pendingTokens - bufferedChunkTokens);
+
     return {
       record,
       pendingTokens,
       threshold,
+      effectiveObservationTokensThreshold,
+      unbufferedPendingTokens,
       shouldObserve,
       shouldBuffer,
       shouldReflect,
       bufferedChunkCount,
       bufferedChunkTokens,
       canActivate,
+      asyncObservationEnabled,
+      asyncReflectionEnabled: this.isAsyncReflectionEnabled(),
+      scope: this.scope,
     };
   }
 

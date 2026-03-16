@@ -2011,7 +2011,7 @@ describe('full async buffering flow', () => {
   });
 });
 
-describe('getObservationStatus (processor-facing API)', () => {
+describe('getStatus', () => {
   let storage: InMemoryMemory;
   let om: ObservationalMemory;
   const threadId = 'obs-status-thread';
@@ -2023,7 +2023,7 @@ describe('getObservationStatus (processor-facing API)', () => {
 
   it('should return observation status with all expected fields', async () => {
     const messages = createBulkMessages(10, threadId);
-    const status = await om.getObservationStatus({
+    const status = await om.getStatus({
       threadId,
       messages,
     });
@@ -2033,33 +2033,21 @@ describe('getObservationStatus (processor-facing API)', () => {
     expect(typeof status.threshold).toBe('number');
     expect(typeof status.shouldObserve).toBe('boolean');
     expect(typeof status.shouldBuffer).toBe('boolean');
+    expect(typeof status.shouldReflect).toBe('boolean');
     expect(typeof status.scope).toBe('string');
+    expect(typeof status.canActivate).toBe('boolean');
+    expect(typeof status.asyncObservationEnabled).toBe('boolean');
   });
 
   it('should report shouldObserve=true when messages exceed threshold', async () => {
     const messages = createBulkMessages(10, threadId);
-    const status = await om.getObservationStatus({
+    const status = await om.getStatus({
       threadId,
       messages,
     });
 
     expect(status.shouldObserve).toBe(true);
     expect(status.pendingTokens).toBeGreaterThanOrEqual(status.threshold);
-  });
-
-  it('should account for currentObservationTokens in threshold calculation', async () => {
-    const messages = createBulkMessages(5, threadId);
-
-    // Without existing observations
-    const s1 = await om.getObservationStatus({ threadId, messages, currentObservationTokens: 0 });
-
-    // With large existing observations (dynamic threshold expands)
-    const s2 = await om.getObservationStatus({ threadId, messages, currentObservationTokens: 50_000 });
-
-    // Threshold should be different when existing observations are larger
-    // (dynamic threshold accounting means the effective threshold may shift)
-    expect(typeof s1.threshold).toBe('number');
-    expect(typeof s2.threshold).toBe('number');
   });
 });
 

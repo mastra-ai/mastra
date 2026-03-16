@@ -340,12 +340,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
 
       if (!readOnly) {
         const allMessages = messageList.get.all.db();
-        const status = await this.engine.getObservationStatus({
+        const status = await this.engine.getStatus({
           threadId,
           resourceId,
           messages: allMessages,
-          otherThreadContext: otherThreadsContext,
-          currentObservationTokens: record.observationTokenCount ?? 0,
         });
 
         record = status.record;
