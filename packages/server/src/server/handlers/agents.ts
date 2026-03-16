@@ -151,7 +151,7 @@ function schemaToJsonSchema(schema: PublicSchema<unknown> | undefined) {
     return undefined;
   }
 
-  return standardSchemaToJSONSchema(toStandardSchema(schema));
+  return standardSchemaToJSONSchema(toStandardSchema(schema), { target: 'draft-2020-12' });
 }
 
 export interface SerializedWorkflow {

@@ -380,6 +380,9 @@ describe('Agent Handlers', () => {
       expect(tools.composioTool.inputSchema).toContain('"query"');
       expect(tools.composioTool.outputSchema).toContain('"result"');
       expect(tools.composioTool.requestContextSchema).toContain('"userId"');
+      expect(tools.composioTool.inputSchema).toContain('https://json-schema.org/draft/2020-12/schema');
+      expect(tools.composioTool.outputSchema).toContain('https://json-schema.org/draft/2020-12/schema');
+      expect(tools.composioTool.requestContextSchema).toContain('https://json-schema.org/draft/2020-12/schema');
     });
 
     it('should not expose a model list for agents with dynamic single-model selection', async () => {
