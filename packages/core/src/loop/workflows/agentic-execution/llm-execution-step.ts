@@ -306,6 +306,7 @@ async function processOutputStream<OUTPUT = undefined>({
                 ...({ providerExecuted: chunk.payload.providerExecuted } as { providerExecuted: boolean | undefined }),
               },
             ],
+            ...buildResponseModelMetadata(runState),
           },
           createdAt: new Date(),
         };
