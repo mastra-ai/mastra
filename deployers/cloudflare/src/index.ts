@@ -88,9 +88,9 @@ export class CloudflareDeployer extends Deployer {
     if (loadedEnvVars.size > 0) {
       const envKeys = [...loadedEnvVars.keys()].join(', ');
       this.logger.warn(
-        `Environment variables from .env (${envKeys}) were not written to wrangler.jsonc.\n` +
-          `  Upload them as Cloudflare Secrets instead:\n` +
-          `    npx wrangler secret bulk .env`,
+        `Environment variables from .env (${envKeys}) were not written to wrangler.jsonc.
+Upload them as Cloudflare Secrets instead:
+npx wrangler secret bulk .env`,
       );
     }
 
