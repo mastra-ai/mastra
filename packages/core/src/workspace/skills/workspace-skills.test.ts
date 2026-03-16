@@ -2170,4 +2170,217 @@ Premium instructions.
       warnSpy.mockRestore();
     });
   });
+
+  // ===========================================================================
+  // Parallel I/O performance tests
+  // ===========================================================================
+
+  describe('parallel I/O performance', () => {
+    /**
+     * Simulates a slow filesystem backend (e.g. S3, GCS, remote AgentFS).
+     * Each I/O operation adds a configurable delay.
+     * Tracks call counts and total wall-clock time spent waiting.
+     */
+    function createSlowFilesystem(
+      files: Record<string, string | Buffer>,
+      delayMs: number,
+    ): MockSkillSource & { ioCalls: number; peakConcurrency: number } {
+      const fast = createMockFilesystem(files);
+      const tracker = { ioCalls: 0, peakConcurrency: 0, _inflight: 0 };
+
+      function trackConcurrency() {
+        tracker._inflight++;
+        if (tracker._inflight > tracker.peakConcurrency) {
+          tracker.peakConcurrency = tracker._inflight;
+        }
+      }
+
+      const delay = () =>
+        new Promise<void>(resolve => {
+          trackConcurrency();
+          setTimeout(() => {
+            tracker.ioCalls++;
+            tracker._inflight--;
+            resolve();
+          }, delayMs);
+        });
+
+      return {
+        ...fast,
+        ioCalls: 0,
+        peakConcurrency: 0,
+        get ioCalls() {
+          return tracker.ioCalls;
+        },
+        get peakConcurrency() {
+          return tracker.peakConcurrency;
+        },
+        exists: vi.fn(async (path: string) => {
+          await delay();
+          return fast.exists(path);
+        }),
+        stat: vi.fn(async (path: string) => {
+          await delay();
+          // Return a fixed past time so staleness check doesn't re-trigger discovery
+          const result = await fast.stat(path);
+          result.modifiedAt = new Date(Date.now() - 60_000);
+          result.createdAt = new Date(Date.now() - 60_000);
+          return result;
+        }),
+        readFile: vi.fn(async (path: string) => {
+          await delay();
+          return fast.readFile(path);
+        }),
+        readdir: vi.fn(async (path: string) => {
+          await delay();
+          return fast.readdir(path);
+        }),
+      };
+    }
+
+    function makeSkillMd(name: string, description: string): string {
+      return `---\nname: ${name}\ndescription: ${description}\n---\n\n# ${name}\n\nInstructions for ${name}.\n`;
+    }
+
+    /**
+     * Build a filesystem with N skills, each having references/scripts/assets subdirs.
+     */
+    function buildSkillsFilesystem(skillCount: number): Record<string, string | Buffer> {
+      const files: Record<string, string | Buffer> = {};
+      for (let i = 0; i < skillCount; i++) {
+        const name = `skill-${i}`;
+        files[`skills/${name}/SKILL.md`] = makeSkillMd(name, `Skill number ${i}`);
+        files[`skills/${name}/references/guide.md`] = `# Guide for ${name}`;
+      }
+      return files;
+    }
+
+    it('should parallelize initial discovery I/O calls', async () => {
+      const SKILL_COUNT = 6;
+      const DELAY_MS = 50; // 50ms per I/O op (conservative; real cloud FS can be 200-500ms)
+      const files = buildSkillsFilesystem(SKILL_COUNT);
+      const filesystem = createSlowFilesystem(files, DELAY_MS);
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      const start = performance.now();
+      const list = await skills.list();
+      const elapsed = performance.now() - start;
+
+      // All 6 skills should be discovered
+      expect(list).toHaveLength(SKILL_COUNT);
+
+      // The total I/O call count should still be high — we do the same work,
+      // just in parallel instead of serial.
+      expect(filesystem.ioCalls).toBeGreaterThanOrEqual(20);
+
+      // KEY ASSERTION: Peak concurrency > 1 proves operations are parallelized.
+      expect(filesystem.peakConcurrency).toBeGreaterThan(1);
+
+      // With parallelization, elapsed time should be significantly less than
+      // the serial estimate (ioCalls * DELAY_MS).
+      const serialEstimate = filesystem.ioCalls * DELAY_MS;
+      expect(elapsed).toBeLessThan(serialEstimate * 0.8);
+
+      // Log for visibility when running tests
+      console.log(
+        `[skills-perf] Initial discovery: ${filesystem.ioCalls} I/O ops, ` +
+          `peak concurrency: ${filesystem.peakConcurrency}, ` +
+          `elapsed: ${elapsed.toFixed(0)}ms (serial estimate: ${serialEstimate.toFixed(0)}ms)`,
+      );
+    });
+
+    it('should parallelize staleness check I/O calls', async () => {
+      const SKILL_COUNT = 6;
+      const DELAY_MS = 50;
+      const files = buildSkillsFilesystem(SKILL_COUNT);
+      const filesystem = createSlowFilesystem(files, DELAY_MS);
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      // Initial discovery
+      await skills.list();
+      const ioAfterInit = filesystem.ioCalls;
+
+      // Wait for the STALENESS_CHECK_COOLDOWN (2s) to expire so maybeRefresh
+      // actually runs the staleness check
+      await new Promise(resolve => setTimeout(resolve, WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN + 100));
+
+      const ioBeforeRefresh = filesystem.ioCalls;
+
+      const start = performance.now();
+      await skills.maybeRefresh();
+      const elapsed = performance.now() - start;
+
+      const stalenessIoCalls = filesystem.ioCalls - ioBeforeRefresh;
+
+      // Staleness check does: stat(base) + readdir(base) + stat(each skill dir)
+      // = 1 + 1 + 6 = 8 I/O calls for 6 skills
+      expect(stalenessIoCalls).toBeGreaterThanOrEqual(8);
+
+      // The subdirectory stats are now parallelized, so peak concurrency across
+      // the whole test run (including init) should be > 1
+      expect(filesystem.peakConcurrency).toBeGreaterThan(1);
+
+      console.log(
+        `[skills-perf] Staleness check: ${stalenessIoCalls} I/O ops, ` +
+          `peak concurrency: ${filesystem.peakConcurrency}, ` +
+          `elapsed: ${elapsed.toFixed(0)}ms (after init used ${ioAfterInit} ops)`,
+      );
+    }, 10_000); // Extended timeout for the 2s cooldown wait
+
+    it('should show that parallelization reduces wall-clock time scaling', async () => {
+      const DELAY_MS = 50;
+      const counts = [3, 6, 12];
+      const results: Array<{ count: number; elapsed: number; ioCalls: number; peakConcurrency: number }> = [];
+
+      for (const count of counts) {
+        const files = buildSkillsFilesystem(count);
+        const filesystem = createSlowFilesystem(files, DELAY_MS);
+
+        const skills = new WorkspaceSkillsImpl({
+          source: filesystem,
+          skills: ['skills'],
+        });
+
+        const start = performance.now();
+        await skills.list();
+        const elapsed = performance.now() - start;
+
+        results.push({ count, elapsed, ioCalls: filesystem.ioCalls, peakConcurrency: filesystem.peakConcurrency });
+      }
+
+      // I/O calls should scale roughly linearly with skill count
+      // (each additional skill adds ~4-6 I/O operations)
+      const ioPerSkill3 = results[0]!.ioCalls / results[0]!.count;
+      const ioPerSkill12 = results[2]!.ioCalls / results[2]!.count;
+      // The per-skill I/O count should be similar (within 2x) regardless of total count
+      expect(ioPerSkill12).toBeGreaterThan(ioPerSkill3 * 0.5);
+      expect(ioPerSkill12).toBeLessThan(ioPerSkill3 * 2);
+
+      // With parallelization, wall-clock time should scale sub-linearly:
+      // 12 skills should take less than 4x the time of 3 skills
+      // (serial would be ~4x, parallel should be much less)
+      const ratio = results[2]!.elapsed / results[0]!.elapsed;
+      expect(ratio).toBeLessThan(4); // Sub-linear scaling due to parallelization
+
+      // All runs should show concurrent I/O
+      for (const r of results) {
+        expect(r.peakConcurrency).toBeGreaterThan(1);
+      }
+
+      for (const r of results) {
+        console.log(
+          `[skills-perf] ${r.count} skills: ${r.ioCalls} I/O ops, ${r.elapsed.toFixed(0)}ms, ` +
+            `peak concurrency: ${r.peakConcurrency}`,
+        );
+      }
+    }, 30_000);
+  });
 });
