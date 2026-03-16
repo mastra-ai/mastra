@@ -196,14 +196,21 @@ This allows you to quickly expose the generative capabilities of your agents thr
 
 ### Accessing MCP Context in Tools
 
-Tools exposed through `MCPServer` can access MCP request context (authentication, session IDs, etc.) via `context.requestContext` or `context.mcp.extra`. Both are populated for all tool types — direct tool calls, agent tool calls, and workflow tool calls.
+Tools exposed through `MCPServer` can access MCP request context (authentication, session IDs, etc.) via two different properties depending on how the tool is invoked:
 
-| Access Method | Description |
+| Call Pattern | Access Method |
 | - | - |
-| `context?.mcp?.extra` | Raw MCP extra data (auth info, session ID, etc.) |
-| `context?.requestContext` | `RequestContext` instance populated from `mcp.extra` |
+| Direct tool call | `context?.mcp?.extra` |
+| Agent tool call | `context?.requestContext?.get("mcp.extra")` |
 
-#### Example
+**Universal pattern** (works in both contexts):
+
+```typescript
+const mcpExtra = context?.mcp?.extra ?? context?.requestContext?.get('mcp.extra')
+const authInfo = mcpExtra?.authInfo
+```
+
+#### Example: Tool that works in both contexts
 
 ```typescript
 import { createTool } from '@mastra/core/tools'
@@ -216,11 +223,11 @@ const fetchUserData = createTool({
     userId: z.string().describe('The ID of the user to fetch'),
   }),
   execute: async (inputData, context) => {
-    // Access auth info via mcp.extra
-    const authInfo = context?.mcp?.extra?.authInfo
-
-    // Or via requestContext
-    // const authInfo = context?.requestContext?.get('authInfo')
+    // Access MCP authentication context
+    // When called directly via MCP: context.mcp.extra
+    // When called via agent: context.requestContext.get('mcp.extra')
+    const mcpExtra = context?.mcp?.extra || context?.requestContext?.get('mcp.extra')
+    const authInfo = mcpExtra?.authInfo
 
     if (!authInfo?.token) {
       throw new Error('Authentication required')
@@ -1371,15 +1378,20 @@ execute: async (inputData, context) => {
 
 ### Passing `RequestContext` through to agent
 
-`requestContext` is automatically populated from `mcp.extra` for all tool types, so you can pass it directly to agents:
-
 ```typescript
 execute: async (inputData, context) => {
+  // Access the auth data you set in middleware
   const authInfo = context?.mcp?.extra?.authInfo
+
+  const requestContext = context.requestContext || new RequestContext().set('someKey', authInfo)
 
   if (!authInfo?.extra?.userId) {
     return { error: 'Authentication required' }
   }
+
+  // Use the auth data
+  console.log('User ID:', authInfo.extra.userId)
+  console.log('Email:', authInfo.extra.email)
 
   const agent = context?.mastra?.getAgentById('some-agent-id')
 
@@ -1387,8 +1399,7 @@ execute: async (inputData, context) => {
     return { error: "Agent 'some-agent-id' not found" }
   }
 
-  // requestContext is already populated from mcp.extra
-  const response = await agent.generate(prompt, { requestContext: context.requestContext })
+  const response = await agent.generate(prompt, { requestContext })
 
   return response.text
 }
