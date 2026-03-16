@@ -635,8 +635,8 @@ export class MessageList {
    *
    * @returns true if the tool call was found and updated, false otherwise.
    */
-  public updateToolInvocation(inputPart: MastraMessagePart): boolean {
-    if (inputPart.type !== 'tool-invocation' || !inputPart.toolInvocation?.toolCallId) {
+  public updateToolInvocation(inputPart: Extract<MastraMessagePart, { type: 'tool-invocation' }>): boolean {
+    if (!inputPart.toolInvocation?.toolCallId) {
       return false;
     }
     const toolCallId = inputPart.toolInvocation.toolCallId;
