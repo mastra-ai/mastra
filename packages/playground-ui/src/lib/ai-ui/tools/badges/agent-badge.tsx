@@ -65,7 +65,7 @@ export const AgentBadge = ({
       if (message.type === 'text') {
         return true;
       }
-      return !!message.toolOutput;
+      return message.toolOutput !== undefined;
     });
 
   let toolCalled = allChildToolsComplete;
