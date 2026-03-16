@@ -241,7 +241,7 @@ const result = await agent.stream('weather in vancouver?', {
   prepareStep: async ({ stepNumber }) => {
     if (stepNumber === 0) {
       return {
-        model: 'anthropic/claude-sonnet-4-20250514',
+        model: 'openai/gpt-5.4',
         tools: {
           weatherTool,
         },
@@ -249,7 +249,7 @@ const result = await agent.stream('weather in vancouver?', {
       }
     }
     return {
-      model: 'anthropic/claude-sonnet-4-20250514',
+      model: 'openai/gpt-5.4',
       tools: undefined,
       structuredOutput: {
         schema: z.object({
