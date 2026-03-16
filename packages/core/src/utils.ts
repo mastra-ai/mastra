@@ -113,7 +113,9 @@ export function generateEmptyFromSchema(schema: string | Record<string, unknown>
       parsedSchema.properties as Record<string, Record<string, unknown>>,
     )) {
       if (prop.default !== undefined) {
-        obj[key] = prop.default;
+        obj[key] = typeof prop.default === 'object' && prop.default !== null
+          ? JSON.parse(JSON.stringify(prop.default))
+          : prop.default;
       } else if (prop.type === 'object' && prop.properties) {
         obj[key] = generateEmptyFromSchema(prop);
       } else if (prop.type === 'object') {
