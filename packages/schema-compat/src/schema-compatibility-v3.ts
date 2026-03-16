@@ -10,6 +10,7 @@ import {
   ZodDefault,
   ZodNull,
   ZodNullable,
+  ZodIntersection,
 } from 'zod/v3';
 import type { ZodTypeAny } from 'zod/v3';
 import type { Targets } from 'zod-to-json-schema';
@@ -50,6 +51,7 @@ export const isString = (v: ZodTypeAny): v is ZodString => v instanceof ZodStrin
 export const isNumber = (v: ZodTypeAny): v is ZodNumber => v instanceof ZodNumber;
 export const isDate = (v: ZodTypeAny): v is ZodDate => v instanceof ZodDate;
 export const isDefault = (v: ZodTypeAny): v is ZodDefault<any> => v instanceof ZodDefault;
+export const isIntersection = (v: ZodTypeAny): v is ZodIntersection<any, any> => v instanceof ZodIntersection;
 
 /**
  * Zod types that are not supported by most AI model providers and should be avoided.
@@ -261,6 +263,13 @@ export class SchemaCompatLayer {
    */
   isDefault(v: ZodTypeAny): v is ZodDefault<any> {
     return v instanceof ZodDefault;
+  }
+
+  /**
+   * Type guard for intersection Zod types
+   */
+  isIntersection(v: ZodTypeAny): v is ZodIntersection<any, any> {
+    return v instanceof ZodIntersection;
   }
 
   /**
@@ -624,6 +633,40 @@ export class SchemaCompatLayer {
     } else {
       return value;
     }
+  }
+
+  /**
+   * Recursively collects leaf types from a ZodIntersection tree.
+   */
+  private collectIntersectionLeaves(value: ZodTypeAny): ZodTypeAny[] {
+    if (value instanceof ZodIntersection) {
+      return [...this.collectIntersectionLeaves(value._def.left), ...this.collectIntersectionLeaves(value._def.right)];
+    }
+    return [value];
+  }
+
+  /**
+   * Default handler for Zod intersection types.
+   * Flattens the intersection tree and merges object shapes into a single z.object().
+   * Falls back to z.any() for non-object intersections.
+   */
+  public defaultZodIntersectionHandler(value: ZodIntersection<any, any>): ZodTypeAny {
+    const leaves = this.collectIntersectionLeaves(value);
+    const processed = leaves.map(leaf => this.processZodType(leaf));
+
+    if (processed.every(p => p instanceof ZodObject)) {
+      const mergedShape: Record<string, ZodTypeAny> = {};
+      for (const obj of processed as ZodObject<any, any, any>[]) {
+        Object.assign(mergedShape, obj.shape);
+      }
+      let result: ZodTypeAny = z.object(mergedShape);
+      if (value.description) {
+        result = result.describe(value.description);
+      }
+      return result;
+    }
+
+    return z.any().describe(value.description || 'intersection type');
   }
 
   /**
