@@ -56,7 +56,9 @@ for await (const chunk of stream.fullStream) {
 ```
 
 :::note
-Agent approval uses snapshots to capture request state. Configure a [storage provider](/docs/storage/overview) on your Mastra instance or you'll see a "snapshot not found" error.
+
+Agent approval uses snapshots to capture request state. Configure a [storage provider](/docs/memory/storage) on your Mastra instance or you'll see a "snapshot not found" error.
+
 :::
 
 ## How approval works
