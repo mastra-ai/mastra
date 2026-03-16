@@ -436,7 +436,12 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             if (isWorkflow) {
               output = (chunk.payload.result as any)?.result;
             } else if (isAgent) {
-              output = (parts[toolPartIndex] as any).output ?? chunk.payload.result;
+              const existingOutput = (parts[toolPartIndex] as any).output;
+              // Merge streaming childMessages with the backend result (which has
+              // subAgentToolResults, text, subAgentThreadId, etc.)
+              output = existingOutput
+                ? { ...(chunk.payload.result as any), childMessages: existingOutput.childMessages }
+                : chunk.payload.result;
             } else {
               output = chunk.payload.result;
             }
