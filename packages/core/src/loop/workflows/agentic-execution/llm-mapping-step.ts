@@ -245,6 +245,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
 
       if (inputData?.length) {
         for (const toolCall of inputData) {
+          // No result yet — skip emitting a chunk. For deferred provider-executed tools
+          // (e.g. Anthropic web_search), the result arrives in a later step and is handled
+          // by processOutputStream's 'tool-result' case in llm-execution-step.
+          if (toolCall.result === undefined) continue;
+
           const chunk: ChunkType<OUTPUT> = {
             type: 'tool-result',
             runId: rest.runId,
