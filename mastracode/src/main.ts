@@ -2,6 +2,8 @@
 /**
  * Main entry point for Mastra Code TUI.
  */
+import fs from 'node:fs';
+
 import { isStreamDestroyedError } from './error-classification.js';
 import { hasHeadlessFlag, headlessMain } from './headless.js';
 import { loadSettings } from './onboarding/settings.js';
@@ -63,14 +65,21 @@ async function tuiMain() {
   // MASTRA_THEME env var is the highest-priority override
   const envTheme = process.env.MASTRA_THEME?.toLowerCase();
   let themeMode: 'dark' | 'light';
+  let detectedBgHex: string | undefined;
   if (envTheme === 'dark' || envTheme === 'light') {
     themeMode = envTheme;
   } else {
     const settings = loadSettings();
     const themePref = settings.preferences.theme;
-    themeMode = themePref === 'dark' || themePref === 'light' ? themePref : await detectTerminalTheme();
+    if (themePref === 'dark' || themePref === 'light') {
+      themeMode = themePref;
+    } else {
+      const detection = await detectTerminalTheme();
+      themeMode = detection.mode;
+      detectedBgHex = detection.detectedBgHex;
+    }
   }
-  applyThemeMode(themeMode);
+  applyThemeMode(themeMode, detectedBgHex);
 
   const tui = new MastraTUI({
     harness,
@@ -132,7 +141,16 @@ function handleFatalError(error: unknown): never {
     process.exit(1);
   }
 
-  write(`Fatal error: ${error instanceof Error ? error.message : String(error)}`);
+  const msg = `Fatal error: ${error instanceof Error ? error.message : String(error)}`;
+  write(msg);
+  // Write crash log to file so it persists even if terminal closes
+  try {
+    const crashLog = `[${new Date().toISOString()}] ${msg}\n${error instanceof Error && error.stack ? error.stack + '\n' : ''}`;
+    fs.appendFileSync('/tmp/mastra-crash.log', crashLog);
+  } catch {}
+  if (error instanceof Error && error.stack) {
+    write(error.stack);
+  }
   process.exit(1);
 }
 

@@ -17,7 +17,7 @@ import type { Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 import { ANTHROPIC_OAUTH_PROVIDER_ID, CLAUDE_MAX_OAUTH_WARNING_MESSAGE } from '../auth/claude-max-warning.js';
 import { AskQuestionInlineComponent } from '../tui/components/ask-question-inline.js';
-import { theme, getSelectListTheme, mastra } from '../tui/theme.js';
+import { BOX_INDENT, theme, getSelectListTheme, mastra } from '../tui/theme.js';
 import type { ModePack, OMPack } from './packs.js';
 
 // ---------------------------------------------------------------------------
@@ -192,7 +192,7 @@ export class OnboardingInlineComponent extends Container implements Focusable {
 
   private makeBox(): Box {
     this.clearStep();
-    this.stepBox = new Box(1, 1, (text: string) => theme.bg('toolPendingBg', text));
+    this.stepBox = new Box(BOX_INDENT, 1, (text: string) => theme.bg('toolPendingBg', text));
     // Add a spacer between steps, but not before the very first one
     if (this.stepCount > 0) {
       this.addChild(new Spacer(1));
@@ -472,9 +472,9 @@ export class OnboardingInlineComponent extends Container implements Focusable {
     this.collapseStep(`Model pack → Custom (${packName})`);
 
     const modes: Array<{ id: 'plan' | 'build' | 'fast'; label: string; color: string }> = [
-      { id: 'plan', label: 'plan', color: mastra.blue },
-      { id: 'build', label: 'build', color: mastra.purple },
-      { id: 'fast', label: 'fast', color: mastra.green },
+      { id: 'plan', label: 'plan', color: mastra.purple },
+      { id: 'build', label: 'build', color: mastra.green },
+      { id: 'fast', label: 'fast', color: mastra.orange },
     ];
 
     const models: Record<string, string> = { build: '', plan: '', fast: '' };
