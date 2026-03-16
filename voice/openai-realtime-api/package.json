@@ -33,7 +33,7 @@
   "dependencies": {
     "openai-realtime-api": "^1.0.8",
     "ws": "^8.19.0",
-    "zod-to-json-schema": "^3.24.6"
+    "zod-to-json-schema": "^3.25.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

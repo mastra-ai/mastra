@@ -1,5 +1,24 @@
 # @mastra/core
 
+## 1.13.3-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5))
+
+- Fixed provider-executed tool calls being saved out of order or without results in memory replay. (Fixes #13762) ([#13860](https://github.com/mastra-ai/mastra/pull/13860))
+
+- Add AI Gateway tool support in the agentic loop. ([#14016](https://github.com/mastra-ai/mastra/pull/14016))
+
+  Gateway tools (e.g., `gateway.tools.perplexitySearch()`) are provider-executed but, unlike native provider tools (e.g., `openai.tools.webSearch()`), the LLM provider does not store their results server-side. The agentic loop now correctly infers `providerExecuted` for these tools, merges streamed provider results with their corresponding tool calls, and skips local execution when a provider result is already present.
+
+  Fixes #13190
+
+- Fixed processor state not persisting between processOutputStream and processOutputResult when processors are wrapped in workflows. State set during stream processing is now correctly accessible in processOutputResult. ([#14279](https://github.com/mastra-ai/mastra/pull/14279))
+
+- Updated dependencies [[`4a7ce05`](https://github.com/mastra-ai/mastra/commit/4a7ce05125b8d3d260f68f1fc4a6c6866d22ba24)]:
+  - @mastra/schema-compat@1.2.5-alpha.0
+
 ## 1.13.2
 
 ### Patch Changes

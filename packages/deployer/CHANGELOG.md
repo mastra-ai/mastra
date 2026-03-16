@@ -1,5 +1,17 @@
 # @mastra/deployer
 
+## 1.13.3-alpha.0
+
+### Patch Changes
+
+- Added `MASTRA_HOST` environment variable support for configuring the server bind address. Previously, the host could only be set via `server.host` in the Mastra config. Now it follows the same pattern as `PORT`: config value takes precedence, then env var, then defaults to `localhost`. ([#14313](https://github.com/mastra-ai/mastra/pull/14313))
+
+- Fixed tsconfig path aliases during build when imports use .js-style module specifiers. ([#13998](https://github.com/mastra-ai/mastra/pull/13998))
+
+- Updated dependencies [[`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`085e371`](https://github.com/mastra-ai/mastra/commit/085e3718a7d0fe9a210fe7dd1c867b9bdfe8d16b), [`ce26fe2`](https://github.com/mastra-ai/mastra/commit/ce26fe2166dd90254f8bee5776e55977143e97de), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1), [`a1b3a48`](https://github.com/mastra-ai/mastra/commit/a1b3a48a92473177b80b843b515d6054b7817724)]:
+  - @mastra/core@1.13.3-alpha.0
+  - @mastra/server@1.13.3-alpha.0
+
 ## 1.13.2
 
 ### Patch Changes
