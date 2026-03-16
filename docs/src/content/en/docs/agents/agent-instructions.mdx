@@ -1,0 +1,172 @@
+---
+title: "Agent instructions | Agents"
+description: How to write agent instructions in Mastra, including static strings, dynamic functions, and Prompt Blocks for reusable modular prompts.
+packages:
+  - "@mastra/core"
+---
+
+# Agent instructions
+
+Instructions define an agent's behavior, personality, and capabilities. They are system-level prompts that establish the agent's core identity and expertise. Mastra supports static strings, dynamic functions, and reusable **Prompt Blocks** for composing instructions modularly.
+
+## Static instructions
+
+The simplest form — a plain string passed to the `instructions` field:
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const myAgent = new Agent({
+  id: 'my-agent',
+  name: 'My Agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'openai/gpt-4o',
+})
+```
+
+You can also pass an array of strings or system message objects:
+
+```typescript
+// Array of strings
+instructions: ['You are a helpful assistant.', 'Always be concise.']
+
+// Array of system messages
+instructions: [
+  { role: 'system', content: 'You are a helpful assistant.' },
+  { role: 'system', content: 'You have expertise in TypeScript.' },
+]
+```
+
+## Dynamic instructions
+
+Instructions can be an async function that resolves at request time. This lets you personalize behavior based on user context, fetch prompts from an external registry, or run A/B tests.
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const myAgent = new Agent({
+  id: 'my-agent',
+  name: 'My Agent',
+  instructions: async ({ requestContext }) => {
+    const userTier = requestContext.get('user-tier')
+    if (userTier === 'enterprise') {
+      return 'You are an expert analyst with access to advanced tools.'
+    }
+    return 'You are a helpful assistant.'
+  },
+  model: 'openai/gpt-4o',
+})
+```
+
+:::info
+
+See [Request Context](/docs/server/request-context#dynamic-instructions) for more examples of runtime instruction resolution.
+
+:::
+
+## Prompt Blocks
+
+Prompt Blocks are reusable, versioned instruction fragments that you create and manage in Mastra Studio. Instead of hardcoding every instruction in code, you compose an agent's instructions from modular blocks — each independently editable, publishable, and optionally conditional.
+
+### How Prompt Blocks work
+
+An agent's `instructions` field can accept an array of `AgentInstructionBlock` items. At runtime, Mastra resolves each block into a string and joins them with double newlines to form the final system prompt.
+
+There are three block types:
+
+```typescript
+type AgentInstructionBlock =
+  | { type: 'text'; content: string }
+  | { type: 'prompt_block_ref'; id: string }
+  | { type: 'prompt_block'; content: string; rules?: RuleGroup }
+```
+
+| Block type | What it does |
+| - | - |
+| `text` | Static text, rendered directly. Supports template variables. |
+| `prompt_block` | Inline block with optional conditional rules. Included only when rules pass. |
+| `prompt_block_ref` | Reference to a stored Prompt Block by ID. Fetched from storage at runtime. Only published blocks are included by default. |
+
+### Creating Prompt Blocks in Mastra Studio
+
+1. Open Mastra Studio and navigate to the **Prompts** section
+1. Click **New Prompt Block** and give it a name
+1. Write the instruction content — you can use template variables like `{{user.name}}`
+1. Click **Publish** to make the block available to agents
+
+Once published, copy the block's ID and reference it in your agent config.
+
+### Using Prompt Blocks in an agent
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const myAgent = new Agent({
+  id: 'my-agent',
+  name: 'My Agent',
+  instructions: [
+    {
+      type: 'text',
+      content: 'You are a helpful assistant.',
+    },
+    {
+      type: 'prompt_block_ref',
+      id: 'your-prompt-block-id',
+    },
+  ],
+  model: 'openai/gpt-4o',
+})
+```
+
+### Inline Prompt Blocks with conditional rules
+
+Use `type: 'prompt_block'` for inline blocks that are included only when a rule condition is met:
+
+```typescript
+instructions: [
+  {
+    type: 'text',
+    content: 'You are a helpful assistant.',
+  },
+  {
+    type: 'prompt_block',
+    content: 'You have access to enterprise reporting tools. Always include data citations.',
+    rules: {
+      operator: 'AND',
+      conditions: [{ field: 'user-tier', operator: 'equals', value: 'enterprise' }],
+    },
+  },
+]
+```
+
+The block is resolved against the `requestContext` at runtime — if the rule fails, the block is silently excluded from the final instruction string.
+
+### Template variables
+
+Both `text` and `prompt_block` content supports template interpolation using `{{variable}}` syntax. Variables are resolved from the `requestContext` at runtime:
+
+```typescript
+instructions: [
+  {
+    type: 'text',
+    content: 'You are assisting {{user.name}}. Their account tier is {{user.tier}}.',
+  },
+]
+```
+
+### Draft vs published blocks
+
+When referencing a block via `prompt_block_ref`, only **published** versions are included in live agent responses. Draft versions are only resolved in Mastra Studio's preview mode. This gives you a safe editing and review workflow before changes reach production.
+
+### Why use Prompt Blocks?
+
+- **Reuse** — share a single block across multiple agents. Update it once, all agents pick up the change on next publish.
+- **Version history** — every edit creates a new version. You can roll back to any previous version from Studio.
+- **Conditional logic** — include or exclude blocks based on request context without changing agent code.
+- **Non-engineer editing** — product and content teams can edit and publish prompt changes in Studio without a code deploy.
+
+## Related
+
+- [Dynamic instructions](/docs/server/request-context#dynamic-instructions)
+- [Request Context](/docs/server/request-context)
+- [Using agents](/docs/agents/overview)

@@ -58,6 +58,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/agent-instructions',
+          label: 'Instructions',
+        },
+        {
+          type: 'doc',
           id: 'agents/using-tools',
           label: 'Using Tools',
         },
