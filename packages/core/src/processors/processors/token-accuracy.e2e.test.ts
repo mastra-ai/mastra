@@ -55,11 +55,12 @@ describe('TokenLimiterProcessor', () => {
     expect(result[1].id).toBe('message-9');
   });
 
-  it('should throw TripWire for empty messages array', async () => {
+  it('should return early for empty messages array without throwing', async () => {
     const limiter = new TokenLimiterProcessor(1000);
     const mockAbort = vi.fn() as any;
     const emptyMessageList = new MessageList({ threadId: 'test-empty', resourceId: 'test' });
 
+    // Should not throw when there are no messages (e.g., during resumeStream)
     await expect(
       limiter.processInputStep({
         messageList: emptyMessageList,
@@ -72,7 +73,10 @@ describe('TokenLimiterProcessor', () => {
         model: { modelId: 'test-model' } as any,
         retryCount: 0,
       }),
-    ).rejects.toThrow('TokenLimiterProcessor: No messages to process');
+    ).resolves.not.toThrow();
+
+    // Message list should remain empty
+    expect(emptyMessageList.get.all.db().length).toBe(0);
   });
 
   it('should use different encodings based on configuration', async () => {
