@@ -83,6 +83,19 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
       return;
     }
 
+    // Pre-populate statuses as "connecting" so callers can see in-progress state
+    const serverNames = Object.keys(servers);
+    for (const name of serverNames) {
+      serverStatuses.set(name, {
+        name,
+        connected: false,
+        connecting: true,
+        toolCount: 0,
+        toolNames: [],
+        transport: getTransport(servers[name]!),
+      });
+    }
+
     client = new MCPClient({
       id: 'mastra-code-mcp',
       servers: buildServerDefs(servers),
@@ -91,7 +104,6 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
     // Use listToolsets() to get tools grouped by server name.
     // Servers that fail to connect are silently skipped (no entry in result),
     // letting us detect which servers actually connected vs which failed.
-    const serverNames = Object.keys(servers);
 
     try {
       const toolsets = await client.listToolsets();

@@ -60,8 +60,8 @@ export async function handleMcpCommand(ctx: SlashCommandContext, args: string[])
   lines.push('');
 
   for (const status of statuses) {
-    const icon = status.connected ? '\u2713' : '\u2717';
-    const state = status.connected ? 'connected' : `error: ${status.error}`;
+    const icon = status.connecting ? '⟳' : status.connected ? '\u2713' : '\u2717';
+    const state = status.connecting ? 'connecting...' : status.connected ? 'connected' : `error: ${status.error}`;
     lines.push(`  ${icon} ${status.name} [${status.transport}] (${state})`);
     if (status.toolNames.length > 0) {
       for (const toolName of status.toolNames) {
