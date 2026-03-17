@@ -219,10 +219,9 @@ export function setupDummyApiKeys(
   mode: string,
   providers: (keyof ProviderApiKeys)[] = ['openai', 'anthropic', 'google', 'openrouter'],
 ): void {
-  // Set dummy keys for modes that may replay recordings.
-  // In auto mode, we may replay so dummy keys are needed as fallback.
-  // Only skip for live, record, and update modes which always need real keys.
-  if (mode === 'live' || mode === 'record' || mode === 'update') return;
+  // Only set dummy keys in explicit replay mode.
+  // All other modes (live, record, update, auto) require real keys.
+  if (mode !== 'replay') return;
 
   const dummyKeys: ProviderApiKeys = {
     openai: 'sk-dummy-for-replay-mode',
@@ -279,7 +278,7 @@ export function hasRealApiKey(provider: keyof ProviderApiKeys): boolean {
     google: 'GOOGLE_API_KEY',
     openrouter: 'OPENROUTER_API_KEY',
   };
-  const key = process.env[envVars[provider]];
+  const key = process.env[envVars[provider]]?.trim();
   if (!key) return false;
   // Check if it's a dummy key
   return !key.includes('-dummy-') && !key.includes('dummy-');

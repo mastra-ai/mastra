@@ -75,6 +75,16 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       await vector.turso.close();
     });
 
+    // Helper to create common step parameters for processInputStep calls
+    const makeStepParams = () => ({
+      stepNumber: 0,
+      steps: [] as any[],
+      state: {},
+      model: {} as any,
+      retryCount: 0,
+      systemMessages: [] as any[],
+    });
+
     it('should apply TokenLimiter when retrieving messages', async () => {
       // Create a thread
       const thread = await memory.createThread({
@@ -104,14 +114,9 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       await tokenLimiter.processInputStep({
         messageList: tokenLimitList,
         messages: tokenLimitList.get.all.db(),
-        systemMessages: [],
         abort,
         requestContext: new RequestContext(),
-        stepNumber: 0,
-        steps: [],
-        state: {},
-        model: {} as any,
-        retryCount: 0,
+        ...makeStepParams(),
       });
       const result = tokenLimitList.get.all.db();
 
@@ -151,16 +156,11 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       await tokenLimiter2.processInputStep({
         messageList,
         messages: messageList.get.all.db(),
-        systemMessages: [],
         abort: () => {
           throw new Error('Aborted');
         },
         requestContext: new RequestContext(),
-        stepNumber: 0,
-        steps: [],
-        state: {},
-        model: {} as any,
-        retryCount: 0,
+        ...makeStepParams(),
       });
       const processedMessages = messageList.get.all.db();
 
@@ -352,14 +352,9 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       await tokenLimiter.processInputStep({
         messageList: tokenLimitList,
         messages: tokenLimitList.get.all.db(),
-        systemMessages: [],
         abort,
         requestContext,
-        stepNumber: 0,
-        steps: [],
-        state: {},
-        model: {} as any,
-        retryCount: 0,
+        ...makeStepParams(),
       });
       const result = v2ToCoreMessages(tokenLimitList.get.all.db());
 
@@ -622,14 +617,9 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       await tokenLimiter.processInputStep({
         messageList: tokenLimitList,
         messages: tokenLimitList.get.all.db(),
-        systemMessages: [],
         abort,
         requestContext: new RequestContext(),
-        stepNumber: 0,
-        steps: [],
-        state: {},
-        model: {} as any,
-        retryCount: 0,
+        ...makeStepParams(),
       });
       const tokenLimitedResult = v2ToCoreMessages(tokenLimitList.get.all.db());
 
@@ -660,14 +650,9 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       await tokenLimiter2.processInputStep({
         messageList: tokenLimitList2,
         messages: tokenLimitList2.get.all.db(),
-        systemMessages: [],
         abort,
         requestContext,
-        stepNumber: 0,
-        steps: [],
-        state: {},
-        model: {} as any,
-        retryCount: 0,
+        ...makeStepParams(),
       });
       const combinedResult = v2ToCoreMessages(tokenLimitList2.get.all.db());
 
