@@ -139,14 +139,16 @@ export class WorkingMemory implements Processor {
     let instruction: string;
     if (isReadOnly) {
       instruction = this.getReadOnlyWorkingMemoryInstruction({ template, data: workingMemoryData });
-    } else if (this.options.useVNext) {
-      instruction = this.getWorkingMemoryToolInstructionVNext({ template, data: workingMemoryData });
-    } else {
+    } else if (this.options.toolInstruction) {
       instruction = this.getWorkingMemoryToolInstruction({
         template,
         data: workingMemoryData,
         toolInstruction: this.options.toolInstruction,
       });
+    } else if (this.options.useVNext) {
+      instruction = this.getWorkingMemoryToolInstructionVNext({ template, data: workingMemoryData });
+    } else {
+      instruction = this.getWorkingMemoryToolInstruction({ template, data: workingMemoryData });
     }
 
     // If we have a MessageList, add working memory to it with source: 'memory'
