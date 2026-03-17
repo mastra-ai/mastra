@@ -39,7 +39,7 @@
     "@mastra/core": "workspace:*",
     "@mastra/gcs": "workspace:*",
     "@mastra/s3": "workspace:*",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.3.1",

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.13.2",
+  "version": "1.13.3-alpha.1",
   "description": "",
   "type": "module",
   "files": [
@@ -133,7 +133,7 @@
     "@mastra/server": "workspace:*",
     "@types/babel__core": "^7.20.5",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",

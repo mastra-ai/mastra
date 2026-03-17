@@ -230,6 +230,7 @@ export interface StudioInjectionConfig {
   hideCloudCta: string;
   cloudApiEndpoint: string;
   experimentalFeatures: string;
+  templates: string;
   telemetryDisabled: string;
   requestContextPresets: string;
   autoDetectUrl?: string;
@@ -252,6 +253,7 @@ export function injectStudioHtmlConfig(html: string, config: StudioInjectionConf
   html = html.replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, config.hideCloudCta);
   html = html.replace(`'%%MASTRA_CLOUD_API_ENDPOINT%%'`, config.cloudApiEndpoint);
   html = html.replace(`'%%MASTRA_EXPERIMENTAL_FEATURES%%'`, config.experimentalFeatures);
+  html = html.replace(`'%%MASTRA_TEMPLATES%%'`, config.templates);
   html = html.replace(`'%%MASTRA_TELEMETRY_DISABLED%%'`, config.telemetryDisabled);
   html = html.replace(`'%%MASTRA_REQUEST_CONTEXT_PRESETS%%'`, config.requestContextPresets);
   if (config.autoDetectUrl) {

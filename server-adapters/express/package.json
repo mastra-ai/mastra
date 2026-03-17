@@ -1,6 +1,6 @@
 {
   "name": "@mastra/express",
-  "version": "1.2.4",
+  "version": "1.2.5-alpha.1",
   "description": "Mastra Express adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -42,7 +42,7 @@
     "@mastra/observability": "workspace:*",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "@types/swagger-ui-express": "^4.1.8",
     "cors": "^2.8.6",
     "eslint": "^9.39.4",
