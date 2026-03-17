@@ -145,7 +145,8 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
                 if (
                   '$schema' in sdkTool.inputSchema &&
                   typeof sdkTool.inputSchema.$schema === 'string' &&
-                  sdkTool.inputSchema.$schema.startsWith('http://json-schema.org/')
+                  (sdkTool.inputSchema.$schema.startsWith('http://json-schema.org/') ||
+                    sdkTool.inputSchema.$schema.startsWith('https://json-schema.org/'))
                 ) {
                   parameters = sdkTool.inputSchema;
                 } else if (isStandardSchemaWithJSON(sdkTool.inputSchema)) {
