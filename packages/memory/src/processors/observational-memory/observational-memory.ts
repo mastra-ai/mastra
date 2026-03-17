@@ -596,26 +596,6 @@ export class ObservationalMemory {
     };
   }
 
-  getRuntimeModelContext(
-    model: { provider: string; modelId: string } | undefined,
-  ): TokenCounterModelContext | undefined {
-    if (!model?.modelId) {
-      return undefined;
-    }
-
-    return {
-      provider: model.provider,
-      modelId: model.modelId,
-    };
-  }
-
-  runWithTokenCounterModelContext<T>(
-    modelContext: TokenCounterModelContext | undefined,
-    fn: () => Promise<T>,
-  ): Promise<T> {
-    return this.tokenCounter.runWithModelContext(modelContext, fn);
-  }
-
   /**
    * Get the full config including resolved model names.
    * This is async because it needs to resolve the model configs.
@@ -1690,7 +1670,7 @@ ${suggestedResponse}
    * Messages with observation markers are always saved (upserted) even if sealed,
    * because the markers need to be persisted to storage.
    */
-  private async persistMessages(
+  async persistMessages(
     messagesToSave: MastraDBMessage[],
     threadId: string,
     resourceId: string | undefined,
@@ -3828,17 +3808,9 @@ ${formattedMessages}
       return allMsgs;
     }
 
-    if (messageList) {
-      const newInput = messageList.get.input.db();
-      const newOutput = messageList.get.response.db();
-      const msgsToSave = [...newInput, ...newOutput];
-      if (msgsToSave.length > 0) {
-        await this.persistMessages(msgsToSave, threadId, resourceId);
-      }
-      return messageList.get.all.db();
-    }
-
-    return allMsgs;
+    // No observed IDs and no marker — nothing to clean up.
+    // Return messages unchanged.
+    return messageList ? messageList.get.all.db() : allMsgs;
   }
 
   /**
@@ -4066,74 +4038,6 @@ ${formattedMessages}
    */
   countMessageTokens(messages: MastraDBMessage[]): number {
     return this.tokenCounter.countMessages(messages);
-  }
-
-  /**
-   * Count tokens in a set of messages (async, more accurate).
-   */
-  async countMessageTokensAsync(messages: MastraDBMessage[]): Promise<number> {
-    return this.tokenCounter.countMessagesAsync(messages);
-  }
-
-  /**
-   * Count tokens in a string.
-   */
-  countStringTokens(text: string): number {
-    return this.tokenCounter.countString(text);
-  }
-
-  /**
-   * Save pending token count to storage.
-   */
-  async savePendingTokens(recordId: string, tokens: number): Promise<void> {
-    await this.storage.setPendingMessageTokens(recordId, tokens).catch(() => {});
-  }
-
-  /**
-   * Save messages incrementally during an agent step.
-   *
-   * Clears input/response messages from the message list, persists them to storage
-   * with sealed ID tracking, then re-adds them to the list so the agent can still
-   * see them.
-   */
-  async saveIncrementalMessages(opts: {
-    messageList: MessageList;
-    threadId: string;
-    resourceId?: string;
-  }): Promise<void> {
-    const { messageList, threadId, resourceId } = opts;
-    const newInput = messageList.clear.input.db();
-    const newOutput = messageList.clear.response.db();
-    const messagesToSave = [...newInput, ...newOutput];
-
-    omDebug(
-      `[OM:saveIncremental] cleared input=${newInput.length}, response=${newOutput.length}, toSave=${messagesToSave.length}`,
-    );
-
-    if (messagesToSave.length > 0) {
-      await this.persistMessages(messagesToSave, threadId, resourceId);
-      for (const msg of messagesToSave) {
-        messageList.add(msg, 'memory');
-      }
-    }
-  }
-
-  /**
-   * Save final output messages (e.g., the assistant's response after the last step).
-   */
-  async saveFinalMessages(opts: { messageList: MessageList; threadId: string; resourceId?: string }): Promise<void> {
-    const { messageList, threadId, resourceId } = opts;
-    const newInput = messageList.get.input.db();
-    const newOutput = messageList.get.response.db();
-    const messagesToSave = [...newInput, ...newOutput];
-
-    omDebug(
-      `[OM:saveFinal] inputMsgs=${newInput.length}, responseMsgs=${newOutput.length}, totalToSave=${messagesToSave.length}`,
-    );
-
-    if (messagesToSave.length > 0) {
-      await this.persistMessages(messagesToSave, threadId, resourceId);
-    }
   }
 
   /**

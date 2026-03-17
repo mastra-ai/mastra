@@ -9703,11 +9703,8 @@ describe('Single-thread replay red tests', () => {
       return originalPersist(...args);
     };
 
-    const cleanupPromise = (om as any).cleanupObservedContext({
-      messageList,
-      threadId,
-      resourceId,
-    });
+    // Persist messages explicitly (cleanup no longer saves in the fallback branch)
+    const savePromise = (om as any).persistMessages(messageList.get.all.db(), threadId, resourceId);
 
     await new Promise(resolve => setTimeout(resolve, 5));
     expect(saveStarted.value).toBe(true);
@@ -9725,7 +9722,7 @@ describe('Single-thread replay red tests', () => {
 
     expect(duringRaceText).not.toContain('already-observed-race');
 
-    await cleanupPromise;
+    await savePromise;
   });
 
   it('T4-A-debug: activation/save ordering sample can drop fresh-next-turn during race window', async () => {
@@ -9767,11 +9764,8 @@ describe('Single-thread replay red tests', () => {
       return originalPersist(...args);
     };
 
-    const cleanupPromise = (om as any).cleanupObservedContext({
-      messageList,
-      threadId,
-      resourceId,
-    });
+    // Persist messages explicitly (cleanup no longer saves in the fallback branch)
+    const savePromise = (om as any).persistMessages(messageList.get.all.db(), threadId, resourceId);
 
     // Assert intermediate state before save completes.
     const duringRaceText = getModelVisibleText(messageList);
@@ -9780,7 +9774,7 @@ describe('Single-thread replay red tests', () => {
     expect(duringRaceText).toContain('fresh-next-turn');
 
     releaseSave();
-    await cleanupPromise;
+    await savePromise;
   });
 
   it('T5-A: part excluded by getUnobservedMessages should not survive step-0 filter', async () => {

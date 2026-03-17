@@ -217,10 +217,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     const memoryContext = parseMemoryRequestContext(requestContext);
     const readOnly = memoryContext?.memoryConfig?.readOnly;
 
-    const actorModelContext = this.engine.getRuntimeModelContext(model);
+    const actorModelContext = model?.modelId ? { provider: model.provider, modelId: model.modelId } : undefined;
     state.__omActorModelContext = actorModelContext;
 
-    return this.engine.runWithTokenCounterModelContext(actorModelContext, async () => {
+    return this.engine.getTokenCounter().runWithModelContext(actorModelContext, async () => {
       let record = await this.engine.getOrCreateRecord(threadId, resourceId);
       const reproCaptureEnabled = isOmReproCaptureEnabled();
       const preRecordSnapshot = reproCaptureEnabled ? (safeCaptureJson(record) as ObservationalMemoryRecord) : null;
@@ -367,12 +367,16 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         }
 
         if (stepNumber > 0) {
-          // Per-step save
-          await this.engine.saveIncrementalMessages({
-            messageList,
-            threadId,
-            resourceId,
-          });
+          // Per-step save: drain new messages, persist (skipping sealed), re-add as memory
+          const newInput = messageList.clear.input.db();
+          const newOutput = messageList.clear.response.db();
+          const messagesToSave = [...newInput, ...newOutput];
+          if (messagesToSave.length > 0) {
+            await this.engine.persistMessages(messagesToSave, threadId, resourceId);
+            for (const msg of messagesToSave) {
+              messageList.add(msg, 'memory');
+            }
+          }
 
           if (status.shouldObserve) {
             reproCaptureDetails.thresholdReached = true;
@@ -473,11 +477,15 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       // Count remaining context tokens and persist
       const freshRecord = await this.engine.getOrCreateRecord(threadId, resourceId);
       const allDbMsgs = messageList.get.all.db();
-      const contextTokens = await this.engine.countMessageTokensAsync(allDbMsgs);
-      const otherThreadTokens = otherThreadsContext ? this.engine.countStringTokens(otherThreadsContext) : 0;
+      const tokenCounter = this.engine.getTokenCounter();
+      const contextTokens = await tokenCounter.countMessagesAsync(allDbMsgs);
+      const otherThreadTokens = otherThreadsContext ? tokenCounter.countString(otherThreadsContext) : 0;
       const finalTotalPending = contextTokens + otherThreadTokens;
 
-      await this.engine.savePendingTokens(freshRecord.id, finalTotalPending);
+      await this.engine
+        .getStorage()
+        .setPendingMessageTokens(freshRecord.id, finalTotalPending)
+        .catch(() => {});
 
       // Repro capture
       if (reproCaptureEnabled) {
@@ -512,21 +520,22 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
 
     const { threadId, resourceId } = context;
 
-    return this.engine.runWithTokenCounterModelContext(
-      state.__omActorModelContext as TokenCounterModelContext | undefined,
-      async () => {
+    return this.engine
+      .getTokenCounter()
+      .runWithModelContext(state.__omActorModelContext as TokenCounterModelContext | undefined, async () => {
         const memoryContext = parseMemoryRequestContext(requestContext);
         if (memoryContext?.memoryConfig?.readOnly) return messageList;
 
-        await this.engine.saveFinalMessages({
-          messageList,
-          threadId,
-          resourceId,
-        });
+        // Save any remaining unsaved messages (final save at end of turn)
+        const newInput = messageList.get.input.db();
+        const newOutput = messageList.get.response.db();
+        const messagesToSave = [...newInput, ...newOutput];
+        if (messagesToSave.length > 0) {
+          await this.engine.persistMessages(messagesToSave, threadId, resourceId);
+        }
 
         return messageList;
-      },
-    );
+      });
   }
 
   // ─── Passthrough API ────────────────────────────────────────────────────
