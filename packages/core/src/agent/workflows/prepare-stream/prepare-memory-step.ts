@@ -44,6 +44,10 @@ interface PrepareMemoryStepOptions<OUTPUT = undefined> {
   instructions: SystemMessage;
   memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
+  resumeContext?: {
+    resumeData: any;
+    snapshot: any;
+  };
 }
 
 export function createPrepareMemoryStep<OUTPUT = undefined>({
@@ -56,6 +60,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
   instructions,
   memoryConfig,
   memory,
+  resumeContext,
 }: PrepareMemoryStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-memory-step',
@@ -87,6 +92,18 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
 
       if (!memory || (!thread?.id && !resourceId)) {
         messageList.add(options.messages, 'input');
+
+        // Skip input processors during resume - messages are loaded from snapshot and processors have already run
+        if (resumeContext) {
+          return {
+            threadExists: false,
+            thread: undefined,
+            messageList,
+            processorStates,
+            tripwire: undefined,
+          };
+        }
+
         const { tripwire } = await capabilities.runInputProcessors({
           requestContext,
           ...observabilityContext,
@@ -170,6 +187,17 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
 
       // Add user messages - memory processors will handle history/semantic recall/working memory
       messageList.add(options.messages, 'input');
+
+      // Skip input processors during resume - messages are loaded from snapshot and processors have already run
+      if (resumeContext) {
+        return {
+          thread: threadObject,
+          messageList: messageList,
+          processorStates,
+          tripwire: undefined,
+          threadExists: !!existingThread,
+        };
+      }
 
       const { tripwire } = await capabilities.runInputProcessors({
         requestContext,
