@@ -232,7 +232,12 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         return;
       }
 
-      await agenticLoopWorkflow.deleteWorkflowRunById(runId);
+      // Only delete the workflow run if we're not resuming.
+      // When resuming, we need to preserve the workflow run so that
+      // the resumed stream is persisted and can be retrieved after page refresh.
+      if (!resumeContext) {
+        await agenticLoopWorkflow.deleteWorkflowRunById(runId);
+      }
 
       // Always emit finish chunk, even for abort (tripwire) cases
       // This ensures the stream properly completes and all promises are resolved
