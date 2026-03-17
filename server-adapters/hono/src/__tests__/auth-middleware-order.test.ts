@@ -60,7 +60,7 @@ describe('Auth middleware execution order', () => {
     };
     await adapter.registerRoute(app, testRoute, { prefix: '' });
 
-    await app.request(
+    const response = await app.request(
       new Request('http://localhost/api/test', {
         method: 'GET',
         headers: { Authorization: 'Bearer valid-token' },
@@ -69,6 +69,7 @@ describe('Auth middleware execution order', () => {
 
     expect(userInMiddleware).toBeDefined();
     expect((userInMiddleware as any).id).toBe('user-123');
+    expect(response.status).toBe(200);
   });
 
   it('should not block request when token is missing', async () => {
