@@ -2739,9 +2739,6 @@ importers:
       '@ai-sdk/ui-utils-v5':
         specifier: npm:@ai-sdk/ui-utils@1.2.11
         version: '@ai-sdk/ui-utils@1.2.11(zod@4.3.6)'
-      '@internal/core':
-        specifier: workspace:*
-        version: link:../_internal-core
       '@isaacs/ttlcache':
         specifier: ^2.1.4
         version: 2.1.4
@@ -2875,6 +2872,9 @@ importers:
       '@internal/ai-v6':
         specifier: workspace:*
         version: link:../_vendored/ai_v6
+      '@internal/core':
+        specifier: workspace:*
+        version: link:../_internal-core
       '@internal/external-types':
         specifier: workspace:*
         version: link:../_external-types
