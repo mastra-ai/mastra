@@ -14,10 +14,9 @@ import StepItem from "@site/src/components/StepItem";
 
 Memory enables your agent to remember user messages, agent replies, and tool results across interactions, giving it the context it needs to stay consistent, maintain conversation flow, and produce better answers over time.
 
-Mastra supports four complementary memory types:
+Mastra agents can be configured to store [message history](/docs/memory/message-history). Additionally, you can enable:
 
-- [Message history](/docs/memory/message-history) keeps recent messages from the current conversation so they can be rendered in the UI and used to maintain short-term context.
-- [Observational memory](../memory/observational-memory) uses background agents (Observer and Reflector) to maintain a dense observation log that replaces raw message history as it grows. This keeps the context window small while preserving long-term memory.
+- [Observational Memory](../memory/observational-memory) uses background agents (Observer and Reflector) to maintain a dense observation log that replaces raw message history as it grows. This keeps the context window small while preserving long-term memory.
 - [Working memory](../memory/working-memory) stores persistent, structured user data such as names, preferences, and goals.
 - [Semantic recall](../memory/semantic-recall) retrieves relevant past messages on semantic meaning rather than exact keywords.
 
@@ -156,9 +155,9 @@ Each thread has an owner (`resourceId`) that can't be changed after creation. Av
 
 To list all threads for a resource, or retrieve a specific thread, [use the memory API directly](/docs/memory/message-history#querying).
 
-## Observational memory
+## Observational Memory
 
-For long-running conversations, raw message history grows until it fills the context window, degrading agent performance. [Observational memory](../memory/observational-memory) solves this by running background agents that compress old messages into dense observations, keeping the context window small while preserving long-term memory.
+For long-running conversations, raw message history grows until it fills the context window, degrading agent performance. [Observational Memory](../memory/observational-memory) solves this by running background agents that compress old messages into dense observations, keeping the context window small while preserving long-term memory.
 
 ```typescript title="src/mastra/agents/memory-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -223,7 +222,7 @@ await writer.generate('Write a summary from the research notes.', {
 
 Because both calls use `resource: 'project-42'`, the writer can access the researcher's observations, working memory, and semantic embeddings. Each agent still has its own thread, so message histories stay separate.
 
-**Thread-scoped sharing** gives tighter coupling. [Observational memory](../memory/observational-memory) uses `scope: 'thread'` by default. If two agents use the same `resource` _and_ `thread`, they share the full message history. Each agent sees every message the other has written. This is useful when agents need to build on each other's exact outputs.
+**Thread-scoped sharing** gives tighter coupling. [Observational Memory](../memory/observational-memory) uses `scope: 'thread'` by default. If two agents use the same `resource` _and_ `thread`, they share the full message history. Each agent sees every message the other has written. This is useful when agents need to build on each other's exact outputs.
 
 ## Switch memory per request
 

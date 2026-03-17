@@ -68,7 +68,7 @@ Visit the [agent reference](/reference/agents/agent) for more information on ava
 
 After registration, retrieve your agent with [`mastra.getAgentById()`](/reference/core/getAgentById). Call `.generate()` for a complete response or `.stream()` to deliver tokens in real time. You can call agents from [workflow steps](/docs/workflows/agents-and-tools), [tools](/docs/agents/using-tools), the [Mastra Client](/reference/client-js/mastra-client), route handlers, [server adapters](/docs/server/server-adapters), or the command line. Visit the [guides section](/guides) to learn how to use agents in your framework of choice.
 
-When referencing an agent, use `mastra.getAgentById()` instead of a direct import. `mastra.getAgentById()` wires up shared services (storage, logging, other agents, etc.). A directly imported agent skips this setup, so features like memory, tool approval, and subagent delegation won't work.
+When referencing an agent from your Mastra instance, use `mastra.getAgentById()` to ensure it has access to shared services such as instance-level storage, logging, and agent registry. A directly imported agent can still work with its own local configuration, but it won't have access to those shared services.
 
 <Tabs>
   <TabItem value="generate" label="Generate">

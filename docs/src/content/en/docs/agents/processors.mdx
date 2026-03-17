@@ -114,13 +114,13 @@ export class CustomInputProcessor implements Processor {
 }
 ```
 
-The `processInput` method receives `messages`, `systemMessages`, and an `abort` function. Return a `MastraDBMessage[]` to replace messages, or `{ messages, systemMessages }` to also modify system messages.
+The `processInput()` method receives `messages`, `systemMessages`, and an `abort()` function. Return a `MastraDBMessage[]` to replace messages, or `{ messages, systemMessages }` to also modify system messages.
 
 See the [`Processor` reference](/reference/processors/processor-interface#processinput) for all available arguments and return types.
 
 ### Control each step
 
-While `processInput` runs once at the start of agent execution, `processInputStep` runs at **each step** of the agentic loop (including tool call continuations). This enables per-step configuration changes like dynamic model switching or tool choice modifications.
+While `processInput()` runs once at the start of agent execution, `processInputStep()` runs at **each step** of the agentic loop (including tool call continuations). This enables per-step configuration changes like dynamic model switching or tool choice modifications.
 
 ```typescript title="src/mastra/processors/step-processor.ts"
 import type {
@@ -158,9 +158,9 @@ The method receives the current `stepNumber`, `model`, `tools`, `toolChoice`, `m
 
 See the [`Processor` reference](/reference/processors/processor-interface#processinputstep) for all available arguments and return types.
 
-### Use the `prepareStep` callback
+### Use the `prepareStep()` callback
 
-For simpler per-step logic, use the `prepareStep` callback on `generate()` or `stream()` instead of creating a full processor:
+The `prepareStep()` callback on `generate()` or `stream()` is a shorthand for `processInputStep()`. Internally, Mastra wraps it in a processor that calls your function at each step. It accepts the same arguments and return type as `processInputStep()`, but doesn't require creating a class:
 
 ```typescript
 await agent.generate('Complex task', {
@@ -209,7 +209,7 @@ export class UsageTracker implements Processor {
 
 ### Filter streamed output
 
-The `processOutputStream` method transforms or filters streaming chunks before they reach the client:
+The `processOutputStream()` method transforms or filters streaming chunks before they reach the client:
 
 ```typescript title="src/mastra/processors/stream-filter.ts"
 import type { Processor } from '@mastra/core/processors'
@@ -229,7 +229,7 @@ To also receive custom `data-*` chunks emitted by tools via `writer.custom()`, s
 
 ### Validate each response
 
-The `processOutputStep` method runs after each LLM step, allowing you to validate the response and optionally request a retry:
+The `processOutputStep()` method runs after each LLM step, allowing you to validate the response and optionally request a retry:
 
 ```typescript title="src/mastra/processors/response-validator.ts"
 import type { Processor } from '@mastra/core/processors'
@@ -291,7 +291,7 @@ See the [`ToolSearchProcessor` reference](/reference/processors/tool-search-proc
 
 ### Ensure a final response with `maxSteps`
 
-When using `maxSteps` to limit agent execution, the agent may return an empty response if it attempts a tool call on the final step. Use `processInputStep` to force a text response on the last step:
+When using `maxSteps` to limit agent execution, the agent may return an empty response if it attempts a tool call on the final step. Use `processInputStep()` to force a text response on the last step:
 
 ```typescript title="src/mastra/processors/ensure-final-response.ts"
 import type {
@@ -539,14 +539,14 @@ const agent = new Agent({
 
 The retry mechanism:
 
-- Only works in `processOutputStep` and `processInputStep` methods
+- Only works in `processOutputStep()` and `processInputStep()` methods
 - Replays the step with the abort reason added as context for the LLM
 - Tracks retry count via the `retryCount` parameter
 - Respects `maxProcessorRetries` limit on the agent
 
 ## Related documentation
 
-- [Guardrails](/docs/agents/guardrails) - Security and validation processors
-- [Memory Processors](/docs/memory/memory-processors) - Memory-specific processors and automatic integration
-- [Processor Interface](/reference/processors/processor-interface) - Full API reference for processors
-- [ToolSearchProcessor Reference](/reference/processors/tool-search-processor) - API reference for dynamic tool search
+- [Guardrails](/docs/agents/guardrails): Security and validation processors
+- [Memory Processors](/docs/memory/memory-processors): Memory-specific processors and automatic integration
+- [Processor Interface](/reference/processors/processor-interface): Full API reference for processors
+- [ToolSearchProcessor Reference](/reference/processors/tool-search-processor): API reference for dynamic tool search
