@@ -1,5 +1,4 @@
 import { AuthRequired, MainSidebarProvider, NavigationCommand, Toaster, TooltipProvider } from '@mastra/playground-ui';
-import { useLocation } from 'react-router';
 import { AppSidebar } from './ui/app-sidebar';
 import { ThemeProvider } from './ui/theme-provider';
 

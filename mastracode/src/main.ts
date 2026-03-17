@@ -43,21 +43,9 @@ async function tuiMain() {
     console.info(`⚠ ${result.storageWarning}`);
   }
 
-  if (mcpManager?.hasServers()) {
-    await mcpManager.init();
-    const statuses = mcpManager.getServerStatuses();
-    const connected = statuses.filter(s => s.connected);
-    const failed = statuses.filter(s => !s.connected);
-    const totalTools = connected.reduce((sum, s) => sum + s.toolCount, 0);
-    console.info(`MCP: ${connected.length} server(s) connected, ${totalTools} tool(s)`);
-    for (const s of failed) {
-      console.info(`MCP: Failed to connect to "${s.name}": ${s.error}`);
-    }
-    const skipped = mcpManager.getSkippedServers();
-    for (const s of skipped) {
-      console.info(`MCP: Skipped "${s.name}": ${s.reason}`);
-    }
-  }
+  // MCP connection is deferred to TUI.init() (after ui.start()) so that
+  // status messages use showInfo() instead of console.info(), which would
+  // corrupt the terminal.  Headless mode still inits from headless.ts.
 
   setupDebugLogging();
 
