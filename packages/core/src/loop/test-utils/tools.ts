@@ -294,8 +294,6 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       it('should include dynamic tool call and result content', async () => {
         await result.consumeStream();
 
-        console.log(JSON.stringify(result.content, null, 2));
-
         expect(result.content).toMatchInlineSnapshot(`
           [
             {
@@ -329,8 +327,6 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
       it('should include dynamic tool call and result in the full stream', async () => {
         const fullStream = await convertAsyncIterableToArray(result.fullStream as any);
-
-        console.log(JSON.stringify(fullStream, null, 2));
 
         expect(fullStream).toMatchInlineSnapshot(`
             [
