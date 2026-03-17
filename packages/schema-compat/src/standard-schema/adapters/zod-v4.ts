@@ -35,8 +35,16 @@ function convertToJsonSchema(
 
   const target = SUPPORTED_TARGETS.has(options.target) ? options.target : 'draft-07';
 
+  // Map target names to Zod v4's expected format.
+  // Zod v4's z.toJSONSchema() expects "draft-7" instead of "draft-07",
+  // and "draft-4" instead of "draft-04".
+  const ZOD_V4_TARGET_MAP: Record<string, string> = {
+    'draft-07': 'draft-7',
+    'draft-04': 'draft-4',
+  };
+
   const jsonSchemaOptions: Record<string, unknown> = {
-    target,
+    target: ZOD_V4_TARGET_MAP[target] ?? target,
   };
 
   if (adapterOptions.unrepresentable) {
