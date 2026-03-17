@@ -4,10 +4,17 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     branches: [main, 0.x]
+    paths-ignore:
+      - 'docs/**'
+      - '.changeset/**'
+      - '**/*.md'
+      - 'explorations/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
+
+permissions: {}
 
 jobs:
   changes:
