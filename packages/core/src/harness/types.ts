@@ -170,7 +170,7 @@ export interface HarnessConfig<TState = {}> {
   heartbeatHandlers?: HeartbeatHandler[];
 
   /**
-   * Custom ID generator for threads, messages, and other entities.
+   * Custom ID generator for Harness-managed IDs such as threads and mode-run identifiers.
    * Defaults to a timestamp + random string generator.
    */
   idGenerator?: () => string;

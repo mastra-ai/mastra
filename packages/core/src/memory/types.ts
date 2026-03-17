@@ -204,7 +204,7 @@ type WorkingMemoryNone = BaseWorkingMemory & {
   schema?: never;
 };
 
-export type WorkingMemory = TemplateWorkingMemory | SchemaWorkingMemory | WorkingMemoryNone;
+export type WorkingMemory = TemplateWorkingMemory | SchemaWorkingMemory | PublicSchemaWorkingMemory | WorkingMemoryNone;
 
 /**
  * Vector index configuration for optimizing semantic recall performance.
@@ -528,6 +528,17 @@ export interface ObservationalMemoryObservationConfig {
    * ```
    */
   blockAfter?: number;
+
+  /**
+   * Optional token budget for observer context.
+   * When set, the "Previous Observations" section is truncated from the end
+   * to keep the most recent observations within this budget, and pending
+   * buffered reflections replace the raw observations they summarized.
+   * Set to `0` for full truncation (omit previous observations entirely), or `false` to disable.
+   *
+   * @default undefined (disabled)
+   */
+  previousObserverTokens?: number | false;
 
   /**
    * Custom instructions appended to the Observer agent's system prompt.
@@ -1048,12 +1059,12 @@ export type SharedMemoryConfig = {
   processors?: MemoryProcessor[];
 };
 
+/** @deprecated Use the `format` field on `WorkingMemoryTemplate` discriminated union instead. */
 export type WorkingMemoryFormat = 'json' | 'markdown';
 
-export type WorkingMemoryTemplate = {
-  format: WorkingMemoryFormat;
-  content: string;
-};
+export type WorkingMemoryTemplate =
+  | { format: 'markdown'; content: string }
+  | { format: 'json'; content: string | Record<string, unknown> };
 
 // Type for flexible message deletion input
 export type MessageDeleteInput = string[] | { id: string }[];
@@ -1153,6 +1164,8 @@ export type SerializedObservationalMemoryObservationConfig = {
   bufferActivation?: number;
   /** Token threshold for synchronous blocking */
   blockAfter?: number;
+  /** Optional token budget for observer context (0 = full truncation, false = disabled) */
+  previousObserverTokens?: number | false;
 };
 
 /** Serializable subset of ObservationalMemoryReflectionConfig */

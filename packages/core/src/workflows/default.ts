@@ -819,6 +819,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           undefined,
           stepExecutionPath,
         )) as any;
+
+        // Capture tracing context for suspend to enable span linking on resume
+        const persistTracingContext =
+          result.status === 'suspended' && workflowSpan
+            ? {
+                traceId: workflowSpan.traceId,
+                spanId: workflowSpan.id,
+                parentSpanId: workflowSpan.getParentSpanId(),
+              }
+            : {};
+
         await this.persistStepUpdate({
           workflowId,
           runId,
@@ -830,6 +841,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           result: result.result,
           error: result.error,
           requestContext: currentRequestContext,
+          tracingContext: persistTracingContext,
         });
 
         if (result.error) {

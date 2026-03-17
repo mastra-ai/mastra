@@ -68,8 +68,7 @@ const response = await agent.generate('List all files in the workspace')
   {
     name: 'allowedPaths',
     type: 'string[]',
-    description:
-      'Additional absolute paths that are allowed beyond basePath. Useful with `contained: true` to grant access to specific directories without disabling containment entirely. Paths are resolved to absolute paths.',
+    description: 'Additional directories the agent can access outside of `basePath`.',
     isOptional: true,
     defaultValue: '[]',
   },
@@ -123,7 +122,7 @@ const response = await agent.generate('List all files in the workspace')
     name: 'allowedPaths',
     type: 'readonly string[]',
     description:
-      'Current set of additional allowed paths (absolute, resolved). These paths are permitted beyond basePath when containment is enabled.',
+      'Current set of resolved allowed paths. These paths are permitted beyond basePath when containment is enabled.',
   },
 ]}
 />
@@ -591,7 +590,7 @@ To override the default output, pass an `instructions` option to the constructor
 
 ## Path resolution
 
-### How basePath works
+### How `basePath` works
 
 The `basePath` option sets the root directory for all file operations. File paths passed to methods like `readFile()` are resolved relative to this base:
 

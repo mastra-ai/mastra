@@ -46,6 +46,13 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         : undefined;
       const dataChunkProcessorStates = hasOutputProcessors ? new Map<string, ProcessorState>() : undefined;
 
+      // Create a ProcessorStreamWriter so output processors can emit custom chunks back to the stream
+      const dataChunkStreamWriter = {
+        custom: async (data: { type: string }) => {
+          safeEnqueue(controller, data as ChunkType<OUTPUT>);
+        },
+      };
+
       const outputWriter = async (chunk: ChunkType<OUTPUT>) => {
         // Handle data-* chunks (custom data chunks from writer.custom())
         // These need to be persisted to storage, not just streamed
@@ -67,6 +74,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
               requestContext,
               messageList,
               0,
+              dataChunkStreamWriter,
             );
 
             if (blocked) {

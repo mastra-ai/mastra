@@ -35,9 +35,9 @@ export function createLspPythonTests(getContext: () => TestContext): void {
 
         // Graceful skip: if pyright is not installed, getDiagnostics returns []
         // and the test passes without assertions about content
-        if (diagnostics.length === 0) return ctx.skip();
+        if (!diagnostics?.length) return ctx.skip();
 
-        expect(diagnostics.some(d => d.severity === 'error')).toBe(true);
+        expect(diagnostics?.some(d => d.severity === 'error')).toBe(true);
       },
       getContext().testTimeout,
     );
@@ -62,9 +62,9 @@ export function createLspPythonTests(getContext: () => TestContext): void {
         const diagnostics = await lsp.getDiagnostics(filePath, content);
 
         // Graceful skip if pyright not available
-        if (diagnostics.length === 0) return ctx.skip();
+        if (!diagnostics?.length) return ctx.skip();
 
-        const errors = diagnostics.filter(d => d.severity === 'error');
+        const errors = diagnostics?.filter(d => d.severity === 'error') ?? [];
         expect(errors).toHaveLength(0);
       },
       getContext().testTimeout,

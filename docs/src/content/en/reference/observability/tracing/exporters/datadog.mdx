@@ -18,7 +18,7 @@ Sends Tracing data to Datadog's LLM Observability product for monitoring and ana
 new DatadogExporter(config: DatadogExporterConfig)
 ```
 
-## DatadogExporterConfig
+## `DatadogExporterConfig`
 
 ```typescript
 interface DatadogExporterConfig extends BaseExporterConfig {
@@ -87,7 +87,7 @@ Extends `BaseExporterConfig`, which includes:
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -145,7 +145,7 @@ const exporter = new DatadogExporter({
 })
 ```
 
-## Span Mapping
+## Span mapping
 
 Mastra span types are mapped to Datadog LLMObs span kinds:
 
@@ -161,7 +161,7 @@ Mastra span types are mapped to Datadog LLMObs span kinds:
 
 All unmapped span types (including `MODEL_CHUNK`, `WORKFLOW_STEP`, `GENERIC`, and future span types) automatically default to `task`.
 
-## Environment Variables
+## Environment variables
 
 The exporter reads configuration from these environment variables:
 

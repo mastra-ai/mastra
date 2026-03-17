@@ -14,9 +14,8 @@ import {
   UPDATE_STORED_MCP_CLIENT_ROUTE,
   DELETE_STORED_MCP_CLIENT_ROUTE,
 } from '../../handlers/stored-mcp-clients';
-import type { ServerRoute } from '.';
 
-export const STORED_MCP_CLIENTS_ROUTES: ServerRoute<any, any, any>[] = [
+export const STORED_MCP_CLIENTS_ROUTES = [
   // Stored MCP Clients CRUD Routes
   LIST_STORED_MCP_CLIENTS_ROUTE,
   GET_STORED_MCP_CLIENT_ROUTE,
@@ -34,4 +33,4 @@ export const STORED_MCP_CLIENTS_ROUTES: ServerRoute<any, any, any>[] = [
   ACTIVATE_MCP_CLIENT_VERSION_ROUTE,
   RESTORE_MCP_CLIENT_VERSION_ROUTE,
   DELETE_MCP_CLIENT_VERSION_ROUTE,
-];
+] as const;

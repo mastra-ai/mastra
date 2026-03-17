@@ -5,13 +5,12 @@ import {
   UPDATE_STORED_WORKSPACE_ROUTE,
   DELETE_STORED_WORKSPACE_ROUTE,
 } from '../../handlers/stored-workspaces';
-import type { ServerRoute } from '.';
 
-export const STORED_WORKSPACES_ROUTES: ServerRoute<any, any, any>[] = [
+export const STORED_WORKSPACES_ROUTES = [
   // Stored Workspaces CRUD Routes
   LIST_STORED_WORKSPACES_ROUTE,
   GET_STORED_WORKSPACE_ROUTE,
   CREATE_STORED_WORKSPACE_ROUTE,
   UPDATE_STORED_WORKSPACE_ROUTE,
   DELETE_STORED_WORKSPACE_ROUTE,
-];
+] as const;
