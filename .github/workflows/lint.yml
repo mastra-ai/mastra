@@ -5,6 +5,10 @@ on:
     types: [opened, synchronize, reopened]
     branches: [main, 0.x]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   changes:
     name: Detect code changes
@@ -43,6 +47,7 @@ jobs:
     name: Lint
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -67,6 +72,7 @@ jobs:
     name: Validate build outputs
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -97,6 +103,7 @@ jobs:
     name: Validate examples packages.json
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: needs.changes.outputs.has_examples == 'true' && github.repository == 'mastra-ai/mastra'
     permissions:
       pull-requests: read
@@ -120,6 +127,7 @@ jobs:
   peerdeps-check:
     name: Validate peer dependencies
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # Run on main repository or for trusted bot PRs
     if: ${{ github.repository == 'mastra-ai/mastra' }}
     permissions:
@@ -169,6 +177,7 @@ jobs:
     name: Validate package.json files
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     permissions:
       pull-requests: read

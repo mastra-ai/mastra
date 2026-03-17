@@ -38,6 +38,7 @@ jobs:
     name: Build
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
