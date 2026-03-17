@@ -1641,6 +1641,7 @@ describe('OpenAISchemaCompatLayer - typeless anyOf branches from z.any()', () =>
     const types = resumeData.anyOf.map((b: any) => b.type);
     expect(types).toContain('string');
     expect(types).toContain('number');
+    expect(types).toContain('integer');
     expect(types).toContain('boolean');
     expect(types).toContain('object');
     expect(types).toContain('null');
