@@ -574,6 +574,76 @@ describe('MastraAuthStudio', () => {
       expect(headers['Set-Cookie']).toContain('Secure');
       expect(headers['Set-Cookie']).toContain('Domain=.mastra.ai');
     });
+
+    it('should use custom cookieDomain when provided', () => {
+      const customAuth = new MastraAuthStudio({
+        sharedApiUrl: SHARED_API,
+        cookieDomain: '.example.com',
+      });
+
+      const headers = customAuth.getSessionHeaders({
+        id: 'token-123',
+        userId: 'user-1',
+        expiresAt: new Date(),
+        createdAt: new Date(),
+      });
+
+      expect(headers['Set-Cookie']).toContain('Secure');
+      expect(headers['Set-Cookie']).toContain('Domain=.example.com');
+      expect(headers['Set-Cookie']).not.toContain('.mastra.ai');
+    });
+
+    it('should use MASTRA_COOKIE_DOMAIN env var when no explicit option', () => {
+      process.env.MASTRA_COOKIE_DOMAIN = '.env-domain.io';
+      const envAuth = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
+
+      const headers = envAuth.getSessionHeaders({
+        id: 'token-123',
+        userId: 'user-1',
+        expiresAt: new Date(),
+        createdAt: new Date(),
+      });
+
+      expect(headers['Set-Cookie']).toContain('Secure');
+      expect(headers['Set-Cookie']).toContain('Domain=.env-domain.io');
+      delete process.env.MASTRA_COOKIE_DOMAIN;
+    });
+
+    it('should prefer explicit cookieDomain option over env var', () => {
+      process.env.MASTRA_COOKIE_DOMAIN = '.env-domain.io';
+      const customAuth = new MastraAuthStudio({
+        sharedApiUrl: SHARED_API,
+        cookieDomain: '.explicit.com',
+      });
+
+      const headers = customAuth.getSessionHeaders({
+        id: 'token-123',
+        userId: 'user-1',
+        expiresAt: new Date(),
+        createdAt: new Date(),
+      });
+
+      expect(headers['Set-Cookie']).toContain('Domain=.explicit.com');
+      expect(headers['Set-Cookie']).not.toContain('.env-domain.io');
+      delete process.env.MASTRA_COOKIE_DOMAIN;
+    });
+
+    it('should not auto-detect mastra.ai from malicious URLs', () => {
+      // Ensure hostname-based detection prevents false positives
+      const maliciousAuth = new MastraAuthStudio({
+        sharedApiUrl: 'https://api.mastra.ai.evil.com/v1',
+      });
+
+      const headers = maliciousAuth.getSessionHeaders({
+        id: 'token-123',
+        userId: 'user-1',
+        expiresAt: new Date(),
+        createdAt: new Date(),
+      });
+
+      expect(headers['Set-Cookie']).not.toContain('Domain=.mastra.ai');
+      expect(headers['Set-Cookie']).not.toContain('Secure');
+    });
   });
 
   describe('getClearSessionHeaders', () => {
@@ -591,6 +661,46 @@ describe('MastraAuthStudio', () => {
       expect(headers['Set-Cookie']).toContain('Secure');
       expect(headers['Set-Cookie']).toContain('Domain=.mastra.ai');
       expect(headers['Set-Cookie']).toContain('Max-Age=0');
+    });
+
+    it('should use custom cookieDomain when provided', () => {
+      const customAuth = new MastraAuthStudio({
+        sharedApiUrl: SHARED_API,
+        cookieDomain: '.example.com',
+      });
+
+      const headers = customAuth.getClearSessionHeaders();
+
+      expect(headers['Set-Cookie']).toContain('Secure');
+      expect(headers['Set-Cookie']).toContain('Domain=.example.com');
+      expect(headers['Set-Cookie']).toContain('Max-Age=0');
+    });
+
+    it('should use MASTRA_COOKIE_DOMAIN env var when no explicit option', () => {
+      process.env.MASTRA_COOKIE_DOMAIN = '.env-domain.io';
+      const envAuth = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
+
+      const headers = envAuth.getClearSessionHeaders();
+
+      expect(headers['Set-Cookie']).toContain('Secure');
+      expect(headers['Set-Cookie']).toContain('Domain=.env-domain.io');
+      expect(headers['Set-Cookie']).toContain('Max-Age=0');
+      delete process.env.MASTRA_COOKIE_DOMAIN;
+    });
+
+    it('should prefer explicit cookieDomain option over env var', () => {
+      process.env.MASTRA_COOKIE_DOMAIN = '.env-domain.io';
+      const customAuth = new MastraAuthStudio({
+        sharedApiUrl: SHARED_API,
+        cookieDomain: '.explicit.com',
+      });
+
+      const headers = customAuth.getClearSessionHeaders();
+
+      expect(headers['Set-Cookie']).toContain('Domain=.explicit.com');
+      expect(headers['Set-Cookie']).not.toContain('.env-domain.io');
+      expect(headers['Set-Cookie']).toContain('Max-Age=0');
+      delete process.env.MASTRA_COOKIE_DOMAIN;
     });
   });
 
