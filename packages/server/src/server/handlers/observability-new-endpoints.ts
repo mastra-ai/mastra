@@ -40,7 +40,9 @@ import {
   getTagsResponseSchema,
   paginationArgsSchema,
 } from '@internal/core/storage';
+import { coreFeatures } from '@mastra/core/features';
 import type { z } from 'zod';
+import { HTTPException } from '../http-exception';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -70,6 +72,12 @@ function createNewRoute<
     tags: ['Observability'],
     requiresAuth: true,
     handler: (async (params: InferParams<TPathSchema, TQuerySchema, TBodySchema> & ServerContext) => {
+      if (!coreFeatures.has('observability:v1.13.2')) {
+        throw new HTTPException(501, {
+          message: 'New observability endpoints require @mastra/core >= 1.13.3, please upgrade.',
+        });
+      }
+
       try {
         return await handler(params);
       } catch (error) {

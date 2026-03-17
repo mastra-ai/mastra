@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module';
 import type { Mastra } from '@mastra/core';
 import { listScoresResponseSchema } from '@mastra/core/evals';
 import { scoreTraces } from '@mastra/core/evals/scoreTraces';
@@ -19,8 +18,9 @@ import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
-import { DUMMY_ROUTES } from './observability-dummy-endpoints';
 import { getObservabilityStore, getStorage } from './observability-shared';
+
+export * from './observability-new-endpoints';
 
 // ============================================================================
 // Legacy Parameter Support (backward compatibility with main branch API)
@@ -224,22 +224,3 @@ export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
     }
   },
 });
-
-// ============================================================================
-// New Observability Routes Loader (guarded import with fallback)
-// ============================================================================
-
-const NEW_OBSERVABILITY_ROUTES = { ...DUMMY_ROUTES };
-try {
-  // createRequire resolves relative to the given URL. With tsup's code splitting,
-  // this file's code may end up in a chunk in dist/ root, but the target module
-  // lives in dist/server/handlers/. We use import.meta.url to find where we are,
-  // then navigate to the handlers directory to resolve correctly.
-  const handlersUrl = new URL('.', import.meta.url).href.endsWith('/handlers/')
-    ? new URL('.', import.meta.url)
-    : new URL('./server/handlers/', new URL('.', import.meta.url));
-  const _require = createRequire(handlersUrl);
-  Object.assign(NEW_OBSERVABILITY_ROUTES, _require('./observability-new-endpoints').NEW_ROUTES);
-} catch {
-  // Real endpoints unavailable (older @mastra/core) — dummy routes remain as fallback
-}
