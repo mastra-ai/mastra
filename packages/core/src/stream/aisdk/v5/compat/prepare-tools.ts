@@ -10,6 +10,7 @@ import type {
 } from '@ai-sdk/provider-v6';
 import { asSchema, tool as toolFn } from '@internal/ai-sdk-v5';
 import type { Tool, ToolChoice } from '@internal/ai-sdk-v5';
+import type { JSONSchema7 } from '@mastra/schema-compat';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '../../../../schema';
 import { getProviderToolName, isProviderDefinedTool } from '../../../../tools/toolchecks';
 
@@ -153,6 +154,19 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
                     io: 'input',
                     target: 'draft-07',
                   });
+                } else if (
+                  typeof sdkTool.inputSchema === 'object' &&
+                  sdkTool.inputSchema !== null &&
+                  !Array.isArray(sdkTool.inputSchema) &&
+                  ('type' in sdkTool.inputSchema ||
+                    'properties' in sdkTool.inputSchema ||
+                    'anyOf' in sdkTool.inputSchema ||
+                    'oneOf' in sdkTool.inputSchema ||
+                    'allOf' in sdkTool.inputSchema)
+                ) {
+                  // Handle plain JSON Schema objects (e.g., from serialized client tools)
+                  // that don't have a $schema property but have JSON Schema structure
+                  parameters = sdkTool.inputSchema as JSONSchema7;
                 } else {
                   // Fallback to AI SDK's asSchema for non-standard schemas
                   parameters = asSchema(sdkTool.inputSchema).jsonSchema;
