@@ -7,7 +7,7 @@ import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { MemoryStorage, ObservationalMemoryRecord, BufferedObservationChunk } from '@mastra/core/storage';
+import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
 import {
@@ -17,7 +17,6 @@ import {
 } from './constants';
 import { addRelativeTimeToObservations } from './date-utils';
 import { omDebug, omError } from './debug';
-
 import {
   createActivationMarker,
   createBufferingEndMarker,
@@ -27,6 +26,13 @@ import {
   createObservationFailedMarker,
   createObservationStartMarker,
 } from './markers';
+import {
+  findLastCompletedObservationBoundary,
+  getUnobservedParts,
+  getLastObservedMessageCursor,
+  getBufferedChunks,
+} from './message-utils';
+
 import {
   buildObserverSystemPrompt,
   buildObserverTaskPrompt,
@@ -263,24 +269,6 @@ export class ObservationalMemory {
     } catch {
       // Timeout or error - continue silently
     }
-  }
-
-  /**
-   * Safely get bufferedObservationChunks as an array.
-   * Handles cases where it might be a JSON string or undefined.
-   */
-  private getBufferedChunks(record: ObservationalMemoryRecord | null | undefined): BufferedObservationChunk[] {
-    if (!record?.bufferedObservationChunks) return [];
-    if (Array.isArray(record.bufferedObservationChunks)) return record.bufferedObservationChunks;
-    if (typeof record.bufferedObservationChunks === 'string') {
-      try {
-        const parsed = JSON.parse(record.bufferedObservationChunks);
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        return [];
-      }
-    }
-    return [];
   }
 
   /**
@@ -953,20 +941,6 @@ export class ObservationalMemory {
    * Returns the index of the END marker (which is the observation boundary),
    * or -1 if no completed observation is found.
    */
-  private findLastCompletedObservationBoundary(message: MastraDBMessage): number {
-    const parts = message.content?.parts;
-    if (!parts || !Array.isArray(parts)) return -1;
-
-    // Search from the end to find the most recent end marker
-    for (let i = parts.length - 1; i >= 0; i--) {
-      const part = parts[i] as { type?: string };
-      if (part?.type === 'data-om-observation-end') {
-        // Found an end marker - this is the observation boundary
-        return i;
-      }
-    }
-    return -1;
-  }
 
   /**
    * Check if a message has an in-progress observation (start without end).
@@ -1057,39 +1031,11 @@ export class ObservationalMemory {
    */
 
   /**
-   * Get unobserved parts from a message.
-   * If the message has a completed observation (start + end), only return parts after the end.
-   * If observation is in progress (start without end), include parts before the start.
-   * Otherwise, return all parts.
-   */
-  private getUnobservedParts(message: MastraDBMessage): MastraDBMessage['content']['parts'] {
-    const parts = message.content?.parts;
-    if (!parts || !Array.isArray(parts)) return [];
-
-    const endMarkerIndex = this.findLastCompletedObservationBoundary(message);
-    if (endMarkerIndex === -1) {
-      // No completed observation - all parts are unobserved
-      // (This includes the case where observation is in progress)
-      return parts.filter(p => {
-        const part = p as { type?: string };
-        // Exclude start markers that are in progress
-        return part?.type !== 'data-om-observation-start';
-      });
-    }
-
-    // Return only parts after the end marker (excluding start/end/failed markers)
-    return parts.slice(endMarkerIndex + 1).filter(p => {
-      const part = p as { type?: string };
-      return !part?.type?.startsWith('data-om-observation-');
-    });
-  }
-
-  /**
    * Create a virtual message containing only the unobserved parts.
    * This is used for token counting and observation.
    */
   private createUnobservedMessage(message: MastraDBMessage): MastraDBMessage | null {
-    const unobservedParts = this.getUnobservedParts(message);
+    const unobservedParts = getUnobservedParts(message);
     if (unobservedParts.length === 0) return null;
 
     return {
@@ -1126,7 +1072,7 @@ export class ObservationalMemory {
     // Only exclude buffered chunk message IDs when called from the buffering path.
     // The main agent context should still see buffered messages until activation.
     if (opts?.excludeBuffered) {
-      const bufferedChunks = this.getBufferedChunks(record);
+      const bufferedChunks = getBufferedChunks(record);
       for (const chunk of bufferedChunks) {
         if (Array.isArray(chunk.messageIds)) {
           for (const id of chunk.messageIds) {
@@ -1145,7 +1091,7 @@ export class ObservationalMemory {
       }
 
       // Check if this message has a completed observation
-      const endMarkerIndex = this.findLastCompletedObservationBoundary(msg);
+      const endMarkerIndex = findLastCompletedObservationBoundary(msg);
       const inProgress = this.hasInProgressObservation(msg);
 
       if (inProgress) {
@@ -1681,7 +1627,7 @@ ${suggestedResponse}
       if (isSealed) {
         // Sealed messages were already persisted by buffer(). Only re-save if they
         // now have observation markers (need to upsert the markers to storage).
-        if (this.findLastCompletedObservationBoundary(msg) !== -1) {
+        if (findLastCompletedObservationBoundary(msg) !== -1) {
           filteredMessages.push(msg);
         }
       } else {
@@ -1825,32 +1771,6 @@ ${formattedMessages}
     }
     // If no valid timestamps found, fall back to current time
     return maxTime > 0 ? new Date(maxTime) : new Date();
-  }
-
-  /**
-   * Compute a cursor pointing at the latest message by createdAt.
-   * Used to derive a stable observation boundary for replay pruning.
-   */
-  private getLastObservedMessageCursor(messages: MastraDBMessage[]): { createdAt: string; id: string } | undefined {
-    let latest: MastraDBMessage | undefined;
-    for (const msg of messages) {
-      if (!msg?.id || !msg.createdAt) continue;
-      if (!latest || new Date(msg.createdAt).getTime() > new Date(latest.createdAt!).getTime()) {
-        latest = msg;
-      }
-    }
-    return latest ? { createdAt: new Date(latest.createdAt!).toISOString(), id: latest.id } : undefined;
-  }
-
-  /**
-   * Check if a message is at or before a cursor (by createdAt then id).
-   */
-  private isMessageAtOrBeforeCursor(msg: MastraDBMessage, cursor: { createdAt: string; id: string }): boolean {
-    if (!msg.createdAt) return false;
-    const msgIso = new Date(msg.createdAt).toISOString();
-    if (msgIso < cursor.createdAt) return true;
-    if (msgIso === cursor.createdAt && msg.id === cursor.id) return true;
-    return false;
   }
 
   /**
@@ -2091,7 +2011,7 @@ ${formattedMessages}
         const newMetadata = setThreadOMMetadata(thread.metadata, {
           suggestedResponse: result.suggestedContinuation,
           currentTask: result.currentTask,
-          lastObservedMessageCursor: this.getLastObservedMessageCursor(messagesToObserve),
+          lastObservedMessageCursor: getLastObservedMessageCursor(messagesToObserve),
         });
         await this.storage.updateThread({
           id: threadId,
@@ -2416,7 +2336,7 @@ ${formattedMessages}
     requestContext?: RequestContext,
   ): Promise<void> {
     // Build combined context for the observer: active + buffered chunk observations
-    const bufferedChunks = this.getBufferedChunks(record);
+    const bufferedChunks = getBufferedChunks(record);
     const bufferedChunksText = bufferedChunks.map(c => c.observations).join('\n\n');
     const combinedObservations = this.combineObservationsForBuffering(record.activeObservations, bufferedChunksText);
 
@@ -2477,7 +2397,7 @@ ${formattedMessages}
       const tokensBuffered = await this.tokenCounter.countMessagesAsync(messagesToBuffer);
       // Re-fetch record to get total buffered tokens after storage update
       const updatedRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
-      const updatedChunks = this.getBufferedChunks(updatedRecord);
+      const updatedChunks = getBufferedChunks(updatedRecord);
       const totalBufferedTokens = updatedChunks.reduce((sum, c) => sum + (c.tokenCount ?? 0), 0) || newTokenCount;
       const endMarker = createBufferingEndMarker({
         cycleId,
@@ -3181,7 +3101,7 @@ ${formattedMessages}
             lastObservedAt: threadLastObservedAt.toISOString(),
             suggestedResponse: result.suggestedContinuation,
             currentTask: result.currentTask,
-            lastObservedMessageCursor: this.getLastObservedMessageCursor(threadMessages),
+            lastObservedMessageCursor: getLastObservedMessageCursor(threadMessages),
           });
           await this.storage.updateThread({
             id: threadId,
@@ -3667,7 +3587,7 @@ ${formattedMessages}
     for (const msg of messages) {
       if (!msg?.id || msg.id === 'om-continuation' || !observedSet.has(msg.id)) continue;
 
-      const unobservedParts = this.getUnobservedParts(msg);
+      const unobservedParts = getUnobservedParts(msg);
       const totalParts = msg.content?.parts?.length ?? 0;
 
       if (unobservedParts.length > 0 && unobservedParts.length < totalParts) {
@@ -3739,7 +3659,7 @@ ${formattedMessages}
     for (let i = allMsgs.length - 1; i >= 0; i--) {
       const msg = allMsgs[i];
       if (!msg) continue;
-      if (this.findLastCompletedObservationBoundary(msg) !== -1) {
+      if (findLastCompletedObservationBoundary(msg) !== -1) {
         markerIdx = i;
         markerMsg = msg;
         break;
@@ -3784,7 +3704,7 @@ ${formattedMessages}
 
       messagesToSave.push(markerMsg);
 
-      const unobservedParts = this.getUnobservedParts(markerMsg);
+      const unobservedParts = getUnobservedParts(markerMsg);
       if (unobservedParts.length === 0) {
         if (markerMsg.id) idsToRemove.push(markerMsg.id);
       } else if (unobservedParts.length < (markerMsg.content?.parts?.length ?? 0)) {
@@ -3908,95 +3828,6 @@ ${formattedMessages}
   }
 
   /**
-   * Filter out already-observed messages from the in-memory context.
-   *
-   * Uses marker-boundary pruning (safest at step 0) or record-based fallback
-   * (for step > 0 where the list may have mid-loop mutations).
-   */
-  async filterObservedMessages(opts: {
-    messageList: MessageList;
-    record?: ObservationalMemoryRecord;
-    useMarkerBoundaryPruning?: boolean;
-  }): Promise<void> {
-    const { messageList, record } = opts;
-    const allMessages = messageList.get.all.db();
-    const useMarkerBoundaryPruning = opts.useMarkerBoundaryPruning ?? true;
-    const fallbackCursor = record?.threadId
-      ? getThreadOMMetadata((await this.storage.getThreadById({ threadId: record.threadId }))?.metadata)
-          ?.lastObservedMessageCursor
-      : undefined;
-
-    let markerMessageIndex = -1;
-    let markerMessage: MastraDBMessage | null = null;
-
-    for (let i = allMessages.length - 1; i >= 0; i--) {
-      const msg = allMessages[i];
-      if (!msg) continue;
-      if (this.findLastCompletedObservationBoundary(msg) !== -1) {
-        markerMessageIndex = i;
-        markerMessage = msg;
-        break;
-      }
-    }
-
-    if (useMarkerBoundaryPruning && markerMessage && markerMessageIndex !== -1) {
-      const messagesToRemove: string[] = [];
-      for (let i = 0; i < markerMessageIndex; i++) {
-        const msg = allMessages[i];
-        if (msg?.id && msg.id !== 'om-continuation') {
-          messagesToRemove.push(msg.id);
-        }
-      }
-
-      if (messagesToRemove.length > 0) {
-        messageList.removeByIds(messagesToRemove);
-      }
-
-      const unobservedParts = this.getUnobservedParts(markerMessage);
-      if (unobservedParts.length === 0) {
-        if (markerMessage.id) messageList.removeByIds([markerMessage.id]);
-      } else if (unobservedParts.length < (markerMessage.content?.parts?.length ?? 0)) {
-        markerMessage.content.parts = unobservedParts;
-      }
-    } else if (record) {
-      const observedIds = new Set<string>(Array.isArray(record.observedMessageIds) ? record.observedMessageIds : []);
-
-      const derivedCursor =
-        fallbackCursor ??
-        this.getLastObservedMessageCursor(
-          allMessages.filter(msg => !!msg?.id && observedIds.has(msg.id) && !!msg.createdAt),
-        );
-      const lastObservedAt = record.lastObservedAt;
-      const messagesToRemove: string[] = [];
-
-      for (const msg of allMessages) {
-        if (!msg?.id || msg.id === 'om-continuation') continue;
-
-        if (observedIds.has(msg.id)) {
-          messagesToRemove.push(msg.id);
-          continue;
-        }
-
-        if (derivedCursor && this.isMessageAtOrBeforeCursor(msg, derivedCursor)) {
-          messagesToRemove.push(msg.id);
-          continue;
-        }
-
-        if (lastObservedAt && msg.createdAt) {
-          const msgDate = new Date(msg.createdAt);
-          if (msgDate <= lastObservedAt) {
-            messagesToRemove.push(msg.id);
-          }
-        }
-      }
-
-      if (messagesToRemove.length > 0) {
-        messageList.removeByIds(messagesToRemove);
-      }
-    }
-  }
-
-  /**
    * Get unobserved messages from other threads for resource-scoped observation.
    *
    * Lists all threads for the resource, filters to unobserved messages,
@@ -4081,7 +3912,7 @@ ${formattedMessages}
     });
 
     if (writer) {
-      const bufferedChunks = this.getBufferedChunks(record);
+      const bufferedChunks = getBufferedChunks(record);
       const bufferedObservationTokens = bufferedChunks.reduce((sum, chunk) => sum + (chunk.tokenCount ?? 0), 0);
       const rawBufferedMessageTokens = bufferedChunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0);
       const bufferedMessageTokens = Math.min(rawBufferedMessageTokens, pendingTokens);
@@ -4205,7 +4036,7 @@ ${formattedMessages}
     const threshold = calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
 
     // Buffering status
-    const bufferedChunks = this.getBufferedChunks(record);
+    const bufferedChunks = getBufferedChunks(record);
     const bufferedChunkCount = bufferedChunks.length;
     const bufferedChunkTokens = bufferedChunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0);
 
@@ -4611,7 +4442,7 @@ ${formattedMessages}
     }
 
     // Check for buffered chunks
-    const chunks = this.getBufferedChunks(record);
+    const chunks = getBufferedChunks(record);
     if (!chunks.length) {
       return { activated: false, record };
     }
@@ -4649,7 +4480,7 @@ ${formattedMessages}
     if (!freshRecord) {
       return { activated: false, record };
     }
-    const freshChunks = this.getBufferedChunks(freshRecord);
+    const freshChunks = getBufferedChunks(freshRecord);
     if (!freshChunks.length) {
       return { activated: false, record };
     }

@@ -1,4 +1,5 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
+import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import type { BufferedObservationChunk, ObservationalMemoryRecord } from '@mastra/core/storage';
 
 /**
  * Find the index of the last completed observation boundary (end marker) in a message's parts.
@@ -82,38 +83,104 @@ export function isMessageAtOrBeforeCursor(msg: MastraDBMessage, cursor: { create
 }
 
 /**
- * Filter messages for persistence, handling sealed message deduplication.
- *
- * - Sealed messages WITH observation markers: keep (storage upserts)
- * - Sealed messages WITHOUT markers: skip (already persisted by async buffering)
- * - Unsealed messages: keep
- *
- * Also updates sealedIds and state after filtering.
+ * Safely extract buffered observation chunks from a record.
+ * Handles both array and JSON-string formats, returning empty array if malformed.
  */
-export function filterMessagesForPersistence(
-  messagesToSave: MastraDBMessage[],
-  sealedIds: Set<string>,
-  state: Record<string, unknown>,
-): MastraDBMessage[] {
-  const filtered: MastraDBMessage[] = [];
-  for (const msg of messagesToSave) {
-    if (sealedIds.has(msg.id)) {
-      if (findLastCompletedObservationBoundary(msg) !== -1) {
-        filtered.push(msg);
-      }
-      // else: sealed for buffering only, already persisted — skip to avoid duplication
-    } else {
-      filtered.push(msg);
-    }
-  }
+/**
+ * Filter out already-observed messages from the in-memory context.
+ * Uses marker-boundary pruning (preferred) or record-based fallback.
+ *
+ * The `fallbackCursor` is optional — callers that need it should resolve it
+ * from thread metadata before calling this function.
+ */
+export function filterObservedMessages(opts: {
+  messageList: MessageList;
+  record?: ObservationalMemoryRecord;
+  useMarkerBoundaryPruning?: boolean;
+  fallbackCursor?: { createdAt: string; id: string };
+}): void {
+  const { messageList, record } = opts;
+  const allMessages = messageList.get.all.db();
+  const useMarkerBoundaryPruning = opts.useMarkerBoundaryPruning ?? true;
 
-  // Track IDs of messages that now have observation markers (sealed)
-  for (const msg of filtered) {
+  let markerMessageIndex = -1;
+  let markerMessage: MastraDBMessage | null = null;
+
+  for (let i = allMessages.length - 1; i >= 0; i--) {
+    const msg = allMessages[i];
+    if (!msg) continue;
     if (findLastCompletedObservationBoundary(msg) !== -1) {
-      sealedIds.add(msg.id);
+      markerMessageIndex = i;
+      markerMessage = msg;
+      break;
     }
   }
-  state.sealedIds = sealedIds;
 
-  return filtered;
+  if (useMarkerBoundaryPruning && markerMessage && markerMessageIndex !== -1) {
+    const messagesToRemove: string[] = [];
+    for (let i = 0; i < markerMessageIndex; i++) {
+      const msg = allMessages[i];
+      if (msg?.id && msg.id !== 'om-continuation') {
+        messagesToRemove.push(msg.id);
+      }
+    }
+
+    if (messagesToRemove.length > 0) {
+      messageList.removeByIds(messagesToRemove);
+    }
+
+    const unobserved = getUnobservedParts(markerMessage);
+    if (unobserved.length === 0) {
+      if (markerMessage.id) messageList.removeByIds([markerMessage.id]);
+    } else if (unobserved.length < (markerMessage.content?.parts?.length ?? 0)) {
+      markerMessage.content.parts = unobserved;
+    }
+  } else if (record) {
+    const observedIds = new Set<string>(Array.isArray(record.observedMessageIds) ? record.observedMessageIds : []);
+
+    const derivedCursor =
+      opts.fallbackCursor ??
+      getLastObservedMessageCursor(allMessages.filter(msg => !!msg?.id && observedIds.has(msg.id) && !!msg.createdAt));
+    const lastObservedAt = record.lastObservedAt;
+    const messagesToRemove: string[] = [];
+
+    for (const msg of allMessages) {
+      if (!msg?.id || msg.id === 'om-continuation') continue;
+
+      if (observedIds.has(msg.id)) {
+        messagesToRemove.push(msg.id);
+        continue;
+      }
+
+      if (derivedCursor && isMessageAtOrBeforeCursor(msg, derivedCursor)) {
+        messagesToRemove.push(msg.id);
+        continue;
+      }
+
+      if (lastObservedAt && msg.createdAt) {
+        const msgDate = new Date(msg.createdAt);
+        if (msgDate <= lastObservedAt) {
+          messagesToRemove.push(msg.id);
+        }
+      }
+    }
+
+    if (messagesToRemove.length > 0) {
+      messageList.removeByIds(messagesToRemove);
+    }
+  }
+}
+
+export function getBufferedChunks(record: ObservationalMemoryRecord | null | undefined): BufferedObservationChunk[] {
+  if (!record?.bufferedObservationChunks) return [];
+  if (Array.isArray(record.bufferedObservationChunks)) return record.bufferedObservationChunks;
+  if (typeof record.bufferedObservationChunks === 'string') {
+    try {
+      const parsed = JSON.parse(record.bufferedObservationChunks);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
 }

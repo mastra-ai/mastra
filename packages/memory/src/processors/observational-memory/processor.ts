@@ -1,10 +1,11 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
-import { parseMemoryRequestContext } from '@mastra/core/memory';
+import { getThreadOMMetadata, parseMemoryRequestContext } from '@mastra/core/memory';
 import type { Processor, ProcessInputStepArgs, ProcessOutputResultArgs } from '@mastra/core/processors';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { omDebug } from './debug';
+import { filterObservedMessages } from './message-utils';
 import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import { resolveRetentionFloor } from './thresholds';
@@ -195,6 +196,25 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     }
 
     return obsResult.record;
+  }
+
+  /**
+   * Filter out already-observed messages from the in-memory context.
+   * Resolves the cursor fallback from thread metadata, then delegates to the
+   * pure filterObservedMessages utility.
+   */
+  private async filterObservedMessagesFromContext(opts: {
+    messageList: MessageList;
+    record?: ObservationalMemoryRecord;
+    useMarkerBoundaryPruning?: boolean;
+  }): Promise<void> {
+    const { record } = opts;
+    const fallbackCursor = record?.threadId
+      ? getThreadOMMetadata((await this.engine.getStorage().getThreadById({ threadId: record.threadId }))?.metadata)
+          ?.lastObservedMessageCursor
+      : undefined;
+
+    filterObservedMessages({ ...opts, fallbackCursor });
   }
 
   // ─── Processor lifecycle hooks ──────────────────────────────────────────
@@ -451,7 +471,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       }
 
       if (!didThresholdCleanup) {
-        await this.engine.filterObservedMessages({
+        await this.filterObservedMessagesFromContext({
           messageList,
           record,
           useMarkerBoundaryPruning: stepNumber === 0,

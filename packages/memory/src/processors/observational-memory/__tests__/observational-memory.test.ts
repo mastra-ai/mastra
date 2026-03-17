@@ -4,6 +4,7 @@ import { coreFeatures } from '@mastra/core/features';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
+import { filterObservedMessages } from '../message-utils';
 import { ObservationalMemory } from '../observational-memory';
 import {
   buildObserverPrompt,
@@ -9013,7 +9014,7 @@ describe('Single-thread replay red tests', () => {
   }
 
   it('T1-A: messages at exact lastObservedAt boundary should not replay on next turn', async () => {
-    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+    const { messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
     const t1 = new Date(t0.getTime() + 1);
@@ -9042,7 +9043,7 @@ describe('Single-thread replay red tests', () => {
       'memory',
     );
 
-    await (om as any).filterObservedMessages({
+    filterObservedMessages({
       messageList,
       record: { lastObservedAt: t0 },
     });
@@ -9054,7 +9055,7 @@ describe('Single-thread replay red tests', () => {
   });
 
   it('T2-B: marker-bearing mixed message should be trimmed to post-marker parts only', async () => {
-    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+    const { messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
     const t1 = new Date('2025-01-01T10:00:01.000Z');
@@ -9090,7 +9091,7 @@ describe('Single-thread replay red tests', () => {
       'memory',
     );
 
-    await (om as any).filterObservedMessages({
+    filterObservedMessages({
       messageList,
       record: { lastObservedAt: t1 },
     });
@@ -9286,7 +9287,7 @@ describe('Single-thread replay red tests', () => {
   });
 
   it('T3-A: sealed remint (id=A->id=B) should not replay sealed prefix', async () => {
-    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+    const { messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
 
@@ -9332,7 +9333,7 @@ describe('Single-thread replay red tests', () => {
     const reminted = messagesAfterRemint.find((m: any) => m.id !== 'A');
     expect(reminted).toBeDefined();
 
-    await (om as any).filterObservedMessages({
+    filterObservedMessages({
       messageList,
       record: { observedMessageIds: ['A'], lastObservedAt: t0 },
     });
@@ -9344,7 +9345,7 @@ describe('Single-thread replay red tests', () => {
   });
 
   it('T1-B: reminted +1ms boundary should not leak observed prefix on next turn', async () => {
-    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+    const { messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
 
@@ -9386,7 +9387,7 @@ describe('Single-thread replay red tests', () => {
     expect(reminted).toBeDefined();
     expect(reminted!.createdAt.getTime()).toBe(t0.getTime() + 1);
 
-    await (om as any).filterObservedMessages({
+    filterObservedMessages({
       messageList,
       record: { observedMessageIds: ['A'], lastObservedAt: t0 },
     });
@@ -9709,7 +9710,7 @@ describe('Single-thread replay red tests', () => {
     await new Promise(resolve => setTimeout(resolve, 5));
     expect(saveStarted.value).toBe(true);
 
-    await (om as any).filterObservedMessages({
+    filterObservedMessages({
       messageList,
       record: {
         observedMessageIds: ['race-old'],
@@ -9810,7 +9811,7 @@ describe('Single-thread replay red tests', () => {
 
     messageList.add(observed, 'memory');
     messageList.add(fresh, 'memory');
-    await (om as any).filterObservedMessages({ messageList, record });
+    filterObservedMessages({ messageList, record });
 
     const remainingIds = messageList.get.all.db().map((m: any) => m.id);
     expect(remainingIds).toEqual(unobservedIds);
