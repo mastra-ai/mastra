@@ -175,6 +175,10 @@ export class GradientAnimator {
     return this._isFadingOut;
   }
 
+  isFadingIn(): boolean {
+    return this._isFadingIn;
+  }
+
   isRunning(): boolean {
     return this.intervalId !== null;
   }

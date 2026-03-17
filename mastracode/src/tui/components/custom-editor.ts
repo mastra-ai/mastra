@@ -10,6 +10,7 @@ import type { EditorTheme, TUI } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 import { getClipboardImage, getClipboardText } from '../../clipboard/index.js';
 import type { ClipboardImage } from '../../clipboard/index.js';
+import type { GradientAnimator } from './obi-loader.js';
 import { mastra, theme } from '../theme.js';
 
 const PASTE_START = '\x1b[200~';
@@ -54,6 +55,7 @@ export class CustomEditor extends Editor {
   public escapeEnabled = true;
   public onImagePaste?: (image: ClipboardImage) => void;
   public getModeColor?: () => string | undefined;
+  public getPromptAnimator?: () => GradientAnimator | undefined;
   private pendingBracketedPaste: string | null = null;
 
   private _cachedModeColorHex?: string;
@@ -97,7 +99,37 @@ export class CustomEditor extends Editor {
     const isSlash = text.startsWith('/');
     const isAt = text.startsWith('@');
     const color = this.getModeColor?.() || mastra.green;
-    const promptChar = isSlash ? '/' : isAt ? '@' : '›';
+    const promptAnimator = this.getPromptAnimator?.();
+    const shouldAnimatePrompt = !isSlash && !isAt;
+    const isPromptAnimated = shouldAnimatePrompt && Boolean(promptAnimator?.isRunning());
+    const fadeProgress = isPromptAnimated ? promptAnimator!.getFadeProgress() : 1;
+    const isTransitioningIn = isPromptAnimated && promptAnimator!.isFadingIn();
+    const pulseWave = isPromptAnimated ? (Math.sin(promptAnimator!.getOffset() * Math.PI * 2) + 1) / 2 : 0;
+    const transitionPhase = isTransitioningIn ? 1 - fadeProgress : 1;
+    const chevronBrightness = isPromptAnimated
+      ? isTransitioningIn
+        ? transitionPhase < 0.5
+          ? Math.max(0, 1 - transitionPhase * 2)
+          : 0
+        : 0
+      : 1;
+    const circleBrightness = isPromptAnimated
+      ? isTransitioningIn
+        ? transitionPhase <= 0.5
+          ? 0
+          : Math.max(0, (transitionPhase - 0.5) * 2)
+        : 0.15 + pulseWave * 0.85
+      : 0;
+    const promptChar = isSlash
+      ? '/'
+      : isAt
+        ? '@'
+        : chevronBrightness > 0.05
+          ? '›'
+          : circleBrightness > 0.05
+            ? '∙'
+            : ' ';
+    const promptBrightness = isPromptAnimated ? Math.max(chevronBrightness, circleBrightness) : 1;
 
     // Cache colorFn and prompt — only recreate when color changes
     if (this._cachedModeColorHex !== color) {
@@ -106,8 +138,12 @@ export class CustomEditor extends Editor {
     }
     const colorFn = this._cachedColorFn!;
     const b = colorFn;
-    // Prompt changes with slash/at mode, so rebuild each time (cheap)
-    const prompt = chalk.bold.hex(color)(promptChar);
+    const [r, g, bValue] = parseHex(color);
+    const prompt = chalk.bold.rgb(
+      Math.round(r * promptBrightness),
+      Math.round(g * promptBrightness),
+      Math.round(bValue * promptBrightness),
+    )(promptChar);
 
     // Box structure: "│ > content │" or "│   content │"
     // Left: "│ > " (4) or "│   " (4), Right: " │" (2) = 6 chars total

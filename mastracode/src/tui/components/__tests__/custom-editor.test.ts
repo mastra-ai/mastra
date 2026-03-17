@@ -2,11 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   superHandleInput: vi.fn(),
+  superRender: vi.fn(() => ['────', 'hello', '────']),
   getClipboardImage: vi.fn(),
   getClipboardText: vi.fn(),
   matchesKey: vi.fn((_data: string, _key: string) => false),
   readFileSync: vi.fn(),
   statSync: vi.fn(),
+  chalkHex: vi.fn((_color: string) => (value: string) => value),
+  chalkBoldHex: vi.fn((_color: string) => (value: string) => `[hex:${_color}]${value}`),
+  chalkBoldRgb: vi.fn((r: number, g: number, b: number) => (value: string) => `[rgb:${r},${g},${b}]${value}`),
 }));
 
 vi.mock('node:fs', () => ({
@@ -20,6 +24,10 @@ vi.mock('@mariozechner/pi-tui', () => {
 
     handleInput(data: string): void {
       mocks.superHandleInput(data);
+    }
+
+    render(_width: number): string[] {
+      return mocks.superRender();
     }
 
     getText(): string {
@@ -42,6 +50,16 @@ vi.mock('../../../clipboard/index.js', () => ({
   getClipboardText: mocks.getClipboardText,
 }));
 
+vi.mock('chalk', () => ({
+  default: {
+    hex: mocks.chalkHex,
+    bold: {
+      hex: mocks.chalkBoldHex,
+      rgb: mocks.chalkBoldRgb,
+    },
+  },
+}));
+
 import { CustomEditor } from '../custom-editor.js';
 
 const PASTE_START = '\x1b[200~';
@@ -52,6 +70,10 @@ describe('CustomEditor image paste handling', () => {
     for (const mock of Object.values(mocks)) {
       mock.mockReset();
     }
+    mocks.superRender.mockReturnValue(['────', 'hello', '────']);
+    mocks.chalkHex.mockImplementation((_color: string) => (value: string) => value);
+    mocks.chalkBoldHex.mockImplementation((color: string) => (value: string) => `[hex:${color}]${value}`);
+    mocks.chalkBoldRgb.mockImplementation((r: number, g: number, b: number) => (value: string) => `[rgb:${r},${g},${b}]${value}`);
     mocks.matchesKey.mockImplementation((_data: string, _key: string) => false);
     mocks.statSync.mockReturnValue({ isFile: () => true });
     mocks.readFileSync.mockReturnValue(Buffer.from('dragged-image-binary'));
@@ -94,6 +116,90 @@ describe('CustomEditor image paste handling', () => {
 
     expect(mocks.superHandleInput).toHaveBeenCalledWith('\t');
     expect(followUp).not.toHaveBeenCalled();
+  });
+
+  it('renders a chevron prompt when no animator is active', () => {
+    const editor = new CustomEditor({} as any, {} as any);
+    editor.getText = vi.fn(() => 'hello');
+    editor.getModeColor = vi.fn(() => '#16c858');
+
+    const output = editor.render(20).join('\n');
+
+    expect(output).toContain('[rgb:22,200,88]›');
+  });
+
+  it('fully fades the chevron out before fading the circle in, then keeps pulsing the circle', () => {
+    const editor = new CustomEditor({} as any, {} as any);
+    editor.getText = vi.fn(() => 'hello');
+    editor.getModeColor = vi.fn(() => '#16c858');
+
+    editor.getPromptAnimator = vi.fn(
+      () =>
+        ({
+          isRunning: () => true,
+          isFadingIn: () => true,
+          getFadeProgress: () => 0.8,
+          getOffset: () => 0,
+        }) as any,
+    );
+    expect(editor.render(20).join('\n')).toContain('[rgb:13,120,53]›');
+
+    editor.getPromptAnimator = vi.fn(
+      () =>
+        ({
+          isRunning: () => true,
+          isFadingIn: () => true,
+          getFadeProgress: () => 0.5,
+          getOffset: () => 0,
+        }) as any,
+    );
+    const invisibleOutput = editor.render(20).join('\n');
+    expect(invisibleOutput).not.toContain('›');
+    expect(invisibleOutput).not.toContain('•');
+
+    editor.getPromptAnimator = vi.fn(
+      () =>
+        ({
+          isRunning: () => true,
+          isFadingIn: () => true,
+          getFadeProgress: () => 0.2,
+          getOffset: () => 0,
+        }) as any,
+    );
+    const transitionedOutput = editor.render(20).join('\n');
+    expect(transitionedOutput).toContain('[rgb:13,120,53]∙');
+    expect(transitionedOutput).not.toContain('›');
+
+    editor.getPromptAnimator = vi.fn(
+      () =>
+        ({
+          isRunning: () => true,
+          isFadingIn: () => false,
+          getFadeProgress: () => 0,
+          getOffset: () => 0.5,
+        }) as any,
+    );
+    const pulsingOutput = editor.render(20).join('\n');
+
+    expect(pulsingOutput).toContain('[rgb:13,115,51]∙');
+    expect(pulsingOutput).not.toContain('›');
+  });
+
+  it('keeps slash prompts unanimated while showing the slash character', () => {
+    const editor = new CustomEditor({} as any, {} as any);
+    editor.getText = vi.fn(() => '/help');
+    editor.getModeColor = vi.fn(() => '#16c858');
+    editor.getPromptAnimator = vi.fn(
+      () =>
+        ({
+          isRunning: () => true,
+          getOffset: () => 0.75,
+        }) as any,
+    );
+
+    const output = editor.render(20).join('\n');
+
+    expect(output).toContain('[rgb:22,200,88]/');
   });
 
   it('converts a pasted local image path into an image attachment', () => {
