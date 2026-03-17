@@ -648,12 +648,27 @@ export class MessageList {
       for (let i = 0; i < msg.content.parts.length; i++) {
         const part = msg.content.parts[i];
         if (part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId) {
+          // Cast to access providerExecuted/providerMetadata which exist at runtime but aren't in the base type
+          const originalPart = part as typeof part & { providerExecuted?: boolean; providerMetadata?: unknown };
+          const inputPartWithMeta = inputPart as typeof inputPart & {
+            providerExecuted?: boolean;
+            providerMetadata?: unknown;
+          };
+
           msg.content.parts[i] = {
             ...inputPart,
             toolInvocation: {
               ...inputPart.toolInvocation,
               args: part.toolInvocation.args,
             },
+            // Preserve providerExecuted from original call if not in result
+            ...(originalPart.providerExecuted !== undefined && inputPartWithMeta.providerExecuted === undefined
+              ? { providerExecuted: originalPart.providerExecuted }
+              : {}),
+            // Preserve providerMetadata from original call if not in result
+            ...(originalPart.providerMetadata !== undefined && inputPartWithMeta.providerMetadata === undefined
+              ? { providerMetadata: originalPart.providerMetadata }
+              : {}),
           };
 
           // Move the message to the response source so it gets
