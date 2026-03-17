@@ -63,7 +63,7 @@ export function MainSidebarNavLink({
           // Keep strong green CTA in dark mode
           'dark:[&>a]:bg-accent1 dark:[&>a:hover]:bg-accent1/90 dark:[&>a]:text-black dark:[&>a:hover]:text-black dark:[&>a]:border-transparent':
             isFeatured,
-          '[&_svg]:text-accent1 dark:[&_svg]:text-black/75 dark:[&>a:hover_svg]:text-black': isFeatured,
+          '[&_svg]:text-accent1 [&>a:hover_svg]:text-accent1 dark:[&_svg]:text-black/75 dark:[&>a:hover_svg]:text-black': isFeatured,
         },
         className,
       )}

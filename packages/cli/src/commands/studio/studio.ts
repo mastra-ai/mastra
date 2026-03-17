@@ -100,6 +100,7 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
   const basePath = normalizeBasePath(process.env.MASTRA_STUDIO_BASE_PATH ?? '');
 
   const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
+  const themeToggle = process.env.MASTRA_THEME_TOGGLE?.toLowerCase() === 'true' ? 'true' : 'false';
 
   let html = readFileSync(indexHtmlPath, 'utf8')
     .replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', basePath)
@@ -112,7 +113,7 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
     .replaceAll('%%MASTRA_HIDE_CLOUD_CTA%%', '')
     .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', process.env.MASTRA_TELEMETRY_DISABLED ?? '')
     .replaceAll('%%MASTRA_REQUEST_CONTEXT_PRESETS%%', escapeJsonForHtml(requestContextPresetsJson))
-    .replaceAll('%%MASTRA_THEME_TOGGLE%%', process.env.MASTRA_THEME_TOGGLE ?? '');
+    .replaceAll('%%MASTRA_THEME_TOGGLE%%', themeToggle);
 
   // Pre-compress the HTML shell since it's served for every non-asset request
   const compressedHtml = gzipSync(Buffer.from(html));

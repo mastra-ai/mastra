@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Add a feature-gated light mode toggle to Studio Settings with persisted theme preference in local storage. When `MASTRA_THEME_TOGGLE=true`, users can switch between dark and light themes and the preference is restored after reload; when disabled, Studio remains dark-only with no theme toggle shown.
+Add a feature-gated theme toggle to Studio Settings with persisted preference in local storage. Run `MASTRA_THEME_TOGGLE=true mastra studio` to enable it. The Studio Settings theme selector supports `dark`, `light`, and `system` (follow OS); when `MASTRA_THEME_TOGGLE` is false, Studio remains dark-only and the selector is hidden.

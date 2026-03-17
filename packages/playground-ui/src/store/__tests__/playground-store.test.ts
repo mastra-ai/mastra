@@ -27,6 +27,7 @@ describe('playground-store theme persistence', () => {
   beforeEach(() => {
     localStorageMock.clear();
     vi.clearAllMocks();
+    vi.resetModules();
   });
 
   it('defaults theme to dark', async () => {
@@ -44,7 +45,8 @@ describe('playground-store theme persistence', () => {
     expect(localStorageMock.setItem).toHaveBeenCalled();
 
     const storedValue = localStorageMock.setItem.mock.calls.at(-1)?.[1] as string;
-    expect(storedValue).toContain('"theme":"light"');
+    const parsed = JSON.parse(storedValue);
+    expect(parsed.state.theme).toBe('light');
   });
 
   it('updates theme to system and writes to persisted store', async () => {
@@ -56,6 +58,7 @@ describe('playground-store theme persistence', () => {
     expect(localStorageMock.setItem).toHaveBeenCalled();
 
     const storedValue = localStorageMock.setItem.mock.calls.at(-1)?.[1] as string;
-    expect(storedValue).toContain('"theme":"system"');
+    const parsed = JSON.parse(storedValue);
+    expect(parsed.state.theme).toBe('system');
   });
 });

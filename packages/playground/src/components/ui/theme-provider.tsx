@@ -6,7 +6,7 @@ type ResolvedTheme = 'dark' | 'light';
 
 type ThemeProviderProps = {
   children: React.ReactNode;
-  defaultTheme?: ResolvedTheme;
+  defaultTheme?: Theme;
   attribute?: string;
 };
 
@@ -28,7 +28,8 @@ const resolveTheme = (theme: Theme): ResolvedTheme => {
 
 export function ThemeProvider({ children, defaultTheme = 'dark' }: ThemeProviderProps) {
   const { themeToggleEnabled } = useStudioConfig();
-  const { theme, setTheme } = usePlaygroundStore();
+  const theme = usePlaygroundStore(state => state.theme);
+  const setTheme = usePlaygroundStore(state => state.setTheme);
 
   const persistedTheme: Theme = theme === 'light' || theme === 'system' ? theme : 'dark';
   const selectedTheme: Theme = themeToggleEnabled ? persistedTheme : defaultTheme;

@@ -1,5 +1,26 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { resetStorage } from '../__utils__/reset-storage';
+
+const seedThemeInLocalStorage = async (page: Page, themeToggle: 'true' | 'false') => {
+  await page.addInitScript(toggle => {
+    Object.defineProperty(window, 'MASTRA_THEME_TOGGLE', {
+      value: toggle,
+      writable: false,
+      configurable: false,
+    });
+
+    if (toggle !== 'true') {
+      return;
+    }
+
+    if (!window.localStorage.getItem('mastra-playground-store')) {
+      window.localStorage.setItem(
+        'mastra-playground-store',
+        JSON.stringify({ state: { requestContext: [], theme: 'dark' }, version: 0 }),
+      );
+    }
+  }, themeToggle);
+};
 
 test.beforeEach(async () => {
   await resetStorage();
@@ -24,13 +45,7 @@ test('renders settings form', async ({ page }) => {
 });
 
 test('keeps theme selector hidden when theme flag is disabled', async ({ page }) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(window, 'MASTRA_THEME_TOGGLE', {
-      value: 'false',
-      writable: false,
-      configurable: false,
-    });
-  });
+  await seedThemeInLocalStorage(page, 'false');
 
   await page.goto('/settings');
 
@@ -38,20 +53,7 @@ test('keeps theme selector hidden when theme flag is disabled', async ({ page })
 });
 
 test('shows theme selector with dark default when theme flag is enabled', async ({ page }) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(window, 'MASTRA_THEME_TOGGLE', {
-      value: 'true',
-      writable: false,
-      configurable: false,
-    });
-
-    if (!window.localStorage.getItem('mastra-playground-store')) {
-      window.localStorage.setItem(
-        'mastra-playground-store',
-        JSON.stringify({ state: { requestContext: [], theme: 'dark' }, version: 0 }),
-      );
-    }
-  });
+  await seedThemeInLocalStorage(page, 'true');
 
   await page.goto('/settings');
 
@@ -63,20 +65,7 @@ test('shows theme selector with dark default when theme flag is enabled', async 
 });
 
 test('applies selected light theme only after saving configuration', async ({ page }) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(window, 'MASTRA_THEME_TOGGLE', {
-      value: 'true',
-      writable: false,
-      configurable: false,
-    });
-
-    if (!window.localStorage.getItem('mastra-playground-store')) {
-      window.localStorage.setItem(
-        'mastra-playground-store',
-        JSON.stringify({ state: { requestContext: [], theme: 'dark' }, version: 0 }),
-      );
-    }
-  });
+  await seedThemeInLocalStorage(page, 'true');
 
   await page.goto('/settings');
 
@@ -101,20 +90,7 @@ test('applies selected light theme only after saving configuration', async ({ pa
 });
 
 test('persists system theme mode when saved', async ({ page }) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(window, 'MASTRA_THEME_TOGGLE', {
-      value: 'true',
-      writable: false,
-      configurable: false,
-    });
-
-    if (!window.localStorage.getItem('mastra-playground-store')) {
-      window.localStorage.setItem(
-        'mastra-playground-store',
-        JSON.stringify({ state: { requestContext: [], theme: 'dark' }, version: 0 }),
-      );
-    }
-  });
+  await seedThemeInLocalStorage(page, 'true');
 
   await page.goto('/settings');
 
