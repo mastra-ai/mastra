@@ -118,7 +118,6 @@ describe('PgVector halfvec version detection after custom schema install', () =>
 
   let vectorStore: PgVector;
   let listIndexesSpy: ReturnType<typeof vi.spyOn>;
-  const queryHistory: QueryCall[] = [];
 
   beforeEach(async () => {
     queryHistory.length = 0;
@@ -187,6 +186,90 @@ describe('PgVector halfvec version detection after custom schema install', () =>
   });
 });
 
+describe('PgVector schema-aware operator class handling for custom schema', () => {
+  const config: PgVectorConfig & { id: string } = {
+    connectionString: 'postgresql://postgres:postgres@localhost:5432/mastra',
+    schemaName: 'custom_schema',
+    id: 'pg-vector-operator-class-test',
+  };
+
+  let vectorStore: PgVector;
+  let listIndexesSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(async () => {
+    queryHistory.length = 0;
+
+    mockClient.query.mockImplementation(async (text: any, values?: any[]) => {
+      const sql = typeof text === 'string' ? text : text?.text || '';
+      queryHistory.push({ text: sql, values });
+
+      // Schema check
+      if (sql.includes('information_schema.schemata')) {
+        return { rows: [{ exists: true }] };
+      }
+
+      // Extension detection - extension installed in custom schema
+      if (sql.includes('FROM pg_extension e')) {
+        return { rows: [{ schema_name: 'custom_schema', version: '0.8.0' }] };
+      }
+
+      // For describeIndex - simulate table exists, return type based on dimension
+      if (sql.includes('information_schema.columns') && sql.includes('udt_name')) {
+        // Check if this is for halfvecTestIndex
+        return { rows: [{ udt_name: 'vector' }] };
+      }
+
+      // For dimension query - return dimension based on index
+      if (sql.includes('pg_attribute') && sql.includes('atttypmod')) {
+        return { rows: [{ dimension: 1536 }] };
+      }
+
+      // For count query
+      if (sql.includes('COUNT(*)')) {
+        return { rows: [{ count: '100' }] };
+      }
+
+      // For index info query - no index exists yet (flat)
+      if (sql.includes('pg_index') && sql.includes('pg_am')) {
+        return { rows: [] };
+      }
+
+      return { rows: [] };
+    });
+    mockClient.release.mockReset();
+
+    listIndexesSpy = vi.spyOn(PgVector.prototype, 'listIndexes').mockResolvedValue([]);
+
+    vectorStore = new PgVector(config);
+    await (vectorStore as any).cacheWarmupPromise;
+  });
+
+  afterEach(async () => {
+    await vectorStore.disconnect();
+    listIndexesSpy.mockRestore();
+    mockClient.query.mockReset();
+  });
+
+  it('should schema-qualify operator class when extension is in custom schema', async () => {
+    // Issue #14357: When PgVector is configured with a custom schemaName and the vector
+    // extension is installed in that custom schema, operator classes like vector_cosine_ops
+    // must be schema-qualified (e.g., custom_schema.vector_cosine_ops) for index creation
+    // to work, because the custom schema is not on the default search_path.
+
+    await vectorStore.createIndex({
+      indexName: 'testIndex',
+      dimension: 1536,
+      metric: 'cosine',
+      indexConfig: { type: 'hnsw' },
+    });
+
+    const createIndexCall = queryHistory.find(call => call.text.includes('CREATE INDEX'));
+    expect(createIndexCall).toBeDefined();
+    // Should use schema-qualified operator class
+    expect(createIndexCall?.text ?? '').toContain('custom_schema.vector_cosine_ops');
+  });
+});
+
 describe('PgVector buildIndex uses correct operator class for halfvec', () => {
   const config: PgVectorConfig & { id: string } = {
     connectionString: 'postgresql://postgres:postgres@localhost:5432/mastra',
@@ -195,7 +278,6 @@ describe('PgVector buildIndex uses correct operator class for halfvec', () => {
 
   let vectorStore: PgVector;
   let listIndexesSpy: ReturnType<typeof vi.spyOn>;
-  const queryHistory: QueryCall[] = [];
 
   beforeEach(async () => {
     queryHistory.length = 0;

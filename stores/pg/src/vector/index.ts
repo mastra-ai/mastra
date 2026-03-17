@@ -295,6 +295,27 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   }
 
   /**
+   * Gets the properly qualified operator class name for index creation
+   * @param operatorClass - The operator class name (e.g., 'vector_cosine_ops')
+   */
+  private getOperatorClassName(operatorClass: string): string {
+    // If we know where the extension is, qualify the operator class
+    if (this.vectorExtensionSchema) {
+      // If it's in pg_catalog, return the operator class directly
+      if (this.vectorExtensionSchema === 'pg_catalog') {
+        return operatorClass;
+      }
+      // Issue #14357: Qualify operator class with schema where vector extension is installed
+      // This ensures the operator class is found during index creation regardless of search_path
+      const validatedSchema = parseSqlIdentifier(this.vectorExtensionSchema, 'vector extension schema');
+      return `${validatedSchema}.${operatorClass}`;
+    }
+
+    // Fallback to unqualified (will use search_path)
+    return operatorClass;
+  }
+
+  /**
    * Returns the operator class, distance operator, and score expression for a
    * standard (non-bit) vector type prefix and metric.
    */
@@ -1091,6 +1112,19 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Use the detected vectorType from existing table if available, otherwise use the parameter
       const effectiveVectorType = existingIndexInfo?.vectorType ?? vectorType;
       const metricOp = this.getVectorOps(effectiveVectorType, metric).operatorClass;
+      // Issue #14357: Schema-qualify the operator class when extension is in custom schema
+      const qualifiedMetricOp = this.getOperatorClassName(metricOp);
+
+      // Set search path to include both schemas if needed before creating index
+      // This ensures operators and functions are resolvable during index creation
+      if (
+        this.schema &&
+        this.vectorExtensionSchema &&
+        this.schema !== this.vectorExtensionSchema &&
+        this.vectorExtensionSchema !== 'pg_catalog'
+      ) {
+        await client.query(`SET search_path TO ${this.getSchemaName()}, "${this.vectorExtensionSchema}"`);
+      }
 
       let indexSQL: string;
       if (indexType === 'hnsw') {
@@ -1100,7 +1134,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         indexSQL = `
           CREATE INDEX IF NOT EXISTS ${vectorIndexName}
           ON ${tableName}
-          USING hnsw (embedding ${metricOp})
+          USING hnsw (embedding ${qualifiedMetricOp})
           WITH (
             m = ${m},
             ef_construction = ${efConstruction}
@@ -1117,7 +1151,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         indexSQL = `
           CREATE INDEX IF NOT EXISTS ${vectorIndexName}
           ON ${tableName}
-          USING ivfflat (embedding ${metricOp})
+          USING ivfflat (embedding ${qualifiedMetricOp})
           WITH (lists = ${lists});
         `;
       }
