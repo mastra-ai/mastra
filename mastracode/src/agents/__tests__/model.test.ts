@@ -74,12 +74,18 @@ vi.mock('@mastra/core/llm', () => ({
 }));
 
 const mockLoadSettings = vi.hoisted(() =>
-  vi.fn<() => { customProviders: Array<{ name: string; url: string; apiKey?: string }> }>(() => ({ customProviders: [] })),
+  vi.fn<() => { customProviders: Array<{ name: string; url: string; apiKey?: string }> }>(() => ({
+    customProviders: [],
+  })),
 );
 
 vi.mock('../../onboarding/settings.js', () => ({
   loadSettings: mockLoadSettings,
-  getCustomProviderId: (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+  getCustomProviderId: (name: string) =>
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, ''),
 }));
 
 import { opencodeClaudeMaxProvider } from '../../providers/claude-max.js';
