@@ -705,4 +705,191 @@ describe('PromptInjectionDetector', () => {
       });
     });
   });
+
+  describe('scanMode: latest', () => {
+    it('should only scan the latest message when scanMode is latest', async () => {
+      // Only the last message should be checked
+      const model = setupMockModel(createMockDetectionResult(false));
+      const detector = new PromptInjectionDetector({
+        model,
+        scanMode: 'latest',
+      });
+
+      const mockAbort = vi.fn();
+
+      const messages = [
+        createTestMessage('First message', 'user', 'msg1'),
+        createTestMessage('Second message', 'user', 'msg2'),
+        createTestMessage('Third message', 'user', 'msg3'),
+      ];
+
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
+
+      // All messages should pass through since only the last one was checked
+      expect(result).toEqual(messages);
+      // Model should only be called once (for the last message)
+      expect(mockAbort).not.toHaveBeenCalled();
+    });
+
+    it('should block only when latest message has injection with scanMode latest', async () => {
+      const model = setupMockModel(createMockDetectionResult(true, ['injection']));
+      const detector = new PromptInjectionDetector({
+        model,
+        scanMode: 'latest',
+        strategy: 'block',
+      });
+
+      const mockAbort = vi.fn().mockImplementation(() => {
+        throw new TripWire('Injection blocked');
+      });
+
+      const messages = [
+        createTestMessage('Safe first message', 'user', 'msg1'),
+        createTestMessage('Safe second message', 'user', 'msg2'),
+        createTestMessage('Malicious content', 'user', 'msg3'),
+      ];
+
+      await expect(async () => {
+        await detector.processInput({ messages, abort: mockAbort as any });
+      }).rejects.toThrow('Injection blocked');
+
+      expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('Prompt injection detected'));
+    });
+
+    it('should filter only the latest message when scanMode is latest', async () => {
+      const model = setupMockModel(createMockDetectionResult(true, ['injection']));
+      const detector = new PromptInjectionDetector({
+        model,
+        scanMode: 'latest',
+        strategy: 'filter',
+      });
+
+      const mockAbort = vi.fn();
+      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+      const messages = [
+        createTestMessage('Safe first message', 'user', 'msg1'),
+        createTestMessage('Safe second message', 'user', 'msg2'),
+        createTestMessage('Malicious content', 'user', 'msg3'),
+      ];
+
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
+
+      // Only the last message should be filtered, first two should remain
+      expect(result).toHaveLength(2);
+      expect(result[0].id).toBe('msg1');
+      expect(result[1].id).toBe('msg2');
+
+      consoleInfoSpy.mockRestore();
+    });
+
+    it('should rewrite only the latest message when scanMode is latest', async () => {
+      const rewrittenContent = 'Safe rewritten content';
+      const model = setupMockModel(createMockDetectionResult(true, ['injection'], rewrittenContent));
+      const detector = new PromptInjectionDetector({
+        model,
+        scanMode: 'latest',
+        strategy: 'rewrite',
+      });
+
+      const mockAbort = vi.fn();
+
+      const messages = [
+        createTestMessage('Safe first message', 'user', 'msg1'),
+        createTestMessage('Safe second message', 'user', 'msg2'),
+        createTestMessage('Malicious content', 'user', 'msg3'),
+      ];
+
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
+
+      // All three messages should be returned, with the last one rewritten
+      expect(result).toHaveLength(3);
+      expect(result[0].id).toBe('msg1');
+      expect(result[1].id).toBe('msg2');
+      expect(result[2].content.parts?.[0]).toEqual({
+        type: 'text',
+        text: rewrittenContent,
+      });
+    });
+
+    it('should allow all messages when latest is safe with scanMode latest', async () => {
+      const model = setupMockModel(createMockDetectionResult(false));
+      const detector = new PromptInjectionDetector({
+        model,
+        scanMode: 'latest',
+        strategy: 'block',
+      });
+
+      const mockAbort = vi.fn();
+
+      const messages = [
+        createTestMessage('First message', 'user', 'msg1'),
+        createTestMessage('Second message', 'user', 'msg2'),
+        createTestMessage('Third message', 'user', 'msg3'),
+      ];
+
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
+
+      // All messages should pass through since the latest was safe
+      expect(result).toEqual(messages);
+      expect(mockAbort).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('scanMode: all (default)', () => {
+    it('should scan all messages by default', async () => {
+      // Multiple results - all messages will be checked
+      const model = setupMockModel([
+        createMockDetectionResult(false),
+        createMockDetectionResult(false),
+        createMockDetectionResult(false),
+      ]);
+      const detector = new PromptInjectionDetector({
+        model,
+        // scanMode defaults to 'all'
+      });
+
+      const mockAbort = vi.fn();
+
+      const messages = [
+        createTestMessage('First message', 'user', 'msg1'),
+        createTestMessage('Second message', 'user', 'msg2'),
+        createTestMessage('Third message', 'user', 'msg3'),
+      ];
+
+      const result = await detector.processInput({ messages, abort: mockAbort as any });
+
+      expect(result).toEqual(messages);
+      expect(mockAbort).not.toHaveBeenCalled();
+    });
+
+    it('should block when any message has injection with scanMode all', async () => {
+      const model = setupMockModel([
+        createMockDetectionResult(false),
+        createMockDetectionResult(true, ['injection']),
+        createMockDetectionResult(false),
+      ]);
+      const detector = new PromptInjectionDetector({
+        model,
+        scanMode: 'all',
+        strategy: 'block',
+      });
+
+      const mockAbort = vi.fn().mockImplementation(() => {
+        throw new TripWire('Injection blocked');
+      });
+
+      const messages = [
+        createTestMessage('Safe first message', 'user', 'msg1'),
+        createTestMessage('Malicious content', 'user', 'msg2'),
+        createTestMessage('Safe third message', 'user', 'msg3'),
+      ];
+
+      await expect(async () => {
+        await detector.processInput({ messages, abort: mockAbort as any });
+      }).rejects.toThrow('Injection blocked');
+
+      expect(mockAbort).toHaveBeenCalled();
+    });
+  });
 });

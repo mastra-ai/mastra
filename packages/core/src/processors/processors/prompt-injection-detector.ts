@@ -58,6 +58,13 @@ export interface PromptInjectionOptions {
   strategy?: 'block' | 'warn' | 'filter' | 'rewrite';
 
   /**
+   * Which messages to scan for prompt injection:
+   * - 'all': Scan all messages (default, more secure but slower)
+   * - 'latest': Scan only the latest user message (faster, suitable for most use cases)
+   */
+  scanMode?: 'all' | 'latest';
+
+  /**
    * Custom detection instructions for the agent
    * If not provided, uses default instructions based on detection types
    */
@@ -108,6 +115,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
   private detectionTypes: string[];
   private threshold: number;
   private strategy: 'block' | 'warn' | 'filter' | 'rewrite';
+  private scanMode: 'all' | 'latest';
   private includeScores: boolean;
   private structuredOutputOptions?: PromptInjectionOptions['structuredOutputOptions'];
   private providerOptions?: ProviderOptions;
@@ -126,6 +134,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
     this.detectionTypes = options.detectionTypes ?? PromptInjectionDetector.DEFAULT_DETECTION_TYPES;
     this.threshold = options.threshold ?? 0.7; // Higher default threshold for security
     this.strategy = options.strategy || 'block';
+    this.scanMode = options.scanMode || 'all';
     this.includeScores = options.includeScores ?? false;
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.providerOptions = options.providerOptions;
@@ -152,37 +161,91 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
         return messages;
       }
 
-      const results: PromptInjectionResult[] = [];
+      // Determine which messages to scan based on scanMode
+      // 'latest' scans only the last message (much faster for most use cases)
+      // 'all' scans every message (more thorough but slower)
+      const messagesToScan = this.scanMode === 'latest' ? [messages[messages.length - 1]] : messages;
+
+      // For 'block' strategy, we need to check sequentially to abort on first detection
+      // For other strategies, we can process concurrently for better performance
+      if (this.strategy === 'block') {
+        for (const message of messagesToScan) {
+          const textContent = this.extractTextContent(message);
+          if (!textContent.trim()) {
+            continue;
+          }
+
+          const detectionResult = await this.detectPromptInjection(textContent, observabilityContext);
+
+          if (this.isInjectionFlagged(detectionResult)) {
+            // This will throw TripWire and abort
+            this.handleDetectedInjection(message, detectionResult, this.strategy, abort);
+          }
+        }
+
+        // For 'latest' mode with 'block' strategy, we need to return all messages
+        // since we only checked the last one and it was clean
+        return this.scanMode === 'latest' ? messages : messages;
+      }
+
+      // For non-block strategies, process concurrently for better performance
+      const detectionResults = await Promise.all(
+        messagesToScan.map(async message => {
+          const textContent = this.extractTextContent(message);
+          if (!textContent.trim()) {
+            return { message, result: null, hasInjection: false };
+          }
+
+          const result = await this.detectPromptInjection(textContent, observabilityContext);
+          const hasInjection = this.isInjectionFlagged(result);
+          return { message, result, hasInjection };
+        }),
+      );
+
+      // Handle results based on strategy
       const processedMessages: MastraDBMessage[] = [];
 
-      // Evaluate each message
-      for (const message of messages) {
-        const textContent = this.extractTextContent(message);
-        if (!textContent.trim()) {
-          // No text content to analyze
+      for (const { message, result, hasInjection } of detectionResults) {
+        if (result === null) {
+          // No text content to analyze - pass through unchanged
           processedMessages.push(message);
           continue;
         }
 
-        const detectionResult = await this.detectPromptInjection(textContent, observabilityContext);
-        results.push(detectionResult);
+        if (hasInjection) {
+          const processedMessage = this.handleDetectedInjection(message, result, this.strategy, abort);
 
-        if (this.isInjectionFlagged(detectionResult)) {
-          const processedMessage = this.handleDetectedInjection(message, detectionResult, this.strategy, abort);
-
-          // If we reach here, strategy is 'warn', 'filter', or 'rewrite'
           if (this.strategy === 'filter') {
             continue;
           } else if (this.strategy === 'rewrite') {
             if (processedMessage) {
               processedMessages.push(processedMessage);
             }
-            // If processedMessage is null (no rewrite available), skip the message
             continue;
           }
         }
 
         processedMessages.push(message);
+      }
+
+      // For 'latest' scanMode, we need to include all unscanned messages
+      if (this.scanMode === 'latest') {
+        const lastMessage = messages[messages.length - 1];
+        const lastResult = detectionResults[0];
+        const otherMessages = messages.slice(0, -1);
+
+        if (lastResult?.hasInjection) {
+          if (this.strategy === 'filter') {
+            return otherMessages;
+          } else if (this.strategy === 'rewrite' && lastResult.result) {
+            const rewrittenMessage = this.createRewrittenMessage(
+              lastMessage,
+              lastResult.result.rewritten_content || '',
+            );
+            return [...otherMessages, rewrittenMessage];
+          }
+        }
+        return messages;
       }
 
       return processedMessages;
