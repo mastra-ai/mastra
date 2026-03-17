@@ -1,5 +1,14 @@
 # @mastra/libsql
 
+## 1.7.1-alpha.0
+
+### Patch Changes
+
+- Added dated message boundary delimiters when activating buffered observations for improved cache stability. ([#14367](https://github.com/mastra-ai/mastra/pull/14367))
+
+- Updated dependencies [[`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f)]:
+  - @mastra/core@1.14.0-alpha.2
+
 ## 1.7.0
 
 ### Minor Changes
