@@ -153,7 +153,7 @@ export const dynamicAgent = new Agent({
 
     return `${basePrompt} ${localeInstructions}`.trim()
   },
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
 })
 ```
 
@@ -180,7 +180,7 @@ export const registryAgent = new Agent({
 
     return prompt.content
   },
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
 })
 ```
 
@@ -335,7 +335,7 @@ export const validatedAgent = new Agent({
 
     return `You are helping user ${userId}`
   },
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
 })
 ```
 

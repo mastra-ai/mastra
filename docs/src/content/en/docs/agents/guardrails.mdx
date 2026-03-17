@@ -32,7 +32,7 @@ export const moderatedAgent = new Agent({
   id: 'moderated-agent',
   name: 'Moderated Agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   inputProcessors: [
     new ModerationProcessor({
       model: 'openrouter/openai/gpt-oss-safeguard-20b',
