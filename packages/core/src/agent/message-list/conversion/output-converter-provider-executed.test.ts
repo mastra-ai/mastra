@@ -7,10 +7,10 @@ import { sanitizeV5UIMessages } from './output-converter';
  *
  * Provider-executed tools (e.g. Anthropic web_search_20250305) are executed
  * server-side by the provider API. When deferred (not yet executed), they
- * remain in 'input-available' state and should be filtered out — the provider
- * will re-deliver the server_tool_use + result in the next response.
- * When completed (output-available), they should be kept so the provider API
- * sees the encryptedContent for citation context.
+ * remain in 'input-available' state and should be kept — the provider API
+ * needs to see the server_tool_use block to execute the tool on the next request.
+ * When completed (output-available), they should also be kept so the provider
+ * API sees the encryptedContent for citation context.
  */
 describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
   const makeToolPart = (
