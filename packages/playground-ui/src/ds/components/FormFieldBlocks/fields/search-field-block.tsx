@@ -22,6 +22,7 @@ export type SearchFieldBlockProps = {
   errorMsg?: string;
   size?: 'small' | 'default';
   layout?: 'horizontal' | 'vertical';
+  className?: string;
 };
 
 export function SearchFieldBlock({
@@ -38,9 +39,10 @@ export function SearchFieldBlock({
   placeholder = 'Search...',
   onChange,
   onReset,
+  className,
 }: SearchFieldBlockProps) {
   return (
-    <FieldBlock.Layout layout={layout}>
+    <FieldBlock.Layout layout={layout} className={className}>
       {layout === 'horizontal' ? (
         <FieldBlock.Column>
           <FieldBlock.Label name={name} required={required}>

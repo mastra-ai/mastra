@@ -3,16 +3,12 @@ import autoprefixer from 'autoprefixer';
 import { resolve } from 'node:path';
 import tailwindcss from 'tailwindcss';
 import { defineConfig } from 'vite';
-import dts from 'vite-plugin-dts';
 import { libInjectCss } from 'vite-plugin-lib-inject-css';
 import nodeExternals from 'rollup-plugin-node-externals';
 
 export default defineConfig({
   plugins: [
     react(),
-    dts({
-      insertTypesEntry: true,
-    }),
     libInjectCss(),
     nodeExternals(),
   ],

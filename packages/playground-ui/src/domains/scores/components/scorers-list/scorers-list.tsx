@@ -1,0 +1,111 @@
+import type { GetScorerResponse } from '@mastra/client-js';
+import { EntityList } from '@/ds/components/EntityList';
+import { Spinner } from '@/ds/components/Spinner';
+import { EmptyState } from '@/ds/components/EmptyState';
+import { Button } from '@/ds/components/Button';
+import { Icon } from '@/ds/icons/Icon';
+import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
+import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { is403ForbiddenError } from '@/lib/query-utils';
+import { useLinkComponent } from '@/lib/framework';
+import { truncateString } from '@/lib/truncate-string';
+import { useMemo, useState } from 'react';
+
+export interface ScorersListProps {
+  scorers: Record<string, GetScorerResponse>;
+  isLoading: boolean;
+  error?: Error | null;
+  search?: string;
+  onSearch?: (search: string) => void;
+}
+
+export function ScorersList({ scorers, isLoading, error, search: externalSearch, onSearch: externalOnSearch }: ScorersListProps) {
+  const { paths } = useLinkComponent();
+  const [internalSearch, setInternalSearch] = useState('');
+  const search = externalSearch ?? internalSearch;
+
+  const scorersData = useMemo(
+    () =>
+      Object.keys(scorers).map(key => ({
+        ...scorers[key],
+        id: key,
+      })),
+    [scorers],
+  );
+
+  const filteredData = useMemo(() => {
+    const term = search.toLowerCase();
+    return scorersData.filter(
+      s =>
+        s.scorer.config?.id?.toLowerCase().includes(term) ||
+        s.scorer.config?.name?.toLowerCase().includes(term),
+    );
+  }, [scorersData, search]);
+
+  if (error && is403ForbiddenError(error)) {
+    return <PermissionDenied resource="scorers" />;
+  }
+
+  if (scorersData.length === 0 && !isLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <EmptyState
+          iconSlot={<AgentCoinIcon />}
+          titleSlot="Configure Scorers"
+          descriptionSlot="Mastra scorers are not configured yet. You can find more information in the documentation."
+          actionSlot={
+            <Button
+              size="lg"
+              className="w-full"
+              variant="light"
+              as="a"
+              href="https://mastra.ai/en/docs/evals/overview"
+              target="_blank"
+            >
+              <Icon>
+                <AgentIcon />
+              </Icon>
+              Docs
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Spinner />
+      </div>
+    );
+  }
+
+  return (
+    <EntityList columns="auto 1fr auto auto">
+      <EntityList.Top>
+        <EntityList.TopCell>Name</EntityList.TopCell>
+        <EntityList.TopCell>Description</EntityList.TopCell>
+        <EntityList.TopCell className="text-center">Agents</EntityList.TopCell>
+        <EntityList.TopCell className="text-center">Workflows</EntityList.TopCell>
+      </EntityList.Top>
+
+      {filteredData.map(scorer => {
+        const name = truncateString(scorer.scorer.config?.name ?? scorer.id, 50);
+        const description = truncateString(scorer.scorer.config?.description ?? '', 200);
+        const agentsCount = scorer.agentIds?.length ?? 0;
+        const workflowsCount = scorer.workflowIds?.length ?? 0;
+
+        return (
+          <EntityList.RowLink key={scorer.id} to={paths.scorerLink(scorer.id)}>
+              <EntityList.NameCell>{name}</EntityList.NameCell>
+              <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
+              <EntityList.TextCell className="text-center">{agentsCount || ''}</EntityList.TextCell>
+              <EntityList.TextCell className="text-center">{workflowsCount || ''}</EntityList.TextCell>
+            </EntityList.RowLink>
+        );
+      })}
+    </EntityList>
+  );
+}

@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module';
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../standard-schema.types';
 
@@ -66,15 +65,26 @@ function convertToJsonSchema(
  */
 let _toJSONSchema: ((schema: unknown, options?: unknown) => unknown) | null = null;
 let _toJSONSchemaResolved = false;
+type RequireFn = (id: string) => unknown;
+let __require: RequireFn | null = null;
 
-let __require: ReturnType<typeof createRequire>;
-
-function getRequire(): ReturnType<typeof createRequire> {
-  if (!__require) {
-    __require = createRequire(import.meta.url);
+function getRequire(): RequireFn | null {
+  if (__require) return __require;
+  // Skip entirely in browser environments — bundlers may inline a broken shim for require('module')
+  if (typeof (globalThis as any).window !== 'undefined') return null;
+  try {
+    const mod = globalThis.process?.versions?.node
+      ? (Function('return require')() as RequireFn)('node:module')
+      : null;
+    if (mod && typeof (mod as any).createRequire === 'function') {
+      __require = (mod as any).createRequire(import.meta.url);
+    }
+  } catch {
+    __require = null;
   }
   return __require;
 }
+
 function pickToJSONSchema(mod: unknown): ((schema: unknown, options?: unknown) => unknown) | null {
   const candidate = mod as {
     toJSONSchema?: unknown;
@@ -116,7 +126,8 @@ function getToJSONSchema(): ((schema: unknown, options?: unknown) => unknown) | 
     return _toJSONSchema;
   }
 
-  _toJSONSchema = resolveToJSONSchema(moduleName => getRequire()(moduleName));
+  const req = getRequire();
+  _toJSONSchema = req ? resolveToJSONSchema(moduleName => req(moduleName)) : null;
   _toJSONSchemaResolved = true;
   return _toJSONSchema;
 }

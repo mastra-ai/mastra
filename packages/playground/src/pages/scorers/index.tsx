@@ -1,5 +1,6 @@
 import {
   Button,
+  ButtonWithTooltip,
   DocsIcon,
   HeaderAction,
   Icon,
@@ -11,14 +12,60 @@ import {
   HeaderTitle,
   MainContentLayout,
   ScorersTable,
+  ScorersList,
+  ListSearch,
+  MainHeader,
+  EntityListPageLayout,
+  useExperimentalUI,
 } from '@mastra/playground-ui';
-import { GaugeIcon, Plus } from 'lucide-react';
+import { BookIcon, GaugeIcon, Plus } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 
 export default function Scorers() {
   const { Link: FrameworkLink } = useLinkComponent();
   const { data: scorers = {}, isLoading, error } = useScorers();
   const { isCmsAvailable } = useIsCmsAvailable();
+  const { variant } = useExperimentalUI('agent-list');
+  const [search, setSearch] = useState('');
+
+  if (variant === 'new-proposal') {
+    return (
+      <EntityListPageLayout>
+        <EntityListPageLayout.Top>
+          <MainHeader withMargins={false}>
+            <MainHeader.Column>
+              <MainHeader.Title isLoading={isLoading}>
+                <GaugeIcon /> Scorers
+              </MainHeader.Title>
+            </MainHeader.Column>
+            <MainHeader.Column className="flex justify-end gap-2">
+              <ButtonWithTooltip
+                as="a"
+                href="https://mastra.ai/en/docs/evals/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+                tooltipContent="Go to Scorers documentation"
+              >
+                <BookIcon />
+              </ButtonWithTooltip>
+              {isCmsAvailable && (
+                <Button as={Link} to="/cms/scorers/create" variant="primary">
+                  <Plus />
+                  Create Scorer
+                </Button>
+              )}
+            </MainHeader.Column>
+          </MainHeader>
+          <div className="max-w-[30rem]">
+            <ListSearch onSearch={setSearch} label="Filter scorers" placeholder="Filter by name" />
+          </div>
+        </EntityListPageLayout.Top>
+
+        <ScorersList scorers={scorers} isLoading={isLoading} error={error} search={search} onSearch={setSearch} />
+      </EntityListPageLayout>
+    );
+  }
 
   return (
     <MainContentLayout>
