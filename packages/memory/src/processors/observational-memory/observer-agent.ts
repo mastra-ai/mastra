@@ -221,7 +221,33 @@ Only add a new observation for a repeated action if the NEW result changes the p
 ACTIONABLE INSIGHTS:
 - What worked well in explanations
 - What needs follow-up or clarification
-- User's stated goals or next steps (note if the user tells you not to do a next step, or asks for something specific, other next steps besides the users request should be marked as "waiting for user", unless the user explicitly says to continue all next steps)`;
+- User's stated goals or next steps (note if the user tells you not to do a next step, or asks for something specific, other next steps besides the users request should be marked as "waiting for user", unless the user explicitly says to continue all next steps)
+
+COMPLETION TRACKING:
+When a task is completed or a question is fully answered, add a completion observation using the ✅ marker.
+This is critical — without explicit completion signals, the assistant may re-engage with already-resolved topics.
+
+Use ✅ when:
+- The user explicitly confirms something worked or was answered ("thanks, that fixed it", "got it", "perfect")
+- The assistant provided a definitive, complete answer to a factual question and the user moved on
+- A multi-step task reached its stated goal
+- The user acknowledged receipt of requested information
+
+Do NOT use ✅ when:
+- The assistant merely responded — the user might follow up with corrections
+- The topic is paused but not resolved ("I'll try that later")
+- The user's reaction is ambiguous
+
+FORMAT:
+As a sub-bullet under the related observation group:
+* 🔴 (14:30) User asked how to configure auth middleware
+  * -> Agent explained JWT setup with code example
+  * ✅ User confirmed auth is working
+
+Or as a standalone observation when closing out a broader task:
+* ✅ (14:45) Auth configuration task completed — user confirmed middleware is working
+
+Completion observations should be terse but specific about WHAT was completed.`;
 
 /**
  * The output format instructions for the Observer.
@@ -235,12 +261,14 @@ export const OBSERVER_OUTPUT_FORMAT_BASE = `Use priority levels:
 - 🔴 High: explicit user facts, preferences, goals achieved, critical context
 - 🟡 Medium: project details, learned information, tool results
 - 🟢 Low: minor details, uncertain observations
+- ✅ Completed: task finished, question answered, issue resolved
 
 Group related observations (like tool sequences) by indenting:
 * 🔴 (14:33) Agent debugging auth issue
   * -> ran git status, found 3 modified files
   * -> viewed auth.ts:45-60, found missing null check
   * -> applied fix, tests now pass
+  * ✅ Tests passing, auth issue resolved
 
 Group observations by date, then list each with 24-hour time.
 
@@ -282,8 +310,8 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
 - If the agent calls tools, observe what was called, why, and what was learned
 - When observing files with line numbers, include the line number if useful
 - If the agent provides a detailed response, observe the contents so it could be repeated
-- Make sure you start each observation with a priority emoji (🔴, 🟡, 🟢)
-- User messages are always 🔴 priority, so are the completions of tasks. Capture the user's words closely — short/medium messages near-verbatim, long messages summarized with key quotes
+- Make sure you start each observation with a priority emoji (🔴, 🟡, 🟢) or a completion marker (✅)
+- User messages are always 🔴 priority. Completions of tasks use ✅. Capture the user's words closely — short/medium messages near-verbatim, long messages summarized with key quotes
 - Observe WHAT the agent did and WHAT it means
 - If the user provides detailed messages or code snippets, observe all important details`;
 

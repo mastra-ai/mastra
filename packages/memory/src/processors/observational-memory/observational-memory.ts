@@ -1763,7 +1763,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const isImportant: boolean[] = new Array(totalCount);
     for (let i = 0; i < totalCount; i++) {
       lineTokens[i] = this.tokenCounter.countString(lines[i]!);
-      isImportant[i] = lines[i]!.includes('🔴');
+      isImportant[i] = lines[i]!.includes('🔴') || lines[i]!.includes('✅');
     }
 
     // Precompute suffix sums so tail cost is O(1).
