@@ -35,7 +35,7 @@ import type {
   SerializedMessageListState,
 } from './state';
 import type { AIV5Type, AIV5ResponseMessage, MessageInput, MessageListInput } from './types';
-import { ensureGeminiCompatibleMessages } from './utils/provider-compat';
+import { ensureGeminiCompatibleMessages, mergeSystemMessages } from './utils/provider-compat';
 
 export class MessageList {
   private messages: MastraDBMessage[] = [];
@@ -363,7 +363,9 @@ export class MessageList {
         // Filter incomplete tool calls when sending messages TO the LLM
         const modelMessages = convertAIV5UIToModelMessages(this.all.aiV5.ui(), this.messages, true);
 
-        const messages = [...systemMessages, ...modelMessages];
+        // Merge all system messages into one to support models that only accept single system message
+        // See: https://github.com/mastra-ai/mastra/issues/14384
+        const messages = mergeSystemMessages([...systemMessages, ...modelMessages]);
 
         return ensureGeminiCompatibleMessages(messages, this.logger);
       },
@@ -396,7 +398,9 @@ export class MessageList {
           supportedUrls: options?.supportedUrls,
         });
 
-        let messages = [...systemMessages, ...modelMessages];
+        // Merge all system messages into one to support models that only accept single system message
+        // See: https://github.com/mastra-ai/mastra/issues/14384
+        let messages = mergeSystemMessages([...systemMessages, ...modelMessages]);
 
         // Check if any messages have image/file content that needs processing
         const hasImageOrFileContent = modelMessages.some(
@@ -460,7 +464,11 @@ export class MessageList {
       // Used when calling AI SDK streamText/generateText
       prompt: () => {
         const coreMessages = this.all.aiV4.core();
-        const messages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
+        // Merge all system messages into one to support models that only accept single system message
+        // See: https://github.com/mastra-ai/mastra/issues/14384
+        const systemMessages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
+        const allMessages = [...systemMessages, ...coreMessages];
+        const messages = mergeSystemMessages(allMessages);
 
         return ensureGeminiCompatibleMessages(messages, this.logger);
       },
@@ -470,7 +478,8 @@ export class MessageList {
         const coreMessages = this.all.aiV4.core();
 
         const systemMessages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
-        let messages = [...systemMessages, ...coreMessages];
+        const allMessages = [...systemMessages, ...coreMessages];
+        let messages = mergeSystemMessages(allMessages);
 
         messages = ensureGeminiCompatibleMessages(messages, this.logger);
 

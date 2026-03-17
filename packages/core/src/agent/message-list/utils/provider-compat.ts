@@ -12,6 +12,78 @@ export type ToolResultWithInput = ToolResultPart & {
 };
 
 // ============================================================================
+// System Message Merging
+// ============================================================================
+
+/**
+ * Merges multiple system messages into a single system message.
+ *
+ * Some LLM providers (e.g., Qwen, some OpenAI-compatible local models) only support
+ * a single system message at the beginning of the conversation. This function
+ * consolidates multiple system messages into one by concatenating their content
+ * with double newlines.
+ *
+ * @param messages - Array of messages that may contain multiple system messages
+ * @returns Messages array with all consecutive system messages merged into one
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/14384 - Multiple system messages issue
+ */
+export function mergeSystemMessages<T extends { role: string; content: unknown }>(messages: T[]): T[] {
+  if (messages.length === 0) return messages;
+
+  const result: T[] = [];
+  let currentSystemContent: string[] = [];
+
+  for (const message of messages) {
+    if (message.role === 'system') {
+      // Collect system message content
+      const content = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
+      if (content.trim()) {
+        currentSystemContent.push(content);
+      }
+    } else {
+      // Non-system message: flush any accumulated system content first
+      if (currentSystemContent.length > 0) {
+        result.push({
+          ...message,
+          role: 'system',
+          content: currentSystemContent.join('\n\n'),
+        } as T);
+        currentSystemContent = [];
+      }
+      result.push(message);
+    }
+  }
+
+  // Handle trailing system messages
+  if (currentSystemContent.length > 0) {
+    // Find the last system message to use as template, or create a new one
+    let lastSystem: T | undefined;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]!.role === 'system') {
+        lastSystem = messages[i]!;
+        break;
+      }
+    }
+    if (lastSystem) {
+      result.push({
+        ...lastSystem,
+        role: 'system',
+        content: currentSystemContent.join('\n\n'),
+      } as T);
+    } else {
+      // Should not happen, but handle gracefully
+      result.push({
+        role: 'system',
+        content: currentSystemContent.join('\n\n'),
+      } as T);
+    }
+  }
+
+  return result;
+}
+
+// ============================================================================
 // Gemini Compatibility
 // ============================================================================
 
