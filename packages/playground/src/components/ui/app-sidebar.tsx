@@ -191,6 +191,7 @@ const secondNavigation: SidebarSection = {
 declare global {
   interface Window {
     MASTRA_HIDE_CLOUD_CTA: string;
+    MASTRA_TEMPLATES?: string;
   }
 }
 
@@ -201,6 +202,7 @@ export function AppSidebar() {
   const pathname = location.pathname;
 
   const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
+  const showTemplates = window?.MASTRA_TEMPLATES === 'true';
   const { isMastraPlatform } = useMastraPlatform();
   const { data: authCapabilities } = useAuthCapabilities();
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
@@ -271,26 +273,28 @@ export function AppSidebar() {
       </div>
 
       <MainSidebar.Nav>
-        {mainNavigation.map(section => {
-          const filteredLinks = section.links.filter(filterSidebarLink);
-          const showSeparator = filteredLinks.length > 0 && section?.separator;
+        {mainNavigation
+          .filter(section => (section.key === 'Templates' ? showTemplates : true))
+          .map(section => {
+            const filteredLinks = section.links.filter(filterSidebarLink);
+            const showSeparator = filteredLinks.length > 0 && section?.separator;
 
-          return (
-            <MainSidebar.NavSection key={section.key}>
-              {section?.title ? (
-                <MainSidebar.NavHeader state={state}>{section.title}</MainSidebar.NavHeader>
-              ) : (
-                <>{showSeparator && <MainSidebar.NavSeparator />}</>
-              )}
-              <MainSidebar.NavList>
-                {filteredLinks.map(link => {
-                  const isActive = pathname.startsWith(link.url);
-                  return <MainSidebar.NavLink key={link.name} state={state} link={link} isActive={isActive} />;
-                })}
-              </MainSidebar.NavList>
-            </MainSidebar.NavSection>
-          );
-        })}
+            return (
+              <MainSidebar.NavSection key={section.key}>
+                {section?.title ? (
+                  <MainSidebar.NavHeader state={state}>{section.title}</MainSidebar.NavHeader>
+                ) : (
+                  <>{showSeparator && <MainSidebar.NavSeparator />}</>
+                )}
+                <MainSidebar.NavList>
+                  {filteredLinks.map(link => {
+                    const isActive = pathname.startsWith(link.url);
+                    return <MainSidebar.NavLink key={link.name} state={state} link={link} isActive={isActive} />;
+                  })}
+                </MainSidebar.NavList>
+              </MainSidebar.NavSection>
+            );
+          })}
       </MainSidebar.Nav>
 
       <MainSidebar.Bottom>

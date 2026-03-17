@@ -1059,12 +1059,12 @@ export type SharedMemoryConfig = {
   processors?: MemoryProcessor[];
 };
 
+/** @deprecated Use the `format` field on `WorkingMemoryTemplate` discriminated union instead. */
 export type WorkingMemoryFormat = 'json' | 'markdown';
 
-export type WorkingMemoryTemplate = {
-  format: WorkingMemoryFormat;
-  content: string;
-};
+export type WorkingMemoryTemplate =
+  | { format: 'markdown'; content: string }
+  | { format: 'json'; content: string | Record<string, unknown> };
 
 // Type for flexible message deletion input
 export type MessageDeleteInput = string[] | { id: string }[];

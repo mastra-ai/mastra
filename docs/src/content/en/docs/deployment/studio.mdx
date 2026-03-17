@@ -1,5 +1,5 @@
 ---
-title: "Deploying studio | Deployment"
+title: "Deploying Studio | Deployment"
 description: "Learn how to deploy and use Studio on your own infrastructure."
 packages:
   - "mastra"
@@ -8,7 +8,7 @@ packages:
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Deploying studio
+# Deploying Studio
 
 [Studio](/docs/getting-started/studio) provides an interactive UI for building and testing your agents. It's a React-based Single Page Application (SPA) that runs in the browser and connects to a running [Mastra server](/docs/deployment/mastra-server).
 
@@ -173,18 +173,21 @@ Follow the example below to create a SPA using Vite.
     MASTRA_STUDIO_BASE_PATH=
     MASTRA_TELEMETRY_DISABLED=true
     MASTRA_HIDE_CLOUD_CTA=false
+    MASTRA_TEMPLATES=false
     MASTRA_CLOUD_API_ENDPOINT=
     MASTRA_EXPERIMENTAL_FEATURES=false
     MASTRA_REQUEST_CONTEXT_PRESETS=
     ```
-  </StepItem>
 
-  <StepItem>
+    ````
+    </StepItem>
+
+    <StepItem>
     Run the build script to generate the static files in the `dist` folder:
 
     ```bash npm2yarn
     npm run build
-    ```
+    ````
   </StepItem>
 
   <StepItem>

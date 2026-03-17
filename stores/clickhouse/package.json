@@ -32,14 +32,14 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@clickhouse/client": "^1.12.1"
+    "@clickhouse/client": "^1.18.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",
