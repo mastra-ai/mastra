@@ -45,6 +45,87 @@ export function sanitizeAIV4UIMessages(messages: UIMessageV4[]): UIMessageV4[] {
 }
 
 /**
+ * Checks if a message part has OpenAI provider metadata with item IDs.
+ * OpenAI's Responses API uses item IDs (msg_*, rs_*, fc_*) that can cause
+ * "Duplicate item found" errors when replayed to the API.
+ */
+function hasOpenAIProviderMetadata(part: AIV5Type.UIMessage['parts'][number]): boolean {
+  if ('providerMetadata' in part && part.providerMetadata) {
+    const meta = part.providerMetadata as Record<string, unknown>;
+    if ('openai' in meta && meta.openai && typeof meta.openai === 'object') {
+      const openaiMeta = meta.openai as Record<string, unknown>;
+      // Check for item IDs that would cause duplicate errors
+      if (openaiMeta.id || openaiMeta.itemId) {
+        return true;
+      }
+    }
+  }
+  if ('callProviderMetadata' in part && part.callProviderMetadata) {
+    const callMeta = part.callProviderMetadata as Record<string, unknown>;
+    if ('openai' in callMeta && callMeta.openai && typeof callMeta.openai === 'object') {
+      const openaiMeta = callMeta.openai as Record<string, unknown>;
+      if (openaiMeta.id || openaiMeta.callId) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Strips OpenAI provider metadata from a message part to prevent duplicate item errors.
+ */
+function stripOpenAIProviderMetadata<T extends AIV5Type.UIMessage['parts'][number]>(part: T): T {
+  let result = { ...part };
+
+  if ('providerMetadata' in result && result.providerMetadata) {
+    const meta = result.providerMetadata as Record<string, unknown>;
+    if ('openai' in meta) {
+      const { openai: _, ...restMeta } = meta;
+      result.providerMetadata = Object.keys(restMeta).length > 0 ? restMeta : undefined;
+    }
+  }
+
+  if ('callProviderMetadata' in result && result.callProviderMetadata) {
+    const callMeta = result.callProviderMetadata as Record<string, unknown>;
+    if ('openai' in callMeta) {
+      const { openai: _, ...restCallMeta } = callMeta;
+      result.callProviderMetadata =
+        Object.keys(restCallMeta).length > 0 ? (restCallMeta as typeof result.callProviderMetadata) : undefined;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Checks if message metadata has OpenAI provider metadata with item IDs.
+ */
+function hasOpenAIMessageMetadata(metadata: Record<string, unknown> | undefined): boolean {
+  if (!metadata?.providerMetadata) return false;
+  const providerMetadata = metadata.providerMetadata as Record<string, unknown>;
+  if (!providerMetadata.openai || typeof providerMetadata.openai !== 'object') return false;
+  const openaiMeta = providerMetadata.openai as Record<string, unknown>;
+  // Check for item IDs that would cause duplicate errors
+  return !!(openaiMeta.id || openaiMeta.itemId || openaiMeta.previousResponseId);
+}
+
+/**
+ * Strips OpenAI provider metadata from message metadata.
+ */
+function stripOpenAIMessageMetadata(metadata: Record<string, unknown>): Record<string, unknown> {
+  if (!metadata.providerMetadata) return metadata;
+  const providerMetadata = metadata.providerMetadata as Record<string, unknown>;
+  if (!providerMetadata.openai) return metadata;
+
+  const { openai: _, ...restProviderMetadata } = providerMetadata;
+  return {
+    ...metadata,
+    providerMetadata: Object.keys(restProviderMetadata).length > 0 ? restProviderMetadata : undefined,
+  };
+}
+
+/**
  * Sanitizes AIV5 UI messages by filtering out streaming states, data-* parts, empty text parts, and optionally incomplete tool calls.
  * Handles legacy data by filtering empty text parts that may exist in pre-existing DB records.
  */
@@ -70,6 +151,10 @@ export function sanitizeV5UIMessages(
             typeof p.providerMetadata === 'object' &&
             'openai' in (p.providerMetadata as Record<string, unknown>),
         );
+
+      // Check if any part has OpenAI provider metadata with item IDs
+      // This can cause "Duplicate item found" errors when messages are replayed to the API
+      const hasOpenAIItemIds = filterIncompleteToolCalls && m.parts.some(hasOpenAIProviderMetadata);
 
       // Filter out streaming states and optionally input-available (which aren't supported by convertToModelMessages)
       const safeParts = m.parts.filter(p => {
@@ -125,42 +210,25 @@ export function sanitizeV5UIMessages(
         return p.state !== 'input-streaming';
       });
 
+      // Check if message-level metadata has OpenAI item IDs
+      const hasOpenAIMeta = filterIncompleteToolCalls && hasOpenAIMessageMetadata(m.metadata);
+
       if (!safeParts.length) return false;
 
-      const sanitized = {
+      let sanitized = {
         ...m,
         parts: safeParts.map(part => {
-          // When OpenAI reasoning was stripped, clear openai metadata from ALL remaining
-          // parts so the SDK sends inline content instead of item_reference. This covers:
+          // When OpenAI reasoning was stripped OR when message has OpenAI item IDs,
+          // clear openai metadata from ALL remaining parts so the SDK sends inline
+          // content instead of item_reference. This covers:
           //   - providerMetadata.openai on text/reasoning parts (msg_*/rs_* itemIds)
           //   - callProviderMetadata.openai on tool parts (fc_* itemIds used by convertToModelMessages)
-          // Without paired reasoning items, OpenAI rejects orphaned item_references with:
+          // Without paired reasoning items or when replaying messages with item IDs,
+          // OpenAI rejects orphaned item_references with:
           //   "function_call was provided without its required reasoning item"
-          if (hasOpenAIReasoning) {
-            if ('providerMetadata' in part && part.providerMetadata) {
-              const meta = part.providerMetadata as Record<string, unknown>;
-              if ('openai' in meta) {
-                const { openai: _, ...restMeta } = meta;
-                part = {
-                  ...part,
-                  providerMetadata:
-                    Object.keys(restMeta).length > 0 ? (restMeta as typeof part.providerMetadata) : undefined,
-                };
-              }
-            }
-            if ('callProviderMetadata' in part && part.callProviderMetadata) {
-              const callMeta = part.callProviderMetadata as Record<string, unknown>;
-              if ('openai' in callMeta) {
-                const { openai: _, ...restCallMeta } = callMeta;
-                part = {
-                  ...part,
-                  callProviderMetadata:
-                    Object.keys(restCallMeta).length > 0
-                      ? (restCallMeta as typeof part.callProviderMetadata)
-                      : undefined,
-                } as typeof part;
-              }
-            }
+          //   "Duplicate item found with id msg_*"
+          if (hasOpenAIReasoning || hasOpenAIItemIds) {
+            return stripOpenAIProviderMetadata(part);
           }
 
           if (AIV5.isToolUIPart(part) && part.state === 'output-available') {
@@ -175,6 +243,11 @@ export function sanitizeV5UIMessages(
           return part;
         }),
       };
+
+      // Strip OpenAI metadata from message-level metadata if present
+      if (hasOpenAIMeta) {
+        sanitized.metadata = stripOpenAIMessageMetadata(sanitized.metadata);
+      }
 
       return sanitized;
     })
