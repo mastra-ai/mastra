@@ -220,9 +220,7 @@ export function llmRecorderPlugin(options: LLMRecorderPluginOptions = {}): Plugi
             importPath = './' + importPath;
           }
         }
-        imports.push(
-          `import { ${exportName} as __autoTransformRequest } from ${JSON.stringify(importPath)};`,
-        );
+        imports.push(`import { ${exportName} as __autoTransformRequest } from ${JSON.stringify(importPath)};`);
       }
 
       // Inject the imports and the auto-recording call at the top of the file
