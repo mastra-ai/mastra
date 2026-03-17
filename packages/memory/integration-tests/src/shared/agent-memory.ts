@@ -21,17 +21,20 @@ import { z } from 'zod';
 
 const MODE = getLLMTestMode();
 setupDummyApiKeys(MODE, ['openai']);
-const skipLLM = shouldSkipLLMTest(MODE, 'openai');
 
 export async function getAgentMemoryTests({
   model,
   tools,
   reasoningModel,
+  recordingName,
 }: {
   model: MastraModelConfig;
   tools: Record<string, any>;
   reasoningModel?: MastraModelConfig;
+  /** Recording name for LLM replay (e.g., 'memory-integration-tests-src-agent-memory') */
+  recordingName?: string;
 }) {
+  const skipLLM = shouldSkipLLMTest(MODE, 'openai', recordingName);
   const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'mastra-agent.db');
   const dbFile = `file:${dbPath}`;
 

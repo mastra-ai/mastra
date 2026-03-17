@@ -24,7 +24,6 @@ import { z } from 'zod';
 
 const MODE = getLLMTestMode();
 setupDummyApiKeys(MODE, ['openai']);
-const skipLLM = shouldSkipLLMTest(MODE, 'openai');
 
 // Local wrapper to handle Agent type compatibility
 // (Agent has complex generic types that don't play well with the shared helper)
@@ -108,8 +107,15 @@ function getErrorDetails(error: any): string | undefined {
   return JSON.stringify(error);
 }
 
-export function getWorkingMemoryTests(model: MastraModelConfig) {
+export function getWorkingMemoryTests(
+  model: MastraModelConfig,
+  options?: {
+    /** Recording name for LLM replay (e.g., 'memory-integration-tests-src-working-memory') */
+    recordingName?: string;
+  },
+) {
   const modelName = typeof model === 'string' ? model : (model as any).modelId || (model as any).id || 'sdk-model';
+  const skipLLM = shouldSkipLLMTest(MODE, 'openai', options?.recordingName);
 
   describe.skipIf(skipLLM)(`Working Memory Tests (${modelName})`, () => {
     let memory: Memory;

@@ -12,17 +12,21 @@ import { describe, expect, it } from 'vitest';
 
 const MODE = getLLMTestMode();
 setupDummyApiKeys(MODE, ['openai']);
-const skipLLM = shouldSkipLLMTest(MODE, 'openai');
 
 export async function setupStreamingMemoryTest({
   model,
   memory,
   tools,
+  recordingName,
 }: {
   memory: MastraMemory;
   model: MastraModelConfig;
   tools: any;
+  /** Recording name for LLM replay (e.g., 'memory-integration-tests-src-streaming-memory') */
+  recordingName?: string;
 }) {
+  const skipLLM = shouldSkipLLMTest(MODE, 'openai', recordingName);
+
   describe.skipIf(skipLLM)('Memory Streaming Tests', () => {
     it('should handle multiple tool calls in memory thread history', async () => {
       // Create agent with memory and tools

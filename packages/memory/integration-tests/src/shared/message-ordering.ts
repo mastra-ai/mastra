@@ -191,14 +191,20 @@ function createResearchTools() {
   return { search: searchTool, create_document: createDocTool };
 }
 
-export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
+export function getMessageOrderingTests(
+  config: MessageOrderingTestConfig,
+  options?: {
+    /** Recording name for LLM replay (e.g., 'memory-integration-tests-src-message-ordering') */
+    recordingName?: string;
+  },
+) {
   const { version, models } = config;
 
   // Run tests for each model configuration
   for (const modelConfig of models) {
     // Extract provider name from env var (e.g., 'OPENAI_API_KEY' -> 'openai')
     const provider = modelConfig.envVar.replace('_API_KEY', '').toLowerCase() as 'openai' | 'anthropic' | 'google';
-    const skipLLM = shouldSkipLLMTest(MODE, provider);
+    const skipLLM = shouldSkipLLMTest(MODE, provider, options?.recordingName);
 
     describe.skipIf(skipLLM)(`Message Ordering with ${modelConfig.name} (${version}) (Issue #9909)`, () => {
       const dbFile = `file:ordering-test-${version}.db`;

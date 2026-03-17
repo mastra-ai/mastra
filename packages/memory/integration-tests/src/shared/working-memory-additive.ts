@@ -20,7 +20,6 @@ import { z } from 'zod';
 
 const MODE = getLLMTestMode();
 setupDummyApiKeys(MODE, ['openai']);
-const skipLLM = shouldSkipLLMTest(MODE, 'openai');
 
 const resourceId = 'test-resource';
 
@@ -33,8 +32,15 @@ const createTestThread = (title: string, metadata = {}) => ({
   updatedAt: new Date(),
 });
 
-export function getWorkingMemoryAdditiveTests(model: MastraModelConfig) {
+export function getWorkingMemoryAdditiveTests(
+  model: MastraModelConfig,
+  options?: {
+    /** Recording name for LLM replay (e.g., 'memory-integration-tests-src-working-memory') */
+    recordingName?: string;
+  },
+) {
   const modelName = typeof model === 'string' ? model : (model as any).modelId || 'unknown';
+  const skipLLM = shouldSkipLLMTest(MODE, 'openai', options?.recordingName);
 
   describe.skipIf(skipLLM)(`Working Memory Additive Updates (${modelName})`, () => {
     let memory: Memory;

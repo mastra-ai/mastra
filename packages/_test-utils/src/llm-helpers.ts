@@ -219,9 +219,11 @@ export function setupDummyApiKeys(
   mode: string,
   providers: (keyof ProviderApiKeys)[] = ['openai', 'anthropic', 'google', 'openrouter'],
 ): void {
-  // Only set dummy keys in explicit replay mode.
-  // All other modes (live, record, update, auto) require real keys.
-  if (mode !== 'replay') return;
+  // Set dummy keys for modes that may replay recordings.
+  // - replay: strict replay mode, recordings are required
+  // - auto: replay if recording exists, otherwise record/hit API
+  // For live, record, and update modes, real keys are always required.
+  if (mode === 'live' || mode === 'record' || mode === 'update') return;
 
   const dummyKeys: ProviderApiKeys = {
     openai: 'sk-dummy-for-replay-mode',
@@ -285,16 +287,45 @@ export function hasRealApiKey(provider: keyof ProviderApiKeys): boolean {
 }
 
 /**
+ * Check if non-empty recordings exist for a test file.
+ *
+ * Recording files are JSON arrays. An empty recording is `[]` (3 bytes).
+ * This function checks if the recording file exists AND has content.
+ *
+ * @param recordingName - The recording name (typically derived from test file path)
+ * @param recordingsDir - Optional recordings directory (defaults to `__recordings__` in cwd)
+ * @returns true if recordings exist and are non-empty
+ */
+export function hasNonEmptyRecordings(recordingName: string, recordingsDir?: string): boolean {
+  const fs = require('fs');
+  const path = require('path');
+  const dir = recordingsDir || path.join(process.cwd(), '__recordings__');
+  const recordingPath = path.join(dir, `${recordingName}.json`);
+
+  if (!fs.existsSync(recordingPath)) return false;
+
+  try {
+    const content = fs.readFileSync(recordingPath, 'utf-8');
+    const parsed = JSON.parse(content);
+    // Recording is an array of request/response pairs
+    return Array.isArray(parsed) && parsed.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Determine if an LLM test should be skipped.
  *
- * Skip when:
- * - No real API key is available AND not in replay mode with working recordings
- *
- * In practice, this means tests skip if there's no real API key,
- * unless replay mode is explicitly set AND recordings are expected to work.
+ * Skip logic:
+ * - If real API key exists: never skip
+ * - In `replay` mode: never skip (recordings are required, let it fail if missing)
+ * - In `auto` mode: skip only if no recordings exist (no key + no recordings = can't run)
+ * - In `live`/`record`/`update` modes: skip if no real API key
  *
  * @param mode - Current LLM test mode from getLLMTestMode()
  * @param provider - Which provider's API key to check
+ * @param recordingName - Optional recording name to check for existing recordings (for auto mode)
  * @returns true if the test should be skipped
  *
  * @example
@@ -304,22 +335,32 @@ export function hasRealApiKey(provider: keyof ProviderApiKeys): boolean {
  *
  * const MODE = getLLMTestMode();
  *
- * it('should call the LLM', async () => {
- *   if (shouldSkipLLMTest(MODE, 'openai')) {
- *     console.log('Skipping: no OpenAI API key and not in replay mode');
- *     return;
- *   }
- *   // ... test code
- * });
+ * // Without recording check (skips in auto mode without real key)
+ * const skipLLM = shouldSkipLLMTest(MODE, 'openai');
+ *
+ * // With recording check (allows auto mode to run if recordings exist)
+ * const skipLLM = shouldSkipLLMTest(MODE, 'openai', 'my-test-recording');
+ *
+ * describe.skipIf(skipLLM)('LLM Tests', () => { ... });
  * ```
  */
-export function shouldSkipLLMTest(mode: string, provider: keyof ProviderApiKeys): boolean {
+export function shouldSkipLLMTest(
+  mode: string,
+  provider: keyof ProviderApiKeys,
+  recordingName?: string,
+): boolean {
   // If we have a real API key, never skip
   if (hasRealApiKey(provider)) return false;
 
-  // If in explicit replay mode, don't skip (recordings should handle it)
+  // In explicit replay mode, don't skip - let it fail if no recording
   if (mode === 'replay') return false;
 
-  // For all other cases (live, record, update, auto) without a real key, skip
+  // In auto mode, check if recordings exist
+  if (mode === 'auto' && recordingName) {
+    // If recordings exist, don't skip - the recorder will replay them
+    if (hasNonEmptyRecordings(recordingName)) return false;
+  }
+
+  // For all other cases (live, record, update, or auto without recordings), skip
   return true;
 }
