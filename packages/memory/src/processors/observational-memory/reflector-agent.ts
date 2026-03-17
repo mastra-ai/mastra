@@ -59,7 +59,8 @@ When consolidating observations:
 - Preserve and include dates/times when present (temporal context is critical)
 - Retain the most relevant timestamps (start times, completion times, significant events)
 - Combine related items where it makes sense (e.g., "agent called view tool 5 times on file x")
-- Preserve ✅ completion markers — they signal resolved tasks/questions and prevent the assistant from re-engaging with completed topics
+- Preserve ✅ completion markers — they are memory signals that tell the assistant what is already resolved and help prevent repeated work
+- Preserve the concrete resolved outcome captured by ✅ markers so the assistant knows what exactly is done
 - Condense older observations more aggressively, retain more detail for recent ones
 
 CRITICAL: USER ASSERTIONS vs QUESTIONS

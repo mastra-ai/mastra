@@ -232,14 +232,18 @@ ACTIONABLE INSIGHTS:
 - User's stated goals or next steps (note if the user tells you not to do a next step, or asks for something specific, other next steps besides the users request should be marked as "waiting for user", unless the user explicitly says to continue all next steps)
 
 COMPLETION TRACKING:
-When a task is completed or a question is fully answered, add a completion observation using the ✅ marker.
-This is critical — without explicit completion signals, the assistant may re-engage with already-resolved topics.
+Completion observations are not just summaries. They are explicit memory signals to the assistant that a task, question, or subtask has been resolved.
+Without clear completion markers, the assistant may forget that work is already finished and may repeat, reopen, or continue an already-completed task.
+
+Use ✅ to answer: "What exactly is now done?"
+Choose completion observations that help the assistant know what is finished and should not be reworked unless new information appears.
 
 Use ✅ when:
 - The user explicitly confirms something worked or was answered ("thanks, that fixed it", "got it", "perfect")
 - The assistant provided a definitive, complete answer to a factual question and the user moved on
 - A multi-step task reached its stated goal
 - The user acknowledged receipt of requested information
+- A concrete subtask, fix, deliverable, or implementation step became complete during ongoing work
 
 Do NOT use ✅ when:
 - The assistant merely responded — the user might follow up with corrections
@@ -255,7 +259,8 @@ As a sub-bullet under the related observation group:
 Or as a standalone observation when closing out a broader task:
 * ✅ (14:45) Auth configuration task completed — user confirmed middleware is working
 
-Completion observations should be terse but specific about WHAT was completed.`;
+Completion observations should be terse but specific about WHAT was completed.
+Prefer concrete resolved outcomes over abstract workflow status so the assistant remembers what is already done.`;
 
 /**
  * The output format instructions for the Observer.
@@ -269,7 +274,7 @@ export const OBSERVER_OUTPUT_FORMAT_BASE = `Use priority levels:
 - 🔴 High: explicit user facts, preferences, goals achieved, critical context
 - 🟡 Medium: project details, learned information, tool results
 - 🟢 Low: minor details, uncertain observations
-- ✅ Completed: task finished, question answered, issue resolved
+- ✅ Completed: concrete task finished, question answered, issue resolved, or subtask completed in a way that helps the assistant know it is done
 
 Group related observations (like tool sequences) by indenting:
 * 🔴 (14:33) Agent debugging auth issue
@@ -320,6 +325,10 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
 - If the agent provides a detailed response, observe the contents so it could be repeated
 - Make sure you start each observation with a priority emoji (🔴, 🟡, 🟢) or a completion marker (✅)
 - User messages are always 🔴 priority. Completions of tasks use ✅. Capture the user's words closely — short/medium messages near-verbatim, long messages summarized with key quotes
+- Treat ✅ as a memory signal that tells the assistant something is finished and should not be repeated unless new information changes it
+- Make completion observations answer "What exactly is now done?"
+- Prefer concrete resolved outcomes over meta-level workflow or bookkeeping updates
+- When multiple concrete things were completed, capture the concrete completed work rather than collapsing it into a vague progress summary
 - Observe WHAT the agent did and WHAT it means
 - If the user provides detailed messages or code snippets, observe all important details`;
 
