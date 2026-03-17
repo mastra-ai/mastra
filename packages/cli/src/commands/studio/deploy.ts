@@ -81,7 +81,8 @@ export function parseEnvFile(content: string): Record<string, string> {
     if (!trimmed || trimmed.startsWith('#')) continue;
     const eqIdx = trimmed.indexOf('=');
     if (eqIdx === -1) continue;
-    const key = trimmed.slice(0, eqIdx).trim();
+    let key = trimmed.slice(0, eqIdx).trim();
+    if (key.startsWith('export ')) key = key.slice(7).trim();
     let value = trimmed.slice(eqIdx + 1).trim();
     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
       value = value.slice(1, -1);
@@ -93,7 +94,7 @@ export function parseEnvFile(content: string): Record<string, string> {
 
 async function readEnvVars(projectDir: string): Promise<Record<string, string>> {
   const vars: Record<string, string> = {};
-  for (const envFile of ['.env', '.env.local']) {
+  for (const envFile of ['.env.production', '.env.local', '.env']) {
     try {
       const content = await readFile(join(projectDir, envFile), 'utf-8');
       Object.assign(vars, parseEnvFile(content));
@@ -275,7 +276,7 @@ export async function deployAction(dir: string | undefined, opts: { org?: string
       projectName,
       organizationId: orgId,
     });
-    p.log.success('Saved .mastra/project.json');
+    p.log.success('Saved .mastra-project.json');
   } else {
     // Already linked — just show a summary line
     p.log.info(`Organization: ${orgName} (${orgId})`);

@@ -1,9 +1,9 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { loadProjectConfig, saveProjectConfig } from './project-config';
+import { loadProjectConfig, saveProjectConfig, PROJECT_CONFIG_FILE } from './project-config';
 
 let tempDir: string;
 
@@ -16,30 +16,53 @@ afterEach(() => {
 });
 
 describe('loadProjectConfig', () => {
-  it('returns null when .mastra/project.json does not exist', async () => {
+  it('returns null when no config file exists', async () => {
     const result = await loadProjectConfig(tempDir);
     expect(result).toBeNull();
   });
 
-  it('loads an existing project config', async () => {
+  it('loads config from new location (.mastra-project.json)', async () => {
     const config = {
       projectId: 'proj-1',
       projectName: 'My App',
       organizationId: 'org-1',
     };
 
-    // Write the file manually
-    const { mkdirSync, writeFileSync } = await import('node:fs');
+    writeFileSync(join(tempDir, PROJECT_CONFIG_FILE), JSON.stringify(config, null, 2));
+
+    const result = await loadProjectConfig(tempDir);
+    expect(result).toEqual(config);
+  });
+
+  it('falls back to legacy .mastra/project.json', async () => {
+    const config = {
+      projectId: 'proj-1',
+      projectName: 'My App',
+      organizationId: 'org-1',
+    };
+
     mkdirSync(join(tempDir, '.mastra'), { recursive: true });
     writeFileSync(join(tempDir, '.mastra', 'project.json'), JSON.stringify(config, null, 2));
 
     const result = await loadProjectConfig(tempDir);
     expect(result).toEqual(config);
   });
+
+  it('prefers new location over legacy when both exist', async () => {
+    const newConfig = { projectId: 'new', projectName: 'New', organizationId: 'org-new' };
+    const legacyConfig = { projectId: 'old', projectName: 'Old', organizationId: 'org-old' };
+
+    writeFileSync(join(tempDir, PROJECT_CONFIG_FILE), JSON.stringify(newConfig, null, 2));
+    mkdirSync(join(tempDir, '.mastra'), { recursive: true });
+    writeFileSync(join(tempDir, '.mastra', 'project.json'), JSON.stringify(legacyConfig, null, 2));
+
+    const result = await loadProjectConfig(tempDir);
+    expect(result).toEqual(newConfig);
+  });
 });
 
 describe('saveProjectConfig', () => {
-  it('creates .mastra directory and writes project.json', async () => {
+  it('writes config to project root as .mastra-project.json', async () => {
     const config = {
       projectId: 'proj-1',
       projectName: 'My App',
@@ -48,7 +71,7 @@ describe('saveProjectConfig', () => {
 
     await saveProjectConfig(tempDir, config);
 
-    const content = readFileSync(join(tempDir, '.mastra', 'project.json'), 'utf-8');
+    const content = readFileSync(join(tempDir, PROJECT_CONFIG_FILE), 'utf-8');
     const parsed = JSON.parse(content);
 
     expect(parsed).toEqual(config);
@@ -63,7 +86,7 @@ describe('saveProjectConfig', () => {
 
     await saveProjectConfig(tempDir, config);
 
-    const raw = readFileSync(join(tempDir, '.mastra', 'project.json'), 'utf-8');
+    const raw = readFileSync(join(tempDir, PROJECT_CONFIG_FILE), 'utf-8');
 
     expect(raw).toBe(JSON.stringify(config, null, 2) + '\n');
     expect(raw.endsWith('\n')).toBe(true);

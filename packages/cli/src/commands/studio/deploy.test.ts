@@ -103,6 +103,13 @@ describe('parseEnvFile', () => {
     const result = parseEnvFile('  FOO  =  bar  ');
     expect(result).toEqual({ FOO: 'bar' });
   });
+
+  it('strips export prefix from keys', async () => {
+    const { parseEnvFile } = await import('./deploy.js');
+
+    const result = parseEnvFile('export FOO=bar\nexport BAZ="qux"');
+    expect(result).toEqual({ FOO: 'bar', BAZ: 'qux' });
+  });
 });
 
 describe('deployAction', () => {

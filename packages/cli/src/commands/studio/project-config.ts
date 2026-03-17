@@ -1,5 +1,7 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+
+export const PROJECT_CONFIG_FILE = '.mastra-project.json';
 
 export interface ProjectConfig {
   projectId: string;
@@ -8,16 +10,18 @@ export interface ProjectConfig {
 }
 
 export async function loadProjectConfig(dir: string): Promise<ProjectConfig | null> {
-  try {
-    const data = await readFile(join(dir, '.mastra', 'project.json'), 'utf-8');
-    return JSON.parse(data) as ProjectConfig;
-  } catch {
-    return null;
+  // Try new location first, fall back to legacy .mastra/project.json
+  for (const path of [join(dir, PROJECT_CONFIG_FILE), join(dir, '.mastra', 'project.json')]) {
+    try {
+      const data = await readFile(path, 'utf-8');
+      return JSON.parse(data) as ProjectConfig;
+    } catch {
+      continue;
+    }
   }
+  return null;
 }
 
 export async function saveProjectConfig(dir: string, config: ProjectConfig): Promise<void> {
-  const mastraDir = join(dir, '.mastra');
-  await mkdir(mastraDir, { recursive: true });
-  await writeFile(join(mastraDir, 'project.json'), JSON.stringify(config, null, 2) + '\n');
+  await writeFile(join(dir, PROJECT_CONFIG_FILE), JSON.stringify(config, null, 2) + '\n');
 }
