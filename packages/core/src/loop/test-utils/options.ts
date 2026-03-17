@@ -2581,35 +2581,20 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     },
                     "parts": [
                       {
-                        "providerExecuted": undefined,
-                        "providerMetadata": undefined,
                         "toolInvocation": {
                           "args": {
                             "value": "value",
                           },
                           "result": "result1",
                           "state": "result",
-                          "step": undefined,
                           "toolCallId": "call-1",
                           "toolName": "tool1",
                         },
                         "type": "tool-invocation",
                       },
                     ],
-                    "toolInvocations": [
-                      {
-                        "args": {
-                          "value": "value",
-                        },
-                        "result": "result1",
-                        "state": "result",
-                        "step": undefined,
-                        "toolCallId": "call-1",
-                        "toolName": "tool1",
-                      },
-                    ],
                   },
-                  "createdAt": 2024-01-01T00:00:00.000Z,
+                  "createdAt": 2024-01-01T00:00:00.003Z,
                   "id": "msg-0",
                   "role": "assistant",
                 },
