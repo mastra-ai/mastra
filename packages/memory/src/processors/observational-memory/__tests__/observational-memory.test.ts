@@ -4,6 +4,7 @@ import { coreFeatures } from '@mastra/core/features';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
+import { getObservationsAsOf } from '../observation-utils';
 import { ObservationalMemory } from '../observational-memory';
 import {
   buildObserverPrompt,
@@ -3383,7 +3384,7 @@ describe('Thread Attribution Helpers', () => {
       const threadId = 'thread-1';
       const newSection = '<thread id="thread-1">\n- 🔴 New observation\n</thread>';
 
-      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection);
+      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection, new Date('2025-01-01'));
 
       expect(result).toBe(newSection);
     });
@@ -3393,11 +3394,12 @@ describe('Thread Attribution Helpers', () => {
       const threadId = 'thread-1';
       const newSection = '<thread id="thread-1">\n- 🔴 New observation\n</thread>';
 
-      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection);
+      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection, new Date('2025-01-01'));
 
       expect(result).toContain(existing);
       expect(result).toContain(newSection);
-      expect(result).toBe(`${existing}\n\n${newSection}`);
+      // Message boundary delimiter is inserted between chunks for cache stability
+      expect(result).toMatch(/--- message boundary \(\d{4}-\d{2}-\d{2}T[^)]+\) ---/);
     });
 
     it('should always append new thread sections (preserves temporal ordering)', () => {
@@ -3411,15 +3413,83 @@ describe('Thread Attribution Helpers', () => {
       const threadId = 'thread-1';
       const newSection = '<thread id="thread-1">\n- 🔴 Updated observation\n- 🟡 New detail\n</thread>';
 
-      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection);
+      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection, new Date('2025-01-01'));
 
       // Should append, not replace - preserves temporal ordering
       expect(result).toContain(newSection);
       expect(result).toContain('<thread id="thread-2">');
       // Old observation is preserved (appended, not replaced)
       expect(result).toContain('Old observation');
-      // New section is appended at the end
-      expect(result).toBe(`${existing}\n\n${newSection}`);
+      // New section is appended at the end with a message boundary delimiter
+      expect(result).toMatch(/--- message boundary \(\d{4}-\d{2}-\d{2}T[^)]+\) ---/);
+    });
+  });
+
+  describe('getObservationsAsOf', () => {
+    it('should return all chunks when asOf is after all boundaries', () => {
+      const observations = [
+        '- User likes cats',
+        ObservationalMemory.createMessageBoundary(new Date('2025-01-01T10:00:00Z')),
+        '- User prefers dark mode',
+        ObservationalMemory.createMessageBoundary(new Date('2025-01-02T15:00:00Z')),
+        '- User is working on a TypeScript project',
+      ].join('');
+
+      const result = getObservationsAsOf(observations, new Date('2025-01-03T00:00:00Z'));
+      expect(result).toContain('User likes cats');
+      expect(result).toContain('User prefers dark mode');
+      expect(result).toContain('User is working on a TypeScript project');
+    });
+
+    it('should exclude chunks after the asOf date', () => {
+      const observations = [
+        '- User likes cats',
+        ObservationalMemory.createMessageBoundary(new Date('2025-01-01T10:00:00Z')),
+        '- User prefers dark mode',
+        ObservationalMemory.createMessageBoundary(new Date('2025-01-02T15:00:00Z')),
+        '- User is working on a TypeScript project',
+      ].join('');
+
+      const result = getObservationsAsOf(observations, new Date('2025-01-01T12:00:00Z'));
+      expect(result).toContain('User likes cats');
+      expect(result).toContain('User prefers dark mode');
+      expect(result).not.toContain('User is working on a TypeScript project');
+    });
+
+    it('should return only the first chunk when asOf is before all boundaries', () => {
+      const observations = [
+        '- User likes cats',
+        ObservationalMemory.createMessageBoundary(new Date('2025-01-01T10:00:00Z')),
+        '- User prefers dark mode',
+      ].join('');
+
+      const result = getObservationsAsOf(observations, new Date('2024-12-31T00:00:00Z'));
+      expect(result).toContain('User likes cats');
+      expect(result).not.toContain('User prefers dark mode');
+    });
+
+    it('should include a chunk when asOf exactly matches its boundary date', () => {
+      const boundary = new Date('2025-01-01T10:00:00Z');
+      const observations = [
+        '- User likes cats',
+        ObservationalMemory.createMessageBoundary(boundary),
+        '- User prefers dark mode',
+      ].join('');
+
+      const result = getObservationsAsOf(observations, boundary);
+      expect(result).toContain('User likes cats');
+      expect(result).toContain('User prefers dark mode');
+    });
+
+    it('should return empty string for empty observations', () => {
+      expect(getObservationsAsOf('', new Date())).toBe('');
+      expect(getObservationsAsOf('  ', new Date())).toBe('');
+    });
+
+    it('should return the full text when there are no boundaries', () => {
+      const observations = '- User likes cats\n- User prefers dark mode';
+      const result = getObservationsAsOf(observations, new Date('2020-01-01'));
+      expect(result).toBe(observations);
     });
   });
 
@@ -4251,7 +4321,11 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
     });
     await storage.updateActiveObservations({
       id: record.id,
-      observations: '<thread id="thread-A">\n- 🔴 User\'s favorite color is blue\n</thread>',
+      observations: [
+        '<thread id="thread-A">\n- 🔴 User\'s favorite color is blue\n</thread>',
+        ObservationalMemory.createMessageBoundary(new Date('2025-01-01T09:30:00.000Z')).trim(),
+        '<thread id="thread-A">\n- 🔴 User is debugging observational memory prompt ordering\n</thread>',
+      ].join('\n\n'),
       tokenCount: 50,
       lastObservedAt: threadAObservedAt, // Resource-level cursor set to Thread A's observation time
     });
@@ -4306,13 +4380,23 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
       }) as any,
     });
 
-    // Extract the OM system message (tagged as 'observational-memory')
+    // Extract the OM system messages (tagged as 'observational-memory')
     const omSystemMessages = messageList.getSystemMessages('observational-memory');
-    expect(omSystemMessages.length).toBeGreaterThan(0);
+    expect(omSystemMessages.length).toBeGreaterThan(1);
 
-    const omSystemMessage = omSystemMessages[0]!;
-    const omContent =
-      typeof omSystemMessage.content === 'string' ? omSystemMessage.content : JSON.stringify(omSystemMessage.content);
+    const omContents = omSystemMessages.map(message =>
+      typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+    );
+    const omContent = omContents.join('\n\n');
+
+    expect(omContents[0]).toContain(
+      'The following observations block contains your memory of past conversations with this user.',
+    );
+    expect(omContents).toContain('<observations>');
+    expect(omContents).toContain(`<thread id="thread-A">\n- 🔴 User's favorite color is blue\n</thread>`);
+    expect(omContents).toContain(
+      `<thread id="thread-A">\n- 🔴 User is debugging observational memory prompt ordering\n</thread>`,
+    );
 
     // KEY ASSERTION: Thread A's messages should appear as <other-conversation> blocks
     // even though Thread A was already observed (its messages are older than resource-level lastObservedAt).
