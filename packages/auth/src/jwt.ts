@@ -8,12 +8,16 @@ type JwtUser = jwt.JwtPayload;
 
 interface MastraJwtAuthOptions extends MastraAuthProviderOptions<JwtUser> {
   secret?: string;
-  mapUser?: (payload: JwtUser) => User;
+  mapUser?: (payload: JwtUser) => User | null;
 }
 
-function defaultMapUser(payload: JwtUser): User {
+function defaultMapUser(payload: JwtUser): User | null {
+  const id = payload.sub || payload.id;
+  if (!id) {
+    return null;
+  }
   return {
-    id: payload.sub || payload.id || 'unknown',
+    id,
     email: payload.email,
     name: payload.name,
     avatarUrl: payload.avatarUrl || payload.avatar_url || payload.picture,
@@ -22,7 +26,7 @@ function defaultMapUser(payload: JwtUser): User {
 
 export class MastraJwtAuth extends MastraAuthProvider<JwtUser> implements IUserProvider {
   protected secret: string;
-  private mapUser: (payload: JwtUser) => User;
+  private mapUser: (payload: JwtUser) => User | null;
 
   constructor(options?: MastraJwtAuthOptions) {
     super({ name: options?.name ?? 'jwt' });

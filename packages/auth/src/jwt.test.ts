@@ -60,14 +60,14 @@ describe('MastraJwtAuth', () => {
       expect(user?.id).toBe('from-id-claim');
     });
 
-    it('falls back to unknown when both sub and id are missing', async () => {
+    it('returns null when both sub and id are missing', async () => {
       const auth = new MastraJwtAuth({ secret: SECRET });
       const token = signToken({ email: 'noone@example.com' });
       const request = createRequest({ Authorization: `Bearer ${token}` });
 
       const user = await auth.getCurrentUser(request);
 
-      expect(user?.id).toBe('unknown');
+      expect(user).toBeNull();
     });
 
     it('accepts case-insensitive Bearer scheme', async () => {
