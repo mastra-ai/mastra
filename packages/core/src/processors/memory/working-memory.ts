@@ -70,6 +70,7 @@ export class WorkingMemory implements Processor {
       scope?: 'thread' | 'resource';
       useVNext?: boolean;
       readOnly?: boolean;
+      toolInstruction?: string;
       templateProvider?: {
         getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfigInternal }): Promise<WorkingMemoryTemplate | null>;
       };
@@ -141,7 +142,11 @@ export class WorkingMemory implements Processor {
     } else if (this.options.useVNext) {
       instruction = this.getWorkingMemoryToolInstructionVNext({ template, data: workingMemoryData });
     } else {
-      instruction = this.getWorkingMemoryToolInstruction({ template, data: workingMemoryData });
+      instruction = this.getWorkingMemoryToolInstruction({
+        template,
+        data: workingMemoryData,
+        toolInstruction: this.options.toolInstruction,
+      });
     }
 
     // If we have a MessageList, add working memory to it with source: 'memory'
@@ -159,10 +164,19 @@ export class WorkingMemory implements Processor {
   private getWorkingMemoryToolInstruction({
     template,
     data,
+    toolInstruction,
   }: {
     template: WorkingMemoryTemplate;
     data: string | null;
+    toolInstruction?: string;
   }): string {
+    if (toolInstruction) {
+      return `${toolInstruction}
+
+<working_memory_data>
+${data}
+</working_memory_data>`;
+    }
     const emptyWorkingMemoryTemplateObject =
       template.format === 'json' ? this.generateEmptyFromSchemaInternal(template.content) : null;
     const hasEmptyWorkingMemoryTemplateObject =

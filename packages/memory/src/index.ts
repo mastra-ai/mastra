@@ -1043,6 +1043,7 @@ ${workingMemory}`;
       : this.getWorkingMemoryToolInstruction({
           template: workingMemoryTemplate,
           data: workingMemoryData,
+          toolInstruction: memoryConfig?.workingMemory?.toolInstruction,
         });
   }
 
@@ -1062,10 +1063,19 @@ ${workingMemory}`;
   protected getWorkingMemoryToolInstruction({
     template,
     data,
+    toolInstruction,
   }: {
     template: WorkingMemoryTemplate;
     data: string | null;
+    toolInstruction?: string;
   }) {
+    if (toolInstruction) {
+      return `${toolInstruction}
+
+<working_memory_data>
+${data}
+</working_memory_data>`;
+    }
     const emptyWorkingMemoryTemplateObject =
       template.format === 'json' ? generateEmptyFromSchema(template.content) : null;
     const hasEmptyWorkingMemoryTemplateObject =

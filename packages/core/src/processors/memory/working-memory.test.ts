@@ -789,4 +789,60 @@ describe('WorkingMemory', () => {
       expect(mockStorage.getThreadById).not.toHaveBeenCalled();
     });
   });
+
+  describe('Custom toolInstruction', () => {
+    it('should use custom toolInstruction instead of default when provided', async () => {
+      const customInstruction = 'Only save explicit user preferences. Maximum 3 items.';
+      const processor = new WorkingMemory({
+        storage: mockStorage,
+        scope: 'thread',
+        toolInstruction: customInstruction,
+      });
+
+      const threadId = 'thread-123';
+      const workingMemoryData = '# User Info\n- Name: John';
+
+      requestContext.set('MastraMemory', {
+        thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
+        resourceId: 'resource-1',
+      });
+
+      vi.mocked(mockStorage.getThreadById).mockResolvedValue({
+        id: threadId,
+        resourceId: 'resource-1',
+        title: 'Test Thread',
+        metadata: { workingMemory: workingMemoryData },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const messages = [
+        {
+          id: 'msg-1',
+          role: 'user' as const,
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+          createdAt: new Date(),
+        },
+      ];
+
+      const { MessageList } = await import('../../agent');
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await processor.processInput({
+        messages,
+        messageList,
+        abort: () => {
+          throw new Error('Aborted');
+        },
+        requestContext,
+      });
+
+      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      expect(resultMessages[0].role).toBe('system');
+      expect(resultMessages[0].content).toContain(customInstruction);
+      expect(resultMessages[0].content).toContain(workingMemoryData);
+      expect(resultMessages[0].content).not.toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
+    });
+  });
 });

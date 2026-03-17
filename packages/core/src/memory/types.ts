@@ -179,6 +179,19 @@ type BaseWorkingMemory = {
    * @default 'resource'
    */
   scope?: 'thread' | 'resource';
+  /**
+   * Custom instruction given to the LLM about when and how to use the
+   * updateWorkingMemory tool. When provided, completely replaces the
+   * default instruction. Use this to enforce constraints such as limiting
+   * what gets saved or how frequently memory updates occur.
+   *
+   * @example
+   * ```typescript
+   * toolInstruction: `Only call updateWorkingMemory for preferences
+   * the user has explicitly stated. Maximum 3 items total.`
+   * ```
+   */
+  toolInstruction?: string;
   /** @deprecated The `use` option has been removed. Working memory always uses tool-call mode. */
   use?: never;
 };
