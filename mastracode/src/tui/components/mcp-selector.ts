@@ -410,6 +410,7 @@ export class McpSelectorComponent extends Box implements Focusable {
   }
 
   private doReconnectServer(status: McpServerStatus): void {
+    if (status.connecting) return;
     const name = status.name;
 
     // Mark this server as connecting
@@ -428,6 +429,8 @@ export class McpSelectorComponent extends Box implements Focusable {
 
     this.onReconnectServerCallback(name)
       .then((updated: McpServerStatus) => {
+        // If a reload-all started, ignore stale reconnect results
+        if (this._reloading) return;
         const i = this.statuses.findIndex(s => s.name === name);
         if (i >= 0) {
           this.statuses[i] = updated;
@@ -439,6 +442,7 @@ export class McpSelectorComponent extends Box implements Focusable {
         }
       })
       .catch((err: unknown) => {
+        if (this._reloading) return;
         const errMsg = err instanceof Error ? err.message : String(err);
         const i = this.statuses.findIndex(s => s.name === name);
         if (i >= 0) {
@@ -455,7 +459,9 @@ export class McpSelectorComponent extends Box implements Focusable {
         this.showInfoCallback(`MCP: Failed to reconnect "${name}": ${errMsg}`);
       })
       .finally(() => {
-        this.updateList();
+        if (!this._reloading) {
+          this.updateList();
+        }
       });
   }
 
