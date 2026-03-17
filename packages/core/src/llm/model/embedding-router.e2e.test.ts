@@ -216,5 +216,83 @@ describe('ModelRouterEmbeddingModel Integration', () => {
       expect(result.embeddings.length).toBe(1);
       expect(result.embeddings[0].length).toBe(768);
     });
+
+    it('should always include warnings array even when model does not provide it', async () => {
+      // Mock a provider that doesn't return warnings
+      vi.mocked(createOpenAICompatible).mockReturnValue({
+        textEmbeddingModel: vi.fn((_modelId: string) => {
+          return {
+            specificationVersion: 'v2',
+            modelId: _modelId,
+            maxEmbeddingsPerCall: 2048,
+            supportsParallelCalls: true,
+            doEmbed: vi.fn(async ({ values }: { values: string[] }) => {
+              // Return embeddings without warnings property (simulating vllm behavior)
+              return {
+                embeddings: values.map(() => new Array(768).fill(0.1)),
+              };
+            }),
+          };
+        }),
+      } as any);
+
+      const model = new ModelRouterEmbeddingModel({
+        providerId: 'test-vllm',
+        modelId: 'test-embed',
+        url: 'http://localhost:8000/v1',
+        apiKey: 'test-key',
+      });
+
+      const result = await model.doEmbed({
+        values: ['hello world'],
+      });
+
+      // Verify warnings is always present and is an array
+      expect(result).toBeDefined();
+      expect(result.warnings).toBeDefined();
+      expect(Array.isArray(result.warnings)).toBe(true);
+      expect(result.embeddings).toBeDefined();
+      expect(result.embeddings.length).toBe(1);
+    });
+
+    it('should preserve warnings array when model provides it', async () => {
+      const testWarning = { message: 'test warning' };
+
+      vi.mocked(createOpenAICompatible).mockReturnValue({
+        textEmbeddingModel: vi.fn((_modelId: string) => {
+          return {
+            specificationVersion: 'v2',
+            modelId: _modelId,
+            maxEmbeddingsPerCall: 2048,
+            supportsParallelCalls: true,
+            doEmbed: vi.fn(async ({ values }: { values: string[] }) => {
+              // Return embeddings with warnings
+              return {
+                embeddings: values.map(() => new Array(768).fill(0.1)),
+                warnings: [testWarning],
+              };
+            }),
+          };
+        }),
+      } as any);
+
+      const model = new ModelRouterEmbeddingModel({
+        providerId: 'test-provider',
+        modelId: 'test-embed',
+        url: 'http://localhost:8000/v1',
+        apiKey: 'test-key',
+      });
+
+      const result = await model.doEmbed({
+        values: ['hello world'],
+      });
+
+      // Verify warnings from the model are preserved
+      expect(result).toBeDefined();
+      expect(result.warnings).toBeDefined();
+      expect(Array.isArray(result.warnings)).toBe(true);
+      expect(result.warnings.length).toBe(1);
+      expect(result.warnings[0]).toEqual(testWarning);
+    });
   });
 });
