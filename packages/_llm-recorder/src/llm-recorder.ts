@@ -279,6 +279,11 @@ export interface LLMRecorderOptions {
    */
   debug?: boolean;
   /**
+   * Override the test mode instead of reading from `LLM_TEST_MODE` env var.
+   * Useful for tests that must always replay regardless of environment.
+   */
+  mode?: LLMTestMode;
+  /**
    * Additional metadata context to include in the recording file.
    * Automatically populated by `createLLMMock` but can be set manually.
    */
@@ -626,7 +631,7 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
   const recordingExists = fs.existsSync(recordingPath);
 
   // Determine mode
-  let mode = getLLMTestMode();
+  let mode = options.mode ?? getLLMTestMode();
 
   // Force record if explicitly requested
   if (options.forceRecord) {

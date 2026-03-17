@@ -7,10 +7,27 @@ import {
   Icon,
   SettingsIcon,
   MainContentContent,
+  SelectField,
+  usePlaygroundStore,
 } from '@mastra/playground-ui';
+import { useEffect, useRef, useState } from 'react';
+
+const THEME_OPTIONS = [
+  { value: 'dark', label: 'Dark' },
+  { value: 'light', label: 'Light' },
+  { value: 'system', label: 'System' },
+] as const;
 
 export const StudioSettingsPage = () => {
-  const { baseUrl, headers } = useStudioConfig();
+  const { baseUrl, headers, themeToggleEnabled } = useStudioConfig();
+  const { theme, setTheme } = usePlaygroundStore();
+  const [selectedTheme, setSelectedTheme] = useState(theme);
+  const selectedThemeRef = useRef(theme);
+
+  useEffect(() => {
+    setSelectedTheme(theme);
+    selectedThemeRef.current = theme;
+  }, [theme]);
 
   return (
     <MainContentLayout>
@@ -23,8 +40,34 @@ export const StudioSettingsPage = () => {
         </HeaderTitle>
       </Header>
       <MainContentContent>
-        <div className="max-w-2xl mx-auto w-full mt-[4vh]">
-          <StudioConfigForm initialConfig={{ baseUrl, headers }} />
+        <div className="max-w-2xl mx-auto w-full mt-8 space-y-8">
+          {themeToggleEnabled ? (
+            <section className="rounded-lg border border-border1 bg-surface3 p-4">
+              <div className="space-y-3">
+                <h2 className="text-icon6 font-medium">Theme</h2>
+                <SelectField
+                  name="theme"
+                  label="Theme mode"
+                  value={selectedTheme}
+                  onValueChange={value => {
+                    const nextTheme = value as 'dark' | 'light' | 'system';
+                    selectedThemeRef.current = nextTheme;
+                    setSelectedTheme(nextTheme);
+                  }}
+                  options={THEME_OPTIONS.map(option => ({ ...option }))}
+                />
+              </div>
+            </section>
+          ) : null}
+
+          <StudioConfigForm
+            initialConfig={{ baseUrl, headers }}
+            onSave={() => {
+              if (themeToggleEnabled) {
+                setTheme(selectedThemeRef.current);
+              }
+            }}
+          />
         </div>
       </MainContentContent>
     </MainContentLayout>

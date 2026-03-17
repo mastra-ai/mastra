@@ -254,6 +254,7 @@
   },
   "devDependencies": {
     "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.61",
+    "@internal/core": "workspace:*",
     "@ai-sdk/azure": "^2.0.101",
     "@ai-sdk/cerebras-v5": "npm:@ai-sdk/cerebras@1.0.36",
     "@ai-sdk/deepinfra-v5": "npm:@ai-sdk/deepinfra@1.0.35",

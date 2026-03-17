@@ -4,7 +4,7 @@ import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError, generateId } from '@internal/ai-sdk-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
-import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
+import type { MastraDBMessage, MastraMessagePart, MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { getErrorFromUnknown } from '../../../error/utils.js';
@@ -57,7 +57,6 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   logger?: IMastraLogger;
   transportRef?: StreamTransportRef;
   transportResolver?: () => StreamTransport | undefined;
-  persistedToolCallIds?: Set<string>;
 };
 
 function buildResponseModelMetadata(runState: AgenticRunState): { metadata: Record<string, unknown> } | undefined {
@@ -78,7 +77,6 @@ async function processOutputStream<OUTPUT = undefined>({
   logger,
   transportRef,
   transportResolver,
-  persistedToolCallIds,
 }: ProcessOutputStreamOptions<OUTPUT>) {
   let transportSet = false;
 
@@ -288,36 +286,6 @@ async function processOutputStream<OUTPUT = undefined>({
         break;
       }
 
-      case 'tool-call': {
-        const message: MastraDBMessage = {
-          id: messageId,
-          role: 'assistant' as const,
-          content: {
-            format: 2,
-            parts: [
-              {
-                type: 'tool-invocation' as const,
-                toolInvocation: {
-                  state: 'call' as const,
-                  toolCallId: chunk.payload.toolCallId,
-                  toolName: chunk.payload.toolName,
-                  args: chunk.payload.args ?? {},
-                },
-                providerMetadata: chunk.payload.providerMetadata,
-                ...({ providerExecuted: chunk.payload.providerExecuted } as { providerExecuted: boolean | undefined }),
-              },
-            ],
-            ...buildResponseModelMetadata(runState),
-          },
-          createdAt: new Date(),
-        };
-
-        messageList.add(message, 'response');
-        persistedToolCallIds?.add(chunk.payload.toolCallId);
-        safeEnqueue(controller, chunk);
-        break;
-      }
-
       case 'tool-call-input-streaming-end': {
         safeEnqueue(controller, chunk);
         break;
@@ -503,6 +471,62 @@ async function processOutputStream<OUTPUT = undefined>({
         await options?.onError?.({ error });
         break;
 
+      // Provider-executed tool results (e.g. web_search). Client tool results
+      // are handled by llm-mapping-step after execution.
+      case 'tool-result': {
+        if (chunk.payload.result != null) {
+          const resultToolDef =
+            tools?.[chunk.payload.toolName] || findProviderToolByName(tools, chunk.payload.toolName);
+          messageList.updateToolInvocation({
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: chunk.payload.toolCallId,
+              toolName: chunk.payload.toolName,
+              args: chunk.payload.args,
+              result: chunk.payload.result,
+            },
+            providerMetadata: chunk.payload.providerMetadata,
+            // @ts-expect-error - providerExecuted is not in the type but is read by output-converter.ts (to keep deferred provider calls) and tool-call-step.ts (to skip client execution)
+            providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
+          });
+        }
+        safeEnqueue(controller, chunk);
+        break;
+      }
+
+      case 'tool-call': {
+        const toolDef = tools?.[chunk.payload.toolName] || findProviderToolByName(tools, chunk.payload.toolName);
+        const inferredProviderExecuted = inferProviderExecuted(chunk.payload.providerExecuted, toolDef);
+
+        const toolCallPart: MastraMessagePart = {
+          type: 'tool-invocation' as const,
+          toolInvocation: {
+            state: 'call' as const,
+            toolCallId: chunk.payload.toolCallId,
+            toolName: chunk.payload.toolName,
+            args: chunk.payload.args,
+          },
+          providerMetadata: chunk.payload.providerMetadata,
+          // @ts-expect-error - providerExecuted is not in the type but is read by output-converter.ts (to keep deferred provider calls) and tool-call-step.ts (to skip client execution)
+          providerExecuted: inferredProviderExecuted,
+        };
+
+        const message: MastraDBMessage = {
+          id: messageId,
+          role: 'assistant' as const,
+          content: {
+            format: 2,
+            parts: [toolCallPart],
+            ...buildResponseModelMetadata(runState),
+          },
+          createdAt: new Date(),
+        };
+        messageList.add(message, 'response');
+
+        safeEnqueue(controller, chunk);
+        break;
+      }
       default:
         safeEnqueue(controller, chunk);
     }
@@ -628,8 +652,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let warnings: any;
       let request: any;
       let rawResponse: any;
-      const persistedToolCallIds = new Set<string>();
-
       const { outputStream, callBail, runState, stepTools, stepWorkspace } = await executeStreamWithFallbackModels<{
         outputStream: MastraModelOutput<OUTPUT>;
         runState: AgenticRunState;
@@ -993,7 +1015,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             logger,
             transportRef: _internal?.transportRef,
             transportResolver,
-            persistedToolCallIds,
           });
         } catch (error) {
           const provider = model?.provider;
@@ -1120,59 +1141,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         });
       }
 
-      /**
-       * Add tool calls to the message list.
-       * For PTC (programmatic tool calling from code execution), merge matching tool-result
-       * so providerExecuted tool calls include output for the tool-call-step.
-       */
-      const toolResults = outputStream._getImmediateToolResults()?.map(chunk => chunk.payload) ?? [];
-      const toolResultById = new Map(toolResults.map(result => [result.toolCallId, result]));
-      const toolCalls =
-        outputStream._getImmediateToolCalls()?.map(chunk => {
-          const toolResult = toolResultById.get(chunk.payload.toolCallId);
-          const output = chunk.payload.output ?? toolResult?.result;
-          const tool = findProviderToolByName(stepTools, chunk.payload.toolName);
-          const providerExecuted = inferProviderExecuted(
-            chunk.payload.providerExecuted ?? toolResult?.providerExecuted,
-            tool,
-          );
-
-          return {
-            ...chunk.payload,
-            args: chunk.payload.args ?? toolResult?.args ?? {},
-            ...(output !== undefined ? { output } : {}),
-            providerExecuted,
-            providerMetadata: chunk.payload.providerMetadata ?? toolResult?.providerMetadata,
-          };
-        }) ?? [];
-
-      const toolCallsToPersist = toolCalls.filter(toolCall => !persistedToolCallIds.has(toolCall.toolCallId));
-
-      if (toolCallsToPersist.length > 0) {
-        const message: MastraDBMessage = {
-          id: outputStream.messageId,
-          role: 'assistant' as const,
-          content: {
-            format: 2,
-            parts: toolCallsToPersist.map(toolCall => {
-              return {
-                type: 'tool-invocation' as const,
-                toolInvocation: {
-                  state: 'call' as const,
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  args: toolCall.args,
-                },
-                providerMetadata: toolCall.providerMetadata,
-                providerExecuted: toolCall.providerExecuted,
-              };
-            }),
-            ...buildResponseModelMetadata(runState),
-          },
-          createdAt: new Date(),
+      // Tool calls are added to the message list inline during stream processing (case 'tool-call').
+      // Tool results (including deferred provider results) are handled inline (case 'tool-result').
+      const toolCalls = (outputStream._getImmediateToolCalls() ?? []).map(chunk => {
+        const tool = stepTools?.[chunk.payload.toolName] || findProviderToolByName(stepTools, chunk.payload.toolName);
+        return {
+          ...chunk.payload,
+          providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, tool),
         };
-        messageList.add(message, 'response');
-      }
+      });
 
       // Call processOutputStep for processors (runs AFTER LLM response, BEFORE tool execution)
       // This allows processors to validate/modify the response and trigger retries if needed
