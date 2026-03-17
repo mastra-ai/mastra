@@ -10,6 +10,31 @@ import type { AIV5Type } from '../types';
 import { ensureAnthropicCompatibleMessages } from '../utils/provider-compat';
 
 /**
+ * Deduplicates UI messages by ID, keeping the first occurrence of each message.
+ * This prevents "Duplicate item found" errors from LLM providers (e.g., OpenAI Responses API)
+ * when multiple processors add the same messages to the message list.
+ *
+ * @param messages - Array of UI messages that may contain duplicates
+ * @returns Array of UI messages with duplicates removed (first occurrence kept)
+ */
+function deduplicateMessagesById<T extends { id?: string }>(messages: T[]): T[] {
+  const seenIds = new Set<string>();
+  return messages.filter(message => {
+    if (!message.id) {
+      // Messages without IDs are always kept
+      return true;
+    }
+    if (seenIds.has(message.id)) {
+      // Duplicate found, filter it out
+      return false;
+    }
+    // First occurrence, track it and keep it
+    seenIds.add(message.id);
+    return true;
+  });
+}
+
+/**
  * Sanitizes AIV4 UI messages by filtering out incomplete tool calls.
  * Removes messages with empty parts arrays after sanitization.
  */
@@ -207,7 +232,9 @@ export function addStartStepPartsForAIV5(messages: AIV5Type.UIMessage[]): AIV5Ty
  * Converts AIV4 UI messages to AIV4 Core messages.
  */
 export function aiV4UIMessagesToAIV4CoreMessages(messages: UIMessageV4[]): CoreMessageV4[] {
-  return convertToCoreMessagesV4(sanitizeAIV4UIMessages(messages));
+  // Deduplicate messages by ID to prevent "Duplicate item found" errors
+  const deduplicated = deduplicateMessagesById(messages);
+  return convertToCoreMessagesV4(sanitizeAIV4UIMessages(deduplicated));
 }
 
 /**
@@ -223,7 +250,10 @@ export function aiV5UIMessagesToAIV5ModelMessages(
   dbMessages: MastraDBMessage[],
   filterIncompleteToolCalls = false,
 ): AIV5Type.ModelMessage[] {
-  const sanitized = sanitizeV5UIMessages(messages, filterIncompleteToolCalls);
+  // Deduplicate messages by ID before processing to prevent "Duplicate item found" errors
+  // from LLM providers (e.g., OpenAI Responses API) when multiple processors add the same messages
+  const deduplicated = deduplicateMessagesById(messages);
+  const sanitized = sanitizeV5UIMessages(deduplicated, filterIncompleteToolCalls);
   const preprocessed = addStartStepPartsForAIV5(sanitized);
   const result = AIV5.convertToModelMessages(preprocessed);
 
