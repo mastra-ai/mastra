@@ -1043,7 +1043,7 @@ ${workingMemory}`;
       : this.getWorkingMemoryToolInstruction({
           template: workingMemoryTemplate,
           data: workingMemoryData,
-          toolInstruction: memoryConfig?.workingMemory?.toolInstruction,
+          toolInstruction: config.workingMemory?.toolInstruction,
         });
   }
 
