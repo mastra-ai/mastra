@@ -88,24 +88,43 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
       servers: buildServerDefs(servers),
     });
 
-    // MCPClient.listTools() iterates servers individually with per-server
-    // try/catch — failed servers are logged and skipped internally.
-    // We derive per-server status from tool name prefixes (serverName_toolName).
+    // Use listToolsets() to get tools grouped by server name.
+    // Servers that fail to connect are silently skipped (no entry in result),
+    // letting us detect which servers actually connected vs which failed.
     const serverNames = Object.keys(servers);
 
     try {
-      tools = await client.listTools();
+      const toolsets = await client.listToolsets();
+
+      // Flatten toolsets into the namespaced tools map (serverName_toolName)
+      for (const [serverName, serverTools] of Object.entries(toolsets)) {
+        for (const [toolName, toolConfig] of Object.entries(serverTools)) {
+          tools[`${serverName}_${toolName}`] = toolConfig;
+        }
+      }
 
       for (const name of serverNames) {
-        const prefix = `${name}_`;
-        const serverToolNames = Object.keys(tools).filter(t => t.startsWith(prefix));
-        serverStatuses.set(name, {
-          name,
-          connected: true,
-          toolCount: serverToolNames.length,
-          toolNames: serverToolNames,
-          transport: getTransport(servers[name]!),
-        });
+        const serverTools = toolsets[name];
+        if (serverTools) {
+          const toolNames = Object.keys(serverTools).map(t => `${name}_${t}`);
+          serverStatuses.set(name, {
+            name,
+            connected: true,
+            toolCount: toolNames.length,
+            toolNames,
+            transport: getTransport(servers[name]!),
+          });
+        } else {
+          // Server was silently skipped by MCPClient — connection failed
+          serverStatuses.set(name, {
+            name,
+            connected: false,
+            toolCount: 0,
+            toolNames: [],
+            transport: getTransport(servers[name]!),
+            error: 'Failed to connect',
+          });
+        }
       }
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
