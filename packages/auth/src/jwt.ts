@@ -11,16 +11,20 @@ interface MastraJwtAuthOptions extends MastraAuthProviderOptions<JwtUser> {
   mapUser?: (payload: JwtUser) => User | null;
 }
 
+function str(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
 function defaultMapUser(payload: JwtUser): User | null {
-  const id = payload.sub || payload.id;
+  const id = str(payload.sub) || str(payload.id);
   if (!id) {
     return null;
   }
   return {
     id,
-    email: payload.email,
-    name: payload.name,
-    avatarUrl: payload.avatarUrl || payload.avatar_url || payload.picture,
+    email: str(payload.email),
+    name: str(payload.name),
+    avatarUrl: str(payload.avatarUrl) || str(payload.avatar_url) || str(payload.picture),
   };
 }
 
