@@ -473,8 +473,8 @@ async function processOutputStream<OUTPUT = undefined>({
 
       // Provider-executed tool results (e.g. web_search). Client tool results
       // are handled by llm-mapping-step after execution.
-      case 'tool-result':
-        if (chunk.payload.result) {
+      case 'tool-result': {
+        if (chunk.payload.result != null) {
           const resultToolDef =
             tools?.[chunk.payload.toolName] || findProviderToolByName(tools, chunk.payload.toolName);
           messageList.updateToolInvocation({
@@ -493,8 +493,9 @@ async function processOutputStream<OUTPUT = undefined>({
         }
         safeEnqueue(controller, chunk);
         break;
+      }
 
-      case 'tool-call':
+      case 'tool-call': {
         const toolDef = tools?.[chunk.payload.toolName] || findProviderToolByName(tools, chunk.payload.toolName);
         const inferredProviderExecuted = inferProviderExecuted(chunk.payload.providerExecuted, toolDef);
 
@@ -525,6 +526,7 @@ async function processOutputStream<OUTPUT = undefined>({
 
         safeEnqueue(controller, chunk);
         break;
+      }
       default:
         safeEnqueue(controller, chunk);
     }
@@ -1142,7 +1144,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // Tool calls are added to the message list inline during stream processing (case 'tool-call').
       // Tool results (including deferred provider results) are handled inline (case 'tool-result').
       const toolCalls = (outputStream._getImmediateToolCalls() ?? []).map(chunk => {
-        const tool = tools?.[chunk.payload.toolName] || findProviderToolByName(tools, chunk.payload.toolName);
+        const tool = stepTools?.[chunk.payload.toolName] || findProviderToolByName(stepTools, chunk.payload.toolName);
         return {
           ...chunk.payload,
           providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, tool),

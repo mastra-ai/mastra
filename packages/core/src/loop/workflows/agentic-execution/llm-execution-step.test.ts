@@ -99,7 +99,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     bail = vi.fn(data => data);
   });
 
-  it('should infer providerExecuted and merge streamed gateway tool results into tool calls', async () => {
+  it('should infer providerExecuted for gateway tools and not merge streamed results onto toolCalls', async () => {
     const executeSpy = vi.fn();
     const tools = {
       perplexitySearch: {

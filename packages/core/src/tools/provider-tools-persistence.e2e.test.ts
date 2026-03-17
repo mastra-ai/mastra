@@ -127,14 +127,12 @@ describe('provider-executed tool message persistence', () => {
       expect(webSearchParts.length).toBeGreaterThan(0);
 
       for (const part of webSearchParts) {
-        if (part.type === 'tool-invocation') {
-          expect(part.toolInvocation.state).toBe('result');
-          const inv = part.toolInvocation as any;
-          expect(inv.result).toBeDefined();
-          expect(inv.result).not.toBeNull();
-          // Must be real web search data, not a stub
-          expect(inv.result).not.toEqual({ providerExecuted: true, toolName: 'web_search' });
-        }
+        expect(part.toolInvocation.state).toBe('result');
+        const inv = part.toolInvocation as any;
+        expect(inv.result).toBeDefined();
+        expect(inv.result).not.toBeNull();
+        // Must be real web search data, not a stub
+        expect(inv.result).not.toEqual({ providerExecuted: true, toolName: 'web_search' });
       }
 
       // No orphaned call-only parts
