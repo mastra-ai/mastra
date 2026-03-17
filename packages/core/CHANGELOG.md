@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 1.14.0-alpha.2
+
+### Patch Changes
+
+- Added dated message boundary delimiters when activating buffered observations for improved cache stability. ([#14367](https://github.com/mastra-ai/mastra/pull/14367))
+
+- Fixed provider-executed tool calls (e.g. Anthropic `web_search`) being dropped or incorrectly persisted when deferred by the provider. Tool call parts are now persisted in stream order, and deferred tool results are correctly merged back into the originating message. ([#14282](https://github.com/mastra-ai/mastra/pull/14282))
+
+- Added client/server body schemas for feedback and scores that omit the timestamp field, allowing it to be set server-side ([#14270](https://github.com/mastra-ai/mastra/pull/14270))
+
 ## 1.13.3-alpha.1
 
 ### Patch Changes
