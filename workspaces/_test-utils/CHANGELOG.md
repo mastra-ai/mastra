@@ -1,5 +1,12 @@
 # @internal/workspace-test-utils
 
+## 0.0.15
+
+### Patch Changes
+
+- Updated dependencies [[`0ce6035`](https://github.com/mastra-ai/mastra/commit/0ce603591189f547397704e53f23c77bc5630071)]:
+  - @mastra/core@1.13.2
+
 ## 0.0.14
 
 ### Patch Changes

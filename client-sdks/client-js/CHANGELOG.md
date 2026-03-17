@@ -1,5 +1,42 @@
 # @mastra/client-js
 
+## 1.8.5-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`b77aa19`](https://github.com/mastra-ai/mastra/commit/b77aa1981361c021f2c881bee8f0c703687f00da), [`dd6ca1c`](https://github.com/mastra-ai/mastra/commit/dd6ca1cdea3b8b6182f4cf61df41070ba0cc0deb), [`4cb4edf`](https://github.com/mastra-ai/mastra/commit/4cb4edf3c909d197ec356c1790d13270514ffef6)]:
+  - @mastra/core@1.13.3-alpha.1
+
+## 1.8.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`4a7ce05`](https://github.com/mastra-ai/mastra/commit/4a7ce05125b8d3d260f68f1fc4a6c6866d22ba24), [`085e371`](https://github.com/mastra-ai/mastra/commit/085e3718a7d0fe9a210fe7dd1c867b9bdfe8d16b), [`ce26fe2`](https://github.com/mastra-ai/mastra/commit/ce26fe2166dd90254f8bee5776e55977143e97de), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1)]:
+  - @mastra/core@1.13.3-alpha.0
+  - @mastra/schema-compat@1.2.5-alpha.0
+
+## 1.8.4
+
+### Patch Changes
+
+- Fixed `@mastra/client-js` so client-side tools with Zod `inputSchema`, `parameters`, or `outputSchema` are serialized to JSON Schema before requests are sent. ([#13673](https://github.com/mastra-ai/mastra/pull/13673))
+
+  Client tools with `execute` functions no longer trigger OpenAI `"Invalid schema for function"` errors when they include Zod schemas.
+
+  Fixes #11668. Alternative to #11787.
+
+- Updated dependencies [[`0ce6035`](https://github.com/mastra-ai/mastra/commit/0ce603591189f547397704e53f23c77bc5630071), [`1978bc4`](https://github.com/mastra-ai/mastra/commit/1978bc424dbb04f5f7c5d8522f07f1166006fa3f)]:
+  - @mastra/core@1.13.2
+  - @mastra/schema-compat@1.2.4
+
+## 1.8.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`0ce6035`](https://github.com/mastra-ai/mastra/commit/0ce603591189f547397704e53f23c77bc5630071), [`1978bc4`](https://github.com/mastra-ai/mastra/commit/1978bc424dbb04f5f7c5d8522f07f1166006fa3f)]:
+  - @mastra/core@1.13.2-alpha.0
+  - @mastra/schema-compat@1.2.4-alpha.0
+
 ## 1.8.3
 
 ### Patch Changes

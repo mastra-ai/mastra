@@ -1,5 +1,54 @@
 # @mastra/core
 
+## 1.13.3-alpha.1
+
+### Patch Changes
+
+- Fix `generateEmptyFromSchema` to accept both string and pre-parsed object JSON schema inputs, recursively initialize nested object properties, and respect default values. Updated `WorkingMemoryTemplate` type to a discriminated union supporting `Record<string, unknown>` content for JSON format templates. Removed duplicate private schema generator in the working-memory processor in favor of the shared utility. ([#14310](https://github.com/mastra-ai/mastra/pull/14310))
+
+- `@mastra/core`: patch ([#14327](https://github.com/mastra-ai/mastra/pull/14327))
+
+  Added `spanId` alongside `traceId` across user-facing execution results that return tracing identifiers (including agent stream/generate and workflow run results) so integrations can query observability vendors by run root span ID
+
+- Fixed workspace search being wiped when skills refresh. Previously, calling `skills.refresh()` or triggering a skills re-discovery via `maybeRefresh()` would clear the entire BM25 search index, including auto-indexed workspace content. Now only skill entries are removed from the index during refresh, preserving workspace search results. ([#14287](https://github.com/mastra-ai/mastra/pull/14287))
+
+## 1.13.3-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5))
+
+- Fixed provider-executed tool calls being saved out of order or without results in memory replay. (Fixes #13762) ([#13860](https://github.com/mastra-ai/mastra/pull/13860))
+
+- Add AI Gateway tool support in the agentic loop. ([#14016](https://github.com/mastra-ai/mastra/pull/14016))
+
+  Gateway tools (e.g., `gateway.tools.perplexitySearch()`) are provider-executed but, unlike native provider tools (e.g., `openai.tools.webSearch()`), the LLM provider does not store their results server-side. The agentic loop now correctly infers `providerExecuted` for these tools, merges streamed provider results with their corresponding tool calls, and skips local execution when a provider result is already present.
+
+  Fixes #13190
+
+- Fixed processor state not persisting between processOutputStream and processOutputResult when processors are wrapped in workflows. State set during stream processing is now correctly accessible in processOutputResult. ([#14279](https://github.com/mastra-ai/mastra/pull/14279))
+
+- Updated dependencies [[`4a7ce05`](https://github.com/mastra-ai/mastra/commit/4a7ce05125b8d3d260f68f1fc4a6c6866d22ba24)]:
+  - @mastra/schema-compat@1.2.5-alpha.0
+
+## 1.13.2
+
+### Patch Changes
+
+- Fix WorkingMemory type to accept Zod schemas in workingMemory.schema configuration ([#14261](https://github.com/mastra-ai/mastra/pull/14261))
+
+- Updated dependencies [[`1978bc4`](https://github.com/mastra-ai/mastra/commit/1978bc424dbb04f5f7c5d8522f07f1166006fa3f)]:
+  - @mastra/schema-compat@1.2.4
+
+## 1.13.2-alpha.0
+
+### Patch Changes
+
+- Fix WorkingMemory type to accept Zod schemas in workingMemory.schema configuration ([#14261](https://github.com/mastra-ai/mastra/pull/14261))
+
+- Updated dependencies [[`1978bc4`](https://github.com/mastra-ai/mastra/commit/1978bc424dbb04f5f7c5d8522f07f1166006fa3f)]:
+  - @mastra/schema-compat@1.2.4-alpha.0
+
 ## 1.13.1
 
 ### Patch Changes

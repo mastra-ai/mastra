@@ -37,7 +37,7 @@ export const mastra = new Mastra({
       id: 'weather-agent',
       name: 'Weather Agent',
       instructions: 'You help with weather information',
-      model: 'openai/gpt-4o',
+      model: 'openai/gpt-5.4',
     }),
   },
 })
@@ -270,7 +270,7 @@ import { ModerationProcessor } from '@mastra/core/processors'
 export const mastra = new Mastra({
   processors: {
     moderation: new ModerationProcessor({
-      model: 'openai/gpt-4.1-nano',
+      model: 'openai/gpt-5-mini',
       categories: ['hate', 'harassment', 'violence'],
     }),
   },
@@ -317,7 +317,7 @@ import { createToxicityScorer } from '@mastra/evals/scorers/prebuilt'
 
 export const mastra = new Mastra({
   scorers: {
-    toxicity: createToxicityScorer({ model: 'openai/gpt-4.1-nano' }),
+    toxicity: createToxicityScorer({ model: 'openai/gpt-5-mini' }),
   },
 })
 ```
@@ -521,6 +521,8 @@ You only need this option if you're importing uncompiled source code directly. I
 
 Mastra automatically detects workspace packages in monorepo setups and adds them to this list, so you typically only need to specify external packages that require transpilation.
 
+Mastra also resolves `tsconfig.json` `baseUrl` and `paths` aliases during build. This includes ESM-style imports such as `~/utils/logger.js` that point to TypeScript source files.
+
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 
@@ -654,9 +656,9 @@ export const mastra = new Mastra({
 ### server.host
 
 **Type:** `string`\
-**Default:** `localhost`
+**Default:** `localhost` (or `MASTRA_HOST` environment variable if set)
 
-Host address the Mastra development server binds to.
+Host address the Mastra development server binds to. If the `MASTRA_HOST` environment variable is set, it takes precedence over the default.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'

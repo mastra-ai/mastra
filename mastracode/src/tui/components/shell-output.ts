@@ -5,7 +5,7 @@
 
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import stripAnsi from 'strip-ansi';
-import { theme } from '../theme.js';
+import { getTermWidth, theme } from '../theme.js';
 
 const MAX_LINES = 200;
 
@@ -101,7 +101,7 @@ export class ShellStreamComponent extends Container {
     this.addChild(new Spacer(1));
 
     const border = (char: string) => theme.bold(theme.fg('accent', char));
-    const termWidth = process.stdout.columns || 80;
+    const termWidth = getTermWidth();
     const maxLineWidth = termWidth - 6;
 
     const done = this.exitCode !== undefined;
@@ -115,7 +115,7 @@ export class ShellStreamComponent extends Container {
     const footerText = `${theme.bold(theme.fg('toolTitle', '$'))} ${theme.fg('accent', this.command)}${durationStr}${statusIcon}`;
 
     // Top border
-    this.addChild(new Text(border('┌──'), 0, 0));
+    this.addChild(new Text(border('╭──'), 0, 0));
 
     // Output lines with left border
     const displayLines = [...this.lines];
@@ -138,7 +138,7 @@ export class ShellStreamComponent extends Container {
     }
 
     // Bottom border with command info
-    this.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
+    this.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
 
     // Show exit code if non-zero
     if (done && this.exitCode !== 0) {

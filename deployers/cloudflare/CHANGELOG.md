@@ -1,5 +1,34 @@
 # @mastra/deployer-cloudflare
 
+## 1.1.12-alpha.0
+
+### Patch Changes
+
+- Stop writing `.env` variables to `wrangler.jsonc` to prevent secrets from leaking into source control. ([#14302](https://github.com/mastra-ai/mastra/pull/14302))
+  - Environment variables from `.env` are no longer merged into the `vars` field of the generated wrangler config.
+  - User-provided `vars` from the `CloudflareDeployer` constructor are still written as before.
+  - A warning is logged during build with instructions to upload secrets via `npx wrangler secret bulk .env`.
+
+- Updated dependencies [[`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`9d4f992`](https://github.com/mastra-ai/mastra/commit/9d4f9921d2d3afb3301b2c93f0e4e6a80a4f81a3), [`085e371`](https://github.com/mastra-ai/mastra/commit/085e3718a7d0fe9a210fe7dd1c867b9bdfe8d16b), [`ce26fe2`](https://github.com/mastra-ai/mastra/commit/ce26fe2166dd90254f8bee5776e55977143e97de), [`0b0ba2f`](https://github.com/mastra-ai/mastra/commit/0b0ba2f251087df603b5ee512bb83ba81e79d9fb), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1)]:
+  - @mastra/core@1.13.3-alpha.0
+  - @mastra/deployer@1.13.3-alpha.0
+
+## 1.1.11
+
+### Patch Changes
+
+- Updated dependencies [[`0ce6035`](https://github.com/mastra-ai/mastra/commit/0ce603591189f547397704e53f23c77bc5630071)]:
+  - @mastra/core@1.13.2
+  - @mastra/deployer@1.13.2
+
+## 1.1.11-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`0ce6035`](https://github.com/mastra-ai/mastra/commit/0ce603591189f547397704e53f23c77bc5630071)]:
+  - @mastra/core@1.13.2-alpha.0
+  - @mastra/deployer@1.13.2-alpha.0
+
 ## 1.1.10
 
 ### Patch Changes
