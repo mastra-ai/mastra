@@ -585,13 +585,4 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     return this.engine.getResolvedConfig(requestContext);
   }
 
-  static async awaitBuffering(
-    threadId: string | null | undefined,
-    resourceId: string | null | undefined,
-    scope: 'resource' | 'thread',
-    timeoutMs?: number,
-  ) {
-    const { ObservationalMemory: OM } = await import('./observational-memory');
-    return OM.awaitBuffering(threadId, resourceId, scope, timeoutMs);
-  }
 }

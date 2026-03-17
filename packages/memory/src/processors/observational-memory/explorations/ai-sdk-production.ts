@@ -224,14 +224,47 @@ async function main() {
         });
         stepLog.push(`step ${stepNum}: buffer [fire-and-forget] (pending ${status.pendingTokens}/${status.threshold})`);
       } else if (status.shouldObserve) {
-        // Same observe primitives as the processor: wait -> activate -> observe
-        // Wait for any in-flight buffer to complete before observing
+        // Same observe flow as processor's runThresholdObservation:
+        // wait → re-check → activate → blockAfter → observe → cleanup
+
         await ObservationalMemory.awaitBuffering(threadId, undefined, 'thread');
-        if (status.canActivate) {
-          await om.activate({ threadId });
+
+        // Fresh re-check — state may have changed while waiting for buffering
+        const freshStatus = await om.getStatus({ threadId, messages: messageList.get.all.db() });
+        if (!freshStatus.shouldObserve) {
+          stepLog.push(`step ${stepNum}: noop-after-wait (pending ${freshStatus.pendingTokens}/${freshStatus.threshold})`);
+        } else {
+          // Try activation first
+          if (freshStatus.canActivate) {
+            const activation = await om.activate({ threadId, messages: messageList.get.all.db() });
+            if (activation.activated) {
+              if (activation.activatedMessageIds?.length) {
+                messageList.removeByIds(activation.activatedMessageIds);
+              }
+              await om.resetBufferingState({ threadId, recordId: activation.record.id });
+
+              // Check if reflection is needed after activation
+              const postActivation = await om.getStatus({ threadId, messages: messageList.get.all.db() });
+              if (postActivation.shouldReflect) {
+                await om.reflect(threadId);
+              }
+
+              stepLog.push(`step ${stepNum}: activate (pending ${freshStatus.pendingTokens}/${freshStatus.threshold})`);
+            }
+          }
+
+          // blockAfter gate — defer to async if below blockAfter
+          const config = om.getObservationConfig();
+          const shouldDefer =
+            config.bufferTokens && (!config.blockAfter || freshStatus.pendingTokens < config.blockAfter);
+
+          if (shouldDefer) {
+            stepLog.push(`step ${stepNum}: defer (pending ${freshStatus.pendingTokens}/${freshStatus.threshold})`);
+          } else {
+            await om.observe({ threadId, messages: messageList.get.all.db() });
+            stepLog.push(`step ${stepNum}: observe (pending ${freshStatus.pendingTokens}/${freshStatus.threshold})`);
+          }
         }
-        await om.observe({ threadId, messages });
-        stepLog.push(`step ${stepNum}: observe (pending ${status.pendingTokens}/${status.threshold})`);
       } else {
         stepLog.push(`step ${stepNum}: noop (pending ${status.pendingTokens}/${status.threshold})`);
       }
@@ -244,8 +277,19 @@ async function main() {
       const messages = messageList.get.all.db();
       const status = await om.getStatus({ threadId, messages });
       if (status.canActivate) {
-        await om.activate({ threadId, checkThreshold: true, messages });
-        stepLog.push(`prepareStep ${stepNumber}: activate (threshold-checked)`);
+        const activation = await om.activate({ threadId, checkThreshold: true, messages });
+        if (activation.activated) {
+          if (activation.activatedMessageIds?.length) {
+            messageList.removeByIds(activation.activatedMessageIds);
+          }
+          await om.resetBufferingState({ threadId, recordId: activation.record.id });
+          stepLog.push(`prepareStep ${stepNumber}: activate (threshold-checked)`);
+        }
+      }
+
+      // Check if reflection is needed after activation
+      if (status.shouldReflect) {
+        await om.reflect(threadId);
       }
 
       // Rebuild system message with latest observations
