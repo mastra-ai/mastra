@@ -2317,7 +2317,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     return trimmed
-      .split(/\n{2,}--- message boundary \([^)]+\) ---\n{2,}/)
+      .split(/\n{2,}--- message boundary \(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\) ---\n{2,}/)
       .map(chunk => chunk.trim())
       .filter(Boolean);
   }

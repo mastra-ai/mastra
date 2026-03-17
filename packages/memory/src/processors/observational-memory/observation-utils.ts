@@ -1,5 +1,6 @@
-// Regex that captures the ISO date from each message boundary delimiter
-const BOUNDARY_WITH_DATE_RE = /\n{2,}--- message boundary \(([^)]+)\) ---\n{2,}/;
+// Regex that captures the ISO 8601 date from each message boundary delimiter
+const BOUNDARY_WITH_DATE_RE =
+  /\n{2,}--- message boundary \((\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\) ---\n{2,}/;
 
 /**
  * Given a raw `activeObservations` string (from an `ObservationalMemoryRecord`),
