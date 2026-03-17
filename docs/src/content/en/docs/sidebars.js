@@ -62,9 +62,8 @@ const sidebars = {
           label: 'Tools',
         },
         {
-          type: 'doc',
-          id: 'agents/agent-memory',
-          label: 'Memory',
+          type: 'html',
+          value: '<a class="menu__link" href="/docs/memory/overview"><span>Memory</span></a>',
         },
         {
           type: 'doc',
@@ -106,6 +105,51 @@ const sidebars = {
           customProps: {
             tags: ['deprecated'],
           },
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Memory',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'memory/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'memory/storage',
+          label: 'Storage',
+        },
+        {
+          type: 'doc',
+          id: 'memory/message-history',
+          label: 'Message History',
+        },
+        {
+          type: 'doc',
+          id: 'memory/observational-memory',
+          label: 'Observational Memory',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'memory/working-memory',
+          label: 'Working Memory',
+        },
+        {
+          type: 'doc',
+          id: 'memory/semantic-recall',
+          label: 'Semantic Recall',
+        },
+        {
+          type: 'doc',
+          id: 'memory/memory-processors',
+          label: 'Memory Processors',
         },
       ],
     },
@@ -200,51 +244,6 @@ const sidebars = {
           type: 'doc',
           id: 'mcp/publishing-mcp-server',
           label: 'Publishing an MCP Server',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Memory',
-      collapsed: true,
-      items: [
-        {
-          type: 'doc',
-          id: 'memory/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'memory/storage',
-          label: 'Storage',
-        },
-        {
-          type: 'doc',
-          id: 'memory/message-history',
-          label: 'Message History',
-        },
-        {
-          type: 'doc',
-          id: 'memory/observational-memory',
-          label: 'Observational Memory',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'memory/working-memory',
-          label: 'Working Memory',
-        },
-        {
-          type: 'doc',
-          id: 'memory/semantic-recall',
-          label: 'Semantic Recall',
-        },
-        {
-          type: 'doc',
-          id: 'memory/memory-processors',
-          label: 'Memory Processors',
         },
       ],
     },

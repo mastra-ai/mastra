@@ -659,6 +659,11 @@
       "source": "/docs/agents/network-approval",
       "destination": "/docs/agents/networks",
       "permanent": true
+    },
+    {
+      "source": "/docs/agents/agent-memory",
+      "destination": "/docs/memory/overview",
+      "permanent": true
     }
   ]
 }
