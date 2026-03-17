@@ -26,10 +26,16 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 const MODE = getLLMTestMode();
-setupDummyApiKeys(MODE, ['openai']);
 
 type MessagePart = MastraMessageContentV2['parts'][number];
 type OrderEntry = { type: string; content?: string };
+
+// Map env vars to provider keys for shouldSkipLLMTest
+const ENV_TO_PROVIDER: Record<string, 'openai' | 'anthropic' | 'google'> = {
+  OPENAI_API_KEY: 'openai',
+  ANTHROPIC_API_KEY: 'anthropic',
+  GOOGLE_GENERATIVE_AI_API_KEY: 'google',
+};
 
 // Model configurations for testing
 interface ModelConfig {
@@ -200,10 +206,13 @@ export function getMessageOrderingTests(
 ) {
   const { version, models } = config;
 
+  // Setup dummy keys for all providers used in this test suite
+  const providers = [...new Set(models.map(m => ENV_TO_PROVIDER[m.envVar]).filter(Boolean))];
+  setupDummyApiKeys(MODE, providers);
+
   // Run tests for each model configuration
   for (const modelConfig of models) {
-    // Extract provider name from env var (e.g., 'OPENAI_API_KEY' -> 'openai')
-    const provider = modelConfig.envVar.replace('_API_KEY', '').toLowerCase() as 'openai' | 'anthropic' | 'google';
+    const provider = ENV_TO_PROVIDER[modelConfig.envVar];
     const skipLLM = shouldSkipLLMTest(MODE, provider, options?.recordingName);
 
     describe.skipIf(skipLLM)(`Message Ordering with ${modelConfig.name} (${version}) (Issue #9909)`, () => {

@@ -1,11 +1,17 @@
 import { openai } from '@ai-sdk/openai';
 import { openai as openaiV6 } from '@ai-sdk/openai-v6';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { shouldSkipLLMTest } from '@internal/test-utils';
 import { describe } from 'vitest';
 import { getAgentMemoryTests } from './shared/agent-memory';
 import { weatherTool as weatherToolV4, weatherToolCity as weatherToolCityV4 } from './v4/mastra/tools/weather';
 import { weatherTool as weatherToolV5, weatherToolCity as weatherToolCityV5 } from './v5/mastra/tools/weather';
 
 const RECORDING_NAME = 'memory-integration-tests-src-agent-memory';
+const MODE = getLLMTestMode();
+
+// Check if OpenRouter tests should run (has real key or recordings exist)
+const skipOpenRouter = shouldSkipLLMTest(MODE, 'openrouter', RECORDING_NAME);
 
 // V4
 describe('V4', async () => {
@@ -26,8 +32,8 @@ describe('V5', async () => {
       get_weather: weatherToolV5,
       get_weather_city: weatherToolCityV5,
     },
-    // Only include reasoningModel if OPENROUTER_API_KEY is available
-    ...(process.env.OPENROUTER_API_KEY ? { reasoningModel: 'openrouter/openai/gpt-oss-20b' } : {}),
+    // Include reasoningModel if we have a key or recordings exist
+    ...(!skipOpenRouter ? { reasoningModel: 'openrouter/openai/gpt-oss-20b' } : {}),
     recordingName: RECORDING_NAME,
   });
 });
