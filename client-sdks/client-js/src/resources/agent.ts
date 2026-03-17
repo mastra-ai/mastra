@@ -999,6 +999,7 @@ export class Agent extends BaseResource {
                 execUpdate();
               }
             }
+            break;
           }
 
           case 'tool-call-input-streaming-start': {

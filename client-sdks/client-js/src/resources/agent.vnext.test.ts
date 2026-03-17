@@ -1123,6 +1123,74 @@ describe('Agent vNext', () => {
     expect(hasToolResult).toBe(true);
   });
 
+  it('stream: tool-call event should not create duplicate toolInvocations from switch fallthrough (issue #14364)', async () => {
+    // Regression test: a missing `break` after `case 'tool-call'` caused fallthrough
+    // into `case 'tool-call-input-streaming-start'`, creating a duplicate partial-call
+    // entry in toolInvocations. The corrupted message then caused the recursive stream
+    // request to fail with HTTP 400.
+    const toolCallId = 'call_1';
+
+    const firstCycle = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      {
+        type: 'tool-call',
+        payload: { toolCallId, toolName: 'weatherTool', args: { location: 'NYC' } },
+      },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'Weather is sunny.' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 3 } } },
+    ];
+
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const executeSpy = vi.fn(async () => ({ temperature: 72 }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ temperature: z.number() }),
+      execute: executeSpy,
+    });
+
+    const resp = await agent.stream('weather?', { clientTools: { weatherTool } });
+
+    await resp.processDataStream({
+      onChunk: async () => {},
+    });
+
+    // Verify two requests were made (initial + recursive)
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    // Parse the recursive call's body to inspect the messages sent to the server
+    const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+
+    // Find the assistant message that contains toolInvocations
+    const assistantMsg = secondCallBody.messages.find(
+      (msg: any) => msg.role === 'assistant' && Array.isArray(msg.toolInvocations) && msg.toolInvocations.length > 0,
+    );
+
+    expect(assistantMsg).toBeDefined();
+
+    // The bug: without the break, toolInvocations would have 2 entries for the same
+    // toolCallId — one with state 'result' (or 'call') and one with state 'partial-call'.
+    // After the fix, there should be exactly 1 entry per toolCallId.
+    const invocationsForCall = assistantMsg.toolInvocations.filter((inv: any) => inv.toolCallId === toolCallId);
+    expect(invocationsForCall).toHaveLength(1);
+    expect(invocationsForCall[0].state).toBe('result');
+
+    // Verify no partial-call entries exist (these come from the fallthrough bug)
+    const partialCalls = assistantMsg.toolInvocations.filter((inv: any) => inv.state === 'partial-call');
+    expect(partialCalls).toHaveLength(0);
+  });
+
   it('stream: should receive error chunks with serialized error properties', async () => {
     const testAPICallError = new APICallError({
       message: 'API Error',
