@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { createWriteStream, accessSync } from 'node:fs';
+import { createWriteStream } from 'node:fs';
 import { mkdir, rm, stat, access, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -41,16 +41,6 @@ function getGitBranch(projectDir: string): string | null {
 }
 
 function runBuild(projectDir: string): void {
-  const outputFile = join(projectDir, '.mastra', 'output', 'index.mjs');
-
-  try {
-    accessSync(outputFile);
-    p.log.step('Build output exists, skipping build');
-    return;
-  } catch {
-    // No existing output — build it
-  }
-
   const localMastra = join(projectDir, 'node_modules', '.bin', 'mastra');
   p.log.step('Running mastra build --studio...');
   try {
