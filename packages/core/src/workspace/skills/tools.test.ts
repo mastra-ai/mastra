@@ -47,6 +47,7 @@ function makeMetadata(overrides: Partial<SkillMetadata> = {}): SkillMetadata {
   return {
     name: 'test-skill',
     description: 'A test skill',
+    path: '/skills/test-skill',
     ...overrides,
   };
 }
@@ -198,6 +199,48 @@ describe('skill tool', () => {
 
     expect(result).toBe('Skill "nonexistent" not found. Available skills: ');
   });
+
+  it('resolves skill by exact path', async () => {
+    const skill = makeSkill({ name: 'my-skill', path: 'team-a/my-skill', instructions: 'Found by path.' });
+    const skills = createMockWorkspaceSkills({
+      get: vi.fn(async (p: string) => (p === 'team-a/my-skill' ? skill : null)),
+    });
+    const { skill: tool } = createSkillTools(skills);
+
+    const result = await exec(tool, { name: 'team-a/my-skill' });
+
+    expect(result).toBe('Found by path.');
+  });
+
+  it('resolves unique name when path match fails', async () => {
+    const skill = makeSkill({ name: 'unique-skill', path: 'skills/unique-skill', instructions: 'Found by name.' });
+    const skills = createMockWorkspaceSkills({
+      get: vi.fn(async (p: string) => (p === 'skills/unique-skill' ? skill : null)),
+      list: vi.fn(async () => [makeMetadata({ name: 'unique-skill', path: 'skills/unique-skill' })]),
+    });
+    const { skill: tool } = createSkillTools(skills);
+
+    const result = await exec(tool, { name: 'unique-skill' });
+
+    expect(result).toBe('Found by name.');
+  });
+
+  it('returns disambiguation when multiple skills share the same name', async () => {
+    const skills = createMockWorkspaceSkills({
+      get: vi.fn(async () => null),
+      list: vi.fn(async () => [
+        makeMetadata({ name: 'plan', path: '.mastra/skills/plan' }),
+        makeMetadata({ name: 'plan', path: 'user-skills/plan' }),
+      ]),
+    });
+    const { skill: tool } = createSkillTools(skills);
+
+    const result = await exec(tool, { name: 'plan' });
+
+    expect(result).toContain('Multiple skills named "plan" found');
+    expect(result).toContain('.mastra/skills/plan');
+    expect(result).toContain('user-skills/plan');
+  });
 });
 
 // =============================================================================
@@ -219,7 +262,7 @@ describe('skill_search tool', () => {
   it('formats results with skill name, score, and preview', async () => {
     const searchResults: SkillSearchResult[] = [
       {
-        skillName: 'brand-guide',
+        skillPath: 'skills/brand-guide',
         source: 'SKILL.md',
         content: 'Use the primary blue color #0066CC for all headings.',
         score: 0.85,
@@ -232,7 +275,7 @@ describe('skill_search tool', () => {
 
     const result = await exec(tool, { query: 'blue color' });
 
-    expect(result).toContain('[brand-guide]');
+    expect(result).toContain('[skills/brand-guide]');
     expect(result).toContain('(score: 0.85)');
     expect(result).toContain('Use the primary blue color #0066CC for all headings.');
   });
@@ -240,7 +283,7 @@ describe('skill_search tool', () => {
   it('includes line range when available', async () => {
     const searchResults: SkillSearchResult[] = [
       {
-        skillName: 'code-review',
+        skillPath: 'skills/code-review',
         source: 'SKILL.md',
         content: 'Always check for null.',
         score: 0.72,
@@ -261,7 +304,7 @@ describe('skill_search tool', () => {
     const longContent = 'A'.repeat(250);
     const searchResults: SkillSearchResult[] = [
       {
-        skillName: 'verbose-skill',
+        skillPath: 'skills/verbose-skill',
         source: 'SKILL.md',
         content: longContent,
         score: 0.5,
@@ -282,7 +325,7 @@ describe('skill_search tool', () => {
     const shortContent = 'B'.repeat(200);
     const searchResults: SkillSearchResult[] = [
       {
-        skillName: 'short-skill',
+        skillPath: 'skills/short-skill',
         source: 'SKILL.md',
         content: shortContent,
         score: 0.6,
@@ -301,8 +344,8 @@ describe('skill_search tool', () => {
 
   it('formats multiple results separated by double newlines', async () => {
     const searchResults: SkillSearchResult[] = [
-      { skillName: 'skill-a', source: 'SKILL.md', content: 'First result.', score: 0.9 },
-      { skillName: 'skill-b', source: 'SKILL.md', content: 'Second result.', score: 0.7 },
+      { skillPath: 'skills/skill-a', source: 'SKILL.md', content: 'First result.', score: 0.9 },
+      { skillPath: 'skills/skill-b', source: 'SKILL.md', content: 'Second result.', score: 0.7 },
     ];
     const skills = createMockWorkspaceSkills({
       search: vi.fn(async () => searchResults),
@@ -313,13 +356,20 @@ describe('skill_search tool', () => {
 
     const parts = (result as string).split('\n\n');
     expect(parts).toHaveLength(2);
-    expect(parts[0]).toContain('[skill-a]');
-    expect(parts[1]).toContain('[skill-b]');
+    expect(parts[0]).toContain('[skills/skill-a]');
+    expect(parts[1]).toContain('[skills/skill-b]');
   });
 
-  it('passes skillNames and topK to the search function', async () => {
+  it('maps skillNames to skillPaths and passes topK to the search function', async () => {
     const searchFn = vi.fn(async () => []);
-    const skills = createMockWorkspaceSkills({ search: searchFn });
+    const skills = createMockWorkspaceSkills({
+      search: searchFn,
+      list: vi.fn(async () => [
+        makeMetadata({ name: 'brand-guide', path: 'skills/brand-guide' }),
+        makeMetadata({ name: 'design-system', path: 'skills/design-system' }),
+        makeMetadata({ name: 'other', path: 'skills/other' }),
+      ]),
+    });
     const { skill_search: tool } = createSkillTools(skills);
 
     await exec(tool, {
@@ -330,7 +380,7 @@ describe('skill_search tool', () => {
 
     expect(searchFn).toHaveBeenCalledWith('color palette', {
       topK: 3,
-      skillNames: ['brand-guide', 'design-system'],
+      skillPaths: ['skills/brand-guide', 'skills/design-system'],
     });
   });
 });
@@ -342,18 +392,21 @@ describe('skill_search tool', () => {
 describe('skill_read tool', () => {
   it('returns error when skill does not exist', async () => {
     const skills = createMockWorkspaceSkills({
-      has: vi.fn(async () => false),
+      get: vi.fn(async () => null),
+      list: vi.fn(async () => []),
     });
     const { skill_read: tool } = createSkillTools(skills);
 
     const result = await exec(tool, { skillName: 'nonexistent', path: 'references/file.md' });
 
-    expect(result).toBe('Skill "nonexistent" not found.');
+    expect(result).toContain('Skill "nonexistent" not found.');
   });
 
-  it('reads a reference file', async () => {
+  it('reads a reference file (resolved by name)', async () => {
+    const skill = makeSkill({ name: 'brand-guide', path: 'skills/brand-guide' });
     const skills = createMockWorkspaceSkills({
-      has: vi.fn(async () => true),
+      get: vi.fn(async (p: string) => (p === 'skills/brand-guide' ? skill : null)),
+      list: vi.fn(async () => [makeMetadata({ name: 'brand-guide', path: 'skills/brand-guide' })]),
       getReference: vi.fn(async () => '# Color Palette\n\nBlue: #0066CC'),
     });
     const { skill_read: tool } = createSkillTools(skills);
@@ -364,8 +417,10 @@ describe('skill_read tool', () => {
   });
 
   it('falls through to script reader when reference returns null', async () => {
+    const skill = makeSkill({ name: 'deploy-skill', path: 'skills/deploy-skill' });
     const skills = createMockWorkspaceSkills({
-      has: vi.fn(async () => true),
+      get: vi.fn(async (p: string) => (p === 'skills/deploy-skill' ? skill : null)),
+      list: vi.fn(async () => [makeMetadata({ name: 'deploy-skill', path: 'skills/deploy-skill' })]),
       getReference: vi.fn(async () => null),
       getScript: vi.fn(async () => '#!/bin/bash\necho "hello"'),
     });
@@ -377,8 +432,10 @@ describe('skill_read tool', () => {
   });
 
   it('falls through to asset reader when reference and script return null', async () => {
+    const skill = makeSkill({ name: 'my-skill', path: 'skills/my-skill' });
     const skills = createMockWorkspaceSkills({
-      has: vi.fn(async () => true),
+      get: vi.fn(async (p: string) => (p === 'skills/my-skill' ? skill : null)),
+      list: vi.fn(async () => [makeMetadata({ name: 'my-skill', path: 'skills/my-skill' })]),
       getReference: vi.fn(async () => null),
       getScript: vi.fn(async () => null),
       getAsset: vi.fn(async () => Buffer.from('asset content')),
@@ -391,8 +448,10 @@ describe('skill_read tool', () => {
   });
 
   it('returns error with file list when file is not found in any reader', async () => {
+    const skill = makeSkill({ name: 'brand-guide', path: 'skills/brand-guide' });
     const skills = createMockWorkspaceSkills({
-      has: vi.fn(async () => true),
+      get: vi.fn(async (p: string) => (p === 'skills/brand-guide' ? skill : null)),
+      list: vi.fn(async () => [makeMetadata({ name: 'brand-guide', path: 'skills/brand-guide' })]),
       getReference: vi.fn(async () => null),
       getScript: vi.fn(async () => null),
       getAsset: vi.fn(async () => null),
@@ -412,8 +471,10 @@ describe('skill_read tool', () => {
   });
 
   it('returns error without file list when skill has no files', async () => {
+    const skill = makeSkill({ name: 'empty-skill', path: 'skills/empty-skill' });
     const skills = createMockWorkspaceSkills({
-      has: vi.fn(async () => true),
+      get: vi.fn(async (p: string) => (p === 'skills/empty-skill' ? skill : null)),
+      list: vi.fn(async () => [makeMetadata({ name: 'empty-skill', path: 'skills/empty-skill' })]),
       getReference: vi.fn(async () => null),
       getScript: vi.fn(async () => null),
       getAsset: vi.fn(async () => null),
@@ -430,13 +491,13 @@ describe('skill_read tool', () => {
 
   it('detects binary content and returns metadata', async () => {
     const binaryContent = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0x02, 0x03]);
-    const skill = makeSkill({ path: '/skills/brand-guide' });
+    const skill = makeSkill({ path: '/skills/brand-guide', name: 'brand-guide' });
     const skills = createMockWorkspaceSkills({
-      has: vi.fn(async () => true),
       getReference: vi.fn(async () => null),
       getScript: vi.fn(async () => null),
       getAsset: vi.fn(async () => binaryContent),
-      get: vi.fn(async () => skill),
+      get: vi.fn(async (p: string) => (p === '/skills/brand-guide' ? skill : null)),
+      list: vi.fn(async () => [makeMetadata({ name: 'brand-guide', path: '/skills/brand-guide' })]),
     });
     const { skill_read: tool } = createSkillTools(skills);
 
@@ -449,11 +510,11 @@ describe('skill_read tool', () => {
 
   it('detects binary content in string form (null bytes)', async () => {
     const stringWithNulls = 'header\0\x01\x02binary data';
-    const skill = makeSkill({ path: '/skills/my-skill' });
+    const skill = makeSkill({ path: '/skills/my-skill', name: 'my-skill' });
     const skills = createMockWorkspaceSkills({
-      has: vi.fn(async () => true),
       getReference: vi.fn(async () => stringWithNulls),
-      get: vi.fn(async () => skill),
+      get: vi.fn(async (p: string) => (p === '/skills/my-skill' ? skill : null)),
+      list: vi.fn(async () => [makeMetadata({ name: 'my-skill', path: '/skills/my-skill' })]),
     });
     const { skill_read: tool } = createSkillTools(skills);
 
@@ -465,8 +526,10 @@ describe('skill_read tool', () => {
 
   it('extracts lines using startLine and endLine', async () => {
     const content = 'line 1\nline 2\nline 3\nline 4\nline 5';
+    const skill = makeSkill({ name: 'test-skill', path: 'skills/test-skill' });
     const skills = createMockWorkspaceSkills({
-      has: vi.fn(async () => true),
+      get: vi.fn(async (p: string) => (p === 'skills/test-skill' ? skill : null)),
+      list: vi.fn(async () => [makeMetadata({ name: 'test-skill', path: 'skills/test-skill' })]),
       getReference: vi.fn(async () => content),
     });
     const { skill_read: tool } = createSkillTools(skills);
@@ -483,8 +546,10 @@ describe('skill_read tool', () => {
 
   it('returns full content when startLine and endLine are omitted', async () => {
     const content = 'line 1\nline 2\nline 3';
+    const skill = makeSkill({ name: 'test-skill', path: 'skills/test-skill' });
     const skills = createMockWorkspaceSkills({
-      has: vi.fn(async () => true),
+      get: vi.fn(async (p: string) => (p === 'skills/test-skill' ? skill : null)),
+      list: vi.fn(async () => [makeMetadata({ name: 'test-skill', path: 'skills/test-skill' })]),
       getReference: vi.fn(async () => content),
     });
     const { skill_read: tool } = createSkillTools(skills);
@@ -496,19 +561,23 @@ describe('skill_read tool', () => {
 
   it('uses path as fallback when skill lookup returns null for binary metadata', async () => {
     const binaryContent = Buffer.from([0x00, 0x01, 0x02]);
+    const skill = makeSkill({ name: 'gone-skill', path: 'skills/gone-skill' });
     const skills = createMockWorkspaceSkills({
-      has: vi.fn(async () => true),
       getReference: vi.fn(async () => null),
       getScript: vi.fn(async () => null),
       getAsset: vi.fn(async () => binaryContent),
-      get: vi.fn(async () => null),
+      get: vi.fn(async (p: string) => {
+        // First call resolves the skill, second call for binary metadata returns null
+        if (p === 'skills/gone-skill') return skill;
+        return null;
+      }),
+      list: vi.fn(async () => [makeMetadata({ name: 'gone-skill', path: 'skills/gone-skill' })]),
     });
     const { skill_read: tool } = createSkillTools(skills);
 
     const result = await exec(tool, { skillName: 'gone-skill', path: 'assets/data.bin' });
 
     expect(result).toContain('Binary file:');
-    expect(result).toContain('assets/data.bin');
-    expect(result).not.toContain('/skills/');
+    expect(result).toContain('skills/gone-skill/assets/data.bin');
   });
 });

@@ -35,7 +35,7 @@ import {
   indexBodySchema,
   indexResponseSchema,
   // Skills schemas
-  skillNamePathParams,
+  skillPathPathParams,
   skillReferencePathParams,
   searchSkillsQuerySchema,
   listSkillsResponseSchema,
@@ -894,35 +894,26 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
 
       const skillsList = await skills.list();
 
-      // Get full skill details to include path in response
-      // Handle individual skill fetch failures gracefully to avoid failing the entire list
-      const skillsWithPath = await Promise.all(
+      // Enrich skills with skills.sh source info where applicable
+      const enrichedSkills = await Promise.all(
         skillsList.map(async skillMeta => {
-          let path = '';
           let skillsShSource: { owner: string; repo: string } | undefined;
 
-          try {
-            const fullSkill = await skills.get(skillMeta.name);
-            path = fullSkill?.path ?? '';
-
-            // For skills installed via skills.sh, read source info from .meta.json.
-            // Uses includes() because glob-discovered paths may have a leading slash
-            // or be nested (e.g., '/.agents/skills/foo', '/src/.agents/skills/foo').
-            if (path.includes(SKILLS_SH_PATH_PREFIX) && workspace.filesystem) {
-              try {
-                const metaPath = `${path}/.meta.json`;
-                const metaContent = await workspace.filesystem.readFile(metaPath);
-                const metaText = typeof metaContent === 'string' ? metaContent : metaContent.toString('utf-8');
-                const meta = JSON.parse(metaText) as { owner?: string; repo?: string };
-                if (meta.owner && meta.repo) {
-                  skillsShSource = { owner: meta.owner, repo: meta.repo };
-                }
-              } catch {
-                // .meta.json might not exist or be invalid - that's ok
+          // For skills installed via skills.sh, read source info from .meta.json.
+          // Uses includes() because glob-discovered paths may have a leading slash
+          // or be nested (e.g., '/.agents/skills/foo', '/src/.agents/skills/foo').
+          if (skillMeta.path.includes(SKILLS_SH_PATH_PREFIX) && workspace.filesystem) {
+            try {
+              const metaPath = `${skillMeta.path}/.meta.json`;
+              const metaContent = await workspace.filesystem.readFile(metaPath);
+              const metaText = typeof metaContent === 'string' ? metaContent : metaContent.toString('utf-8');
+              const meta = JSON.parse(metaText) as { owner?: string; repo?: string };
+              if (meta.owner && meta.repo) {
+                skillsShSource = { owner: meta.owner, repo: meta.repo };
               }
+            } catch {
+              // .meta.json might not exist or be invalid - that's ok
             }
-          } catch {
-            // Fall back to empty path if skill details can't be loaded
           }
 
           return {
@@ -931,14 +922,14 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
             license: skillMeta.license,
             compatibility: skillMeta.compatibility,
             metadata: skillMeta.metadata,
-            path,
+            path: skillMeta.path,
             skillsShSource,
           };
         }),
       );
 
       return {
-        skills: skillsWithPath,
+        skills: enrichedSkills,
         isSkillsConfigured: true,
       };
     } catch (error) {
@@ -949,20 +940,22 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
 
 export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
   method: 'GET',
-  path: '/workspaces/:workspaceId/skills/:skillName',
+  path: '/workspaces/:workspaceId/skills/:skillPath',
   responseType: 'json',
-  pathParamSchema: skillNamePathParams,
+  pathParamSchema: skillPathPathParams,
   responseSchema: getSkillResponseSchema,
   summary: 'Get skill details',
   description: 'Returns the full details of a specific skill including instructions and file lists',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, skillName, workspaceId, requestContext }) => {
+  handler: async ({ mastra, skillPath, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
 
-      if (!skillName) {
-        throw new HTTPException(400, { message: 'Skill name is required' });
+      if (!skillPath) {
+        throw new HTTPException(400, { message: 'Skill path is required' });
       }
+
+      const decodedSkillPath = decodeURIComponent(skillPath);
 
       const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
@@ -972,9 +965,9 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
       // Refresh skills with request context (handles dynamic skill resolvers)
       await skills.maybeRefresh({ requestContext });
 
-      const skill = await skills.get(skillName);
+      const skill = await skills.get(decodedSkillPath);
       if (!skill) {
-        throw new HTTPException(404, { message: `Skill "${skillName}" not found` });
+        throw new HTTPException(404, { message: `Skill "${decodedSkillPath}" not found` });
       }
 
       return {
@@ -998,20 +991,22 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
 
 export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
   method: 'GET',
-  path: '/workspaces/:workspaceId/skills/:skillName/references',
+  path: '/workspaces/:workspaceId/skills/:skillPath/references',
   responseType: 'json',
-  pathParamSchema: skillNamePathParams,
+  pathParamSchema: skillPathPathParams,
   responseSchema: listReferencesResponseSchema,
   summary: 'List skill references',
   description: 'Returns a list of all reference file paths for a skill',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, skillName, workspaceId, requestContext }) => {
+  handler: async ({ mastra, skillPath, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
 
-      if (!skillName) {
-        throw new HTTPException(400, { message: 'Skill name is required' });
+      if (!skillPath) {
+        throw new HTTPException(400, { message: 'Skill path is required' });
       }
+
+      const decodedSkillPath = decodeURIComponent(skillPath);
 
       const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
@@ -1021,15 +1016,15 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
       // Refresh skills with request context (handles dynamic skill resolvers)
       await skills.maybeRefresh({ requestContext });
 
-      const hasSkill = await skills.has(skillName);
+      const hasSkill = await skills.has(decodedSkillPath);
       if (!hasSkill) {
-        throw new HTTPException(404, { message: `Skill "${skillName}" not found` });
+        throw new HTTPException(404, { message: `Skill "${decodedSkillPath}" not found` });
       }
 
-      const references = await skills.listReferences(skillName);
+      const references = await skills.listReferences(decodedSkillPath);
 
       return {
-        skillName,
+        skillPath: decodedSkillPath,
         references,
       };
     } catch (error) {
@@ -1040,20 +1035,22 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
 
 export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
   method: 'GET',
-  path: '/workspaces/:workspaceId/skills/:skillName/references/:referencePath',
+  path: '/workspaces/:workspaceId/skills/:skillPath/references/:referencePath',
   responseType: 'json',
   pathParamSchema: skillReferencePathParams,
   responseSchema: skillReferenceResponseSchema,
   summary: 'Get skill reference content',
   description: 'Returns the content of a specific reference file from a skill',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, skillName, referencePath, workspaceId, requestContext }) => {
+  handler: async ({ mastra, skillPath, referencePath, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
 
-      if (!skillName || !referencePath) {
-        throw new HTTPException(400, { message: 'Skill name and reference path are required' });
+      if (!skillPath || !referencePath) {
+        throw new HTTPException(400, { message: 'Skill path and reference path are required' });
       }
+
+      const decodedSkillPath = decodeURIComponent(skillPath);
 
       const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
@@ -1071,13 +1068,15 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
 
       // getReference expects a path relative to skill.path, so prepend 'references/'
       // since the URL path already contains the literal /references/ segment
-      const content = await skills.getReference(skillName, `references/${decodedPath}`);
+      const content = await skills.getReference(decodedSkillPath, `references/${decodedPath}`);
       if (content === null) {
-        throw new HTTPException(404, { message: `Reference "${decodedPath}" not found in skill "${skillName}"` });
+        throw new HTTPException(404, {
+          message: `Reference "${decodedPath}" not found in skill "${decodedSkillPath}"`,
+        });
       }
 
       return {
-        skillName,
+        skillPath: decodedSkillPath,
         referencePath: decodedPath,
         content,
       };
@@ -1097,7 +1096,7 @@ export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
   summary: 'Search skills',
   description: 'Searches across all skills content using BM25 keyword search',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, query, topK, minScore, skillNames, includeReferences, workspaceId, requestContext }) => {
+  handler: async ({ mastra, query, topK, minScore, skillPaths, includeReferences, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -1116,19 +1115,19 @@ export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
       // Refresh skills with request context (handles dynamic skill resolvers)
       await skills.maybeRefresh({ requestContext });
 
-      // Parse comma-separated skill names if provided
-      const skillNamesList = skillNames ? skillNames.split(',').map((s: string) => s.trim()) : undefined;
+      // Parse comma-separated skill paths if provided
+      const skillPathsList = skillPaths ? skillPaths.split(',').map((s: string) => s.trim()) : undefined;
 
       const results = await skills.search(query, {
         topK: topK || 5,
         minScore,
-        skillNames: skillNamesList,
+        skillPaths: skillPathsList,
         includeReferences: includeReferences ?? true,
       });
 
       return {
         results: results.map(r => ({
-          skillName: r.skillName,
+          skillPath: r.skillPath,
           source: r.source,
           content: r.content,
           score: r.score,
@@ -1538,12 +1537,9 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
       // Look up the skill's actual path from the cache (supports glob-discovered skills).
       // Only use the discovered path if it's under the skills.sh directory to avoid
       // accidentally deleting a locally-authored skill with the same name.
-      const skill = await workspace.skills?.get(safeSkillName);
-      const discoveredPath = skill?.path;
-      const skillPath =
-        discoveredPath && discoveredPath.includes(SKILLS_SH_PATH_PREFIX)
-          ? discoveredPath
-          : buildSkillInstallPath(workspace.filesystem, safeSkillName);
+      const allSkills = await workspace.skills?.list();
+      const matchingSkill = allSkills?.find(s => s.name === safeSkillName && s.path.includes(SKILLS_SH_PATH_PREFIX));
+      const skillPath = matchingSkill?.path ?? buildSkillInstallPath(workspace.filesystem, safeSkillName);
 
       // Check if skill exists on filesystem
       try {
@@ -1558,7 +1554,7 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
       // Surgically remove the skill from the cache
       if (workspace.skills?.removeSkill) {
         try {
-          await workspace.skills.removeSkill(safeSkillName);
+          await workspace.skills.removeSkill(skillPath);
         } catch (cacheError) {
           console.warn(
             `[skills-sh] Failed to update cache after remove: ${cacheError instanceof Error ? cacheError.message : String(cacheError)}`,
@@ -1623,9 +1619,10 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
         const safeName = assertSafeSkillName(skillName);
 
         // Try to find the installed path via discovery first
-        const discoveredSkill = await workspace.skills?.get(safeName);
+        const allSkills = await workspace.skills?.list();
+        const discoveredSkill = allSkills?.find(s => s.name === safeName && s.path.includes(SKILLS_SH_PATH_PREFIX));
         let basePath: string;
-        if (discoveredSkill?.path && discoveredSkill.path.includes(SKILLS_SH_PATH_PREFIX)) {
+        if (discoveredSkill?.path) {
           // Derive basePath by removing the skill name suffix from the discovered path
           basePath = discoveredSkill.path.substring(0, discoveredSkill.path.lastIndexOf('/'));
         } else {
@@ -1785,7 +1782,7 @@ export const WORKSPACE_FS_ROUTES = [
 export const WORKSPACE_SEARCH_ROUTES = [WORKSPACE_SEARCH_ROUTE, WORKSPACE_INDEX_ROUTE];
 
 // IMPORTANT: Search route must come before the parameterized routes
-// to avoid /api/workspace/skills/search being matched as /api/workspace/skills/:skillName
+// to avoid /api/workspace/skills/search being matched as /api/workspace/skills/:skillPath
 export const WORKSPACE_SKILLS_ROUTES = [
   WORKSPACE_SEARCH_SKILLS_ROUTE,
   WORKSPACE_LIST_SKILLS_ROUTE,

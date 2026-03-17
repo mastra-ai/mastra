@@ -257,11 +257,11 @@ export const listWorkspacesResponseSchema = z.object({
 // Skills Path Parameter Schemas
 // =============================================================================
 
-export const skillNamePathParams = workspaceIdPathParams.extend({
-  skillName: z.string().describe('Skill name identifier'),
+export const skillPathPathParams = workspaceIdPathParams.extend({
+  skillPath: z.string().describe('Skill path identifier (URL encoded)'),
 });
 
-export const skillReferencePathParams = skillNamePathParams.extend({
+export const skillReferencePathParams = skillPathPathParams.extend({
   referencePath: z.string().describe('Reference file path (URL encoded)'),
 });
 
@@ -273,7 +273,7 @@ export const searchSkillsQuerySchema = z.object({
   query: z.string().describe('Search query text'),
   topK: z.coerce.number().optional().default(5).describe('Maximum number of results'),
   minScore: z.coerce.number().optional().describe('Minimum relevance score threshold'),
-  skillNames: z.string().optional().describe('Comma-separated list of skill names to search within'),
+  skillPaths: z.string().optional().describe('Comma-separated list of skill paths to search within'),
   includeReferences: z.coerce.boolean().optional().default(true).describe('Include reference files in search'),
 });
 
@@ -287,6 +287,7 @@ export const skillMetadataSchema = z.object({
   license: z.string().optional(),
   compatibility: z.unknown().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  path: z.string(),
 });
 
 export const skillSourceSchema = z.discriminatedUnion('type', [
@@ -296,7 +297,6 @@ export const skillSourceSchema = z.discriminatedUnion('type', [
 ]);
 
 export const skillSchema = skillMetadataSchema.extend({
-  path: z.string(),
   instructions: z.string(),
   source: skillSourceSchema,
   references: z.array(z.string()),
@@ -314,7 +314,6 @@ export const skillsShSourceSchema = z.object({
 });
 
 export const skillMetadataWithPathSchema = skillMetadataSchema.extend({
-  path: z.string().describe('Path to the skill directory'),
   /** Source info for skills installed via skills.sh (from .meta.json) */
   skillsShSource: skillsShSourceSchema.optional(),
 });
@@ -341,18 +340,18 @@ export const getAgentSkillResponseSchema = skillMetadataSchema.extend({
 });
 
 export const skillReferenceResponseSchema = z.object({
-  skillName: z.string(),
+  skillPath: z.string(),
   referencePath: z.string(),
   content: z.string(),
 });
 
 export const listReferencesResponseSchema = z.object({
-  skillName: z.string(),
+  skillPath: z.string(),
   references: z.array(z.string()),
 });
 
 export const skillSearchResultSchema = z.object({
-  skillName: z.string(),
+  skillPath: z.string(),
   source: z.string(),
   content: z.string(),
   score: z.number(),

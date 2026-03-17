@@ -28,7 +28,7 @@ export class WorkspaceSkillResource extends BaseResource {
   constructor(
     options: ClientOptions,
     private workspaceId: string,
-    private skillName: string,
+    private skillPath: string,
   ) {
     super(options);
   }
@@ -39,7 +39,7 @@ export class WorkspaceSkillResource extends BaseResource {
    */
   details(): Promise<Skill> {
     return this.request(
-      `/workspaces/${encodeURIComponent(this.workspaceId)}/skills/${encodeURIComponent(this.skillName)}`,
+      `/workspaces/${encodeURIComponent(this.workspaceId)}/skills/${encodeURIComponent(this.skillPath)}`,
     );
   }
 
@@ -49,7 +49,7 @@ export class WorkspaceSkillResource extends BaseResource {
    */
   listReferences(): Promise<ListSkillReferencesResponse> {
     return this.request(
-      `/workspaces/${encodeURIComponent(this.workspaceId)}/skills/${encodeURIComponent(this.skillName)}/references`,
+      `/workspaces/${encodeURIComponent(this.workspaceId)}/skills/${encodeURIComponent(this.skillPath)}/references`,
     );
   }
 
@@ -60,7 +60,7 @@ export class WorkspaceSkillResource extends BaseResource {
    */
   getReference(referencePath: string): Promise<GetSkillReferenceResponse> {
     return this.request(
-      `/workspaces/${encodeURIComponent(this.workspaceId)}/skills/${encodeURIComponent(this.skillName)}/references/${encodeURIComponent(referencePath)}`,
+      `/workspaces/${encodeURIComponent(this.workspaceId)}/skills/${encodeURIComponent(this.skillPath)}/references/${encodeURIComponent(referencePath)}`,
     );
   }
 }
@@ -263,8 +263,8 @@ export class Workspace extends BaseResource {
     if (params.minScore !== undefined) {
       searchParams.set('minScore', String(params.minScore));
     }
-    if (params.skillNames && params.skillNames.length > 0) {
-      searchParams.set('skillNames', params.skillNames.join(','));
+    if (params.skillPaths && params.skillPaths.length > 0) {
+      searchParams.set('skillPaths', params.skillPaths.join(','));
     }
     if (params.includeReferences !== undefined) {
       searchParams.set('includeReferences', String(params.includeReferences));
@@ -274,10 +274,10 @@ export class Workspace extends BaseResource {
 
   /**
    * Gets a skill instance for further operations
-   * @param skillName - Skill name identifier
+   * @param skillPath - Skill path identifier
    * @returns WorkspaceSkillResource instance
    */
-  getSkill(skillName: string): WorkspaceSkillResource {
-    return new WorkspaceSkillResource(this.options, this.workspaceId, skillName);
+  getSkill(skillPath: string): WorkspaceSkillResource {
+    return new WorkspaceSkillResource(this.options, this.workspaceId, skillPath);
   }
 }

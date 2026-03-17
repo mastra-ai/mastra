@@ -89,9 +89,9 @@ import Tools from '@/pages/tools';
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}/chat/new`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
-  agentSkillLink: (agentId: string, skillName: string, workspaceId?: string) =>
+  agentSkillLink: (agentId: string, skillPath: string, workspaceId?: string) =>
     workspaceId
-      ? `/workspaces/${workspaceId}/skills/${skillName}?agentId=${encodeURIComponent(agentId)}`
+      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillPath)}?agentId=${encodeURIComponent(agentId)}`
       : `/workspaces`,
   agentsLink: () => `/agents`,
   agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/new`,
@@ -112,11 +112,11 @@ const paths: LinkComponentProviderProps['paths'] = {
   cmsPromptBlockCreateLink: () => '/cms/prompts/create',
   cmsPromptBlockEditLink: (promptBlockId: string) => `/cms/prompts/${promptBlockId}/edit`,
   toolLink: (toolId: string) => `/tools/${toolId}`,
-  skillLink: (skillName: string, workspaceId?: string) =>
-    workspaceId ? `/workspaces/${workspaceId}/skills/${skillName}` : `/workspaces`,
+  skillLink: (skillPath: string, workspaceId?: string) =>
+    workspaceId ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillPath)}` : `/workspaces`,
   workspaceLink: (workspaceId?: string) => (workspaceId ? `/workspaces/${workspaceId}` : `/workspaces`),
-  workspaceSkillLink: (skillName: string, workspaceId?: string) =>
-    workspaceId ? `/workspaces/${workspaceId}/skills/${skillName}` : `/workspaces`,
+  workspaceSkillLink: (skillPath: string, workspaceId?: string) =>
+    workspaceId ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillPath)}` : `/workspaces`,
   workspacesLink: () => `/workspaces`,
   processorsLink: () => `/processors`,
   processorLink: (processorId: string) => `/processors/${processorId}`,
@@ -245,7 +245,7 @@ const routes = [
 
       { path: '/workspaces', element: <Workspace /> },
       { path: '/workspaces/:workspaceId', element: <Workspace /> },
-      { path: '/workspaces/:workspaceId/skills/:skillName', element: <WorkspaceSkillDetailPage /> },
+      { path: '/workspaces/:workspaceId/skills/:skillPath', element: <WorkspaceSkillDetailPage /> },
 
       { path: '/workflows', element: <Workflows /> },
       {

@@ -877,7 +877,7 @@ describe('WorkspaceSkillsImpl with VersionedSkillSource', () => {
     const results = await workspaceSkills.search('brand');
 
     expect(results.length).toBeGreaterThan(0);
-    expect(results[0]!.skillName).toBe('brand-guidelines');
+    expect(results[0]!.skillPath).toBe('brand-guidelines');
   });
 
   it('should read references through versioned source', async () => {

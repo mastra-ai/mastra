@@ -181,7 +181,6 @@ export interface SkillMetadata {
 }
 
 export interface Skill extends SkillMetadata {
-  path: string;
   instructions: string;
   source: SkillSource;
   references: string[];
@@ -195,7 +194,7 @@ export interface ListSkillsResponse {
 }
 
 export interface SkillSearchResult {
-  skillName: string;
+  skillPath: string;
   source: string;
   content: string;
   score: number;
@@ -215,12 +214,12 @@ export interface SearchSkillsResponse {
 }
 
 export interface ListReferencesResponse {
-  skillName: string;
+  skillPath: string;
   references: string[];
 }
 
 export interface GetReferenceResponse {
-  skillName: string;
+  skillPath: string;
   referencePath: string;
   content: string;
 }
@@ -230,7 +229,7 @@ export interface SearchSkillsParams {
   query: string;
   topK?: number;
   minScore?: number;
-  skillNames?: string[];
+  skillPaths?: string[];
   includeReferences?: boolean;
 }
 

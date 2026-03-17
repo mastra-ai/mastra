@@ -1543,13 +1543,13 @@ export interface SkillMetadata {
   license?: string;
   compatibility?: string;
   metadata?: Record<string, string>;
+  path: string;
 }
 
 /**
  * Full skill data including instructions and file paths
  */
 export interface Skill extends SkillMetadata {
-  path: string;
   instructions: string;
   source: SkillSource;
   references: string[];
@@ -1569,7 +1569,7 @@ export interface ListSkillsResponse {
  * Skill search result
  */
 export interface SkillSearchResult {
-  skillName: string;
+  skillPath: string;
   source: string;
   content: string;
   score: number;
@@ -1590,7 +1590,7 @@ export interface SearchSkillsParams {
   query: string;
   topK?: number;
   minScore?: number;
-  skillNames?: string[];
+  skillPaths?: string[];
   includeReferences?: boolean;
 }
 
@@ -1606,7 +1606,7 @@ export interface SearchSkillsResponse {
  * Response for listing skill references
  */
 export interface ListSkillReferencesResponse {
-  skillName: string;
+  skillPath: string;
   references: string[];
 }
 
@@ -1614,7 +1614,7 @@ export interface ListSkillReferencesResponse {
  * Response for getting skill reference content
  */
 export interface GetSkillReferenceResponse {
-  skillName: string;
+  skillPath: string;
   referencePath: string;
   content: string;
 }

@@ -321,7 +321,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['skills'],
       });
 
-      const result = await skills.get('test-skill');
+      const result = await skills.get('skills/test-skill');
       expect(result).not.toBeNull();
       expect(result?.name).toBe('test-skill');
       expect(result?.description).toBe('A test skill for unit testing');
@@ -342,7 +342,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['skills'],
       });
 
-      const result = await skills.get('test-skill');
+      const result = await skills.get('skills/test-skill');
       expect(result?.references).toContain('doc.md');
       expect(result?.scripts).toContain('run.sh');
       expect(result?.assets).toContain('logo.png');
@@ -371,7 +371,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['skills'],
       });
 
-      const result = await skills.has('test-skill');
+      const result = await skills.has('skills/test-skill');
       expect(result).toBe(true);
     });
   });
@@ -419,7 +419,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       const results = await skills.search('API');
       expect(results.length).toBeGreaterThan(0);
-      expect(results[0]?.skillName).toBe('api-skill');
+      expect(results[0]?.skillPath).toBe('skills/api-skill');
     });
 
     it('should use search engine when configured', async () => {
@@ -440,10 +440,10 @@ describe('WorkspaceSkillsImpl', () => {
 
       // Verify skill was indexed
       expect(searchEngine.indexedDocs.length).toBeGreaterThan(0);
-      expect(searchEngine.indexedDocs[0]?.metadata?.skillName).toBe('test-skill');
+      expect(searchEngine.indexedDocs[0]?.metadata?.skillPath).toBe('skills/test-skill');
     });
 
-    it('should filter by skill names', async () => {
+    it('should filter by skill paths', async () => {
       const filesystem = createMockFilesystem({
         'skills/test-skill/SKILL.md': VALID_SKILL_MD,
         'skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
@@ -454,8 +454,8 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['skills'],
       });
 
-      const results = await skills.search('skill', { skillNames: ['test-skill'] });
-      expect(results.every(r => r.skillName === 'test-skill')).toBe(true);
+      const results = await skills.search('skill', { skillPaths: ['skills/test-skill'] });
+      expect(results.every(r => r.skillPath === 'skills/test-skill')).toBe(true);
     });
 
     it('should respect topK option', async () => {
@@ -487,7 +487,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['skills'],
       });
 
-      const content = await skills.getReference('test-skill', 'references/doc.md');
+      const content = await skills.getReference('skills/test-skill', 'references/doc.md');
       expect(content).toBe(REFERENCE_CONTENT);
     });
 
@@ -502,7 +502,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['skills'],
       });
 
-      const content = await skills.getReference('test-skill', 'docs/schema.md');
+      const content = await skills.getReference('skills/test-skill', 'docs/schema.md');
       expect(content).toBe('schema content');
     });
 
@@ -517,7 +517,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['skills'],
       });
 
-      const content = await skills.getReference('test-skill', './config.json');
+      const content = await skills.getReference('skills/test-skill', './config.json');
       expect(content).toBe('{}');
     });
 
@@ -531,7 +531,9 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['skills'],
       });
 
-      await expect(skills.getReference('test-skill', '../../etc/passwd')).rejects.toThrow('Invalid reference path');
+      await expect(skills.getReference('skills/test-skill', '../../etc/passwd')).rejects.toThrow(
+        'Invalid reference path',
+      );
     });
 
     it('should return null for non-existent reference', async () => {
@@ -544,7 +546,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['skills'],
       });
 
-      const content = await skills.getReference('test-skill', 'non-existent.md');
+      const content = await skills.getReference('skills/test-skill', 'non-existent.md');
       expect(content).toBeNull();
     });
 
@@ -573,7 +575,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['skills'],
       });
 
-      const content = await skills.getScript('test-skill', 'scripts/run.sh');
+      const content = await skills.getScript('skills/test-skill', 'scripts/run.sh');
       expect(content).toBe(SCRIPT_CONTENT);
     });
   });
@@ -591,7 +593,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['skills'],
       });
 
-      const content = await skills.getAsset('test-skill', 'assets/logo.png');
+      const content = await skills.getAsset('skills/test-skill', 'assets/logo.png');
       expect(content).toBeInstanceOf(Buffer);
       expect(content?.toString()).toBe('PNG image data');
     });
@@ -611,7 +613,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['skills'],
       });
 
-      const refs = await skills.listReferences('test-skill');
+      const refs = await skills.listReferences('skills/test-skill');
       expect(refs).toContain('doc1.md');
       expect(refs).toContain('doc2.md');
       expect(refs).toContain('nested/doc3.md');
@@ -627,7 +629,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['skills'],
       });
 
-      const refs = await skills.listReferences('test-skill');
+      const refs = await skills.listReferences('skills/test-skill');
       expect(refs).toEqual([]);
     });
   });
@@ -645,7 +647,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['skills'],
       });
 
-      const scripts = await skills.listScripts('test-skill');
+      const scripts = await skills.listScripts('skills/test-skill');
       expect(scripts).toContain('run.sh');
       expect(scripts).toContain('build.sh');
     });
@@ -664,7 +666,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['skills'],
       });
 
-      const assets = await skills.listAssets('test-skill');
+      const assets = await skills.listAssets('skills/test-skill');
       expect(assets).toContain('logo.png');
       expect(assets).toContain('icon.svg');
     });
@@ -730,7 +732,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['skills'],
       });
 
-      const skill = await skills.get('test-skill');
+      const skill = await skills.get('skills/test-skill');
       expect(skill?.source.type).toBe('local');
     });
 
@@ -744,7 +746,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['node_modules/@company/skills'],
       });
 
-      const skill = await skills.get('test-skill');
+      const skill = await skills.get('node_modules/@company/skills/test-skill');
       expect(skill?.source.type).toBe('external');
     });
 
@@ -758,7 +760,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['.mastra/skills'],
       });
 
-      const skill = await skills.get('test-skill');
+      const skill = await skills.get('.mastra/skills/test-skill');
       expect(skill?.source.type).toBe('managed');
     });
   });
@@ -1168,7 +1170,7 @@ Instructions for the new skill.`;
         skills: ['skills'],
       });
 
-      const skill = await skills.get('test-skill');
+      const skill = await skills.get('skills/test-skill');
       expect(skill).not.toBeNull();
       expect(skill?.name).toBe('test-skill');
       expect(skill?.references).toContain('doc.md');
@@ -1187,7 +1189,7 @@ Instructions for the new skill.`;
 
       const results = await skills.search('API');
       expect(results.length).toBeGreaterThan(0);
-      expect(results[0]?.skillName).toBe('api-skill');
+      expect(results[0]?.skillPath).toBe('skills/api-skill');
     });
   });
 
@@ -1456,6 +1458,36 @@ Instructions for the new skill.`;
       expect(result).toHaveLength(1);
       expect(result[0]?.name).toBe('test-skill');
     });
+
+    it('should keep same-named skills from different paths separate', async () => {
+      const shadowSkillMd = `---
+name: test-skill
+description: Shadow copy of the test skill
+license: MIT
+---
+
+Shadow instructions.`;
+
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        'custom-skills/test-skill/SKILL.md': shadowSkillMd,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills', 'custom-skills'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(2);
+      expect(result.map(s => s.path).sort()).toEqual(['custom-skills/test-skill', 'skills/test-skill']);
+
+      const primary = await skills.get('skills/test-skill');
+      const shadow = await skills.get('custom-skills/test-skill');
+
+      expect(primary?.instructions).toContain('This is the test skill instructions.');
+      expect(shadow?.instructions).toContain('Shadow instructions.');
+    });
   });
 
   describe('direct skill path discovery', () => {
@@ -1632,8 +1664,8 @@ Instructions for the new skill.`;
 
       // Initial discovery — 1 skill
       await skills.list();
-      expect(await skills.has('test-skill')).toBe(true);
-      expect(await skills.has('api-skill')).toBe(false);
+      expect(await skills.has('skills/test-skill')).toBe(true);
+      expect(await skills.has('skills/api-skill')).toBe(false);
 
       // Write a new skill to the filesystem
       await filesystem.writeFile('skills/api-skill/SKILL.md', VALID_SKILL_MD_WITH_TOOLS);
@@ -1641,14 +1673,14 @@ Instructions for the new skill.`;
       // Surgically add it
       await skills.addSkill('skills/api-skill');
 
-      expect(await skills.has('api-skill')).toBe(true);
+      expect(await skills.has('skills/api-skill')).toBe(true);
       const list = await skills.list();
       expect(list).toHaveLength(2);
 
       // Verify it was indexed for search
       const searchResults = await skills.search('API');
       expect(searchResults.length).toBeGreaterThan(0);
-      expect(searchResults.some(r => r.skillName === 'api-skill')).toBe(true);
+      expect(searchResults.some(r => r.skillPath === 'skills/api-skill')).toBe(true);
     });
 
     it('should replace existing skill in cache (update case)', async () => {
@@ -1666,7 +1698,7 @@ Instructions for the new skill.`;
 
       // Initial discovery
       await skills.list();
-      const original = await skills.get('test-skill');
+      const original = await skills.get('skills/test-skill');
       expect(original?.instructions).toContain('This is the test skill instructions.');
 
       // Update the skill's SKILL.md with new content
@@ -1685,7 +1717,7 @@ These are the updated instructions.
       // Surgically update
       await skills.addSkill('skills/test-skill');
 
-      const updated = await skills.get('test-skill');
+      const updated = await skills.get('skills/test-skill');
       expect(updated?.description).toBe('Updated test skill');
       expect(updated?.instructions).toContain('updated instructions');
 
@@ -1710,7 +1742,7 @@ These are the updated instructions.
       await filesystem.writeFile('skills/api-skill/SKILL.md', VALID_SKILL_MD_WITH_TOOLS);
       await skills.addSkill('skills/api-skill/SKILL.md');
 
-      expect(await skills.has('api-skill')).toBe(true);
+      expect(await skills.has('skills/api-skill')).toBe(true);
     });
 
     it('should update lastDiscoveryTime so maybeRefresh does not trigger full scan', async () => {
@@ -1768,14 +1800,14 @@ These are the updated instructions.
 
       // Initial discovery — 2 skills
       await skills.list();
-      expect(await skills.has('test-skill')).toBe(true);
-      expect(await skills.has('api-skill')).toBe(true);
+      expect(await skills.has('skills/test-skill')).toBe(true);
+      expect(await skills.has('skills/api-skill')).toBe(true);
 
       // Surgically remove one
-      await skills.removeSkill('test-skill');
+      await skills.removeSkill('skills/test-skill');
 
-      expect(await skills.has('test-skill')).toBe(false);
-      expect(await skills.has('api-skill')).toBe(true);
+      expect(await skills.has('skills/test-skill')).toBe(false);
+      expect(await skills.has('skills/api-skill')).toBe(true);
 
       const list = await skills.list();
       expect(list).toHaveLength(1);
@@ -1798,7 +1830,7 @@ These are the updated instructions.
       await skills.removeSkill('non-existent');
 
       // Original skill should still exist
-      expect(await skills.has('test-skill')).toBe(true);
+      expect(await skills.has('skills/test-skill')).toBe(true);
       const list = await skills.list();
       expect(list).toHaveLength(1);
     });
@@ -1827,7 +1859,7 @@ These are the updated instructions.
 
       await skills.list();
 
-      await skills.removeSkill('test-skill');
+      await skills.removeSkill('skills/test-skill');
       const readFileCallsAfterRemove = (filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.length;
 
       // maybeRefresh should NOT trigger a full refresh since removeSkill bumped the timestamp
@@ -1859,11 +1891,11 @@ These are the updated instructions.
 
       await skills.list();
 
-      await skills.removeSkill('test-skill');
+      await skills.removeSkill('skills/test-skill');
 
       // Should have removed SKILL.md and reference entries
-      expect(removedIds).toContain('skill:test-skill:SKILL.md');
-      expect(removedIds).toContain('skill:test-skill:doc.md');
+      expect(removedIds).toContain('skill:skills/test-skill:SKILL.md');
+      expect(removedIds).toContain('skill:skills/test-skill:doc.md');
     });
   });
 

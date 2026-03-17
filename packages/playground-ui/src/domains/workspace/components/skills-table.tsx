@@ -123,7 +123,7 @@ export function SkillsTable({
             <EntryList.Entries>
               {skills.map(skill => {
                 const entry = {
-                  id: skill.name,
+                  id: skill.path,
                   name: skill.name,
                   description: skill.description || '—',
                 };
@@ -131,11 +131,11 @@ export function SkillsTable({
 
                 return (
                   <EntryList.Entry
-                    key={skill.name}
+                    key={skill.path}
                     entry={entry}
                     columns={effectiveColumns}
                     onClick={() => {
-                      const url = `${basePath}/${encodeURIComponent(skill.name)}`;
+                      const url = `${basePath}/${encodeURIComponent(skill.path)}`;
                       navigate(url);
                     }}
                   >

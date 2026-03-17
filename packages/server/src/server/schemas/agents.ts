@@ -16,7 +16,7 @@ export const agentToolPathParams = agentIdPathParams.extend({
 });
 
 export const agentSkillPathParams = agentIdPathParams.extend({
-  skillName: z.string().describe('Name of the skill'),
+  skillPath: z.string().describe('Path of the skill (URL encoded)'),
 });
 
 export const modelConfigIdPathParams = agentIdPathParams.extend({

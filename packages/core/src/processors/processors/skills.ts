@@ -126,7 +126,7 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
     }
 
     // Get full skill objects to include source info (parallel fetch)
-    const skillPromises = skillsList.map(meta => this.skills?.get(meta.name));
+    const skillPromises = skillsList.map(meta => this.skills?.get(meta.path));
     const fullSkills = (await Promise.all(skillPromises)).filter((s): s is Skill => s !== undefined);
 
     // Sort by name for deterministic output (avoids busting prompt cache)
@@ -228,6 +228,7 @@ ${skillsMd}`;
         content:
           'IMPORTANT: Skills are NOT tools. Do not call skill names directly as tool names. ' +
           'To use a skill, call the `skill` tool with the skill name as the "name" parameter. ' +
+          'If multiple skills share the same name, use the skill path (shown in <location>) instead of the name to disambiguate. ' +
           'When a user asks about a topic covered by an available skill, activate it immediately without asking for permission first.',
       });
     }

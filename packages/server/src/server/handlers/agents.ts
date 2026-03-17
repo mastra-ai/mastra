@@ -120,6 +120,7 @@ export interface SerializedSkill {
   name: string;
   description: string;
   license?: string;
+  path: string;
 }
 
 export interface SerializedTool {
@@ -285,6 +286,7 @@ export async function getSerializedSkillsFromAgent(
       name: skill.name,
       description: skill.description,
       license: skill.license,
+      path: skill.path,
     }));
   } catch {
     return [];
@@ -1883,14 +1885,14 @@ export const STREAM_UI_MESSAGE_DEPRECATED_ROUTE = createRoute({
 
 export const GET_AGENT_SKILL_ROUTE = createRoute({
   method: 'GET',
-  path: '/agents/:agentId/skills/:skillName',
+  path: '/agents/:agentId/skills/:skillPath',
   responseType: 'json',
   pathParamSchema: agentSkillPathParams,
   responseSchema: getAgentSkillResponseSchema,
   summary: 'Get agent skill',
   description: 'Returns details for a specific skill available to the agent via its workspace',
   tags: ['Agents', 'Skills'],
-  handler: async ({ mastra, agentId, skillName, requestContext }) => {
+  handler: async ({ mastra, agentId, skillPath, requestContext }) => {
     try {
       const agent = agentId ? mastra.getAgentById(agentId) : null;
       if (!agent) {
@@ -1903,10 +1905,12 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Agent does not have skills configured' });
       }
 
+      const decodedSkillPath = decodeURIComponent(skillPath);
+
       // Get the skill from the workspace
-      const skill = await workspace.skills.get(skillName);
+      const skill = await workspace.skills.get(decodedSkillPath);
       if (!skill) {
-        throw new HTTPException(404, { message: `Skill "${skillName}" not found` });
+        throw new HTTPException(404, { message: `Skill "${decodedSkillPath}" not found` });
       }
 
       return {

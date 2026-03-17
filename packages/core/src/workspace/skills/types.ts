@@ -146,6 +146,8 @@ export type SkillFormat = 'xml' | 'json' | 'markdown';
 export interface SkillMetadata {
   /** Skill name (1-64 chars, lowercase, hyphens only) */
   name: string;
+  /** Path to skill directory (relative to workspace root) */
+  path: string;
   /** Description of what the skill does and when to use it (1-1024 chars) */
   description: string;
   /** Optional license */
@@ -160,8 +162,6 @@ export interface SkillMetadata {
  * Full skill with parsed instructions and path info
  */
 export interface Skill extends SkillMetadata {
-  /** Path to skill directory (relative to workspace root) */
-  path: string;
   /** Markdown body from SKILL.md */
   instructions: string;
   /** Source of the skill (external package, local project, or managed) */
@@ -178,8 +178,8 @@ export interface Skill extends SkillMetadata {
  * Search result when searching across skills
  */
 export interface SkillSearchResult extends BaseSearchResult {
-  /** Skill name */
-  skillName: string;
+  /** Skill path (unique identifier) */
+  skillPath: string;
   /** Source file (SKILL.md or reference path) */
   source: string;
 }
@@ -188,8 +188,8 @@ export interface SkillSearchResult extends BaseSearchResult {
  * Options for searching skills
  */
 export interface SkillSearchOptions extends BaseSearchOptions {
-  /** Only search within specific skill names */
-  skillNames?: string[];
+  /** Only search within specific skill paths */
+  skillPaths?: string[];
   /** Include reference files in search (default: true) */
   includeReferences?: boolean;
 }
@@ -215,8 +215,8 @@ export interface SkillSearchOptions extends BaseSearchOptions {
  * // List all skills
  * const skills = await workspace.skills.list();
  *
- * // Get a specific skill
- * const skill = await workspace.skills.get('brand-guidelines');
+ * // Get a specific skill by path
+ * const skill = await workspace.skills.get('skills/brand-guidelines');
  *
  * // Search skills
  * const results = await workspace.skills.search('color palette');
@@ -233,14 +233,14 @@ export interface WorkspaceSkills {
   list(): Promise<SkillMetadata[]>;
 
   /**
-   * Get a specific skill by name (full content)
+   * Get a specific skill by path (full content)
    */
-  get(name: string): Promise<Skill | null>;
+  get(skillPath: string): Promise<Skill | null>;
 
   /**
-   * Check if a skill exists
+   * Check if a skill exists by path
    */
-  has(name: string): Promise<boolean>;
+  has(skillPath: string): Promise<boolean>;
 
   /**
    * Refresh skills from filesystem (re-scan skills)
@@ -278,17 +278,17 @@ export interface WorkspaceSkills {
   /**
    * Get reference file content from a skill
    */
-  getReference(skillName: string, referencePath: string): Promise<string | null>;
+  getReference(skillPath: string, referencePath: string): Promise<string | null>;
 
   /**
    * Get script file content from a skill
    */
-  getScript(skillName: string, scriptPath: string): Promise<string | null>;
+  getScript(skillPath: string, scriptPath: string): Promise<string | null>;
 
   /**
    * Get asset file content from a skill (returns Buffer for binary files)
    */
-  getAsset(skillName: string, assetPath: string): Promise<Buffer | null>;
+  getAsset(skillPath: string, assetPath: string): Promise<Buffer | null>;
 
   // ===========================================================================
   // Listing Accessors
@@ -297,17 +297,17 @@ export interface WorkspaceSkills {
   /**
    * Get all reference file paths for a skill
    */
-  listReferences(skillName: string): Promise<string[]>;
+  listReferences(skillPath: string): Promise<string[]>;
 
   /**
    * Get all script file paths for a skill
    */
-  listScripts(skillName: string): Promise<string[]>;
+  listScripts(skillPath: string): Promise<string[]>;
 
   /**
    * Get all asset file paths for a skill
    */
-  listAssets(skillName: string): Promise<string[]>;
+  listAssets(skillPath: string): Promise<string[]>;
 
   // ===========================================================================
   // Surgical Cache Updates
@@ -323,11 +323,11 @@ export interface WorkspaceSkills {
   addSkill?(skillPath: string): Promise<void>;
 
   /**
-   * Surgically remove a single skill from the cache by name.
+   * Surgically remove a single skill from the cache by path.
    * Removes the skill from the in-memory cache and search index,
    * and bumps the discovery timestamp so maybeRefresh() won't trigger a full scan.
    *
-   * @param skillName - Name of the skill to remove
+   * @param skillPath - Path of the skill to remove
    */
-  removeSkill?(skillName: string): Promise<void>;
+  removeSkill?(skillPath: string): Promise<void>;
 }

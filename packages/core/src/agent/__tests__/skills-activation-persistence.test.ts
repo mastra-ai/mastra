@@ -33,15 +33,16 @@ const mockSkill: Skill = {
 const mockSkillMetadata: SkillMetadata = {
   name: mockSkill.name,
   description: mockSkill.description,
+  path: mockSkill.path,
 };
 
 function createMockWorkspaceSkills(): WorkspaceSkills {
-  const skills = new Map<string, Skill>([[mockSkill.name, mockSkill]]);
+  const skills = new Map<string, Skill>([[mockSkill.path, mockSkill]]);
 
   return {
     list: vi.fn().mockResolvedValue([mockSkillMetadata]),
-    get: vi.fn().mockImplementation((name: string) => Promise.resolve(skills.get(name) || null)),
-    has: vi.fn().mockImplementation((name: string) => Promise.resolve(skills.has(name))),
+    get: vi.fn().mockImplementation((path: string) => Promise.resolve(skills.get(path) || null)),
+    has: vi.fn().mockImplementation((path: string) => Promise.resolve(skills.has(path))),
     refresh: vi.fn().mockResolvedValue(undefined),
     maybeRefresh: vi.fn().mockResolvedValue(undefined),
     search: vi.fn().mockResolvedValue([]),

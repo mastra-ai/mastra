@@ -21,9 +21,9 @@ import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 
 export default function WorkspaceSkillDetailPage() {
-  const { skillName, workspaceId } = useParams<{ skillName: string; workspaceId: string }>();
+  const { skillPath, workspaceId } = useParams<{ skillPath: string; workspaceId: string }>();
   const [searchParams] = useSearchParams();
-  const decodedSkillName = skillName ? decodeURIComponent(skillName) : '';
+  const decodedSkillPath = skillPath ? decodeURIComponent(skillPath) : '';
 
   // Check if we came from an agent page (for breadcrumb context)
   const agentId = searchParams.get('agentId');
@@ -39,7 +39,7 @@ export default function WorkspaceSkillDetailPage() {
   const [viewingReference, setViewingReference] = useState<string | null>(null);
 
   // Fetch skill details - pass workspaceId to fetch from correct workspace
-  const { data: skill, isLoading, error } = useWorkspaceSkill(decodedSkillName, { workspaceId });
+  const { data: skill, isLoading, error } = useWorkspaceSkill(decodedSkillPath, { workspaceId });
 
   // Fetch raw SKILL.md file for "Source" view
   const { data: rawSkillMdData } = useWorkspaceFile(skill?.path ? `${skill.path}/SKILL.md` : '', {
@@ -49,7 +49,7 @@ export default function WorkspaceSkillDetailPage() {
 
   // Fetch reference content when viewing
   const { data: referenceData, isLoading: isLoadingReference } = useWorkspaceSkillReference(
-    decodedSkillName,
+    decodedSkillPath,
     viewingReference ?? '',
     {
       enabled: !!viewingReference,
@@ -136,7 +136,7 @@ export default function WorkspaceSkillDetailPage() {
   return (
     <MainContentLayout>
       <Header>
-        {renderBreadcrumb(decodedSkillName)}
+        {renderBreadcrumb(skill.name)}
 
         <HeaderAction>
           <Button as={Link} to="https://mastra.ai/en/docs/workspace/skills" target="_blank">
@@ -157,7 +157,7 @@ export default function WorkspaceSkillDetailPage() {
       <ReferenceViewerDialog
         open={!!viewingReference}
         onOpenChange={open => !open && setViewingReference(null)}
-        skillName={decodedSkillName}
+        skillName={skill.name}
         referencePath={viewingReference ?? ''}
         content={referenceData?.content}
         isLoading={isLoadingReference}
