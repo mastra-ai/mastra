@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Clear the module registry so vi.mock factories take effect even when
@@ -60,21 +61,46 @@ vi.mock('ai', () => ({
 
 // Mock ModelRouterLanguageModel
 vi.mock('@mastra/core/llm', () => ({
-  ModelRouterLanguageModel: vi.fn(function (this: Record<string, unknown>, modelId: string) {
+  ModelRouterLanguageModel: vi.fn(function (
+    this: Record<string, unknown>,
+    config: string | { id: string; url?: string; apiKey?: string; headers?: Record<string, string> },
+  ) {
     this.__provider = 'model-router';
-    this.modelId = modelId;
+    this.modelId = typeof config === 'string' ? config : config.id;
+    this.url = typeof config === 'string' ? undefined : config.url;
+    this.apiKey = typeof config === 'string' ? undefined : config.apiKey;
+    this.headers = typeof config === 'string' ? undefined : config.headers;
   }),
+}));
+
+const mockLoadSettings = vi.hoisted(() =>
+  vi.fn<() => { customProviders: Array<{ name: string; url: string; apiKey?: string }> }>(() => ({ customProviders: [] })),
+);
+
+vi.mock('../../onboarding/settings.js', () => ({
+  loadSettings: mockLoadSettings,
+  getCustomProviderId: (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
 }));
 
 import { opencodeClaudeMaxProvider } from '../../providers/claude-max.js';
 import { openaiCodexProvider } from '../../providers/openai-codex.js';
 import { resolveModel, getAnthropicApiKey, getOpenAIApiKey } from '../model.js';
 
+function makeRequestContext({ threadId, resourceId }: { threadId?: string; resourceId?: string } = {}) {
+  const requestContext = new RequestContext();
+  requestContext.set('harness', {
+    threadId,
+    resourceId,
+  });
+  return requestContext;
+}
+
 describe('resolveModel', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLoadSettings.mockReturnValue({ customProviders: [] });
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.MOONSHOT_AI_API_KEY;
   });
@@ -94,7 +120,7 @@ describe('resolveModel', () => {
 
       resolveModel('anthropic/claude-sonnet-4-20250514');
 
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514');
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { headers: undefined });
     });
 
     it('uses API key when stored credential is api_key, even if isLoggedIn reports true', () => {
@@ -116,7 +142,7 @@ describe('resolveModel', () => {
       const result = resolveModel('anthropic/claude-sonnet-4-20250514') as Record<string, unknown>;
 
       expect(result.__provider).toBe('claude-max-oauth');
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514');
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { headers: undefined });
     });
 
     it('uses stored API key credential when not logged in via OAuth', () => {
@@ -136,7 +162,27 @@ describe('resolveModel', () => {
 
       resolveModel('anthropic/claude-sonnet-4-20250514');
 
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514');
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { headers: undefined });
+    });
+
+    it('passes harness headers to the Anthropic OAuth provider', () => {
+      mockAuthStorageInstance.get.mockReturnValue({
+        type: 'oauth',
+        access: 'oauth-access-token',
+        refresh: 'oauth-refresh-token',
+        expires: Date.now() + 60_000,
+      });
+
+      resolveModel('anthropic/claude-sonnet-4-20250514', {
+        requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
+      });
+
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', {
+        headers: {
+          'x-thread-id': 'thread-123',
+          'x-resource-id': 'resource-456',
+        },
+      });
     });
 
     it('reloads auth storage before resolving', () => {
@@ -172,12 +218,70 @@ describe('resolveModel', () => {
       const result = resolveModel('openai/gpt-4o') as Record<string, unknown>;
       expect(result.__provider).toBe('model-router');
     });
+
+    it('passes harness headers to the OpenAI OAuth provider', () => {
+      mockAuthStorageInstance.get.mockReturnValue({
+        type: 'oauth',
+        access: 'openai-oauth-access-token',
+        refresh: 'openai-oauth-refresh-token',
+        expires: Date.now() + 60_000,
+      });
+
+      resolveModel('openai/gpt-4o', {
+        requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
+      });
+
+      expect(openaiCodexProvider).toHaveBeenCalledWith('gpt-4o', {
+        thinkingLevel: undefined,
+        headers: {
+          'x-thread-id': 'thread-123',
+          'x-resource-id': 'resource-456',
+        },
+      });
+    });
   });
 
   describe('other providers', () => {
     it('uses model router for unknown providers', () => {
       const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
       expect(result.__provider).toBe('model-router');
+    });
+
+    it('passes harness headers to model router providers', () => {
+      const result = resolveModel('google/gemini-2.0-flash', {
+        requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
+      }) as Record<string, unknown>;
+
+      expect(result.__provider).toBe('model-router');
+      expect(result.headers).toEqual({
+        'x-thread-id': 'thread-123',
+        'x-resource-id': 'resource-456',
+      });
+    });
+
+    it('passes harness headers to custom providers', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [
+          {
+            name: 'Acme',
+            url: 'https://llm.acme.dev/v1',
+            apiKey: 'acme-secret',
+          },
+        ],
+      });
+
+      const result = resolveModel('acme/reasoner-v1', {
+        requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
+      }) as Record<string, unknown>;
+
+      expect(result.__provider).toBe('model-router');
+      expect(result.modelId).toBe('acme/reasoner-v1');
+      expect(result.url).toBe('https://llm.acme.dev/v1');
+      expect(result.apiKey).toBe('acme-secret');
+      expect(result.headers).toEqual({
+        'x-thread-id': 'thread-123',
+        'x-resource-id': 'resource-456',
+      });
     });
   });
 });
