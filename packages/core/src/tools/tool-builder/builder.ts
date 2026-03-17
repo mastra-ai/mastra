@@ -106,7 +106,10 @@ export class CoreToolBuilder extends MastraBase {
               description: 'The runId of the suspended tool',
             },
             resumeData: {
+              type: 'object',
               description: 'The resumeData object created from the resumeSchema of suspended tool',
+              properties: {},
+              additionalProperties: true,
             },
           };
           this.originalTool.inputSchema = toStandardSchema(jsonSchema) as any;

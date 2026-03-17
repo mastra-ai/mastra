@@ -25,10 +25,15 @@ type PreparedTool =
 
 type PreparedToolChoice = LanguageModelV2ToolChoice | LanguageModelV3ToolChoice;
 
+const PERMISSIVE_TYPE = ['string', 'number', 'integer', 'boolean', 'object', 'null'];
+
+function isTypelessSchema(s: Record<string, unknown>): boolean {
+  return !('type' in s) && !('$ref' in s) && !('anyOf' in s) && !('oneOf' in s) && !('allOf' in s);
+}
+
 /**
- * Recursively fixes JSON Schema properties that lack a 'type' key.
- * Zod v4's toJSONSchema serializes z.any() to just { description: "..." } with no 'type',
- * which providers like OpenAI reject. This converts such schemas to a permissive type union.
+ * Recursively fixes JSON Schema nodes that lack a 'type' key.
+ * z.any() serializes to { description: "..." } with no 'type', which providers like OpenAI reject.
  */
 function fixTypelessProperties(schema: Record<string, unknown>): Record<string, unknown> {
   if (typeof schema !== 'object' || schema === null) return schema;
@@ -41,19 +46,11 @@ function fixTypelessProperties(schema: Record<string, unknown>): Record<string, 
         if (typeof value !== 'object' || value === null || Array.isArray(value)) {
           return [key, value];
         }
-
         const propSchema = value as Record<string, unknown>;
-        const hasType = 'type' in propSchema;
-        const hasRef = '$ref' in propSchema;
-        const hasAnyOf = 'anyOf' in propSchema;
-        const hasOneOf = 'oneOf' in propSchema;
-        const hasAllOf = 'allOf' in propSchema;
-
-        if (!hasType && !hasRef && !hasAnyOf && !hasOneOf && !hasAllOf) {
+        if (isTypelessSchema(propSchema)) {
           const { items: _items, ...rest } = propSchema;
-          return [key, { ...rest, type: ['string', 'number', 'integer', 'boolean', 'object', 'null'] }];
+          return [key, { ...rest, type: PERMISSIVE_TYPE }];
         }
-
         return [key, fixTypelessProperties(propSchema)];
       }),
     );
@@ -64,6 +61,20 @@ function fixTypelessProperties(schema: Record<string, unknown>): Record<string, 
       result.items = (result.items as Record<string, unknown>[]).map(item => fixTypelessProperties(item));
     } else if (typeof result.items === 'object') {
       result.items = fixTypelessProperties(result.items as Record<string, unknown>);
+    }
+  }
+
+  for (const keyword of ['anyOf', 'oneOf', 'allOf'] as const) {
+    if (Array.isArray(result[keyword])) {
+      result[keyword] = (result[keyword] as Record<string, unknown>[]).map(branch => {
+        if (typeof branch !== 'object' || branch === null || Array.isArray(branch)) return branch;
+        const b = branch as Record<string, unknown>;
+        if (isTypelessSchema(b)) {
+          const { items: _items, ...rest } = b;
+          return { ...rest, type: PERMISSIVE_TYPE };
+        }
+        return fixTypelessProperties(b);
+      });
     }
   }
 
