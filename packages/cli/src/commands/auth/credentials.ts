@@ -45,6 +45,10 @@ export async function clearCredentials(): Promise<void> {
 }
 
 export async function getCurrentOrgId(): Promise<string | null> {
+  // CI/CD headless path
+  const envOrgId = process.env.MASTRA_ORG_ID;
+  if (envOrgId) return envOrgId;
+
   const creds = await loadCredentials();
   if (!creds) return null;
   return creds.currentOrgId ?? creds.organizationId;

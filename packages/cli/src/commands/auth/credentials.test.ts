@@ -19,6 +19,7 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env.MASTRA_API_TOKEN;
+  delete process.env.MASTRA_ORG_ID;
 });
 
 describe('getToken', () => {
@@ -40,6 +41,18 @@ describe('getToken', () => {
     const token = await getToken();
 
     expect(token).toBe('from-env');
+  });
+});
+
+describe('getCurrentOrgId', () => {
+  it('returns MASTRA_ORG_ID from env when set', async () => {
+    process.env.MASTRA_ORG_ID = 'env-org-123';
+    vi.resetModules();
+
+    const { getCurrentOrgId } = await import('./credentials.js');
+    const orgId = await getCurrentOrgId();
+
+    expect(orgId).toBe('env-org-123');
   });
 });
 
