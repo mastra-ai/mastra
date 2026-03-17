@@ -97,7 +97,7 @@ export const mastra = new Mastra({
 
 ## Framework-agnostic handlers
 
-For use outside of the Mastra server (e.g., Next.js App Router, Express), you can use the standalone handler functions directly. These handlers return a compatibility `ReadableStream` that can be passed to AI SDK response helpers like `createUIMessageStreamResponse` and `pipeUIMessageStreamToResponse`:
+For use outside the Mastra server (e.g., Next.js App Router, Express), you can use the standalone handler functions directly. These handlers return a compatibility `ReadableStream` that can be passed to AI SDK response helpers like `createUIMessageStreamResponse` and `pipeUIMessageStreamToResponse`:
 
 ### handleChatStream
 

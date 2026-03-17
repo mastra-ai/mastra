@@ -442,6 +442,9 @@ importers:
       '@internal/ai-sdk-v5':
         specifier: workspace:*
         version: link:../../packages/_vendored/ai_v5
+      '@internal/ai-v6':
+        specifier: workspace:*
+        version: link:../../packages/_vendored/ai_v6
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -506,6 +509,9 @@ importers:
       '@internal/ai-sdk-v5':
         specifier: workspace:*
         version: link:../../packages/_vendored/ai_v5
+      '@internal/ai-v6':
+        specifier: workspace:*
+        version: link:../../packages/_vendored/ai_v6
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
