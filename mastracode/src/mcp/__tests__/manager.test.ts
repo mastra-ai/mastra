@@ -441,9 +441,7 @@ describe('createMcpManager', () => {
       // Reload with a different server
       setupConfig({ mcpServers: { api: { url: 'https://api.example.com/mcp' } } });
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsetsWithErrors = vi
-          .fn()
-          .mockResolvedValue({ toolsets: { api: { fetch: {} } }, errors: {} });
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { api: { fetch: {} } }, errors: {} });
         this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 
@@ -499,9 +497,7 @@ describe('createMcpManager', () => {
     it('returns a copy so mutations do not affect internal state', async () => {
       setupConfig({ mcpServers: { fs: { command: 'npx' } } });
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsetsWithErrors = vi
-          .fn()
-          .mockResolvedValue({ toolsets: { fs: { read: {} } }, errors: {} });
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { fs: { read: {} } }, errors: {} });
         this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 
