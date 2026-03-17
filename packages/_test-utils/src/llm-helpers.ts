@@ -345,11 +345,7 @@ export function hasNonEmptyRecordings(recordingName: string, recordingsDir?: str
  * describe.skipIf(skipLLM)('LLM Tests', () => { ... });
  * ```
  */
-export function shouldSkipLLMTest(
-  mode: string,
-  provider: keyof ProviderApiKeys,
-  recordingName?: string,
-): boolean {
+export function shouldSkipLLMTest(mode: string, provider: keyof ProviderApiKeys, recordingName?: string): boolean {
   // If we have a real API key, never skip
   if (hasRealApiKey(provider)) return false;
 
