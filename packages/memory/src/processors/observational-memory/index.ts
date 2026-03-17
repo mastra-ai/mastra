@@ -18,11 +18,13 @@ export {
   OBSERVATION_CONTINUATION_HINT,
   OBSERVATION_CONTEXT_PROMPT,
   OBSERVATION_CONTEXT_INSTRUCTIONS,
-  getObservationsAsOf,
   type ObservationalMemoryConfig,
   type ObservationDebugEvent,
   type ObserveHooks,
 } from './observational-memory';
+
+// Observation utilities
+export { getObservationsAsOf } from './observation-utils';
 
 // Types
 export type {

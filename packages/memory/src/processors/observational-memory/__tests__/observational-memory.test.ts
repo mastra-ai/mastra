@@ -4,7 +4,8 @@ import { coreFeatures } from '@mastra/core/features';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-import { ObservationalMemory, getObservationsAsOf } from '../observational-memory';
+import { getObservationsAsOf } from '../observation-utils';
+import { ObservationalMemory } from '../observational-memory';
 import {
   buildObserverPrompt,
   buildMultiThreadObserverPrompt,
