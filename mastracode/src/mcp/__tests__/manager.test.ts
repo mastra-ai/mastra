@@ -556,6 +556,53 @@ describe('createMcpManager', () => {
     });
   });
 
+  describe('zero-tool server handling', () => {
+    it('marks a server with zero tools as failed on init', async () => {
+      setupConfig({ mcpServers: { empty: { command: 'npx' } } });
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({
+          toolsets: { empty: {} },
+          errors: {},
+        });
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      const statuses = manager.getServerStatuses();
+      expect(statuses).toHaveLength(1);
+      expect(statuses[0]!.connected).toBe(false);
+      expect(statuses[0]!.error).toBe('Failed to connect');
+    });
+
+    it('marks a server with zero tools as failed on reconnect', async () => {
+      setupConfig({ mcpServers: { fs: { command: 'npx' } } });
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.reconnectServer = vi.fn().mockResolvedValue(undefined);
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({
+          toolsets: { fs: { read: {} } },
+          errors: {},
+        });
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      // After reconnect, server has 0 tools
+      const mockInstance = MockedMCPClient.mock.instances[0] as any;
+      mockInstance.listToolsetsWithErrors.mockResolvedValue({
+        toolsets: { fs: {} },
+        errors: {},
+      });
+
+      const result = await manager.reconnectServer('fs');
+      expect(result.connected).toBe(false);
+      expect(result.error).toBe('Failed to connect');
+    });
+  });
+
   describe('reconnectServer', () => {
     it('returns error status for unknown server name', async () => {
       setupConfig({ mcpServers: { fs: { command: 'npx' } } });

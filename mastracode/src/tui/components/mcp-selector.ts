@@ -256,10 +256,15 @@ export class McpSelectorComponent extends Box implements Focusable {
   }
 
   handleInput(data: string): void {
-    // Ignore input while reloading
-    if (this._reloading) return;
-
     const kb = getEditorKeybindings();
+
+    // During reload, only allow closing the selector
+    if (this._reloading) {
+      if (kb.matches(data, 'selectCancel')) {
+        this.onCloseCallback();
+      }
+      return;
+    }
     const totalItems = this.getTotalItems();
 
     // Detail view (tool list or error) — Esc goes back to server list

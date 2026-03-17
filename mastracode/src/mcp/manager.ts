@@ -158,7 +158,7 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
 
       for (const name of serverNames) {
         const serverTools = toolsets[name];
-        if (serverTools) {
+        if (serverTools && Object.keys(serverTools).length > 0) {
           const toolNames = Object.keys(serverTools).map(t => `${name}_${t}`);
           serverStatuses.set(name, {
             name,
