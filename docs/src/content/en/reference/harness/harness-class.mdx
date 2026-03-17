@@ -336,7 +336,7 @@ const state = harness.getState()
 Update the harness state. Validates against `stateSchema` if provided, and emits a `state_changed` event with the new state and changed keys.
 
 ```typescript
-await harness.setState({ currentModelId: 'anthropic/claude-sonnet-4-20250514' })
+await harness.setState({ currentModelId: 'anthropic/claude-sonnet-4-6' })
 ```
 
 ### Modes
@@ -415,10 +415,10 @@ Switch the active model. When `scope` is `'thread'`, the model ID is persisted t
 
 ```typescript
 // Set for current session only
-await harness.switchModel({ modelId: 'anthropic/claude-sonnet-4-20250514' })
+await harness.switchModel({ modelId: 'anthropic/claude-sonnet-4-6' })
 
 // Persist to the current thread
-await harness.switchModel({ modelId: 'anthropic/claude-sonnet-4-20250514', scope: 'thread' })
+await harness.switchModel({ modelId: 'anthropic/claude-sonnet-4-6', scope: 'thread' })
 ```
 
 #### `getCurrentModelAuthStatus()`
@@ -846,7 +846,7 @@ Set the subagent model ID. Pass an `agentType` to set a per-type override, or om
 
 ```typescript
 // Set global subagent model
-await harness.setSubagentModelId({ modelId: 'anthropic/claude-sonnet-4-20250514' })
+await harness.setSubagentModelId({ modelId: 'anthropic/claude-sonnet-4-6' })
 
 // Set per-type model
 await harness.setSubagentModelId({ modelId: 'anthropic/claude-haiku-3.5', agentType: 'explore' })

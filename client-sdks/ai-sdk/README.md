@@ -55,6 +55,8 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat<MyMes
 });
 ```
 
+`chatRoute()` forwards the incoming request `AbortSignal` to `agent.stream()`. If the client disconnects, Mastra aborts the in-flight generation. If you need generation to continue and persist server-side after disconnect, build a custom route around `agent.stream()`, avoid passing the request signal, and call `consumeStream()` on the returned `MastraModelOutput`.
+
 ### Workflow route
 
 Stream a workflow in AI SDK-compatible format.

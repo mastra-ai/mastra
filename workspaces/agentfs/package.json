@@ -23,6 +23,7 @@
     "build:lib": "pnpm build",
     "build:watch": "pnpm build --watch",
     "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
+    "test:cloud": "vitest run ./src/**/*.integration.test.ts",
     "test:watch": "vitest watch",
     "test": "vitest run",
     "lint": "eslint ."
@@ -36,7 +37,7 @@
     "@internal/types-builder": "workspace:*",
     "@internal/workspace-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.3.1",

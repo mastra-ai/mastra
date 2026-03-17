@@ -6,7 +6,7 @@ import { Spacer, Text } from '@mariozechner/pi-tui';
 
 import { getCurrentGitBranch } from '../../utils/project.js';
 import { GradientAnimator } from '../components/obi-loader.js';
-import { theme } from '../theme.js';
+import { BOX_INDENT, theme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
 
@@ -113,8 +113,8 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
     state.streamingMessage = undefined;
   } else if (state.userInitiatedAbort) {
     // Show standalone "Interrupted" if user pressed Ctrl+C but no streaming component
+    state.chatContainer.addChild(new Text(theme.fg('error', 'Interrupted'), BOX_INDENT, 0));
     state.chatContainer.addChild(new Spacer(1));
-    state.chatContainer.addChild(new Text(theme.fg('error', 'Interrupted'), 1, 0));
   }
   state.userInitiatedAbort = false;
 
