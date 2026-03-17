@@ -12,6 +12,73 @@ export type ToolResultWithInput = ToolResultPart & {
 };
 
 // ============================================================================
+// Single System Message Compatibility
+// ============================================================================
+
+/**
+ * Merges multiple consecutive system messages at the start of the array into a single system message.
+ *
+ * Some models (e.g., Qwen 3.5-27b and other local models) only support a single system message
+ * and will error if multiple system messages are provided. This function consolidates all
+ * system messages at the beginning of the message array into one.
+ *
+ * The merged content preserves the order of original messages, separated by double newlines
+ * to maintain clear boundaries between different instruction sets.
+ *
+ * @param messages - Array of model messages to process
+ * @returns Modified messages array with merged system message
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/14384 - Multiple system messages issue
+ */
+export function mergeSystemMessages<T extends ModelMessage | CoreMessageV4>(messages: T[]): T[] {
+  if (messages.length === 0) return messages;
+
+  // Find the last consecutive system message at the start
+  let lastSystemIndex = -1;
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i]?.role === 'system') {
+      lastSystemIndex = i;
+    } else {
+      break;
+    }
+  }
+
+  // If 0 or 1 system messages, no merging needed
+  if (lastSystemIndex <= 0) return messages;
+
+  // Extract all system messages at the start
+  const systemMessages = messages.slice(0, lastSystemIndex + 1);
+  const remainingMessages = messages.slice(lastSystemIndex + 1);
+
+  // Merge content from all system messages
+  const mergedContent = systemMessages
+    .map(m => {
+      if (typeof m.content === 'string') {
+        return m.content;
+      }
+      // For array content, extract text parts and join
+      if (Array.isArray(m.content)) {
+        return m.content
+          .filter((part: any) => part.type === 'text')
+          .map((part: any) => part.text)
+          .join('');
+      }
+      return '';
+    })
+    .filter(content => content.length > 0)
+    .join('\n\n');
+
+  // Create merged system message preserving the first message's structure
+  const firstSystem = systemMessages[0];
+  const mergedSystemMessage = {
+    ...firstSystem,
+    content: mergedContent,
+  } as T;
+
+  return [mergedSystemMessage, ...remainingMessages];
+}
+
+// ============================================================================
 // Gemini Compatibility
 // ============================================================================
 

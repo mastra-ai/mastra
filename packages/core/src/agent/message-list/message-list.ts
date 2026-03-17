@@ -35,7 +35,7 @@ import type {
   SerializedMessageListState,
 } from './state';
 import type { AIV5Type, AIV5ResponseMessage, MessageInput, MessageListInput } from './types';
-import { ensureGeminiCompatibleMessages } from './utils/provider-compat';
+import { ensureGeminiCompatibleMessages, mergeSystemMessages } from './utils/provider-compat';
 
 export class MessageList {
   private messages: MastraDBMessage[] = [];
@@ -363,7 +363,7 @@ export class MessageList {
         // Filter incomplete tool calls when sending messages TO the LLM
         const modelMessages = convertAIV5UIToModelMessages(this.all.aiV5.ui(), this.messages, true);
 
-        const messages = [...systemMessages, ...modelMessages];
+        const messages = mergeSystemMessages([...systemMessages, ...modelMessages]);
 
         return ensureGeminiCompatibleMessages(messages, this.logger);
       },
@@ -437,6 +437,7 @@ export class MessageList {
           });
         }
 
+        messages = mergeSystemMessages(messages);
         messages = ensureGeminiCompatibleMessages(messages, this.logger);
 
         return messages
@@ -460,7 +461,11 @@ export class MessageList {
       // Used when calling AI SDK streamText/generateText
       prompt: () => {
         const coreMessages = this.all.aiV4.core();
-        const messages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
+        const messages = mergeSystemMessages([
+          ...this.systemMessages,
+          ...Object.values(this.taggedSystemMessages).flat(),
+          ...coreMessages,
+        ]);
 
         return ensureGeminiCompatibleMessages(messages, this.logger);
       },
@@ -470,7 +475,7 @@ export class MessageList {
         const coreMessages = this.all.aiV4.core();
 
         const systemMessages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
-        let messages = [...systemMessages, ...coreMessages];
+        let messages = mergeSystemMessages([...systemMessages, ...coreMessages]);
 
         messages = ensureGeminiCompatibleMessages(messages, this.logger);
 

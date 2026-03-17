@@ -42,6 +42,7 @@ export {
   hasOpenAIReasoningItemId,
   getOpenAIReasoningItemId,
   findToolCallArgs,
+  mergeSystemMessages,
 } from './utils/provider-compat';
 export type { ToolResultWithInput } from './utils/provider-compat';
 
