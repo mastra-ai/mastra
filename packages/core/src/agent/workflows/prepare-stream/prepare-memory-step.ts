@@ -44,6 +44,10 @@ interface PrepareMemoryStepOptions<OUTPUT = undefined> {
   instructions: SystemMessage;
   memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
+  resumeContext?: {
+    resumeData: any;
+    snapshot: any;
+  };
 }
 
 export function createPrepareMemoryStep<OUTPUT = undefined>({
@@ -56,6 +60,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
   instructions,
   memoryConfig,
   memory,
+  resumeContext,
 }: PrepareMemoryStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-memory-step',
@@ -87,19 +92,29 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
 
       if (!memory || (!thread?.id && !resourceId)) {
         messageList.add(options.messages, 'input');
-        const { tripwire } = await capabilities.runInputProcessors({
-          requestContext,
-          ...observabilityContext,
-          messageList,
-          inputProcessorOverrides: options.inputProcessors,
-          processorStates,
-        });
+        // Skip input processors during resume - messages come from snapshot, not new input
+        if (!resumeContext) {
+          const { tripwire } = await capabilities.runInputProcessors({
+            requestContext,
+            ...observabilityContext,
+            messageList,
+            inputProcessorOverrides: options.inputProcessors,
+            processorStates,
+          });
+          return {
+            threadExists: false,
+            thread: undefined,
+            messageList,
+            processorStates,
+            tripwire,
+          };
+        }
         return {
           threadExists: false,
           thread: undefined,
           messageList,
           processorStates,
-          tripwire,
+          tripwire: undefined,
         };
       }
 
@@ -171,19 +186,29 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
       // Add user messages - memory processors will handle history/semantic recall/working memory
       messageList.add(options.messages, 'input');
 
-      const { tripwire } = await capabilities.runInputProcessors({
-        requestContext,
-        ...observabilityContext,
-        messageList,
-        inputProcessorOverrides: options.inputProcessors,
-        processorStates,
-      });
+      // Skip input processors during resume - messages come from snapshot, not new input
+      if (!resumeContext) {
+        const { tripwire } = await capabilities.runInputProcessors({
+          requestContext,
+          ...observabilityContext,
+          messageList,
+          inputProcessorOverrides: options.inputProcessors,
+          processorStates,
+        });
+        return {
+          thread: threadObject,
+          messageList: messageList,
+          processorStates,
+          tripwire,
+          threadExists: !!existingThread,
+        };
+      }
 
       return {
         thread: threadObject,
         messageList: messageList,
         processorStates,
-        tripwire,
+        tripwire: undefined,
         threadExists: !!existingThread,
       };
     },
