@@ -55,9 +55,6 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     threadId: string;
     resourceId?: string;
     messageList: MessageList;
-    threshold: number;
-    otherThreadContext?: string;
-    writer?: ProcessInputStepArgs['writer'];
     abortSignal?: AbortSignal;
     requestContext?: any;
     abort?: ProcessInputStepArgs['abort'];
@@ -387,9 +384,6 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
               threadId,
               resourceId,
               messageList,
-              threshold,
-              otherThreadContext: otherThreadsContext,
-              writer,
               abortSignal,
               requestContext,
               abort,
