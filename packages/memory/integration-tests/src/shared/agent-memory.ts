@@ -35,6 +35,7 @@ export async function getAgentMemoryTests({
   recordingName?: string;
 }) {
   const skipLLM = shouldSkipLLMTest(MODE, 'openai', recordingName);
+
   const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'mastra-agent.db');
   const dbFile = `file:${dbPath}`;
 

@@ -117,7 +117,11 @@ export function getWorkingMemoryTests(
   const modelName = typeof model === 'string' ? model : (model as any).modelId || (model as any).id || 'sdk-model';
   const skipLLM = shouldSkipLLMTest(MODE, 'openai', options?.recordingName);
 
-  describe.skipIf(skipLLM)(`Working Memory Tests (${modelName})`, () => {
+  // Use it.skipIf for individual LLM tests instead of skipping the whole suite
+  // to preserve local-only test coverage (getSystemMessage, saveMessages, etc.)
+  const itLLM = it.skipIf(skipLLM);
+
+  describe(`Working Memory Tests (${modelName})`, () => {
     let memory: Memory;
     let thread: any;
     let storage: LibSQLStore;
@@ -180,35 +184,38 @@ export function getWorkingMemoryTests(
         } catch {}
       });
 
-      it('should handle LLM responses with working memory using OpenAI (test that the working memory prompt works)', async () => {
-        const agent = new Agent({
-          id: 'memory-test-agent',
-          name: 'Memory Test Agent',
-          instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
-          model,
-          memory,
-        });
+      itLLM(
+        'should handle LLM responses with working memory using OpenAI (test that the working memory prompt works)',
+        async () => {
+          const agent = new Agent({
+            id: 'memory-test-agent',
+            name: 'Memory Test Agent',
+            instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
+            model,
+            memory,
+          });
 
-        await agentGenerate(
-          agent,
-          'Hi, my name is Tyler and I live in San Francisco',
-          {
-            threadId: thread.id,
-            resourceId,
-          },
-          model,
-        );
+          await agentGenerate(
+            agent,
+            'Hi, my name is Tyler and I live in San Francisco',
+            {
+              threadId: thread.id,
+              resourceId,
+            },
+            model,
+          );
 
-        // Get working memory
-        const workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
-        expect(workingMemory).not.toBeNull();
-        if (workingMemory) {
-          // Check for specific Markdown format
-          expect(workingMemory).toContain('# User Information');
-          expect(workingMemory).toContain('**First Name**: Tyler');
-          expect(workingMemory).toContain('**Location**: San Francisco');
-        }
-      });
+          // Get working memory
+          const workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
+          expect(workingMemory).not.toBeNull();
+          if (workingMemory) {
+            // Check for specific Markdown format
+            expect(workingMemory).toContain('# User Information');
+            expect(workingMemory).toContain('**First Name**: Tyler');
+            expect(workingMemory).toContain('**Location**: San Francisco');
+          }
+        },
+      );
 
       it('should initialize with default working memory template', async () => {
         const systemInstruction = await memory.getSystemMessage({ threadId: thread.id, resourceId });
@@ -309,7 +316,7 @@ export function getWorkingMemoryTests(
         expect(updatedThread?.metadata?.workingMemory).toBeUndefined();
       });
 
-      it('should handle LLM responses with working memory using tool calls', async () => {
+      itLLM('should handle LLM responses with working memory using tool calls', async () => {
         const agent = new Agent({
           id: 'memory-test-agent',
           name: 'Memory Test Agent',
@@ -340,106 +347,109 @@ export function getWorkingMemoryTests(
         }
       });
 
-      it("shouldn't pollute context with working memory tool call args, only the system instruction working memory should exist", async () => {
-        const agent = new Agent({
-          id: 'memory-test-agent',
-          name: 'Memory Test Agent',
-          instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
-          model,
-          memory,
-        });
+      itLLM(
+        "shouldn't pollute context with working memory tool call args, only the system instruction working memory should exist",
+        async () => {
+          const agent = new Agent({
+            id: 'memory-test-agent',
+            name: 'Memory Test Agent',
+            instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
+            model,
+            memory,
+          });
 
-        const thread = await memory.createThread(createTestThread(`Tool call working memory context pollution test`));
+          const thread = await memory.createThread(createTestThread(`Tool call working memory context pollution test`));
 
-        await agentGenerate(
-          agent,
-          'Hi, my name is Tyler and I live in a submarine under the sea',
-          {
+          await agentGenerate(
+            agent,
+            'Hi, my name is Tyler and I live in a submarine under the sea',
+            {
+              threadId: thread.id,
+              resourceId,
+            },
+            model,
+          );
+
+          let workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
+          expect(workingMemory).not.toBeNull();
+          if (workingMemory) {
+            expect(workingMemory).toContain('# User Information');
+            expect(workingMemory).toContain('**First Name**: Tyler');
+            expect(workingMemory?.toLowerCase()).toContain('**location**:');
+            expect(workingMemory?.toLowerCase()).toContain('submarine under the sea');
+          }
+
+          await agentGenerate(
+            agent,
+            'I changed my name to Jim',
+            {
+              threadId: thread.id,
+              resourceId,
+            },
+            model,
+          );
+
+          workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
+          expect(workingMemory).not.toBeNull();
+          if (workingMemory) {
+            expect(workingMemory).toContain('# User Information');
+            expect(workingMemory).toContain('**First Name**: Jim');
+            expect(workingMemory?.toLowerCase()).toContain('**location**:');
+            expect(workingMemory?.toLowerCase()).toContain('submarine under the sea');
+          }
+
+          await agentGenerate(
+            agent,
+            'I moved to Vancouver Island',
+            {
+              threadId: thread.id,
+              resourceId,
+            },
+            model,
+          );
+
+          workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
+          expect(workingMemory).not.toBeNull();
+          if (workingMemory) {
+            expect(workingMemory).toContain('# User Information');
+            expect(workingMemory).toContain('**First Name**: Jim');
+            expect(workingMemory).toContain('**Location**: Vancouver Island');
+          }
+
+          const history = await memory.recall({
             threadId: thread.id,
             resourceId,
-          },
-          model,
-        );
+            perPage: 20,
+          });
 
-        let workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
-        expect(workingMemory).not.toBeNull();
-        if (workingMemory) {
-          expect(workingMemory).toContain('# User Information');
-          expect(workingMemory).toContain('**First Name**: Tyler');
-          expect(workingMemory?.toLowerCase()).toContain('**location**:');
-          expect(workingMemory?.toLowerCase()).toContain('submarine under the sea');
-        }
+          const memoryArgs: string[] = [];
 
-        await agentGenerate(
-          agent,
-          'I changed my name to Jim',
-          {
-            threadId: thread.id,
-            resourceId,
-          },
-          model,
-        );
-
-        workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
-        expect(workingMemory).not.toBeNull();
-        if (workingMemory) {
-          expect(workingMemory).toContain('# User Information');
-          expect(workingMemory).toContain('**First Name**: Jim');
-          expect(workingMemory?.toLowerCase()).toContain('**location**:');
-          expect(workingMemory?.toLowerCase()).toContain('submarine under the sea');
-        }
-
-        await agentGenerate(
-          agent,
-          'I moved to Vancouver Island',
-          {
-            threadId: thread.id,
-            resourceId,
-          },
-          model,
-        );
-
-        workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
-        expect(workingMemory).not.toBeNull();
-        if (workingMemory) {
-          expect(workingMemory).toContain('# User Information');
-          expect(workingMemory).toContain('**First Name**: Jim');
-          expect(workingMemory).toContain('**Location**: Vancouver Island');
-        }
-
-        const history = await memory.recall({
-          threadId: thread.id,
-          resourceId,
-          perPage: 20,
-        });
-
-        const memoryArgs: string[] = [];
-
-        for (const message of history.messages) {
-          if (message.role === `assistant`) {
-            for (const part of message.content.parts) {
-              if (part.type === 'tool-invocation' && part.toolInvocation?.toolName === `updateWorkingMemory`) {
-                memoryArgs.push(part.toolInvocation.args.memory);
+          for (const message of history.messages) {
+            if (message.role === `assistant`) {
+              for (const part of message.content.parts) {
+                if (part.type === 'tool-invocation' && part.toolInvocation?.toolName === `updateWorkingMemory`) {
+                  memoryArgs.push(part.toolInvocation.args.memory);
+                }
               }
             }
           }
-        }
 
-        expect(memoryArgs).not.toContain(`Tyler`);
-        expect(memoryArgs).not.toContain('submarine under the sea');
-        expect(memoryArgs).not.toContain('Jim');
-        expect(memoryArgs).not.toContain('Vancouver Island');
-        expect(memoryArgs).toEqual([]);
+          expect(memoryArgs).not.toContain(`Tyler`);
+          expect(memoryArgs).not.toContain('submarine under the sea');
+          expect(memoryArgs).not.toContain('Jim');
+          expect(memoryArgs).not.toContain('Vancouver Island');
+          expect(memoryArgs).toEqual([]);
 
-        workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
-        expect(workingMemory).not.toBeNull();
-        if (workingMemory) {
-          // Format-specific assertion that checks for Markdown format
-          expect(workingMemory).toContain('# User Information');
-          expect(workingMemory).toContain('**First Name**: Jim');
-          expect(workingMemory).toContain('**Location**: Vancouver Island');
-        }
-      });
+          workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
+          expect(workingMemory).not.toBeNull();
+          if (workingMemory) {
+            // Format-specific assertion that checks for Markdown format
+            expect(workingMemory).toContain('# User Information');
+            expect(workingMemory).toContain('**First Name**: Jim');
+            expect(workingMemory).toContain('**Location**: Vancouver Island');
+          }
+        },
+      );
 
       it('should remove tool-call/tool-result messages with toolName "updateWorkingMemory"', async () => {
         const threadId = thread.id;
@@ -603,7 +613,7 @@ export function getWorkingMemoryTests(
         });
       });
 
-      it('should remember information from working memory in subsequent calls', async () => {
+      itLLM('should remember information from working memory in subsequent calls', async () => {
         const thread = await memory.saveThread({
           thread: createTestThread('Remembering Test'),
         });
@@ -720,7 +730,7 @@ export function getWorkingMemoryTests(
           await vector.turso.close();
         });
 
-        it('should accept valid working memory updates matching the schema', async () => {
+        itLLM('should accept valid working memory updates matching the schema', async () => {
           const validMemory = { city: 'Austin', temperature: 85 };
           await agentGenerate(
             agent,
@@ -738,7 +748,7 @@ export function getWorkingMemoryTests(
           expect(extractUserData(wmObj)).toMatchObject(validMemory);
         });
 
-        it('should recall the most recent valid schema-based working memory', { retry: 2 }, async () => {
+        itLLM('should recall the most recent valid schema-based working memory', { retry: 2 }, async () => {
           const second = { city: 'Denver', temperature: 75 };
           await agentGenerate(
             agent,
@@ -946,7 +956,7 @@ export function getWorkingMemoryTests(
         expect(template?.content).toContain('string');
       });
 
-      it('should accept valid working memory updates matching the JSONSchema7', async () => {
+      itLLM('should accept valid working memory updates matching the JSONSchema7', async () => {
         await agentGenerate(
           agent,
           'Hi, my name is John Doe, I am 30 years old and I live in Boston. I prefer dark theme and want notifications enabled.',
@@ -967,7 +977,7 @@ export function getWorkingMemoryTests(
         expect(userData.city).toBe('Boston');
       });
 
-      it('should handle required and optional fields correctly with JSONSchema7', async () => {
+      itLLM('should handle required and optional fields correctly with JSONSchema7', async () => {
         // Test with only required fields
         const _res = await agentGenerate(
           agent,
@@ -991,7 +1001,7 @@ export function getWorkingMemoryTests(
         // Age is not required, so it might not be set
       });
 
-      it('should update working memory progressively with JSONSchema7', async () => {
+      itLLM('should update working memory progressively with JSONSchema7', async () => {
         // First message with partial info
         await agentGenerate(
           agent,
@@ -1032,7 +1042,7 @@ export function getWorkingMemoryTests(
         expect(userData.age).toBe(25);
       });
 
-      it('should persist working memory across multiple interactions with JSONSchema7', async () => {
+      itLLM('should persist working memory across multiple interactions with JSONSchema7', async () => {
         // Set initial data
         await agentGenerate(
           agent,
@@ -1614,6 +1624,7 @@ export function getWorkingMemoryTests(
               embedder: fastembed,
             }),
           model,
+          itLLM,
         );
       });
 
@@ -1633,6 +1644,7 @@ export function getWorkingMemoryTests(
               embedder: fastembed,
             }),
           model,
+          itLLM,
         );
       });
     });
@@ -1643,7 +1655,7 @@ export function getWorkingMemoryTests(
  * Shared test suite for agent network with working memory.
  * Can be run with any memory configuration (thread/resource scope, standard/vnext).
  */
-function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraModelConfig) {
+function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraModelConfig, itLLM: typeof it = it) {
   let mathAgent: Agent;
   let getWeather: Tool;
 
@@ -1714,7 +1726,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
       .join('');
   }
 
-  it(
+  itLLM(
     'should call memory tool directly and end loop when only memory update needed',
     { retry: 3, timeout: 120000 },
     async () => {
@@ -1753,7 +1765,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     },
   );
 
-  it('should call memory tool first, then query agent', { retry: 3, timeout: 120000 }, async () => {
+  itLLM('should call memory tool first, then query agent', { retry: 3, timeout: 120000 }, async () => {
     const memory = getMemory();
 
     const networkAgent = new Agent({
@@ -1803,7 +1815,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 
-  it('should query agent first, then call memory tool', { retry: 3, timeout: 120000 }, async () => {
+  itLLM('should query agent first, then call memory tool', { retry: 3, timeout: 120000 }, async () => {
     const memory = getMemory();
 
     const networkAgent = new Agent({
@@ -1850,7 +1862,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 
-  it('should call memory tool first, then execute user-defined tool', { retry: 3, timeout: 120000 }, async () => {
+  itLLM('should call memory tool first, then execute user-defined tool', { retry: 3, timeout: 120000 }, async () => {
     const memory = getMemory();
     const networkAgent = new Agent({
       id: 'network-orchestrator',
@@ -1898,7 +1910,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 
-  it('should execute user-defined tool first, then call memory tool', { retry: 3, timeout: 120000 }, async () => {
+  itLLM('should execute user-defined tool first, then call memory tool', { retry: 3, timeout: 120000 }, async () => {
     const memory = getMemory();
     const networkAgent = new Agent({
       id: 'network-orchestrator',
@@ -1944,7 +1956,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 
-  it('should handle multiple memory updates in single network call', { retry: 3, timeout: 120000 }, async () => {
+  itLLM('should handle multiple memory updates in single network call', { retry: 3, timeout: 120000 }, async () => {
     const memory = getMemory();
 
     const networkAgent = new Agent({
@@ -1978,7 +1990,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 
-  it(
+  itLLM(
     'should handle complex multi-step workflow with memory, agents, and tools',
     { retry: 3, timeout: 120000 },
     async () => {
