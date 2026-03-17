@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
 import type { HarnessThread } from '@mastra/core/harness';
+import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@mariozechner/pi-tui', () => {
   class MockNode {
@@ -44,7 +44,11 @@ vi.mock('@mariozechner/pi-tui', () => {
   }
 
   class Text {
-    constructor(public text: string, public x = 0, public y = 0) {}
+    constructor(
+      public text: string,
+      public x = 0,
+      public y = 0,
+    ) {}
     render() {
       return [this.text];
     }

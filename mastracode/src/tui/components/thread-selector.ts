@@ -96,7 +96,10 @@ export class ThreadSelectorComponent extends Box implements Focusable {
   private getVisibleRange(): { startIndex: number; endIndex: number } {
     const startIndex = Math.max(
       0,
-      Math.min(this.selectedIndex - Math.floor(MAX_VISIBLE_THREADS / 2), this.filteredThreads.length - MAX_VISIBLE_THREADS),
+      Math.min(
+        this.selectedIndex - Math.floor(MAX_VISIBLE_THREADS / 2),
+        this.filteredThreads.length - MAX_VISIBLE_THREADS,
+      ),
     );
     const endIndex = Math.min(startIndex + MAX_VISIBLE_THREADS, this.filteredThreads.length);
     return { startIndex, endIndex };
@@ -110,7 +113,9 @@ export class ThreadSelectorComponent extends Box implements Focusable {
   private getPreviewCandidates(initialLoad: boolean): HarnessThread[] {
     const initialThreads = initialLoad ? this.filteredThreads.slice(0, INITIAL_PREVIEW_LOAD_COUNT) : [];
     const combinedThreads = [...initialThreads, ...this.getVisibleThreads()];
-    const uniqueThreads = combinedThreads.filter((thread, index, threads) => threads.findIndex(t => t.id === thread.id) === index);
+    const uniqueThreads = combinedThreads.filter(
+      (thread, index, threads) => threads.findIndex(t => t.id === thread.id) === index,
+    );
 
     const prioritizedThreads = uniqueThreads.filter(
       thread =>

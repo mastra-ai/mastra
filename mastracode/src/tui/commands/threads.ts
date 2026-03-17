@@ -111,7 +111,9 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
       currentResourceId,
       currentProjectPath: state.projectInfo.rootPath,
       initialMessagePreviews: new Map(
-        [...state.threadPreviewCache.entries()].map(([threadId, cachedPreview]) => [threadId, cachedPreview.preview] as const),
+        [...state.threadPreviewCache.entries()].map(
+          ([threadId, cachedPreview]) => [threadId, cachedPreview.preview] as const,
+        ),
       ),
       initialAttemptedPreviewThreadIds: state.attemptedThreadPreviewIds,
       onMessagePreviewsLoaded: (previews, attemptedThreadIds) => {

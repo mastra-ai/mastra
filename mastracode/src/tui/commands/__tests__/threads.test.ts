@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HarnessThread } from '@mastra/core/harness';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleThreadsCommand } from '../threads.js';
 import type { SlashCommandContext } from '../types.js';
 
