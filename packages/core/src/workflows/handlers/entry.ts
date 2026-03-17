@@ -64,6 +64,7 @@ function buildResumedBlockResult(
       result = {
         status: 'failed',
         error: failedResult?.error ?? new Error('Workflow step failed after resume'),
+        tripwire: failedResult?.tripwire,
       };
     } else {
       const stillSuspended = entrySteps.find(s => s.type === 'step' && stepResults[s.step.id]?.status === 'suspended');
