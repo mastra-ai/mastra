@@ -28,6 +28,8 @@ export interface McpSelectorOptions {
   onReloadAll: () => Promise<{ statuses: McpServerStatus[]; skipped: McpSkippedServer[] }>;
   /** Callback to reconnect a single server by name — returns updated status */
   onReconnectServer: (name: string) => Promise<McpServerStatus>;
+  /** Get captured stderr logs for a server */
+  getServerLogs: (name: string) => string[];
   /** Show an info message in the chat area */
   showInfo: (msg: string) => void;
   /** Callback when selector is dismissed */
@@ -45,11 +47,13 @@ interface ServerAction {
 
 const CONNECTED_ACTIONS: ServerAction[] = [
   { label: 'View tools', key: 'tools' },
+  { label: 'View logs', key: 'logs' },
   { label: 'Reconnect', key: 'reconnect' },
 ];
 
 const FAILED_ACTIONS: ServerAction[] = [
   { label: 'View error', key: 'error' },
+  { label: 'View logs', key: 'logs' },
   { label: 'Reconnect', key: 'reconnect' },
 ];
 
@@ -69,6 +73,7 @@ export class McpSelectorComponent extends Box implements Focusable {
   private getStatusesCallback: McpSelectorOptions['getStatuses'];
   private onReloadAllCallback: McpSelectorOptions['onReloadAll'];
   private onReconnectServerCallback: McpSelectorOptions['onReconnectServer'];
+  private getServerLogsCallback: McpSelectorOptions['getServerLogs'];
   private showInfoCallback: McpSelectorOptions['showInfo'];
   private onCloseCallback: () => void;
   private tui: TUI;
@@ -103,6 +108,7 @@ export class McpSelectorComponent extends Box implements Focusable {
     this.getStatusesCallback = options.getStatuses;
     this.onReloadAllCallback = options.onReloadAll;
     this.onReconnectServerCallback = options.onReconnectServer;
+    this.getServerLogsCallback = options.getServerLogs;
     this.showInfoCallback = options.showInfo;
     this.onCloseCallback = options.onClose;
 
@@ -354,6 +360,11 @@ export class McpSelectorComponent extends Box implements Focusable {
         this.showError(status);
         break;
       }
+      case 'logs': {
+        this.subMenuOpen = false;
+        this.showLogs(status);
+        break;
+      }
       case 'reconnect': {
         this.subMenuOpen = false;
         this.doReconnectServer(status);
@@ -470,6 +481,42 @@ export class McpSelectorComponent extends Box implements Focusable {
     this.listContainer.addChild(new Text(theme.bold(`Error for ${status.name}`), 0, 0));
     this.listContainer.addChild(new Spacer(1));
     this.listContainer.addChild(new Text(theme.fg('error', status.error ?? 'Unknown error'), 0, 0));
+    this.listContainer.addChild(new Spacer(1));
+    this.listContainer.addChild(new Text(theme.fg('muted', 'Press Esc to go back'), 0, 0));
+
+    this._detailView = true;
+    this.tui.requestRender();
+  }
+
+  private showLogs(status: McpServerStatus): void {
+    this.listContainer.clear();
+
+    const logs = this.getServerLogsCallback(status.name);
+
+    this.listContainer.addChild(
+      new Text(theme.bold(`Logs for ${status.name}`) + theme.fg('muted', ` (${logs.length} lines)`), 0, 0),
+    );
+    this.listContainer.addChild(new Spacer(1));
+
+    if (logs.length === 0) {
+      const hint =
+        status.transport === 'http'
+          ? 'No logs available (HTTP servers do not produce stderr output)'
+          : 'No logs captured yet';
+      this.listContainer.addChild(new Text(theme.fg('muted', hint), 0, 0));
+    } else {
+      // Show last 50 lines to avoid overwhelming the overlay
+      const tail = logs.slice(-50);
+      if (logs.length > 50) {
+        this.listContainer.addChild(
+          new Text(theme.fg('muted', `  ... ${logs.length - 50} earlier lines omitted`), 0, 0),
+        );
+      }
+      for (const line of tail) {
+        this.listContainer.addChild(new Text(theme.fg('muted', `  ${line}`), 0, 0));
+      }
+    }
+
     this.listContainer.addChild(new Spacer(1));
     this.listContainer.addChild(new Text(theme.fg('muted', 'Press Esc to go back'), 0, 0));
 

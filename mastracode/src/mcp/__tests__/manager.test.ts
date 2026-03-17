@@ -84,7 +84,7 @@ describe('createMcpManager', () => {
       setupConfig({ mcpServers: { fs: stdioConfig } });
 
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsets = vi.fn().mockResolvedValue({ fs: { read: {} } });
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { fs: { read: {} } }, errors: {} });
         this.disconnect = vi.fn();
       } as any);
 
@@ -107,7 +107,7 @@ describe('createMcpManager', () => {
       setupConfig({ mcpServers: { remote: httpConfig } });
 
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsets = vi.fn().mockResolvedValue({ remote: { weather: {} } });
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { remote: { weather: {} } }, errors: {} });
         this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 
@@ -126,7 +126,7 @@ describe('createMcpManager', () => {
       setupConfig({ mcpServers: { remote: httpConfig } });
 
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsets = vi.fn().mockResolvedValue({ remote: {} });
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { remote: {} }, errors: {} });
         this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 
@@ -148,7 +148,7 @@ describe('createMcpManager', () => {
       });
 
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsets = vi.fn().mockResolvedValue({ fs: {}, remote: {} });
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { fs: {}, remote: {} }, errors: {} });
         this.disconnect = vi.fn();
       } as any);
 
@@ -168,7 +168,7 @@ describe('createMcpManager', () => {
       setupConfig({ mcpServers: { fs: { command: 'npx', args: ['-y', 'mcp-fs'] } } });
 
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsets = vi.fn().mockResolvedValue({ fs: { read: {} }, remote: { weather: {} } });
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { fs: { read: {} }, remote: { weather: {} } }, errors: {} });
         this.disconnect = vi.fn();
       } as any);
 
@@ -186,7 +186,7 @@ describe('createMcpManager', () => {
       setupConfig({ mcpServers: { myserver: { command: 'old-cmd' } } });
 
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsets = vi.fn().mockResolvedValue({ myserver: {} });
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { myserver: {} }, errors: {} });
         this.disconnect = vi.fn();
       } as any);
 
@@ -212,7 +212,7 @@ describe('createMcpManager', () => {
       setupConfig({ mcpServers: { fs: { command: 'npx' } } });
 
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsets = vi.fn().mockResolvedValue({ fs: { tool: {} }, extra: { tool: {} } });
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { fs: { tool: {} }, extra: { tool: {} } }, errors: {} });
         this.disconnect = vi.fn();
       } as any);
 
@@ -236,7 +236,7 @@ describe('createMcpManager', () => {
         skippedServers: [{ name: 'bad', reason: 'Invalid entry' }],
       });
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsets = vi.fn().mockResolvedValue({ fs: { read: {}, write: {} } });
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { fs: { read: {}, write: {} } }, errors: {} });
         this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 
@@ -253,7 +253,7 @@ describe('createMcpManager', () => {
     it('returns failed servers on connection error', async () => {
       setupConfig({ mcpServers: { remote: { url: 'https://example.com/mcp' } } });
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsets = vi.fn().mockRejectedValue(new Error('Connection failed'));
+        this.listToolsetsWithErrors = vi.fn().mockRejectedValue(new Error('Connection failed'));
         this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 
@@ -266,10 +266,9 @@ describe('createMcpManager', () => {
       expect(result.totalTools).toBe(0);
     });
 
-    it('detects failed servers via missing entries in listToolsets result', async () => {
-      // listToolsets() returns tools grouped by server name. Servers that fail
-      // to connect are silently skipped — they won't have an entry in the result.
-      // The manager uses this to detect which servers actually connected.
+    it('captures per-server errors from listToolsetsWithErrors', async () => {
+      // listToolsetsWithErrors() returns both toolsets and per-server errors.
+      // Failed servers appear in the errors record with their real error message.
       setupConfig({
         mcpServers: {
           good: { command: 'npx', args: ['good-server'] },
@@ -278,11 +277,16 @@ describe('createMcpManager', () => {
         },
       });
 
-      // listToolsets returns entries only for "good" and "alsogood" — "bad" is absent
+      // listToolsetsWithErrors returns tools for "good" and "alsogood", error for "bad"
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsets = vi.fn().mockResolvedValue({
-          good: { tool1: {}, tool2: {} },
-          alsogood: { tool1: {} },
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({
+          toolsets: {
+            good: { tool1: {}, tool2: {} },
+            alsogood: { tool1: {} },
+          },
+          errors: {
+            bad: 'Failed to connect to MCP server bad: spawn nonexistent ENOENT',
+          },
         });
         this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
@@ -290,12 +294,12 @@ describe('createMcpManager', () => {
       const manager = createMcpManager('/tmp/test');
       const result = await manager.initInBackground();
 
-      // good and alsogood connected; bad detected as failed
+      // good and alsogood connected; bad detected as failed with real error
       expect(result.connected).toHaveLength(2);
       expect(result.connected.map(s => s.name).sort()).toEqual(['alsogood', 'good']);
       expect(result.failed).toHaveLength(1);
       expect(result.failed[0]!.name).toBe('bad');
-      expect(result.failed[0]!.error).toBe('Failed to connect');
+      expect(result.failed[0]!.error).toBe('Failed to connect to MCP server bad: spawn nonexistent ENOENT');
       expect(result.totalTools).toBe(3);
 
       // Tools from successful servers should be available (namespaced)
@@ -307,9 +311,9 @@ describe('createMcpManager', () => {
 
     it('returns cached result if already initialized', async () => {
       setupConfig({ mcpServers: { fs: { command: 'npx' } } });
-      const mockListToolsets = vi.fn().mockResolvedValue({ fs: { read: {} } });
+      const mockListToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { fs: { read: {} } }, errors: {} });
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsets = mockListToolsets;
+        this.listToolsetsWithErrors = mockListToolsetsWithErrors;
         this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 
@@ -319,8 +323,8 @@ describe('createMcpManager', () => {
 
       expect(result.connected).toHaveLength(1);
       expect(result.totalTools).toBe(1);
-      // listToolsets should only have been called once (from init, not again from initInBackground)
-      expect(mockListToolsets).toHaveBeenCalledTimes(1);
+      // listToolsetsWithErrors should only have been called once (from init, not again from initInBackground)
+      expect(mockListToolsetsWithErrors).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -328,7 +332,7 @@ describe('createMcpManager', () => {
     it('sets transport to stdio for command-based servers', async () => {
       setupConfig({ mcpServers: { fs: { command: 'npx' } } });
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsets = vi.fn().mockResolvedValue({ fs: { tool: {} } });
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { fs: { tool: {} } }, errors: {} });
         this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 
@@ -343,7 +347,7 @@ describe('createMcpManager', () => {
     it('sets transport to http for url-based servers', async () => {
       setupConfig({ mcpServers: { remote: { url: 'https://example.com/mcp' } } });
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsets = vi.fn().mockResolvedValue({ remote: { tool: {} } });
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { remote: { tool: {} } }, errors: {} });
         this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 
@@ -366,7 +370,7 @@ describe('createMcpManager', () => {
       });
       const mockDisconnect = vi.fn().mockResolvedValue(undefined);
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsets = vi.fn().mockResolvedValue({ fs: {}, remote: {} });
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { fs: {}, remote: {} }, errors: {} });
         this.disconnect = mockDisconnect;
       } as any);
 
@@ -381,7 +385,7 @@ describe('createMcpManager', () => {
     it('ignores disconnect errors gracefully', async () => {
       setupConfig({ mcpServers: { fs: { command: 'npx' } } });
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsets = vi.fn().mockResolvedValue({ fs: { tool: {} } });
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { fs: { tool: {} } }, errors: {} });
         this.disconnect = vi.fn().mockRejectedValue(new Error('Disconnect error'));
       } as any);
 
@@ -396,7 +400,7 @@ describe('createMcpManager', () => {
     it('disconnects old clients, reloads config, and reconnects', async () => {
       setupConfig({ mcpServers: { fs: { command: 'npx' } } });
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsets = vi.fn().mockResolvedValue({ fs: { tool: {} } });
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { fs: { tool: {} } }, errors: {} });
         this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 

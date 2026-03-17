@@ -76,6 +76,9 @@ export async function handleMcpCommand(ctx: SlashCommandContext, args: string[])
     onReconnectServer: async (name: string) => {
       return mm.reconnectServer(name);
     },
+    getServerLogs: (name: string) => {
+      return mm.getServerLogs(name);
+    },
     showInfo: (msg: string) => {
       showInfo(ctx.state, msg);
     },

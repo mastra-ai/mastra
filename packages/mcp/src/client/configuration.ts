@@ -1,3 +1,4 @@
+import type { Stream } from 'node:stream';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { Tool } from '@mastra/core/tools';
@@ -805,8 +806,33 @@ To fix this you have three different options:
    * ```
    */
   public async listToolsets(): Promise<Record<string, Record<string, Tool<any, any, any, any>>>> {
+    const result = await this.listToolsetsWithErrors();
+    return result.toolsets;
+  }
+
+  /**
+   * Returns toolsets organized by server name, along with any per-server errors.
+   *
+   * Like listToolsets(), but also returns errors for servers that failed to connect
+   * or list tools. This allows callers to report specific failure reasons per server.
+   *
+   * @returns Object with `toolsets` (successful servers) and `errors` (failed servers with error messages).
+   *
+   * @example
+   * ```typescript
+   * const { toolsets, errors } = await mcp.listToolsetsWithErrors();
+   * for (const [name, err] of Object.entries(errors)) {
+   *   console.error(`Server ${name} failed: ${err}`);
+   * }
+   * ```
+   */
+  public async listToolsetsWithErrors(): Promise<{
+    toolsets: Record<string, Record<string, Tool<any, any, any, any>>>;
+    errors: Record<string, string>;
+  }> {
     this.addToInstanceCache();
     const connectedToolsets: Record<string, Record<string, Tool<any, any, any, any>>> = {};
+    const errors: Record<string, string> = {};
 
     for (const serverName of Object.keys(this.serverConfigs)) {
       try {
@@ -829,10 +855,11 @@ To fix this you have three different options:
         );
         this.logger.trackException(mastraError);
         this.logger.error('Failed to list toolsets from server:', { error: mastraError.toString() });
+        errors[serverName] = error instanceof Error ? error.message : String(error);
       }
     }
 
-    return connectedToolsets;
+    return { toolsets: connectedToolsets, errors };
   }
 
   /**
@@ -858,6 +885,21 @@ To fix this you have three different options:
       }
     }
     return sessionIds;
+  }
+
+  /**
+   * Gets the stderr stream of a connected stdio server.
+   *
+   * Only available for servers using stdio transport with `stderr: 'pipe'`.
+   * Returns null if the server is not connected, not using stdio, or stderr is not piped.
+   *
+   * @param serverName - The name of the server
+   * @returns The stderr stream, or null
+   */
+  public getServerStderr(serverName: string): Stream | null {
+    const client = this.mcpClientsById.get(serverName);
+    if (!client) return null;
+    return client.stderr;
   }
 
   private async getConnectedClient(name: string, config: MastraMCPServerDefinition): Promise<InternalMastraMCPClient> {

@@ -40,6 +40,8 @@ export interface McpManager {
   getConfigPaths(): { project: string; global: string; claude: string };
   /** Get the merged config. */
   getConfig(): McpConfig;
+  /** Get captured stderr logs for a server. */
+  getServerLogs(name: string): string[];
 }
 
 function getTransport(cfg: McpServerConfig): 'stdio' | 'http' {
@@ -61,7 +63,36 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
   let client: MCPClient | null = null;
   let tools: Record<string, any> = {};
   let serverStatuses = new Map<string, McpServerStatus>();
+  let stderrLogs = new Map<string, string[]>();
   let initialized = false;
+
+  const MAX_STDERR_LINES = 200;
+
+  /** Hook into a server's stderr stream and buffer its output. */
+  function captureStderr(serverName: string): void {
+    if (!client || typeof client.getServerStderr !== 'function') return;
+    const stream = client.getServerStderr(serverName);
+    if (!stream) return;
+
+    let buffer = '';
+    const lines = stderrLogs.get(serverName) ?? [];
+    stderrLogs.set(serverName, lines);
+
+    stream.on('data', (chunk: Buffer) => {
+      buffer += chunk.toString();
+      const parts = buffer.split('\n');
+      // Last element is incomplete line (or empty if ended with \n)
+      buffer = parts.pop()!;
+      for (const line of parts) {
+        if (line.trim()) {
+          lines.push(line);
+          if (lines.length > MAX_STDERR_LINES) {
+            lines.shift();
+          }
+        }
+      }
+    });
+  }
 
   function buildServerDefs(servers: Record<string, McpServerConfig>): Record<string, MastraMCPServerDefinition> {
     const defs: Record<string, MastraMCPServerDefinition> = {};
@@ -103,12 +134,11 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
       servers: buildServerDefs(servers),
     });
 
-    // Use listToolsets() to get tools grouped by server name.
-    // Servers that fail to connect are silently skipped (no entry in result),
-    // letting us detect which servers actually connected vs which failed.
+    // Use listToolsetsWithErrors() to get tools grouped by server name,
+    // plus per-server error messages for servers that failed to connect.
 
     try {
-      const toolsets = await client.listToolsets();
+      const { toolsets, errors } = await client.listToolsetsWithErrors();
 
       // Flatten toolsets into the namespaced tools map (serverName_toolName)
       for (const [serverName, serverTools] of Object.entries(toolsets)) {
@@ -129,16 +159,21 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
             transport: getTransport(servers[name]!),
           });
         } else {
-          // Server was silently skipped by MCPClient — connection failed
+          // Server failed — use the real error from listToolsetsWithErrors()
           serverStatuses.set(name, {
             name,
             connected: false,
             toolCount: 0,
             toolNames: [],
             transport: getTransport(servers[name]!),
-            error: 'Failed to connect',
+            error: errors[name] ?? 'Failed to connect',
           });
         }
+      }
+
+      // Capture stderr from all stdio servers (connected or failed)
+      for (const name of serverNames) {
+        captureStderr(name);
       }
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
@@ -192,6 +227,7 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
       config = applyExtraServers(loadMcpConfig(projectDir));
       tools = {};
       serverStatuses = new Map();
+      stderrLogs = new Map();
       initialized = false;
       await connectAndCollectTools();
       initialized = true;
@@ -231,7 +267,8 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
         }
       }
 
-      // Mark as connecting
+      // Clear old logs and mark as connecting
+      stderrLogs.delete(name);
       serverStatuses.set(name, {
         name,
         connected: false,
@@ -244,6 +281,9 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
       try {
         // Use MCPClient's per-server reconnect
         await client.reconnectServer(name);
+
+        // Recapture stderr for the reconnected server
+        captureStderr(name);
 
         // Fetch updated toolsets to get this server's tools
         const toolsets = await client.listToolsets();
@@ -320,6 +360,10 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
 
     getConfig() {
       return config;
+    },
+
+    getServerLogs(name: string) {
+      return [...(stderrLogs.get(name) ?? [])];
     },
   };
 }
