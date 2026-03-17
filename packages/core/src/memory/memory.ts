@@ -653,6 +653,10 @@ https://mastra.ai/en/docs/memory/overview`,
               'version' in effectiveConfig.workingMemory &&
               effectiveConfig.workingMemory.version === 'vnext',
             templateProvider: this,
+            toolInstruction:
+              typeof effectiveConfig.workingMemory === 'object'
+                ? effectiveConfig.workingMemory.toolInstruction
+                : undefined,
           }),
         );
       }

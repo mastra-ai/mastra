@@ -173,12 +173,9 @@ export class WorkingMemory implements Processor {
   }): string {
     if (toolInstruction) {
       return `${toolInstruction}
-
 <working_memory_data>
 ${data}
 </working_memory_data>`;
-
-      return `${toolInstruction}\n<working_memory_data>\n${data}\n</working_memory_data>`;
     }
     const emptyWorkingMemoryTemplateObject =
       template.format === 'json' ? this.generateEmptyFromSchemaInternal(template.content) : null;
