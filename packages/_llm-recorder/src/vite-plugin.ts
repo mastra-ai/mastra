@@ -112,15 +112,19 @@ function matchesPattern(filepath: string, patterns: string[]): boolean {
     if (pattern.length > 500) return false;
 
     try {
+      const GLOBSTAR_DIR = '__GLOBSTAR_DIR__';
+      const GLOBSTAR = '__GLOBSTAR__';
       const regex = pattern
         // Escape regex-special chars except * and /
         .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
         // Replace **/ with a globstar that matches zero or more path segments (including the /)
-        .replace(/\*\*\//g, '(?:.*/)?')
+        .replace(/\*\*\//g, GLOBSTAR_DIR)
         // Replace remaining ** (at end of pattern) with match-all
-        .replace(/\*\*/g, '.*')
+        .replace(/\*\*/g, GLOBSTAR)
         // Replace single * with segment matcher (no path separators)
-        .replace(/\*/g, '[^/]*');
+        .replace(/\*/g, '[^/]*')
+        .replaceAll(GLOBSTAR_DIR, '(?:.*/)?')
+        .replaceAll(GLOBSTAR, '.*');
       // If pattern starts with **, allow matching anywhere in path (after / or at start)
       // This lets **/*.test.ts match absolute paths like /Users/.../foo.test.ts
       const startsWithGlobstar = pattern.startsWith('**/');

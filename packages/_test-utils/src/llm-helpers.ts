@@ -277,17 +277,31 @@ export function hasApiKey(provider: keyof ProviderApiKeys): boolean {
  * Returns false if the key is a dummy key set by setupDummyApiKeys.
  */
 export function hasRealApiKey(provider: keyof ProviderApiKeys): boolean {
-  const envVars: Record<keyof ProviderApiKeys, string> = {
-    openai: 'OPENAI_API_KEY',
-    anthropic: 'ANTHROPIC_API_KEY',
-    google: 'GOOGLE_API_KEY',
-    openrouter: 'OPENROUTER_API_KEY',
+  // Some providers have multiple possible env var names
+  const envVars: Record<keyof ProviderApiKeys, string[]> = {
+    openai: ['OPENAI_API_KEY'],
+    anthropic: ['ANTHROPIC_API_KEY'],
+    google: ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY'],
+    openrouter: ['OPENROUTER_API_KEY'],
   };
-  const key = process.env[envVars[provider]]?.trim();
-  if (!key) return false;
-  // Check if it's a dummy key
-  return !key.includes('-dummy-') && !key.includes('dummy-');
+
+  const possibleKeys = envVars[provider];
+  for (const envVar of possibleKeys) {
+    const key = process.env[envVar]?.trim();
+    if (key && !key.includes('-dummy-') && !key.includes('dummy-')) {
+      return true;
+    }
+  }
+  return false;
 }
+
+// Map providers to their API URL domains
+const PROVIDER_URL_PATTERNS: Record<keyof ProviderApiKeys, string[]> = {
+  openai: ['api.openai.com'],
+  anthropic: ['api.anthropic.com'],
+  google: ['generativelanguage.googleapis.com'],
+  openrouter: ['openrouter.ai'],
+};
 
 /**
  * Check if non-empty recordings exist for a test file.
@@ -297,9 +311,14 @@ export function hasRealApiKey(provider: keyof ProviderApiKeys): boolean {
  *
  * @param recordingName - The recording name (typically derived from test file path)
  * @param recordingsDir - Optional recordings directory (defaults to `__recordings__` in cwd)
- * @returns true if recordings exist and are non-empty
+ * @param provider - Optional provider to check for (if specified, only counts recordings for that provider)
+ * @returns true if recordings exist and are non-empty (optionally for the specified provider)
  */
-export function hasNonEmptyRecordings(recordingName: string, recordingsDir?: string): boolean {
+export function hasNonEmptyRecordings(
+  recordingName: string,
+  recordingsDir?: string,
+  provider?: keyof ProviderApiKeys,
+): boolean {
   const dir = recordingsDir || path.join(process.cwd(), '__recordings__');
   const recordingPath = path.join(dir, `${recordingName}.json`);
 
@@ -309,7 +328,17 @@ export function hasNonEmptyRecordings(recordingName: string, recordingsDir?: str
     const content = fs.readFileSync(recordingPath, 'utf-8');
     const parsed = JSON.parse(content);
     // Recording is an array of request/response pairs
-    return Array.isArray(parsed) && parsed.length > 0;
+    if (!Array.isArray(parsed) || parsed.length === 0) return false;
+
+    // If no provider specified, just check if any recordings exist
+    if (!provider) return true;
+
+    // Check if any recordings match the provider's URL patterns
+    const patterns = PROVIDER_URL_PATTERNS[provider];
+    return parsed.some(
+      (entry: { request?: { url?: string } }) =>
+        entry.request?.url && patterns.some(pattern => entry.request!.url!.includes(pattern)),
+    );
   } catch {
     return false;
   }
@@ -352,10 +381,10 @@ export function shouldSkipLLMTest(mode: string, provider: keyof ProviderApiKeys,
   // In explicit replay mode, don't skip - let it fail if no recording
   if (mode === 'replay') return false;
 
-  // In auto mode, check if recordings exist
+  // In auto mode, check if recordings exist for this provider
   if (mode === 'auto' && recordingName) {
-    // If recordings exist, don't skip - the recorder will replay them
-    if (hasNonEmptyRecordings(recordingName)) return false;
+    // If recordings exist for this provider, don't skip - the recorder will replay them
+    if (hasNonEmptyRecordings(recordingName, undefined, provider)) return false;
   }
 
   // For all other cases (live, record, update, or auto without recordings), skip

@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [
     llmRecorderPlugin({
       transformRequest: {
-        importPath: './src/transform-request',
+        importPath: './transform-request',
         exportName: 'transformRequest',
       },
     }) as any,
