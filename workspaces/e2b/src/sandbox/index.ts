@@ -29,6 +29,7 @@ import { createDefaultMountableTemplate } from '../utils/template';
 import type { TemplateSpec } from '../utils/template';
 import { mountS3, mountGCS, LOG_PREFIX } from './mounts';
 import type { E2BMountConfig, E2BS3MountConfig, E2BGCSMountConfig, MountContext } from './mounts';
+import { E2BFilesystem } from '../filesystem';
 import { E2BProcessManager } from './process-manager';
 
 /** Allowlist pattern for mount paths — absolute path with safe characters only. */
@@ -152,6 +153,7 @@ export class E2BSandbox extends MastraSandbox {
 
   private _sandbox: Sandbox | null = null;
   private _createdAt: Date | null = null;
+  private _filesystem: E2BFilesystem | null = null;
   private _isRetrying = false;
   private readonly timeout: number;
   private readonly templateSpec?: TemplateSpec;
@@ -222,6 +224,35 @@ export class E2BSandbox extends MastraSandbox {
       throw new SandboxNotReadyError(this.id);
     }
     return this._sandbox;
+  }
+
+  /**
+   * Get a singleton E2BFilesystem instance backed by this sandbox.
+   *
+   * The filesystem is lazily created on first access and reused for
+   * subsequent calls. It is automatically destroyed when the sandbox
+   * is destroyed.
+   *
+   * @throws {SandboxNotReadyError} If the sandbox has not been started
+   *
+   * @example
+   * ```typescript
+   * const sandbox = new E2BSandbox({ template: 'my-template' });
+   * await sandbox._init();
+   *
+   * const fs = sandbox.filesystem;
+   * await fs._init();
+   * const content = await fs.readFile('/tmp/test.txt', { encoding: 'utf-8' });
+   * ```
+   */
+  get filesystem(): E2BFilesystem {
+    if (!this._sandbox) {
+      throw new SandboxNotReadyError(this.id);
+    }
+    if (!this._filesystem) {
+      this._filesystem = new E2BFilesystem({ sandbox: this });
+    }
+    return this._filesystem;
   }
 
   // ---------------------------------------------------------------------------
@@ -360,6 +391,16 @@ export class E2BSandbox extends MastraSandbox {
         } catch {
           // Ignore errors during cleanup
         }
+      }
+
+      // Destroy the singleton filesystem
+      if (this._filesystem) {
+        try {
+          await this._filesystem._destroy();
+        } catch {
+          // Ignore errors during cleanup
+        }
+        this._filesystem = null;
       }
 
       try {
