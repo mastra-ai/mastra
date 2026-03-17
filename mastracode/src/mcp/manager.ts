@@ -1,9 +1,6 @@
 /**
  * MCP manager — orchestrates MCP server connections using MCPClient directly.
  * Created once at startup, provides tools from connected MCP servers.
- *
- * Each server gets its own MCPClient instance for independent lifecycle management.
- * A single server failure does not affect the others.
  */
 
 import { MCPClient } from '@mastra/mcp';
@@ -47,23 +44,9 @@ function getTransport(cfg: McpServerConfig): 'stdio' | 'http' {
   return 'url' in cfg ? 'http' : 'stdio';
 }
 
-function buildServerDef(cfg: McpServerConfig): MastraMCPServerDefinition {
-  if ('url' in cfg) {
-    const httpCfg = cfg as McpHttpServerConfig;
-    return {
-      url: new URL(httpCfg.url),
-      requestInit: httpCfg.headers ? { headers: httpCfg.headers } : undefined,
-    };
-  }
-  return { command: cfg.command, args: cfg.args, env: cfg.env, stderr: 'pipe' };
-}
-
 /**
  * Create an MCP manager that wraps MCPClient with config-file discovery
  * and per-server status tracking.
- *
- * Each server gets its own MCPClient instance so that a failure in one
- * server does not block or take down the others.
  */
 export function createMcpManager(projectDir: string, extraServers?: Record<string, McpServerConfig>): McpManager {
   /** Merge programmatic servers into a base config (highest priority). */
@@ -73,91 +56,82 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
   };
 
   let config = applyExtraServers(loadMcpConfig(projectDir));
-  /** One MCPClient per server, keyed by server name. */
-  let clients = new Map<string, MCPClient>();
+  let client: MCPClient | null = null;
   let tools: Record<string, any> = {};
   let serverStatuses = new Map<string, McpServerStatus>();
   let initialized = false;
 
-  /** Connect a single server independently. Returns its tools on success. */
-  async function connectServer(
-    name: string,
-    cfg: McpServerConfig,
-  ): Promise<{ name: string; tools: Record<string, any> } | { name: string; error: string }> {
-    const client = new MCPClient({
-      id: `mastra-code-mcp-${name}`,
-      servers: { [name]: buildServerDef(cfg) },
-    });
-    clients.set(name, client);
-
-    try {
-      const serverTools = await client.listTools();
-      return { name, tools: serverTools };
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      return { name, error: errMsg };
+  function buildServerDefs(servers: Record<string, McpServerConfig>): Record<string, MastraMCPServerDefinition> {
+    const defs: Record<string, MastraMCPServerDefinition> = {};
+    for (const [name, cfg] of Object.entries(servers)) {
+      if ('url' in cfg) {
+        const httpCfg = cfg as McpHttpServerConfig;
+        defs[name] = {
+          url: new URL(httpCfg.url),
+          requestInit: httpCfg.headers ? { headers: httpCfg.headers } : undefined,
+        };
+      } else {
+        defs[name] = { command: cfg.command, args: cfg.args, env: cfg.env, stderr: 'pipe' };
+      }
     }
+    return defs;
   }
 
-  /** Connect all configured servers independently using Promise.allSettled. */
   async function connectAndCollectTools(): Promise<void> {
     const servers = config.mcpServers;
     if (!servers || Object.keys(servers).length === 0) {
       return;
     }
 
-    const results = await Promise.allSettled(
-      Object.entries(servers).map(([name, cfg]) => connectServer(name, cfg)),
-    );
+    client = new MCPClient({
+      id: 'mastra-code-mcp',
+      servers: buildServerDefs(servers),
+    });
 
-    for (const result of results) {
-      if (result.status === 'rejected') {
-        // Unexpected — connectServer already catches errors internally.
-        continue;
-      }
+    // MCPClient.listTools() iterates servers individually with per-server
+    // try/catch — failed servers are logged and skipped internally.
+    // We derive per-server status from tool name prefixes (serverName_toolName).
+    const serverNames = Object.keys(servers);
 
-      const value = result.value;
-      if ('error' in value) {
-        serverStatuses.set(value.name, {
-          name: value.name,
-          connected: false,
-          toolCount: 0,
-          toolNames: [],
-          transport: getTransport(servers[value.name]!),
-          error: value.error,
-        });
-      } else {
-        const serverToolNames = Object.keys(value.tools);
-        Object.assign(tools, value.tools);
-        serverStatuses.set(value.name, {
-          name: value.name,
+    try {
+      tools = await client.listTools();
+
+      for (const name of serverNames) {
+        const prefix = `${name}_`;
+        const serverToolNames = Object.keys(tools).filter(t => t.startsWith(prefix));
+        serverStatuses.set(name, {
+          name,
           connected: true,
           toolCount: serverToolNames.length,
           toolNames: serverToolNames,
-          transport: getTransport(servers[value.name]!),
+          transport: getTransport(servers[name]!),
+        });
+      }
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+
+      for (const name of serverNames) {
+        serverStatuses.set(name, {
+          name,
+          connected: false,
+          toolCount: 0,
+          toolNames: [],
+          transport: getTransport(servers[name]!),
+          error: errMsg,
         });
       }
     }
   }
 
-  async function disconnectAll(): Promise<void> {
-    const disconnectPromises = Array.from(clients.values()).map(client =>
-      client.disconnect().catch(() => {}),
-    );
-    await Promise.allSettled(disconnectPromises);
-    clients.clear();
-  }
-
-  function buildInitResult(): McpInitResult {
-    const statuses = Array.from(serverStatuses.values());
-    const connected = statuses.filter(s => s.connected);
-    const failed = statuses.filter(s => !s.connected);
-    return {
-      connected,
-      failed,
-      skipped: [...(config.skippedServers ?? [])],
-      totalTools: connected.reduce((sum, s) => sum + s.toolCount, 0),
-    };
+  async function disconnect(): Promise<void> {
+    if (client) {
+      try {
+        await client.disconnect();
+      } catch {
+        // Ignore disconnect errors
+      }
+      client = null;
+    }
   }
 
   return {
@@ -168,16 +142,20 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
     },
 
     async initInBackground(): Promise<McpInitResult> {
-      if (initialized) {
-        return buildInitResult();
-      }
-      await connectAndCollectTools();
-      initialized = true;
-      return buildInitResult();
+      await this.init();
+      const statuses = Array.from(serverStatuses.values());
+      const connected = statuses.filter(s => s.connected);
+      const failed = statuses.filter(s => !s.connected);
+      return {
+        connected,
+        failed,
+        skipped: [...(config.skippedServers ?? [])],
+        totalTools: connected.reduce((sum, s) => sum + s.toolCount, 0),
+      };
     },
 
     async reload() {
-      await disconnectAll();
+      await disconnect();
       config = applyExtraServers(loadMcpConfig(projectDir));
       tools = {};
       serverStatuses = new Map();
@@ -186,7 +164,7 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
       initialized = true;
     },
 
-    disconnect: disconnectAll,
+    disconnect,
 
     getTools() {
       return { ...tools };
