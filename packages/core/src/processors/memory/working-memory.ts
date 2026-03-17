@@ -74,7 +74,6 @@ export class WorkingMemory implements Processor {
       templateProvider?: {
         getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfigInternal }): Promise<WorkingMemoryTemplate | null>;
       };
-      toolInstruction?: string;
       logger?: IMastraLogger;
     },
   ) {
