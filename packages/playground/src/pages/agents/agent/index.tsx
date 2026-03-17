@@ -44,12 +44,11 @@ function Agent() {
   } = useThreads({ agentId: agentId!, isMemoryEnabled: hasMemory, resourceId: agentId! });
 
   useEffect(() => {
-    if (!hasMemory) return;
     if (threadId) return;
 
-    // After redirects on /agents/:agentId
+    // Normalize /agents/:agentId to /agents/:agentId/chat/new
     void navigate(`/agents/${agentId}/chat/new`);
-  }, [hasMemory, threadId, agentId, navigate]);
+  }, [threadId, agentId, navigate]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
 
@@ -100,6 +99,10 @@ function Agent() {
 
   if (!agent) {
     return <div className="text-center py-4">Agent not found</div>;
+  }
+
+  if (!threadId) {
+    return null;
   }
 
   const actualThreadId = isNewThread ? newThreadId : threadId;

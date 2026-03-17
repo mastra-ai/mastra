@@ -1,5 +1,46 @@
 # mastracode
 
+## 0.9.0-alpha.2
+
+### Minor Changes
+
+- Improved MCP server management with interactive `/mcp` selector UI. ([#14377](https://github.com/mastra-ai/mastra/pull/14377))
+  - **Fixed stderr flooding** — MCP child process debug output no longer corrupts the terminal. Server stderr is piped and buffered instead of inherited.
+  - **Fixed console.info race condition** — MCP status messages now display properly in the chat area instead of racing with TUI rendering.
+  - **Better error detection** — Failed MCP servers now correctly show as failed instead of showing as connected with 0 tools.
+  - **Interactive `/mcp` command** — Replaces text-only output with a navigable overlay (↑↓ to select, Enter for actions, Esc to close). Sub-menus offer View tools, View error, View logs, and Reconnect per server.
+  - **Per-server reconnect** — Reconnect individual servers from the `/mcp` selector without restarting all connections.
+  - **Live status polling** — The `/mcp` selector auto-refreshes while servers are still connecting.
+  - **Connecting state** — Servers show as 'connecting...' during initial startup, visible via `/mcp`.
+
+  **Example**
+
+  ```text
+  /mcp
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`b92d0c9`](https://github.com/mastra-ai/mastra/commit/b92d0c92ecc833bec9a99af98b3243839c1661be), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f), [`133ef20`](https://github.com/mastra-ai/mastra/commit/133ef20c39c696eb0dbbee26e77c8acfec14b8c6), [`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e)]:
+  - @mastra/core@1.14.0-alpha.2
+  - @mastra/pg@1.8.1-alpha.0
+  - @mastra/libsql@1.7.1-alpha.0
+  - @mastra/memory@1.8.3-alpha.1
+  - @mastra/mcp@1.3.0-alpha.1
+
+## 0.9.0-alpha.1
+
+### Minor Changes
+
+- Added adaptive light and dark terminal themes with WCAG-compliant contrast. Editor input, messages, tool output, and interactive components now automatically adjust colors and borders for readability across terminal backgrounds. ([#14337](https://github.com/mastra-ai/mastra/pull/14337))
+
+### Patch Changes
+
+- Fix rendering corruption in some terminal emulators by replacing the per-character gradient animation on the editor input border with a solid mode-color border. ([#14359](https://github.com/mastra-ai/mastra/pull/14359))
+
+- Updated dependencies [[`b77aa19`](https://github.com/mastra-ai/mastra/commit/b77aa1981361c021f2c881bee8f0c703687f00da), [`dd6ca1c`](https://github.com/mastra-ai/mastra/commit/dd6ca1cdea3b8b6182f4cf61df41070ba0cc0deb), [`4cb4edf`](https://github.com/mastra-ai/mastra/commit/4cb4edf3c909d197ec356c1790d13270514ffef6)]:
+  - @mastra/core@1.13.3-alpha.1
+
 ## 0.9.0-alpha.0
 
 ### Minor Changes

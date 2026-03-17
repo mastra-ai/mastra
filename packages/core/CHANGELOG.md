@@ -1,5 +1,27 @@
 # @mastra/core
 
+## 1.14.0-alpha.2
+
+### Patch Changes
+
+- Added dated message boundary delimiters when activating buffered observations for improved cache stability. ([#14367](https://github.com/mastra-ai/mastra/pull/14367))
+
+- Fixed provider-executed tool calls (e.g. Anthropic `web_search`) being dropped or incorrectly persisted when deferred by the provider. Tool call parts are now persisted in stream order, and deferred tool results are correctly merged back into the originating message. ([#14282](https://github.com/mastra-ai/mastra/pull/14282))
+
+- Added client/server body schemas for feedback and scores that omit the timestamp field, allowing it to be set server-side ([#14270](https://github.com/mastra-ai/mastra/pull/14270))
+
+## 1.13.3-alpha.1
+
+### Patch Changes
+
+- Fix `generateEmptyFromSchema` to accept both string and pre-parsed object JSON schema inputs, recursively initialize nested object properties, and respect default values. Updated `WorkingMemoryTemplate` type to a discriminated union supporting `Record<string, unknown>` content for JSON format templates. Removed duplicate private schema generator in the working-memory processor in favor of the shared utility. ([#14310](https://github.com/mastra-ai/mastra/pull/14310))
+
+- `@mastra/core`: patch ([#14327](https://github.com/mastra-ai/mastra/pull/14327))
+
+  Added `spanId` alongside `traceId` across user-facing execution results that return tracing identifiers (including agent stream/generate and workflow run results) so integrations can query observability vendors by run root span ID
+
+- Fixed workspace search being wiped when skills refresh. Previously, calling `skills.refresh()` or triggering a skills re-discovery via `maybeRefresh()` would clear the entire BM25 search index, including auto-indexed workspace content. Now only skill entries are removed from the index during refresh, preserving workspace search results. ([#14287](https://github.com/mastra-ai/mastra/pull/14287))
+
 ## 1.13.3-alpha.0
 
 ### Patch Changes
