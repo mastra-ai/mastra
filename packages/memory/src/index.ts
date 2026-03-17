@@ -1468,35 +1468,40 @@ Notes:
    * @returns Promise that resolves when all messages are deleted
    */
   public async deleteMessages(input: MessageDeleteInput, tracingContext?: TracingContext): Promise<void> {
-    const span = this.createMemorySpan('delete', tracingContext, { input });
+    // Normalize input to messageIds before creating span to avoid leaking full message objects into traces
+    let messageIds: string[];
+
+    if (!Array.isArray(input)) {
+      throw new Error('Invalid input: must be an array of message IDs or message objects');
+    }
+
+    if (input.length === 0) {
+      return;
+    }
+
+    messageIds = input.map(item => {
+      if (typeof item === 'string') {
+        return item;
+      } else if (item && typeof item === 'object' && 'id' in item) {
+        return item.id;
+      } else {
+        throw new Error('Invalid input: array items must be strings or objects with an id property');
+      }
+    });
+
+    const invalidIds = messageIds.filter(id => !id || typeof id !== 'string');
+    if (invalidIds.length > 0) {
+      throw new Error('All message IDs must be non-empty strings');
+    }
+
+    const span = this.createMemorySpan(
+      'delete',
+      tracingContext,
+      { messageCount: messageIds.length },
+      { messageCount: messageIds.length },
+    );
 
     try {
-      let messageIds: string[];
-
-      if (!Array.isArray(input)) {
-        throw new Error('Invalid input: must be an array of message IDs or message objects');
-      }
-
-      if (input.length === 0) {
-        span?.end({ attributes: { success: true, messageCount: 0 } });
-        return;
-      }
-
-      messageIds = input.map(item => {
-        if (typeof item === 'string') {
-          return item;
-        } else if (item && typeof item === 'object' && 'id' in item) {
-          return item.id;
-        } else {
-          throw new Error('Invalid input: array items must be strings or objects with an id property');
-        }
-      });
-
-      const invalidIds = messageIds.filter(id => !id || typeof id !== 'string');
-      if (invalidIds.length > 0) {
-        throw new Error('All message IDs must be non-empty strings');
-      }
-
       const memoryStore = await this.getMemoryStore();
 
       await memoryStore.deleteMessages(messageIds);
