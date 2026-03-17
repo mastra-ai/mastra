@@ -5,6 +5,9 @@
  * These helpers reduce boilerplate across test files.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+
 /**
  * Model configuration type from @mastra/core/llm
  * Re-declared here to avoid circular dependencies
@@ -297,8 +300,6 @@ export function hasRealApiKey(provider: keyof ProviderApiKeys): boolean {
  * @returns true if recordings exist and are non-empty
  */
 export function hasNonEmptyRecordings(recordingName: string, recordingsDir?: string): boolean {
-  const fs = require('fs');
-  const path = require('path');
   const dir = recordingsDir || path.join(process.cwd(), '__recordings__');
   const recordingPath = path.join(dir, `${recordingName}.json`);
 
