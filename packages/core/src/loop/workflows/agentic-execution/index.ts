@@ -89,7 +89,7 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
         // VNext execution as internal
         internal: InternalSpans.WORKFLOW,
       },
-      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended' || workflowStatus === 'success',
       validateInputs: false,
     },
   })
