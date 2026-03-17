@@ -1,4 +1,4 @@
-import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL } from '../auth/client.js';
+import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL, throwApiError } from '../auth/client.js';
 
 export interface Project {
   id: string;
@@ -23,7 +23,7 @@ export async function fetchProjects(token: string, orgId: string): Promise<Proje
   const { data, error, response } = await client.GET('/v1/studio/projects');
 
   if (error) {
-    throw new Error(`Failed to fetch projects: ${response.status}`);
+    throwApiError('Failed to fetch projects', response.status);
   }
 
   return data.projects;
@@ -36,7 +36,7 @@ export async function createProject(token: string, orgId: string, name: string):
   });
 
   if (error) {
-    throw new Error(`Failed to create project: ${response.status} — ${error.error}`);
+    throwApiError(`Failed to create project — ${error.error}`, response.status);
   }
 
   return data.project;
@@ -58,7 +58,7 @@ export async function fetchDeployStatus(deployId: string, token: string, orgId?:
   });
 
   if (error) {
-    throw new Error(`Failed to fetch deploy status: ${response.status}`);
+    throwApiError('Failed to fetch deploy status', response.status);
   }
 
   return data.deploy;
@@ -86,8 +86,7 @@ export async function uploadDeploy(
     body: JSON.stringify({ envVars: meta?.envVars }),
   });
   if (!createResp.ok) {
-    const text = await createResp.text();
-    throw new Error(`Deploy failed: ${createResp.status} ${createResp.statusText} — ${text}`);
+    throwApiError('Deploy failed', createResp.status);
   }
   const { deploy } = (await createResp.json()) as {
     deploy: { id: string; status: string; uploadUrl: string };
@@ -116,8 +115,7 @@ export async function uploadDeploy(
     headers: authHeaders(token, orgId),
   });
   if (!completeResp.ok) {
-    const text = await completeResp.text();
-    throw new Error(`Upload confirmation failed: ${completeResp.status} — ${text}`);
+    throwApiError('Upload confirmation failed', completeResp.status);
   }
 
   return deploy;
@@ -177,12 +175,12 @@ export async function pollDeploy(
 
   try {
     while (Date.now() - start < maxWaitMs) {
-      const { data, error } = await client.GET('/v1/studio/deploys/{id}', {
+      const { data, error, response } = await client.GET('/v1/studio/deploys/{id}', {
         params: { path: { id: deployId } },
       });
 
       if (error) {
-        throw new Error(`Poll failed: ${JSON.stringify(error)}`);
+        throwApiError('Poll failed', response.status);
       }
 
       const { deploy } = data;

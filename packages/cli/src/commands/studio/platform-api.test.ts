@@ -3,18 +3,22 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 const mockGET = vi.fn();
 const mockPOST = vi.fn();
 
-vi.mock('../auth/client.js', () => ({
-  MASTRA_PLATFORM_API_URL: 'http://localhost:9999',
-  createApiClient: vi.fn(() => ({
-    GET: mockGET,
-    POST: mockPOST,
-  })),
-  authHeaders: vi.fn((token: string, orgId?: string) => {
-    const h: Record<string, string> = { Authorization: `Bearer ${token}` };
-    if (orgId) h['x-organization-id'] = orgId;
-    return h;
-  }),
-}));
+vi.mock('../auth/client.js', async importOriginal => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    MASTRA_PLATFORM_API_URL: 'http://localhost:9999',
+    createApiClient: vi.fn(() => ({
+      GET: mockGET,
+      POST: mockPOST,
+    })),
+    authHeaders: vi.fn((token: string, orgId?: string) => {
+      const h: Record<string, string> = { Authorization: `Bearer ${token}` };
+      if (orgId) h['x-organization-id'] = orgId;
+      return h;
+    }),
+  };
+});
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -50,6 +54,13 @@ describe('fetchProjects', () => {
     const { fetchProjects } = await import('./platform-api.js');
     await expect(fetchProjects('tok', 'org-1')).rejects.toThrow('Failed to fetch projects: 403');
   });
+
+  it('throws session expired message on 401', async () => {
+    mockGET.mockResolvedValue({ data: undefined, error: { error: 'unauthorized' }, response: { status: 401 } });
+
+    const { fetchProjects } = await import('./platform-api.js');
+    await expect(fetchProjects('tok', 'org-1')).rejects.toThrow('Session expired. Run: mastra auth login');
+  });
 });
 
 describe('createProject', () => {
@@ -68,7 +79,7 @@ describe('createProject', () => {
     mockPOST.mockResolvedValue({ data: undefined, error: { error: 'conflict' }, response: { status: 409 } });
 
     const { createProject } = await import('./platform-api.js');
-    await expect(createProject('tok', 'org-1', 'Dup')).rejects.toThrow('Failed to create project: 409');
+    await expect(createProject('tok', 'org-1', 'Dup')).rejects.toThrow('Failed to create project — conflict: 409');
   });
 });
 
