@@ -141,11 +141,11 @@ Pass AI SDK `UIMessage[]` from your installed `ai` version so TypeScript can inf
 
 ```typescript
 import { handleNetworkStream } from '@mastra/ai-sdk';
-import { createUIMessageStreamResponse } from 'ai';
+import { createUIMessageStreamResponse, type UIMessage } from 'ai';
 import { mastra } from '@/src/mastra';
 
 export async function POST(req: Request) {
-  const params = await req.json();
+  const params = (await req.json()) as { messages: UIMessage[] };
   const stream = await handleNetworkStream({
     mastra,
     agentId: 'routingAgent',

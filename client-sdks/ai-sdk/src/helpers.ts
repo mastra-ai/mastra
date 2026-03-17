@@ -46,7 +46,6 @@ type ConvertMastraChunkToAISDKOptions<OUTPUT> = {
   normalizeUsage: (usage: any) => any;
   normalizeFinishReason: (reason: MastraFinishReason) => string;
   includeRawFinishReason?: boolean;
-  versionLabel: string;
 };
 
 export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
@@ -56,7 +55,6 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
   normalizeUsage,
   normalizeFinishReason,
   includeRawFinishReason = false,
-  versionLabel,
 }: ConvertMastraChunkToAISDKOptions<OUTPUT>): OutputChunkType<OUTPUT> {
   switch (chunk.type) {
     case 'start':
@@ -100,14 +98,14 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         providerMetadata: chunk.payload.providerMetadata,
       };
     case 'reasoning-signature':
-      throw new Error(`${versionLabel} chunk type "reasoning-signature" not supported`);
+      return;
     // return {
     //   type: 'reasoning-signature' as const,
     //   id: chunk.payload.id,
     //   signature: chunk.payload.signature,
     // };
     case 'redacted-reasoning':
-      throw new Error(`${versionLabel} chunk type "redacted-reasoning" not supported`);
+      return;
     // return {
     //   type: 'redacted-reasoning',
     //   id: chunk.payload.id,
@@ -324,7 +322,6 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
     normalizeWarnings: warnings => warnings || [],
     normalizeUsage: usage => usage as AISDKLanguageModelUsage,
     normalizeFinishReason: toAISDKFinishReason,
-    versionLabel: 'AISDKv5',
   });
 }
 
@@ -404,7 +401,6 @@ export function convertMastraChunkToAISDKv6<OUTPUT = undefined>({
     normalizeUsage: normalizeV6Usage,
     normalizeFinishReason: toAISDKFinishReasonV6,
     includeRawFinishReason: true,
-    versionLabel: 'AISDKv6',
   });
 }
 

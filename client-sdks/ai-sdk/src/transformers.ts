@@ -282,7 +282,7 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
         part: part as any,
         sendReasoning,
         sendSources,
-        messageMetadataValue: messageMetadata?.({ part: part as TextStreamPart<ToolSet> }),
+        messageMetadataValue: part ? messageMetadata?.({ part: part as TextStreamPart<ToolSet> }) : undefined,
         sendStart,
         sendFinish,
         responseMessageId: lastMessageId,
