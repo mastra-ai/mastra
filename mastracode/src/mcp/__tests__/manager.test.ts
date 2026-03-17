@@ -168,7 +168,9 @@ describe('createMcpManager', () => {
       setupConfig({ mcpServers: { fs: { command: 'npx', args: ['-y', 'mcp-fs'] } } });
 
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { fs: { read: {} }, remote: { weather: {} } }, errors: {} });
+        this.listToolsetsWithErrors = vi
+          .fn()
+          .mockResolvedValue({ toolsets: { fs: { read: {} }, remote: { weather: {} } }, errors: {} });
         this.disconnect = vi.fn();
       } as any);
 
@@ -212,7 +214,9 @@ describe('createMcpManager', () => {
       setupConfig({ mcpServers: { fs: { command: 'npx' } } });
 
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { fs: { tool: {} }, extra: { tool: {} } }, errors: {} });
+        this.listToolsetsWithErrors = vi
+          .fn()
+          .mockResolvedValue({ toolsets: { fs: { tool: {} }, extra: { tool: {} } }, errors: {} });
         this.disconnect = vi.fn();
       } as any);
 
@@ -236,7 +240,9 @@ describe('createMcpManager', () => {
         skippedServers: [{ name: 'bad', reason: 'Invalid entry' }],
       });
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { fs: { read: {}, write: {} } }, errors: {} });
+        this.listToolsetsWithErrors = vi
+          .fn()
+          .mockResolvedValue({ toolsets: { fs: { read: {}, write: {} } }, errors: {} });
         this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 

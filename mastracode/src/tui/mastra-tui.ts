@@ -342,10 +342,7 @@ export class MastraTUI {
           }
         })
         .catch(error => {
-          showInfo(
-            this.state,
-            `MCP: Initialization failed: ${error instanceof Error ? error.message : String(error)}`,
-          );
+          showInfo(this.state, `MCP: Initialization failed: ${error instanceof Error ? error.message : String(error)}`);
         });
     }
 

@@ -57,9 +57,7 @@ const FAILED_ACTIONS: ServerAction[] = [
   { label: 'Reconnect', key: 'reconnect' },
 ];
 
-const CONNECTING_ACTIONS: ServerAction[] = [
-  { label: 'Waiting for connection...', key: 'none' },
-];
+const CONNECTING_ACTIONS: ServerAction[] = [{ label: 'Waiting for connection...', key: 'none' }];
 
 // =============================================================================
 // McpSelectorComponent
@@ -174,11 +172,10 @@ export class McpSelectorComponent extends Box implements Focusable {
       const cursor = isSelected ? theme.fg('accent', '› ') : '  ';
       const name = isSelected ? theme.bold(theme.fg('accent', status.name)) : status.name;
       const transport = theme.fg('muted', `[${status.transport}]`);
-      const toolInfo = !this._reloading && status.toolCount > 0 ? theme.fg('muted', ` · ${status.toolCount} tools`) : '';
+      const toolInfo =
+        !this._reloading && status.toolCount > 0 ? theme.fg('muted', ` · ${status.toolCount} tools`) : '';
 
-      this.listContainer.addChild(
-        new Text(`${cursor}${icon} ${name} ${transport} ${stateText}${toolInfo}`, 0, 0),
-      );
+      this.listContainer.addChild(new Text(`${cursor}${icon} ${name} ${transport} ${stateText}${toolInfo}`, 0, 0));
 
       // Sub-menu for this server
       if (i === this.selectedIndex && this.subMenuOpen) {
