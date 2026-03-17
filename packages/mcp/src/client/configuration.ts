@@ -707,6 +707,30 @@ To fix this you have three different options:
   }
 
   /**
+   * Reconnects a single MCP server by name.
+   *
+   * If the server is already connected, it will be forcefully disconnected and reconnected.
+   * If the server has never been connected, a new connection will be established.
+   *
+   * @param serverName - The name of the server to reconnect (must match a key in `servers`)
+   * @throws {Error} If the server name is not found in the configuration
+   *
+   * @example
+   * ```typescript
+   * // Reconnect a specific server after it fails
+   * await mcp.reconnectServer('weatherServer');
+   * ```
+   */
+  public async reconnectServer(serverName: string): Promise<void> {
+    const existingClient = this.mcpClientsById.get(serverName);
+    if (existingClient) {
+      await existingClient.forceReconnect();
+    } else {
+      await this.getConnectedClientForServer(serverName);
+    }
+  }
+
+  /**
    * Retrieves all tools from all configured servers with namespaced names.
    *
    * Tool names are namespaced as `serverName_toolName` to prevent conflicts between servers.

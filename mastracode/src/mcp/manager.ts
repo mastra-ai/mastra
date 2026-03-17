@@ -24,6 +24,8 @@ export interface McpManager {
   initInBackground(): Promise<McpInitResult>;
   /** Disconnect all servers, reload config from disk, reconnect. */
   reload(): Promise<void>;
+  /** Reconnect a single server by name. Returns updated status. */
+  reconnectServer(name: string): Promise<McpServerStatus>;
   /** Disconnect from all MCP servers and clean up. */
   disconnect(): Promise<void>;
   /** Get all tools from connected MCP servers (namespaced as serverName_toolName). */
@@ -193,6 +195,99 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
       initialized = false;
       await connectAndCollectTools();
       initialized = true;
+    },
+
+    async reconnectServer(name: string): Promise<McpServerStatus> {
+      const cfg = config.mcpServers?.[name];
+      if (!cfg) {
+        return {
+          name,
+          connected: false,
+          toolCount: 0,
+          toolNames: [],
+          transport: 'stdio',
+          error: `Server "${name}" not found in config`,
+        };
+      }
+
+      if (!client) {
+        return {
+          name,
+          connected: false,
+          toolCount: 0,
+          toolNames: [],
+          transport: getTransport(cfg),
+          error: 'MCP client not initialized',
+        };
+      }
+
+      const transport = getTransport(cfg);
+
+      // Remove old tools for this server
+      const prefix = `${name}_`;
+      for (const key of Object.keys(tools)) {
+        if (key.startsWith(prefix)) {
+          delete tools[key];
+        }
+      }
+
+      // Mark as connecting
+      serverStatuses.set(name, {
+        name,
+        connected: false,
+        connecting: true,
+        toolCount: 0,
+        toolNames: [],
+        transport,
+      });
+
+      try {
+        // Use MCPClient's per-server reconnect
+        await client.reconnectServer(name);
+
+        // Fetch updated toolsets to get this server's tools
+        const toolsets = await client.listToolsets();
+        const serverTools = toolsets[name];
+
+        if (serverTools && Object.keys(serverTools).length > 0) {
+          const toolNames = Object.keys(serverTools).map(t => `${name}_${t}`);
+          for (const [toolName, toolConfig] of Object.entries(serverTools)) {
+            tools[`${name}_${toolName}`] = toolConfig;
+          }
+          const status: McpServerStatus = {
+            name,
+            connected: true,
+            toolCount: toolNames.length,
+            toolNames,
+            transport,
+          };
+          serverStatuses.set(name, status);
+          return status;
+        } else {
+          const status: McpServerStatus = {
+            name,
+            connected: false,
+            toolCount: 0,
+            toolNames: [],
+            transport,
+            error: 'Failed to connect',
+          };
+          serverStatuses.set(name, status);
+          return status;
+        }
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        const status: McpServerStatus = {
+          name,
+          connected: false,
+          toolCount: 0,
+          toolNames: [],
+          transport,
+          error: errMsg,
+        };
+        serverStatuses.set(name, status);
+        return status;
+      }
     },
 
     disconnect,

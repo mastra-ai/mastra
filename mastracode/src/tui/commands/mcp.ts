@@ -66,12 +66,18 @@ export async function handleMcpCommand(ctx: SlashCommandContext, args: string[])
       statuses: mm.getServerStatuses(),
       skipped: mm.getSkippedServers(),
     }),
-    onReload: async () => {
+    onReloadAll: async () => {
       await mm.reload();
       return {
         statuses: mm.getServerStatuses(),
         skipped: mm.getSkippedServers(),
       };
+    },
+    onReconnectServer: async (name: string) => {
+      return mm.reconnectServer(name);
+    },
+    showInfo: (msg: string) => {
+      showInfo(ctx.state, msg);
     },
     onClose: () => {
       ctx.state.ui.hideOverlay();

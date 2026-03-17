@@ -24,8 +24,12 @@ export interface McpSelectorOptions {
   configPaths: { project: string; global: string; claude: string };
   /** Get current statuses (for polling during initial connect) */
   getStatuses: () => { statuses: McpServerStatus[]; skipped: McpSkippedServer[] };
-  /** Callback to reload servers — should return fresh statuses/skipped */
-  onReload: () => Promise<{ statuses: McpServerStatus[]; skipped: McpSkippedServer[] }>;
+  /** Callback to reload all servers — should return fresh statuses/skipped */
+  onReloadAll: () => Promise<{ statuses: McpServerStatus[]; skipped: McpSkippedServer[] }>;
+  /** Callback to reconnect a single server by name — returns updated status */
+  onReconnectServer: (name: string) => Promise<McpServerStatus>;
+  /** Show an info message in the chat area */
+  showInfo: (msg: string) => void;
   /** Callback when selector is dismissed */
   onClose: () => void;
 }
@@ -63,7 +67,9 @@ export class McpSelectorComponent extends Box implements Focusable {
   private skipped: McpSkippedServer[];
   private selectedIndex = 0;
   private getStatusesCallback: McpSelectorOptions['getStatuses'];
-  private onReloadCallback: McpSelectorOptions['onReload'];
+  private onReloadAllCallback: McpSelectorOptions['onReloadAll'];
+  private onReconnectServerCallback: McpSelectorOptions['onReconnectServer'];
+  private showInfoCallback: McpSelectorOptions['showInfo'];
   private onCloseCallback: () => void;
   private tui: TUI;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -95,7 +101,9 @@ export class McpSelectorComponent extends Box implements Focusable {
     this.statuses = options.statuses;
     this.skipped = options.skipped;
     this.getStatusesCallback = options.getStatuses;
-    this.onReloadCallback = options.onReload;
+    this.onReloadAllCallback = options.onReloadAll;
+    this.onReconnectServerCallback = options.onReconnectServer;
+    this.showInfoCallback = options.showInfo;
     this.onCloseCallback = options.onClose;
 
     this.buildUI();
@@ -281,7 +289,7 @@ export class McpSelectorComponent extends Box implements Focusable {
     }
     // 'r' — reload all servers
     else if (data === 'r') {
-      this.doReload();
+      this.doReloadAll();
     }
     // Escape or Ctrl+C
     else if (kb.matches(data, 'selectCancel')) {
@@ -348,18 +356,18 @@ export class McpSelectorComponent extends Box implements Focusable {
       }
       case 'reconnect': {
         this.subMenuOpen = false;
-        this.doReload();
+        this.doReconnectServer(status);
         break;
       }
     }
   }
 
-  private doReload(): void {
+  private doReloadAll(): void {
     this._reloading = true;
     this.updateList();
 
-    this.onReloadCallback()
-      .then(result => {
+    this.onReloadAllCallback()
+      .then((result: { statuses: McpServerStatus[]; skipped: McpSkippedServer[] }) => {
         this.statuses = result.statuses;
         this.skipped = result.skipped;
         // Clamp selected index in case server count changed
@@ -367,12 +375,68 @@ export class McpSelectorComponent extends Box implements Focusable {
         if (this.selectedIndex >= total) {
           this.selectedIndex = Math.max(0, total - 1);
         }
+        const connected = result.statuses.filter(s => s.connected);
+        const totalTools = connected.reduce((sum, s) => sum + s.toolCount, 0);
+        this.showInfoCallback(`MCP: Reloaded. ${connected.length} server(s) connected, ${totalTools} tool(s).`);
+        for (const s of result.statuses.filter(s => !s.connected)) {
+          this.showInfoCallback(`MCP: Failed to connect to "${s.name}": ${s.error ?? 'Unknown error'}`);
+        }
       })
       .catch(() => {
         // Statuses stay as they were
       })
       .finally(() => {
         this._reloading = false;
+        this.updateList();
+      });
+  }
+
+  private doReconnectServer(status: McpServerStatus): void {
+    const name = status.name;
+
+    // Mark this server as connecting
+    const idx = this.statuses.findIndex(s => s.name === name);
+    if (idx >= 0) {
+      this.statuses[idx] = {
+        name,
+        connected: false,
+        connecting: true,
+        toolCount: 0,
+        toolNames: [],
+        transport: status.transport,
+      };
+    }
+    this.updateList();
+
+    this.onReconnectServerCallback(name)
+      .then((updated: McpServerStatus) => {
+        const i = this.statuses.findIndex(s => s.name === name);
+        if (i >= 0) {
+          this.statuses[i] = updated;
+        }
+        if (updated.connected) {
+          this.showInfoCallback(`MCP: Reconnected "${name}" — ${updated.toolCount} tool(s)`);
+        } else {
+          this.showInfoCallback(`MCP: Failed to reconnect "${name}": ${updated.error ?? 'Unknown error'}`);
+        }
+      })
+      .catch((err: unknown) => {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const i = this.statuses.findIndex(s => s.name === name);
+        if (i >= 0) {
+          this.statuses[i] = {
+            name,
+            connected: false,
+            connecting: false,
+            toolCount: 0,
+            toolNames: [],
+            transport: status.transport,
+            error: errMsg,
+          };
+        }
+        this.showInfoCallback(`MCP: Failed to reconnect "${name}": ${errMsg}`);
+      })
+      .finally(() => {
         this.updateList();
       });
   }
