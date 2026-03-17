@@ -4257,8 +4257,11 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
     });
     await storage.updateActiveObservations({
       id: record.id,
-      observations:
-        '<thread id="thread-A">\n- 🔴 User\'s favorite color is blue\n</thread>\n\n--- message boundary (2025-01-01T09:30:00.000Z) ---\n\n<thread id="thread-A">\n- 🔴 User is debugging observational memory prompt ordering\n</thread>',
+      observations: [
+        '<thread id="thread-A">\n- 🔴 User\'s favorite color is blue\n</thread>',
+        ObservationalMemory.createMessageBoundary(new Date('2025-01-01T09:30:00.000Z')).trim(),
+        '<thread id="thread-A">\n- 🔴 User is debugging observational memory prompt ordering\n</thread>',
+      ].join('\n\n'),
       tokenCount: 50,
       lastObservedAt: threadAObservedAt, // Resource-level cursor set to Thread A's observation time
     });
