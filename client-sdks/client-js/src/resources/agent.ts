@@ -1262,10 +1262,12 @@ export class Agent extends BaseResource {
 
                 // Recursively call stream with updated messages
                 // This will wait for the recursive stream to complete before continuing
+                // Remove clientTools from recursive call since they've already been executed
                 try {
+                  const { clientTools: _, ...recursiveParams } = processedParams;
                   await this.processStreamResponse(
                     {
-                      ...processedParams,
+                      ...recursiveParams,
                       messages: updatedMessages,
                     },
                     controller,
@@ -1816,9 +1818,11 @@ export class Agent extends BaseResource {
                   : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
 
                 // Recursively call stream with updated messages
+                // Remove clientTools from recursive call since they've already been executed
+                const { clientTools: _, ...recursiveParams } = processedParams;
                 this.processStreamResponseLegacy(
                   {
-                    ...processedParams,
+                    ...recursiveParams,
                     messages: updatedMessages,
                   },
                   writable,
