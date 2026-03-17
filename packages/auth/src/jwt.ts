@@ -55,11 +55,13 @@ export class MastraJwtAuth extends MastraAuthProvider<JwtUser> implements IUserP
 
   async getCurrentUser(request: Request): Promise<User | null> {
     const authHeader = request.headers.get('authorization');
-    const token = authHeader?.toLowerCase().startsWith('bearer ') ? authHeader.slice(7) : null;
+    const token = authHeader?.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : null;
     if (!token) return null;
 
     try {
-      const payload = jwt.verify(token, this.secret) as JwtUser;
+      const payload = await this.authenticateToken(token);
+      const allowed = await this.authorizeUser(payload);
+      if (!allowed) return null;
       return this.mapUser(payload);
     } catch {
       return null;
