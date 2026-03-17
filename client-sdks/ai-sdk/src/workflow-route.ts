@@ -34,7 +34,7 @@ export type WorkflowStreamHandlerOptions = {
  * ```ts
  * // Next.js App Router
  * import { handleWorkflowStream } from '@mastra/ai-sdk';
- * import { createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
+ * import { createUIMessageStreamResponse } from 'ai';
  * import { mastra } from '@/src/mastra';
  *
  * export async function POST(req: Request) {

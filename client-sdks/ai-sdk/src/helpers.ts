@@ -7,6 +7,11 @@ import type {
   UIMessage,
   FinishReason,
 } from '@internal/ai-sdk-v5';
+import type {
+  CallWarning as AISDKCallWarningV6,
+  FinishReason as FinishReasonV6,
+  LanguageModelUsage as AISDKLanguageModelUsageV6,
+} from '@internal/ai-v6';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '@mastra/core/stream';
 import type { DataChunkType, ChunkType, MastraFinishReason } from '@mastra/core/stream';
 
@@ -34,13 +39,25 @@ export type ToolAgentChunkType = { type: 'tool-agent'; toolCallId: string; paylo
 export type ToolWorkflowChunkType = { type: 'tool-workflow'; toolCallId: string; payload: any };
 export type ToolNetworkChunkType = { type: 'tool-network'; toolCallId: string; payload: any };
 
-export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
-  chunk,
-  mode = 'stream',
-}: {
+type ConvertMastraChunkToAISDKOptions<OUTPUT> = {
   chunk: ChunkType<OUTPUT>;
   mode?: 'generate' | 'stream';
-}): OutputChunkType<OUTPUT> {
+  normalizeWarnings: (warnings: any[] | undefined) => any[];
+  normalizeUsage: (usage: any) => any;
+  normalizeFinishReason: (reason: MastraFinishReason) => string;
+  includeRawFinishReason?: boolean;
+  versionLabel: string;
+};
+
+export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
+  chunk,
+  mode = 'stream',
+  normalizeWarnings,
+  normalizeUsage,
+  normalizeFinishReason,
+  includeRawFinishReason = false,
+  versionLabel,
+}: ConvertMastraChunkToAISDKOptions<OUTPUT>): OutputChunkType<OUTPUT> {
   switch (chunk.type) {
     case 'start':
       return {
@@ -53,7 +70,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
       return {
         type: 'start-step',
         request: rest.request,
-        warnings: rest.warnings || [],
+        warnings: normalizeWarnings(rest.warnings),
       };
     case 'raw':
       return {
@@ -64,9 +81,9 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
     case 'finish': {
       return {
         type: 'finish',
-        finishReason: toAISDKFinishReason(chunk.payload.stepResult.reason),
-        // Cast needed: Mastra's LanguageModelUsage has optional properties, AI SDK has required-but-nullable
-        totalUsage: chunk.payload.output.usage as AISDKLanguageModelUsage,
+        finishReason: normalizeFinishReason(chunk.payload.stepResult.reason) as FinishReason,
+        ...(includeRawFinishReason ? { rawFinishReason: chunk.payload.stepResult.reason } : {}),
+        totalUsage: normalizeUsage(chunk.payload.output.usage),
       };
     }
     case 'reasoning-start':
@@ -83,14 +100,14 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         providerMetadata: chunk.payload.providerMetadata,
       };
     case 'reasoning-signature':
-      throw new Error('AISDKv5 chunk type "reasoning-signature" not supported');
+      throw new Error(`${versionLabel} chunk type "reasoning-signature" not supported`);
     // return {
     //   type: 'reasoning-signature' as const,
     //   id: chunk.payload.id,
     //   signature: chunk.payload.signature,
     // };
     case 'redacted-reasoning':
-      throw new Error('AISDKv5 chunk type "redacted-reasoning" not supported');
+      throw new Error(`${versionLabel} chunk type "redacted-reasoning" not supported`);
     // return {
     //   type: 'redacted-reasoning',
     //   id: chunk.payload.id,
@@ -208,8 +225,9 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
           modelId: (rest.modelId as string) || '',
           ...rest,
         },
-        usage: chunk.payload.output.usage,
-        finishReason: toAISDKFinishReason(chunk.payload.stepResult.reason),
+        usage: normalizeUsage(chunk.payload.output.usage),
+        finishReason: normalizeFinishReason(chunk.payload.stepResult.reason) as FinishReason,
+        ...(includeRawFinishReason ? { rawFinishReason: chunk.payload.stepResult.reason } : {}),
         providerMetadata,
       };
     }
@@ -291,6 +309,103 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
       }
       return;
   }
+}
+
+export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
+  chunk,
+  mode = 'stream',
+}: {
+  chunk: ChunkType<OUTPUT>;
+  mode?: 'generate' | 'stream';
+}): OutputChunkType<OUTPUT> {
+  return convertMastraChunkToAISDKBase({
+    chunk,
+    mode,
+    normalizeWarnings: warnings => warnings || [],
+    normalizeUsage: usage => usage as AISDKLanguageModelUsage,
+    normalizeFinishReason: toAISDKFinishReason,
+    versionLabel: 'AISDKv5',
+  });
+}
+
+export function toAISDKFinishReasonV6(reason: MastraFinishReason): FinishReasonV6 {
+  switch (reason) {
+    case 'stop':
+    case 'length':
+    case 'content-filter':
+    case 'tool-calls':
+    case 'error':
+    case 'other':
+      return reason;
+    default:
+      return 'other';
+  }
+}
+
+function normalizeV6Warnings(warnings: any[] | undefined): AISDKCallWarningV6[] {
+  return (warnings ?? []).map(warning => {
+    switch (warning?.type) {
+      case 'unsupported-setting':
+        return {
+          type: 'compatibility',
+          feature: warning.setting,
+          details: warning.details,
+        } satisfies AISDKCallWarningV6;
+      case 'unsupported-tool':
+        return {
+          type: 'unsupported',
+          feature: warning.tool?.name ?? 'tool',
+          details: warning.details,
+        } satisfies AISDKCallWarningV6;
+      case 'other':
+        return {
+          type: 'other',
+          message: warning.message,
+        } satisfies AISDKCallWarningV6;
+      default:
+        return {
+          type: 'other',
+          message: String(warning),
+        } satisfies AISDKCallWarningV6;
+    }
+  });
+}
+
+function normalizeV6Usage(usage: any): AISDKLanguageModelUsageV6 {
+  return {
+    inputTokens: usage?.inputTokens,
+    inputTokenDetails: {
+      noCacheTokens: usage?.inputTokens,
+      cacheReadTokens: usage?.cachedInputTokens,
+      cacheWriteTokens: undefined,
+    },
+    outputTokens: usage?.outputTokens,
+    outputTokenDetails: {
+      textTokens: usage?.outputTokens,
+      reasoningTokens: usage?.reasoningTokens,
+    },
+    totalTokens: usage?.totalTokens,
+    reasoningTokens: usage?.reasoningTokens,
+    cachedInputTokens: usage?.cachedInputTokens,
+  };
+}
+
+export function convertMastraChunkToAISDKv6<OUTPUT = undefined>({
+  chunk,
+  mode = 'stream',
+}: {
+  chunk: ChunkType<OUTPUT>;
+  mode?: 'generate' | 'stream';
+}): OutputChunkType<OUTPUT> {
+  return convertMastraChunkToAISDKBase({
+    chunk,
+    mode,
+    normalizeWarnings: normalizeV6Warnings,
+    normalizeUsage: normalizeV6Usage,
+    normalizeFinishReason: toAISDKFinishReasonV6,
+    includeRawFinishReason: true,
+    versionLabel: 'AISDKv6',
+  });
 }
 
 export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMessage>({

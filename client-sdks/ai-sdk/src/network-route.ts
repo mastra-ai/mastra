@@ -1,20 +1,33 @@
 import { createUIMessageStream, createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
-import type { InferUIMessageChunk, UIMessage } from '@internal/ai-sdk-v5';
+import type { UIMessage as InternalUIMessage } from '@internal/ai-sdk-v5';
 import type { AgentExecutionOptions, NetworkOptions } from '@mastra/core/agent';
-import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import { toAISdkV5Stream } from './convert-streams';
+import type {
+  SupportedUIMessage,
+  SupportedUIMessageStream,
+  V5UIMessage,
+  V5UIMessageStream,
+  V6UIMessage,
+  V6UIMessageStream,
+} from './public-types';
 
-export type NetworkStreamHandlerParams<OUTPUT = undefined> = AgentExecutionOptions<OUTPUT> & {
-  messages: MessageListInput;
+export type NetworkStreamHandlerParams<
+  UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage,
+  OUTPUT = undefined,
+> = AgentExecutionOptions<OUTPUT> & {
+  messages: UI_MESSAGE[];
 };
 
-export type NetworkStreamHandlerOptions<OUTPUT = undefined> = {
+export type NetworkStreamHandlerOptions<
+  UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage,
+  OUTPUT = undefined,
+> = {
   mastra: Mastra;
   agentId: string;
-  params: NetworkStreamHandlerParams<OUTPUT>;
+  params: NetworkStreamHandlerParams<UI_MESSAGE, OUTPUT>;
   defaultOptions?: NetworkOptions<OUTPUT>;
 };
 
@@ -26,7 +39,7 @@ export type NetworkStreamHandlerOptions<OUTPUT = undefined> = {
  * ```ts
  * // Next.js App Router
  * import { handleNetworkStream } from '@mastra/ai-sdk';
- * import { createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
+ * import { createUIMessageStreamResponse } from 'ai';
  * import { mastra } from '@/src/mastra';
  *
  * export async function POST(req: Request) {
@@ -40,12 +53,18 @@ export type NetworkStreamHandlerOptions<OUTPUT = undefined> = {
  * }
  * ```
  */
-export async function handleNetworkStream<UI_MESSAGE extends UIMessage, OUTPUT = undefined>({
+export function handleNetworkStream<UI_MESSAGE extends V5UIMessage = V5UIMessage, OUTPUT = undefined>(
+  options: NetworkStreamHandlerOptions<UI_MESSAGE, OUTPUT>,
+): Promise<V5UIMessageStream<UI_MESSAGE>>;
+export function handleNetworkStream<UI_MESSAGE extends V6UIMessage = V6UIMessage, OUTPUT = undefined>(
+  options: NetworkStreamHandlerOptions<UI_MESSAGE, OUTPUT>,
+): Promise<V6UIMessageStream<UI_MESSAGE>>;
+export async function handleNetworkStream<OUTPUT = undefined>({
   mastra,
   agentId,
   params,
   defaultOptions,
-}: NetworkStreamHandlerOptions<OUTPUT>): Promise<ReadableStream<InferUIMessageChunk<UI_MESSAGE>>> {
+}: NetworkStreamHandlerOptions<SupportedUIMessage, OUTPUT>): Promise<SupportedUIMessageStream> {
   const { messages, ...rest } = params;
 
   const agentObj = mastra.getAgentById(agentId);
@@ -54,18 +73,21 @@ export async function handleNetworkStream<UI_MESSAGE extends UIMessage, OUTPUT =
     throw new Error(`Agent ${agentId} not found`);
   }
 
-  const result = await agentObj.network<any>(messages, {
+  const result = await agentObj.network<any>(messages as InternalUIMessage[], {
     ...defaultOptions,
     ...rest,
   });
 
-  return createUIMessageStream<UI_MESSAGE>({
+  const stream = createUIMessageStream<InternalUIMessage>({
+    originalMessages: messages as InternalUIMessage[],
     execute: async ({ writer }) => {
       for await (const part of toAISdkV5Stream(result, { from: 'network' })) {
-        writer.write(part as InferUIMessageChunk<UI_MESSAGE>);
+        writer.write(part);
       }
     },
   });
+
+  return stream as unknown as SupportedUIMessageStream;
 }
 
 export type NetworkRouteOptions<OUTPUT = undefined> =
@@ -159,7 +181,7 @@ export function networkRoute<OUTPUT = undefined>({
       },
     },
     handler: async c => {
-      const params = (await c.req.json()) as NetworkStreamHandlerParams<OUTPUT>;
+      const params = (await c.req.json()) as NetworkStreamHandlerParams<SupportedUIMessage, OUTPUT>;
       const mastra = c.get('mastra');
       const contextRequestContext = (c as any).get('requestContext') as RequestContext | undefined;
 
@@ -194,7 +216,7 @@ export function networkRoute<OUTPUT = undefined>({
         throw new Error('Agent ID is required');
       }
 
-      const uiMessageStream = await handleNetworkStream<UIMessage, OUTPUT>({
+      const uiMessageStream = await handleNetworkStream({
         mastra,
         agentId: agentToUse,
         params: {
