@@ -261,36 +261,19 @@ describe('createToolCallStep tool approval workflow', () => {
     expectNoToolExecution();
   });
 
-  it('should return a fallback result for provider-executed tools without output', async () => {
-    // Arrange: provider-executed tool with no output (the bug scenario from #13125)
+  it('should return inputData as-is for provider-executed tools (no client execution)', async () => {
+    // Provider-executed tools are handled by the stream path (tool-call + tool-result chunks
+    // in llm-execution-step), so tool-call-step just passes through inputData unchanged.
     const inputData = {
       ...makeInputData(),
       toolName: 'web_search_20250305',
       providerExecuted: true,
     };
 
-    // Act: Execute the tool call step
     const result = await toolCallStep.execute(makeExecuteParams({ inputData }));
 
-    // Assert: Should return a non-undefined result to prevent bail in llm-mapping-step
-    expect(result.result).toEqual({ providerExecuted: true, toolName: 'web_search_20250305' });
-    expectNoToolExecution();
-  });
-
-  it('should pass through output for provider-executed tools when output is present', async () => {
-    // Arrange: provider-executed tool with output
-    const inputData = {
-      ...makeInputData(),
-      toolName: 'web_search_20250305',
-      providerExecuted: true,
-      output: { searchResults: ['result1'] },
-    };
-
-    // Act
-    const result = await toolCallStep.execute(makeExecuteParams({ inputData }));
-
-    // Assert: Should use the actual output, not the fallback
-    expect(result.result).toEqual({ searchResults: ['result1'] });
+    expect(result).toEqual(inputData);
+    expect(result.result).toBeUndefined();
     expectNoToolExecution();
   });
 
@@ -338,8 +321,7 @@ describe('createToolCallStep provider-executed tools', () => {
     vi.restoreAllMocks();
   });
 
-  it('should skip execution and return pre-merged output for provider-executed tools', async () => {
-    const providerResult = { results: [{ title: 'Example', url: 'https://example.com' }] };
+  it('should skip execution and return inputData as-is for provider-executed tools', async () => {
     const tools = {
       webSearch: {
         type: 'provider-defined' as const,
@@ -359,7 +341,6 @@ describe('createToolCallStep provider-executed tools', () => {
       toolName: 'web_search',
       args: { query: 'test' },
       providerExecuted: true,
-      output: providerResult,
     };
 
     const result = await step.execute({
@@ -368,7 +349,7 @@ describe('createToolCallStep provider-executed tools', () => {
       inputData,
     });
 
-    expect(result).toEqual(expect.objectContaining({ result: providerResult }));
+    expect(result).toEqual(inputData);
     expect(suspend).not.toHaveBeenCalled();
   });
 

@@ -30,6 +30,7 @@ import type {
   TextStartPayload,
 } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
+import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { isMastraTool } from '../../../tools/toolchecks';
 import { makeCoreTool } from '../../../utils';
@@ -470,8 +471,12 @@ async function processOutputStream<OUTPUT = undefined>({
         await options?.onError?.({ error });
         break;
 
+      // Provider-executed tool results (e.g. web_search). Client tool results
+      // are handled by llm-mapping-step after execution.
       case 'tool-result':
         if (chunk.payload.result) {
+          const resultToolDef =
+            tools?.[chunk.payload.toolName] || findProviderToolByName(tools, chunk.payload.toolName);
           messageList.updateToolInvocation({
             type: 'tool-invocation',
             toolInvocation: {
@@ -482,14 +487,17 @@ async function processOutputStream<OUTPUT = undefined>({
               result: chunk.payload.result,
             },
             providerMetadata: chunk.payload.providerMetadata,
-            // @ts-expect-error - providerExecuted is not in the type, but output-convert.ts checks providerExecuted to decide whether to include deferred provider calls for the next step
-            providerExecuted: chunk.payload.providerExecuted,
+            // @ts-expect-error - providerExecuted is not in the type but is read by output-converter.ts (to keep deferred provider calls) and tool-call-step.ts (to skip client execution)
+            providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
           });
         }
         safeEnqueue(controller, chunk);
         break;
 
       case 'tool-call':
+        const toolDef = tools?.[chunk.payload.toolName] || findProviderToolByName(tools, chunk.payload.toolName);
+        const inferredProviderExecuted = inferProviderExecuted(chunk.payload.providerExecuted, toolDef);
+
         const toolCallPart: MastraMessagePart = {
           type: 'tool-invocation' as const,
           toolInvocation: {
@@ -499,8 +507,8 @@ async function processOutputStream<OUTPUT = undefined>({
             args: chunk.payload.args,
           },
           providerMetadata: chunk.payload.providerMetadata,
-          // @ts-expect-error - providerExecuted is not in the type, but output-convert.ts checks providerExecuted to decide whether to include deferred provider calls for the next step
-          providerExecuted: chunk.payload.providerExecuted,
+          // @ts-expect-error - providerExecuted is not in the type but is read by output-converter.ts (to keep deferred provider calls) and tool-call-step.ts (to skip client execution)
+          providerExecuted: inferredProviderExecuted,
         };
 
         const message: MastraDBMessage = {
@@ -1133,7 +1141,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       // Tool calls are added to the message list inline during stream processing (case 'tool-call').
       // Tool results (including deferred provider results) are handled inline (case 'tool-result').
-      const toolCalls = (outputStream._getImmediateToolCalls() ?? []).map(chunk => chunk.payload);
+      const toolCalls = (outputStream._getImmediateToolCalls() ?? []).map(chunk => {
+        const tool = tools?.[chunk.payload.toolName] || findProviderToolByName(tools, chunk.payload.toolName);
+        return {
+          ...chunk.payload,
+          providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, tool),
+        };
+      });
 
       // Call processOutputStep for processors (runs AFTER LLM response, BEFORE tool execution)
       // This allows processors to validate/modify the response and trigger retries if needed

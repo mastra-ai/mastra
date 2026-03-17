@@ -195,12 +195,13 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     const toolCalls = llmResult.output.toolCalls ?? [];
     const toolCallById = Object.fromEntries(toolCalls.map(toolCall => [toolCall.toolCallId, toolCall]));
 
+    // providerExecuted is inferred from the tool definition (type: 'provider')
+    // even though the raw model stream doesn't include it
     expect(toolCallById['call-1']).toEqual(
       expect.objectContaining({
         toolCallId: 'call-1',
         toolName: 'perplexity_search',
         providerExecuted: true,
-        output: { answer: 'fresh gateway result' },
       }),
     );
     expect(toolCallById['call-2']).toEqual(
@@ -208,11 +209,16 @@ describe('createLLMExecutionStep gateway provider tools', () => {
         toolCallId: 'call-2',
         toolName: 'perplexity_search',
         providerExecuted: true,
-        output: { answer: 'fresh gateway funding result' },
       }),
     );
+    // output is no longer merged onto toolCalls — results are handled inline
+    // via case 'tool-result' in processOutputStream
+    expect(toolCallById['call-1'].output).toBeUndefined();
+    expect(toolCallById['call-2'].output).toBeUndefined();
+
     expect(llmResult.stepResult.isContinued).toBe(true);
 
+    // tool-call-step returns inputData as-is for provider-executed tools (no client execution)
     const toolCallStep = createToolCallStep({
       agentId: 'test-agent',
       controller,
@@ -233,13 +239,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       inputData: toolCallById['call-1'],
     });
 
-    expect(toolResult).toEqual(
-      expect.objectContaining({
-        toolCallId: 'call-1',
-        toolName: 'perplexity_search',
-        result: { answer: 'fresh gateway result' },
-      }),
-    );
+    expect(toolResult).toEqual(toolCallById['call-1']);
+    expect(toolResult.result).toBeUndefined();
     expect(executeSpy).not.toHaveBeenCalled();
   });
 });
