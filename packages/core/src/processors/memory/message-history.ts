@@ -105,7 +105,7 @@ export class MessageHistory implements Processor {
       tracingContext,
       { threadId, resourceId },
       {
-        lastMessages: this.lastMessages ?? false,
+        lastMessages: this.lastMessages,
       },
     );
 
