@@ -226,19 +226,26 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
         delete schema[key];
       }
 
-      // Typeless schemas (e.g. z.any()) need a concrete type for OpenAI strict mode
       if (!subSchema.type && !subSchema.$ref && !subSchema.anyOf && !subSchema.oneOf && !subSchema.allOf) {
-        subSchema.type = 'object';
-        subSchema.properties = subSchema.properties || {};
-        subSchema.additionalProperties = false;
+        // Typeless schemas (e.g. z.any()) — expand into concrete typed branches
+        if (subSchema.description) {
+          schema.description = subSchema.description;
+        }
+        schema.anyOf = [
+          { type: 'string' },
+          { type: 'number' },
+          { type: 'boolean' },
+          { type: 'object', properties: {}, additionalProperties: false },
+          { type: 'null' },
+        ];
+      } else {
+        schema.anyOf = [
+          subSchema,
+          {
+            type: 'null',
+          },
+        ];
       }
-
-      schema.anyOf = [
-        subSchema,
-        {
-          type: 'null',
-        },
-      ];
     }
 
     // Ensure bare {"type":"object"} nodes (e.g., inside anyOf) have additionalProperties: false.
