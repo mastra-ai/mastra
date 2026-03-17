@@ -1,5 +1,20 @@
 # @mastra/auth-studio
 
+## 1.2.0-alpha.0
+
+### Minor Changes
+
+- Add configurable cookie domain support ([#14285](https://github.com/mastra-ai/mastra/pull/14285))
+  - Add `cookieDomain` option to `MastraAuthStudioOptions` for explicit configuration
+  - Support `MASTRA_COOKIE_DOMAIN` environment variable as fallback
+  - Use hostname-based detection for auto-detecting `.mastra.ai` domain (prevents false positives from malicious URLs)
+  - Maintain backward compatibility with existing `.mastra.ai` auto-detection
+
+### Patch Changes
+
+- Updated dependencies [[`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f)]:
+  - @mastra/core@1.14.0-alpha.2
+
 ## 1.1.0
 
 ### Minor Changes

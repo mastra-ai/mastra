@@ -1,5 +1,21 @@
 # @internal/playground
 
+## 1.3.13-alpha.2
+
+### Patch Changes
+
+- Improved Studio reconnect behavior after dev server restarts by spreading retry attempts over time to prevent many clients reconnecting at once. Also fixed a memory leak from repeated event handler registration during reconnects. ([#14284](https://github.com/mastra-ai/mastra/pull/14284))
+
+- Fixed Studio protected-route layout behavior so unauthenticated users no longer see the left sidebar. The auth prompt remains centered, and sidebar navigation is restored immediately after authentication. ([#14317](https://github.com/mastra-ai/mastra/pull/14317))
+
+- Studio sidebar navigation now respects RBAC read permissions for key resources. When RBAC is enabled, users only see links they can read (`agents`, `workflows`, `tools`, `mcps`, `processors`, `scorers`, and `datasets`), while admin and wildcard permissions continue to see all links. When RBAC is disabled, sidebar permission filtering is bypassed and existing platform/CMS link gating behavior remains unchanged. ([#14381](https://github.com/mastra-ai/mastra/pull/14381))
+
+- Updated dependencies [[`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f)]:
+  - @mastra/core@1.14.0-alpha.2
+  - @mastra/client-js@1.9.0-alpha.2
+  - @mastra/react@0.2.15-alpha.2
+  - @mastra/playground-ui@17.0.0-alpha.2
+
 ## 1.3.13-alpha.1
 
 ### Patch Changes
