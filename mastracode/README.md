@@ -77,7 +77,7 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | Command             | Description                                      |
 | ------------------- | ------------------------------------------------ |
 | `/new`              | Start a new conversation thread                  |
-| `/threads`          | List and switch between threads                  |
+| `/threads`          | List and switch between threads with freshness-checked cached lazy previews |
 | `/models`           | Switch/manage model packs (built-in/custom)      |
 | `/custom-providers` | Manage custom OpenAI-compatible providers/models |
 | `/mode`             | Switch agent mode                                |
