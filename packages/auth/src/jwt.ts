@@ -1,3 +1,4 @@
+import type { User, IUserProvider } from '@mastra/core/auth';
 import { MastraAuthProvider } from '@mastra/core/server';
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
 
@@ -7,10 +8,21 @@ type JwtUser = jwt.JwtPayload;
 
 interface MastraJwtAuthOptions extends MastraAuthProviderOptions<JwtUser> {
   secret?: string;
+  mapUser?: (payload: JwtUser) => User;
 }
 
-export class MastraJwtAuth extends MastraAuthProvider<JwtUser> {
+function defaultMapUser(payload: JwtUser): User {
+  return {
+    id: payload.sub || payload.id || 'unknown',
+    email: payload.email,
+    name: payload.name,
+    avatarUrl: payload.avatarUrl || payload.avatar_url || payload.picture,
+  };
+}
+
+export class MastraJwtAuth extends MastraAuthProvider<JwtUser> implements IUserProvider {
   protected secret: string;
+  private mapUser: (payload: JwtUser) => User;
 
   constructor(options?: MastraJwtAuthOptions) {
     super({ name: options?.name ?? 'jwt' });
@@ -21,6 +33,7 @@ export class MastraJwtAuth extends MastraAuthProvider<JwtUser> {
       throw new Error('JWT auth secret is required');
     }
 
+    this.mapUser = options?.mapUser ?? defaultMapUser;
     this.registerOptions(options);
   }
 
@@ -30,5 +43,22 @@ export class MastraJwtAuth extends MastraAuthProvider<JwtUser> {
 
   async authorizeUser(user: JwtUser) {
     return !!user;
+  }
+
+  async getCurrentUser(request: Request): Promise<User | null> {
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!token) return null;
+
+    try {
+      const payload = jwt.verify(token, this.secret) as JwtUser;
+      return this.mapUser(payload);
+    } catch {
+      return null;
+    }
+  }
+
+  async getUser(_userId: string): Promise<User | null> {
+    return null;
   }
 }
