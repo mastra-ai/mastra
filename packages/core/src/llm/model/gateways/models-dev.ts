@@ -43,6 +43,9 @@ const PROVIDER_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
   groq: {
     url: 'https://api.groq.com/openai/v1',
   },
+  // vercel uses @internal/ai-v6 createGateway which manages its own endpoints
+  // Do not set a URL override so createGateway can use its default base URL
+  vercel: {},
   // moonshotai uses Anthropic-compatible API, not OpenAI-compatible
   moonshotai: {
     url: 'https://api.moonshot.ai/anthropic/v1',
@@ -106,7 +109,9 @@ export class ModelsDevGateway extends MastraModelGateway {
           .sort();
 
         // Get the API URL - overrides take priority over models.dev data
-        const url = PROVIDER_OVERRIDES[normalizedId]?.url || providerInfo.api;
+        // For vercel, don't use providerInfo.api even if it's available, because createGateway
+        // manages its own endpoint. For other providers, use providerInfo.api as fallback.
+        const url = PROVIDER_OVERRIDES[normalizedId]?.url || (normalizedId === 'vercel' ? undefined : providerInfo.api);
 
         // Skip if we don't have a URL
         if (!hasInstalledPackage && !url) {
