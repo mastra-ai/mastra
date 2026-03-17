@@ -617,8 +617,33 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
   }
 
   registerAuthMiddleware(): void {
-    // Auth is handled per-route in registerRoute() and registerCustomApiRoutes()
-    // No global middleware needed
+    const authConfig = this.mastra.getServer()?.auth;
+    if (!authConfig) return;
+
+    // Eagerly populate requestContext with the authenticated user so that
+    // server.middleware handlers can access requestContext.get('user').
+    // This does NOT enforce auth — protected/public path logic still runs
+    // per-route in checkRouteAuth(). A missing or invalid token is silently
+    // ignored here; the per-route check will return 401 when required.
+    this.app.use('*', async (c, next) => {
+      const requestContext = c.get('requestContext') as RequestContext;
+      if (!requestContext) return next();
+
+      const authHeader = c.req.header('authorization');
+      const token = authHeader ? authHeader.replace('Bearer ', '') : c.req.query('apiKey');
+      if (!token) return next();
+
+      try {
+        const user = await authConfig.authenticateToken(token, c.req.raw as any);
+        if (user) {
+          requestContext.set('user', user);
+        }
+      } catch {
+        // Ignore auth errors here — per-route auth will handle them
+      }
+
+      return next();
+    });
   }
 
   registerHttpLoggingMiddleware(): void {
