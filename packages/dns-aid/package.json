@@ -1,0 +1,15 @@
+{
+  "name": "@mastra/dns-aid",
+  "version": "0.1.0",
+  "description": "DNS-AID integration for Mastra - discover AI agents via DNS",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=0.1.0"
+  }
+}
