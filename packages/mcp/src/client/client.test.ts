@@ -297,6 +297,102 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
   });
 });
 
+describe('MastraMCPClient - no outputSchema (issue #12040)', () => {
+  // Reproduces the core scenario from issue #12040: MCP tools that do NOT
+  // declare an outputSchema at all should still return parsed content from
+  // the content array, not the raw CallToolResult envelope.
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'no-output-schema-test-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should return parsed JSON content when outputSchema is undefined', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    // Tool has NO outputSchema — common for FastMCP and many MCP servers
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'get_patient',
+          description: 'Get patient information',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { patientId: { type: 'string' } },
+          },
+          // No outputSchema defined
+        },
+      ],
+    });
+
+    const patientData = {
+      success: true,
+      patient: { id: '123', name: 'John Doe', dob: '1990-01-01' },
+      markdown: '## Patient: John Doe',
+    };
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify(patientData) }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const getTool = tools['get_patient'];
+    expect(getTool).toBeDefined();
+
+    const result = await getTool.execute?.({ patientId: '123' });
+
+    // Before the fix, this returned the raw envelope { content: [...], isError: false }
+    // or {} if Zod stripped the keys. Now it should return the parsed content.
+    expect(result).toEqual(patientData);
+  });
+
+  it('should return raw text when content is not valid JSON', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'describe',
+          description: 'Describe something',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { topic: { type: 'string' } },
+          },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: 'This is a plain text response' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const result = await tools['describe']!.execute?.({ topic: 'test' });
+
+    expect(result).toBe('This is a plain text response');
+  });
+});
+
 describe('MastraMCPClient - outputSchema Zod stripping', () => {
   // Reproduces the bug where the Zod output schema converted from the MCP tool's
   // JSON Schema strips unknown keys from the result. This happens because Zod's
