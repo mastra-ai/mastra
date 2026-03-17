@@ -20,6 +20,25 @@
       window.MASTRA_REQUEST_CONTEXT_PRESETS = '%%MASTRA_REQUEST_CONTEXT_PRESETS%%';
       window.MASTRA_THEME_TOGGLE = '%%MASTRA_THEME_TOGGLE%%';
 
+      try {
+        const themeToggleEnabled = window.MASTRA_THEME_TOGGLE === 'true';
+        const storageValue = window.localStorage.getItem('mastra-playground-store');
+        const parsedStorage = storageValue ? JSON.parse(storageValue) : null;
+        const persistedTheme = parsedStorage?.state?.theme;
+
+        const selectedTheme =
+          themeToggleEnabled && (persistedTheme === 'light' || persistedTheme === 'system') ? persistedTheme : 'dark';
+
+        const resolvedTheme =
+          selectedTheme === 'system'
+            ? window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light'
+            : selectedTheme;
+
+        document.documentElement.className = resolvedTheme;
+      } catch {}
+
       function connectSSE() {
         const basePath = window.MASTRA_STUDIO_BASE_PATH || '';
         const events = new EventSource(`${basePath}/refresh-events`);
