@@ -79,23 +79,22 @@ describe('createMcpManager', () => {
   });
 
   describe('init with server defs', () => {
-    it('builds stdio server def correctly', async () => {
+    it('builds stdio server def correctly with per-server MCPClient', async () => {
       const stdioConfig: McpStdioServerConfig = { command: 'npx', args: ['-y', 'mcp-fs'], env: { HOME: '/tmp' } };
       setupConfig({ mcpServers: { fs: stdioConfig } });
 
-      const mockListTools = vi.fn().mockResolvedValue({ fs_read: {} });
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listTools = mockListTools;
-        this.disconnect = vi.fn();
+        this.listTools = vi.fn().mockResolvedValue({ fs_read: {} });
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 
       const manager = createMcpManager('/tmp/test');
       await manager.init();
 
       expect(MockedMCPClient).toHaveBeenCalledWith({
-        id: 'mastra-code-mcp',
+        id: 'mastra-code-mcp-fs',
         servers: {
-          fs: { command: 'npx', args: ['-y', 'mcp-fs'], env: { HOME: '/tmp' } },
+          fs: { command: 'npx', args: ['-y', 'mcp-fs'], env: { HOME: '/tmp' }, stderr: 'pipe' },
         },
       });
     });
@@ -107,10 +106,9 @@ describe('createMcpManager', () => {
       };
       setupConfig({ mcpServers: { remote: httpConfig } });
 
-      const mockListTools = vi.fn().mockResolvedValue({ remote_weather: {} });
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listTools = mockListTools;
-        this.disconnect = vi.fn();
+        this.listTools = vi.fn().mockResolvedValue({ remote_weather: {} });
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 
       const manager = createMcpManager('/tmp/test');
@@ -127,10 +125,9 @@ describe('createMcpManager', () => {
       const httpConfig: McpHttpServerConfig = { url: 'https://mcp.example.com/mcp' };
       setupConfig({ mcpServers: { remote: httpConfig } });
 
-      const mockListTools = vi.fn().mockResolvedValue({});
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listTools = mockListTools;
-        this.disconnect = vi.fn();
+        this.listTools = vi.fn().mockResolvedValue({});
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 
       const manager = createMcpManager('/tmp/test');
@@ -141,16 +138,36 @@ describe('createMcpManager', () => {
       expect(serverDef.url).toBeInstanceOf(URL);
       expect(serverDef.requestInit).toBeUndefined();
     });
+
+    it('creates one MCPClient per server', async () => {
+      setupConfig({
+        mcpServers: {
+          fs: { command: 'npx' },
+          remote: { url: 'https://example.com/mcp' },
+        },
+      });
+
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listTools = vi.fn().mockResolvedValue({});
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      expect(MockedMCPClient).toHaveBeenCalledTimes(2);
+      expect(MockedMCPClient.mock.calls[0]![0]!.id).toBe('mastra-code-mcp-fs');
+      expect(MockedMCPClient.mock.calls[1]![0]!.id).toBe('mastra-code-mcp-remote');
+    });
   });
 
   describe('extraServers parameter', () => {
     it('merges programmatic servers with file-based config', async () => {
       setupConfig({ mcpServers: { fs: { command: 'npx', args: ['-y', 'mcp-fs'] } } });
 
-      const mockListTools = vi.fn().mockResolvedValue({ fs_read: {}, remote_weather: {} });
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listTools = mockListTools;
-        this.disconnect = vi.fn();
+        this.listTools = vi.fn().mockResolvedValue({});
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 
       const manager = createMcpManager('/tmp/test', {
@@ -158,18 +175,19 @@ describe('createMcpManager', () => {
       });
       await manager.init();
 
-      const call = MockedMCPClient.mock.calls[0]![0]!;
-      expect(call.servers).toHaveProperty('fs');
-      expect(call.servers).toHaveProperty('remote');
+      // Two MCPClients created — one for fs, one for remote
+      expect(MockedMCPClient).toHaveBeenCalledTimes(2);
+      const ids = MockedMCPClient.mock.calls.map(c => c[0]!.id);
+      expect(ids).toContain('mastra-code-mcp-fs');
+      expect(ids).toContain('mastra-code-mcp-remote');
     });
 
     it('programmatic servers override file-based servers with the same name', async () => {
       setupConfig({ mcpServers: { myserver: { command: 'old-cmd' } } });
 
-      const mockListTools = vi.fn().mockResolvedValue({});
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listTools = mockListTools;
-        this.disconnect = vi.fn();
+        this.listTools = vi.fn().mockResolvedValue({});
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 
       const manager = createMcpManager('/tmp/test', {
@@ -177,9 +195,11 @@ describe('createMcpManager', () => {
       });
       await manager.init();
 
-      const call = MockedMCPClient.mock.calls[0]![0]!;
-      expect((call.servers['myserver'] as any).command).toBe('new-cmd');
-      expect((call.servers['myserver'] as any).args).toEqual(['--flag']);
+      // Only one MCPClient since the name is the same
+      expect(MockedMCPClient).toHaveBeenCalledTimes(1);
+      const serverDef = MockedMCPClient.mock.calls[0]![0]!.servers['myserver'] as any;
+      expect(serverDef.command).toBe('new-cmd');
+      expect(serverDef.args).toEqual(['--flag']);
     });
 
     it('hasServers returns true when only extraServers provided and config is empty', () => {
@@ -193,10 +213,9 @@ describe('createMcpManager', () => {
     it('preserves extra servers after reload', async () => {
       setupConfig({ mcpServers: { fs: { command: 'npx' } } });
 
-      const mockListTools = vi.fn().mockResolvedValue({ fs_tool: {}, extra_tool: {} });
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listTools = mockListTools;
-        this.disconnect = vi.fn();
+        this.listTools = vi.fn().mockResolvedValue({});
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 
       const manager = createMcpManager('/tmp/test', {
@@ -205,10 +224,107 @@ describe('createMcpManager', () => {
       await manager.init();
       await manager.reload();
 
-      // After reload, extra servers should still be included
-      const lastCall = MockedMCPClient.mock.calls[MockedMCPClient.mock.calls.length - 1]![0]!;
-      expect(lastCall.servers).toHaveProperty('extra');
-      expect(lastCall.servers).toHaveProperty('fs');
+      // After reload, should still create clients for both servers
+      // init creates 2, reload creates 2 more = 4 total
+      const allIds = MockedMCPClient.mock.calls.map(c => c[0]!.id);
+      // Check the last two calls (from reload) include both servers
+      const reloadIds = allIds.slice(-2);
+      expect(reloadIds).toContain('mastra-code-mcp-fs');
+      expect(reloadIds).toContain('mastra-code-mcp-extra');
+    });
+  });
+
+  describe('initInBackground', () => {
+    it('returns init result with connected and failed servers', async () => {
+      setupConfig({
+        mcpServers: { fs: { command: 'npx' } },
+        skippedServers: [{ name: 'bad', reason: 'Invalid entry' }],
+      });
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listTools = vi.fn().mockResolvedValue({ fs_read: {}, fs_write: {} });
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      const result = await manager.initInBackground();
+
+      expect(result.connected).toHaveLength(1);
+      expect(result.connected[0]!.name).toBe('fs');
+      expect(result.failed).toHaveLength(0);
+      expect(result.totalTools).toBe(2);
+      expect(result.skipped).toEqual([{ name: 'bad', reason: 'Invalid entry' }]);
+    });
+
+    it('returns failed servers on connection error', async () => {
+      setupConfig({ mcpServers: { remote: { url: 'https://example.com/mcp' } } });
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listTools = vi.fn().mockRejectedValue(new Error('Connection failed'));
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      const result = await manager.initInBackground();
+
+      expect(result.connected).toHaveLength(0);
+      expect(result.failed).toHaveLength(1);
+      expect(result.failed[0]!.name).toBe('remote');
+      expect(result.totalTools).toBe(0);
+    });
+
+    it('handles mixed success and failure independently', async () => {
+      setupConfig({
+        mcpServers: {
+          good: { command: 'npx', args: ['good-server'] },
+          bad: { url: 'https://broken.example.com/mcp' },
+          alsogood: { command: 'npx', args: ['also-good'] },
+        },
+      });
+
+      // Each MCPClient instance gets its own listTools mock based on server name
+      MockedMCPClient.mockImplementation(function (this: any, opts: any) {
+        const serverName = Object.keys(opts.servers)[0];
+        if (serverName === 'bad') {
+          this.listTools = vi.fn().mockRejectedValue(new Error('Connection refused'));
+        } else if (serverName === 'good') {
+          this.listTools = vi.fn().mockResolvedValue({ good_tool1: {}, good_tool2: {} });
+        } else {
+          this.listTools = vi.fn().mockResolvedValue({ alsogood_tool1: {} });
+        }
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      const result = await manager.initInBackground();
+
+      expect(result.connected).toHaveLength(2);
+      expect(result.failed).toHaveLength(1);
+      expect(result.failed[0]!.name).toBe('bad');
+      expect(result.failed[0]!.error).toBe('Connection refused');
+      expect(result.totalTools).toBe(3);
+
+      // Tools from successful servers should be available
+      const tools = manager.getTools();
+      expect(tools).toHaveProperty('good_tool1');
+      expect(tools).toHaveProperty('good_tool2');
+      expect(tools).toHaveProperty('alsogood_tool1');
+    });
+
+    it('returns cached result if already initialized', async () => {
+      setupConfig({ mcpServers: { fs: { command: 'npx' } } });
+      const mockListTools = vi.fn().mockResolvedValue({ fs_read: {} });
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listTools = mockListTools;
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+      const result = await manager.initInBackground();
+
+      expect(result.connected).toHaveLength(1);
+      expect(result.totalTools).toBe(1);
+      // listTools should only have been called once (from init, not again from initInBackground)
+      expect(mockListTools).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -217,7 +333,7 @@ describe('createMcpManager', () => {
       setupConfig({ mcpServers: { fs: { command: 'npx' } } });
       MockedMCPClient.mockImplementation(function (this: any) {
         this.listTools = vi.fn().mockResolvedValue({ fs_tool: {} });
-        this.disconnect = vi.fn();
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 
       const manager = createMcpManager('/tmp/test');
@@ -232,7 +348,7 @@ describe('createMcpManager', () => {
       setupConfig({ mcpServers: { remote: { url: 'https://example.com/mcp' } } });
       MockedMCPClient.mockImplementation(function (this: any) {
         this.listTools = vi.fn().mockResolvedValue({ remote_tool: {} });
-        this.disconnect = vi.fn();
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 
       const manager = createMcpManager('/tmp/test');
@@ -242,29 +358,68 @@ describe('createMcpManager', () => {
       expect(statuses).toHaveLength(1);
       expect(statuses[0]!.transport).toBe('http');
     });
+  });
 
-    it('sets transport correctly on connection error', async () => {
+  describe('disconnect', () => {
+    it('disconnects all per-server MCPClient instances', async () => {
       setupConfig({
         mcpServers: {
-          local: { command: 'npx' },
+          fs: { command: 'npx' },
           remote: { url: 'https://example.com/mcp' },
         },
       });
+      const disconnectFns: Array<ReturnType<typeof vi.fn>> = [];
       MockedMCPClient.mockImplementation(function (this: any) {
-        this.listTools = vi.fn().mockRejectedValue(new Error('Connection failed'));
-        this.disconnect = vi.fn();
+        const fn = vi.fn().mockResolvedValue(undefined);
+        disconnectFns.push(fn);
+        this.listTools = vi.fn().mockResolvedValue({});
+        this.disconnect = fn;
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+      await manager.disconnect();
+
+      // Each MCPClient instance should have been disconnected
+      expect(disconnectFns).toHaveLength(2);
+      for (const fn of disconnectFns) {
+        expect(fn).toHaveBeenCalledTimes(1);
+      }
+    });
+
+    it('ignores disconnect errors gracefully', async () => {
+      setupConfig({ mcpServers: { fs: { command: 'npx' } } });
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listTools = vi.fn().mockResolvedValue({ fs_tool: {} });
+        this.disconnect = vi.fn().mockRejectedValue(new Error('Disconnect error'));
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+      // Should not throw
+      await expect(manager.disconnect()).resolves.not.toThrow();
+    });
+  });
+
+  describe('reload', () => {
+    it('disconnects old clients, reloads config, and reconnects', async () => {
+      setupConfig({ mcpServers: { fs: { command: 'npx' } } });
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listTools = vi.fn().mockResolvedValue({ fs_tool: {} });
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
       } as any);
 
       const manager = createMcpManager('/tmp/test');
       await manager.init();
 
-      const statuses = manager.getServerStatuses();
-      const local = statuses.find(s => s.name === 'local')!;
-      const remote = statuses.find(s => s.name === 'remote')!;
-      expect(local.transport).toBe('stdio');
-      expect(remote.transport).toBe('http');
-      expect(local.connected).toBe(false);
-      expect(remote.connected).toBe(false);
+      // Change config for reload
+      setupConfig({ mcpServers: { newserver: { url: 'https://new.example.com/mcp' } } });
+      await manager.reload();
+
+      // Should have created clients for both init and reload
+      expect(MockedMCPClient.mock.calls.length).toBeGreaterThanOrEqual(2);
+      const lastCall = MockedMCPClient.mock.calls[MockedMCPClient.mock.calls.length - 1]![0]!;
+      expect(lastCall.id).toBe('mastra-code-mcp-newserver');
     });
   });
 });
