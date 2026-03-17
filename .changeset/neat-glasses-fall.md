@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-fix memory workingMemory schema typing to consistently accept PublicSchema input while preserving runtime normalization paths
+Fixed schema-based working memory typing so `workingMemory.schema` accepts supported schemas such as Zod and JSON Schema.

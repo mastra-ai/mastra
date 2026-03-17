@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed request context type-check coverage to validate Zod v3 and Zod v4 schema inference in the core type-check template.
+Fixed type inference for requestContext schemas when using Zod v3 and v4. Agent and tool configurations now correctly infer RequestContext types from Zod schemas and other StandardSchema-compatible schemas.
