@@ -1629,15 +1629,20 @@ describe('OpenAISchemaCompatLayer - typeless anyOf branches from z.any()', () =>
     const resumeData = result.properties?.resumeData as Record<string, any>;
 
     expect(resumeData).toBeDefined();
+    expect(resumeData.description).toBe('Resume data from suspended tool');
     expect(resumeData.anyOf).toBeDefined();
-    expect(resumeData.anyOf).toHaveLength(2);
 
-    // First branch must have a concrete type (was missing before the fix)
-    expect(resumeData.anyOf[0].type).toBe('object');
-    expect(resumeData.anyOf[0].description).toBe('Resume data from suspended tool');
-    expect(resumeData.anyOf[0].additionalProperties).toBe(false);
+    // Every branch must have a concrete type
+    for (const branch of resumeData.anyOf) {
+      expect(branch.type).toBeDefined();
+    }
 
-    // Second branch is the null option
-    expect(resumeData.anyOf[1].type).toBe('null');
+    // Should cover common JSON types including null
+    const types = resumeData.anyOf.map((b: any) => b.type);
+    expect(types).toContain('string');
+    expect(types).toContain('number');
+    expect(types).toContain('boolean');
+    expect(types).toContain('object');
+    expect(types).toContain('null');
   });
 });

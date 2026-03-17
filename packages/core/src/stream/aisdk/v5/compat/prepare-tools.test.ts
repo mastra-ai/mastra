@@ -455,6 +455,38 @@ describe('prepareToolsAndToolChoice', () => {
     });
   });
 
+  describe('fixTypelessProperties anyOf branch recursion', () => {
+    it('should fix typeless branches inside anyOf', () => {
+      const toolWithAnyOf = {
+        description: 'A tool with anyOf containing a typeless branch',
+        parameters: jsonSchema({
+          type: 'object',
+          properties: {
+            data: {
+              anyOf: [{ description: 'typeless branch' }, { type: 'null' }],
+            },
+          },
+        }),
+        execute: async () => 'ok',
+      };
+
+      const result = prepareToolsAndToolChoice({
+        tools: { testTool: toolWithAnyOf as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v2',
+      });
+
+      const toolDef = result.tools![0] as { type: string; inputSchema: Record<string, any> };
+      const dataProp = toolDef.inputSchema.properties.data as Record<string, any>;
+
+      expect(dataProp.anyOf).toBeDefined();
+      for (const branch of dataProp.anyOf) {
+        expect(branch.type).toBeDefined();
+      }
+    });
+  });
+
   describe('default targetVersion', () => {
     it('should default to v2 when targetVersion is not specified', () => {
       const providerTool = {

@@ -46,11 +46,14 @@ function fixTypelessProperties(schema: Record<string, unknown>): Record<string, 
         if (typeof value !== 'object' || value === null || Array.isArray(value)) {
           return [key, value];
         }
+
         const propSchema = value as Record<string, unknown>;
+
         if (isTypelessSchema(propSchema)) {
           const { items: _items, ...rest } = propSchema;
           return [key, { ...rest, type: PERMISSIVE_TYPE }];
         }
+
         return [key, fixTypelessProperties(propSchema)];
       }),
     );
