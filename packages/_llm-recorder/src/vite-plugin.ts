@@ -208,8 +208,20 @@ export function llmRecorderPlugin(options: LLMRecorderPluginOptions = {}): Plugi
       const imports = [`import { useLLMRecording as __autoUseLLMRecording } from '@internal/llm-recorder';`];
       if (transformRequest) {
         const exportName = transformRequest.exportName || 'transformRequest';
+        // If importPath is relative, compute the path from the test file to the transform module
+        let importPath = transformRequest.importPath;
+        if (importPath.startsWith('./') || importPath.startsWith('../')) {
+          const testDir = path.dirname(id);
+          const projectRoot = process.cwd();
+          const absoluteTransformPath = path.resolve(projectRoot, importPath);
+          importPath = path.relative(testDir, absoluteTransformPath);
+          // Ensure the path starts with ./ for relative imports
+          if (!importPath.startsWith('.') && !importPath.startsWith('/')) {
+            importPath = './' + importPath;
+          }
+        }
         imports.push(
-          `import { ${exportName} as __autoTransformRequest } from ${JSON.stringify(transformRequest.importPath)};`,
+          `import { ${exportName} as __autoTransformRequest } from ${JSON.stringify(importPath)};`,
         );
       }
 
