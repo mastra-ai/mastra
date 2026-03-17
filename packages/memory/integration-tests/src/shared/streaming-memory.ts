@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { UUID } from 'node:crypto';
 import { getLLMTestMode } from '@internal/llm-recorder';
-import { isV5PlusModel, setupDummyApiKeys, agentGenerate, agentStream } from '@internal/test-utils';
+import { isV5PlusModel, setupDummyApiKeys, agentGenerate, agentStream, shouldSkipLLMTest } from '@internal/test-utils';
 import { toAISdkStream } from '@mastra/ai-sdk';
 import { Agent } from '@mastra/core/agent';
 import { AIV5Adapter } from '@mastra/core/agent/message-list';
@@ -10,7 +10,9 @@ import { Mastra } from '@mastra/core/mastra';
 import type { MastraMemory } from '@mastra/core/memory';
 import { describe, expect, it } from 'vitest';
 
-setupDummyApiKeys(getLLMTestMode(), ['openai']);
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['openai']);
+const skipLLM = shouldSkipLLMTest(MODE, 'openai');
 
 export async function setupStreamingMemoryTest({
   model,
@@ -21,7 +23,7 @@ export async function setupStreamingMemoryTest({
   model: MastraModelConfig;
   tools: any;
 }) {
-  describe('Memory Streaming Tests', () => {
+  describe.skipIf(skipLLM)('Memory Streaming Tests', () => {
     it('should handle multiple tool calls in memory thread history', async () => {
       // Create agent with memory and tools
       const agent = new Agent({

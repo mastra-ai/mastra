@@ -100,11 +100,20 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
       const tokenLimiter = new TokenLimiter(250);
-      const result = await tokenLimiter.processInput({
-        messages: new MessageList({ threadId: thread.id, resourceId }).add(queryResult.messages, 'memory').get.all.db(),
+      const tokenLimitList = new MessageList({ threadId: thread.id, resourceId }).add(queryResult.messages, 'memory');
+      await tokenLimiter.processInputStep({
+        messageList: tokenLimitList,
+        messages: tokenLimitList.get.all.db(),
+        systemMessages: [],
         abort,
         requestContext: new RequestContext(),
+        stepNumber: 0,
+        steps: [],
+        state: {},
+        model: {} as any,
+        retryCount: 0,
       });
+      const result = tokenLimitList.get.all.db();
 
       // We should have messages limited by token count
       expect(result.length).toBeGreaterThan(0);
@@ -139,13 +148,21 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       const tokenLimiter2 = new TokenLimiter(3000); // High limit that should exceed total tokens
       const messageList = new MessageList({ threadId: thread.id, resourceId }).add(allMessagesQuery.messages, 'memory');
 
-      const processedMessages = await tokenLimiter2.processInput({
+      await tokenLimiter2.processInputStep({
+        messageList,
         messages: messageList.get.all.db(),
+        systemMessages: [],
         abort: () => {
           throw new Error('Aborted');
         },
         requestContext: new RequestContext(),
+        stepNumber: 0,
+        steps: [],
+        state: {},
+        model: {} as any,
+        retryCount: 0,
       });
+      const processedMessages = messageList.get.all.db();
 
       // create response message list to add to memory
       const messages = new MessageList({ threadId: thread.id, resourceId })
@@ -331,12 +348,20 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
         requestContext,
       })) as MastraDBMessage[];
       const filteredArray = Array.isArray(filteredMessages) ? filteredMessages : filteredMessages.get.all.db();
-      const limitedMessages = (await tokenLimiter.processInput({
-        messages: filteredArray,
+      const tokenLimitList = new MessageList({ threadId: thread.id, resourceId }).add(filteredArray, 'memory');
+      await tokenLimiter.processInputStep({
+        messageList: tokenLimitList,
+        messages: tokenLimitList.get.all.db(),
+        systemMessages: [],
         abort,
         requestContext,
-      })) as MastraDBMessage[];
-      const result = v2ToCoreMessages(limitedMessages);
+        stepNumber: 0,
+        steps: [],
+        state: {},
+        model: {} as any,
+        retryCount: 0,
+      });
+      const result = v2ToCoreMessages(tokenLimitList.get.all.db());
 
       // We should have fewer messages after filtering and token limiting
       expect(result.length).toBeGreaterThan(0);
@@ -594,12 +619,19 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       const tokenLimitList = new MessageList({ threadId, resourceId }).add(tokenLimitQuery.messages, 'memory');
       // Use a very small token limit (10 tokens) to ensure messages get filtered
       const tokenLimiter = new TokenLimiter(30);
-      const tokenLimitedMessages = await tokenLimiter.processInput({
+      await tokenLimiter.processInputStep({
+        messageList: tokenLimitList,
         messages: tokenLimitList.get.all.db(),
+        systemMessages: [],
         abort,
         requestContext: new RequestContext(),
+        stepNumber: 0,
+        steps: [],
+        state: {},
+        model: {} as any,
+        retryCount: 0,
       });
-      const tokenLimitedResult = v2ToCoreMessages(tokenLimitedMessages);
+      const tokenLimitedResult = v2ToCoreMessages(tokenLimitList.get.all.db());
 
       // Should have fewer messages after token limiting (10 tokens is very restrictive)
       expect(tokenLimitedResult.length).toBeLessThan(baselineResult.length);
@@ -624,12 +656,20 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       const filteredArray = Array.isArray(filteredResult) ? filteredResult : filteredResult.get.all.db();
 
       // Then apply token limit
-      const combinedMessages = await tokenLimiter2.processInput({
-        messages: filteredArray,
+      const tokenLimitList2 = new MessageList({ threadId, resourceId }).add(filteredArray, 'memory');
+      await tokenLimiter2.processInputStep({
+        messageList: tokenLimitList2,
+        messages: tokenLimitList2.get.all.db(),
+        systemMessages: [],
         abort,
         requestContext,
+        stepNumber: 0,
+        steps: [],
+        state: {},
+        model: {} as any,
+        retryCount: 0,
       });
-      const combinedResult = v2ToCoreMessages(combinedMessages);
+      const combinedResult = v2ToCoreMessages(tokenLimitList2.get.all.db());
 
       // No tool calls should remain
       expect(filterToolCallsByName(combinedResult, 'get_weather').length).toBe(0);

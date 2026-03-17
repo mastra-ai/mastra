@@ -15,7 +15,7 @@
  */
 
 import { getLLMTestMode } from '@internal/llm-recorder';
-import { setupDummyApiKeys } from '@internal/test-utils';
+import { setupDummyApiKeys, shouldSkipLLMTest } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
@@ -25,7 +25,8 @@ import { Memory } from '@mastra/memory';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-setupDummyApiKeys(getLLMTestMode(), ['openai']);
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['openai']);
 
 type MessagePart = MastraMessageContentV2['parts'][number];
 type OrderEntry = { type: string; content?: string };
@@ -195,7 +196,11 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
 
   // Run tests for each model configuration
   for (const modelConfig of models) {
-    describe(`Message Ordering with ${modelConfig.name} (${version}) (Issue #9909)`, () => {
+    // Extract provider name from env var (e.g., 'OPENAI_API_KEY' -> 'openai')
+    const provider = modelConfig.envVar.replace('_API_KEY', '').toLowerCase() as 'openai' | 'anthropic' | 'google';
+    const skipLLM = shouldSkipLLMTest(MODE, provider);
+
+    describe.skipIf(skipLLM)(`Message Ordering with ${modelConfig.name} (${version}) (Issue #9909)`, () => {
       const dbFile = `file:ordering-test-${version}.db`;
 
       const createMemory = () =>
@@ -207,17 +212,7 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           }),
         });
 
-      const skipIfNoApiKey = () => {
-        if (!process.env[modelConfig.envVar]) {
-          console.info(`Skipping: ${modelConfig.envVar} not set`);
-          return true;
-        }
-        return false;
-      };
-
       it('should preserve text ordering: stream -> raw storage -> recall', async () => {
-        if (skipIfNoApiKey()) return;
-
         const memory = createMemory();
         const tools = createWeatherTools();
 
@@ -364,8 +359,6 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
       }, 90000);
 
       it('should preserve ordering with multiple tool calls', async () => {
-        if (skipIfNoApiKey()) return;
-
         const memory = createMemory();
         const tools = createResearchTools();
 
@@ -463,8 +456,6 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
       }, 120000);
 
       it('should match stream order exactly in storage', async () => {
-        if (skipIfNoApiKey()) return;
-
         const memory = createMemory();
         const tools = createWeatherTools();
 

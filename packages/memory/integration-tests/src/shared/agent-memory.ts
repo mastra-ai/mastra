@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { openai as openaiV6 } from '@ai-sdk/openai-v6';
 import { getLLMTestMode } from '@internal/llm-recorder';
-import { setupDummyApiKeys, agentGenerate } from '@internal/test-utils';
+import { setupDummyApiKeys, agentGenerate, shouldSkipLLMTest } from '@internal/test-utils';
 import type { MastraDBMessage, UIMessageWithMetadata } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import type { MastraModelConfig, CoreMessage } from '@mastra/core/llm';
@@ -19,7 +19,9 @@ import { Memory } from '@mastra/memory';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-setupDummyApiKeys(getLLMTestMode(), ['openai']);
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['openai']);
+const skipLLM = shouldSkipLLMTest(MODE, 'openai');
 
 export async function getAgentMemoryTests({
   model,
@@ -176,77 +178,80 @@ export async function getAgentMemoryTests({
       expect(workingMemoryData).toBe('# Resource Memory\n- Shared across threads');
     });
 
-    it('should call getMemoryMessages for first message in new thread when using resource-scoped semantic recall', async () => {
-      const storage = new LibSQLStore({
-        id: 'inline-storage',
-        url: dbFile,
-      });
-      const vector = new LibSQLVector({
-        url: dbFile,
-        id: 'test-vector',
-      });
+    it.skipIf(skipLLM)(
+      'should call getMemoryMessages for first message in new thread when using resource-scoped semantic recall',
+      async () => {
+        const storage = new LibSQLStore({
+          id: 'inline-storage',
+          url: dbFile,
+        });
+        const vector = new LibSQLVector({
+          url: dbFile,
+          id: 'test-vector',
+        });
 
-      const mastra = new Mastra({
-        storage,
-        vectors: { default: vector },
-        agents: {
-          testAgent: new Agent({
-            id: 'test-agent',
-            name: 'Test Agent',
-            instructions: 'You are a helpful assistant',
-            model,
-            memory: new Memory({
-              options: {
-                lastMessages: 5,
-                semanticRecall: {
-                  topK: 5,
-                  messageRange: 5,
-                  scope: 'resource',
+        const mastra = new Mastra({
+          storage,
+          vectors: { default: vector },
+          agents: {
+            testAgent: new Agent({
+              id: 'test-agent',
+              name: 'Test Agent',
+              instructions: 'You are a helpful assistant',
+              model,
+              memory: new Memory({
+                options: {
+                  lastMessages: 5,
+                  semanticRecall: {
+                    topK: 5,
+                    messageRange: 5,
+                    scope: 'resource',
+                  },
                 },
-              },
-              storage,
-              vector,
-              embedder: fastembed,
+                storage,
+                vector,
+                embedder: fastembed,
+              }),
             }),
-          }),
-        },
-      });
+          },
+        });
 
-      const agent = mastra.getAgent('testAgent');
-      const memory = (await agent.getMemory()) as Memory;
-      const resourceId = 'test-resource-semantic';
+        const agent = mastra.getAgent('testAgent');
+        const memory = (await agent.getMemory()) as Memory;
+        const resourceId = 'test-resource-semantic';
 
-      // First, create a thread and add some messages to establish history
-      const thread1Id = randomUUID();
+        // First, create a thread and add some messages to establish history
+        const thread1Id = randomUUID();
 
-      await agentGenerate(agent, 'Tell me about cats', { threadId: thread1Id, resourceId }, model);
+        await agentGenerate(agent, 'Tell me about cats', { threadId: thread1Id, resourceId }, model);
 
-      // Verify first thread has messages
-      const thread1Messages = await memory.recall({ threadId: thread1Id, resourceId });
-      expect(thread1Messages.messages.length).toBeGreaterThan(0);
+        // Verify first thread has messages
+        const thread1Messages = await memory.recall({ threadId: thread1Id, resourceId });
+        expect(thread1Messages.messages.length).toBeGreaterThan(0);
 
-      // Now create a second thread - this should be able to access memory from thread1
-      // due to resource scope, even on the first message
-      const thread2Id = randomUUID();
+        // Now create a second thread - this should be able to access memory from thread1
+        // due to resource scope, even on the first message
+        const thread2Id = randomUUID();
 
-      const secondResponse = (await agentGenerate(
-        agent,
-        'What did we discuss about cats?',
-        { threadId: thread2Id, resourceId },
-        model,
-      )) as any;
+        const secondResponse = (await agentGenerate(
+          agent,
+          'What did we discuss about cats?',
+          { threadId: thread2Id, resourceId },
+          model,
+        )) as any;
 
-      // Verify that the agent was able to access cross-thread memory
-      // by checking that the response references the previous conversation
-      expect(secondResponse.text.toLowerCase()).toMatch(/(cat|animal|discuss)/);
+        // Verify that the agent was able to access cross-thread memory
+        // by checking that the response references the previous conversation
+        expect(secondResponse.text.toLowerCase()).toMatch(/(cat|animal|discuss)/);
 
-      // Verify that the second thread now has messages
-      const thread2Messages = await memory.recall({ threadId: thread2Id, resourceId });
-      expect(thread2Messages.messages.length).toBeGreaterThan(0);
-    });
+        // Verify that the second thread now has messages
+        const thread2Messages = await memory.recall({ threadId: thread2Id, resourceId });
+        expect(thread2Messages.messages.length).toBeGreaterThan(0);
+      },
+    );
   });
 
-  describe('Agent memory message persistence', () => {
+  describe.skipIf(skipLLM)('Agent memory message persistence', () => {
     // making a separate memory for agent to avoid conflicts with other tests
     const memory = new Memory({
       options: {
@@ -517,7 +522,7 @@ export async function getAgentMemoryTests({
     );
   });
 
-  describe('Agent thread metadata with generateTitle', () => {
+  describe.skipIf(skipLLM)('Agent thread metadata with generateTitle', () => {
     // Agent with generateTitle: true
     const memoryWithTitle = new Memory({
       options: {
@@ -674,7 +679,7 @@ export async function getAgentMemoryTests({
     });
   });
 
-  describe('Agent with message processors', () => {
+  describe.skipIf(skipLLM)('Agent with message processors', () => {
     const memoryWithProcessor = new Memory({
       embedder: fastembed,
       storage: new LibSQLStore({
@@ -868,7 +873,7 @@ export async function getAgentMemoryTests({
     }, 30_000);
   });
 
-  describe('Agent memory test with MockStore', () => {
+  describe.skipIf(skipLLM)('Agent memory test with MockStore', () => {
     const mockMemory = new Memory({
       storage: new MockStore(),
       options: {
@@ -914,7 +919,7 @@ export async function getAgentMemoryTests({
     });
   });
 
-  describe('Input Processors', () => {
+  describe.skipIf(skipLLM)('Input Processors', () => {
     it('should run MessageHistory input processor and include previous messages in LLM request', async () => {
       const inputProcessorMemory = new Memory({
         storage: new MockStore(),
@@ -977,7 +982,7 @@ export async function getAgentMemoryTests({
     });
   });
 
-  describe('Guardrails + Memory interaction', () => {
+  describe.skipIf(skipLLM)('Guardrails + Memory interaction', () => {
     it('should NOT save messages to memory when output guardrail aborts', async () => {
       const guardrailStorage = new MockStore();
       const guardrailMemory = new Memory({
@@ -1139,7 +1144,7 @@ export async function getAgentMemoryTests({
     });
   });
 
-  describe('Thread Cloning', () => {
+  describe.skipIf(skipLLM)('Thread Cloning', () => {
     const cloneStorage = new LibSQLStore({
       id: 'clone-storage',
       url: dbFile,

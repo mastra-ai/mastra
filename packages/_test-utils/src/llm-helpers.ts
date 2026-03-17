@@ -267,3 +267,60 @@ export function hasApiKey(provider: keyof ProviderApiKeys): boolean {
   };
   return !!process.env[envVars[provider]];
 }
+
+/**
+ * Check if a real (non-dummy) API key is available for a provider.
+ * Returns false if the key is a dummy key set by setupDummyApiKeys.
+ */
+export function hasRealApiKey(provider: keyof ProviderApiKeys): boolean {
+  const envVars: Record<keyof ProviderApiKeys, string> = {
+    openai: 'OPENAI_API_KEY',
+    anthropic: 'ANTHROPIC_API_KEY',
+    google: 'GOOGLE_API_KEY',
+    openrouter: 'OPENROUTER_API_KEY',
+  };
+  const key = process.env[envVars[provider]];
+  if (!key) return false;
+  // Check if it's a dummy key
+  return !key.includes('-dummy-') && !key.includes('dummy-');
+}
+
+/**
+ * Determine if an LLM test should be skipped.
+ *
+ * Skip when:
+ * - No real API key is available AND not in replay mode with working recordings
+ *
+ * In practice, this means tests skip if there's no real API key,
+ * unless replay mode is explicitly set AND recordings are expected to work.
+ *
+ * @param mode - Current LLM test mode from getLLMTestMode()
+ * @param provider - Which provider's API key to check
+ * @returns true if the test should be skipped
+ *
+ * @example
+ * ```typescript
+ * import { getLLMTestMode } from '@internal/llm-recorder';
+ * import { shouldSkipLLMTest } from '@internal/test-utils';
+ *
+ * const MODE = getLLMTestMode();
+ *
+ * it('should call the LLM', async () => {
+ *   if (shouldSkipLLMTest(MODE, 'openai')) {
+ *     console.log('Skipping: no OpenAI API key and not in replay mode');
+ *     return;
+ *   }
+ *   // ... test code
+ * });
+ * ```
+ */
+export function shouldSkipLLMTest(mode: string, provider: keyof ProviderApiKeys): boolean {
+  // If we have a real API key, never skip
+  if (hasRealApiKey(provider)) return false;
+
+  // If in explicit replay mode, don't skip (recordings should handle it)
+  if (mode === 'replay') return false;
+
+  // For all other cases (live, record, update, auto) without a real key, skip
+  return true;
+}

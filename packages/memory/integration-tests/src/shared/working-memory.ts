@@ -4,7 +4,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { getLLMTestMode } from '@internal/llm-recorder';
-import { isV5PlusModel, agentGenerate as baseAgentGenerate, setupDummyApiKeys } from '@internal/test-utils';
+import {
+  isV5PlusModel,
+  agentGenerate as baseAgentGenerate,
+  setupDummyApiKeys,
+  shouldSkipLLMTest,
+} from '@internal/test-utils';
 import type { MastraModelConfig as TestUtilsModelConfig } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
@@ -17,7 +22,9 @@ import type { JSONSchema7 } from 'json-schema';
 import { describe, expect, it, beforeEach, afterEach, beforeAll } from 'vitest';
 import { z } from 'zod';
 
-setupDummyApiKeys(getLLMTestMode(), ['openai']);
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['openai']);
+const skipLLM = shouldSkipLLMTest(MODE, 'openai');
 
 // Local wrapper to handle Agent type compatibility
 // (Agent has complex generic types that don't play well with the shared helper)
@@ -104,7 +111,7 @@ function getErrorDetails(error: any): string | undefined {
 export function getWorkingMemoryTests(model: MastraModelConfig) {
   const modelName = typeof model === 'string' ? model : (model as any).modelId || (model as any).id || 'sdk-model';
 
-  describe(`Working Memory Tests (${modelName})`, () => {
+  describe.skipIf(skipLLM)(`Working Memory Tests (${modelName})`, () => {
     let memory: Memory;
     let thread: any;
     let storage: LibSQLStore;
