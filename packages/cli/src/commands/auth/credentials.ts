@@ -192,3 +192,16 @@ export async function getToken(): Promise<string> {
 
   throw new Error('Session expired. Run: mastra auth login');
 }
+
+/**
+ * Validate that the user has access to the specified organization.
+ * Throws if the org is not in the user's org list.
+ */
+export async function validateOrgAccess(token: string, orgId: string): Promise<void> {
+  const { fetchOrgs } = await import('./api.js');
+  const orgs = await fetchOrgs(token);
+  const hasAccess = orgs.some(o => o.id === orgId);
+  if (!hasAccess) {
+    throw new Error(`No access to organization ${orgId}. Run: mastra auth orgs`);
+  }
+}

@@ -1,5 +1,5 @@
 import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL } from '../auth/client.js';
-import { getToken, getCurrentOrgId } from '../auth/credentials.js';
+import { getToken, getCurrentOrgId, validateOrgAccess } from '../auth/credentials.js';
 
 async function getLogs(deployId: string, tail: string | undefined, token: string, orgId: string) {
   const client = createApiClient(token, orgId);
@@ -71,6 +71,8 @@ export async function logsAction(deployId: string, opts: { follow?: boolean; tai
     console.error('No organization selected. Run: mastra auth login');
     process.exit(1);
   }
+
+  await validateOrgAccess(token, orgId);
 
   if (opts.follow) {
     await streamLogs(deployId, token, orgId);

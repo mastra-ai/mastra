@@ -1,4 +1,4 @@
-import { getToken, getCurrentOrgId } from '../auth/credentials.js';
+import { getToken, getCurrentOrgId, validateOrgAccess } from '../auth/credentials.js';
 import { fetchProjects } from './platform-api.js';
 
 const statusIcon: Record<string, string> = {
@@ -16,6 +16,8 @@ export async function deploysAction() {
     console.error('No organization selected. Run: mastra auth login');
     process.exit(1);
   }
+
+  await validateOrgAccess(token, orgId);
 
   const projects = await fetchProjects(token, orgId);
 

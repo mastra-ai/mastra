@@ -56,6 +56,33 @@ describe('getCurrentOrgId', () => {
   });
 });
 
+describe('validateOrgAccess', () => {
+  it('passes when org is in the user org list', async () => {
+    vi.resetModules();
+    vi.doMock('./api.js', () => ({
+      fetchOrgs: vi.fn().mockResolvedValue([
+        { id: 'org-1', name: 'Org One', role: 'admin', isCurrent: true },
+        { id: 'org-2', name: 'Org Two', role: 'member', isCurrent: false },
+      ]),
+    }));
+
+    const { validateOrgAccess } = await import('./credentials.js');
+    await expect(validateOrgAccess('tok', 'org-1')).resolves.toBeUndefined();
+  });
+
+  it('throws when org is not in the user org list', async () => {
+    vi.resetModules();
+    vi.doMock('./api.js', () => ({
+      fetchOrgs: vi.fn().mockResolvedValue([{ id: 'org-1', name: 'Org One', role: 'admin', isCurrent: true }]),
+    }));
+
+    const { validateOrgAccess } = await import('./credentials.js');
+    await expect(validateOrgAccess('tok', 'deleted-org')).rejects.toThrow(
+      'No access to organization deleted-org. Run: mastra auth orgs',
+    );
+  });
+});
+
 describe('Credentials interface shape', () => {
   it('accepts minimal credentials', () => {
     const creds = {

@@ -1,4 +1,4 @@
-import { getToken, getCurrentOrgId } from '../auth/credentials.js';
+import { getToken, getCurrentOrgId, validateOrgAccess } from '../auth/credentials.js';
 import type { DeployInfo } from './platform-api.js';
 import { fetchDeployStatus } from './platform-api.js';
 
@@ -35,6 +35,8 @@ export async function statusAction(deployId: string, opts: { watch?: boolean }) 
     console.error('No organization selected. Run: mastra auth login');
     process.exit(1);
   }
+
+  await validateOrgAccess(token, orgId);
 
   if (opts.watch) {
     let lastStatus = '';
