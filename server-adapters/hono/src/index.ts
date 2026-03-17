@@ -634,7 +634,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       if (!token) return next();
 
       try {
-        const user = await authConfig.authenticateToken(token, c.req.raw as any);
+        const user = await authConfig.authenticateToken(token, c.req);
         if (user) {
           requestContext.set('user', user);
         }
