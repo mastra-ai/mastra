@@ -87,13 +87,21 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
 
       if (!memory || (!thread?.id && !resourceId)) {
         messageList.add(options.messages, 'input');
-        const { tripwire } = await capabilities.runInputProcessors({
-          requestContext,
-          ...observabilityContext,
-          messageList,
-          inputProcessorOverrides: options.inputProcessors,
-          processorStates,
-        });
+
+        // Skip input processors during resumeStream - messages will be loaded from snapshot
+        // and input processors will run later in the loop with the full message context
+        const isResume = options.resumeContext?.snapshot !== undefined;
+
+        const { tripwire } = isResume
+          ? { tripwire: undefined }
+          : await capabilities.runInputProcessors({
+              requestContext,
+              ...observabilityContext,
+              messageList,
+              inputProcessorOverrides: options.inputProcessors,
+              processorStates,
+            });
+
         return {
           threadExists: false,
           thread: undefined,
@@ -171,13 +179,19 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
       // Add user messages - memory processors will handle history/semantic recall/working memory
       messageList.add(options.messages, 'input');
 
-      const { tripwire } = await capabilities.runInputProcessors({
-        requestContext,
-        ...observabilityContext,
-        messageList,
-        inputProcessorOverrides: options.inputProcessors,
-        processorStates,
-      });
+      // Skip input processors during resumeStream - messages will be loaded from snapshot
+      // and input processors will run later in the loop with the full message context
+      const isResume = options.resumeContext?.snapshot !== undefined;
+
+      const { tripwire } = isResume
+        ? { tripwire: undefined }
+        : await capabilities.runInputProcessors({
+            requestContext,
+            ...observabilityContext,
+            messageList,
+            inputProcessorOverrides: options.inputProcessors,
+            processorStates,
+          });
 
       return {
         thread: threadObject,
