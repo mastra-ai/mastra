@@ -188,6 +188,7 @@ const deployCommand = studioCommand
   .option('--org <id>', 'Organization ID')
   .option('--project <id>', 'Project ID')
   .option('-y, --yes', 'Auto-accept defaults without confirmation')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
   .action(wrapAction(deployAction));
 
 deployCommand.command('list').description('List deployed studios').action(wrapAction(deploysAction));

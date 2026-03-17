@@ -21,7 +21,7 @@ describe('loadProjectConfig', () => {
     expect(result).toBeNull();
   });
 
-  it('loads config from .mastra-project.json', async () => {
+  it('loads config from default .mastra-project.json', async () => {
     const config = {
       projectId: 'proj-1',
       projectName: 'My App',
@@ -33,10 +33,37 @@ describe('loadProjectConfig', () => {
     const result = await loadProjectConfig(tempDir);
     expect(result).toEqual(config);
   });
+
+  it('loads config from custom file path', async () => {
+    const config = {
+      projectId: 'proj-1',
+      projectName: 'My App',
+      organizationId: 'org-1',
+    };
+
+    writeFileSync(join(tempDir, 'custom-config.json'), JSON.stringify(config, null, 2));
+
+    const result = await loadProjectConfig(tempDir, 'custom-config.json');
+    expect(result).toEqual(config);
+  });
+
+  it('loads config from absolute path', async () => {
+    const config = {
+      projectId: 'proj-1',
+      projectName: 'My App',
+      organizationId: 'org-1',
+    };
+
+    const absolutePath = join(tempDir, 'absolute-config.json');
+    writeFileSync(absolutePath, JSON.stringify(config, null, 2));
+
+    const result = await loadProjectConfig(tempDir, absolutePath);
+    expect(result).toEqual(config);
+  });
 });
 
 describe('saveProjectConfig', () => {
-  it('writes config to project root as .mastra-project.json', async () => {
+  it('writes config to default .mastra-project.json', async () => {
     const config = {
       projectId: 'proj-1',
       projectName: 'My App',
@@ -46,6 +73,21 @@ describe('saveProjectConfig', () => {
     await saveProjectConfig(tempDir, config);
 
     const content = readFileSync(join(tempDir, PROJECT_CONFIG_FILE), 'utf-8');
+    const parsed = JSON.parse(content);
+
+    expect(parsed).toEqual(config);
+  });
+
+  it('writes config to custom file path', async () => {
+    const config = {
+      projectId: 'proj-1',
+      projectName: 'My App',
+      organizationId: 'org-1',
+    };
+
+    await saveProjectConfig(tempDir, config, 'custom-config.json');
+
+    const content = readFileSync(join(tempDir, 'custom-config.json'), 'utf-8');
     const parsed = JSON.parse(content);
 
     expect(parsed).toEqual(config);

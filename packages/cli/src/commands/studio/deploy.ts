@@ -219,7 +219,10 @@ async function resolveProject(
 /*  Main deploy action                                                */
 /* ------------------------------------------------------------------ */
 
-export async function deployAction(dir: string | undefined, opts: { org?: string; project?: string; yes?: boolean }) {
+export async function deployAction(
+  dir: string | undefined,
+  opts: { org?: string; project?: string; yes?: boolean; config?: string },
+) {
   const targetDir = resolve(dir || process.cwd());
   const isHeadless = Boolean(process.env.MASTRA_API_TOKEN);
   if (isHeadless && (!process.env.MASTRA_ORG_ID || !process.env.MASTRA_PROJECT_ID)) {
@@ -237,7 +240,7 @@ export async function deployAction(dir: string | undefined, opts: { org?: string
   const token = await getToken();
 
   // Step 2: Load existing project config
-  const projectConfig = await loadProjectConfig(targetDir);
+  const projectConfig = await loadProjectConfig(targetDir, opts.config);
 
   // Step 3: Resolve org
   const { orgId, orgName } = await resolveOrg(token, projectConfig, opts.org);
@@ -271,12 +274,16 @@ export async function deployAction(dir: string | undefined, opts: { org?: string
     }
 
     // Save the project link
-    await saveProjectConfig(targetDir, {
-      projectId,
-      projectName,
-      organizationId: orgId,
-    });
-    p.log.success('Saved .mastra-project.json');
+    await saveProjectConfig(
+      targetDir,
+      {
+        projectId,
+        projectName,
+        organizationId: orgId,
+      },
+      opts.config,
+    );
+    p.log.success(`Saved ${opts.config || '.mastra-project.json'}`);
   } else {
     // Already linked — just show a summary line
     p.log.info(`Organization: ${orgName} (${orgId})`);

@@ -1,5 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 
 export const PROJECT_CONFIG_FILE = '.mastra-project.json';
 
@@ -9,15 +9,22 @@ export interface ProjectConfig {
   organizationId: string;
 }
 
-export async function loadProjectConfig(dir: string): Promise<ProjectConfig | null> {
+function resolveConfigPath(dir: string, configFile?: string): string {
+  if (configFile) {
+    return isAbsolute(configFile) ? configFile : join(dir, configFile);
+  }
+  return join(dir, PROJECT_CONFIG_FILE);
+}
+
+export async function loadProjectConfig(dir: string, configFile?: string): Promise<ProjectConfig | null> {
   try {
-    const data = await readFile(join(dir, PROJECT_CONFIG_FILE), 'utf-8');
+    const data = await readFile(resolveConfigPath(dir, configFile), 'utf-8');
     return JSON.parse(data) as ProjectConfig;
   } catch {
     return null;
   }
 }
 
-export async function saveProjectConfig(dir: string, config: ProjectConfig): Promise<void> {
-  await writeFile(join(dir, PROJECT_CONFIG_FILE), JSON.stringify(config, null, 2) + '\n');
+export async function saveProjectConfig(dir: string, config: ProjectConfig, configFile?: string): Promise<void> {
+  await writeFile(resolveConfigPath(dir, configFile), JSON.stringify(config, null, 2) + '\n');
 }
