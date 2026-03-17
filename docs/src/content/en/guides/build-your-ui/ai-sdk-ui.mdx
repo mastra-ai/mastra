@@ -137,6 +137,12 @@ If you don't want to run Mastra's server and instead use frameworks like Next.js
 
 They return a `ReadableStream` that you can wrap with [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response).
 
+:::tip AI SDK v6 compatibility
+
+`handleChatStream()` and `handleNetworkStream()` are compatible with AI SDK v6 response helpers such as [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response) and [`pipeUIMessageStreamToResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/pipe-ui-message-stream-to-response). For best TypeScript inference, pass `messages` as `UIMessage[]` from your installed `ai` version.
+
+:::
+
 The examples below show you how to use them with Next.js App Router.
 
 <Tabs>
@@ -897,6 +903,15 @@ For live examples of Custom UI patterns, visit [Mastra's UI Dojo](https://ui-doj
 ### Stream transformations
 
 To manually transform Mastra's streams to AI SDK-compatible format, use the [`toAISdkStream()`](/reference/ai-sdk/to-ai-sdk-stream) utility. See the [examples](/reference/ai-sdk/to-ai-sdk-stream#examples) for concrete usage patterns.
+
+If your app is typed against AI SDK v6, use `toAISdkV6Stream()` instead. `toAISdkStream()` remains the default path for AI SDK v5.
+
+```typescript
+import { toAISdkStream, toAISdkV6Stream } from '@mastra/ai-sdk'
+
+const v5Stream = toAISdkStream(mastraStream, { from: 'agent' })
+const v6Stream = toAISdkV6Stream(mastraStream, { from: 'agent' })
+```
 
 ### Loading historical messages
 
