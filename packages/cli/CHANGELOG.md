@@ -1,5 +1,21 @@
 # mastra
 
+## 1.3.13-alpha.1
+
+### Patch Changes
+
+- Added a new `MASTRA_TEMPLATES` Studio runtime flag to control whether the **Templates** section appears in the sidebar. ([#14309](https://github.com/mastra-ai/mastra/pull/14309))
+  - `MASTRA_TEMPLATES=true` now enables Templates navigation in Studio.
+  - By default (`false` or unset), Templates is hidden.
+  - Studio HTML injection now propagates this value in both CLI-hosted and deployer-hosted Studio builds.
+  - Added tests covering environment variable injection for both paths.
+
+- Fixed dev server startup log to display the configured `apiPrefix` instead of always showing `/api`. ([#14325](https://github.com/mastra-ai/mastra/pull/14325))
+
+- Updated dependencies [[`5dfaf3d`](https://github.com/mastra-ai/mastra/commit/5dfaf3d1cf286d56d3645398dcb687a4eb02db96), [`b77aa19`](https://github.com/mastra-ai/mastra/commit/b77aa1981361c021f2c881bee8f0c703687f00da), [`dd6ca1c`](https://github.com/mastra-ai/mastra/commit/dd6ca1cdea3b8b6182f4cf61df41070ba0cc0deb), [`4cb4edf`](https://github.com/mastra-ai/mastra/commit/4cb4edf3c909d197ec356c1790d13270514ffef6), [`e647a02`](https://github.com/mastra-ai/mastra/commit/e647a0215754bf91ed45c6d8857435bce4d387dc)]:
+  - @mastra/deployer@1.13.3-alpha.1
+  - @mastra/core@1.13.3-alpha.1
+
 ## 1.3.13-alpha.0
 
 ### Patch Changes
