@@ -31,19 +31,19 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "posthog-node": "^4.18.0",
-    "@mastra/observability": "workspace:*"
+    "@mastra/observability": "workspace:*",
+    "posthog-node": "^4.18.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@observability/test-utils": "workspace:*",
-    "@types/node": "^20.19.35",
+    "@types/node": "22.19.15",
     "eslint": "^9.39.4",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
-    "vitest": "catalog:",
-    "@internal/types-builder": "workspace:*"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"

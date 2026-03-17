@@ -18,7 +18,7 @@ export const personalAssistantAgent = new Agent({
     
     Keep your responses concise and friendly.
   `,
-  model: 'openai/gpt-4.1-mini',
+  model: 'openai/gpt-5.4',
   tools: { ...mcpTools },
   memory,
 })

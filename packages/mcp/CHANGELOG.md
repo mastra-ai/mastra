@@ -1,5 +1,25 @@
 # @mastra/mcp
 
+## 1.2.2-alpha.0
+
+### Patch Changes
+
+- **Improved** ([#14260](https://github.com/mastra-ai/mastra/pull/14260))
+  - Updated `@modelcontextprotocol/sdk` from `^1.17.5` to `^1.27.1`.
+
+  **Deprecated**
+  - Deprecated prompt `version` usage in `@mastra/mcp`.
+  - Prompt versions are not part of MCP protocol behavior and will be removed.
+
+  **Migration**
+  - Use unique prompt names instead of prompt versions.
+  - Before: `client.prompts.get({ name: 'explain-code', version: 'v1', args })`
+  - After: `client.prompts.get({ name: 'explain-code-v1', args })`
+  - `MastraPrompt` is available for migration and is also deprecated.
+
+- Updated dependencies [[`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`085e371`](https://github.com/mastra-ai/mastra/commit/085e3718a7d0fe9a210fe7dd1c867b9bdfe8d16b), [`ce26fe2`](https://github.com/mastra-ai/mastra/commit/ce26fe2166dd90254f8bee5776e55977143e97de), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1)]:
+  - @mastra/core@1.13.3-alpha.0
+
 ## 1.2.1
 
 ### Patch Changes

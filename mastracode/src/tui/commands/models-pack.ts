@@ -14,6 +14,7 @@ import type { GlobalSettings } from '../../onboarding/settings.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
+import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import { updateStatusLine } from '../status-line.js';
 import { getSelectListTheme, mastra, theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
@@ -34,8 +35,9 @@ async function selectModel(
       currentModelId,
       title,
       titleColor: modeColor,
-      onSelect: (model: ModelItem) => {
+      onSelect: async (model: ModelItem) => {
         ctx.state.ui.hideOverlay();
+        await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
         resolve(model.id);
       },
       onCancel: () => {
@@ -163,9 +165,9 @@ async function askCustomPackEditTarget(
     const selectList = new SelectList(
       [
         { value: 'rename', label: `  Rename → ${theme.fg('text', pack.name)}` },
-        { value: 'plan', label: `  ${chalk.hex(mastra.blue)('plan')} → ${theme.fg('text', pack.models.plan)}` },
-        { value: 'build', label: `  ${chalk.hex(mastra.purple)('build')} → ${theme.fg('text', pack.models.build)}` },
-        { value: 'fast', label: `  ${chalk.hex(mastra.green)('fast')} → ${theme.fg('text', pack.models.fast)}` },
+        { value: 'plan', label: `  ${chalk.hex(mastra.purple)('plan')} → ${theme.fg('text', pack.models.plan)}` },
+        { value: 'build', label: `  ${chalk.hex(mastra.green)('build')} → ${theme.fg('text', pack.models.build)}` },
+        { value: 'fast', label: `  ${chalk.hex(mastra.orange)('fast')} → ${theme.fg('text', pack.models.fast)}` },
         { value: 'save', label: `  ${theme.fg('success', 'Save')}` },
       ],
       5,
@@ -209,9 +211,9 @@ async function runCustomFlow(
   options?: { name?: string; models?: ModePack['models']; skipNamePrompt?: boolean },
 ): Promise<ModePack | null> {
   const modes: Array<{ id: 'plan' | 'build' | 'fast'; label: string; color: string }> = [
-    { id: 'plan', label: 'plan', color: mastra.blue },
-    { id: 'build', label: 'build', color: mastra.purple },
-    { id: 'fast', label: 'fast', color: mastra.green },
+    { id: 'plan', label: 'plan', color: mastra.purple },
+    { id: 'build', label: 'build', color: mastra.green },
+    { id: 'fast', label: 'fast', color: mastra.orange },
   ];
 
   const name = options?.skipNamePrompt
@@ -271,9 +273,9 @@ async function runCustomPackEditFlow(
     }
 
     const modeColors: Record<'plan' | 'build' | 'fast', string> = {
-      plan: mastra.blue,
-      build: mastra.purple,
-      fast: mastra.green,
+      plan: mastra.purple,
+      build: mastra.green,
+      fast: mastra.orange,
     };
 
     const modelId = await selectModel(
@@ -405,9 +407,9 @@ function getPackDetail(pack: ModePack): string {
     return theme.fg('dim', '  Create a named custom pack and pick a model for each mode.');
   }
   return [
-    `  ${chalk.hex(mastra.blue)('plan')}  → ${theme.fg('text', pack.models.plan)}`,
-    `  ${chalk.hex(mastra.purple)('build')} → ${theme.fg('text', pack.models.build)}`,
-    `  ${chalk.hex(mastra.green)('fast')}  → ${theme.fg('text', pack.models.fast)}`,
+    `  ${chalk.hex(mastra.purple)('plan')}  → ${theme.fg('text', pack.models.plan)}`,
+    `  ${chalk.hex(mastra.green)('build')} → ${theme.fg('text', pack.models.build)}`,
+    `  ${chalk.hex(mastra.orange)('fast')}  → ${theme.fg('text', pack.models.fast)}`,
   ].join('\n');
 }
 
