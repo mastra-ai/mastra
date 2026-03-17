@@ -1,5 +1,29 @@
 # @mastra/memory
 
+## 1.8.3-alpha.1
+
+### Patch Changes
+
+- Fixed observational memory triggering observation while provider-executed tool calls are still pending, which could split messages and cause errors on follow-up turns. ([#14282](https://github.com/mastra-ai/mastra/pull/14282))
+
+- Limit oversized observational-memory tool results before they reach the observer. ([#14344](https://github.com/mastra-ai/mastra/pull/14344))
+
+  This strips large `encryptedContent` blobs and truncates remaining tool result payloads to keep observer prompts and token estimates aligned with what the model actually sees.
+
+- Improved observational memory cache stability by splitting persisted observations into separate prompt chunks using dated message boundary delimiters. ([#14367](https://github.com/mastra-ai/mastra/pull/14367))
+
+  Added `getObservationsAsOf()` utility to retrieve the observations that were active at a specific point in time. This enables filtering observation history by message creation date.
+
+  ```ts
+  import { getObservationsAsOf } from '@mastra/memory';
+
+  // Get observations that existed when a specific message was created
+  const observations = getObservationsAsOf(record.activeObservations, message.createdAt);
+  ```
+
+- Updated dependencies [[`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f)]:
+  - @mastra/core@1.14.0-alpha.2
+
 ## 1.8.3-alpha.0
 
 ### Patch Changes
