@@ -234,6 +234,7 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
         schema.anyOf = [
           { type: 'string' },
           { type: 'number' },
+          { type: 'integer' },
           { type: 'boolean' },
           { type: 'object', properties: {}, additionalProperties: false },
           { type: 'null' },
