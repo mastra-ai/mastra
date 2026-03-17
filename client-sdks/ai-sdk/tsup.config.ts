@@ -12,6 +12,8 @@ export default defineConfig({
   },
   sourcemap: true,
   onSuccess: async () => {
-    await generateTypes(process.cwd(), new Set(['@ai-sdk/*', '@internal/ai-sdk-v4', '@internal/ai-sdk-v5']));
+    await generateTypes(process.cwd(), new Set(['@ai-sdk/*', '@internal/ai-sdk-v4', '@internal/ai-sdk-v5']), {
+      '@internal/ai-sdk-v5': 'ai',
+    });
   },
 });
