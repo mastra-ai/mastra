@@ -23,6 +23,26 @@ If no authentication is configured, all routes are publicly accessible.
 
 See [Custom API Routes](/docs/server/custom-api-routes#authentication) for controlling authentication on custom endpoints.
 
+## Studio sidebar behavior with RBAC
+
+When RBAC is enabled, Studio hides navigation links for resources the current user cannot read. This keeps the sidebar aligned with API and page-level authorization checks.
+
+Sidebar links currently map to these read permissions:
+
+- `Agents` -> `agents:read`
+- `Workflows` -> `workflows:read`
+- `Tools` -> `tools:read`
+- `MCP Servers` -> `mcps:read`
+- `Processors` -> `processors:read`
+- `Scorers` -> `scorers:read`
+- `Datasets` -> `datasets:read`
+- `Workspaces` -> `workspaces:read`
+- `Observability` -> `observability:read`
+
+Links without a configured resource permission (for example `Request Context`, `Templates`, and `Settings`) are currently shown based on existing Studio/platform rules.
+
+If RBAC is disabled, permission checks are bypassed and Studio shows the full sidebar (subject to existing platform/CMS gating, such as `Prompts` requiring CMS availability).
+
 ## Available providers
 
 ### Built-in

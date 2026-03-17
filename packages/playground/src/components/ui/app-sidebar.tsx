@@ -14,6 +14,7 @@ import {
   useIsCmsAvailable,
   useAuthCapabilities,
   isAuthenticated,
+  usePermissions,
 } from '@mastra/playground-ui';
 import type { NavLink, NavSection } from '@mastra/playground-ui';
 import {
@@ -32,7 +33,16 @@ import {
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
-const mainNavigation: NavSection[] = [
+type SidebarLink = NavLink & {
+  requiredPermission?: string;
+  requiredAnyPermission?: string[];
+};
+
+type SidebarSection = Omit<NavSection, 'links'> & {
+  links: SidebarLink[];
+};
+
+const mainNavigation: SidebarSection[] = [
   {
     key: 'main',
 
@@ -42,6 +52,7 @@ const mainNavigation: NavSection[] = [
         url: '/agents',
         icon: <AgentIcon />,
         isOnMastraPlatform: true,
+        requiredPermission: 'agents:read',
       },
       {
         name: 'Prompts',
@@ -54,35 +65,42 @@ const mainNavigation: NavSection[] = [
         url: '/workflows',
         icon: <WorkflowIcon />,
         isOnMastraPlatform: true,
+        requiredPermission: 'workflows:read',
       },
       {
         name: 'Processors',
         url: '/processors',
         icon: <Cpu />,
         isOnMastraPlatform: false,
+        requiredPermission: 'processors:read',
       },
       {
         name: 'MCP Servers',
         url: '/mcps',
         icon: <McpServerIcon />,
         isOnMastraPlatform: true,
+        requiredPermission: 'mcps:read',
       },
       {
         name: 'Tools',
         url: '/tools',
         icon: <ToolsIcon />,
         isOnMastraPlatform: true,
+        requiredPermission: 'tools:read',
       },
       {
         name: 'Scorers',
         url: '/scorers',
         icon: <GaugeIcon />,
         isOnMastraPlatform: true,
+        requiredPermission: 'scorers:read',
       },
       {
         name: 'Workspaces',
         url: '/workspaces',
         icon: <FolderIcon />,
+        isOnMastraPlatform: true,
+        requiredPermission: 'workspaces:read',
       },
       {
         name: 'Request Context',
@@ -101,12 +119,14 @@ const mainNavigation: NavSection[] = [
         url: '/observability',
         icon: <EyeIcon />,
         isOnMastraPlatform: true,
+        requiredPermission: 'observability:read',
       },
       {
         name: 'Datasets',
         url: '/datasets',
         icon: <DatabaseIcon />,
         isOnMastraPlatform: false,
+        requiredPermission: 'datasets:read',
       },
     ],
   },
@@ -137,7 +157,7 @@ const mainNavigation: NavSection[] = [
   },
 ];
 
-const secondNavigation: NavSection = {
+const secondNavigation: SidebarSection = {
   key: 'others',
   title: 'Other links',
   links: [
@@ -184,18 +204,43 @@ export function AppSidebar() {
   const { isMastraPlatform } = useMastraPlatform();
   const { data: authCapabilities } = useAuthCapabilities();
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
+  const {
+    hasPermission,
+    hasAnyPermission,
+    rbacEnabled,
+    isAuthenticated: isPermissionsAuthenticated,
+    isLoading: isPermissionsLoading,
+  } = usePermissions();
 
   // Check if user is authenticated (small avatar) vs not (wide login button)
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
   const cmsOnlyLinks = new Set(['/prompts']);
 
-  const filterPlatformLink = (link: NavLink) => {
+  const filterSidebarLink = (link: SidebarLink) => {
+    // 1) CMS link gating
     if (cmsOnlyLinks.has(link.url) && !isCmsAvailable && !isCmsLoading) {
       return false;
     }
-    if (isMastraPlatform) {
-      return link.isOnMastraPlatform;
+
+    // 2) Mastra platform link gating
+    if (isMastraPlatform && !link.isOnMastraPlatform) {
+      return false;
     }
+
+    // 3) RBAC link gating
+    // Avoid hiding during transient permission loading to prevent nav flicker.
+    if (rbacEnabled && isPermissionsAuthenticated && isPermissionsLoading) {
+      return true;
+    }
+
+    if (link.requiredPermission && !hasPermission(link.requiredPermission)) {
+      return false;
+    }
+
+    if (link.requiredAnyPermission && !hasAnyPermission(link.requiredAnyPermission)) {
+      return false;
+    }
+
     return true;
   };
 
@@ -227,7 +272,7 @@ export function AppSidebar() {
 
       <MainSidebar.Nav>
         {mainNavigation.map(section => {
-          const filteredLinks = section.links.filter(filterPlatformLink);
+          const filteredLinks = section.links.filter(filterSidebarLink);
           const showSeparator = filteredLinks.length > 0 && section?.separator;
 
           return (
@@ -253,7 +298,7 @@ export function AppSidebar() {
           <MainSidebar.NavSection>
             <MainSidebar.NavSeparator />
             <MainSidebar.NavList>
-              {secondNavigation.links.filter(filterPlatformLink).map(link => {
+              {secondNavigation.links.filter(filterSidebarLink).map(link => {
                 return <MainSidebar.NavLink key={link.name} link={link} state={state} />;
               })}
 
