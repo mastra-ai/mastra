@@ -1,5 +1,5 @@
 ---
-title: "Deploying studio | Deployment"
+title: "Deploying Studio | Deployment"
 description: "Learn how to deploy and use Studio on your own infrastructure."
 packages:
   - "mastra"
@@ -8,7 +8,7 @@ packages:
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Deploying studio
+# Deploying Studio
 
 [Studio](/docs/getting-started/studio) provides an interactive UI for building and testing your agents. It's a React-based Single Page Application (SPA) that runs in the browser and connects to a running [Mastra server](/docs/deployment/mastra-server).
 
@@ -46,8 +46,6 @@ MASTRA_STUDIO_BASE_PATH=/agents mastra studio
 ```
 
 This updates the HTML base URL and static asset routing so the standalone Studio works correctly under that subpath.
-
-Studio also supports optional runtime feature flags through `MASTRA_*` environment variables. Set `MASTRA_THEME_TOGGLE=true` to enable the Settings page theme switch and let users persist a theme preference of `dark | light | system` (with `system` following the OS) in local storage. If the flag is unset (or set to any value other than `true`), Studio remains dark-only and hides the Settings page theme switch.
 
 The command uses Node's built-in `http` module and [`serve-handler`](https://www.npmjs.com/package/serve-handler) to serve the static files.
 
@@ -175,18 +173,21 @@ Follow the example below to create a SPA using Vite.
     MASTRA_STUDIO_BASE_PATH=
     MASTRA_TELEMETRY_DISABLED=true
     MASTRA_HIDE_CLOUD_CTA=false
+    MASTRA_TEMPLATES=false
     MASTRA_CLOUD_API_ENDPOINT=
     MASTRA_EXPERIMENTAL_FEATURES=false
     MASTRA_REQUEST_CONTEXT_PRESETS=
     ```
-  </StepItem>
 
-  <StepItem>
+    ````
+    </StepItem>
+
+    <StepItem>
     Run the build script to generate the static files in the `dist` folder:
 
     ```bash npm2yarn
     npm run build
-    ```
+    ````
   </StepItem>
 
   <StepItem>

@@ -76,6 +76,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
     window.MASTRA_SERVER_HOST = '%%MASTRA_SERVER_HOST%%';
     window.MASTRA_SERVER_PORT = '%%MASTRA_SERVER_PORT%%';
     window.MASTRA_HIDE_CLOUD_CTA = '%%MASTRA_HIDE_CLOUD_CTA%%';
+    window.MASTRA_TEMPLATES = '%%MASTRA_TEMPLATES%%';
     window.MASTRA_STUDIO_BASE_PATH = '%%MASTRA_STUDIO_BASE_PATH%%';
   </script>
 </body>
@@ -246,6 +247,26 @@ describe('Mastra Studio "studioBase" functionality', () => {
           process.env.MASTRA_HIDE_CLOUD_CTA = originalEnv;
         } else {
           delete process.env.MASTRA_HIDE_CLOUD_CTA;
+        }
+      }
+    });
+
+    it('should replace templates placeholder based on environment variable', async () => {
+      const originalEnv = process.env.MASTRA_TEMPLATES;
+      try {
+        process.env.MASTRA_TEMPLATES = 'true';
+        vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/admin', port: 4111, host: 'localhost' });
+        const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
+
+        const response = await app.request('/admin');
+        const html = await response.text();
+
+        expect(html).toContain("window.MASTRA_TEMPLATES = 'true'");
+      } finally {
+        if (originalEnv !== undefined) {
+          process.env.MASTRA_TEMPLATES = originalEnv;
+        } else {
+          delete process.env.MASTRA_TEMPLATES;
         }
       }
     });
