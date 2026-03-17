@@ -92,6 +92,15 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
         }
       }
     });
+
+    stream.on('end', () => {
+      if (buffer.trim()) {
+        lines.push(buffer);
+        if (lines.length > MAX_STDERR_LINES) {
+          lines.shift();
+        }
+      }
+    });
   }
 
   function buildServerDefs(servers: Record<string, McpServerConfig>): Record<string, MastraMCPServerDefinition> {
@@ -286,10 +295,22 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
         captureStderr(name);
 
         // Fetch updated toolsets to get this server's tools
-        const toolsets = await client.listToolsets();
+        const { toolsets, errors } = await client.listToolsetsWithErrors();
         const serverTools = toolsets[name];
+        const serverError = errors[name];
 
-        if (serverTools && Object.keys(serverTools).length > 0) {
+        if (serverError) {
+          const status: McpServerStatus = {
+            name,
+            connected: false,
+            toolCount: 0,
+            toolNames: [],
+            transport,
+            error: serverError,
+          };
+          serverStatuses.set(name, status);
+          return status;
+        } else if (serverTools && Object.keys(serverTools).length > 0) {
           const toolNames = Object.keys(serverTools).map(t => `${name}_${t}`);
           for (const [toolName, toolConfig] of Object.entries(serverTools)) {
             tools[`${name}_${toolName}`] = toolConfig;

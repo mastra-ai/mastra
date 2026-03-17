@@ -11,3 +11,8 @@ Improved MCP server management with interactive `/mcp` selector UI.
 - **Per-server reconnect** — Reconnect individual servers from the `/mcp` selector without restarting all connections.
 - **Live status polling** — The `/mcp` selector auto-refreshes while servers are still connecting.
 - **Connecting state** — Servers show as 'connecting...' during initial startup, visible via `/mcp`.
+
+**Example**
+```text
+/mcp
+```

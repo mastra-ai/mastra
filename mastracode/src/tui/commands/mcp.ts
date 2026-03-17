@@ -83,6 +83,7 @@ export async function handleMcpCommand(ctx: SlashCommandContext, args: string[])
       showInfo(ctx.state, msg);
     },
     onClose: () => {
+      selector.dispose();
       ctx.state.ui.hideOverlay();
     },
   });
@@ -96,7 +97,8 @@ export async function handleMcpCommand(ctx: SlashCommandContext, args: string[])
 }
 
 async function reloadServers(ctx: SlashCommandContext): Promise<void> {
-  const mm = ctx.mcpManager!;
+  const mm = ctx.mcpManager;
+  if (!mm) return;
   ctx.showInfo('MCP: Reconnecting to servers...');
   try {
     await mm.reload();
@@ -105,7 +107,7 @@ async function reloadServers(ctx: SlashCommandContext): Promise<void> {
     const totalTools = connected.reduce((sum, s) => sum + s.toolCount, 0);
     ctx.showInfo(`MCP: Reloaded. ${connected.length} server(s) connected, ${totalTools} tool(s).`);
     for (const s of statuses.filter(s => !s.connected)) {
-      showInfo(ctx.state, `MCP: Failed to connect to "${s.name}": ${s.error}`);
+      ctx.showInfo(`MCP: Failed to connect to "${s.name}": ${s.error}`);
     }
   } catch (error) {
     ctx.showError(`MCP reload failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -113,7 +115,8 @@ async function reloadServers(ctx: SlashCommandContext): Promise<void> {
 }
 
 function showTextStatus(ctx: SlashCommandContext): void {
-  const mm = ctx.mcpManager!;
+  const mm = ctx.mcpManager;
+  if (!mm) return;
   const paths = mm.getConfigPaths();
   const statuses = mm.getServerStatuses();
   const skipped = mm.getSkippedServers();

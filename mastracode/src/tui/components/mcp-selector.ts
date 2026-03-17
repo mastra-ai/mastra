@@ -250,6 +250,11 @@ export class McpSelectorComponent extends Box implements Focusable {
     }
   }
 
+  /** Clean up resources when component is removed. */
+  dispose(): void {
+    this.stopPolling();
+  }
+
   handleInput(data: string): void {
     // Ignore input while reloading
     if (this._reloading) return;
@@ -391,7 +396,7 @@ export class McpSelectorComponent extends Box implements Focusable {
         }
       })
       .catch(() => {
-        // Statuses stay as they were
+        this.showInfoCallback('MCP: Reload failed. Retrying may help.');
       })
       .finally(() => {
         this._reloading = false;
