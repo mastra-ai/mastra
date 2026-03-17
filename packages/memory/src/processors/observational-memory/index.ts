@@ -73,6 +73,6 @@ export {
   renderObservationGroupsForReflection,
   reconcileObservationGroupsFromReflection,
   deriveObservationGroupProvenance,
-  combineObservationGroupRanges,
+  mergeObservationGroupRange,
   type ObservationGroup,
 } from './observation-groups';

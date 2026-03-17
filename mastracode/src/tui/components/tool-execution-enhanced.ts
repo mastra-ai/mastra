@@ -101,6 +101,56 @@ function extractContent(text: string): { content: string; isError: boolean } {
   return { content: text, isError: false };
 }
 
+function safeJsonParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+type RecallListResult = {
+  mode: 'list';
+  cursor: string;
+  page: number;
+  limit: number;
+  direction: 'forward' | 'backward';
+  count: number;
+  hasMore: boolean;
+  items: Array<{
+    id: string;
+    role: string;
+    createdAt: string;
+    preview: string;
+    isCursor: boolean;
+  }>;
+};
+
+type RecallInspectResult = {
+  mode: 'inspect';
+  cursor: string;
+  page: number;
+  limit: number;
+  count: number;
+  inspectedIds?: string[];
+  items: Array<{
+    id: string;
+    role: string;
+    createdAt: string;
+    preview: string;
+    isCursor: boolean;
+  }>;
+  messages: string;
+};
+
+type RecallResultData = RecallListResult | RecallInspectResult;
+
+function isRecallResult(value: unknown): value is RecallResultData {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  return (record.mode === 'list' || record.mode === 'inspect') && Array.isArray(record.items);
+}
+
 /**
  * Enhanced tool execution component with collapsible sections
  */
@@ -243,6 +293,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         break;
       case MC_TOOLS.FIND_FILES:
         this.renderListFilesEnhanced();
+        break;
+      case MC_TOOLS.RECALL:
+        this.renderRecallToolEnhanced();
         break;
       case MC_TOOLS.GET_PROCESS_OUTPUT:
       case MC_TOOLS.KILL_PROCESS:
@@ -910,6 +963,61 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     }
   }
 
+  private renderRecallToolEnhanced(): void {
+    const argsObj = this.args as Record<string, unknown> | undefined;
+    const cursor = argsObj?.cursor ? String(argsObj.cursor) : '';
+    const mode = argsObj?.mode ? String(argsObj.mode) : 'list';
+    const status = this.getStatusIndicator();
+    const cursorDisplay = cursor ? ` ${theme.fg('accent', cursor)}` : '';
+    const modeDisplay = mode ? theme.fg('muted', ` (${mode})`) : '';
+    const header = `${theme.bold(theme.fg('toolTitle', MC_TOOLS.RECALL))}${cursorDisplay}${modeDisplay}${status}`;
+
+    if (!this.result || this.isPartial) {
+      this.contentBox.addChild(new Text(header, 0, 0));
+      const preview = this.formatArgsPreview();
+      if (preview.length > 0) {
+        this.contentBox.addChild(new Text(preview.join('\n'), 0, 0));
+      }
+      return;
+    }
+
+    if (this.result.isError) {
+      this.renderErrorResult(header);
+      return;
+    }
+
+    const raw = this.result.content
+      .filter(c => c.type === 'text' && c.text)
+      .map(c => c.text!)
+      .join('\n');
+    const parsed = safeJsonParse(raw);
+
+    if (!isRecallResult(parsed)) {
+      this.renderGenericToolEnhanced();
+      return;
+    }
+
+    const output = this.formatRecallResults(parsed);
+    if (!output) {
+      this.contentBox.addChild(new Text(header, 0, 0));
+      return;
+    }
+
+    this.collapsible = new CollapsibleComponent(
+      {
+        header,
+        expanded: this.expanded,
+        collapsedLines: parsed.mode === 'inspect' ? 16 : 10,
+        expandedLines: 200,
+        showLineCount: false,
+      },
+      this.ui,
+    );
+
+    this.collapsible.setContent(output);
+    this.contentBox.addChild(this.collapsible);
+  }
+
   private renderTaskWriteEnhanced(): void {
     const argsObj = this.args as { tasks?: TaskItem[] } | undefined;
     const tasks = argsObj?.tasks;
@@ -1035,6 +1143,36 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
     // Not JSON (e.g. Tavily format) — already readable text, return as-is
     return raw;
+  }
+
+  private formatRecallResults(result: RecallResultData): string {
+    const headerParts = [
+      `mode=${result.mode}`,
+      `count=${result.count}`,
+      `cursor=${result.cursor}`,
+      `page=${result.page}`,
+      `limit=${result.limit}`,
+    ];
+
+    if (result.mode === 'list') {
+      headerParts.push(`direction=${result.direction}`);
+      headerParts.push(`hasMore=${result.hasMore}`);
+    }
+
+    const summary = headerParts.join('  ');
+    const items = result.items.map(item => {
+      const cursorMarker = item.isCursor ? '★ ' : '  ';
+      const preview = item.preview || '[no preview]';
+      return `${cursorMarker}${item.createdAt}  ${item.role}  ${item.id}\n    ${preview}`;
+    });
+
+    if (result.mode === 'inspect') {
+      const inspectedIds = result.inspectedIds?.length ? `\ninspectedIds=${result.inspectedIds.join(', ')}` : '';
+      const transcript = result.messages ? `\n\n${result.messages}` : '';
+      return [summary, inspectedIds, items.join('\n\n'), transcript].filter(Boolean).join('\n');
+    }
+
+    return [summary, items.join('\n\n')].filter(Boolean).join('\n\n');
   }
 
   private renderGenericToolEnhanced(): void {

@@ -328,7 +328,7 @@ PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm goi
 
 MOST RECENT USER INPUT: Treat the most recent user message as the highest-priority signal for what to do next. Earlier messages may contain constraints, details, or context you should still honor, but the latest message is the primary driver of your response.`;
 
-export const OBSERVATION_GRAPH_INSTRUCTIONS = `Your observations may include durable group ranges shown as lines like _range: \`messageId1-messageId2\`_. When you need exact wording, detailed chronology, or raw context behind one of those groups, call the recall tool with the exact cursor message id plus page and limit arguments.`;
+export const OBSERVATION_GRAPH_INSTRUCTIONS = `Your observations may include durable group ranges shown as lines like _range_start: \`messageId1\`_ and _range_end: \`messageId2\`_. When you need exact wording, detailed chronology, or raw context behind one of those groups, call the recall tool with the exact cursor message id plus page and limit arguments.`;
 
 /**
  * ObservationalMemory - A three-agent memory system for long conversations.
@@ -3703,11 +3703,11 @@ ${formattedMessages}
    * Wrap observations in a thread attribution tag.
    * Used in resource scope to track which thread observations came from.
    */
-  private async wrapWithThreadTag(threadId: string, observations: string, messageRange?: string): Promise<string> {
+  private async wrapWithThreadTag(threadId: string, observations: string, messageIds?: string[]): Promise<string> {
     // First strip any thread tags the Observer might have added
     const cleanObservations = this.stripThreadTags(observations);
-    const groupedObservations = messageRange
-      ? wrapInObservationGroup(cleanObservations, messageRange)
+    const groupedObservations = messageIds?.length
+      ? wrapInObservationGroup(cleanObservations, messageIds)
       : cleanObservations;
     const obscuredId = await this.representThreadIDInContext(threadId);
     return `<thread id="${obscuredId}">\n${groupedObservations}\n</thread>`;
@@ -3905,15 +3905,15 @@ ${formattedMessages}
 
       // Build new observations (use freshRecord if available)
       const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
-      const messageRange = `${messagesToObserve[0]!.id}-${messagesToObserve[messagesToObserve.length - 1]!.id}`;
+      const messageIds = messagesToObserve.map(message => message.id);
       let newObservations: string;
       if (this.scope === 'resource') {
         // In resource scope: wrap with thread tag and replace/append
-        const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
+        const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageIds);
         newObservations = this.replaceOrAppendThreadSection(existingObservations, threadId, threadSection);
       } else {
         // In thread scope: simple append
-        const groupedObservations = wrapInObservationGroup(result.observations, messageRange);
+        const groupedObservations = wrapInObservationGroup(result.observations, messageIds);
         newObservations = existingObservations
           ? `${existingObservations}\n\n${groupedObservations}`
           : groupedObservations;
@@ -4303,12 +4303,12 @@ ${formattedMessages}
 
     // Get the new observations to buffer (just the new content, not merged)
     // The storage adapter will handle appending to existing buffered content
-    const messageRange = `${messagesToBuffer[0]!.id}-${messagesToBuffer[messagesToBuffer.length - 1]!.id}`;
+    const messageIds = messagesToBuffer.map(message => message.id);
     let newObservations: string;
     if (this.scope === 'resource') {
-      newObservations = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
+      newObservations = await this.wrapWithThreadTag(threadId, result.observations, messageIds);
     } else {
-      newObservations = wrapInObservationGroup(result.observations, messageRange);
+      newObservations = wrapInObservationGroup(result.observations, messageIds);
     }
 
     const newTokenCount = this.tokenCounter.countObservations(newObservations);
@@ -5204,8 +5204,8 @@ ${formattedMessages}
         cycleObservationTokens += this.tokenCounter.countObservations(result.observations);
 
         // Wrap with thread tag and append (in thread order for consistency)
-        const messageRange = `${threadMessages[0]!.id}-${threadMessages[threadMessages.length - 1]!.id}`;
-        const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
+        const messageIds = threadMessages.map(message => message.id);
+        const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageIds);
         currentObservations = this.replaceOrAppendThreadSection(currentObservations, threadId, threadSection);
 
         // Update thread-specific metadata:

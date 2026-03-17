@@ -71,7 +71,7 @@ describe('om-tools', () => {
       await memory.saveMessages({ messages });
     });
 
-    it('should return forward results from a cursor', async () => {
+    it('should list forward results from a cursor by default', async () => {
       const result = await recallMessages({
         memory: memory as any,
         threadId,
@@ -81,16 +81,19 @@ describe('om-tools', () => {
         limit: 2,
       });
 
+      expect(result.mode).toBe('list');
+      if (result.mode !== 'list') throw new Error('Expected list mode');
       expect(result.count).toBe(2);
       expect(result.cursor).toBe('msg-2');
       expect(result.page).toBe(1);
       expect(result.limit).toBe(2);
-      expect(result.messages).toContain('Message 3');
-      expect(result.messages).toContain('Message 4');
-      expect(result.messages).not.toContain('Message 5');
+      expect(result.direction).toBe('forward');
+      expect(result.items.map(item => item.id)).toEqual(['msg-3', 'msg-4']);
+      expect(result.items.map(item => item.preview)).toEqual(['Message 3', 'Message 4']);
+      expect(result.hasMore).toBe(true);
     });
 
-    it('should return backward results when page is negative', async () => {
+    it('should list backward results when page is negative', async () => {
       const result = await recallMessages({
         memory: memory as any,
         threadId,
@@ -100,11 +103,13 @@ describe('om-tools', () => {
         limit: 2,
       });
 
+      expect(result.mode).toBe('list');
+      if (result.mode !== 'list') throw new Error('Expected list mode');
       expect(result.count).toBe(2);
       expect(result.page).toBe(-1);
-      expect(result.messages).toContain('Message 2');
-      expect(result.messages).toContain('Message 3');
-      expect(result.messages).not.toContain('Message 1');
+      expect(result.direction).toBe('backward');
+      expect(result.items.map(item => item.id)).toEqual(['msg-2', 'msg-3']);
+      expect(result.hasMore).toBe(true);
     });
 
     it('should treat page 0 as page 1', async () => {
@@ -117,12 +122,14 @@ describe('om-tools', () => {
         limit: 1,
       });
 
+      expect(result.mode).toBe('list');
+      if (result.mode !== 'list') throw new Error('Expected list mode');
       expect(result.page).toBe(1);
       expect(result.count).toBe(1);
-      expect(result.messages).toContain('Message 3');
+      expect(result.items.map(item => item.id)).toEqual(['msg-3']);
     });
 
-    it('should use the default limit of 20', async () => {
+    it('should use the default limit of 20 in list mode', async () => {
       const result = await recallMessages({
         memory: memory as any,
         threadId,
@@ -130,9 +137,48 @@ describe('om-tools', () => {
         cursor: 'msg-1',
       });
 
+      expect(result.mode).toBe('list');
+      if (result.mode !== 'list') throw new Error('Expected list mode');
       expect(result.limit).toBe(20);
       expect(result.count).toBe(4);
-      expect(result.messages).toContain('Message 2');
+      expect(result.items.map(item => item.id)).toEqual(['msg-2', 'msg-3', 'msg-4', 'msg-5']);
+      expect(result.hasMore).toBe(false);
+    });
+
+    it('should inspect the listed window when mode is inspect', async () => {
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-2',
+        page: 1,
+        limit: 2,
+        mode: 'inspect',
+      });
+
+      expect(result.mode).toBe('inspect');
+      if (result.mode !== 'inspect') throw new Error('Expected inspect mode');
+      expect(result.count).toBe(2);
+      expect(result.items.map(item => item.id)).toEqual(['msg-3', 'msg-4']);
+      expect(result.messages).toContain('Message 3');
+      expect(result.messages).toContain('Message 4');
+    });
+
+    it('should inspect explicit message ids in chronological order', async () => {
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-2',
+        mode: 'inspect',
+        messageIds: ['msg-5', 'msg-3'],
+      });
+
+      expect(result.mode).toBe('inspect');
+      if (result.mode !== 'inspect') throw new Error('Expected inspect mode');
+      expect(result.inspectedIds).toEqual(['msg-5', 'msg-3']);
+      expect(result.items.map(item => item.id)).toEqual(['msg-3', 'msg-5']);
+      expect(result.messages).toContain('Message 3');
       expect(result.messages).toContain('Message 5');
     });
 
@@ -170,6 +216,42 @@ describe('om-tools', () => {
       ).rejects.toThrow('does not belong to the current thread');
     });
 
+    it('should reject inspected ids from a different thread', async () => {
+      await memory.saveThread({
+        thread: {
+          id: 'other-thread',
+          resourceId,
+          title: 'Other thread',
+          createdAt: new Date('2024-01-01T11:00:00Z'),
+          updatedAt: new Date('2024-01-01T11:00:00Z'),
+        },
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'other-1',
+            threadId: 'other-thread',
+            resourceId,
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: 'Wrong thread detail' }] },
+            createdAt: new Date('2024-01-01T11:01:00Z'),
+          },
+        ],
+      });
+
+      await expect(
+        recallMessages({
+          memory: memory as any,
+          threadId,
+          resourceId,
+          cursor: 'msg-2',
+          mode: 'inspect',
+          messageIds: ['msg-3', 'other-1'],
+        }),
+      ).rejects.toThrow('do not belong to the current thread');
+    });
+
     it('should surface missing memory context errors from the tool', async () => {
       const tool = recallTool();
 
@@ -180,29 +262,34 @@ describe('om-tools', () => {
   });
 
   describe('Memory.listTools', () => {
-    it('should register recall only when OM graph mode is enabled', () => {
-      const graphMemory = new Memory({
+    it('should register recall when observational memory graph mode is enabled', () => {
+      const memory = new Memory({
         storage: new InMemoryStore(),
         options: {
           observationalMemory: {
-            model: 'test-model',
+            model: 'google/gemini-2.5-flash',
             graph: true,
-          },
-        } as any,
+          } as any,
+        },
       });
 
-      const nonGraphMemory = new Memory({
+      const tools = memory.listTools();
+      expect(tools.recall).toBeDefined();
+    });
+
+    it('should not register recall when graph mode is disabled', () => {
+      const memory = new Memory({
         storage: new InMemoryStore(),
         options: {
           observationalMemory: {
-            model: 'test-model',
+            model: 'google/gemini-2.5-flash',
             graph: false,
-          },
-        } as any,
+          } as any,
+        },
       });
 
-      expect(graphMemory.listTools()).toHaveProperty('recall');
-      expect(nonGraphMemory.listTools()).not.toHaveProperty('recall');
+      const tools = memory.listTools();
+      expect(tools.recall).toBeUndefined();
     });
   });
 });

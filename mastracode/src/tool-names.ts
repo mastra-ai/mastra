@@ -24,6 +24,9 @@ export const MC_TOOLS = {
   // Search
   SEARCH_CONTENT: 'search_content',
 
+  // Memory
+  RECALL: 'recall',
+
   // Code intelligence
   AST_SMART_EDIT: 'ast_smart_edit',
 
