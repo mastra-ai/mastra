@@ -1,6 +1,7 @@
 import type { ValidationErrorHook } from '@mastra/core/server';
 import { z } from 'zod';
 import type { ZodObject, ZodRawShape, ZodTypeAny } from 'zod';
+import { z as zV4 } from 'zod/v4';
 import { generateRouteOpenAPI } from '../openapi-utils';
 import type { InferParams, ResponseType, RouteSchemas, ServerRoute, ServerRouteHandler } from './index';
 
@@ -49,6 +50,16 @@ export function pickParams<T extends z.ZodRawShape, P extends Record<string, unk
  * // Accepts: { gte: "2024-01-01" } OR '{"gte": "2024-01-01"}'
  * ```
  */
+
+/**
+ * Detects if a schema is from Zod v4 (uses _zod) vs v3 (uses _def).
+ * Used to pick the correct zod version when wrapping schemas from @mastra/core/storage
+ * (which uses zod/v4) to avoid "keyValidator._parse is not a function" when mixing versions.
+ */
+function isZodV4Schema(schema: unknown): boolean {
+  return typeof schema === 'object' && schema !== null && '_zod' in schema;
+}
+
 export function jsonQueryParam<T extends ZodTypeAny>(schema: T): z.ZodType<z.infer<T>> {
   return z.union([
     schema, // Already the expected type (non-string input)
@@ -149,22 +160,54 @@ function isComplexType(schema: ZodTypeAny): boolean {
  * // ?tags=["tag1","tag2"]&startedAt={"gte":"2024-01-01"}&perPage=10
  * ```
  */
+
+/**
+ * Internal: jsonQueryParam using a specific zod instance (v3 or v4).
+ * Used by wrapSchemaForQueryParams to avoid mixing zod versions.
+ */
+function jsonQueryParamWithZ<T extends ZodTypeAny>(zLib: typeof z, schema: T): ZodTypeAny {
+  const zAny = zLib as any;
+  return zLib.union([
+    schema,
+    zLib.string().transform((val: string, ctx: any) => {
+      try {
+        const parsed = JSON.parse(val);
+        const result = schema.safeParse(parsed);
+        if (!result.success) {
+          for (const issue of (result.error as { issues: Array<{ message: string; path: unknown[] }> }).issues) {
+            ctx.addIssue({ code: zAny.ZodIssueCode?.custom ?? 'custom', message: issue.message, path: issue.path });
+          }
+          return zAny.NEVER ?? z.NEVER;
+        }
+        return result.data;
+      } catch (e) {
+        ctx.addIssue({
+          code: zAny.ZodIssueCode?.custom ?? 'custom',
+          message: `Invalid JSON: ${e instanceof Error ? e.message : 'parse error'}`,
+        });
+        return zAny.NEVER ?? z.NEVER;
+      }
+    }),
+  ]) as ZodTypeAny;
+}
+
 export function wrapSchemaForQueryParams<T extends ZodRawShape>(schema: ZodObject<T>): ZodObject<ZodRawShape> {
   const newShape: Record<string, ZodTypeAny> = {};
+  const zLib = isZodV4Schema(schema) ? zV4 : z;
 
   // schema.shape is Readonly in Zod v4, so we need to create a mutable copy
   const shape = schema.shape as unknown as Record<string, ZodTypeAny>;
   for (const [key, fieldSchema] of Object.entries(shape)) {
     if (isComplexType(fieldSchema)) {
-      // Wrap complex types to accept JSON strings
-      newShape[key] = jsonQueryParam(fieldSchema);
+      // Wrap complex types to accept JSON strings (use same zod version as schema)
+      newShape[key] = jsonQueryParamWithZ(zLib, fieldSchema);
     } else {
       // Keep simple types as-is
       newShape[key] = fieldSchema;
     }
   }
 
-  return z.object(newShape);
+  return zLib.object(newShape) as ZodObject<ZodRawShape>;
 }
 
 interface RouteConfig<
