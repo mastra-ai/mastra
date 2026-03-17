@@ -104,21 +104,31 @@ export class CustomEditor extends Editor {
     const isPromptAnimated = shouldAnimatePrompt && Boolean(promptAnimator?.isRunning());
     const fadeProgress = isPromptAnimated ? promptAnimator!.getFadeProgress() : 1;
     const isTransitioningIn = isPromptAnimated && promptAnimator!.isFadingIn();
-    const pulseWave = isPromptAnimated ? (Math.sin(promptAnimator!.getOffset() * Math.PI * 2) + 1) / 2 : 0;
-    const transitionPhase = isTransitioningIn ? 1 - fadeProgress : 1;
+    const isTransitioningOut = isPromptAnimated && promptAnimator!.isFadingOut();
+    const promptOffset = isPromptAnimated ? promptAnimator!.getOffset() : 0;
+    const pulseWave = isPromptAnimated ? (Math.sin(promptOffset * Math.PI * 2) + 1) / 2 : 0;
+    const transitionPhase = isTransitioningIn || isTransitioningOut ? 1 - fadeProgress : 1;
     const chevronBrightness = isPromptAnimated
       ? isTransitioningIn
         ? transitionPhase < 0.5
           ? Math.max(0, 1 - transitionPhase * 2)
           : 0
-        : 0
+        : isTransitioningOut
+          ? transitionPhase <= 0.5
+            ? Math.max(0, 1 - transitionPhase * 2)
+            : 0
+          : 0
       : 1;
-    const circleBrightness = isPromptAnimated
+    const dotBrightness = isPromptAnimated
       ? isTransitioningIn
         ? transitionPhase <= 0.5
           ? 0
           : Math.max(0, (transitionPhase - 0.5) * 2)
-        : 0.15 + pulseWave * 0.85
+        : isTransitioningOut
+          ? transitionPhase < 0.5
+            ? 0
+            : Math.max(0, (transitionPhase - 0.5) * 2)
+          : 0.2 + pulseWave * 0.8
       : 0;
     const promptChar = isSlash
       ? '/'
@@ -126,10 +136,10 @@ export class CustomEditor extends Editor {
         ? '@'
         : chevronBrightness > 0.05
           ? '›'
-          : circleBrightness > 0.05
-            ? '∙'
+          : dotBrightness > 0.05
+            ? '●'
             : ' ';
-    const promptBrightness = isPromptAnimated ? Math.max(chevronBrightness, circleBrightness) : 1;
+    const promptBrightness = isPromptAnimated ? Math.max(chevronBrightness, dotBrightness) : 1;
 
     // Cache colorFn and prompt — only recreate when color changes
     if (this._cachedModeColorHex !== color) {

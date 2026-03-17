@@ -128,7 +128,7 @@ describe('CustomEditor image paste handling', () => {
     expect(output).toContain('[rgb:22,200,88]›');
   });
 
-  it('fully fades the chevron out before fading the circle in, then keeps pulsing the circle', () => {
+  it('fades the chevron out, fades the larger pulsing circle in, then fades back to the chevron on exit', () => {
     const editor = new CustomEditor({} as any, {} as any);
     editor.getText = vi.fn(() => 'hello');
     editor.getModeColor = vi.fn(() => '#16c858');
@@ -138,6 +138,7 @@ describe('CustomEditor image paste handling', () => {
         ({
           isRunning: () => true,
           isFadingIn: () => true,
+          isFadingOut: () => false,
           getFadeProgress: () => 0.8,
           getOffset: () => 0,
         }) as any,
@@ -149,25 +150,27 @@ describe('CustomEditor image paste handling', () => {
         ({
           isRunning: () => true,
           isFadingIn: () => true,
+          isFadingOut: () => false,
           getFadeProgress: () => 0.5,
           getOffset: () => 0,
         }) as any,
     );
     const invisibleOutput = editor.render(20).join('\n');
     expect(invisibleOutput).not.toContain('›');
-    expect(invisibleOutput).not.toContain('•');
+    expect(invisibleOutput).not.toContain('●');
 
     editor.getPromptAnimator = vi.fn(
       () =>
         ({
           isRunning: () => true,
           isFadingIn: () => true,
+          isFadingOut: () => false,
           getFadeProgress: () => 0.2,
           getOffset: () => 0,
         }) as any,
     );
     const transitionedOutput = editor.render(20).join('\n');
-    expect(transitionedOutput).toContain('[rgb:13,120,53]∙');
+    expect(transitionedOutput).toContain('[rgb:13,120,53]●');
     expect(transitionedOutput).not.toContain('›');
 
     editor.getPromptAnimator = vi.fn(
@@ -175,14 +178,56 @@ describe('CustomEditor image paste handling', () => {
         ({
           isRunning: () => true,
           isFadingIn: () => false,
+          isFadingOut: () => false,
           getFadeProgress: () => 0,
           getOffset: () => 0.5,
         }) as any,
     );
     const pulsingOutput = editor.render(20).join('\n');
-
-    expect(pulsingOutput).toContain('[rgb:13,115,51]∙');
+    expect(pulsingOutput).toContain('[rgb:13,120,53]●');
     expect(pulsingOutput).not.toContain('›');
+
+    editor.getPromptAnimator = vi.fn(
+      () =>
+        ({
+          isRunning: () => true,
+          isFadingIn: () => false,
+          isFadingOut: () => true,
+          getFadeProgress: () => 0.2,
+          getOffset: () => 0,
+        }) as any,
+    );
+    const fadingOutDotOutput = editor.render(20).join('\n');
+    expect(fadingOutDotOutput).toContain('[rgb:13,120,53]●');
+    expect(fadingOutDotOutput).not.toContain('›');
+
+    editor.getPromptAnimator = vi.fn(
+      () =>
+        ({
+          isRunning: () => true,
+          isFadingIn: () => false,
+          isFadingOut: () => true,
+          getFadeProgress: () => 0.5,
+          getOffset: () => 0,
+        }) as any,
+    );
+    const fadingOutGapOutput = editor.render(20).join('\n');
+    expect(fadingOutGapOutput).not.toContain('›');
+    expect(fadingOutGapOutput).not.toContain('●');
+
+    editor.getPromptAnimator = vi.fn(
+      () =>
+        ({
+          isRunning: () => true,
+          isFadingIn: () => false,
+          isFadingOut: () => true,
+          getFadeProgress: () => 0.8,
+          getOffset: () => 0,
+        }) as any,
+    );
+    const returnedChevronOutput = editor.render(20).join('\n');
+    expect(returnedChevronOutput).toContain('[rgb:13,120,53]›');
+    expect(returnedChevronOutput).not.toContain('●');
   });
 
   it('keeps slash prompts unanimated while showing the slash character', () => {
