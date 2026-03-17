@@ -34,7 +34,8 @@ const variantClasses = {
   default: 'bg-surface3 border-2 border-border1 hover:text-neutral6 hover:bg-surface4 active:bg-surface5 text-neutral5',
   primary: 'bg-surface4 border-2 border-border2 hover:text-neutral6 hover:bg-surface5 active:bg-surface6 text-neutral6',
   cta: 'bg-accent1/50 hover:bg-accent1/80 text-neutral5 font-semibold',
-  ghost: 'bg-transparent border-2 border-transparent hover:text-neutral6 hover:bg-surface4 active:bg-surface5 text-neutral4',
+  ghost:
+    'bg-transparent border-2 border-transparent hover:text-neutral6 hover:bg-surface4 active:bg-surface5 text-neutral4',
   inputLike: sharedFormElementStyle,
   light: '',
   outline: '',
