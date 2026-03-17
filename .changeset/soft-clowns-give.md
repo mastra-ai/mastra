@@ -1,23 +1,20 @@
 ---
 '@mastra/server': minor
+'@mastra/client-js': minor
 ---
 
-Added OpenAI-compatible `/v1/responses` routes to Mastra Server.
+Added OpenAI-compatible `/v1/responses` support to Mastra Server and the client SDK.
 
 **What changed**
 
-Mastra Server now exposes `POST /v1/responses`, `GET /v1/responses/:responseId`, and `DELETE /v1/responses/:responseId`. Use the agent ID as `model`, set `store: true` to persist a response when the agent has memory configured, and use `previous_response_id` to continue the same memory thread.
+Mastra Server now exposes `POST /v1/responses`, `GET /v1/responses/:responseId`, and `DELETE /v1/responses/:responseId`. The client SDK now exposes matching `client.responses.create()`, `client.responses.retrieve()`, and `client.responses.del()` helpers. Use the agent ID as `model`, set `store: true` to persist a response when the agent has memory configured, and use `previous_response_id` to continue the same memory thread.
 
 ```ts
-await fetch('http://localhost:4111/api/v1/responses', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    model: 'support-agent',
-    input: 'Summarize this ticket',
-    store: true,
-  }),
+const response = await client.responses.create({
+  model: 'support-agent',
+  input: 'Summarize this ticket',
+  store: true,
 });
+
+console.log(response.output_text);
 ```

@@ -79,6 +79,110 @@ export interface RequestOptions {
   credentials?: 'omit' | 'same-origin' | 'include';
 }
 
+export type ResponseInputTextPart = {
+  type: 'input_text' | 'text' | 'output_text';
+  text: string;
+};
+
+export type ResponseInputMessage = {
+  role: 'system' | 'developer' | 'user' | 'assistant';
+  content: string | ResponseInputTextPart[];
+};
+
+export type ResponseOutputText = {
+  type: 'output_text';
+  text: string;
+};
+
+export type ResponseOutputMessage = {
+  id: string;
+  type: 'message';
+  role: 'assistant';
+  status: 'in_progress' | 'completed' | 'incomplete';
+  content: ResponseOutputText[];
+};
+
+export type ResponseUsage = {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+};
+
+export type ResponsesResponse = {
+  id: string;
+  object: 'response';
+  created_at: number;
+  model: string;
+  status: 'in_progress' | 'completed' | 'incomplete';
+  output: ResponseOutputMessage[];
+  usage: ResponseUsage | null;
+  instructions?: string | null;
+  previous_response_id?: string | null;
+  store?: boolean;
+  output_text: string;
+};
+
+export type ResponsesDeleteResponse = {
+  id: string;
+  object: 'response';
+  deleted: true;
+};
+
+export type CreateResponseParams = {
+  model: string;
+  input: string | ResponseInputMessage[];
+  instructions?: string;
+  stream?: boolean;
+  store?: boolean;
+  previous_response_id?: string;
+  requestContext?: RequestContext | Record<string, any>;
+};
+
+export type ResponsesCreatedEvent = {
+  type: 'response.created';
+  response: ResponsesResponse;
+};
+
+export type ResponsesOutputItemAddedEvent = {
+  type: 'response.output_item.added';
+  output_index: number;
+  item: {
+    id: string;
+    type: 'message';
+    role: 'assistant';
+    status: 'in_progress' | 'completed' | 'incomplete';
+    content: ResponseOutputText[];
+  };
+};
+
+export type ResponsesOutputTextDeltaEvent = {
+  type: 'response.output_text.delta';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  delta: string;
+};
+
+export type ResponsesOutputTextDoneEvent = {
+  type: 'response.output_text.done';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  text: string;
+};
+
+export type ResponsesCompletedEvent = {
+  type: 'response.completed';
+  response: ResponsesResponse;
+};
+
+export type ResponsesStreamEvent =
+  | ResponsesCreatedEvent
+  | ResponsesOutputItemAddedEvent
+  | ResponsesOutputTextDeltaEvent
+  | ResponsesOutputTextDoneEvent
+  | ResponsesCompletedEvent;
+
 type WithoutMethods<T> = {
   [K in keyof T as T[K] extends (...args: any[]) => any
     ? never

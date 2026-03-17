@@ -1,0 +1,154 @@
+---
+title: "Reference: Responses API | Client SDK"
+description: API reference for the client-js Responses API helpers that target Mastra's OpenAI-compatible `/v1/responses` routes.
+packages:
+  - "@mastra/client-js"
+---
+
+# Responses API
+
+The Responses API adds an OpenAI-style namespace to `MastraClient` so you can call Mastra's built-in `/v1/responses` routes with `client.responses.create()`, `client.responses.retrieve()`, and `client.responses.del()`.
+
+## Usage example
+
+Create a non-streaming response:
+
+```typescript
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({
+  baseUrl: 'http://localhost:4111',
+})
+
+const response = await client.responses.create({
+  model: 'support-agent',
+  input: 'Summarize this ticket',
+  store: true,
+})
+
+console.log(response.output_text)
+```
+
+Stream response events:
+
+```typescript
+const stream = await client.responses.create({
+  model: 'support-agent',
+  input: 'Say hello',
+  stream: true,
+})
+
+for await (const event of stream) {
+  console.log(event.type)
+}
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'model',
+    type: 'string',
+    description: 'Required. The Mastra agent ID to execute.',
+    isOptional: false,
+  },
+  {
+    name: 'input',
+    type: "string | Array<{ role: 'system' | 'developer' | 'user' | 'assistant'; content: string | Array<{ type: 'input_text' | 'text' | 'output_text'; text: string }> }>",
+    description: 'Required. The input text or message array sent to the response route.',
+    isOptional: false,
+  },
+  {
+    name: 'instructions',
+    type: 'string',
+    description: 'Optional instruction override for the target agent.',
+    isOptional: true,
+  },
+  {
+    name: 'stream',
+    type: 'boolean',
+    description: 'When true, returns an async-iterable stream of Responses API SSE events.',
+    isOptional: true,
+  },
+  {
+    name: 'store',
+    type: 'boolean',
+    description: 'Persists the response when the target agent has memory configured.',
+    isOptional: true,
+  },
+  {
+    name: 'previous_response_id',
+    type: 'string',
+    description: 'Continues a stored conversation thread from a previous response.',
+    isOptional: true,
+  },
+  {
+    name: 'requestContext',
+    type: 'RequestContext | Record<string, any>',
+    description: 'Optional request context forwarded to the Mastra server.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Methods
+
+### Lifecycle
+
+#### `create(params)`
+
+Creates a response using the OpenAI-compatible route.
+
+```typescript
+const response = await client.responses.create({
+  model: 'support-agent',
+  input: 'Summarize this ticket',
+})
+```
+
+**Returns:** `Promise<ResponsesResponse>` when `stream` is omitted or `false`.
+
+When `stream: true`, `create()` returns an async iterable of SSE event payloads:
+
+```typescript
+const stream = await client.responses.create({
+  model: 'support-agent',
+  input: 'Summarize this ticket',
+  stream: true,
+})
+
+for await (const event of stream) {
+  if (event.type === 'response.output_text.delta') {
+    process.stdout.write(event.delta)
+  }
+}
+```
+
+**Returns:** `Promise<ResponsesStream>`.
+
+#### `retrieve(responseId, requestContext?)`
+
+Retrieves a stored response by ID.
+
+```typescript
+const response = await client.responses.retrieve('resp_123')
+
+console.log(response.output_text)
+```
+
+**Returns:** `Promise<ResponsesResponse>`.
+
+#### `del(responseId, requestContext?)`
+
+Deletes a stored response by ID.
+
+```typescript
+await client.responses.del('resp_123')
+```
+
+**Returns:** `Promise<{ id: string; object: 'response'; deleted: true }>`.
+
+## Additional configuration
+
+The client SDK adds an `output_text` convenience field to non-streaming response objects and to the `response` payload on `response.created` and `response.completed` stream events. This mirrors the ergonomics of the OpenAI SDK while still calling Mastra's server routes underneath.
