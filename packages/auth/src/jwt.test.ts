@@ -50,6 +50,36 @@ describe('MastraJwtAuth', () => {
       expect(user).toBeNull();
     });
 
+    it('falls back to id claim when sub is missing', async () => {
+      const auth = new MastraJwtAuth({ secret: SECRET });
+      const token = signToken({ id: 'from-id-claim', email: 'id@example.com' });
+      const request = createRequest({ Authorization: `Bearer ${token}` });
+
+      const user = await auth.getCurrentUser(request);
+
+      expect(user?.id).toBe('from-id-claim');
+    });
+
+    it('falls back to unknown when both sub and id are missing', async () => {
+      const auth = new MastraJwtAuth({ secret: SECRET });
+      const token = signToken({ email: 'noone@example.com' });
+      const request = createRequest({ Authorization: `Bearer ${token}` });
+
+      const user = await auth.getCurrentUser(request);
+
+      expect(user?.id).toBe('unknown');
+    });
+
+    it('accepts case-insensitive Bearer scheme', async () => {
+      const auth = new MastraJwtAuth({ secret: SECRET });
+      const token = signToken({ sub: 'user-123' });
+      const request = createRequest({ Authorization: `bearer ${token}` });
+
+      const user = await auth.getCurrentUser(request);
+
+      expect(user?.id).toBe('user-123');
+    });
+
     it('returns null when Authorization header is not Bearer', async () => {
       const auth = new MastraJwtAuth({ secret: SECRET });
       const request = createRequest({ Authorization: 'Basic abc123' });
