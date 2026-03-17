@@ -121,7 +121,12 @@ function matchesPattern(filepath: string, patterns: string[]): boolean {
         .replace(/\*\*/g, '.*')
         // Replace single * with segment matcher (no path separators)
         .replace(/\*/g, '[^/]*');
-      return new RegExp(`^${regex}$`).test(normalized);
+      // If pattern starts with **, allow matching anywhere in path (after / or at start)
+      // This lets **/*.test.ts match absolute paths like /Users/.../foo.test.ts
+      const startsWithGlobstar = pattern.startsWith('**/');
+      const endAnchor = '\x24'; // $ character
+      const startPrefix = startsWithGlobstar ? '(?:^|/)' : '^';
+      return new RegExp(startPrefix + regex + endAnchor).test(normalized);
     } catch {
       // Invalid pattern — skip it
       return false;
