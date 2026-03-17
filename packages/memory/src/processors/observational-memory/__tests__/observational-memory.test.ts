@@ -724,6 +724,34 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).toContain('**User');
       expect(formatted).toContain('Real content');
     });
+
+    it('should strip encryptedContent and truncate oversized tool results', () => {
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'web_search_20250305',
+              args: { q: 'WorkOS FGA Node SDK createResource assignRole check query' },
+              result: {
+                encryptedContent: 'x'.repeat(6000),
+                snippet: 'useful snippet '.repeat(3000),
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const formatted = formatMessagesForObserver([msg], { maxToolResultTokens: 200 });
+      expect(formatted).toContain('[Tool Result: web_search_20250305]');
+      expect(formatted).toContain('[stripped encryptedContent: 6000 characters]');
+      expect(formatted).toContain('[truncated ~');
+      expect(formatted).not.toContain('x'.repeat(200));
+    });
   });
 
   describe('buildObserverHistoryMessage', () => {
@@ -806,6 +834,42 @@ describe('Observer Agent Helpers', () => {
       expect(content.some(part => part.type === 'text' && part.text.includes('<thread id="thread-b">'))).toBe(true);
       expect(content.some(part => part.type === 'text' && part.text.includes('[Image #2: b.jpeg]'))).toBe(true);
       expect(content.some(part => part.type === 'image' && part.image === 'https://example.com/b.jpeg')).toBe(true);
+    });
+
+    it('should apply tool-result truncation in multi-thread observer history', () => {
+      const threadA = createTestMessage('ignored', 'assistant', 'msg-a');
+      threadA.threadId = 'thread-a';
+      threadA.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'web_search_20250305',
+              args: { q: 'search query' },
+              result: {
+                encryptedContent: 'y'.repeat(7000),
+                snippet: 'kept '.repeat(3000),
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const historyMessage = buildMultiThreadObserverHistoryMessage(new Map([['thread-a', [threadA]]]), ['thread-a'], {
+        maxToolResultTokens: 200,
+      });
+
+      const content = historyMessage.content as any[];
+      const joinedText = content
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('\n');
+      expect(joinedText).toContain('[stripped encryptedContent: 7000 characters]');
+      expect(joinedText).toContain('[truncated ~');
+      expect(joinedText).not.toContain('y'.repeat(200));
     });
   });
 

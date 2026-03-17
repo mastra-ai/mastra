@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.13.3-alpha.0",
+  "version": "1.13.3-alpha.1",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -221,6 +221,7 @@
   },
   "dependencies": {
     "@a2a-js/sdk": "~0.2.5",
+    "@internal/core": "workspace:*",
     "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.20",
     "@ai-sdk/provider-utils-v6": "npm:@ai-sdk/provider-utils@4.0.0",
     "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.1",

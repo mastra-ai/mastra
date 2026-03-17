@@ -528,4 +528,701 @@ describe('Observability Methods', () => {
       ).rejects.toThrow();
     });
   });
+
+  // ==========================================================================
+  // Logs
+  // ==========================================================================
+
+  describe('listLogsVNext()', () => {
+    it('should fetch logs without any parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listLogsVNext();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/logs`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should fetch logs with filter parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listLogsVNext({
+        filters: {
+          level: 'error',
+        },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('level=error');
+    });
+
+    it('should fetch logs with pagination parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listLogsVNext({
+        pagination: {
+          page: 3,
+          perPage: 25,
+        },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('page=3');
+      expect(url).toContain('perPage=25');
+    });
+
+    it('should fetch logs with orderBy parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listLogsVNext({
+        orderBy: {
+          field: 'createdAt',
+          direction: 'DESC',
+        },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('field=createdAt');
+      expect(url).toContain('direction=DESC');
+    });
+
+    it('should fetch logs with all parameters combined', async () => {
+      mockSuccessfulResponse();
+
+      await client.listLogsVNext({
+        filters: {
+          level: 'error',
+        },
+        pagination: {
+          page: 1,
+          perPage: 10,
+        },
+        orderBy: {
+          field: 'createdAt',
+          direction: 'ASC',
+        },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('level=error');
+      expect(url).toContain('page=1');
+      expect(url).toContain('perPage=10');
+      expect(url).toContain('field=createdAt');
+      expect(url).toContain('direction=ASC');
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Internal Server Error', { status: 500, statusText: 'Internal Server Error' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.listLogsVNext()).rejects.toThrow();
+    });
+  });
+
+  // ==========================================================================
+  // Scores (observability storage)
+  // ==========================================================================
+
+  describe('listScores()', () => {
+    it('should fetch scores without any parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listScores();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/scores`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should fetch scores with filter parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listScores({
+        filters: {
+          scorerId: 'accuracy-scorer',
+        },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('scorerId=accuracy-scorer');
+    });
+
+    it('should fetch scores with pagination parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listScores({
+        pagination: {
+          page: 2,
+          perPage: 20,
+        },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('page=2');
+      expect(url).toContain('perPage=20');
+    });
+
+    it('should fetch scores with orderBy parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listScores({
+        orderBy: {
+          field: 'timestamp',
+          direction: 'DESC',
+        },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('field=timestamp');
+      expect(url).toContain('direction=DESC');
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.listScores()).rejects.toThrow();
+    });
+  });
+
+  describe('createScore()', () => {
+    it('should create a score with correct POST request', async () => {
+      mockSuccessfulResponse();
+
+      const score = {
+        traceId: 'trace-123',
+        spanId: 'span-456',
+        scorerId: 'accuracy-scorer',
+        score: 0.95,
+        reason: 'High accuracy',
+      };
+
+      await client.createScore({ score });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/scores`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            ...clientOptions.headers,
+            'content-type': 'application/json',
+          }),
+          body: JSON.stringify({ score }),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(
+        client.createScore({
+          score: {
+            traceId: 'trace-123',
+            scorerId: 'accuracy-scorer',
+            score: 0.95,
+          },
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  // ==========================================================================
+  // Feedback
+  // ==========================================================================
+
+  describe('listFeedback()', () => {
+    it('should fetch feedback without any parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listFeedback();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/feedback`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should fetch feedback with filter parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listFeedback({
+        filters: {
+          traceId: 'trace-123',
+        },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('traceId=trace-123');
+    });
+
+    it('should fetch feedback with pagination parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listFeedback({
+        pagination: {
+          page: 2,
+          perPage: 15,
+        },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('page=2');
+      expect(url).toContain('perPage=15');
+    });
+
+    it('should fetch feedback with orderBy parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.listFeedback({
+        orderBy: {
+          field: 'timestamp',
+          direction: 'ASC',
+        },
+      });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('field=timestamp');
+      expect(url).toContain('direction=ASC');
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.listFeedback()).rejects.toThrow();
+    });
+  });
+
+  describe('createFeedback()', () => {
+    it('should create feedback with correct POST request', async () => {
+      mockSuccessfulResponse();
+
+      const feedback = {
+        traceId: 'trace-123',
+        spanId: 'span-456',
+        source: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+        comment: 'Great response',
+      };
+
+      await client.createFeedback({ feedback });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/feedback`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            ...clientOptions.headers,
+            'content-type': 'application/json',
+          }),
+          body: JSON.stringify({ feedback }),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(
+        client.createFeedback({
+          feedback: {
+            traceId: 'trace-123',
+            source: 'user',
+            feedbackType: 'thumbs',
+            value: 1,
+            comment: 'Great response',
+          },
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  // ==========================================================================
+  // Metrics OLAP
+  // ==========================================================================
+
+  describe('getMetricAggregate()', () => {
+    it('should send correct POST request with params', async () => {
+      mockSuccessfulResponse();
+
+      const params = {
+        name: ['latency'],
+        aggregation: 'avg' as const,
+        filters: { entityType: EntityType.AGENT },
+      };
+
+      await client.getMetricAggregate(params);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/metrics/aggregate`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            ...clientOptions.headers,
+            'content-type': 'application/json',
+          }),
+          body: JSON.stringify(params),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(
+        client.getMetricAggregate({
+          name: ['latency'],
+          aggregation: 'avg',
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('getMetricBreakdown()', () => {
+    it('should send correct POST request with params', async () => {
+      mockSuccessfulResponse();
+
+      const params = {
+        name: ['latency'],
+        aggregation: 'avg' as const,
+        groupBy: ['entityType'],
+      };
+
+      await client.getMetricBreakdown(params);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/metrics/breakdown`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            ...clientOptions.headers,
+            'content-type': 'application/json',
+          }),
+          body: JSON.stringify(params),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(
+        client.getMetricBreakdown({
+          name: ['latency'],
+          aggregation: 'avg',
+          groupBy: ['entityType'],
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('getMetricTimeSeries()', () => {
+    it('should send correct POST request with params', async () => {
+      mockSuccessfulResponse();
+
+      const params = {
+        name: ['latency'],
+        aggregation: 'avg' as const,
+        interval: '1h' as const,
+      };
+
+      await client.getMetricTimeSeries(params);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/metrics/timeseries`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            ...clientOptions.headers,
+            'content-type': 'application/json',
+          }),
+          body: JSON.stringify(params),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(
+        client.getMetricTimeSeries({
+          name: ['latency'],
+          aggregation: 'avg',
+          interval: '1h',
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('getMetricPercentiles()', () => {
+    it('should send correct POST request with params', async () => {
+      mockSuccessfulResponse();
+
+      const params = {
+        name: 'latency',
+        percentiles: [0.5, 0.9, 0.99],
+        interval: '1h' as const,
+      };
+
+      await client.getMetricPercentiles(params);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/metrics/percentiles`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            ...clientOptions.headers,
+            'content-type': 'application/json',
+          }),
+          body: JSON.stringify(params),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(
+        client.getMetricPercentiles({
+          name: 'latency',
+          percentiles: [0.5, 0.9, 0.99],
+          interval: '1h',
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  // ==========================================================================
+  // Discovery
+  // ==========================================================================
+
+  describe('getMetricNames()', () => {
+    it('should fetch metric names without any parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.getMetricNames();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/discovery/metric-names`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should fetch metric names with params', async () => {
+      mockSuccessfulResponse();
+
+      await client.getMetricNames({ prefix: 'latency' });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('prefix=latency');
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Internal Server Error', { status: 500, statusText: 'Internal Server Error' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.getMetricNames()).rejects.toThrow();
+    });
+  });
+
+  describe('getMetricLabelKeys()', () => {
+    it('should fetch metric label keys with params', async () => {
+      mockSuccessfulResponse();
+
+      await client.getMetricLabelKeys({ metricName: 'latency' });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain(`${clientOptions.baseUrl}/api/observability/discovery/metric-label-keys`);
+      expect(url).toContain('metricName=latency');
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.getMetricLabelKeys({ metricName: 'latency' })).rejects.toThrow();
+    });
+  });
+
+  describe('getMetricLabelValues()', () => {
+    it('should fetch metric label values with params', async () => {
+      mockSuccessfulResponse();
+
+      await client.getMetricLabelValues({ metricName: 'latency', labelKey: 'env' });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain(`${clientOptions.baseUrl}/api/observability/discovery/metric-label-values`);
+      expect(url).toContain('metricName=latency');
+      expect(url).toContain('labelKey=env');
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.getMetricLabelValues({ metricName: 'latency', labelKey: 'env' })).rejects.toThrow();
+    });
+  });
+
+  describe('getEntityTypes()', () => {
+    it('should fetch entity types without any parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.getEntityTypes();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/discovery/entity-types`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Internal Server Error', { status: 500, statusText: 'Internal Server Error' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.getEntityTypes()).rejects.toThrow();
+    });
+  });
+
+  describe('getEntityNames()', () => {
+    it('should fetch entity names without any parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.getEntityNames();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/discovery/entity-names`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should fetch entity names with params', async () => {
+      mockSuccessfulResponse();
+
+      await client.getEntityNames({ entityType: 'agent' });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('entityType=agent');
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Internal Server Error', { status: 500, statusText: 'Internal Server Error' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.getEntityNames()).rejects.toThrow();
+    });
+  });
+
+  describe('getServiceNames()', () => {
+    it('should fetch service names without any parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.getServiceNames();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/discovery/service-names`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Internal Server Error', { status: 500, statusText: 'Internal Server Error' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.getServiceNames()).rejects.toThrow();
+    });
+  });
+
+  describe('getEnvironments()', () => {
+    it('should fetch environments without any parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.getEnvironments();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/discovery/environments`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Internal Server Error', { status: 500, statusText: 'Internal Server Error' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.getEnvironments()).rejects.toThrow();
+    });
+  });
+
+  describe('getTags()', () => {
+    it('should fetch tags without any parameters', async () => {
+      mockSuccessfulResponse();
+
+      await client.getTags();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/discovery/tags`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should fetch tags with params', async () => {
+      mockSuccessfulResponse();
+
+      await client.getTags({ entityType: 'agent' });
+
+      const call = (global.fetch as any).mock.calls[0];
+      const url = call[0] as string;
+      expect(url).toContain('entityType=agent');
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Internal Server Error', { status: 500, statusText: 'Internal Server Error' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.getTags()).rejects.toThrow();
+    });
+  });
 });
