@@ -6,7 +6,13 @@ import { ConsoleLogger } from './logger';
 import { RequestContext } from './request-context';
 import { toStandardSchema } from './schema';
 import { createTool, isVercelTool } from './tools';
-import { fetchWithRetry, makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
+import {
+  fetchWithRetry,
+  generateEmptyFromSchema,
+  makeCoreTool,
+  maskStreamTags,
+  resolveSerializedZodOutput,
+} from './utils';
 
 describe('maskStreamTags', () => {
   async function* makeStream(chunks: string[]) {
@@ -378,5 +384,133 @@ describe('fetchWithRetry', () => {
     expect(delays[1]).toBe(4000); // 1000 * 2^2
     expect(delays[2]).toBe(8000); // 1000 * 2^3
     expect(delays[3]).toBe(10000); // 1000 * 2^4 = 16000, capped at 10000
+  });
+});
+
+describe('generateEmptyFromSchema', () => {
+  it('should handle a JSON string schema', () => {
+    const schema = JSON.stringify({
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        age: { type: 'number' },
+      },
+    });
+    expect(generateEmptyFromSchema(schema)).toEqual({ name: '', age: 0 });
+  });
+
+  it('should handle a pre-parsed object schema', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        count: { type: 'integer' },
+        active: { type: 'boolean' },
+        tags: { type: 'array' },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      name: '',
+      count: 0,
+      active: false,
+      tags: [],
+    });
+  });
+
+  it('should recursively initialize nested object properties', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        user: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            preferences: {
+              type: 'object',
+              properties: {
+                theme: { type: 'string' },
+                fontSize: { type: 'number' },
+              },
+            },
+          },
+        },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      user: {
+        name: '',
+        preferences: {
+          theme: '',
+          fontSize: 0,
+        },
+      },
+    });
+  });
+
+  it('should respect default values defined in the schema', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        name: { type: 'string', default: 'unnamed' },
+        score: { type: 'number', default: 100 },
+        active: { type: 'boolean', default: true },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      name: 'unnamed',
+      score: 100,
+      active: true,
+    });
+  });
+
+  it('should return {} for non-object schemas', () => {
+    expect(generateEmptyFromSchema({ type: 'string' })).toEqual({});
+    expect(generateEmptyFromSchema({ type: 'array' })).toEqual({});
+  });
+
+  it('should return {} for invalid input', () => {
+    expect(generateEmptyFromSchema('not valid json')).toEqual({});
+  });
+
+  it('should return null for unknown property types', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        unknown: { type: 'custom_type' },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({ unknown: null });
+  });
+
+  it('should handle deeply nested objects (3+ levels)', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        level1: {
+          type: 'object',
+          properties: {
+            level2: {
+              type: 'object',
+              properties: {
+                level3: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      level1: { level2: { level3: '' } },
+    });
+  });
+
+  it('should treat object without properties as empty object', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        data: { type: 'object' },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({ data: {} });
   });
 });

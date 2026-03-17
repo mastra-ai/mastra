@@ -1,5 +1,20 @@
 # @mastra/playground-ui
 
+## 16.2.0-alpha.1
+
+### Minor Changes
+
+- Added dedicated session page for agents at `/agents/<agentId>/session`. This minimal view shows only the chat interface without the sidebar or information pane, making it ideal for quick internal testing or sharing with non-technical team members. If request context presets are configured, a preset dropdown appears in the header. ([#13754](https://github.com/mastra-ai/mastra/pull/13754))
+
+  Added `hideModelSwitcher` prop to `AgentChat` and `Thread` components to allow hiding the model picker in the composer.
+
+### Patch Changes
+
+- Updated dependencies [[`b77aa19`](https://github.com/mastra-ai/mastra/commit/b77aa1981361c021f2c881bee8f0c703687f00da), [`dd6ca1c`](https://github.com/mastra-ai/mastra/commit/dd6ca1cdea3b8b6182f4cf61df41070ba0cc0deb), [`4cb4edf`](https://github.com/mastra-ai/mastra/commit/4cb4edf3c909d197ec356c1790d13270514ffef6)]:
+  - @mastra/core@1.13.3-alpha.1
+  - @mastra/client-js@1.8.5-alpha.1
+  - @mastra/react@0.2.15-alpha.1
+
 ## 16.1.3-alpha.0
 
 ### Patch Changes

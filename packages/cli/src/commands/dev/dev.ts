@@ -43,6 +43,7 @@ type ProcessOptions = {
   port: number;
   host: string;
   studioBasePath: string;
+  apiPrefix: string;
   publicDir: string;
 };
 
@@ -67,7 +68,7 @@ const restartAllActiveWorkflowRuns = async ({ host, port }: { host: string; port
 
 const startServer = async (
   dotMastraPath: string,
-  { port, host, studioBasePath, publicDir }: ProcessOptions,
+  { port, host, studioBasePath, apiPrefix, publicDir }: ProcessOptions,
   env: Map<string, string>,
   startOptions: StartOptions = {},
   errorRestartCount = 0,
@@ -185,7 +186,7 @@ const startServer = async (
     currentServerProcess.on('message', async (message: any) => {
       if (message?.type === 'server-ready') {
         serverIsReady = true;
-        devLogger.ready(host, port, studioBasePath, serverStartTime, startOptions.https);
+        devLogger.ready(host, port, studioBasePath, apiPrefix, serverStartTime, startOptions.https);
         devLogger.watching();
 
         await restartAllActiveWorkflowRuns({ host, port });
@@ -250,6 +251,7 @@ const startServer = async (
             port,
             host,
             studioBasePath,
+            apiPrefix,
             publicDir,
           },
           env,
@@ -263,7 +265,7 @@ const startServer = async (
 
 async function checkAndRestart(
   dotMastraPath: string,
-  { port, host, studioBasePath, publicDir }: ProcessOptions,
+  { port, host, studioBasePath, apiPrefix, publicDir }: ProcessOptions,
   bundler: DevBundler,
   startOptions: StartOptions = {},
 ) {
@@ -288,12 +290,12 @@ async function checkAndRestart(
 
   // Proceed with restart
   devLogger.info('[Mastra Dev] - ✅ Restarting server...');
-  await rebundleAndRestart(dotMastraPath, { port, host, studioBasePath, publicDir }, bundler, startOptions);
+  await rebundleAndRestart(dotMastraPath, { port, host, studioBasePath, apiPrefix, publicDir }, bundler, startOptions);
 }
 
 async function rebundleAndRestart(
   dotMastraPath: string,
-  { port, host, studioBasePath, publicDir }: ProcessOptions,
+  { port, host, studioBasePath, apiPrefix, publicDir }: ProcessOptions,
   bundler: DevBundler,
   startOptions: StartOptions = {},
 ) {
@@ -328,6 +330,7 @@ async function rebundleAndRestart(
         port,
         host,
         studioBasePath,
+        apiPrefix,
         publicDir,
       },
       env,
@@ -402,6 +405,7 @@ export async function dev({
   let portToUse = serverOptions?.port ?? process.env.PORT;
   let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
   const studioBasePathToUse = normalizeStudioBase(serverOptions?.studioBase ?? '/');
+  const apiPrefixToUse = serverOptions?.apiPrefix ?? '/api';
 
   if (!portToUse || isNaN(Number(portToUse))) {
     const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);
@@ -457,6 +461,7 @@ export async function dev({
       port: Number(portToUse),
       host: hostToUse,
       studioBasePath: studioBasePathToUse,
+      apiPrefix: apiPrefixToUse,
       publicDir: join(mastraDir, 'public'),
     },
     loadedEnv,
@@ -477,6 +482,7 @@ export async function dev({
           port: Number(portToUse),
           host: hostToUse,
           studioBasePath: studioBasePathToUse,
+          apiPrefix: apiPrefixToUse,
           publicDir: join(mastraDir, 'public'),
         },
         bundler,

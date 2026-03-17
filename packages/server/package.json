@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.13.3-alpha.0",
+  "version": "1.13.3-alpha.1",
   "description": "",
   "type": "module",
   "files": [
@@ -111,7 +111,7 @@
     "@mastra/agent-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",

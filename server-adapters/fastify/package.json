@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastify",
-  "version": "1.2.5-alpha.0",
+  "version": "1.2.5-alpha.1",
   "description": "Mastra Fastify adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -42,7 +42,7 @@
     "@mastra/libsql": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "eslint": "^9.39.4",
     "fastify": "^5.8.2",
     "tsup": "^8.5.1",
