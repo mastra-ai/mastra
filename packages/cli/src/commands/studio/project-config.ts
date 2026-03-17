@@ -10,16 +10,12 @@ export interface ProjectConfig {
 }
 
 export async function loadProjectConfig(dir: string): Promise<ProjectConfig | null> {
-  // Try new location first, fall back to legacy .mastra/project.json
-  for (const path of [join(dir, PROJECT_CONFIG_FILE), join(dir, '.mastra', 'project.json')]) {
-    try {
-      const data = await readFile(path, 'utf-8');
-      return JSON.parse(data) as ProjectConfig;
-    } catch {
-      continue;
-    }
+  try {
+    const data = await readFile(join(dir, PROJECT_CONFIG_FILE), 'utf-8');
+    return JSON.parse(data) as ProjectConfig;
+  } catch {
+    return null;
   }
-  return null;
 }
 
 export async function saveProjectConfig(dir: string, config: ProjectConfig): Promise<void> {

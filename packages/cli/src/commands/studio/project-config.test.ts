@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -21,7 +21,7 @@ describe('loadProjectConfig', () => {
     expect(result).toBeNull();
   });
 
-  it('loads config from new location (.mastra-project.json)', async () => {
+  it('loads config from .mastra-project.json', async () => {
     const config = {
       projectId: 'proj-1',
       projectName: 'My App',
@@ -32,32 +32,6 @@ describe('loadProjectConfig', () => {
 
     const result = await loadProjectConfig(tempDir);
     expect(result).toEqual(config);
-  });
-
-  it('falls back to legacy .mastra/project.json', async () => {
-    const config = {
-      projectId: 'proj-1',
-      projectName: 'My App',
-      organizationId: 'org-1',
-    };
-
-    mkdirSync(join(tempDir, '.mastra'), { recursive: true });
-    writeFileSync(join(tempDir, '.mastra', 'project.json'), JSON.stringify(config, null, 2));
-
-    const result = await loadProjectConfig(tempDir);
-    expect(result).toEqual(config);
-  });
-
-  it('prefers new location over legacy when both exist', async () => {
-    const newConfig = { projectId: 'new', projectName: 'New', organizationId: 'org-new' };
-    const legacyConfig = { projectId: 'old', projectName: 'Old', organizationId: 'org-old' };
-
-    writeFileSync(join(tempDir, PROJECT_CONFIG_FILE), JSON.stringify(newConfig, null, 2));
-    mkdirSync(join(tempDir, '.mastra'), { recursive: true });
-    writeFileSync(join(tempDir, '.mastra', 'project.json'), JSON.stringify(legacyConfig, null, 2));
-
-    const result = await loadProjectConfig(tempDir);
-    expect(result).toEqual(newConfig);
   });
 });
 
