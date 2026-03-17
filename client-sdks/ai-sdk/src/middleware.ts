@@ -26,6 +26,19 @@ import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { toAISDKFinishReason } from './helpers';
 
 /**
+ * Structural type that accepts both LanguageModelV2 and LanguageModelV3.
+ * A full union is not possible because the vendored AI SDK bundles its own
+ * copy of @ai-sdk/provider\@2 types, creating conflicts with v3.
+ */
+export interface AnyLanguageModel {
+  readonly specificationVersion: string;
+  readonly provider: string;
+  readonly modelId: string;
+  doGenerate: (...args: any[]) => any;
+  doStream: (...args: any[]) => any;
+}
+
+/**
  * Memory context for processors that need thread/resource info
  */
 export interface ProcessorMemoryContext {
@@ -158,7 +171,7 @@ export interface WithMastraOptions {
  * });
  * ```
  */
-export function withMastra(model: LanguageModelV2, options: WithMastraOptions = {}): LanguageModelV2 {
+export function withMastra(model: AnyLanguageModel, options: WithMastraOptions = {}): LanguageModelV2 {
   const { memory, inputProcessors = [], outputProcessors = [] } = options;
 
   // Build the list of processors
@@ -222,7 +235,7 @@ export function withMastra(model: LanguageModelV2, options: WithMastraOptions = 
   }
 
   return wrapLanguageModel({
-    model,
+    model: model as LanguageModelV2,
     middleware: createProcessorMiddleware({
       inputProcessors: allInputProcessors,
       outputProcessors: allOutputProcessors,

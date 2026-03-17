@@ -12,7 +12,12 @@ export { toAISdkV5Stream as toAISdkStream } from './convert-streams';
 
 // Middleware for wrapping models with Mastra processors
 export { withMastra } from './middleware';
-export type { WithMastraOptions, WithMastraMemoryOptions, WithMastraSemanticRecallOptions } from './middleware';
+export type {
+  WithMastraOptions,
+  WithMastraMemoryOptions,
+  WithMastraSemanticRecallOptions,
+  AnyLanguageModel,
+} from './middleware';
 
 // Deprecated exports
 export { toAISdkFormat } from './to-ai-sdk-format';

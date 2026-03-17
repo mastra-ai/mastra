@@ -82,6 +82,22 @@ describe('withMastra middleware', () => {
       expect(result.text).toBe('Test response');
     });
 
+    it('should accept models with specificationVersion v3', async () => {
+      const v3Model = {
+        ...createMockModel(),
+        specificationVersion: 'v3' as const,
+      };
+
+      const model = withMastra(v3Model, {});
+
+      const result = await generateText({
+        model,
+        prompt: 'Hello from V3',
+      });
+
+      expect(result.text).toBe('Test response');
+    });
+
     it('should run output processors after LLM call', async () => {
       const processedOutputs: string[] = [];
 
