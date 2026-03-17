@@ -2023,8 +2023,12 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const existingPending = Number(doc.pendingMessageTokens || 0);
       const newPending = Math.max(0, existingPending - activatedMessageTokens);
 
-      await collection.updateOne(
-        { id: input.id },
+      // Conditional update — only proceed if chunks haven't been swapped by a concurrent run
+      const updateResult = await collection.updateOne(
+        {
+          id: input.id,
+          bufferedObservationChunks: { $exists: true, $ne: null, $not: { $size: 0 } },
+        },
         {
           $set: {
             activeObservations: newActive,
@@ -2036,6 +2040,17 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           },
         },
       );
+
+      if (updateResult.modifiedCount === 0) {
+        return {
+          chunksActivated: 0,
+          messageTokensActivated: 0,
+          observationTokensActivated: 0,
+          messagesActivated: 0,
+          activatedCycleIds: [],
+          activatedMessageIds: [],
+        };
+      }
 
       // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
       const latestChunkHints = activatedChunks[activatedChunks.length - 1];

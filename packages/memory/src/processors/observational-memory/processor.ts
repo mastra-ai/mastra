@@ -161,21 +161,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     threadId: string;
     resourceId?: string;
     messageList: MessageList;
-    sealedIds: Set<string>;
-    state: Record<string, unknown>;
     reproCaptureDetails: Record<string, unknown>;
   }): Promise<ObservationalMemoryRecord> {
-    const {
-      obsResult,
-      threshold,
-      asyncObservationEnabled,
-      threadId,
-      resourceId,
-      messageList,
-      sealedIds,
-      state,
-      reproCaptureDetails,
-    } = opts;
+    const { obsResult, threshold, asyncObservationEnabled, threadId, resourceId, messageList, reproCaptureDetails } =
+      opts;
 
     const observedIds = obsResult.activatedMessageIds ?? obsResult.record.observedMessageIds ?? [];
 
@@ -197,8 +186,6 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       messages: messageList,
       observedMessageIds: observedIds,
       retentionFloor: minRemaining,
-      sealedIds,
-      state,
     });
 
     if (asyncObservationEnabled) {
@@ -351,14 +338,8 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         threshold = status.threshold;
         effectiveObservationTokensThreshold = status.effectiveObservationTokensThreshold;
 
-        // Sealed IDs track messages frozen for buffering so incremental saves skip them
-        const stateSealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
-        const staticSealedIds: Set<string> = this.engine.getSealedIds(threadId, resourceId) ?? new Set<string>();
-        const sealedIds = new Set<string>([...staticSealedIds, ...stateSealedIds]);
-        state.sealedIds = sealedIds;
-
         omDebug(
-          `[OM:step] step=${stepNumber}: totalPending=${totalPendingTokens}, unbuffered=${status.unbufferedPendingTokens}, threshold=${threshold}, sealedIds=${sealedIds.size}`,
+          `[OM:step] step=${stepNumber}: totalPending=${totalPendingTokens}, unbuffered=${status.unbufferedPendingTokens}, threshold=${threshold}`,
         );
 
         // Trigger buffering if we've crossed an interval boundary
@@ -375,14 +356,12 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
               record: status.record,
               writer,
               requestContext,
-              // Called with the final cursor-filtered candidates before the observer runs.
-              // Seals them in the live MessageList and persists to storage.
+              // Seals messages in the live MessageList and persists to storage before
+              // the observer runs. The sealed flag on each message prevents
+              // saveIncrementalMessages from re-persisting them.
               beforeBuffer: async (candidates: MastraDBMessage[]) => {
                 this.engine.sealMessagesForBuffering(candidates);
                 await this.memory.persistMessages(candidates);
-                for (const msg of candidates) {
-                  sealedIds.add(msg.id);
-                }
               },
             })
             .catch(err => {
@@ -394,10 +373,8 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           // Per-step save
           await this.engine.saveIncrementalMessages({
             messageList,
-            sealedIds,
             threadId,
             resourceId,
-            state,
           });
 
           if (status.shouldObserve) {
@@ -427,8 +404,6 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
                 threadId,
                 resourceId,
                 messageList,
-                sealedIds,
-                state,
                 reproCaptureDetails,
               });
             }
@@ -549,17 +524,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         const memoryContext = parseMemoryRequestContext(requestContext);
         if (memoryContext?.memoryConfig?.readOnly) return messageList;
 
-        const stateSealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
-        const staticSealedIds: Set<string> = this.engine.getSealedIds(threadId, resourceId) ?? new Set<string>();
-        const sealedIds = new Set<string>([...staticSealedIds, ...stateSealedIds]);
-        state.sealedIds = sealedIds;
-
         await this.engine.saveFinalMessages({
           messageList,
-          sealedIds,
           threadId,
           resourceId,
-          state,
         });
 
         return messageList;
@@ -584,5 +552,4 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
   async getResolvedConfig(requestContext?: any) {
     return this.engine.getResolvedConfig(requestContext);
   }
-
 }

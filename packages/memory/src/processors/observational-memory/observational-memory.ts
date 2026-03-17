@@ -180,15 +180,6 @@ export class ObservationalMemory {
   static reflectionBufferCycleIds = new Map<string, string>();
 
   /**
-   * Track message IDs that have been sealed during async buffering.
-   * STATIC: Shared across all instances so saveMessagesWithSealedIdTracking
-   * generates new IDs when re-saving messages that were sealed in a previous step.
-   * Key format: threadId
-   * Value: Set of sealed message IDs
-   */
-  static sealedMessageIds = new Map<string, Set<string>>();
-
-  /**
    * Check if async buffering is enabled for observations.
    */
   private isAsyncObservationEnabled(): boolean {
@@ -220,8 +211,7 @@ export class ObservationalMemory {
 
   /**
    * Clean up static maps for a thread/resource to prevent memory leaks.
-   * Called after activation (to remove activated message IDs from sealedMessageIds)
-   * and from clear() (to fully remove all static state for a thread).
+   * Called from clear() to fully remove all static state for a thread.
    */
   private cleanupStaticMaps(threadId: string, resourceId?: string | null, activatedMessageIds?: string[]): void {
     const lockKey = this.getLockKey(threadId, resourceId);
@@ -229,19 +219,9 @@ export class ObservationalMemory {
     const reflBufKey = this.getReflectionBufferKey(lockKey);
 
     if (activatedMessageIds) {
-      // Partial cleanup: remove only activated IDs from sealedMessageIds
-      const sealedSet = ObservationalMemory.sealedMessageIds.get(threadId);
-      if (sealedSet) {
-        for (const id of activatedMessageIds) {
-          sealedSet.delete(id);
-        }
-        if (sealedSet.size === 0) {
-          ObservationalMemory.sealedMessageIds.delete(threadId);
-        }
-      }
+      // Partial cleanup: nothing to do for sealed IDs (flag-based, no static map)
     } else {
       // Full cleanup: remove all static state for this thread
-      ObservationalMemory.sealedMessageIds.delete(threadId);
       ObservationalMemory.lastBufferedAtTime.delete(obsBufKey);
       ObservationalMemory.lastBufferedBoundary.delete(obsBufKey);
       ObservationalMemory.lastBufferedBoundary.delete(reflBufKey);
@@ -1703,29 +1683,27 @@ ${suggestedResponse}
   }
 
   /**
-   * Save messages to storage while preventing duplicate inserts for sealed messages.
+   * Save messages to storage, skipping messages that were already persisted by
+   * async buffering. Uses the message-level sealed flag (metadata.mastra.sealed)
+   * to detect already-persisted messages, avoiding redundant DB operations.
    *
-   * Sealed messages that do not yet contain a completed observation boundary are
-   * skipped because async buffering already persisted them.
+   * Messages with observation markers are always saved (upserted) even if sealed,
+   * because the markers need to be persisted to storage.
    */
-  private async saveMessagesWithSealedIdTracking(
+  private async persistMessages(
     messagesToSave: MastraDBMessage[],
-    sealedIds: Set<string>,
     threadId: string,
     resourceId: string | undefined,
-    state: Record<string, unknown>,
   ): Promise<void> {
-    // Handle sealed messages:
-    // - Messages with observation markers: keep the same ID so storage upserts instead of inserting duplicates
-    // - Messages without observation markers (e.g., sealed for async buffering): skip entirely,
-    //   they were already persisted by runAsyncBufferedObservation (fixes #13089)
     const filteredMessages: MastraDBMessage[] = [];
     for (const msg of messagesToSave) {
-      if (sealedIds.has(msg.id)) {
+      const isSealed = !!(msg.content?.metadata as { mastra?: { sealed?: boolean } })?.mastra?.sealed;
+      if (isSealed) {
+        // Sealed messages were already persisted by buffer(). Only re-save if they
+        // now have observation markers (need to upsert the markers to storage).
         if (this.findLastCompletedObservationBoundary(msg) !== -1) {
           filteredMessages.push(msg);
         }
-        // else: sealed for buffering only, already persisted — skip to avoid duplication
       } else {
         filteredMessages.push(msg);
       }
@@ -1738,15 +1716,6 @@ ${suggestedResponse}
         resourceId,
       });
     }
-
-    // After successful save, track IDs of messages that now have observation markers (sealed)
-    // These IDs cannot be reused in future cycles
-    for (const msg of filteredMessages) {
-      if (this.findLastCompletedObservationBoundary(msg) !== -1) {
-        sealedIds.add(msg.id);
-      }
-    }
-    state.sealedIds = sealedIds;
   }
 
   /**
@@ -2349,8 +2318,7 @@ ${formattedMessages}
     }
 
     // Filter messages to only those newer than the buffer cursor.
-    // This prevents re-buffering messages that were already included in a previous chunk,
-    // even if their IDs were mutated by saveMessagesWithSealedIdTracking.
+    // This prevents re-buffering messages that were already included in a previous chunk.
     let candidateMessages = this.getUnobservedMessages(unobservedMessages, freshRecord, {
       excludeBuffered: true,
     });
@@ -2393,19 +2361,6 @@ ${formattedMessages}
       threadId,
       resourceId: freshRecord.resourceId ?? undefined,
     });
-
-    // Track sealed message IDs in the static map so saveMessagesWithSealedIdTracking
-    // generates new IDs for any future saves of these messages.
-    // Uses static map because async buffering runs in the background and the per-state
-    // sealedIds set may belong to a different (already-finished) processInputStep call.
-    let staticSealedIds = ObservationalMemory.sealedMessageIds.get(threadId);
-    if (!staticSealedIds) {
-      staticSealedIds = new Set<string>();
-      ObservationalMemory.sealedMessageIds.set(threadId, staticSealedIds);
-    }
-    for (const msg of messagesToBuffer) {
-      staticSealedIds.add(msg.id);
-    }
 
     // Generate cycle ID and capture start time
     const cycleId = `buffer-obs-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -3793,10 +3748,8 @@ ${formattedMessages}
     messages: MessageList | MastraDBMessage[];
     observedMessageIds?: string[];
     retentionFloor?: number;
-    sealedIds?: Set<string>;
-    state?: Record<string, unknown>;
   }): Promise<MastraDBMessage[]> {
-    const { threadId, resourceId, observedMessageIds, retentionFloor, sealedIds, state } = opts;
+    const { threadId, resourceId, observedMessageIds, retentionFloor } = opts;
     const messageList = this.isMessageList(opts.messages) ? opts.messages : undefined;
     const allMsgs: MastraDBMessage[] = messageList ? messageList.get.all.db() : (opts.messages as MastraDBMessage[]);
 
@@ -3863,8 +3816,8 @@ ${formattedMessages}
           messageList.removeByIds(idsToRemove);
         }
 
-        if (messagesToSave.length > 0 && sealedIds) {
-          await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state ?? {});
+        if (messagesToSave.length > 0) {
+          await this.persistMessages(messagesToSave, threadId, resourceId);
         }
 
         omDebug(`[OM:cleanupMarker] removed ${idsToRemove.length} messages, saved ${messagesToSave.length}`);
@@ -3879,8 +3832,8 @@ ${formattedMessages}
       const newInput = messageList.get.input.db();
       const newOutput = messageList.get.response.db();
       const msgsToSave = [...newInput, ...newOutput];
-      if (msgsToSave.length > 0 && sealedIds) {
-        await this.saveMessagesWithSealedIdTracking(msgsToSave, sealedIds, threadId, resourceId, state ?? {});
+      if (msgsToSave.length > 0) {
+        await this.persistMessages(msgsToSave, threadId, resourceId);
       }
       return messageList.get.all.db();
     }
@@ -3897,22 +3850,18 @@ ${formattedMessages}
    */
   async cleanupObservedContext(opts: {
     messageList: MessageList;
-    sealedIds: Set<string>;
     threadId: string;
     resourceId?: string;
-    state?: Record<string, unknown>;
     observedMessageIds?: string[];
     retentionFloor?: number;
   }): Promise<void> {
-    const { messageList, sealedIds, threadId, resourceId, state, observedMessageIds, retentionFloor } = opts;
+    const { messageList, threadId, resourceId, observedMessageIds, retentionFloor } = opts;
     await this.cleanupMessages({
       threadId,
       resourceId,
       messages: messageList,
       observedMessageIds,
       retentionFloor,
-      sealedIds,
-      state,
     });
   }
 
@@ -4141,13 +4090,6 @@ ${formattedMessages}
   }
 
   /**
-   * Get the set of sealed message IDs for a buffer key.
-   */
-  getSealedIds(threadId: string, _resourceId?: string): Set<string> | undefined {
-    return ObservationalMemory.sealedMessageIds.get(threadId);
-  }
-
-  /**
    * Save messages incrementally during an agent step.
    *
    * Clears input/response messages from the message list, persists them to storage
@@ -4156,12 +4098,10 @@ ${formattedMessages}
    */
   async saveIncrementalMessages(opts: {
     messageList: MessageList;
-    sealedIds: Set<string>;
     threadId: string;
     resourceId?: string;
-    state?: Record<string, unknown>;
   }): Promise<void> {
-    const { messageList, sealedIds, threadId, resourceId, state } = opts;
+    const { messageList, threadId, resourceId } = opts;
     const newInput = messageList.clear.input.db();
     const newOutput = messageList.clear.response.db();
     const messagesToSave = [...newInput, ...newOutput];
@@ -4171,7 +4111,7 @@ ${formattedMessages}
     );
 
     if (messagesToSave.length > 0) {
-      await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state ?? {});
+      await this.persistMessages(messagesToSave, threadId, resourceId);
       for (const msg of messagesToSave) {
         messageList.add(msg, 'memory');
       }
@@ -4181,14 +4121,8 @@ ${formattedMessages}
   /**
    * Save final output messages (e.g., the assistant's response after the last step).
    */
-  async saveFinalMessages(opts: {
-    messageList: MessageList;
-    sealedIds: Set<string>;
-    threadId: string;
-    resourceId?: string;
-    state?: Record<string, unknown>;
-  }): Promise<void> {
-    const { messageList, sealedIds, threadId, resourceId, state } = opts;
+  async saveFinalMessages(opts: { messageList: MessageList; threadId: string; resourceId?: string }): Promise<void> {
+    const { messageList, threadId, resourceId } = opts;
     const newInput = messageList.get.input.db();
     const newOutput = messageList.get.response.db();
     const messagesToSave = [...newInput, ...newOutput];
@@ -4198,7 +4132,7 @@ ${formattedMessages}
     );
 
     if (messagesToSave.length > 0) {
-      await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state ?? {});
+      await this.persistMessages(messagesToSave, threadId, resourceId);
     }
   }
 
@@ -4640,17 +4574,6 @@ ${formattedMessages}
         await opts.beforeBuffer(candidateMessages);
       } else if (opts.messages) {
         this.sealMessagesForBuffering(candidateMessages);
-      }
-
-      // Track sealed message IDs in the static map so saveMessagesWithSealedIdTracking
-      // and cleanupStaticMaps can coordinate with async buffering.
-      let staticSealedIds = ObservationalMemory.sealedMessageIds.get(threadId);
-      if (!staticSealedIds) {
-        staticSealedIds = new Set<string>();
-        ObservationalMemory.sealedMessageIds.set(threadId, staticSealedIds);
-      }
-      for (const msg of candidateMessages) {
-        staticSealedIds.add(msg.id);
       }
 
       // Generate cycle ID

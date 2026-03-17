@@ -6271,7 +6271,6 @@ describe('Full Async Buffering Flow', () => {
     (ObservationalMemory as any).lastBufferedBoundary.clear();
     (ObservationalMemory as any).lastBufferedAtTime.clear();
     (ObservationalMemory as any).reflectionBufferCycleIds.clear();
-    (ObservationalMemory as any).sealedMessageIds.clear();
 
     const storage = createInMemoryStorage();
     const threadId = 'flow-thread';
@@ -8641,7 +8640,6 @@ describe('Per-step save deduplication', () => {
     (ObservationalMemory as any).lastBufferedBoundary.clear();
     (ObservationalMemory as any).lastBufferedAtTime.clear();
     (ObservationalMemory as any).reflectionBufferCycleIds.clear();
-    (ObservationalMemory as any).sealedMessageIds.clear();
 
     const storage = createInMemoryStorage();
     const threadId = 'dedup-thread';
@@ -9697,20 +9695,18 @@ describe('Single-thread replay red tests', () => {
       'input',
     );
 
-    const originalSave = (om as any).saveMessagesWithSealedIdTracking.bind(om);
+    const originalPersist = (om as any).persistMessages.bind(om);
     const saveStarted: { value: boolean } = { value: false };
-    (om as any).saveMessagesWithSealedIdTracking = async (...args: any[]) => {
+    (om as any).persistMessages = async (...args: any[]) => {
       saveStarted.value = true;
       await new Promise(resolve => setTimeout(resolve, 25));
-      return originalSave(...args);
+      return originalPersist(...args);
     };
 
     const cleanupPromise = (om as any).cleanupObservedContext({
       messageList,
-      sealedIds: new Set<string>(),
       threadId,
       resourceId,
-      state: {},
     });
 
     await new Promise(resolve => setTimeout(resolve, 5));
@@ -9761,22 +9757,20 @@ describe('Single-thread replay red tests', () => {
       'input',
     );
 
-    const originalSave = (om as any).saveMessagesWithSealedIdTracking.bind(om);
+    const originalPersist = (om as any).persistMessages.bind(om);
     let releaseSave!: () => void;
     const saveBlocked = new Promise<void>(resolve => {
       releaseSave = resolve;
     });
-    (om as any).saveMessagesWithSealedIdTracking = async (...args: any[]) => {
+    (om as any).persistMessages = async (...args: any[]) => {
       await saveBlocked;
-      return originalSave(...args);
+      return originalPersist(...args);
     };
 
     const cleanupPromise = (om as any).cleanupObservedContext({
       messageList,
-      sealedIds: new Set<string>(),
       threadId,
       resourceId,
-      state: {},
     });
 
     // Assert intermediate state before save completes.
@@ -9847,7 +9841,6 @@ describe('Processor behavioral regressions', () => {
     (ObservationalMemory as any).lastBufferedBoundary.clear();
     (ObservationalMemory as any).lastBufferedAtTime.clear();
     (ObservationalMemory as any).reflectionBufferCycleIds.clear();
-    (ObservationalMemory as any).sealedMessageIds.clear();
 
     const storage = createInMemoryStorage();
     const threadId = 'observed-filter-thread';
@@ -9958,7 +9951,6 @@ describe('Processor behavioral regressions', () => {
     (ObservationalMemory as any).lastBufferedBoundary.clear();
     (ObservationalMemory as any).lastBufferedAtTime.clear();
     (ObservationalMemory as any).reflectionBufferCycleIds.clear();
-    (ObservationalMemory as any).sealedMessageIds.clear();
 
     const storage = createInMemoryStorage();
     const threadId = 'sanitize-test-thread';
@@ -10150,7 +10142,6 @@ describe('Processor behavioral regressions', () => {
     (ObservationalMemory as any).lastBufferedBoundary.clear();
     (ObservationalMemory as any).lastBufferedAtTime.clear();
     (ObservationalMemory as any).reflectionBufferCycleIds.clear();
-    (ObservationalMemory as any).sealedMessageIds.clear();
 
     const storage = createInMemoryStorage();
     const threadId = 'step0-boundary-thread';
@@ -10252,7 +10243,6 @@ describe('Processor behavioral regressions', () => {
     (ObservationalMemory as any).lastBufferedBoundary.clear();
     (ObservationalMemory as any).lastBufferedAtTime.clear();
     (ObservationalMemory as any).reflectionBufferCycleIds.clear();
-    (ObservationalMemory as any).sealedMessageIds.clear();
 
     const storage = createInMemoryStorage();
     const resourceId = 'resource-refresh-test';
@@ -10386,109 +10376,9 @@ describe('Processor behavioral regressions', () => {
     expect(systemText).toContain('other-thread-new-step1-context');
   });
 
-  it('should use static sealed IDs during final save when state sealedIds is empty', async () => {
-    const { MessageList } = await import('@mastra/core/agent');
-    const { RequestContext } = await import('@mastra/core/di');
-
-    (ObservationalMemory as any).asyncBufferingOps.clear();
-    (ObservationalMemory as any).lastBufferedBoundary.clear();
-    (ObservationalMemory as any).lastBufferedAtTime.clear();
-    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
-    (ObservationalMemory as any).sealedMessageIds.clear();
-
-    const storage = createInMemoryStorage();
-    const threadId = 'sealed-static-thread';
-    const resourceId = 'sealed-static-resource';
-
-    await storage.saveThread({
-      thread: {
-        id: threadId,
-        resourceId,
-        title: 'Test',
-        createdAt: new Date('2025-01-01T08:00:00Z'),
-        updatedAt: new Date('2025-01-01T08:00:00Z'),
-        metadata: {},
-      },
-    });
-
-    await storage.saveMessages({
-      messages: [
-        {
-          id: 'sealed-no-boundary',
-          role: 'assistant',
-          content: { format: 2, parts: [{ type: 'text', text: 'persisted-before-final-save' }] },
-          createdAt: new Date('2025-01-01T09:00:00Z'),
-          threadId,
-          resourceId,
-        } as any,
-      ],
-    });
-
-    const mockModel = new MockLanguageModelV2({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-        content: [{ type: 'text' as const, text: 'ok' }],
-        warnings: [],
-      }),
-    });
-
-    const om = new ObservationalMemory({
-      storage,
-      scope: 'thread',
-      model: mockModel as any,
-      observation: { messageTokens: 500000 },
-      reflection: { observationTokens: 200000 },
-    });
-    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
-
-    (ObservationalMemory as any).sealedMessageIds.set(threadId, new Set(['sealed-no-boundary']));
-
-    const messageList = new MessageList({ threadId, resourceId });
-    messageList.add(
-      {
-        id: 'sealed-no-boundary',
-        role: 'assistant',
-        content: { format: 2, parts: [{ type: 'text', text: 'should-not-overwrite-persisted-copy' }] },
-        createdAt: new Date('2025-01-01T09:00:00Z'),
-        threadId,
-        resourceId,
-      } as any,
-      'response',
-    );
-
-    const ctx = new RequestContext();
-    ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
-
-    await processor.processOutputResult({
-      messageList,
-      messages: messageList.get.response.db(),
-      requestContext: ctx,
-      state: {},
-      abort: (() => {
-        throw new Error('aborted');
-      }) as any,
-      result: {
-        text: 'ok',
-        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-        finishReason: 'stop',
-        steps: [],
-      } as any,
-      retryCount: 0,
-    });
-
-    const { messages: saved } = await storage.listMessages({
-      threadId,
-      orderBy: { field: 'createdAt', direction: 'ASC' },
-      perPage: false,
-    });
-    const target = saved.find(m => m.id === 'sealed-no-boundary');
-    expect(target).toBeDefined();
-    const text = ((target!.content as any).parts ?? []).find((p: any) => p.type === 'text')?.text ?? '';
-    expect(text).toContain('persisted-before-final-save');
-    expect(text).not.toContain('should-not-overwrite-persisted-copy');
-  });
+  // Test "should use static sealed IDs during final save" was removed — sealed ID tracking
+  // was replaced with message-level flag checking (metadata.mastra.sealed). Storage adapters
+  // handle dedup via upserts (INSERT ON CONFLICT DO UPDATE).
 
   it('should map threshold observation errors through abort instead of bubbling raw errors', async () => {
     const { MessageList } = await import('@mastra/core/agent');
@@ -10498,7 +10388,6 @@ describe('Processor behavioral regressions', () => {
     (ObservationalMemory as any).lastBufferedBoundary.clear();
     (ObservationalMemory as any).lastBufferedAtTime.clear();
     (ObservationalMemory as any).reflectionBufferCycleIds.clear();
-    (ObservationalMemory as any).sealedMessageIds.clear();
 
     const storage = createInMemoryStorage();
     const threadId = 'abort-mapping-thread';
