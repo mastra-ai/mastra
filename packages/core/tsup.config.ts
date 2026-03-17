@@ -66,7 +66,6 @@ export default defineConfig({
   format: ['esm', 'cjs'],
   clean: true,
   dts: false,
-  noExternal: ['@internal/core'],
   splitting: true,
   treeshake: {
     preset: 'smallest',
