@@ -28,7 +28,7 @@ class BorderedBox {
   }
 
   render(width: number): string[] {
-    const borderColor = (s: string) => theme.fg('border', s);
+    const borderColor = (s: string) => theme.fg('success', s);
 
     // Border uses 4 chars: "│ " (2) on left + " │" (2) on right
     // Plus 2 for the "› " prompt prefix on the first line
@@ -60,7 +60,7 @@ class BorderedBox {
     const lines: string[] = [];
 
     // Account for "> " prefix taking 2 chars of inner width
-    const promptPrefix = theme.bold(theme.fg('success', '›')) + ' ';
+    const promptPrefix = theme.fg('success', '»') + ' ';
     const promptWidth = 2; // "> "
 
     // Top border: ╭──...──╮
@@ -91,8 +91,8 @@ export class UserMessageComponent extends Container {
     super();
 
     const md = new Markdown(text, 0, 0, markdownTheme, {
-      color: (text: string) => theme.bold(theme.fg('text', text)),
-      italic: true,
+      color: (text: string) => theme.fg('text', text),
+      italic: false,
     });
 
     this.addChild(new BorderedBox(md));
