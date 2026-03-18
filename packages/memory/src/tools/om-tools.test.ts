@@ -180,18 +180,38 @@ describe('om-tools', () => {
   });
 
   describe('Memory.listTools', () => {
-    it('should register recall only when OM graph mode is enabled', () => {
-      const graphMemory = new Memory({
+    it('should register recall when observational memory graph mode is enabled for thread scope', () => {
+      const memory = new Memory({
         storage: new InMemoryStore(),
         options: {
           observationalMemory: {
             model: 'test-model',
+            scope: 'thread',
             graph: true,
           },
         } as any,
       });
 
-      const nonGraphMemory = new Memory({
+      expect(memory.listTools()).toHaveProperty('recall');
+    });
+
+    it('should not register recall when graph mode is enabled for resource scope', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          observationalMemory: {
+            model: 'test-model',
+            scope: 'resource',
+            graph: true,
+          },
+        } as any,
+      });
+
+      expect(memory.listTools()).not.toHaveProperty('recall');
+    });
+
+    it('should not register recall when graph mode is disabled', () => {
+      const memory = new Memory({
         storage: new InMemoryStore(),
         options: {
           observationalMemory: {
@@ -201,8 +221,7 @@ describe('om-tools', () => {
         } as any,
       });
 
-      expect(graphMemory.listTools()).toHaveProperty('recall');
-      expect(nonGraphMemory.listTools()).not.toHaveProperty('recall');
+      expect(memory.listTools()).not.toHaveProperty('recall');
     });
   });
 });

@@ -5,7 +5,7 @@ import { InMemoryStore } from '../storage';
 import { MockMemory } from './mock';
 
 describe('MastraMemory config serialization', () => {
-  it('should serialize observational memory graph config', () => {
+  it('should serialize observational memory graph config for thread scope', () => {
     const memory = new MockMemory({
       storage: new InMemoryStore(),
       options: {
@@ -44,6 +44,26 @@ describe('MastraMemory config serialization', () => {
         providerOptions: undefined,
         blockAfter: undefined,
       },
+      shareTokenBudget: undefined,
+    });
+  });
+
+  it('should serialize graph config for resource scope without changing the requested config', () => {
+    const memory = new MockMemory({
+      storage: new InMemoryStore(),
+      options: {
+        observationalMemory: {
+          scope: 'resource',
+          graph: true,
+          model: 'test-model',
+        },
+      },
+    });
+
+    expect(memory.getConfig().observationalMemory).toEqual({
+      scope: 'resource',
+      graph: true,
+      model: 'test-model',
       shareTokenBudget: undefined,
     });
   });

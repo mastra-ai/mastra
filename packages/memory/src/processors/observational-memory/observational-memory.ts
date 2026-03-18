@@ -787,7 +787,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
-    this.graph = config.graph ?? OBSERVATIONAL_MEMORY_DEFAULTS.graph;
+    this.graph = this.scope === 'thread' && (config.graph ?? OBSERVATIONAL_MEMORY_DEFAULTS.graph);
 
     // Resolve "default" to the default model
     const resolveModel = (m: typeof config.model) =>

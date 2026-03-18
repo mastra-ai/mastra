@@ -1202,7 +1202,7 @@ Notes:
     }
 
     const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
-    if (omConfig?.graph) {
+    if (omConfig?.graph && (omConfig.scope ?? 'thread') === 'thread') {
       tools.recall = recallTool(mergedConfig);
     }
 
