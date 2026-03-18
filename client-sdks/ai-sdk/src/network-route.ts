@@ -1,6 +1,12 @@
-import { createUIMessageStream as createUIMessageStreamV5, createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
+import {
+  createUIMessageStream as createUIMessageStreamV5,
+  createUIMessageStreamResponse as createUIMessageStreamResponseV5,
+} from '@internal/ai-sdk-v5';
 import type { UIMessage as InternalUIMessageV5 } from '@internal/ai-sdk-v5';
-import { createUIMessageStream as createUIMessageStreamV6 } from '@internal/ai-v6';
+import {
+  createUIMessageStream as createUIMessageStreamV6,
+  createUIMessageStreamResponse as createUIMessageStreamResponseV6,
+} from '@internal/ai-v6';
 import type { UIMessage as InternalUIMessageV6 } from '@internal/ai-v6';
 import type { AgentExecutionOptions, NetworkOptions } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
@@ -127,8 +133,13 @@ export async function handleNetworkStream<OUTPUT = undefined>({
 }
 
 export type NetworkRouteOptions<OUTPUT = undefined> =
-  | { path: `${string}:agentId${string}`; agent?: never; defaultOptions?: NetworkOptions<OUTPUT> }
-  | { path: string; agent: string; defaultOptions?: NetworkOptions<OUTPUT> };
+  | {
+      path: `${string}:agentId${string}`;
+      agent?: never;
+      defaultOptions?: NetworkOptions<OUTPUT>;
+      version?: 'v5' | 'v6';
+    }
+  | { path: string; agent: string; defaultOptions?: NetworkOptions<OUTPUT>; version?: 'v5' | 'v6' };
 
 /**
  * Creates a network route handler for streaming agent network execution using the AI SDK-compatible format.
@@ -160,6 +171,7 @@ export function networkRoute<OUTPUT = undefined>({
   path = '/network/:agentId',
   agent,
   defaultOptions,
+  version = 'v5',
 }: NetworkRouteOptions<OUTPUT>): ReturnType<typeof registerApiRoute> {
   if (!agent && !path.includes('/:agentId')) {
     throw new Error('Path must include :agentId to route to the correct agent or pass the agent explicitly');
@@ -252,7 +264,7 @@ export function networkRoute<OUTPUT = undefined>({
         throw new Error('Agent ID is required');
       }
 
-      const uiMessageStream = await handleNetworkStream({
+      const handlerOptions = {
         mastra,
         agentId: agentToUse,
         params: {
@@ -260,9 +272,19 @@ export function networkRoute<OUTPUT = undefined>({
           requestContext: effectiveRequestContext,
         } as any,
         defaultOptions,
-      });
+      };
 
-      return createUIMessageStreamResponse({ stream: uiMessageStream });
+      if (version === 'v6') {
+        const uiMessageStream = await handleNetworkStream({
+          ...handlerOptions,
+          version: 'v6',
+        });
+
+        return createUIMessageStreamResponseV6({ stream: uiMessageStream });
+      }
+
+      const uiMessageStream = await handleNetworkStream(handlerOptions);
+      return createUIMessageStreamResponseV5({ stream: uiMessageStream });
     },
   });
 }

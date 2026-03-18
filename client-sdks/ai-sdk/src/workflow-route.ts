@@ -1,5 +1,11 @@
-import { createUIMessageStream as createUIMessageStreamV5, createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
-import { createUIMessageStream as createUIMessageStreamV6 } from '@internal/ai-v6';
+import {
+  createUIMessageStream as createUIMessageStreamV5,
+  createUIMessageStreamResponse as createUIMessageStreamResponseV5,
+} from '@internal/ai-sdk-v5';
+import {
+  createUIMessageStream as createUIMessageStreamV6,
+  createUIMessageStreamResponse as createUIMessageStreamResponseV6,
+} from '@internal/ai-v6';
 import type { Mastra } from '@mastra/core/mastra';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -123,6 +129,7 @@ export async function handleWorkflowStream({
 }
 
 export type WorkflowRouteOptions = {
+  version?: 'v5' | 'v6';
   sendReasoning?: boolean;
   sendSources?: boolean;
 } & (
@@ -156,6 +163,7 @@ export type WorkflowRouteOptions = {
 export function workflowRoute({
   path = '/api/workflows/:workflowId/stream',
   workflow,
+  version = 'v5',
   includeTextStreamParts = true,
   sendReasoning = false,
   sendSources = false,
@@ -239,7 +247,7 @@ export function workflowRoute({
           );
       }
 
-      const uiMessageStream = await handleWorkflowStream({
+      const handlerOptions = {
         mastra,
         workflowId: workflowToUse,
         params: {
@@ -249,9 +257,19 @@ export function workflowRoute({
         includeTextStreamParts,
         sendReasoning,
         sendSources,
-      });
+      };
 
-      return createUIMessageStreamResponse({ stream: uiMessageStream });
+      if (version === 'v6') {
+        const uiMessageStream = await handleWorkflowStream({
+          ...handlerOptions,
+          version: 'v6',
+        });
+
+        return createUIMessageStreamResponseV6({ stream: uiMessageStream });
+      }
+
+      const uiMessageStream = await handleWorkflowStream(handlerOptions);
+      return createUIMessageStreamResponseV5({ stream: uiMessageStream });
     },
   });
 }

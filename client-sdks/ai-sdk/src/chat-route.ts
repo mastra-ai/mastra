@@ -1,5 +1,11 @@
-import { createUIMessageStream as createUIMessageStreamV5, createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
-import { createUIMessageStream as createUIMessageStreamV6 } from '@internal/ai-v6';
+import {
+  createUIMessageStream as createUIMessageStreamV5,
+  createUIMessageStreamResponse as createUIMessageStreamResponseV5,
+} from '@internal/ai-sdk-v5';
+import {
+  createUIMessageStream as createUIMessageStreamV6,
+  createUIMessageStreamResponse as createUIMessageStreamResponseV6,
+} from '@internal/ai-v6';
 import type { AgentExecutionOptions, AgentExecutionOptionsBase } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -183,6 +189,7 @@ export async function handleChatStream<OUTPUT = undefined>({
 
 export type chatRouteOptions<OUTPUT = undefined> = {
   defaultOptions?: AgentExecutionOptions<OUTPUT>;
+  version?: 'v5' | 'v6';
 } & (
   | {
       path: `${string}:agentId${string}`;
@@ -246,6 +253,7 @@ export function chatRoute<OUTPUT = undefined>({
   path = '/chat/:agentId',
   agent,
   defaultOptions,
+  version = 'v5',
   sendStart = true,
   sendFinish = true,
   sendReasoning = false,
@@ -392,7 +400,7 @@ export function chatRoute<OUTPUT = undefined>({
         throw new Error('Agent ID is required');
       }
 
-      const uiMessageStream = await handleChatStream({
+      const handlerOptions = {
         mastra,
         agentId: agentToUse,
         params: {
@@ -405,11 +413,19 @@ export function chatRoute<OUTPUT = undefined>({
         sendFinish,
         sendReasoning,
         sendSources,
-      });
+      };
 
-      return createUIMessageStreamResponse({
-        stream: uiMessageStream,
-      });
+      if (version === 'v6') {
+        const uiMessageStream = await handleChatStream({
+          ...handlerOptions,
+          version: 'v6',
+        });
+
+        return createUIMessageStreamResponseV6({ stream: uiMessageStream });
+      }
+
+      const uiMessageStream = await handleChatStream(handlerOptions);
+      return createUIMessageStreamResponseV5({ stream: uiMessageStream });
     },
   });
 }
