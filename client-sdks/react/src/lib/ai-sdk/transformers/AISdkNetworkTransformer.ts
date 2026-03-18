@@ -1,7 +1,7 @@
-import { formatCompletionFeedback } from '@mastra/core/loop';
 import type { NetworkChunkType } from '@mastra/core/stream';
 import type { WorkflowStreamResult } from '@mastra/core/workflows';
 import type { MastraUIMessage, MastraUIMessageMetadata } from '../types';
+import { formatCompletionFeedback } from '../utils/formatCompletionFeedback';
 import { mapWorkflowStreamChunkToWatchResult } from '../utils/toUIMessage';
 import type { Transformer, TransformerArgs } from './types';
 

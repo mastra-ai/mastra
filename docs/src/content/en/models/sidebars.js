@@ -163,6 +163,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/clarifai',
+          label: 'Clarifai',
+        },
+        {
+          type: 'doc',
           id: 'providers/cloudferro-sherlock',
           label: 'CloudFerro Sherlock',
         },
@@ -195,6 +200,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/deepinfra',
           label: 'Deep Infra',
+        },
+        {
+          type: 'doc',
+          id: 'providers/dinference',
+          label: 'DInference',
         },
         {
           type: 'doc',
@@ -465,6 +475,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/synthetic',
           label: 'Synthetic',
+        },
+        {
+          type: 'doc',
+          id: 'providers/tencent-coding-plan',
+          label: 'Tencent Coding Plan (China)',
         },
         {
           type: 'doc',

@@ -3,6 +3,7 @@ import z from 'zod/v4';
 import type { MastraDBMessage } from '../../../memory';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { ChunkFrom } from '../../../stream/types';
+import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import type { SuspendOptions } from '../../../workflows';
 import { createStep } from '../../../workflows';
@@ -52,6 +53,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
       const tool =
         stepTools?.[inputData.toolName] ||
+        findProviderToolByName(stepTools, inputData.toolName) ||
         Object.values(stepTools || {})?.find((t: any) => `id` in t && t.id === inputData.toolName);
 
       const addToolMetadata = ({
@@ -214,12 +216,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
       };
 
-      // If the tool was already executed by the provider, skip execution
+      // Provider-executed tools are handled entirely by the stream path
+      // (tool-call and tool-result chunks in llm-execution-step), so skip client execution.
       if (inputData.providerExecuted) {
-        return {
-          ...inputData,
-          result: inputData.output ?? { providerExecuted: true, toolName: inputData.toolName },
-        };
+        return inputData;
       }
 
       // Resolve the tool key for activeTools enforcement (may differ from toolName when matched by id)
@@ -491,7 +491,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         };
 
         //if resuming a subAgent or workflow tool, we want to find the runId from when it got suspended.
-        if (resumeDataToPassToToolOptions && (isAgentTool || isWorkflowTool) && !isResumeToolCall) {
+        // Also look up the runId when the LLM provided resumeData in args (isResumeToolCall)
+        // but omitted suspendedToolRunId — without it, workflow tools start a fresh run and re-suspend.
+        const needsRunIdLookup =
+          resumeDataToPassToToolOptions &&
+          (isAgentTool || isWorkflowTool) &&
+          (!isResumeToolCall || !args.suspendedToolRunId);
+        if (needsRunIdLookup) {
           let suspendedToolRunId = '';
           const messages = messageList.get.all.db();
           const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');

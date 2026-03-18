@@ -742,6 +742,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
                 "content": {
                   "content": "Hello, world!",
                   "format": 2,
+                  "metadata": {
+                    "modelId": "test-response-model-id",
+                  },
                   "parts": [
                     {
                       "text": "Hello, world!",
@@ -783,6 +786,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
                 "id": "1234",
                 "metadata": {
                   "createdAt": 2024-01-01T00:00:00.001Z,
+                  "modelId": "test-response-model-id",
                 },
                 "parts": [
                   {
@@ -803,6 +807,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
                 "content": {
                   "content": "Hello, world!",
                   "format": 2,
+                  "metadata": {
+                    "modelId": "test-response-model-id",
+                  },
                   "parts": [
                     {
                       "text": "Hello, world!",
@@ -844,6 +851,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
                 "id": "1234",
                 "metadata": {
                   "createdAt": 2024-01-01T00:00:00.001Z,
+                  "modelId": "test-response-model-id",
                 },
                 "parts": [
                   {

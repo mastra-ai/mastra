@@ -3,12 +3,10 @@ import { useWatch } from 'react-hook-form';
 import { Plus, PlusIcon } from 'lucide-react';
 
 import { ScrollArea } from '@/ds/components/ScrollArea';
-import { SectionHeader } from '@/domains/cms';
 import { JSONSchemaForm, type SchemaField, jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
 import type { JsonSchema } from '@/lib/json-schema';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { Icon } from '@/ds/icons';
 
 function RecursiveFieldRenderer({
   field,
@@ -20,21 +18,15 @@ function RecursiveFieldRenderer({
   depth: number;
 }) {
   return (
-    <div className="py-2 border-border1 border-l-4 border-b">
+    <div className="py-2 ">
       <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
         <div className="space-y-2 px-2">
           <div className="flex flex-row gap-4 items-center">
-            <JSONSchemaForm.FieldName
-              labelIsHidden
-              placeholder="Variable name"
-              size="md"
-              className="[&_input]:bg-surface3 w-full"
-            />
-
-            <JSONSchemaForm.FieldType placeholder="Type" size="md" className="[&_button]:bg-surface3 w-full" />
+            <JSONSchemaForm.FieldName placeholder="Variable name" className="w-64" />
+            <JSONSchemaForm.FieldType placeholder="Type" />
             <JSONSchemaForm.FieldOptional />
             <JSONSchemaForm.FieldNullable />
-            <JSONSchemaForm.FieldRemove variant="outline" size="md" className="shrink-0" />
+            <JSONSchemaForm.FieldRemove aria-label="Remove Variable" />
           </div>
         </div>
 
@@ -77,16 +69,6 @@ export function VariablesPage() {
   return (
     <ScrollArea className="h-full">
       <section className="flex flex-col gap-6">
-        <SectionHeader
-          title="Variables"
-          subtitle={
-            <>
-              Variables are dynamic values that change based on the context of each request. Use them in your agent's
-              instructions with the <code className="text-accent1 font-medium">{'{{variableName}}'}</code> syntax.
-            </>
-          }
-        />
-
         <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
           <JSONSchemaForm.Root onChange={handleVariablesChange} defaultValue={initialFields} maxDepth={5}>
             <JSONSchemaForm.FieldList>
@@ -96,10 +78,8 @@ export function VariablesPage() {
             </JSONSchemaForm.FieldList>
 
             <div className="p-2">
-              <JSONSchemaForm.AddField className="bg-transparent flex items-center justify-center gap-2 text-ui-sm text-neutral3 hover:text-neutral6 w-full border border-dashed border-border1 p-2 rounded-md">
-                <Icon>
-                  <Plus />
-                </Icon>
+              <JSONSchemaForm.AddField>
+                <Plus />
                 Add variable
               </JSONSchemaForm.AddField>
             </div>

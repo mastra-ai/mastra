@@ -14,8 +14,9 @@ import type { Event } from '../../events';
 import type { Mastra } from '../../mastra';
 import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
+import { executeWithContext } from '../../observability/utils';
 import type { OutputResult, Processor } from '../../processors';
-import { ProcessorRunner, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
+import { ProcessorRunner, ProcessorState, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
 import type { ProcessorStepOutput } from '../../processors/step-schema';
 import { toStandardSchema } from '../../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../../schema';
@@ -43,7 +44,9 @@ import type {
   DefaultEngineType,
   StepMetadata,
 } from '../../workflows/types';
-import { PUBSUB_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { forwardAgentStreamChunk } from '../stream-utils';
+import type { StreamChunkWriter } from '../stream-utils';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk } from './helpers';
 import type { TripwireChunk } from './helpers';
@@ -362,9 +365,11 @@ async function processAgentStream(params: {
   pubsub: { publish: (channel: string, data: any) => Promise<void> };
   runId: string;
   toolData: { name: string; args: unknown };
+  writer?: StreamChunkWriter;
+  streamFormat?: 'legacy' | 'vnext';
   logger?: { debug: (msg: string, data?: unknown) => void };
 }): Promise<{ tripwireChunk: TripwireChunk | null }> {
-  const { fullStream, isV2Model, pubsub, runId, toolData, logger } = params;
+  const { fullStream, isV2Model, pubsub, runId, toolData, logger, writer, streamFormat } = params;
 
   // Publish stream start event
   try {
@@ -402,6 +407,10 @@ async function processAgentStream(params: {
           logger?.debug('Failed to publish stream delta event', { runId, error: err });
         }
       }
+    }
+
+    if (streamFormat !== 'legacy') {
+      await forwardAgentStreamChunk({ writer, chunk });
     }
   }
 
@@ -470,9 +479,11 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       runId,
       mastra,
       [PUBSUB_SYMBOL]: pubsub,
+      [STREAM_FORMAT_SYMBOL]: streamFormat,
       requestContext,
       abortSignal,
       abort,
+      writer,
       ...obsFields
     }) => {
       const observabilityContext = resolveObservabilityContext(obsFields);
@@ -550,6 +561,8 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         runId,
         toolData,
         logger,
+        writer,
+        streamFormat,
       });
 
       // Handle tripwire if detected
@@ -711,7 +724,10 @@ function createStepFromProcessor<TProcessorId extends string>(
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
-      const input = inputData as ProcessorStepOutput & { abortSignal?: AbortSignal };
+      const input = inputData as ProcessorStepOutput & {
+        processorStates?: Map<string, ProcessorState>;
+        abortSignal?: AbortSignal;
+      };
       const {
         phase,
         messages,
@@ -737,6 +753,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         steps,
         messageId,
         rotateResponseMessageId,
+        // Shared processor states map for accessing persisted state
+        processorStates,
         // Abort signal for cancelling in-flight processor work (e.g. OM observations)
         abortSignal,
       } = input;
@@ -794,14 +812,30 @@ function createStepFromProcessor<TProcessorId extends string>(
         processorSpan ? { currentSpan: processorSpan } : observabilityContext.tracingContext,
       );
 
+      // If processorStates map is provided (from ProcessorRunner), use it to get this processor's state
+      // Otherwise fall back to the state passed in inputData
+      let processorState: Record<string, unknown>;
+      if (processorStates) {
+        // Get or create the ProcessorState for this processor
+        let ps = processorStates.get(processor.id);
+        if (!ps) {
+          ps = new ProcessorState();
+          processorStates.set(processor.id, ps);
+        }
+        processorState = ps.customState;
+      } else {
+        processorState = state ?? {};
+      }
+
       // Base context for all processor methods - includes requestContext for memory processors
       // and observabilityContext for proper span nesting when processors call internal agents
+      // state is per-processor state that persists across all method calls within this request
       const baseContext = {
         abort,
         retryCount: retryCount ?? 0,
         requestContext,
         ...processorObservabilityContext,
-        state: state ?? {},
+        state: processorState,
         abortSignal,
         messageId: currentMessageId,
         rotateResponseMessageId: rotateCurrentResponseMessageId,
@@ -843,9 +877,11 @@ function createStepFromProcessor<TProcessorId extends string>(
       };
 
       // Helper to execute phase with proper span lifecycle management
+      // Uses executeWithContext to set the processor span as the active OTEL context,
+      // so auto-instrumented operations inside processors nest correctly under the span.
       const executePhaseWithSpan = async <T>(fn: () => Promise<T>): Promise<T> => {
         try {
-          const result = await fn();
+          const result = await executeWithContext({ span: processorSpan, fn });
           processorSpan?.end({ output: result });
           return result;
         } catch (error) {
@@ -1001,7 +1037,9 @@ function createStepFromProcessor<TProcessorId extends string>(
               // Manage per-processor span lifecycle across stream chunks
               // Use unique key to store span on shared state object
               const spanKey = `__outputStreamSpan_${processor.id}`;
-              const mutableState = (state ?? {}) as Record<string, unknown>;
+              // Use processorState (from the shared processorStates Map) so state persists
+              // across processOutputStream and processOutputResult calls
+              const mutableState = processorState;
               let processorSpan = mutableState[spanKey] as
                 | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
                 | undefined;

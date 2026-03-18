@@ -7,7 +7,7 @@ import type { EmbeddingModelId } from '../llm/model/index.js';
 import type { ModelRouterModelId } from '../llm/model/provider-registry.js';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { RequestContext } from '../request-context';
-import type { StandardSchemaWithJSON, PublicSchema } from '../schema';
+import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
@@ -190,11 +190,6 @@ type TemplateWorkingMemory = BaseWorkingMemory & {
 };
 
 type SchemaWorkingMemory = BaseWorkingMemory & {
-  schema: StandardSchemaWithJSON;
-  template?: never;
-};
-
-type PublicSchemaWorkingMemory = BaseWorkingMemory & {
   schema: PublicSchema;
   template?: never;
 };
@@ -528,6 +523,17 @@ export interface ObservationalMemoryObservationConfig {
    * ```
    */
   blockAfter?: number;
+
+  /**
+   * Optional token budget for observer context.
+   * When set, the "Previous Observations" section is truncated from the end
+   * to keep the most recent observations within this budget, and pending
+   * buffered reflections replace the raw observations they summarized.
+   * Set to `0` for full truncation (omit previous observations entirely), or `false` to disable.
+   *
+   * @default undefined (disabled)
+   */
+  previousObserverTokens?: number | false;
 
   /**
    * Custom instructions appended to the Observer agent's system prompt.
@@ -951,7 +957,7 @@ export type MemoryConfig = BaseMemoryConfig & {
    * }
    * ```
    */
-  workingMemory?: TemplateWorkingMemory | PublicSchemaWorkingMemory | WorkingMemoryNone;
+  workingMemory?: TemplateWorkingMemory | SchemaWorkingMemory | WorkingMemoryNone;
 };
 
 /**
@@ -1055,12 +1061,12 @@ export type SharedMemoryConfig = {
   processors?: MemoryProcessor[];
 };
 
+/** @deprecated Use the `format` field on `WorkingMemoryTemplate` discriminated union instead. */
 export type WorkingMemoryFormat = 'json' | 'markdown';
 
-export type WorkingMemoryTemplate = {
-  format: WorkingMemoryFormat;
-  content: string;
-};
+export type WorkingMemoryTemplate =
+  | { format: 'markdown'; content: string }
+  | { format: 'json'; content: string | Record<string, unknown> };
 
 // Type for flexible message deletion input
 export type MessageDeleteInput = string[] | { id: string }[];
@@ -1163,6 +1169,8 @@ export type SerializedObservationalMemoryObservationConfig = {
   bufferActivation?: number;
   /** Token threshold for synchronous blocking */
   blockAfter?: number;
+  /** Optional token budget for observer context (0 = full truncation, false = disabled) */
+  previousObserverTokens?: number | false;
 };
 
 /** Serializable subset of ObservationalMemoryReflectionConfig */

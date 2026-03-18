@@ -24,7 +24,10 @@ function getHarnessState(requestContext: RequestContext) {
  */
 function getObserverModel({ requestContext }: { requestContext: RequestContext }) {
   const state = getHarnessState(requestContext);
-  return resolveModel(state?.observerModelId ?? DEFAULT_OM_MODEL_ID, { remapForCodexOAuth: true });
+  return resolveModel(state?.observerModelId ?? DEFAULT_OM_MODEL_ID, {
+    remapForCodexOAuth: true,
+    requestContext,
+  });
 }
 
 /**
@@ -33,7 +36,10 @@ function getObserverModel({ requestContext }: { requestContext: RequestContext }
  */
 function getReflectorModel({ requestContext }: { requestContext: RequestContext }) {
   const state = getHarnessState(requestContext);
-  return resolveModel(state?.reflectorModelId ?? DEFAULT_OM_MODEL_ID, { remapForCodexOAuth: true });
+  return resolveModel(state?.reflectorModelId ?? DEFAULT_OM_MODEL_ID, {
+    remapForCodexOAuth: true,
+    requestContext,
+  });
 }
 
 /**
@@ -49,7 +55,8 @@ export function getDynamicMemory(storage: MastraCompositeStore) {
     const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
     const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
 
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}`;
+    const observerPreviousObservationTokens = 1000;
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
@@ -70,6 +77,7 @@ export function getDynamicMemory(storage: MastraCompositeStore) {
             model: getObserverModel,
             messageTokens: obsThreshold,
             blockAfter: 2,
+            previousObserverTokens: observerPreviousObservationTokens,
           },
           reflection: {
             bufferActivation: isResourceScope ? undefined : 1 / 2,

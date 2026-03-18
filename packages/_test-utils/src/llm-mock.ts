@@ -30,6 +30,8 @@
  * ```
  */
 
+import path from 'node:path';
+
 import type { LLMRecorderOptions, LLMRecorderInstance } from '@internal/llm-recorder';
 import { setupLLMRecording, defaultNameGenerator } from '@internal/llm-recorder';
 
@@ -49,6 +51,8 @@ export interface MockOptions {
   name?: string;
   /** Directory for recording files (default: `__recordings__` in cwd) */
   recordingsDir?: string;
+  /** Override the test mode instead of reading from `LLM_TEST_MODE` env var. */
+  mode?: LLMRecorderOptions['mode'];
   /** Force re-record even if recording exists */
   forceRecord?: boolean;
   /** Replay with original chunk timing (default: false) */
@@ -104,6 +108,30 @@ function getTestBaseName(): string {
   return testPath ? defaultNameGenerator(testPath) : 'unknown-test';
 }
 
+/** Monorepo directory patterns that contain packages. */
+const PACKAGE_DIR_PATTERN =
+  /^(.*\/(?:packages|stores|deployers|voice|server-adapters|client-sdks|auth|observability|communications|pubsub|workflows|e2e-tests)\/[^/]+)\//;
+
+/**
+ * Derive the package root from a test file path.
+ * e.g. `/repo/packages/core/src/agent/agent.e2e.test.ts` → `/repo/packages/core`
+ */
+function getPackageRoot(): string | null {
+  const testPath = getVitestFilePath();
+  if (!testPath) return null;
+  const normalized = testPath.replace(/\\/g, '/');
+  const match = normalized.match(PACKAGE_DIR_PATTERN);
+  return match?.[1] ?? null;
+}
+
+/**
+ * Get the recordings directory, preferring the package root over cwd.
+ */
+function getRecordingsDir(): string | undefined {
+  const pkgRoot = getPackageRoot();
+  return pkgRoot ? path.join(pkgRoot, '__recordings__') : undefined;
+}
+
 /**
  * Derive a recording name from the test file path and model identity.
  *
@@ -143,7 +171,7 @@ function deriveModelRecordingName(provider: string, modelId: string): string {
  * ```
  */
 export function createLLMMock(model: ModelLike, options: MockOptions = {}): LLMMock {
-  const { name, recordingsDir, debug, ...recorderOptions } = options;
+  const { name, recordingsDir = getRecordingsDir(), debug, ...recorderOptions } = options;
 
   const { provider, modelId } = model;
   const recordingName = name ?? deriveModelRecordingName(provider, modelId);
@@ -223,7 +251,7 @@ export interface GatewayMock {
  * ```
  */
 export function createGatewayMock(options: MockOptions = {}): GatewayMock {
-  const { name, recordingsDir, debug, ...recorderOptions } = options;
+  const { name, recordingsDir = getRecordingsDir(), debug, ...recorderOptions } = options;
 
   const recordingName = name ?? getTestBaseName();
 

@@ -4,7 +4,7 @@
  */
 
 import { Container, Text, Spacer } from '@mariozechner/pi-tui';
-import { theme } from '../theme.js';
+import { BOX_INDENT, theme } from '../theme.js';
 
 /**
  * Format token count for display (e.g., 7234 -> "7.2k", 234 -> "0.2k", 0 -> "0")
@@ -66,10 +66,9 @@ export class OMMarkerComponent extends Container {
 
   constructor(data: OMMarkerData) {
     super();
-    // Add 1 line of padding above
-    this.addChild(new Spacer(1));
-    this.textChild = new Text(formatMarker(data), 0, 0);
+    this.textChild = new Text(formatMarker(data), BOX_INDENT, 0);
     this.addChild(this.textChild);
+    this.addChild(new Spacer(1));
   }
 
   /**

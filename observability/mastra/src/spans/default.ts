@@ -153,17 +153,25 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
 /**
  * Generate OpenTelemetry-compatible span ID (64-bit, 16 hex chars)
  */
-function generateSpanId(): string {
-  // Generate 8 random bytes (64 bits) in hex format
-  const bytes = new Uint8Array(8);
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    crypto.getRandomValues(bytes);
-  } else {
-    // Fallback for environments without crypto.getRandomValues
-    for (let i = 0; i < 8; i++) {
-      bytes[i] = Math.floor(Math.random() * 256);
+function fillRandomBytes(bytes: Uint8Array): void {
+  try {
+    // Use Web Crypto API with proper this binding
+    const webCrypto = globalThis.crypto;
+    if (webCrypto?.getRandomValues) {
+      webCrypto.getRandomValues.call(webCrypto, bytes);
+      return;
     }
+  } catch {
+    // Fall through to fallback
   }
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = Math.floor(Math.random() * 256);
+  }
+}
+
+function generateSpanId(): string {
+  const bytes = new Uint8Array(8);
+  fillRandomBytes(bytes);
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
@@ -171,16 +179,8 @@ function generateSpanId(): string {
  * Generate OpenTelemetry-compatible trace ID (128-bit, 32 hex chars)
  */
 function generateTraceId(): string {
-  // Generate 16 random bytes (128 bits) in hex format
   const bytes = new Uint8Array(16);
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    crypto.getRandomValues(bytes);
-  } else {
-    // Fallback for environments without crypto.getRandomValues
-    for (let i = 0; i < 16; i++) {
-      bytes[i] = Math.floor(Math.random() * 256);
-    }
-  }
+  fillRandomBytes(bytes);
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
 }
 

@@ -44,10 +44,10 @@ import { ModerationProcessor } from '@mastra/core/processors'
 export const moderatedAgent = new Agent({
   name: 'moderated-agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
   inputProcessors: [
     new ModerationProcessor({
-      model: 'openai/gpt-4.1-nano',
+      model: 'openai/gpt-5-mini',
       categories: ['hate', 'harassment', 'violence'],
       threshold: 0.7,
       strategy: 'block',
@@ -167,7 +167,7 @@ This is useful for:
 - Filtering or modifying semantic recall content to prevent "prompt too long" errors
 - Dynamically adjusting system instructions based on the conversation
 
-### Per-step processing with processInputStep
+### Per-step processing with `processInputStep`
 
 While `processInput` runs once at the start of agent execution, `processInputStep` runs at **each step** of the agentic loop (including tool call continuations). This enables per-step configuration changes like dynamic model switching or tool choice modifications.
 
@@ -185,7 +185,7 @@ export class DynamicModelProcessor implements Processor {
   }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
     // Use a fast model for initial response
     if (stepNumber === 0) {
-      return { model: 'openai/gpt-4o-mini' }
+      return { model: 'openai/gpt-5-mini' }
     }
 
     // Disable tools after 5 steps to force completion
@@ -226,7 +226,7 @@ The method can return any combination of:
 - `modelSettings`: Modify model settings
 - `structuredOutput`: Modify structured output configuration
 
-#### Ensuring a final response with maxSteps
+#### Ensuring a final response with `maxSteps`
 
 When using `maxSteps` to limit agent execution, the agent may return an empty response if it attempts a tool call on the final step. Use `processInputStep` to force a text response on the last step:
 
@@ -277,7 +277,7 @@ const MAX_STEPS = 5
 const agent = new Agent({
   id: 'bounded-agent',
   name: 'Bounded Agent',
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
   tools: {
     /* your tools */
   },
@@ -290,7 +290,7 @@ const result = await agent.generate('Your prompt', { maxSteps: MAX_STEPS })
 
 This ensures that on the final allowed step (step 4 when `maxSteps` is 5, since steps are 0-indexed), the LLM generates a summary instead of attempting another tool call, and clearly indicates if the task is incomplete.
 
-#### Using prepareStep callback
+#### Using `prepareStep` callback
 
 For simpler per-step logic, you can use the `prepareStep` callback on `generate()` or `stream()` instead of creating a full processor:
 
@@ -298,7 +298,7 @@ For simpler per-step logic, you can use the `prepareStep` callback on `generate(
 await agent.generate('Complex task', {
   prepareStep: async ({ stepNumber, model }) => {
     if (stepNumber === 0) {
-      return { model: 'openai/gpt-4o-mini' }
+      return { model: 'openai/gpt-5-mini' }
     }
     if (stepNumber > 5) {
       return { toolChoice: 'none' }
@@ -331,7 +331,7 @@ The `processOutputStream` method receives all streaming chunks. To also receive 
 
 #### Accessing generation result data
 
-The `processOutputResult` method receives a `result` object containing the resolved generation data — the same information available in the `onFinish` callback. This makes it easy to access token usage, generated text, finish reason, and step details.
+The `processOutputResult` method receives a `result` object containing the resolved generation data — the same information available in the `onFinish` callback. This lets you access token usage, generated text, finish reason, and step details.
 
 ```typescript title="src/mastra/processors/usage-tracker.ts"
 import type { Processor } from '@mastra/core'
@@ -473,14 +473,14 @@ const response = await stream.response
 console.log(response.uiMessages)
 ```
 
-## Built-in Utility Processors
+## Built-in utility processors
 
 Mastra provides utility processors for common tasks:
 
 **For security and validation processors**, see the [Guardrails](/docs/agents/guardrails) page for input/output guardrails and moderation processors.
 **For memory-specific processors**, see the [Memory Processors](/docs/memory/memory-processors) page for processors that handle message history, semantic recall, and working memory.
 
-### TokenLimiter
+### `TokenLimiter`
 
 Prevents context window overflow by removing older messages when the total token count exceeds a specified limit.
 
@@ -490,7 +490,7 @@ import { TokenLimiter } from '@mastra/core/processors'
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   inputProcessors: [
     // Ensure the total tokens don't exceed ~127k
     new TokenLimiter(127000),
@@ -498,7 +498,7 @@ const agent = new Agent({
 })
 ```
 
-The `TokenLimiter` uses the `o200k_base` encoding by default (suitable for GPT-4o). You can specify other encodings for different models:
+The `TokenLimiter` uses the `o200k_base` encoding by default. You can specify other encodings for different models:
 
 ```typescript {6-9}
 import cl100k_base from 'js-tiktoken/ranks/cl100k_base'
@@ -514,7 +514,7 @@ const agent = new Agent({
 })
 ```
 
-### ToolCallFilter
+### `ToolCallFilter`
 
 Removes tool calls from messages sent to the LLM, saving tokens by excluding potentially verbose tool interactions.
 
@@ -524,7 +524,7 @@ import { ToolCallFilter, TokenLimiter } from '@mastra/core/processors'
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   inputProcessors: [
     // Example 1: Remove all tool calls/results
     new ToolCallFilter(),
@@ -544,7 +544,7 @@ The example above filters tool calls and limits tokens for the LLM, but these fi
 
 :::
 
-### ToolSearchProcessor
+### `ToolSearchProcessor`
 
 Enables dynamic tool discovery and loading for agents with large tool libraries. Instead of providing all tools upfront, the agent searches for tools by keyword and loads them on demand, reducing context token usage.
 
@@ -554,7 +554,7 @@ import { ToolSearchProcessor } from '@mastra/core/processors'
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   inputProcessors: [
     new ToolSearchProcessor({
       tools: {
@@ -596,7 +596,7 @@ const moderationWorkflow = createWorkflow({
 const agent = new Agent({
   id: 'moderated-agent',
   name: 'Moderated Agent',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   inputProcessors: [moderationWorkflow],
 })
 ```
@@ -631,7 +631,7 @@ export class QualityChecker implements Processor {
 const agent = new Agent({
   id: 'quality-agent',
   name: 'Quality Agent',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   outputProcessors: [new QualityChecker()],
   maxProcessorRetries: 3, // Maximum retry attempts (default: 3)
 })

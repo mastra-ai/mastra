@@ -233,7 +233,6 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 field.onChange(v);
                                 setValue('memory.observationalMemory.model.name', '');
                               }}
-                              variant="light"
                             />
                           </div>
                         )}
@@ -248,12 +247,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                         control={control}
                         render={({ field }) => (
                           <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                            <LLMModels
-                              value={field.value ?? ''}
-                              onValueChange={field.onChange}
-                              llmId={omProvider}
-                              variant="light"
-                            />
+                            <LLMModels value={field.value ?? ''} onValueChange={field.onChange} llmId={omProvider} />
                           </div>
                         )}
                       />
@@ -332,7 +326,6 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                       field.onChange(v);
                                       setValue('memory.observationalMemory.observation.model.name', '');
                                     }}
-                                    variant="light"
                                   />
                                 </div>
                               )}
@@ -351,7 +344,6 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                     value={field.value ?? ''}
                                     onValueChange={field.onChange}
                                     llmId={observerProvider}
-                                    variant="light"
                                   />
                                 </div>
                               )}
@@ -539,7 +531,6 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                       field.onChange(v);
                                       setValue('memory.observationalMemory.reflection.model.name', '');
                                     }}
-                                    variant="light"
                                   />
                                 </div>
                               )}
@@ -558,7 +549,6 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                     value={field.value ?? ''}
                                     onValueChange={field.onChange}
                                     llmId={reflectorProvider}
-                                    variant="light"
                                   />
                                 </div>
                               )}

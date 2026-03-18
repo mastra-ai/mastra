@@ -24,7 +24,9 @@ describe('buildHelpText', () => {
     const text = buildHelpText(baseOpts);
     expect(text).toContain('Ctrl+C');
     expect(text).toContain('Ctrl+D');
-    expect(text).toContain('Ctrl+F');
+    expect(text).toContain('Enter');
+    expect(text).toContain('Send message / queue follow-up');
+    expect(text).not.toContain('Ctrl+F');
     expect(text).toContain('Ctrl+T');
     expect(text).toContain('Ctrl+E');
     expect(text).toContain('Ctrl+Y');
@@ -43,7 +45,7 @@ describe('buildHelpText', () => {
     expect(text).not.toMatch(/\/mode\s+Switch/);
   });
 
-  it('shows custom slash commands', () => {
+  it('shows custom slash commands with double-slash prefixes', () => {
     const text = buildHelpText({
       ...baseOpts,
       customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: '', sourcePath: '' }],

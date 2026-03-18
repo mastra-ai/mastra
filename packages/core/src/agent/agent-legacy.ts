@@ -763,9 +763,11 @@ export class AgentLegacyHandler {
     const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
     const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
 
-    const threadFromArgs = threadIdFromContext
-      ? { id: threadIdFromContext }
-      : resolveThreadIdFromArgs({ threadId: args.threadId, memory: args.memory });
+    const threadFromArgs = resolveThreadIdFromArgs({
+      threadId: args.threadId,
+      memory: args.memory,
+      overrideId: threadIdFromContext,
+    });
     const resourceId = resourceIdFromContext || (args.memory as any)?.resource || resourceIdFromArgs;
     const memoryConfig = (args.memory as any)?.options || memoryConfigFromArgs;
 
@@ -956,9 +958,23 @@ export class AgentLegacyHandler {
     const beforeResult = await before();
     const { messageList, requestContext: contextWithMemory } = beforeResult;
     const traceId = beforeResult.agentSpan?.externalTraceId;
+    const spanId = beforeResult.agentSpan?.id;
 
     // Check for tripwire and return early if triggered
     if (beforeResult.tripwire) {
+      // End agent span with tripwire information
+      beforeResult.agentSpan?.end({
+        output: { tripwire: beforeResult.tripwire },
+        attributes: {
+          tripwireAbort: {
+            reason: beforeResult.tripwire.reason,
+            processorId: beforeResult.tripwire.processorId,
+            retry: beforeResult.tripwire.retry,
+            metadata: beforeResult.tripwire.metadata,
+          },
+        },
+      });
+
       const tripwireResult = {
         text: '',
         object: undefined,
@@ -982,6 +998,7 @@ export class AgentLegacyHandler {
         experimental_providerMetadata: undefined,
         tripwire: beforeResult.tripwire,
         traceId,
+        spanId,
       };
 
       return tripwireResult as unknown as OUTPUT extends undefined
@@ -1020,6 +1037,19 @@ export class AgentLegacyHandler {
 
       // Handle tripwire for output processors
       if (outputProcessorResult.tripwire) {
+        // End agent span with tripwire information from output processor
+        agentSpan?.end({
+          output: { tripwire: outputProcessorResult.tripwire },
+          attributes: {
+            tripwireAbort: {
+              reason: outputProcessorResult.tripwire.reason,
+              processorId: outputProcessorResult.tripwire.processorId,
+              retry: outputProcessorResult.tripwire.retry,
+              metadata: outputProcessorResult.tripwire.metadata,
+            },
+          },
+        });
+
         const tripwireResult = {
           text: '',
           object: undefined,
@@ -1043,6 +1073,7 @@ export class AgentLegacyHandler {
           experimental_providerMetadata: undefined,
           tripwire: outputProcessorResult.tripwire,
           traceId,
+          spanId,
         };
 
         return tripwireResult as unknown as OUTPUT extends undefined
@@ -1106,6 +1137,7 @@ export class AgentLegacyHandler {
       }
 
       result.traceId = traceId;
+      (result as any).spanId = spanId;
 
       return result as any;
     }
@@ -1135,6 +1167,19 @@ export class AgentLegacyHandler {
 
     // Handle tripwire for output processors
     if (outputProcessorResult.tripwire) {
+      // End agent span with tripwire information from output processor
+      agentSpan?.end({
+        output: { tripwire: outputProcessorResult.tripwire },
+        attributes: {
+          tripwireAbort: {
+            reason: outputProcessorResult.tripwire.reason,
+            processorId: outputProcessorResult.tripwire.processorId,
+            retry: outputProcessorResult.tripwire.retry,
+            metadata: outputProcessorResult.tripwire.metadata,
+          },
+        },
+      });
+
       const tripwireResult = {
         text: '',
         object: undefined,
@@ -1158,6 +1203,7 @@ export class AgentLegacyHandler {
         experimental_providerMetadata: undefined,
         tripwire: outputProcessorResult.tripwire,
         traceId,
+        spanId,
       };
 
       return tripwireResult as unknown as OUTPUT extends undefined
@@ -1192,6 +1238,7 @@ export class AgentLegacyHandler {
     }
 
     result.traceId = traceId;
+    (result as any).spanId = spanId;
 
     return result as any;
   }
@@ -1250,9 +1297,23 @@ export class AgentLegacyHandler {
 
     const beforeResult = await before();
     const traceId = beforeResult.agentSpan?.externalTraceId;
+    const spanId = beforeResult.agentSpan?.id;
 
     // Check for tripwire and return early if triggered
     if (beforeResult.tripwire) {
+      // End agent span with tripwire information
+      beforeResult.agentSpan?.end({
+        output: { tripwire: beforeResult.tripwire },
+        attributes: {
+          tripwireAbort: {
+            reason: beforeResult.tripwire.reason,
+            processorId: beforeResult.tripwire.processorId,
+            retry: beforeResult.tripwire.retry,
+            metadata: beforeResult.tripwire.metadata,
+          },
+        },
+      });
+
       // Return a promise that resolves immediately with empty result
       const emptyResult = {
         textStream: (async function* () {
@@ -1286,6 +1347,7 @@ export class AgentLegacyHandler {
         steps: undefined,
         experimental_providerMetadata: undefined,
         traceId,
+        spanId,
         toAIStream: () =>
           Promise.resolve('').then(() => {
             const emptyStream = new (globalThis as any).ReadableStream({
@@ -1332,11 +1394,28 @@ export class AgentLegacyHandler {
             messageList.add(result.response.messages, 'response');
 
             // Run output processors to save messages
-            await this.capabilities.__runOutputProcessors({
+            const outputProcessorResult = await this.capabilities.__runOutputProcessors({
               requestContext,
               ...observabilityContext,
               messageList,
             });
+
+            // End agent span with tripwire details if output processor aborted
+            if (outputProcessorResult.tripwire) {
+              agentSpan?.end({
+                output: { tripwire: outputProcessorResult.tripwire },
+                attributes: {
+                  tripwireAbort: {
+                    reason: outputProcessorResult.tripwire.reason,
+                    processorId: outputProcessorResult.tripwire.processorId,
+                    retry: outputProcessorResult.tripwire.retry,
+                    metadata: outputProcessorResult.tripwire.metadata,
+                  },
+                },
+              });
+              await onFinish?.({ ...result, runId } as any);
+              return;
+            }
 
             const outputText = result.text;
             await after({
@@ -1357,6 +1436,7 @@ export class AgentLegacyHandler {
       });
 
       streamResult.traceId = traceId;
+      (streamResult as any).spanId = spanId;
 
       return streamResult as unknown as
         | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
@@ -1391,11 +1471,28 @@ export class AgentLegacyHandler {
           }
 
           // Run output processors to save messages
-          await this.capabilities.__runOutputProcessors({
+          const outputProcessorResult = await this.capabilities.__runOutputProcessors({
             requestContext,
             ...observabilityContext,
             messageList,
           });
+
+          // End agent span with tripwire details if output processor aborted
+          if (outputProcessorResult.tripwire) {
+            agentSpan?.end({
+              output: { tripwire: outputProcessorResult.tripwire },
+              attributes: {
+                tripwireAbort: {
+                  reason: outputProcessorResult.tripwire.reason,
+                  processorId: outputProcessorResult.tripwire.processorId,
+                  retry: outputProcessorResult.tripwire.retry,
+                  metadata: outputProcessorResult.tripwire.metadata,
+                },
+              },
+            });
+            await onFinish?.({ ...result, runId } as any);
+            return;
+          }
 
           const outputText = JSON.stringify(result.object);
           await after({
@@ -1418,6 +1515,7 @@ export class AgentLegacyHandler {
     });
 
     (streamObjectResult as any).traceId = traceId;
+    (streamObjectResult as any).spanId = spanId;
 
     return streamObjectResult as StreamObjectResult<OUTPUT extends ZodSchema ? OUTPUT : never> & TracingProperties;
   }

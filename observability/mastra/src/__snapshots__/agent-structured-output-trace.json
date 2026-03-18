@@ -32,7 +32,9 @@
         },
         "input": "Return a list of items separated by commas",
         "output": {
-          "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+          "text": {
+            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+          },
           "object": {
             "items": "test structured output"
           },
@@ -95,7 +97,9 @@
               },
               "reasoning": [],
               "sources": [],
-              "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+              "text": {
+                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+              },
               "warnings": []
             }
           },
@@ -123,6 +127,7 @@
                   "finishReason": "stop"
                 },
                 "metadata": {
+                  "runId": "<runId-1>",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -131,7 +136,9 @@
                 },
                 "input": {},
                 "output": {
-                  "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+                  "text": {
+                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                  },
                   "toolCalls": [],
                   "object": {
                     "items": "test structured output"
@@ -155,8 +162,13 @@
                       "chunkType": "text",
                       "sequenceNumber": 0
                     },
+                    "metadata": {
+                      "runId": "<runId-1>"
+                    },
                     "output": {
-                      "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] }
+                      "text": {
+                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                      }
                     }
                   }
                 },
@@ -175,6 +187,9 @@
                     "attributes": {
                       "chunkType": "object",
                       "sequenceNumber": 1
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>"
                     },
                     "output": {
                       "items": "test structured output"
@@ -201,13 +216,24 @@
               "processorExecutor": "legacy",
               "processorIndex": 0
             },
+            "metadata": {
+              "runId": "<runId-1>"
+            },
             "input": {
-              "totalChunks": { "__or__": [5, 3] },
-              "accumulatedText": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] }
+              "totalChunks": {
+                "__or__": [5, 3]
+              },
+              "accumulatedText": {
+                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+              }
             },
             "output": {
-              "totalChunks": { "__or__": [5, 3] },
-              "accumulatedText": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] }
+              "totalChunks": {
+                "__or__": [5, 3]
+              },
+              "accumulatedText": {
+                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+              }
             }
           },
           "children": [
@@ -332,6 +358,7 @@
                           "finishReason": "stop"
                         },
                         "metadata": {
+                          "runId": "<runId-2>",
                           "modelMetadata": {
                             "modelId": "mock-model-id",
                             "modelVersion": "v2",
@@ -364,6 +391,9 @@
                               "chunkType": "object",
                               "sequenceNumber": 0
                             },
+                            "metadata": {
+                              "runId": "<runId-2>"
+                            },
                             "output": {}
                           }
                         },
@@ -382,6 +412,9 @@
                             "attributes": {
                               "chunkType": "text",
                               "sequenceNumber": 1
+                            },
+                            "metadata": {
+                              "runId": "<runId-2>"
                             },
                             "output": {
                               "items": "test structured output"

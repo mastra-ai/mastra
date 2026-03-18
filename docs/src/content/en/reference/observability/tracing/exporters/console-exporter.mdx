@@ -56,7 +56,7 @@ readonly name = 'tracing-console-exporter';
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -83,7 +83,7 @@ async shutdown(): Promise<void>
 
 Logs shutdown message.
 
-## Output Format
+## Output format
 
 The exporter outputs different formats based on event type:
 
@@ -152,7 +152,7 @@ const exporterWithLogger = new ConsoleExporter({
 })
 ```
 
-## Implementation Details
+## Implementation details
 
 - Formats attributes as JSON with 2-space indentation
 - Calculates and displays span duration in milliseconds
@@ -160,7 +160,7 @@ const exporterWithLogger = new ConsoleExporter({
 - Logs unimplemented event types as warnings
 - Uses 80-character separator lines between events
 
-## See Also
+## See also
 
 ### Documentation
 
