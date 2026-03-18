@@ -1,8 +1,8 @@
-import type { Context } from 'hono';
 import { MastraChannel } from '@mastra/core/channels';
 import type { ChannelEvent, ChannelSendParams, ChannelSendResult } from '@mastra/core/channels';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ApiRoute } from '@mastra/core/server';
+import type { Context } from 'hono';
 
 import { parseSlackEvent } from './events';
 import type { SlackChannelConfig, SlackEventPayload, SlackPostMessageResponse } from './types';
@@ -52,7 +52,7 @@ export class SlackChannel extends MastraChannel {
     const response = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${this.#botToken}`,
+        Authorization: `Bearer ${this.#botToken}`,
         'Content-Type': 'application/json; charset=utf-8',
       },
       body: JSON.stringify(body),
