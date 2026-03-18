@@ -125,9 +125,9 @@ export type FullOutput<OUTPUT = undefined> = {
     input: Omit<ScorerRunInputForAgent, 'runId'>;
     output: ScorerRunOutputForAgent;
   };
-  /** Trace ID for observability */
+  /** Trace ID for this execution. */
   traceId: string | undefined;
-  /** Span ID for observability (root span ID for a top-level agent execution) */
+  /** Root span ID for this execution, identifying the top-level span in the trace. */
   spanId: string | undefined;
   /** Run ID for this execution */
   runId: string | undefined;
@@ -248,11 +248,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    */
   public messageList: MessageList;
   /**
-   * Trace ID used on the execution (if the execution was traced).
+   * Trace ID for this execution.
    */
   public traceId?: string;
   /**
-   * Span ID used on the execution (if the execution was traced).
+   * Root span ID for this execution, identifying the top-level span in the trace.
    */
   public spanId?: string;
   public messageId: string;
