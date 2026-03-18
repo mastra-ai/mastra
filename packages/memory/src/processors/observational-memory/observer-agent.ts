@@ -271,10 +271,10 @@ Prefer concrete resolved outcomes over abstract workflow status so the assistant
  * Base output format for Observer (without patterns section)
  */
 export const OBSERVER_OUTPUT_FORMAT_BASE = `Use priority levels:
-- 🔴 High: explicit user facts, preferences, goals achieved, critical context
+- 🔴 High: explicit user facts, preferences, unresolved goals, critical context
 - 🟡 Medium: project details, learned information, tool results
 - 🟢 Low: minor details, uncertain observations
-- ✅ Completed: concrete task finished, question answered, issue resolved, or subtask completed in a way that helps the assistant know it is done
+- ✅ Completed: concrete task finished, question answered, issue resolved, goal achieved, or subtask completed in a way that helps the assistant know it is done
 
 Group related observations (like tool sequences) by indenting:
 * 🔴 (14:33) Agent debugging auth issue
@@ -324,7 +324,7 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
 - When observing files with line numbers, include the line number if useful
 - If the agent provides a detailed response, observe the contents so it could be repeated
 - Make sure you start each observation with a priority emoji (🔴, 🟡, 🟢) or a completion marker (✅)
-- User messages are always 🔴 priority. Completions of tasks use ✅. Capture the user's words closely — short/medium messages near-verbatim, long messages summarized with key quotes
+- Capture the user's words closely — short/medium messages near-verbatim, long messages summarized with key quotes. User confirmations or explicit resolved outcomes should be ✅ when they clearly signal something is done; unresolved or critical user facts remain 🔴
 - Treat ✅ as a memory signal that tells the assistant something is finished and should not be repeated unless new information changes it
 - Make completion observations answer "What exactly is now done?"
 - Prefer concrete resolved outcomes over meta-level workflow or bookkeeping updates
@@ -358,6 +358,12 @@ Process each thread separately and output observations for each thread.
 
 Your output MUST use XML tags to structure the response. Each thread's observations, current-task, and suggested-response should be nested inside a <thread id="..."> block within <observations>.
 
+Use this observation format inside each thread block:
+
+${outputFormat}
+
+For multi-thread output, wrap each thread's observations like this:
+
 <observations>
 <thread id="thread_id_1">
 Date: Dec 4, 2025
@@ -386,11 +392,6 @@ Suggested response for this thread
 </suggested-response>
 </thread>
 </observations>
-
-Use priority levels:
-- 🔴 High: explicit user facts, preferences, goals achieved, critical context, user messages
-- 🟡 Medium: project details, learned information, tool results
-- 🟢 Low: minor details, uncertain observations
 
 === GUIDELINES ===
 
