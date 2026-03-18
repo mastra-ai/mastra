@@ -25,53 +25,69 @@ export const Default: Story = {
         <Tab value="tab3">Settings</Tab>
       </TabList>
       <TabContent value="tab1">
-        <div className="p-4 text-neutral5">Overview content goes here</div>
+        <div className="text-neutral2 text-ui-md">Overview content goes here</div>
       </TabContent>
       <TabContent value="tab2">
-        <div className="p-4 text-neutral5">Details content goes here</div>
+        <div className="text-neutral2 text-ui-md">Details content goes here</div>
       </TabContent>
       <TabContent value="tab3">
-        <div className="p-4 text-neutral5">Settings content goes here</div>
+        <div className="text-neutral2 text-ui-md">Settings content goes here</div>
       </TabContent>
     </Tabs>
   ),
 };
 
-export const ButtonsVariant: Story = {
+export const ListAlignments: Story = {
   render: () => (
-    <Tabs defaultTab="code" className="w-[400px]">
-      <TabList variant="buttons">
-        <Tab value="code">Code</Tab>
-        <Tab value="preview">Preview</Tab>
-        <Tab value="output">Output</Tab>
-      </TabList>
-      <TabContent value="code">
-        <div className="p-4 text-neutral5 font-mono text-sm">const hello = world;</div>
-      </TabContent>
-      <TabContent value="preview">
-        <div className="p-4 text-neutral5">Preview content</div>
-      </TabContent>
-      <TabContent value="output">
-        <div className="p-4 text-neutral5">Output content</div>
-      </TabContent>
-    </Tabs>
+    <div className="flex flex-col gap-8 w-[500px]">
+      <Tabs defaultTab="tab1">
+        <TabList>
+          <Tab value="tab1">Overview</Tab>
+          <Tab value="tab2">Details</Tab>
+          <Tab value="tab3">Settings</Tab>
+        </TabList>
+        <TabContent value="tab1">
+          <div className="text-neutral2 text-ui-md">Tabs are left-aligned</div>
+        </TabContent>
+      </Tabs>
+      <Tabs defaultTab="tab1">
+        <TabList alignment="full-width">
+          <Tab value="tab1">Overview</Tab>
+          <Tab value="tab2">Details</Tab>
+          <Tab value="tab3">Settings</Tab>
+        </TabList>
+        <TabContent value="tab1">
+          <div className="text-neutral2 text-ui-md">Tabs stretch to fill the width</div>
+        </TabContent>
+      </Tabs>
+    </div>
   ),
 };
 
-export const TwoTabs: Story = {
+export const TabSizes: Story = {
   render: () => (
-    <Tabs defaultTab="input" className="w-[300px]">
-      <TabList>
-        <Tab value="input">Input</Tab>
-        <Tab value="output">Output</Tab>
-      </TabList>
-      <TabContent value="input">
-        <div className="p-4 text-neutral5">Input content</div>
-      </TabContent>
-      <TabContent value="output">
-        <div className="p-4 text-neutral5">Output content</div>
-      </TabContent>
-    </Tabs>
+    <div className="flex flex-col gap-8 w-[500px]">
+      <Tabs defaultTab="tab1">
+        <TabList>
+          <Tab value="tab1">Overview</Tab>
+          <Tab value="tab2">Details</Tab>
+          <Tab value="tab3">Settings</Tab>
+        </TabList>
+        <TabContent value="tab1">
+          <div className="text-neutral2 text-ui-md">Default size tabs</div>
+        </TabContent>
+      </Tabs>
+      <Tabs defaultTab="tab1">
+        <TabList>
+          <Tab value="tab1" size="smaller">Overview</Tab>
+          <Tab value="tab2" size="smaller">Details</Tab>
+          <Tab value="tab3" size="smaller">Settings</Tab>
+        </TabList>
+        <TabContent value="tab1">
+          <div className="text-neutral2 text-ui-md">Small size tabs</div>
+        </TabContent>
+      </Tabs>
+    </div>
   ),
 };
 
@@ -86,19 +102,19 @@ export const ManyTabs: Story = {
         <Tab value="tab5">Tab 5</Tab>
       </TabList>
       <TabContent value="tab1">
-        <div className="p-4 text-neutral5">Content 1</div>
+        <div className="text-neutral2 text-ui-md">Content 1</div>
       </TabContent>
       <TabContent value="tab2">
-        <div className="p-4 text-neutral5">Content 2</div>
+        <div className="text-neutral2 text-ui-md">Content 2</div>
       </TabContent>
       <TabContent value="tab3">
-        <div className="p-4 text-neutral5">Content 3</div>
+        <div className="text-neutral2 text-ui-md">Content 3</div>
       </TabContent>
       <TabContent value="tab4">
-        <div className="p-4 text-neutral5">Content 4</div>
+        <div className="text-neutral2 text-ui-md">Content 4</div>
       </TabContent>
       <TabContent value="tab5">
-        <div className="p-4 text-neutral5">Content 5</div>
+        <div className="text-neutral2 text-ui-md">Content 5</div>
       </TabContent>
     </Tabs>
   ),
@@ -119,13 +135,13 @@ export const WithClosableTabs: Story = {
         </Tab>
       </TabList>
       <TabContent value="file1">
-        <div className="p-4 text-neutral5">index.ts content</div>
+        <div className="text-neutral2 text-ui-md">index.ts content</div>
       </TabContent>
       <TabContent value="file2">
-        <div className="p-4 text-neutral5">utils.ts content</div>
+        <div className="text-neutral2 text-ui-md">utils.ts content</div>
       </TabContent>
       <TabContent value="file3">
-        <div className="p-4 text-neutral5">types.ts content</div>
+        <div className="text-neutral2 text-ui-md">types.ts content</div>
       </TabContent>
     </Tabs>
   ),

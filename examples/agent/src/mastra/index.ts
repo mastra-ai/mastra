@@ -1,8 +1,7 @@
 import { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
-import { MastraCompositeStore, FilesystemStore } from '@mastra/core/storage';
+import { InMemoryStore } from '@mastra/core/storage';
 import { MastraEditor } from '@mastra/editor';
-import { LibSQLStore } from '@mastra/libsql';
 
 import { mastraAuth, rbacProvider } from './auth';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
@@ -49,16 +48,7 @@ import {
   stepLoggerProcessor,
 } from './processors/index';
 
-const libsqlStore = new LibSQLStore({
-  id: 'mastra-storage',
-  url: 'file:./mastra.db',
-});
-
-const storage = new MastraCompositeStore({
-  id: 'composite-storage',
-  default: libsqlStore,
-  // editor: new FilesystemStore({ dir: '.mastra-storage' }),
-});
+const storage = new InMemoryStore();
 
 const config = {
   agents: {
@@ -114,6 +104,43 @@ const config = {
   // },
 };
 
+const debugInjectMetricsRoute = registerApiRoute('/debug/inject-metrics', {
+  method: 'POST',
+  createHandler: async ({ mastra: m }) => async (c: any) => {
+    const body = await c.req.json();
+    const metrics = body.metrics ?? [];
+    const store = m.getStorage();
+    if (!store) return c.json({ error: 'No storage' }, 500);
+    const obsStore = await store.getStore('observability');
+    if (!obsStore) return c.json({ error: 'No observability store' }, 500);
+    await obsStore.batchCreateMetrics({
+      metrics: metrics.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) })),
+    });
+    return c.json({ injected: metrics.length });
+  },
+});
+
+const debugInjectScoresRoute = registerApiRoute('/debug/inject-scores', {
+  method: 'POST',
+  createHandler: async ({ mastra: m }) => async (c: any) => {
+    const body = await c.req.json();
+    const scores = body.scores ?? [];
+    const store = m.getStorage();
+    if (!store) return c.json({ error: 'No storage' }, 500);
+    const scoresStore = await store.getStore('scores');
+    if (!scoresStore) return c.json({ error: 'No scores store' }, 500);
+    const results = [];
+    for (const s of scores) {
+      const result = await scoresStore.saveScore(s);
+      // Overwrite createdAt directly on the in-memory record
+      const saved = result.score as any;
+      if (s.createdAt) saved.createdAt = new Date(s.createdAt);
+      results.push(result);
+    }
+    return c.json({ injected: scores.length });
+  },
+});
+
 export const mastra = new Mastra({
   ...config,
   editor: new MastraEditor({
@@ -130,4 +157,7 @@ export const mastra = new Mastra({
       },
     },
   }),
+  server: {
+    apiRoutes: [debugInjectMetricsRoute, debugInjectScoresRoute],
+  },
 });

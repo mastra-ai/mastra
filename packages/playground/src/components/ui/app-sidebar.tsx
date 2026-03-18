@@ -30,6 +30,7 @@ import {
   FolderIcon,
   Cpu,
   DatabaseIcon,
+  BarChart3Icon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -114,6 +115,12 @@ const mainNavigation: SidebarSection[] = [
     key: 'observability',
     separator: true,
     links: [
+      {
+        name: 'Metrics',
+        url: '/metrics',
+        icon: <BarChart3Icon />,
+        isOnMastraPlatform: true,
+      },
       {
         name: 'Observability',
         url: '/observability',

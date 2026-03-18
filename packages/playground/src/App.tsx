@@ -65,6 +65,7 @@ import { Login } from './pages/login';
 import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
+import Metrics from './pages/metrics';
 import Observability from './pages/observability';
 import PromptBlocks from './pages/prompt-blocks';
 import RequestContext from './pages/request-context';
@@ -197,6 +198,7 @@ const routes = [
 
       { path: '/scorers', element: <Scorers /> },
       { path: '/scorers/:scorerId', element: <Scorer /> },
+      { path: '/metrics', element: <Metrics /> },
       { path: '/observability', element: <Observability /> },
       { path: '/agents', element: <Agents /> },
       {

@@ -32,7 +32,6 @@ const nodeOnlyPackages = new Set(['execa']);
 const stubNodeBuiltinsPlugin: Plugin = {
   name: 'stub-node-builtins',
   enforce: 'pre',
-  apply: 'build',
   resolveId(source) {
     if (nodeOnlyPackages.has(source)) {
       return { id: `\0node-stub:${source}`, moduleSideEffects: false };
@@ -45,7 +44,51 @@ const stubNodeBuiltinsPlugin: Plugin = {
   },
   load(id) {
     if (id.startsWith('\0node-stub:')) {
-      return { code: 'export default {}', syntheticNamedExports: true };
+      // Build a Proxy-based stub where every property access returns a no-op
+      // function (which itself returns a proxy for chaining like
+      // `createRequire(url)('zod')`). During build Rollup uses
+      // syntheticNamedExports; during dev Vite needs real ESM exports, so we
+      // enumerate the known named imports from Node builtins used by
+      // @mastra/core, schema-compat, and playground-ui.
+      const source = id.slice('\0node-stub:'.length);
+      const mod = source.startsWith('node:') ? source.slice(5) : source;
+      const baseMod = mod.split('/')[0];
+
+      const knownExports: Record<string, string[]> = {
+        module: ['createRequire', 'builtinModules'],
+        fs: [
+          'constants', 'existsSync', 'mkdirSync', 'mkdtempSync', 'readFileSync',
+          'readdirSync', 'realpathSync', 'renameSync', 'rmSync', 'statSync',
+          'writeFileSync', 'createReadStream', 'createWriteStream',
+        ],
+        'fs/promises': ['mkdtemp', 'readFile', 'rm', 'writeFile', 'readdir', 'stat', 'mkdir'],
+        path: ['dirname', 'join', 'normalize', 'parse', 'relative', 'resolve', 'sep', 'basename', 'extname'],
+        crypto: ['createHash', 'createHmac', 'randomUUID', 'randomBytes'],
+        stream: ['PassThrough', 'Readable', 'Transform', 'Writable', 'pipeline'],
+        'stream/web': ['ReadableStream', 'WritableStream', 'TransformStream'],
+        events: ['EventEmitter'],
+        child_process: ['exec', 'execFile', 'execFileSync', 'spawn'],
+        os: ['tmpdir', 'homedir', 'platform'],
+        url: ['fileURLToPath', 'pathToFileURL', 'URL'],
+        util: ['promisify', 'inspect'],
+        http: ['ServerResponse', 'IncomingMessage', 'createServer'],
+        https: ['createServer'],
+        assert: ['fail', 'ok', 'strictEqual'],
+        buffer: ['Buffer'],
+        zlib: ['createGzip', 'createGunzip'],
+        net: ['createServer', 'Socket'],
+        tls: ['createServer'],
+        querystring: ['parse', 'stringify'],
+      };
+
+      const names = knownExports[mod] ?? knownExports[baseMod] ?? [];
+      const lines = [
+        'const noop = () => stub;',
+        'const stub = new Proxy(noop, { get: () => noop });',
+        'export default stub;',
+        ...names.map(n => `export const ${n} = noop;`),
+      ];
+      return lines.join('\n');
     }
   },
 };
