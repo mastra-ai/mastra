@@ -24,3 +24,28 @@ export function successEntrypoint() {
   }
   `;
 }
+
+export function errorEntrypoint() {
+  return `
+  if (process.env.CI !== 'true') {
+    await fetch('${process.env.REPORTER_API_URL}', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ${process.env.REPORTER_API_URL_AUTH_TOKEN}',
+      },
+      body: JSON.stringify(${JSON.stringify({
+        projectId: PROJECT_ID,
+        buildId: BUILD_ID,
+        status: 'error',
+        url: BUILD_URL,
+        userIpAddress: USER_IP_ADDRESS,
+      })}),
+    }).catch(err => {
+      console.error('Failed to report build error to monitoring service', {
+        error: err,
+      });
+    })
+  }
+  `;
+}

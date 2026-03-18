@@ -8,7 +8,7 @@ import { getAuthEntrypoint } from './utils/auth.js';
 import { MASTRA_DIRECTORY, BUILD_ID, PROJECT_ID, TEAM_ID } from './utils/constants.js';
 import { installDeps } from './utils/deps.js';
 import { getMastraEntryFile } from './utils/file.js';
-import { successEntrypoint } from './utils/report.js';
+import { successEntrypoint, errorEntrypoint } from './utils/report.js';
 
 export class CloudDeployer extends Deployer {
   private studio: boolean;
@@ -174,36 +174,56 @@ if (mastra?.getStorage()) {
 
 ${getAuthEntrypoint()}
 
-await createNodeServer(mastra, { studio: ${this.studio}, swaggerUI: false, tools: getToolExports(tools) });
+try {
+  await createNodeServer(mastra, { studio: ${this.studio}, swaggerUI: false, tools: getToolExports(tools) });
 
-${successEntrypoint()}
+  ${successEntrypoint()}
 
-console.log(JSON.stringify({
-  message: "Server started",
-  operation: 'builder.createNodeServer',
-  operation_startTime: createNodeServerStartTime,
-  operation_durationMs: Date.now() - createNodeServerStartTime,
-  type: "READINESS",
-  startTime,
-  metadata: {
-    teamId: "${TEAM_ID}",
-    projectId: "${PROJECT_ID}",
-    buildId: "${BUILD_ID}",
-  },
-}));
+  console.log(JSON.stringify({
+    message: "Server started",
+    operation: 'builder.createNodeServer',
+    operation_startTime: createNodeServerStartTime,
+    operation_durationMs: Date.now() - createNodeServerStartTime,
+    type: "READINESS",
+    startTime,
+    metadata: {
+      teamId: "${TEAM_ID}",
+      projectId: "${PROJECT_ID}",
+      buildId: "${BUILD_ID}",
+    },
+  }));
 
+  console.log(JSON.stringify({
+    message: "Runner Initialized",
+    type: "READINESS",
+    startTime,
+    durationMs: Date.now() - startTime,
+    metadata: {
+      teamId: "${TEAM_ID}",
+      projectId: "${PROJECT_ID}",
+      buildId: "${BUILD_ID}",
+    },
+  }));
+} catch (error) {
+  console.error(JSON.stringify({
+    message: "Server initialization failed",
+    operation: 'builder.createNodeServer',
+    operation_startTime: createNodeServerStartTime,
+    operation_durationMs: Date.now() - createNodeServerStartTime,
+    type: "ERROR",
+    startTime,
+    error: error instanceof Error ? error.message : String(error),
+    metadata: {
+      teamId: "${TEAM_ID}",
+      projectId: "${PROJECT_ID}",
+      buildId: "${BUILD_ID}",
+    },
+  }));
 
-console.log(JSON.stringify({
-  message: "Runner Initialized",
-  type: "READINESS",
-  startTime,
-  durationMs: Date.now() - startTime,
-  metadata: {
-    teamId: "${TEAM_ID}",
-    projectId: "${PROJECT_ID}",
-    buildId: "${BUILD_ID}",
-  },
-}));
+  ${errorEntrypoint()}
+
+  process.exit(1);
+}
 `;
   }
 }
