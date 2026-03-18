@@ -104,3 +104,28 @@ export function executeWithContextSync<T>(params: { span?: AnySpan; fn: () => T 
 
   return fn();
 }
+
+/**
+ * Returns the top-most non-internal span that would appear in exported tracing output.
+ *
+ * Public API results should use this span for trace/span correlation because internal Mastra
+ * workflow spans are omitted from external exporters.
+ */
+export function getRootExportSpan(span?: AnySpan): AnySpan | undefined {
+  if (!span?.isValid) {
+    return undefined;
+  }
+
+  let current: AnySpan | undefined = span;
+  let rootExportSpan: AnySpan | undefined = span.isInternal ? undefined : span;
+
+  while (current?.parent) {
+    current = current.parent;
+
+    if (!current.isInternal) {
+      rootExportSpan = current;
+    }
+  }
+
+  return rootExportSpan;
+}
