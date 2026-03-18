@@ -347,9 +347,7 @@ export class SemanticRecall implements Processor {
     // Ensure vector index exists
     const indexName = this.indexName || this.getDefaultIndexName();
 
-    // Generate embeddings for the query
-    const { embeddings, dimension } = await this.embedMessageContent(query, indexName);
-    await this.ensureVectorIndex(indexName, dimension);
+    const { embeddings } = await this.embedMessageContent(query, indexName);
 
     // Perform vector search for each embedding
     const vectorResults: Array<{
