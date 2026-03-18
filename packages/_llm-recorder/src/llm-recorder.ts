@@ -126,6 +126,15 @@ export function getLLMTestMode(): LLMTestMode {
 /**
  * Recorded request/response pair
  */
+export interface LLMBinaryArtifact {
+  /** Relative path from recordingsDir to the stored artifact */
+  path: string;
+  /** MIME type of the binary payload */
+  contentType: string;
+  /** Byte length of the payload */
+  size: number;
+}
+
 export interface LLMRecording {
   /** Unique hash of the request for matching */
   hash: string;
@@ -135,6 +144,8 @@ export interface LLMRecording {
     method: string;
     body: unknown;
     timestamp: number;
+    /** Optional binary request payload stored as a sidecar artifact */
+    binaryArtifact?: LLMBinaryArtifact;
   };
   /** Response details */
   response: {
@@ -143,6 +154,8 @@ export interface LLMRecording {
     headers: Record<string, string>;
     /** For non-streaming responses - parsed JSON or text */
     body?: unknown;
+    /** Optional binary response payload stored as a sidecar artifact */
+    binaryArtifact?: LLMBinaryArtifact;
     /** For streaming responses - individual chunks */
     chunks?: string[];
     /** Timing between chunks in ms */
@@ -150,6 +163,69 @@ export interface LLMRecording {
     /** Whether this was a streaming response */
     isStreaming: boolean;
   };
+}
+
+/**
+ * Metadata stored at the top of each recording file.
+ * Makes recording files self-describing — you can open a JSON
+ * and immediately know what it is, which test generated it, etc.
+ */
+export interface RecordingMeta {
+  /** Recording name (matches the filename without extension) */
+  name: string;
+  /** Relative path (from cwd) of the test file that created this recording */
+  testFile?: string;
+  /** Name of the test (best-effort, may not always be available) */
+  testName?: string;
+  /** Provider ID (e.g. "openai", "anthropic") */
+  provider?: string;
+  /** Model ID (e.g. "gpt-4o") */
+  model?: string;
+  /** ISO timestamp when recording was first created */
+  createdAt: string;
+  /** ISO timestamp when recording was last updated */
+  updatedAt?: string;
+}
+
+/**
+ * New versioned recording file format.
+ * Files always have `{ meta, recordings }` at the top level.
+ * Legacy files (plain arrays) are auto-migrated on read.
+ */
+export interface RecordingFile {
+  meta: RecordingMeta;
+  recordings: LLMRecording[];
+}
+
+/**
+ * Load a recording file, handling both legacy (plain array) and new ({ meta, recordings }) formats.
+ */
+function isRecordingFile(raw: unknown): raw is RecordingFile {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+  const obj = raw as Record<string, unknown>;
+  return Array.isArray(obj.recordings);
+}
+
+function loadRecordingFile(filePath: string, name: string): RecordingFile {
+  const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+
+  // New format: { meta, recordings }
+  if (isRecordingFile(raw)) {
+    return raw;
+  }
+
+  // Legacy format: plain array of LLMRecording[]
+  if (Array.isArray(raw)) {
+    return {
+      meta: {
+        name,
+        createdAt: new Date().toISOString(),
+      },
+      recordings: raw as LLMRecording[],
+    };
+  }
+
+  throw new Error(`[llm-recorder] Invalid recording file format: ${filePath}`);
 }
 
 export interface LLMRecorderOptions {
@@ -183,6 +259,42 @@ export interface LLMRecorderOptions {
    * ```
    */
   transformRequest?: (req: { url: string; body: unknown }) => { url: string; body: unknown };
+  /**
+   * Restrict interception to specific API hosts.
+   * When provided, only requests to these hosts are intercepted; all others pass through.
+   * Defaults to all known LLM API hosts.
+   *
+   * @example
+   * ```typescript
+   * setupLLMRecording({
+   *   name: 'openai-only',
+   *   hosts: ['https://api.openai.com'],
+   * });
+   * ```
+   */
+  hosts?: string[];
+  /**
+   * Enable verbose debug logging for request hashes, model info, and match results.
+   * Helps diagnose why a replay miss or fuzzy match happens.
+   */
+  debug?: boolean;
+  /**
+   * Override the test mode instead of reading from `LLM_TEST_MODE` env var.
+   * Useful for tests that must always replay regardless of environment.
+   */
+  mode?: LLMTestMode;
+  /**
+   * Additional metadata context to include in the recording file.
+   * Automatically populated by `createLLMMock` but can be set manually.
+   */
+  metaContext?: {
+    /** Absolute path of the test file */
+    testFile?: string;
+    /** Provider ID (e.g. "openai") */
+    provider?: string;
+    /** Model ID (e.g. "gpt-4o") */
+    model?: string;
+  };
 }
 
 export interface LLMRecorderInstance {
@@ -207,7 +319,7 @@ export interface LLMRecorderInstance {
 /**
  * LLM API hosts to intercept
  */
-const LLM_API_HOSTS = [
+export const LLM_API_HOSTS = [
   'https://api.openai.com',
   'https://api.anthropic.com',
   'https://generativelanguage.googleapis.com',
@@ -237,6 +349,15 @@ export function getActiveRecorder(): LLMRecorderInstance | null {
 }
 
 /**
+ * Convert an absolute test file path to a stable relative path.
+ * Falls back to the basename if the path is outside the project (starts with `..`).
+ */
+function relativizeTestFile(filepath: string): string {
+  const rel = path.relative(process.cwd(), filepath);
+  return rel.startsWith('..') ? path.basename(filepath) : rel;
+}
+
+/**
  * Deep sort object keys for stable serialization
  */
 function stableSortKeys(value: unknown): unknown {
@@ -247,6 +368,53 @@ function stableSortKeys(value: unknown): unknown {
     sorted[key] = stableSortKeys((value as Record<string, unknown>)[key]);
   }
   return sorted;
+}
+
+interface ParsedRequestBody {
+  value: unknown;
+  binary?: {
+    bytes: Uint8Array;
+    contentType: string;
+  };
+}
+
+/**
+ * Parse request payload into a JSON/text value or binary bytes.
+ */
+async function parseRequestBody(request: Request): Promise<ParsedRequestBody> {
+  const contentType = request.headers.get('content-type')?.toLowerCase() || '';
+  const cloned = request.clone();
+
+  if (contentType.includes('application/json') || contentType.includes('+json')) {
+    const json = await cloned.json().catch(() => ({}));
+    return { value: json };
+  }
+
+  if (contentType.startsWith('text/')) {
+    const text = await cloned.text().catch(() => '');
+    return { value: text };
+  }
+
+  const buffer = await cloned.arrayBuffer().catch(() => new ArrayBuffer(0));
+  const bytes = new Uint8Array(buffer);
+  if (bytes.length === 0) {
+    return { value: {} };
+  }
+
+  const digest = crypto.createHash('md5').update(bytes).digest('hex').slice(0, 16);
+
+  return {
+    value: {
+      __binary: true,
+      contentType: contentType || 'application/octet-stream',
+      size: bytes.length,
+      digest,
+    },
+    binary: {
+      bytes,
+      contentType: contentType || 'application/octet-stream',
+    },
+  };
 }
 
 /**
@@ -283,6 +451,45 @@ function filterHeaders(headers: Headers): Record<string, string> {
     }
   });
   return filtered;
+}
+
+function writeBinaryArtifact(params: {
+  recordingsDir: string;
+  hash: string;
+  kind: 'request' | 'response';
+  contentType: string;
+  bytes: Uint8Array;
+}): LLMBinaryArtifact {
+  fs.mkdirSync(params.recordingsDir, { recursive: true });
+
+  const ext = params.contentType.includes('mpeg')
+    ? 'mp3'
+    : params.contentType.includes('wav')
+      ? 'wav'
+      : params.contentType.includes('ogg')
+        ? 'ogg'
+        : params.contentType.includes('webm')
+          ? 'webm'
+          : 'bin';
+
+  const payloadDigest = crypto.createHash('md5').update(params.bytes).digest('hex').slice(0, 12);
+  const fileName = `${params.hash}-${params.kind}-${payloadDigest}.${ext}`;
+  const absolutePath = path.join(params.recordingsDir, fileName);
+  fs.writeFileSync(absolutePath, Buffer.from(params.bytes));
+  return {
+    path: fileName,
+    contentType: params.contentType,
+    size: params.bytes.byteLength,
+  };
+}
+
+function readBinaryArtifact(recordingsDir: string, artifact: LLMBinaryArtifact): Uint8Array {
+  const baseDir = path.resolve(recordingsDir);
+  const absolutePath = path.resolve(baseDir, artifact.path);
+  if (!absolutePath.startsWith(`${baseDir}${path.sep}`)) {
+    throw new Error(`[llm-recorder] Invalid binary artifact path: ${artifact.path}`);
+  }
+  return new Uint8Array(fs.readFileSync(absolutePath));
 }
 
 /**
@@ -381,14 +588,35 @@ function findRecording(recordings: LLMRecording[], hash: string, url: string, bo
     return undefined;
   }
 
-  // 2. Fuzzy match via string similarity on serialized request content
+  // 2. Fuzzy match via string similarity on serialized request content.
+  //    Prefer recordings that match the request URL to avoid cross-API mismatches
+  //    (e.g. /v1/chat/completions vs /v1/responses).
   const incoming = serializeRequestContent(url, body);
-  const candidates = recordings.map(r => serializeRequestContent(r.request.url, r.request.body));
+  let bestRating = -1;
+  let bestIndex = -1;
+  let bestUrlMatchRating = -1;
+  let bestUrlMatchIndex = -1;
 
-  const { bestMatch, bestMatchIndex } = stringSimilarity.findBestMatch(incoming, candidates);
+  for (let i = 0; i < recordings.length; i++) {
+    const candidate = serializeRequestContent(recordings[i]!.request.url, recordings[i]!.request.body);
+    const rating = stringSimilarity.compareTwoStrings(incoming, candidate);
+    if (rating > bestRating) {
+      bestRating = rating;
+      bestIndex = i;
+    }
+    if (recordings[i]!.request.url === url && rating > bestUrlMatchRating) {
+      bestUrlMatchRating = rating;
+      bestUrlMatchIndex = i;
+    }
+  }
 
-  if (bestMatch.rating >= SIMILARITY_THRESHOLD) {
-    return recordings[bestMatchIndex]!;
+  // Prefer URL-matching recording when available and above threshold
+  if (bestUrlMatchRating >= SIMILARITY_THRESHOLD && bestUrlMatchIndex >= 0) {
+    return recordings[bestUrlMatchIndex]!;
+  }
+
+  if (bestRating >= SIMILARITY_THRESHOLD && bestIndex >= 0) {
+    return recordings[bestIndex]!;
   }
 
   return undefined;
@@ -403,11 +631,31 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
   const recordingExists = fs.existsSync(recordingPath);
 
   // Determine mode
-  let mode = getLLMTestMode();
+  let mode = options.mode ?? getLLMTestMode();
 
   // Force record if explicitly requested
   if (options.forceRecord) {
     mode = 'record';
+  }
+
+  // Load existing recordings / metadata before any mutations (backward compatible)
+  // In record/update modes a corrupted file should not block re-recording.
+  let savedRecordings: LLMRecording[] = [];
+  let existingMeta: RecordingMeta | undefined;
+  if (recordingExists) {
+    const willRecord = mode === 'record' || mode === 'update';
+    try {
+      const file = loadRecordingFile(recordingPath, options.name);
+      existingMeta = file.meta;
+      savedRecordings = file.recordings;
+    } catch (err) {
+      if (!willRecord) {
+        throw err;
+      }
+      console.warn(
+        `[llm-recorder] Failed to parse existing recording for "${options.name}", starting fresh: ${err instanceof Error ? err.message : err}`,
+      );
+    }
   }
 
   // Resolve mode to an effective action
@@ -417,6 +665,8 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
       fs.unlinkSync(recordingPath);
     }
     mode = 'record';
+    // Don't replay existing recordings in record mode
+    savedRecordings = [];
   } else if (mode === 'auto') {
     // Auto: replay if recording exists, record if not
     if (recordingExists) {
@@ -457,21 +707,20 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
 
   const recordings: LLMRecording[] = [];
   const isRecordMode = mode === 'record';
+  let saved = false;
 
-  // Load existing recordings for replay mode
-  let savedRecordings: LLMRecording[] = [];
-  if (!isRecordMode && recordingExists) {
-    savedRecordings = JSON.parse(fs.readFileSync(recordingPath, 'utf-8'));
-  }
-
-  // Create handlers for each LLM API host
-  const handlers = LLM_API_HOSTS.flatMap(baseUrl => [
+  // Create handlers for each LLM API host (or a filtered subset)
+  const interceptHosts = options.hosts ?? LLM_API_HOSTS;
+  const debug = options.debug ?? false;
+  const handlers = interceptHosts.flatMap(baseUrl => [
     http.post(`${baseUrl}/*`, async ({ request }) => {
       let url = request.url;
-      let body: unknown = await request
-        .clone()
-        .json()
-        .catch(() => ({}));
+      const parsedRequest = await parseRequestBody(request);
+      const body = parsedRequest.value;
+
+      // Extract model from request body for debug logging
+      const model =
+        body && typeof body === 'object' && 'model' in body ? (body as Record<string, unknown>).model : undefined;
 
       // Apply user-provided transform before hashing
       let hash: string;
@@ -485,7 +734,7 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
       }
 
       if (isRecordMode) {
-        console.log(`[llm-recorder] Recording: ${url}`);
+        console.log(`[llm-recorder] Recording: ${url}${model ? ` (model: ${model})` : ''} [hash: ${hash}]`);
 
         const currentDate = Date.now();
         try {
@@ -494,10 +743,25 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
 
           if (isStreaming) {
             const { chunks, timings, headers } = await captureStreamingResponse(realResponse.clone());
+            const requestBinaryArtifact = parsedRequest.binary
+              ? writeBinaryArtifact({
+                  recordingsDir,
+                  hash,
+                  kind: 'request',
+                  contentType: parsedRequest.binary.contentType,
+                  bytes: parsedRequest.binary.bytes,
+                })
+              : undefined;
 
             recordings.push({
               hash,
-              request: { url, method: 'POST', body, timestamp: currentDate },
+              request: {
+                url,
+                method: 'POST',
+                body,
+                timestamp: currentDate,
+                ...(requestBinaryArtifact ? { binaryArtifact: requestBinaryArtifact } : {}),
+              },
               response: {
                 status: realResponse.status,
                 statusText: realResponse.statusText,
@@ -510,29 +774,76 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
 
             return createStreamingResponse(recordings[recordings.length - 1]!, options);
           } else {
-            const responseText = await realResponse.text();
-            let responseBody: unknown;
-            try {
-              responseBody = JSON.parse(responseText);
-            } catch {
-              responseBody = responseText;
-            }
-
             const headers = filterHeaders(realResponse.headers);
+            const responseContentType = realResponse.headers.get('content-type')?.toLowerCase() || '';
+            const requestBinaryArtifact = parsedRequest.binary
+              ? writeBinaryArtifact({
+                  recordingsDir,
+                  hash,
+                  kind: 'request',
+                  contentType: parsedRequest.binary.contentType,
+                  bytes: parsedRequest.binary.bytes,
+                })
+              : undefined;
+
+            let responseBody: unknown;
+            let responseBinaryArtifact: LLMBinaryArtifact | undefined;
+
+            if (responseContentType.includes('application/json') || responseContentType.includes('+json')) {
+              const responseText = await realResponse.text();
+              try {
+                responseBody = JSON.parse(responseText);
+              } catch {
+                responseBody = responseText;
+              }
+            } else if (responseContentType.startsWith('text/')) {
+              responseBody = await realResponse.text();
+            } else {
+              const responseBuffer = await realResponse.arrayBuffer();
+              const responseBytes = new Uint8Array(responseBuffer);
+              responseBinaryArtifact = writeBinaryArtifact({
+                recordingsDir,
+                hash,
+                kind: 'response',
+                contentType: responseContentType || 'application/octet-stream',
+                bytes: responseBytes,
+              });
+              responseBody = {
+                __binary: true,
+                contentType: responseBinaryArtifact.contentType,
+                size: responseBinaryArtifact.size,
+              };
+            }
 
             recordings.push({
               hash,
-              request: { url, method: 'POST', body, timestamp: currentDate },
+              request: {
+                url,
+                method: 'POST',
+                body,
+                timestamp: currentDate,
+                ...(requestBinaryArtifact ? { binaryArtifact: requestBinaryArtifact } : {}),
+              },
               response: {
                 status: realResponse.status,
                 statusText: realResponse.statusText,
                 headers,
                 body: responseBody,
+                ...(responseBinaryArtifact ? { binaryArtifact: responseBinaryArtifact } : {}),
                 isStreaming: false,
               },
             });
 
-            return new HttpResponse(JSON.stringify(responseBody), {
+            if (responseBinaryArtifact) {
+              return new HttpResponse(readBinaryArtifact(recordingsDir, responseBinaryArtifact), {
+                status: realResponse.status,
+                statusText: realResponse.statusText,
+                headers,
+              });
+            }
+
+            const responseText = typeof responseBody === 'string' ? responseBody : JSON.stringify(responseBody);
+            return new HttpResponse(responseText, {
               status: realResponse.status,
               statusText: realResponse.statusText,
               headers,
@@ -544,15 +855,27 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
         }
       } else {
         // Replay mode
+        if (debug) {
+          console.log(`[llm-recorder] Replay lookup: ${url}${model ? ` (model: ${model})` : ''} [hash: ${hash}]`);
+          console.log(`[llm-recorder]   Available hashes: ${savedRecordings.map(r => r.hash).join(', ')}`);
+        }
+
         const recording = findRecording(savedRecordings, hash, url, body);
 
         if (!recording) {
-          console.error(`[llm-recorder] No recording found for: ${url}`);
-          console.error(`[llm-recorder] Hash: ${hash}`);
-          console.error(`[llm-recorder] Available: ${savedRecordings.map(r => r.hash).join(', ')}`);
+          console.error(`[llm-recorder] No recording found for: ${url}${model ? ` (model: ${model})` : ''}`);
+          console.error(`[llm-recorder]   Request hash: ${hash}`);
+          console.error(
+            `[llm-recorder]   Available: ${savedRecordings.map(r => `${r.hash} (${r.request.url})`).join(', ')}`,
+          );
           throw new Error(
             `No recording found for request: ${url} (hash: ${hash}). Run with UPDATE_RECORDINGS=true to re-record.`,
           );
+        }
+
+        if (debug) {
+          const matchType = recording.hash === hash ? 'exact' : 'fuzzy';
+          console.log(`[llm-recorder]   Matched (${matchType}): ${recording.request.url} [hash: ${recording.hash}]`);
         }
 
         if (recording.hash !== hash) {
@@ -582,6 +905,14 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
         if (recording.response.isStreaming) {
           return createStreamingResponse(recording, options);
         } else {
+          if (recording.response.binaryArtifact) {
+            return new HttpResponse(readBinaryArtifact(recordingsDir, recording.response.binaryArtifact), {
+              status: recording.response.status,
+              statusText: recording.response.statusText,
+              headers: recording.response.headers,
+            });
+          }
+
           const body =
             typeof recording.response.body === 'string'
               ? recording.response.body
@@ -621,13 +952,54 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
     },
 
     async save() {
-      if (!isRecordMode || recordings.length === 0) {
+      if (!isRecordMode || recordings.length === 0 || saved) {
         return;
       }
 
+      // Build metadata for the recording file
+      const now = new Date().toISOString();
+      const vitestWorker = (globalThis as Record<string, unknown>).__vitest_worker__ as
+        | { filepath?: string }
+        | undefined;
+
+      const vitestState = (globalThis as Record<string, unknown>).__vitest_worker__ as
+        | { currentTestName?: string; current?: { fullTestName?: string } }
+        | undefined;
+
+      const firstRequestBody = recordings[0]?.request.body as Record<string, unknown> | undefined;
+      const inferredModel = typeof firstRequestBody?.model === 'string' ? firstRequestBody.model : undefined;
+
+      const rawTestFile = options.metaContext?.testFile ?? vitestWorker?.filepath;
+
+      const meta: RecordingMeta = {
+        name: options.name,
+        testFile: rawTestFile ? relativizeTestFile(rawTestFile) : undefined,
+        testName: vitestState?.current?.fullTestName ?? vitestState?.currentTestName ?? existingMeta?.testName,
+        provider: options.metaContext?.provider ?? existingMeta?.provider,
+        model: options.metaContext?.model ?? inferredModel ?? existingMeta?.model,
+        createdAt: existingMeta?.createdAt ?? now,
+        ...(existingMeta?.createdAt ? { updatedAt: now } : {}),
+      };
+
+      // Deduplicate recordings by hash — identical requests across tests share one entry
+      const seen = new Set<string>();
+      const dedupedRecordings = recordings.filter(r => {
+        if (seen.has(r.hash)) return false;
+        seen.add(r.hash);
+        return true;
+      });
+
+      const file: RecordingFile = { meta, recordings: dedupedRecordings };
+
       fs.mkdirSync(path.dirname(recordingPath), { recursive: true });
-      fs.writeFileSync(recordingPath, JSON.stringify(recordings, null, 2));
-      console.log(`[llm-recorder] Saved ${recordings.length} recordings to: ${recordingPath}`);
+      fs.writeFileSync(recordingPath, JSON.stringify(file, null, 2));
+      saved = true;
+
+      const deduped = recordings.length - dedupedRecordings.length;
+      console.log(
+        `[llm-recorder] Saved ${dedupedRecordings.length} recordings to: ${recordingPath}` +
+          (deduped > 0 ? ` (${deduped} duplicates removed)` : ''),
+      );
     },
   };
 

@@ -5,6 +5,7 @@ import type { z as zV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import type { JSONSchema7, Schema } from './json-schema';
 import * as jsonSchemaUtils from './json-schema/utils';
+import type { PublicSchema } from './schema';
 import * as v3 from './schema-compatibility-v3';
 import { SchemaCompatLayer as SchemaCompatLayerV3 } from './schema-compatibility-v3';
 import * as v4 from './schema-compatibility-v4';
@@ -157,6 +158,14 @@ export abstract class SchemaCompatLayer {
     }
   }
 
+  isIntersection(v: zV3.ZodType | zV4.ZodType): v is zV3.ZodIntersection<any, any> | zV4.ZodIntersection<any, any> {
+    if ('_zod' in v) {
+      return this.v4Layer.isIntersection(v as any);
+    } else {
+      return this.v3Layer.isIntersection(v as any);
+    }
+  }
+
   abstract shouldApply(): boolean;
   abstract getSchemaTarget(): Targets | undefined;
   abstract processZodType(value: ZodType): ZodType;
@@ -306,19 +315,42 @@ export abstract class SchemaCompatLayer {
     }
   }
 
+  public defaultZodIntersectionHandler(
+    value: zV3.ZodIntersection<any, any> | zV4.ZodIntersection<any, any>,
+  ): zV3.ZodType | zV4.ZodType {
+    if ('_zod' in value) {
+      return this.v4Layer.defaultZodIntersectionHandler(value as any);
+    } else {
+      return this.v3Layer.defaultZodIntersectionHandler(value as any);
+    }
+  }
+
   public processToAISDKSchema(zodSchema: zV3.ZodSchema | zV4.ZodType): Schema {
     const processedSchema = this.processZodType(zodSchema);
 
     return convertZodSchemaToAISDKSchema(processedSchema, this.getSchemaTarget());
   }
 
-  public processToJSONSchema(zodSchema: ZodType, io: 'input' | 'output' = 'input'): JSONSchema7 {
+  public processToJSONSchema(zodSchema: PublicSchema<any>, io: 'input' | 'output' = 'input'): JSONSchema7 {
     const standardSchema = toStandardSchema(zodSchema);
 
-    return standardSchemaToJSONSchema(standardSchema, {
+    const jsonSchema = standardSchemaToJSONSchema(standardSchema, {
       target: 'draft-07',
       io, // Use input mode so fields with defaults are optional
     });
+
+    traverse(jsonSchema, {
+      cb: {
+        pre: schema => {
+          this.preProcessJSONNode(schema);
+        },
+        post: schema => {
+          this.postProcessJSONNode(schema);
+        },
+      },
+    });
+
+    return jsonSchema;
   }
 
   // ==========================================
@@ -384,24 +416,26 @@ export abstract class SchemaCompatLayer {
       constraints.push(`maximum length ${schema.maxLength}`);
       delete schema.maxLength;
     }
-    if (schema.pattern !== undefined) {
-      // Don't add pattern to constraints - just remove it
-      delete schema.pattern;
+
+    switch (schema.format) {
+      case 'email':
+      case 'emoji':
+      case 'uri':
+      case 'uuid':
+      case 'date-time':
+      case 'date':
+      case 'time': {
+        constraints.push(`a valid ${schema.format}`);
+
+        delete schema.pattern;
+        delete schema.format;
+        break;
+      }
     }
-    if (schema.format !== undefined) {
-      // Convert format to human-readable constraint text
-      const formatMap: Record<string, string> = {
-        email: 'a valid email',
-        uri: 'a valid url',
-        url: 'a valid url',
-        uuid: 'a valid uuid',
-        'date-time': 'a valid date-time',
-        date: 'a valid date',
-        time: 'a valid time',
-      };
-      const formatText = formatMap[schema.format] || `format: ${schema.format}`;
-      constraints.push(formatText);
-      delete schema.format;
+
+    if (constraints.length === 0 && schema.pattern !== undefined) {
+      constraints.push(`input must match this regex ${schema.pattern}`);
+      delete schema.pattern;
     }
 
     if (constraints.length) {
@@ -456,21 +490,80 @@ export abstract class SchemaCompatLayer {
    * Processes union schemas and can convert anyOf patterns to type arrays for simple primitives.
    */
   protected defaultUnionHandler(schema: JSONSchema7): JSONSchema7 {
-    if (schema.anyOf && Array.isArray(schema.anyOf)) {
-      // Check if all items in anyOf are simple primitive types (only have a 'type' property)
-      const allSimplePrimitives = schema.anyOf.every((s: any) => {
-        if (typeof s !== 'object' || s === null) return false;
-        const keys = Object.keys(s);
-        return keys.length === 1 && keys[0] === 'type' && typeof s.type === 'string';
-      });
+    // if (Array.isArray(schema.type)) {
+    //   schema.anyOf = schema.type.map(type => {
+    //     const result = { type };
 
-      if (allSimplePrimitives) {
-        // Convert anyOf: [{type: "string"}, {type: "number"}] to type: ["string", "number"]
-        const types = schema.anyOf.map((s: any) => s.type);
-        delete schema.anyOf;
-        schema.type = types as JSONSchema7['type'];
+    //     return result;
+    //   });
+
+    //   delete schema.type;
+    // }
+
+    if (Array.isArray(schema.anyOf)) {
+      // const hasNull = schema.anyOf.some(subSchema => typeof subSchema === 'object' && subSchema.type === 'null');
+      // const hasString = schema.anyOf.some(subSchema => typeof subSchema === 'object' && subSchema.type === 'string');
+
+      schema.anyOf = schema.anyOf
+        .map(subSchema => {
+          if (typeof subSchema !== 'object' || subSchema === null) {
+            return false;
+          }
+
+          // if (subSchema.type === 'string' && hasNull) {
+          //   // @ts-expect-error - nullable is a valid property for JSON Schema
+          //   subSchema.nullable = true;
+          // } else if (subSchema.type === 'array') {
+          //   subSchema.items = [];
+          // } else if (subSchema.type === 'null' && hasString) {
+          //   return false;
+          // }
+
+          this.preProcessJSONNode(subSchema);
+          this.postProcessJSONNode(subSchema);
+
+          // if (hasNull && subSchema.type && subSchema.type !== 'null') {
+          //   subSchema.type = [].concat(subSchema.type, 'null');
+          // }
+
+          return subSchema;
+        })
+        .filter(Boolean);
+
+      if (schema.anyOf.length === 1) {
+        schema = schema.anyOf[0] as unknown as JSONSchema7;
       }
     }
+
+    return schema;
+  }
+
+  /**
+   * Default handler for JSON Schema allOf (intersection) types.
+   * Flattens allOf sub-schemas by merging properties and required arrays into a single object schema.
+   */
+  protected defaultAllOfHandler(schema: JSONSchema7): JSONSchema7 {
+    if (!schema.allOf || !Array.isArray(schema.allOf)) return schema;
+
+    const mergedProperties: Record<string, JSONSchema7> = {};
+    const mergedRequired: string[] = [];
+
+    for (const subSchema of schema.allOf as JSONSchema7[]) {
+      if (subSchema.properties) {
+        Object.assign(mergedProperties, subSchema.properties);
+      }
+      if (Array.isArray(subSchema.required)) {
+        mergedRequired.push(...subSchema.required);
+      }
+    }
+
+    delete schema.allOf;
+    schema.type = 'object';
+    schema.properties = mergedProperties;
+    if (mergedRequired.length > 0) {
+      schema.required = [...new Set(mergedRequired)];
+    }
+    schema.additionalProperties = false;
 
     return schema;
   }
@@ -544,6 +637,10 @@ export abstract class SchemaCompatLayer {
     return jsonSchemaUtils.isUnionSchema(schema);
   }
 
+  protected isAllOfSchema(schema: JSONSchema7): schema is JSONSchema7 & { allOf: JSONSchema7[] } {
+    return jsonSchemaUtils.isAllOfSchema(schema);
+  }
+
   /**
    * Checks if a property is optional within a parent object schema.
    * A property is optional if it's not in the parent's `required` array.
@@ -561,7 +658,8 @@ export abstract class SchemaCompatLayer {
    * Uses 'input' io mode so that fields with defaults are optional (appropriate for tool parameters).
    */
   public toJSONSchema(zodSchema: ZodType): JSONSchema7 {
-    const target = 'draft-07' as StandardJSONSchemaV1.Target;
+    const target =
+      this.getSchemaTarget() === 'jsonSchema7' ? ('draft-07' as StandardJSONSchemaV1.Target) : this.getSchemaTarget();
     const standardSchema = toStandardSchema(zodSchema);
     const jsonSchema = standardSchemaToJSONSchema(standardSchema, {
       target,
@@ -570,11 +668,11 @@ export abstract class SchemaCompatLayer {
 
     traverse(jsonSchema, {
       cb: {
-        pre: (schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema) => {
-          this.preProcessJSONNode(schema, parentSchema);
+        pre: schema => {
+          this.preProcessJSONNode(schema);
         },
-        post: (schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema) => {
-          this.postProcessJSONNode(schema, parentSchema);
+        post: schema => {
+          this.postProcessJSONNode(schema);
         },
       },
     });

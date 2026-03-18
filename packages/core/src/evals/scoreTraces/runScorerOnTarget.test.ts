@@ -29,6 +29,7 @@ function createMockSpanRecord(overrides: Partial<SpanRecord> = {}): SpanRecord {
     metadata: {},
     links: null,
     error: null,
+    requestContext: null,
     isEvent: false,
     ...overrides,
   } as SpanRecord;

@@ -14,7 +14,7 @@ import { createTool } from '@mastra/core/tools';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { MCPServer } from './server';
 
 vi.setConfig({ testTimeout: 20000, hookTimeout: 20000 });

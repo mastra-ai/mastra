@@ -45,35 +45,35 @@ const typedDataset = await mastra.datasets.create({
 
 <PropertiesTable
   content={[
-{
-name: "name",
-type: "string",
-description: "Display name for the dataset.",
-},
-{
-name: "description",
-type: "string",
-isOptional: true,
-description: "Description of the dataset.",
-},
-{
-name: "inputSchema",
-type: "unknown",
-isOptional: true,
-description: "JSON Schema or Zod schema for item inputs. Zod schemas are auto-converted.",
-},
-{
-name: "groundTruthSchema",
-type: "unknown",
-isOptional: true,
-description: "JSON Schema or Zod schema for item ground truths. Zod schemas are auto-converted.",
-},
-{
-name: "metadata",
-type: "Record<string, unknown>",
-isOptional: true,
-description: "Arbitrary metadata.",
-},
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Display name for the dataset.',
+  },
+  {
+    name: 'description',
+    type: 'string',
+    isOptional: true,
+    description: 'Description of the dataset.',
+  },
+  {
+    name: 'inputSchema',
+    type: 'unknown',
+    isOptional: true,
+    description: 'JSON Schema or Zod schema for item inputs. Zod schemas are auto-converted.',
+  },
+  {
+    name: 'groundTruthSchema',
+    type: 'unknown',
+    isOptional: true,
+    description: 'JSON Schema or Zod schema for item ground truths. Zod schemas are auto-converted.',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    isOptional: true,
+    description: 'Arbitrary metadata.',
+  },
 ]}
 />
 
@@ -81,10 +81,10 @@ description: "Arbitrary metadata.",
 
 <PropertiesTable
   content={[
-{
-name: "result",
-type: "Promise<Dataset>",
-description: "A Dataset instance for the newly created dataset.",
-},
+  {
+    name: 'result',
+    type: 'Promise<Dataset>',
+    description: 'A Dataset instance for the newly created dataset.',
+  },
 ]}
 />

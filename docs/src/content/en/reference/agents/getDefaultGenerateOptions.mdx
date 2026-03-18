@@ -13,7 +13,7 @@ packages:
 
 :::
 
-Agents can be configured with default generation options for controlling model behavior, output formatting and tool and workflow calls. The `.getDefaultGenerateOptionsLegacy()` method retrieves these defaults, resolving them if they are functions. These options apply to all `generateLegacy()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
+Agents can be configured with default generation options for controlling model behavior, output formatting and tool and workflow calls. The `.getDefaultGenerateOptionsLegacy()` method retrieves these defaults, resolving them if they're functions. These options apply to all `generateLegacy()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
 
 ## Usage example
 
@@ -25,13 +25,27 @@ await agent.getDefaultGenerateOptionsLegacy()
 
 <PropertiesTable
   content={[
-{
-name: "options",
-type: "{ requestContext?: RequestContext }",
-isOptional: true,
-defaultValue: "{}",
-description: "Optional configuration object containing request context.",
-},
+  {
+    name: 'options',
+    type: '{ requestContext?: RequestContext }',
+    isOptional: true,
+    defaultValue: '{}',
+    description: 'Optional configuration object containing request context.',
+    properties: [
+      {
+        type: '{ requestContext?: RequestContext }',
+        parameters: [
+          {
+            name: 'requestContext',
+            type: 'RequestContext',
+            isOptional: true,
+            defaultValue: 'new RequestContext()',
+            description: 'Request Context for dependency injection and contextual information.',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -39,12 +53,12 @@ description: "Optional configuration object containing request context.",
 
 <PropertiesTable
   content={[
-{
-name: "defaultOptions",
-type: "AgentGenerateOptions | Promise<AgentGenerateOptions>",
-description:
-"The default generation options configured for the agent, either as a direct object or a promise that resolves to the options.",
-},
+  {
+    name: 'defaultOptions',
+    type: 'AgentGenerateOptions | Promise<AgentGenerateOptions>',
+    description:
+      'The default generation options configured for the agent, either as a direct object or a promise that resolves to the options.',
+  },
 ]}
 />
 
@@ -55,21 +69,6 @@ await agent.getDefaultGenerateOptionsLegacy({
   requestContext: new RequestContext(),
 })
 ```
-
-### Options parameters
-
-<PropertiesTable
-  content={[
-{
-name: "requestContext",
-type: "RequestContext",
-isOptional: true,
-defaultValue: "new RequestContext()",
-description:
-"Request Context for dependency injection and contextual information.",
-},
-]}
-/>
 
 ## Related
 

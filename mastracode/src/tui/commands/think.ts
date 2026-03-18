@@ -1,6 +1,8 @@
 import { Box, SelectList, Spacer, Text, isKeyRelease } from '@mariozechner/pi-tui';
 import type { SelectItem } from '@mariozechner/pi-tui';
 
+import type { ThinkingLevelSetting } from '../../onboarding/settings.js';
+import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import {
   THINKING_LEVELS,
   getThinkingLevelForModel,
@@ -17,6 +19,16 @@ function supportsThinking(modelId: string): boolean {
 function getThinkingStatusLine(modelId: string, levelId: string): string {
   const level = getThinkingLevelForModel(modelId, levelId);
   return `Thinking: ${level.label}`;
+}
+
+function isThinkingLevelSetting(level: string): level is ThinkingLevelSetting {
+  return THINKING_LEVELS.some(option => option.id === level);
+}
+
+function persistGlobalThinkingLevel(level: ThinkingLevelSetting): void {
+  const settings = loadSettings();
+  settings.preferences.thinkingLevel = level;
+  saveSettings(settings);
 }
 
 function getModelNote(ctx: SlashCommandContext): string | null {
@@ -50,6 +62,7 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
     }
     const note = getModelNote(ctx);
     await ctx.harness.setState({ thinkingLevel: selected.id } as any);
+    persistGlobalThinkingLevel(selected.id);
     ctx.showInfo(getThinkingStatusLine(modelId, selected.id) + (note ? ` (${note})` : ''));
     return;
   }
@@ -75,11 +88,20 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
 
     selectList.onSelect = async (item: SelectItem) => {
       ctx.state.activeInlineQuestion = undefined;
+      const selectedLevel = item.value;
+      if (!isThinkingLevelSetting(selectedLevel)) {
+        collapseResult('cancelled');
+        ctx.state.ui.requestRender();
+        resolve();
+        return;
+      }
+
       try {
-        await ctx.harness.setState({ thinkingLevel: item.value } as any);
-        const selectedLabel = getThinkingLevelForModel(modelId, item.value).label;
+        await ctx.harness.setState({ thinkingLevel: selectedLevel } as any);
+        persistGlobalThinkingLevel(selectedLevel);
+        const selectedLabel = getThinkingLevelForModel(modelId, selectedLevel).label;
         collapseResult(
-          `Thinking → ${theme.bold(item.value === currentLevel ? `${selectedLabel} (unchanged)` : selectedLabel)}`,
+          `Thinking → ${theme.bold(selectedLevel === currentLevel ? `${selectedLabel} (unchanged)` : selectedLabel)}`,
         );
       } catch {
         collapseResult('cancelled');

@@ -474,8 +474,6 @@ describe('runEvals', () => {
         target: workflow,
       });
 
-      console.log(`result`, JSON.stringify(result, null, 2));
-
       // Verify the experiment result includes step scorer results
       expect(result.scores.steps?.[`test-step`]?.[`step-scorer`]).toBe(0.8);
       expect(result.scores.workflow?.toxicity).toBe(0.9);

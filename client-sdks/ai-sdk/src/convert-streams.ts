@@ -1,7 +1,7 @@
 import type { ReadableStream } from 'node:stream/web';
+import type { InferUIMessageChunk, UIMessage, UIMessageStreamOptions } from '@internal/ai-sdk-v5';
 import type { MastraModelOutput, ChunkType, MastraAgentNetworkStream, WorkflowRunOutput } from '@mastra/core/stream';
 import type { MastraWorkflowStream, Step, WorkflowResult } from '@mastra/core/workflows';
-import type { InferUIMessageChunk, UIMessage, UIMessageStreamOptions } from 'ai';
 import type { ZodObject, ZodType } from 'zod';
 import {
   AgentNetworkToAISDKTransformer,

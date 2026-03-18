@@ -1,5 +1,3 @@
-import type { z } from 'zod';
-
 import type { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import { Mastra } from '../mastra';
@@ -7,6 +5,8 @@ import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
+import { toStandardSchema } from '../schema';
+import type { InferPublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
 import { Workspace } from '../workspace/workspace';
@@ -60,11 +60,12 @@ import type {
  * await harness.sendMessage({ content: "Hello!" })
  * ```
  */
-export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
+export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema<{}>> {
   readonly id: string;
 
   private config: HarnessConfig<TState>;
-  private state: z.infer<TState>;
+  private stateSchema: StandardSchemaWithJSON | undefined;
+  private state: InferPublicSchema<TState>;
   private currentModeId: string;
   private currentThreadId: string | null = null;
   private resourceId: string;
@@ -74,8 +75,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   private abortRequested: boolean = false;
   private currentRunId: string | null = null;
   private currentOperationId: number = 0;
-  private followUpQueue: string[] = [];
-  private pendingApprovalResolve: ((decision: 'approve' | 'decline') => void) | null = null;
+  private followUpQueue: Array<{ content: string; requestContext?: RequestContext }> = [];
+  private pendingApprovalResolve:
+    | ((params: { decision: 'approve' | 'decline'; requestContext?: RequestContext }) => void)
+    | null = null;
   private pendingApprovalToolName: string | null = null;
   private pendingQuestions = new Map<string, (answer: string) => void>();
   private pendingPlanApprovals = new Map<
@@ -104,11 +107,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     this.resourceId = config.resourceId ?? config.id;
     this.defaultResourceId = this.resourceId;
 
+    // Convert PublicSchema to StandardSchemaWithJSON at the boundary
+    this.stateSchema = config.stateSchema ? toStandardSchema(config.stateSchema) : undefined;
+
     // Initialize state from schema defaults + initial state
     this.state = {
       ...this.getSchemaDefaults(),
       ...config.initialState,
-    } as z.infer<TState>;
+    } as InferPublicSchema<TState>;
 
     // Find default mode
     const defaultMode = config.modes.find(m => m.default) ?? config.modes[0];
@@ -127,7 +133,9 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     // Seed model from mode default if not set
     const currentModel = (this.state as any).currentModelId;
     if (!currentModel && defaultMode.defaultModelId) {
-      void this.setState({ currentModelId: defaultMode.defaultModelId } as Partial<z.infer<TState>>);
+      void this.setState({ currentModelId: defaultMode.defaultModelId } as unknown as Partial<
+        InferPublicSchema<TState>
+      >);
     }
   }
 
@@ -236,7 +244,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   /**
    * Get current harness state (read-only snapshot).
    */
-  getState(): Readonly<z.infer<TState>> {
+  getState(): Readonly<InferPublicSchema<TState>> {
     return { ...this.state };
   }
 
@@ -244,41 +252,46 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Update harness state. Validates against schema if provided.
    * Emits state_changed event.
    */
-  async setState(updates: Partial<z.infer<TState>>): Promise<void> {
+  async setState(updates: Partial<InferPublicSchema<TState>>): Promise<void> {
     const changedKeys = Object.keys(updates);
     const newState = { ...this.state, ...updates };
 
-    if (this.config.stateSchema) {
-      const result = this.config.stateSchema.safeParse(newState);
-      if (!result.success) {
-        throw new Error(`Invalid state update: ${result.error.message}`);
+    if (this.stateSchema) {
+      const result = await this.stateSchema['~standard'].validate(newState);
+      if (result.issues) {
+        const messages = result.issues.map(i => i.message).join('; ');
+        throw new Error(`Invalid state update: ${messages}`);
       }
-      this.state = result.data as z.infer<TState>;
+      this.state = result.value as InferPublicSchema<TState>;
     } else {
-      this.state = newState as z.infer<TState>;
+      this.state = newState as InferPublicSchema<TState>;
     }
 
     this.emit({ type: 'state_changed', state: this.state, changedKeys });
   }
 
-  private getSchemaDefaults(): Partial<z.infer<TState>> {
-    if (!this.config.stateSchema) return {};
+  private getSchemaDefaults(): Partial<InferPublicSchema<TState>> {
+    if (!this.stateSchema) return {};
 
-    const shape = this.config.stateSchema.shape;
     const defaults: Record<string, unknown> = {};
 
-    for (const [key, field] of Object.entries(shape)) {
-      try {
-        const result = (field as any).safeParse(undefined);
-        if (result.success && result.data !== undefined) {
-          defaults[key] = result.data;
+    try {
+      // Extract defaults from the JSON Schema representation
+      const jsonSchema = this.stateSchema['~standard'].jsonSchema.output({ target: 'draft-07' }) as {
+        properties?: Record<string, { default?: unknown }>;
+      };
+      if (jsonSchema?.properties) {
+        for (const [key, prop] of Object.entries(jsonSchema.properties)) {
+          if (prop.default !== undefined) {
+            defaults[key] = prop.default;
+          }
         }
-      } catch {
-        // field has no default or doesn't support safeParse — skip
       }
+    } catch {
+      // Schema doesn't support JSON Schema extraction — skip defaults
     }
 
-    return defaults as Partial<z.infer<TState>>;
+    return defaults as Partial<InferPublicSchema<TState>>;
   }
 
   // ===========================================================================
@@ -327,7 +340,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     // Load the incoming mode's model
     const modeModelId = await this.loadModeModelId(modeId);
     if (modeModelId) {
-      void this.setState({ currentModelId: modeModelId } as Partial<z.infer<TState>>);
+      void this.setState({ currentModelId: modeModelId } as unknown as Partial<InferPublicSchema<TState>>);
       this.emit({ type: 'model_changed', modelId: modeModelId } as HarnessEvent);
     }
 
@@ -400,7 +413,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const targetModeId = modeId ?? this.currentModeId;
 
     if (targetModeId === this.currentModeId) {
-      void this.setState({ currentModelId: modelId } as Partial<z.infer<TState>>);
+      void this.setState({ currentModelId: modelId } as unknown as Partial<InferPublicSchema<TState>>);
     }
 
     if (scope === 'thread') {
@@ -672,7 +685,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     this.currentThreadId = thread.id;
 
     if (modelId && !currentStateModel) {
-      void this.setState({ currentModelId: modelId } as Partial<z.infer<TState>>);
+      void this.setState({ currentModelId: modelId } as unknown as Partial<InferPublicSchema<TState>>);
     }
 
     this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
@@ -943,7 +956,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       }
 
       if (Object.keys(updates).length > 0) {
-        void this.setState(updates as Partial<z.infer<TState>>);
+        void this.setState(updates as unknown as Partial<InferPublicSchema<TState>>);
       }
     } catch {
       this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
@@ -1131,7 +1144,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Switch the Observer model.
    */
   async switchObserverModel({ modelId }: { modelId: string }): Promise<void> {
-    void this.setState({ observerModelId: modelId } as Partial<z.infer<TState>>);
+    void this.setState({ observerModelId: modelId } as unknown as Partial<InferPublicSchema<TState>>);
     await this.setThreadSetting({ key: 'observerModelId', value: modelId });
     this.emit({ type: 'om_model_changed', role: 'observer', modelId } as HarnessEvent);
   }
@@ -1140,7 +1153,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Switch the Reflector model.
    */
   async switchReflectorModel({ modelId }: { modelId: string }): Promise<void> {
-    void this.setState({ reflectorModelId: modelId } as Partial<z.infer<TState>>);
+    void this.setState({ reflectorModelId: modelId } as unknown as Partial<InferPublicSchema<TState>>);
     await this.setThreadSetting({ key: 'reflectorModelId', value: modelId });
     this.emit({ type: 'om_model_changed', role: 'reflector', modelId } as HarnessEvent);
   }
@@ -1161,7 +1174,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
   async setSubagentModelId({ modelId, agentType }: { modelId: string; agentType?: string }): Promise<void> {
     const key = agentType ? `subagentModelId_${agentType}` : 'subagentModelId';
-    void this.setState({ [key]: modelId } as Partial<z.infer<TState>>);
+    void this.setState({ [key]: modelId } as unknown as Partial<InferPublicSchema<TState>>);
     await this.setThreadSetting({ key, value: modelId });
     this.emit({ type: 'subagent_model_changed', modelId, scope: 'thread', agentType } as HarnessEvent);
   }
@@ -1192,13 +1205,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   setPermissionForCategory({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }): void {
     const rules = this.getPermissionRules();
     rules.categories[category] = policy;
-    void this.setState({ permissionRules: rules } as Partial<z.infer<TState>>);
+    void this.setState({ permissionRules: rules } as unknown as Partial<InferPublicSchema<TState>>);
   }
 
   setPermissionForTool({ toolName, policy }: { toolName: string; policy: PermissionPolicy }): void {
     const rules = this.getPermissionRules();
     rules.tools[toolName] = policy;
-    void this.setState({ permissionRules: rules } as Partial<z.infer<TState>>);
+    void this.setState({ permissionRules: rules } as unknown as Partial<InferPublicSchema<TState>>);
   }
 
   getPermissionRules(): PermissionRules {
@@ -1246,11 +1259,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     files,
     tracingContext,
     tracingOptions,
+    requestContext: requestContextInput,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
+    requestContext?: RequestContext;
   }): Promise<void> {
     if (!this.currentThreadId) {
       const thread = await this.createThread();
@@ -1260,11 +1275,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const operationId = ++this.currentOperationId;
     this.abortController = new AbortController();
     const agent = this.getCurrentAgent();
-
     this.emit({ type: 'agent_start' });
 
     try {
-      const requestContext = await this.buildRequestContext();
+      const requestContext = await this.buildRequestContext(requestContextInput);
 
       const isYolo = (this.state as Record<string, unknown>).yolo === true;
 
@@ -1302,7 +1316,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           return {
             type: 'file' as const,
             data: f.data,
-            mimeType: f.mediaType,
+            mediaType: f.mediaType,
             filename: f.filename,
           };
         });
@@ -1313,7 +1327,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       }
 
       const response = await agent.stream(messageInput as any, streamOptions as any);
-      await this.processStream(response);
+      await this.processStream(response, requestContext);
 
       if (this.currentOperationId === operationId) {
         const reason = this.abortRequested ? 'aborted' : 'complete';
@@ -1331,9 +1345,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           error: new Error(`Unknown tool "${badTool}".`),
           retryable: true,
         });
-        this.followUpQueue.push(
-          `[System] Your previous tool call used "${badTool}" which is not a valid tool. Please retry with the correct tool name.`,
-        );
+        this.followUpQueue.push({
+          content: `[System] Your previous tool call used "${badTool}" which is not a valid tool. Please retry with the correct tool name.`,
+          requestContext: requestContextInput,
+        });
         this.emit({ type: 'agent_end', reason: 'error' });
       } else {
         const err = error instanceof Error ? error : new Error(String(error));
@@ -1348,7 +1363,12 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
       if (this.currentOperationId === operationId && this.followUpQueue.length > 0) {
         const next = this.followUpQueue.shift()!;
-        await this.sendMessage({ content: next, tracingContext, tracingOptions });
+        await this.sendMessage({
+          content: next.content,
+          requestContext: next.requestContext,
+          tracingContext,
+          tracingOptions,
+        });
       }
     }
   }
@@ -1498,9 +1518,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           break;
         }
         case 'file':
+          if (typeof part.data !== 'string') {
+            console.warn('[Harness] Skipping file part with non-string data:', typeof part.data);
+            break;
+          }
           content.push({
             type: 'file',
-            data: typeof part.data === 'string' ? part.data : '',
+            data: part.data,
             mediaType:
               (part as { mediaType?: string }).mediaType ??
               (part as { mimeType?: string }).mimeType ??
@@ -1533,7 +1557,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   /**
    * Process a stream response (shared between sendMessage and tool approval).
    */
-  private async processStream(response: { fullStream: AsyncIterable<any> }): Promise<{ message: HarnessMessage }> {
+  private async processStream(
+    response: { fullStream: AsyncIterable<any> },
+    requestContext: RequestContext,
+  ): Promise<{ message: HarnessMessage }> {
     let currentMessage: HarnessMessage = {
       id: this.generateId(),
       role: 'assistant',
@@ -1676,13 +1703,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           const policy = this.resolveToolApproval(toolName);
 
           if (policy === 'allow') {
-            const result = await this.handleToolApprove(toolCallId);
+            const result = await this.handleToolApprove({ toolCallId, requestContext });
             currentMessage = result.message;
             return { message: currentMessage };
           }
 
           if (policy === 'deny') {
-            const result = await this.handleToolDecline(toolCallId);
+            const result = await this.handleToolDecline({ toolCallId, requestContext });
             currentMessage = result.message;
             return { message: currentMessage };
           }
@@ -1690,17 +1717,25 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           this.pendingApprovalToolName = toolName;
           this.emit({ type: 'tool_approval_required', toolCallId, toolName, args: toolArgs });
 
-          const decision = await new Promise<'approve' | 'decline'>(resolve => {
-            this.pendingApprovalResolve = resolve;
-          });
+          const approval = await new Promise<{ decision: 'approve' | 'decline'; requestContext?: RequestContext }>(
+            resolve => {
+              this.pendingApprovalResolve = resolve;
+            },
+          );
           this.pendingApprovalToolName = null;
 
-          if (decision === 'approve') {
-            const result = await this.handleToolApprove(toolCallId);
+          if (approval.decision === 'approve') {
+            const result = await this.handleToolApprove({
+              toolCallId,
+              requestContext: approval.requestContext ?? requestContext,
+            });
             currentMessage = result.message;
             return { message: currentMessage };
           } else {
-            const result = await this.handleToolDecline(toolCallId);
+            const result = await this.handleToolDecline({
+              toolCallId,
+              requestContext: approval.requestContext ?? requestContext,
+            });
             currentMessage = result.message;
             return { message: currentMessage };
           }
@@ -1964,21 +1999,21 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   /**
    * Steer the agent mid-stream: aborts current run and sends a new message.
    */
-  async steer({ content }: { content: string }): Promise<void> {
+  async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     this.abort();
     this.followUpQueue = [];
-    await this.sendMessage({ content });
+    await this.sendMessage({ content, requestContext });
   }
 
   /**
    * Queue a follow-up message to be processed after the current operation completes.
    */
-  async followUp({ content }: { content: string }): Promise<void> {
+  async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     if (this.isRunning()) {
-      this.followUpQueue.push(content);
+      this.followUpQueue.push({ content, requestContext });
       this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
     } else {
-      await this.sendMessage({ content });
+      await this.sendMessage({ content, requestContext });
     }
   }
 
@@ -2030,7 +2065,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Respond to a pending tool approval from the UI.
    * "always_allow_category" grants the tool's category for the rest of the session, then approves.
    */
-  respondToToolApproval({ decision }: { decision: 'approve' | 'decline' | 'always_allow_category' }): void {
+  respondToToolApproval({
+    decision,
+    requestContext,
+  }: {
+    decision: 'approve' | 'decline' | 'always_allow_category';
+    requestContext?: RequestContext;
+  }): void {
     if (!this.pendingApprovalResolve) return;
 
     if (decision === 'always_allow_category') {
@@ -2041,9 +2082,9 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           this.grantSessionCategory({ category });
         }
       }
-      this.pendingApprovalResolve('approve');
+      this.pendingApprovalResolve({ decision: 'approve', requestContext });
     } else {
-      this.pendingApprovalResolve(decision);
+      this.pendingApprovalResolve({ decision, requestContext });
     }
     this.pendingApprovalResolve = null;
   }
@@ -2112,7 +2153,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     resolve(response);
   }
 
-  private async handleToolApprove(toolCallId?: string): Promise<{ message: HarnessMessage }> {
+  private async handleToolApprove({
+    toolCallId,
+    requestContext: requestContextInput,
+  }: {
+    toolCallId?: string;
+    requestContext?: RequestContext;
+  }): Promise<{ message: HarnessMessage }> {
     if (!this.currentRunId) {
       throw new Error('No active run to approve tool call for');
     }
@@ -2123,7 +2170,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       this.abortController = new AbortController();
     }
 
-    const requestContext = await this.buildRequestContext();
+    const requestContext = await this.buildRequestContext(requestContextInput);
     const response = await agent.approveToolCall({
       runId: this.currentRunId,
       toolCallId,
@@ -2134,10 +2181,16 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       toolsets: await this.buildToolsets(requestContext),
     });
 
-    return await this.processStream(response);
+    return await this.processStream(response, requestContext);
   }
 
-  private async handleToolDecline(toolCallId?: string): Promise<{ message: HarnessMessage }> {
+  private async handleToolDecline({
+    toolCallId,
+    requestContext: requestContextInput,
+  }: {
+    toolCallId?: string;
+    requestContext?: RequestContext;
+  }): Promise<{ message: HarnessMessage }> {
     if (!this.currentRunId) {
       throw new Error('No active run to decline tool call for');
     }
@@ -2147,7 +2200,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       this.abortController = new AbortController();
     }
 
-    const requestContext = await this.buildRequestContext();
+    const requestContext = await this.buildRequestContext(requestContextInput);
     const response = await agent.declineToolCall({
       runId: this.currentRunId,
       toolCallId,
@@ -2158,7 +2211,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       toolsets: await this.buildToolsets(requestContext),
     });
 
-    return await this.processStream(response);
+    return await this.processStream(response, requestContext);
   }
 
   // ===========================================================================
@@ -2634,8 +2687,9 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Build request context for agent execution.
    * Tools can access harness state via requestContext.get('harness').
    */
-  private async buildRequestContext(): Promise<RequestContext> {
-    const harnessContext: HarnessRequestContext<TState> = {
+  private async buildRequestContext(requestContext?: RequestContext): Promise<RequestContext> {
+    requestContext ??= new RequestContext();
+    const harnessContext: HarnessRequestContext<Readonly<InferPublicSchema<TState>>> = {
       harnessId: this.id,
       state: this.getState(),
       getState: () => this.getState(),
@@ -2651,7 +2705,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       getSubagentModelId: params => this.getSubagentModelId(params),
     };
 
-    const requestContext = new RequestContext([['harness', harnessContext]]) as RequestContext;
+    requestContext.set('harness', harnessContext);
 
     if (this.workspaceFn) {
       const resolved = await Promise.resolve(this.workspaceFn({ requestContext }));
@@ -2723,11 +2777,15 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * this triggers resolution and caches the result so getWorkspace() returns it.
    * Useful for code paths outside the request flow (e.g. slash commands).
    */
-  async resolveWorkspace(): Promise<Workspace | undefined> {
+  async resolveWorkspace({
+    requestContext,
+  }: {
+    requestContext?: RequestContext;
+  } = {}): Promise<Workspace | undefined> {
     if (this.workspace) return this.workspace;
     if (this.workspaceFn) {
       // buildRequestContext resolves the workspace and caches it on this.workspace
-      await this.buildRequestContext();
+      await this.buildRequestContext(requestContext);
       return this.workspace;
     }
     return undefined;

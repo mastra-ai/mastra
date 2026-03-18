@@ -19,19 +19,19 @@ workflow.dowhile(step1, async ({ inputData }) => true)
 
 <PropertiesTable
   content={[
-{
-name: "step",
-type: "Step",
-description: "The step instance to execute in the loop",
-isOptional: false,
-},
-{
-name: "condition",
-type: "(params : ExecuteParams & { iterationCount: number }) => Promise<boolean>",
-description:
-"A function that returns a boolean indicating whether to continue the loop. The function receives the execution parameters and the iteration count.",
-isOptional: false,
-},
+  {
+    name: 'step',
+    type: 'Step',
+    description: 'The step instance to execute in the loop',
+    isOptional: false,
+  },
+  {
+    name: 'condition',
+    type: '(params : ExecuteParams & { iterationCount: number }) => Promise<boolean>',
+    description:
+      'A function that returns a boolean indicating whether to continue the loop. The function receives the execution parameters and the iteration count.',
+    isOptional: false,
+  },
 ]}
 />
 
@@ -39,11 +39,11 @@ isOptional: false,
 
 <PropertiesTable
   content={[
-{
-name: "workflow",
-type: "Workflow",
-description: "The workflow instance for method chaining",
-},
+  {
+    name: 'workflow',
+    type: 'Workflow',
+    description: 'The workflow instance for method chaining',
+  },
 ]}
 />
 
@@ -51,4 +51,4 @@ description: "The workflow instance for method chaining",
 
 - [Control Flow](/docs/workflows/control-flow)
 
-- [ExecuteParams](../step#executeparams)
+- [ExecuteParams](../step#constructor-parameters)

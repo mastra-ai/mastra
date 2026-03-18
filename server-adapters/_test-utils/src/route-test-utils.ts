@@ -47,6 +47,9 @@ export function generateContextualValue(fieldName?: string): string {
   // JSON-encoded query params (wrapped with wrapSchemaForQueryParams)
   if (field === 'tags') return '["test-tag"]'; // For observability traces filtering
 
+  // Email fields need valid email format
+  if (field === 'email' || field.includes('email')) return 'test@example.com';
+
   // Version comparison query params (from/to are version IDs)
   // Both use the same known version ID - comparing a version to itself returns empty diffs,
   // which is valid for route integration tests that verify the endpoint responds correctly
@@ -109,27 +112,143 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
     return generateValidDataFromSchema(def.innerType, fieldName);
   }
   if (typeName === 'ZodDefault') {
-    return def.defaultValue();
+    if ('_zod' in schema) {
+      return def.defaultValue;
+    } else {
+      return def.defaultValue();
+    }
   }
 
   if (typeName === 'ZodString') return generateContextualValue(fieldName);
-  if (typeName === 'ZodNumber') return 10;
+  if (typeName === 'ZodNumber') {
+    // Respect min/max constraints from Zod checks
+    let min = -Infinity;
+    let max = Infinity;
+    let minInclusive = true;
+    let maxInclusive = true;
+    let requiresInt = false;
+    let requiresSafeInt = false;
+    let multipleOf: number | undefined;
+    const checks = def.checks ?? [];
+    for (const check of checks) {
+      // Zod 3: check.kind === 'min'/'max', check.value
+      if (check.kind === 'min') {
+        min = check.value;
+        minInclusive = check.inclusive ?? true;
+      }
+      if (check.kind === 'max') {
+        max = check.value;
+        maxInclusive = check.inclusive ?? true;
+      }
+      if (check.kind === 'int') requiresInt = true;
+      if (check.kind === 'multipleOf') multipleOf = check.value;
+      // Zod 4: checks have _zod.def with check type and value
+      const zod4Def = check._zod?.def;
+      if (zod4Def) {
+        if (zod4Def.check === 'greater_than') {
+          min = zod4Def.value;
+          minInclusive = false;
+        }
+        if (zod4Def.check === 'greater_than_or_equal') {
+          min = zod4Def.value;
+          minInclusive = true;
+        }
+        if (zod4Def.check === 'less_than') {
+          max = zod4Def.value;
+          maxInclusive = false;
+        }
+        if (zod4Def.check === 'less_than_or_equal') {
+          max = zod4Def.value;
+          maxInclusive = true;
+        }
+        if (zod4Def.check === 'multiple_of') multipleOf = zod4Def.value;
+        if (zod4Def.check === 'integer') requiresInt = true;
+        if (zod4Def.check === 'safeint') {
+          requiresSafeInt = true;
+          requiresInt = true;
+        }
+      }
+    }
+
+    const step = requiresInt || requiresSafeInt ? 1 : 0.1;
+    const effectiveMin = min === -Infinity ? min : minInclusive ? min : min + step;
+    const effectiveMax = max === Infinity ? max : maxInclusive ? max : max - step;
+
+    const clampToRange = (value: number): number => {
+      if (effectiveMin !== -Infinity && value < effectiveMin) return effectiveMin;
+      if (effectiveMax !== Infinity && value > effectiveMax) return effectiveMax;
+      return value;
+    };
+
+    let candidate: number;
+    if (effectiveMin !== -Infinity && effectiveMax !== Infinity) {
+      candidate = (effectiveMin + effectiveMax) / 2;
+    } else if (effectiveMin !== -Infinity) {
+      candidate = effectiveMin;
+    } else if (effectiveMax !== Infinity) {
+      candidate = effectiveMax;
+    } else {
+      candidate = requiresInt ? 10 : 10.5;
+    }
+
+    candidate = clampToRange(candidate);
+
+    if (multipleOf && multipleOf > 0) {
+      const minBase = effectiveMin !== -Infinity ? effectiveMin : 0;
+      const maxBase = effectiveMax !== Infinity ? effectiveMax : minBase + multipleOf * 10;
+      let aligned = Math.ceil(minBase / multipleOf) * multipleOf;
+      if (effectiveMin !== -Infinity && aligned < effectiveMin) {
+        aligned += multipleOf;
+      }
+      if (effectiveMax !== Infinity && aligned > effectiveMax) {
+        aligned = Math.floor(maxBase / multipleOf) * multipleOf;
+      }
+      candidate = aligned;
+    }
+
+    if (requiresInt) {
+      candidate = Math.round(candidate);
+      candidate = clampToRange(candidate);
+    }
+
+    if (requiresSafeInt) {
+      candidate = Math.min(Math.max(candidate, Number.MIN_SAFE_INTEGER), Number.MAX_SAFE_INTEGER);
+    }
+
+    return candidate;
+  }
   if (typeName === 'ZodBoolean') return true;
   if (typeName === 'ZodNull') return null;
   if (typeName === 'ZodUndefined') return undefined;
   if (typeName === 'ZodDate') return new Date();
   if (typeName === 'ZodBigInt') return BigInt(0);
 
-  if (typeName === 'ZodLiteral') return def.value;
+  if (typeName === 'ZodLiteral') {
+    if ('_zod' in schema) {
+      return def.values?.[0];
+    } else {
+      return def.value;
+    }
+  }
 
-  if (typeName === 'ZodEnum') return def.values[0];
+  if (typeName === 'ZodEnum') {
+    if ('_zod' in schema) {
+      return Object.values(def.entries)[0];
+    } else {
+      return def.values[0];
+    }
+  }
   if (typeName === 'ZodNativeEnum') {
     const values = Object.values(def.values);
     return values[0];
   }
 
   if (typeName === 'ZodArray') {
-    return [generateValidDataFromSchema(def.type, fieldName)];
+    if ('_zod' in schema) {
+      return [generateValidDataFromSchema(def.element, fieldName)];
+    } else {
+      return [generateValidDataFromSchema(def.type, fieldName)];
+    }
   }
 
   if (typeName === 'ZodObject') {

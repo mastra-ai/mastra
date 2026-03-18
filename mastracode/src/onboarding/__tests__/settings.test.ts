@@ -32,7 +32,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       omModelOverride: null,
       subagentModels: {},
     },
-    preferences: { yolo: null, theme: 'auto' },
+    preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', quietMode: false },
     storage,
     customProviders: [],
     customModelPacks: [
@@ -47,6 +47,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       },
     ],
     modelUseCounts: {},
+    updateDismissedVersion: null,
     ...overrides,
   };
 }
@@ -88,6 +89,41 @@ describe('customProviders parsing/persistence', () => {
       const settings = loadSettings(filePath);
 
       expect(settings.customProviders).toEqual([]);
+      expect(settings.preferences.thinkingLevel).toBe('off');
+    });
+  });
+
+  it('normalizes invalid thinking levels to off while preserving valid values', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: { thinkingLevel: 'extreme' },
+          storage: {},
+          customProviders: [],
+          customModelPacks: [],
+          modelUseCounts: {},
+          updateDismissedVersion: null,
+        }),
+        'utf-8',
+      );
+
+      const invalidLevel = loadSettings(filePath);
+      expect(invalidLevel.preferences.thinkingLevel).toBe('off');
+
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          ...invalidLevel,
+          preferences: { ...invalidLevel.preferences, thinkingLevel: 'high' },
+        }),
+        'utf-8',
+      );
+
+      const validLevel = loadSettings(filePath);
+      expect(validLevel.preferences.thinkingLevel).toBe('high');
     });
   });
 

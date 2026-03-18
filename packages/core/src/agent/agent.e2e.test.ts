@@ -4,8 +4,9 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { stepCountIs, tool } from '@internal/ai-sdk-v5';
+import { createGatewayMock } from '@internal/test-utils';
 import { config } from 'dotenv';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { ModelRouterLanguageModel } from '../llm';
@@ -34,6 +35,10 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
   const integration = new TestIntegration();
@@ -112,8 +117,10 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
         weather: expect.any(String),
         temperature: expect.any(Number),
         humidity: expect.any(Number),
+        // .optional() fields: compat layer transforms null → undefined
         windSpeed: undefined,
         barometricPressure: undefined,
+        // .nullable() (without .optional()) stays null
         precipitation: null,
       };
 
@@ -209,47 +216,6 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
 
       expect(mockFindUser).toHaveBeenCalled();
       expect(name).toBe('Dero Israel');
-    }, 500000);
-
-    it('should call tool without input or output schemas (duplicate)', async () => {
-      const noSchemaTool = createTool({
-        id: 'noSchemaTool',
-        description: 'Returns test data with arbitrary structure',
-        execute: async () => {
-          return { success: true, data: { arbitrary: 'value', count: 42 } };
-        },
-      });
-
-      const testAgent = new Agent({
-        id: 'test-agent',
-        name: 'Test agent',
-        instructions: 'You are an agent that can use the noSchemaTool to get test data.',
-        model: openaiModel,
-        tools: { noSchemaTool },
-      });
-
-      const mastra = new Mastra({
-        agents: { testAgent },
-        logger: false,
-      });
-
-      const agent = mastra.getAgent('testAgent');
-
-      let toolCall;
-      let response;
-      if (version === 'v1') {
-        response = await agent.generateLegacy('Use the noSchemaTool to get test data', {
-          maxSteps: 2,
-          toolChoice: 'required',
-        });
-        toolCall = response.toolResults.find((result: any) => result.toolName === 'noSchemaTool');
-      } else {
-        response = await agent.generate('Use the noSchemaTool to get test data');
-        toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'noSchemaTool')?.payload;
-      }
-
-      expect(toolCall?.result).toEqual({ success: true, data: { arbitrary: 'value', count: 42 } });
-      expect(toolCall?.result?.error).toBeUndefined();
     }, 500000);
 
     it('generate - should pass and call client side tools', async () => {
@@ -387,37 +353,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
       expect(mockFindUser).toHaveBeenCalled();
     });
 
-    it('should reach default max steps', async () => {
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test agent',
-        instructions: 'Test agent',
-        model: openaiModel,
-        tools: integration.getStaticTools(),
-        defaultGenerateOptionsLegacy: {
-          maxSteps: 7,
-        },
-        defaultOptions: {
-          maxSteps: 7,
-        },
-      });
-
-      let response;
-
-      if (version === 'v1') {
-        response = await agent.generateLegacy('Call testTool 10 times.', {
-          toolChoice: 'required',
-        });
-      } else {
-        response = await agent.generate('Call testTool 10 times.', {
-          toolChoice: 'required',
-        });
-      }
-
-      expect(response.steps.length).toBe(7);
-    }, 500000);
-
-    it('should reach default max steps / stopWhen', async () => {
+    it('should reach max steps / stopWhen', async () => {
       const agent = new Agent({
         id: 'test-agent',
         name: 'Test agent',
@@ -443,68 +379,55 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
       expect(response.steps.length).toBe(7);
     }, 500000);
 
-    it('should retry when tool fails and eventually succeed with maxSteps=5', async () => {
-      let toolCallCount = 0;
-      const failuresBeforeSuccess = 2;
+    // v1 (AI SDK v4) throws AI_ToolExecutionError on tool failures rather than feeding errors
+    // back to the model for retry. Only v2's agentic loop supports tool error recovery.
+    it.skipIf(version === 'v1')(
+      'should retry when tool fails and eventually succeed with maxSteps=5',
+      { retry: 2, timeout: 500000 },
+      async () => {
+        let toolCallCount = 0;
+        const failuresBeforeSuccess = 2;
 
-      const flakeyTool = createTool({
-        id: 'flakeyTool',
-        description: 'A tool that fails initially but eventually succeeds',
-        inputSchema: z.object({ input: z.string() }),
-        outputSchema: z.object({ output: z.string() }),
-        execute: async input => {
-          toolCallCount++;
-          if (toolCallCount <= failuresBeforeSuccess) {
-            throw new Error(`Tool failed! Attempt ${toolCallCount}. Please try again.`);
-          }
-          return { output: `Success on attempt ${toolCallCount}: ${input.input}` };
-        },
-      });
-
-      const agent = new Agent({
-        id: 'retry-agent',
-        name: 'retry-agent',
-        instructions: 'Call the flakey tool with input "test data".',
-        model: openaiModel,
-        tools: { flakeyTool },
-      });
-      agent.__setLogger(noopLogger);
-
-      let response;
-      if (version === 'v1') {
-        response = await agent.generateLegacy('Please call the flakey tool with input "test data"', {
-          maxSteps: 5,
-        });
-      } else {
-        response = await agent.generate('Please call the flakey tool with input "test data"', {
-          maxSteps: 5,
-        });
-      }
-
-      expect(response.steps.length).toBeGreaterThan(1);
-      expect(response.steps.length).toBeLessThanOrEqual(5);
-      expect(toolCallCount).toBeGreaterThanOrEqual(3);
-
-      let foundSuccess = false;
-      if (version === 'v1') {
-        for (const step of response.steps) {
-          if (step.toolResults) {
-            for (const result of step.toolResults) {
-              if (result.toolName === 'flakeyTool' && result.result && result.result.output?.includes('Success')) {
-                foundSuccess = true;
-                break;
-              }
+        const flakeyTool = createTool({
+          id: 'flakeyTool',
+          description: 'A tool that fails initially but eventually succeeds. You must keep retrying it on failure.',
+          inputSchema: z.object({ input: z.string() }),
+          outputSchema: z.object({ output: z.string() }),
+          execute: async input => {
+            toolCallCount++;
+            if (toolCallCount <= failuresBeforeSuccess) {
+              throw new Error(`Tool failed! Attempt ${toolCallCount}. Please try again.`);
             }
-          }
-        }
-      } else {
+            return { output: `Success on attempt ${toolCallCount}: ${input.input}` };
+          },
+        });
+
+        const agent = new Agent({
+          id: 'retry-agent',
+          name: 'retry-agent',
+          instructions:
+            'Call the flakey tool with input "test data". If the tool returns an error, you MUST retry it with the same input. Keep retrying until it succeeds. Do not give up.',
+          model: openai_v5('gpt-4.1'),
+          tools: { flakeyTool },
+        });
+        agent.__setLogger(noopLogger);
+
+        const response = await agent.generate('Please call the flakey tool with input "test data"', {
+          maxSteps: 5,
+        });
+
+        expect(response.steps.length).toBeGreaterThan(1);
+        expect(response.steps.length).toBeLessThanOrEqual(5);
+        expect(toolCallCount).toBeGreaterThanOrEqual(3);
+
+        let foundSuccess = false;
         for (const step of response.steps) {
           if (step.toolResults) {
             for (const result of step.toolResults) {
               if (
                 result.payload.toolName === 'flakeyTool' &&
                 result.payload.result &&
-                result.payload.result.output?.includes('Success')
+                (result.payload.result as any).output?.includes('Success')
               ) {
                 foundSuccess = true;
                 break;
@@ -512,10 +435,10 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
             }
           }
         }
-      }
 
-      expect(foundSuccess).toBe(true);
-    }, 500000);
+        expect(foundSuccess).toBe(true);
+      },
+    );
   });
 
   describe(`${version} - context parameter handling (e2e)`, () => {

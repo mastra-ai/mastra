@@ -9,7 +9,7 @@ packages:
 
 The `off()` method removes event listeners previously registered with the `on()` method. This is particularly useful for cleaning up resources and preventing memory leaks in long-running applications with real-time voice capabilities.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
@@ -48,30 +48,29 @@ voice.off('writing', writingCallback)
 
 <PropertiesTable
   content={[
-{
-name: "event",
-type: "string",
-description:
-"Name of the event to stop listening for (e.g., 'speaking', 'writing', 'error')",
-isOptional: false,
-},
-{
-name: "callback",
-type: "function",
-description: "The same callback function that was passed to on()",
-isOptional: false,
-},
+  {
+    name: 'event',
+    type: 'string',
+    description: "Name of the event to stop listening for (e.g., 'speaking', 'writing', 'error')",
+    isOptional: false,
+  },
+  {
+    name: 'callback',
+    type: 'function',
+    description: 'The same callback function that was passed to on()',
+    isOptional: false,
+  },
 ]}
 />
 
-## Return Value
+## Return value
 
-This method does not return a value.
+This method doesn't return a value.
 
 ## Notes
 
 - The callback passed to `off()` must be the same function reference that was passed to `on()`
-- If the callback is not found, the method will have no effect
+- If the callback isn't found, the method will have no effect
 - This method is primarily used with real-time voice providers that support event-based communication
 - If called on a voice provider that doesn't support events, it will log a warning and do nothing
 - Removing event listeners is important for preventing memory leaks in long-running applications

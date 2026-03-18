@@ -1,9 +1,13 @@
 import { useMemo } from 'react';
 import type { ClientScoreRowData } from '@mastra/client-js';
+import { GaugeIcon } from 'lucide-react';
+import { EmptyState } from '@/ds/components/EmptyState';
 import { ItemList } from '@/ds/components/ItemList';
+import type { ExperimentStatus } from '@mastra/core/storage';
 
 export type ExperimentScorerSummaryProps = {
   scoresByItemId?: Record<string, ClientScoreRowData[]>;
+  experimentStatus?: ExperimentStatus;
 };
 
 const columns = [
@@ -12,7 +16,7 @@ const columns = [
   { name: 'count', label: 'Items Scored', size: '1fr' },
 ];
 
-export function ExperimentScorerSummary({ scoresByItemId }: ExperimentScorerSummaryProps) {
+export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: ExperimentScorerSummaryProps) {
   const scorerSummaries = useMemo(() => {
     if (!scoresByItemId) return [];
 
@@ -37,7 +41,34 @@ export function ExperimentScorerSummary({ scoresByItemId }: ExperimentScorerSumm
       .sort((a, b) => a.scorerId.localeCompare(b.scorerId));
   }, [scoresByItemId]);
 
-  if (scorerSummaries.length === 0) return null;
+  if (scorerSummaries.length === 0) {
+    const isRunning = experimentStatus === 'running' || experimentStatus === 'pending';
+    const hasLoadedScores = scoresByItemId !== undefined;
+
+    let title: string;
+    let description: string;
+
+    if (isRunning) {
+      title = 'Experiment in progress';
+      description = 'Summary metrics will appear here once the experiment completes.';
+    } else if (!hasLoadedScores) {
+      title = 'Loading scores';
+      description = 'Fetching scorer results…';
+    } else {
+      title = 'No scorers configured';
+      description = 'Add scorers when triggering an experiment to evaluate results and see summary metrics here.';
+    }
+
+    return (
+      <div className="flex h-full items-center justify-center py-12">
+        <EmptyState
+          iconSlot={<GaugeIcon className="w-8 h-8 text-neutral3" />}
+          titleSlot={title}
+          descriptionSlot={description}
+        />
+      </div>
+    );
+  }
 
   return (
     <ItemList>

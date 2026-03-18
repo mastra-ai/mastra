@@ -213,8 +213,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
 
     case 'follow_up_queued': {
-      const totalPending = (event.count as number) + state.pendingSlashCommands.length;
-      ectx.showInfo(`Follow-up queued (${totalPending} pending)`);
+      ectx.updateStatusLine();
       break;
     }
 

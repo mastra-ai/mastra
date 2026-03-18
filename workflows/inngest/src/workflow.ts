@@ -6,9 +6,11 @@ import type { WorkflowRuns } from '@mastra/core/storage';
 import { Workflow } from '@mastra/core/workflows';
 import type {
   Step,
+  StepResult,
   WorkflowConfig,
   StepFlowEntry,
   WorkflowResult,
+  WorkflowRunState,
   WorkflowStreamEvent,
   Run,
 } from '@mastra/core/workflows';
@@ -26,7 +28,15 @@ import type {
 
 export class InngestWorkflow<
   TEngineType = InngestEngineType,
-  TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
+  TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
+    string,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    TEngineType
+  >[],
   TWorkflowId extends string = string,
   TState = unknown,
   TInput = unknown,
@@ -41,7 +51,16 @@ export class InngestWorkflow<
   private readonly flowControlConfig?: InngestFlowControlConfig;
   private readonly cronConfig?: InngestFlowCronConfig<TInput, TState>;
 
-  constructor(params: InngestWorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>, inngest: Inngest) {
+  constructor(
+    params: InngestWorkflowConfig<
+      TWorkflowId,
+      TState,
+      TInput,
+      TOutput,
+      TSteps & Step<string, any, any, any, any, any, InngestEngineType>[]
+    >,
+    inngest: Inngest,
+  ) {
     const { concurrency, rateLimit, throttle, debounce, priority, cron, inputData, initialState, ...workflowParams } =
       params;
 
@@ -322,114 +341,139 @@ export class InngestWorkflow<
 
         // Final step to invoke lifecycle callbacks and end workflow span.
         // This step is memoized by step.run.
-        await step.run(`workflow.${this.id}.finalize`, async () => {
-          if (result.status !== 'paused') {
-            // Invoke lifecycle callbacks (onFinish and onError)
-            await engine.invokeLifecycleCallbacksInternal({
-              status: result.status,
-              result: 'result' in result ? result.result : undefined,
-              error: 'error' in result ? result.error : undefined,
-              steps: result.steps,
-              tripwire: 'tripwire' in result ? result.tripwire : undefined,
-              runId,
-              workflowId: this.id,
-              resourceId,
-              input: inputData,
-              requestContext,
-              state: result.state ?? initialState ?? {},
-            });
-          }
-
-          // End the workflow span with appropriate status
-          // The workflow span was already created and SPAN_STARTED was exported in the span.start step
-          if (workflowSpanData) {
-            const observability = mastra?.observability?.getSelectedInstance({ requestContext });
-            if (observability) {
-              // Rebuild the span from cached data to call end/error
-              const workflowSpan = observability.rebuildSpan(workflowSpanData);
-
-              if (result.status === 'failed') {
-                workflowSpan.error({
-                  error: result.error instanceof Error ? result.error : new Error(String(result.error)),
-                  attributes: { status: 'failed' },
-                });
-              } else {
-                workflowSpan.end({
-                  output: result.status === 'success' ? result.result : undefined,
-                  attributes: { status: result.status },
-                });
-              }
-            }
-          }
-
-          // Ensure final snapshot is persisted BEFORE publishing workflow-finish
-          // This fixes a race condition where getRunOutput reads the snapshot before it's fully written
-          const shouldPersistFinalSnapshot = this.options.shouldPersistSnapshot({
-            workflowStatus: result.status as any,
-            stepResults: result.steps,
-          });
-          if (shouldPersistFinalSnapshot) {
-            const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
-            if (workflowsStore) {
-              // For suspended workflows, read existing snapshot to preserve suspendedPaths and resumeLabels
-              // which were set correctly by the handlers during execution
-              let existingSnapshot:
-                | { suspendedPaths?: Record<string, number[]>; resumeLabels?: Record<string, any> }
-                | undefined;
-              if (result.status === 'suspended') {
-                existingSnapshot =
-                  (await workflowsStore.loadWorkflowSnapshot({
-                    workflowName: this.id,
-                    runId,
-                  })) ?? undefined;
-              }
-
-              await workflowsStore.persistWorkflowSnapshot({
-                workflowName: this.id,
+        let finalizeError: unknown;
+        let finalizeErrored = false;
+        try {
+          await step.run(`workflow.${this.id}.finalize`, async () => {
+            if (result.status !== 'paused') {
+              // Invoke lifecycle callbacks (onFinish and onError)
+              await engine.invokeLifecycleCallbacksInternal({
+                status: result.status,
+                result: 'result' in result ? result.result : undefined,
+                error: 'error' in result ? result.error : undefined,
+                steps: result.steps,
+                tripwire: 'tripwire' in result ? result.tripwire : undefined,
                 runId,
+                workflowId: this.id,
                 resourceId,
-                snapshot: {
-                  runId,
-                  status: result.status,
-                  value: result.state ?? initialState ?? {},
-                  context: result.steps as any,
-                  activePaths: [],
-                  activeStepsPath: {},
-                  serializedStepGraph: this.serializedStepGraph,
-                  suspendedPaths: existingSnapshot?.suspendedPaths ?? {},
-                  waitingPaths: {},
-                  resumeLabels: existingSnapshot?.resumeLabels ?? result.resumeLabels ?? {},
-                  result: result.status === 'success' ? (result.result as any) : undefined,
-                  error: result.status === 'failed' ? result.error : undefined,
-                  timestamp: Date.now(),
-                },
+                input: inputData,
+                requestContext,
+                state: result.state ?? initialState ?? {},
               });
             }
-          }
 
-          // Publish workflow-finish event for realtime subscribers
-          await pubsub.publish(`workflow.events.v2.${runId}`, {
-            type: 'watch',
-            runId,
-            data: {
-              type: 'workflow-finish',
-              payload: {
-                status: result.status,
-                result: result.status === 'success' ? result.result : undefined,
-                error: result.status === 'failed' ? result.error : undefined,
-              },
-            },
-          });
+            // End the workflow span with appropriate status
+            // The workflow span was already created and SPAN_STARTED was exported in the span.start step
+            if (workflowSpanData) {
+              const observability = mastra?.observability?.getSelectedInstance({ requestContext });
+              if (observability) {
+                // Rebuild the span from cached data to call end/error
+                const workflowSpan = observability.rebuildSpan(workflowSpanData);
 
-          // Throw after span ended for failed workflows
-          if (result.status === 'failed') {
-            throw new NonRetriableError(`Workflow failed`, {
-              cause: result,
+                if (result.status === 'failed') {
+                  workflowSpan.error({
+                    error: result.error instanceof Error ? result.error : new Error(String(result.error)),
+                    attributes: { status: 'failed' },
+                  });
+                } else {
+                  workflowSpan.end({
+                    output: result.status === 'success' ? result.result : undefined,
+                    attributes: { status: result.status },
+                  });
+                }
+              }
+            }
+
+            // Ensure final snapshot is persisted BEFORE publishing workflow-finish
+            // This fixes a race condition where getRunOutput reads the snapshot before it's fully written
+            const shouldPersistFinalSnapshot = this.options.shouldPersistSnapshot({
+              workflowStatus: result.status,
+              stepResults: result.steps,
             });
-          }
+            if (shouldPersistFinalSnapshot) {
+              const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+              if (workflowsStore) {
+                // For suspended workflows, read existing snapshot to preserve suspendedPaths and resumeLabels
+                // which were set correctly by the handlers during execution
+                let existingSnapshot:
+                  | { suspendedPaths?: Record<string, number[]>; resumeLabels?: Record<string, any> }
+                  | undefined;
+                if (result.status === 'suspended') {
+                  existingSnapshot =
+                    (await workflowsStore.loadWorkflowSnapshot({
+                      workflowName: this.id,
+                      runId,
+                    })) ?? undefined;
+                }
 
-          return result;
-        });
+                await workflowsStore.persistWorkflowSnapshot({
+                  workflowName: this.id,
+                  runId,
+                  resourceId,
+                  snapshot: {
+                    runId,
+                    status: result.status,
+                    value: result.state ?? initialState ?? {},
+                    context: toSnapshotContext(result.steps),
+                    activePaths: [],
+                    activeStepsPath: {},
+                    serializedStepGraph: this.serializedStepGraph,
+                    suspendedPaths: existingSnapshot?.suspendedPaths ?? {},
+                    waitingPaths: {},
+                    resumeLabels: existingSnapshot?.resumeLabels ?? result.resumeLabels ?? {},
+                    result: result.status === 'success' ? toSnapshotResult(result.result) : undefined,
+                    error: result.status === 'failed' ? result.error : undefined,
+                    timestamp: Date.now(),
+                  },
+                });
+              }
+            }
+
+            // Publish workflow-finish event for realtime subscribers (best-effort)
+            try {
+              await pubsub.publish(`workflow.events.v2.${runId}`, {
+                type: 'watch',
+                runId,
+                data: {
+                  type: 'workflow-finish',
+                  payload: {
+                    status: result.status,
+                    result: result.status === 'success' ? result.result : undefined,
+                    error: result.status === 'failed' ? result.error : undefined,
+                  },
+                },
+              });
+            } catch (publishError) {
+              this.logger.debug?.('Failed to publish workflow-finish event:', publishError);
+            }
+
+            // Throw after span ended for failed workflows
+            if (result.status === 'failed') {
+              throw new NonRetriableError(`Workflow failed`, {
+                cause: result,
+              });
+            }
+
+            return result;
+          });
+        } catch (error) {
+          finalizeErrored = true;
+          finalizeError = error;
+        } finally {
+          // Keep this outside step.run memoization, but guaranteed on all paths.
+          const observability = mastra?.observability?.getSelectedInstance({ requestContext });
+          if (observability) {
+            try {
+              await observability.flush();
+            } catch (flushError) {
+              this.logger.debug?.('Failed to flush observability:', flushError);
+            }
+          }
+        }
+
+        if (finalizeErrored) {
+          throw finalizeError;
+        }
 
         return { result, runId };
       },
@@ -459,4 +503,21 @@ export class InngestWorkflow<
       ...this.getNestedFunctions(this.executionGraph.steps),
     ];
   }
+}
+
+/**
+ * Converts runtime step results to the serialized context shape expected by WorkflowRunState.
+ * StepResult is a structural subset of SerializedStepResult (widening), so no data
+ * transformation is needed — this bridges the generic type mismatch at the persistence boundary.
+ */
+function toSnapshotContext(steps: Record<string, StepResult<any, any, any, any>>): WorkflowRunState['context'] {
+  return steps as unknown as WorkflowRunState['context'];
+}
+
+/**
+ * Converts a workflow output value to the record shape expected by WorkflowRunState.result.
+ * Workflow outputs are generic (TOutput) but the snapshot schema stores them as Record<string, any>.
+ */
+function toSnapshotResult(output: unknown): WorkflowRunState['result'] {
+  return output as WorkflowRunState['result'];
 }

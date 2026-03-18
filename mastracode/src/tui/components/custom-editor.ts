@@ -2,103 +2,388 @@
  * Custom editor that handles app-level keybindings for Mastra Code.
  */
 
+import { readFileSync, statSync } from 'node:fs';
+import { extname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Editor, matchesKey } from '@mariozechner/pi-tui';
 import type { EditorTheme, TUI } from '@mariozechner/pi-tui';
+import chalk from 'chalk';
 import { getClipboardImage, getClipboardText } from '../../clipboard/index.js';
 import type { ClipboardImage } from '../../clipboard/index.js';
+import { mastra, theme } from '../theme.js';
 
 const PASTE_START = '\x1b[200~';
 const PASTE_END = '\x1b[201~';
+const IMAGE_MIME_TYPES_BY_EXTENSION: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.tif': 'image/tiff',
+  '.tiff': 'image/tiff',
+  '.heic': 'image/heic',
+  '.heif': 'image/heif',
+};
+
 export type AppAction =
-  | 'clear' // Ctrl+C or Escape - interrupt
-  | 'exit' // Ctrl+D - exit when empty
-  | 'undo' // Ctrl+Z - undo last clear
-  | 'toggleThinking' // Ctrl+T
-  | 'expandTools' // Ctrl+E
-  | 'followUp' // Alt+Enter - queue follow-up while streaming
-  | 'cycleMode' // Shift+Tab - cycle harness modes
-  | 'toggleYolo'; // Ctrl+Y - toggle YOLO mode
+  | 'clear'
+  | 'exit'
+  | 'suspend'
+  | 'undo'
+  | 'toggleThinking'
+  | 'expandTools'
+  | 'followUp'
+  | 'cycleMode'
+  | 'toggleYolo';
+
+// Pre-compiled constants (avoid re-creation per render)
+const ANSI_STRIP_RE = /\x1b\[[0-9;]*m/g;
+const SLASH_CURSOR_RE = /\x1b\[7m\/\x1b\[0m/;
+const AT_CURSOR_RE = /\x1b\[7m@\x1b\[0m/;
+function parseHex(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
 
 export class CustomEditor extends Editor {
-  private actionHandlers: Map<AppAction, () => void> = new Map();
+  private actionHandlers: Map<AppAction, () => unknown> = new Map();
 
-  /** Handler for Ctrl+D when editor is empty */
   public onCtrlD?: () => void;
-
-  /** Whether Escape triggers clear (default true) */
   public escapeEnabled = true;
-
-  /** Called when clipboard image data is pasted */
   public onImagePaste?: (image: ClipboardImage) => void;
+  public getModeColor?: () => string | undefined;
+  private pendingBracketedPaste: string | null = null;
 
-  /** Tracks when we're swallowing paste content that was intercepted as an image */
-  private _imagePasteIntercepted = false;
+  private _cachedModeColorHex?: string;
+  private _cachedColorFn?: (s: string) => string;
 
   constructor(tui: TUI, theme: EditorTheme) {
     super(tui, theme);
+    (this as any).getBestAutocompleteMatchIndex = (items: Array<{ value: string }>, prefix: string): number => {
+      if (!prefix) {
+        return -1;
+      }
+
+      const normalizeSlashCommandValue = (value: string) => value.replace(/^\/+/, '');
+      const shouldNormalizeSlashCommand = prefix.startsWith('/');
+      const normalizedPrefix = shouldNormalizeSlashCommand ? normalizeSlashCommandValue(prefix) : prefix;
+
+      let firstPrefixIndex = -1;
+      for (let i = 0; i < items.length; i++) {
+        const value = items[i]?.value ?? '';
+        const comparableValue = shouldNormalizeSlashCommand ? normalizeSlashCommandValue(value) : value;
+
+        if (comparableValue === normalizedPrefix) {
+          return i;
+        }
+
+        if (firstPrefixIndex === -1 && comparableValue.startsWith(normalizedPrefix)) {
+          firstPrefixIndex = i;
+        }
+      }
+
+      return firstPrefixIndex;
+    };
   }
 
-  /**
-   * Register a handler for an app action.
-   */
-  onAction(action: AppAction, handler: () => void): void {
+  onAction(action: AppAction, handler: () => unknown): void {
     this.actionHandlers.set(action, handler);
   }
 
-  handleInput(data: string): void {
-    // If we intercepted a paste as image, swallow remaining paste data
-    if (this._imagePasteIntercepted) {
-      if (data.includes(PASTE_END)) {
-        this._imagePasteIntercepted = false;
-        const afterPaste = data.substring(data.indexOf(PASTE_END) + PASTE_END.length);
+  render(width: number): string[] {
+    const text = this.getText().trimStart();
+    const isSlash = text.startsWith('/');
+    const isAt = text.startsWith('@');
+    const color = this.getModeColor?.() || mastra.green;
+    const promptChar = isSlash ? '/' : isAt ? '@' : '›';
+
+    // Cache colorFn and prompt — only recreate when color changes
+    if (this._cachedModeColorHex !== color) {
+      this._cachedModeColorHex = color;
+      this._cachedColorFn = chalk.hex(color);
+    }
+    const colorFn = this._cachedColorFn!;
+    const b = colorFn;
+    // Prompt changes with slash/at mode, so rebuild each time (cheap)
+    const prompt = chalk.bold.hex(color)(promptChar);
+
+    // Box structure: "│ > content │" or "│   content │"
+    // Left: "│ > " (4) or "│   " (4), Right: " │" (2) = 6 chars total
+    const promptWidth = 4; // "│ > " or "│   "
+    const contentWidth = width - 6;
+    // Editor renders at content width (prompt char space is separate)
+    const editorLines = super.render(contentWidth);
+
+    // Extract content lines (skip editor's invisible borders)
+    const contentLines: string[] = [];
+    const scrollIndicators: string[] = [];
+    let isTop = true;
+    for (const line of editorLines) {
+      const stripped = line.replace(ANSI_STRIP_RE, '');
+      if (stripped.length > 0 && stripped[0] === '─') {
+        if (isTop) {
+          isTop = false;
+          continue;
+        }
+        if (stripped.includes('↑') || stripped.includes('↓')) {
+          scrollIndicators.push(b(stripped));
+          continue;
+        }
+        continue;
+      }
+      contentLines.push(line);
+    }
+
+    // Strip leading "/" or "@" from first content line when shown in prompt
+    if ((isSlash || isAt) && contentLines.length > 0) {
+      let l = contentLines[0]!;
+      const char = isSlash ? '/' : '@';
+      // Handle cursor-highlighted char (reverse video)
+      l = l.replace(isSlash ? SLASH_CURSOR_RE : AT_CURSOR_RE, '');
+      // Remove the first plain occurrence
+      const idx = l.indexOf(char);
+      if (idx !== -1) {
+        l = l.slice(0, idx) + l.slice(idx + 1);
+      }
+      contentLines[0] = l;
+    }
+
+    // Build rounded box
+    const result: string[] = [];
+    const hBarLen = width - 2;
+
+    // Solid mode-color border
+    const top = b('╭') + b('─').repeat(hBarLen) + b('╮');
+    const leftBorder = b('│');
+    const rightBorder = b('│');
+    const bottom = b('╰') + b('─').repeat(hBarLen) + b('╯');
+
+    // Assemble box
+    const textColorOpen = `\x1b[38;2;${parseHex(theme.getTheme().text).join(';')}m`;
+    const textColorClose = '\x1b[39m';
+    result.push(top);
+
+    for (let i = 0; i < contentLines.length; i++) {
+      const line = `${textColorOpen}${contentLines[i]!}${textColorClose}`;
+      if (i === 0) {
+        result.push(`${leftBorder} ${prompt} ${line} ${rightBorder}`);
+      } else {
+        result.push(`${leftBorder}${' '.repeat(promptWidth - 1)}${line} ${rightBorder}`);
+      }
+    }
+
+    result.push(bottom);
+
+    // Scroll indicators below the box
+    for (const ind of scrollIndicators) {
+      result.push(ind);
+    }
+
+    return result;
+  }
+
+  private maybeHandleBracketedPaste(data: string): boolean {
+    const pasteStartIndex = this.pendingBracketedPaste ? -1 : data.indexOf(PASTE_START);
+    if (!this.pendingBracketedPaste && pasteStartIndex === -1) {
+      return false;
+    }
+
+    const beforePaste = this.pendingBracketedPaste ? '' : data.slice(0, pasteStartIndex);
+    const pasteChunk = this.pendingBracketedPaste
+      ? `${this.pendingBracketedPaste}${data}`
+      : data.slice(pasteStartIndex);
+
+    if (beforePaste) {
+      super.handleInput(beforePaste);
+    }
+
+    const pasteEndIndex = pasteChunk.indexOf(PASTE_END);
+    if (pasteEndIndex === -1) {
+      this.pendingBracketedPaste = pasteChunk;
+      return true;
+    }
+
+    this.pendingBracketedPaste = null;
+
+    const pasteContent = pasteChunk.slice(PASTE_START.length, pasteEndIndex);
+    const afterPaste = pasteChunk.slice(pasteEndIndex + PASTE_END.length);
+
+    if (this.shouldPasteClipboardImage(pasteContent)) {
+      const clipboardImage = getClipboardImage();
+      if (clipboardImage) {
+        this.onImagePaste?.(clipboardImage);
         if (afterPaste.length > 0) {
           this.handleInput(afterPaste);
         }
+        return true;
       }
-      return;
     }
 
-    // Detect paste start → check clipboard for image
-    if (data.includes(PASTE_START) && this.onImagePaste) {
+    const clipboardImageForRemoteUrl = this.getClipboardImageForPastedRemoteImageUrl(pasteContent);
+    if (clipboardImageForRemoteUrl) {
+      this.onImagePaste?.(clipboardImageForRemoteUrl);
+      if (afterPaste.length > 0) {
+        this.handleInput(afterPaste);
+      }
+      return true;
+    }
+
+    const pastedImageSource = this.readPastedImageSource(pasteContent);
+    if (pastedImageSource) {
+      this.onImagePaste?.(pastedImageSource);
+      if (afterPaste.length > 0) {
+        this.handleInput(afterPaste);
+      }
+      return true;
+    }
+
+    super.handleInput(`${PASTE_START}${pasteContent}${PASTE_END}`);
+    if (afterPaste.length > 0) {
+      this.handleInput(afterPaste);
+    }
+    return true;
+  }
+
+  private shouldPasteClipboardImage(pasteContent: string): boolean {
+    return Boolean(this.onImagePaste) && pasteContent.trim().length === 0;
+  }
+
+  private getClipboardImageForPastedRemoteImageUrl(pasteContent: string): ClipboardImage | null {
+    if (!this.onImagePaste) {
+      return null;
+    }
+
+    if (!this.normalizePastedImageUrl(this.normalizePastedPathLike(pasteContent) ?? '')) {
+      return null;
+    }
+
+    return getClipboardImage();
+  }
+
+  private readPastedImageSource(pasteContent: string): ClipboardImage | null {
+    if (!this.onImagePaste) {
+      return null;
+    }
+
+    const normalizedPaste = this.normalizePastedPathLike(pasteContent);
+    if (!normalizedPaste) {
+      return null;
+    }
+
+    const imageUrl = this.normalizePastedImageUrl(normalizedPaste);
+    if (imageUrl) {
+      const mimeType = this.getImageMimeType(imageUrl);
+      return mimeType
+        ? {
+            data: imageUrl,
+            mimeType,
+          }
+        : null;
+    }
+
+    const filePath = this.normalizePastedFilePath(normalizedPaste);
+    if (!filePath) {
+      return null;
+    }
+
+    const mimeType = this.getImageMimeType(filePath);
+    if (!mimeType) {
+      return null;
+    }
+
+    try {
+      if (!statSync(filePath).isFile()) {
+        return null;
+      }
+
+      return {
+        data: readFileSync(filePath).toString('base64'),
+        mimeType,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private normalizePastedPathLike(pasteContent: string): string | null {
+    const trimmed = pasteContent.trim();
+    if (!trimmed || trimmed.includes('\n')) {
+      return null;
+    }
+
+    const unquoted =
+      (trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))
+        ? trimmed.slice(1, -1)
+        : trimmed;
+
+    return unquoted.replace(/\\([ !$&'()\[\]{}])/g, '$1');
+  }
+
+  private normalizePastedImageUrl(pasteContent: string): string | null {
+    if (!/^https?:\/\//i.test(pasteContent)) {
+      return null;
+    }
+
+    try {
+      const url = new URL(pasteContent);
+      return this.getImageMimeType(url.toString()) ? url.toString() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private normalizePastedFilePath(pasteContent: string): string | null {
+    if (/^https?:\/\//i.test(pasteContent)) {
+      return null;
+    }
+
+    if (/^file:\/\//i.test(pasteContent)) {
+      try {
+        return fileURLToPath(pasteContent);
+      } catch {
+        return null;
+      }
+    }
+
+    return pasteContent;
+  }
+
+  private getImageMimeType(pathOrUrl: string): string | null {
+    const extensionSource = /^https?:\/\//i.test(pathOrUrl) ? new URL(pathOrUrl).pathname : pathOrUrl;
+    return IMAGE_MIME_TYPES_BY_EXTENSION[extname(extensionSource).toLowerCase()] ?? null;
+  }
+
+  private handleExplicitPaste(): boolean {
+    if (this.onImagePaste) {
       const clipboardImage = getClipboardImage();
       if (clipboardImage) {
         this.onImagePaste(clipboardImage);
-        // Swallow the paste text content
-        if (data.includes(PASTE_END)) {
-          const afterPaste = data.substring(data.indexOf(PASTE_END) + PASTE_END.length);
-          if (afterPaste.length > 0) {
-            this.handleInput(afterPaste);
-          }
-        } else {
-          this._imagePasteIntercepted = true;
-        }
-        return;
+        return true;
       }
     }
 
-    // Ctrl+V - explicit paste (handles image-only clipboard where terminals
-    // don't generate a bracketed paste event, and text clipboard)
-    if (matchesKey(data, 'ctrl+v')) {
-      // Check for image first
-      if (this.onImagePaste) {
-        const clipboardImage = getClipboardImage();
-        if (clipboardImage) {
-          this.onImagePaste(clipboardImage);
-          return;
-        }
-      }
-      // No image — read text and synthesize a bracketed paste so the parent
-      // Editor.handlePaste() logic kicks in (large paste condensation, etc.)
-      const clipboardText = getClipboardText();
-      if (clipboardText) {
-        const syntheticPaste = `${PASTE_START}${clipboardText}${PASTE_END}`;
-        super.handleInput(syntheticPaste);
-        return;
-      }
+    const clipboardText = getClipboardText();
+    if (clipboardText) {
+      const syntheticPaste = `${PASTE_START}${clipboardText}${PASTE_END}`;
+      super.handleInput(syntheticPaste);
+      return true;
+    }
+
+    return true;
+  }
+
+  handleInput(data: string): void {
+    if (this.maybeHandleBracketedPaste(data)) {
       return;
     }
 
-    // Ctrl+C - interrupt
+    if (matchesKey(data, 'ctrl+v') || matchesKey(data, 'alt+v')) {
+      this.handleExplicitPaste();
+      return;
+    }
+
     if (matchesKey(data, 'ctrl+c')) {
       const handler = this.actionHandlers.get('clear');
       if (handler) {
@@ -106,7 +391,7 @@ export class CustomEditor extends Editor {
         return;
       }
     }
-    // Escape - same as Ctrl+C (abort generation) if enabled
+
     if (matchesKey(data, 'escape') && this.escapeEnabled) {
       const handler = this.actionHandlers.get('clear');
       if (handler) {
@@ -115,16 +400,23 @@ export class CustomEditor extends Editor {
       }
     }
 
-    // Ctrl+D - exit when editor is empty
     if (matchesKey(data, 'ctrl+d')) {
       if (this.getText().length === 0) {
         const handler = this.onCtrlD ?? this.actionHandlers.get('exit');
         if (handler) handler();
       }
-      return; // Always consume
+      return;
     }
-    // Ctrl+Z - undo last clear
+
     if (matchesKey(data, 'ctrl+z')) {
+      const handler = this.actionHandlers.get('suspend');
+      if (handler) {
+        handler();
+        return;
+      }
+    }
+
+    if (matchesKey(data, 'alt+z')) {
       const handler = this.actionHandlers.get('undo');
       if (handler) {
         handler();
@@ -132,7 +424,6 @@ export class CustomEditor extends Editor {
       }
     }
 
-    // Ctrl+T - toggle thinking
     if (matchesKey(data, 'ctrl+t')) {
       const handler = this.actionHandlers.get('toggleThinking');
       if (handler) {
@@ -141,7 +432,6 @@ export class CustomEditor extends Editor {
       }
     }
 
-    // Ctrl+E - expand tools
     if (matchesKey(data, 'ctrl+e')) {
       const handler = this.actionHandlers.get('expandTools');
       if (handler) {
@@ -150,20 +440,30 @@ export class CustomEditor extends Editor {
       }
     }
 
-    // Ctrl+F - follow-up (queue message while streaming)
-    if (matchesKey(data, 'ctrl+f')) {
-      // Accept autocomplete suggestion if one is showing, so the resolved
-      // text (e.g. "/review" instead of "/rev") is read by the handler.
-      if (this.isShowingAutocomplete()) {
-        super.handleInput('\t');
+    if (matchesKey(data, 'enter')) {
+      // Let pi-tui handle \+Enter newline workaround
+      const lines = (this as any).state?.lines;
+      const cursorCol = (this as any).state?.cursorCol;
+      const currentLine = lines?.[(this as any).state?.cursorLine] || '';
+      if (cursorCol > 0 && currentLine[cursorCol - 1] === '\\') {
+        super.handleInput(data);
+        return;
       }
       const handler = this.actionHandlers.get('followUp');
       if (handler) {
-        handler();
-        return;
+        if (this.isShowingAutocomplete()) {
+          super.handleInput('\t');
+          if (this.getText().trimStart().startsWith('/') && handler() !== false) {
+            return;
+          }
+          return;
+        }
+        if (handler() !== false) {
+          return;
+        }
       }
     }
-    // Shift+Tab - cycle harness modes
+
     if (matchesKey(data, 'shift+tab')) {
       const handler = this.actionHandlers.get('cycleMode');
       if (handler) {
@@ -172,7 +472,6 @@ export class CustomEditor extends Editor {
       }
     }
 
-    // Ctrl+Y - toggle YOLO mode
     if (matchesKey(data, 'ctrl+y')) {
       const handler = this.actionHandlers.get('toggleYolo');
       if (handler) {
@@ -181,7 +480,6 @@ export class CustomEditor extends Editor {
       }
     }
 
-    // Pass to parent for editor handling
     super.handleInput(data);
   }
 }

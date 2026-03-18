@@ -39,12 +39,12 @@ const serverById = mastra.getMCPServerById('my-mcp-server')
 
 <PropertiesTable
   content={[
-{
-name: "registryKey",
-type: "string",
-description:
-"The registry key used when registering the MCP server in the mcpServers configuration object. This is the key in the key-value pair, not the server's intrinsic id property.",
-},
+  {
+    name: 'registryKey',
+    type: 'string',
+    description:
+      "The registry key used when registering the MCP server in the mcpServers configuration object. This is the key in the key-value pair, not the server's intrinsic id property.",
+  },
 ]}
 />
 
@@ -52,21 +52,20 @@ description:
 
 <PropertiesTable
   content={[
-{
-name: "server",
-type: "MCPServerBase | undefined",
-description:
-"The MCP server instance with the specified registry key, or undefined if not found.",
-},
+  {
+    name: 'server',
+    type: 'MCPServerBase | undefined',
+    description: 'The MCP server instance with the specified registry key, or undefined if not found.',
+  },
 ]}
 />
 
-## Related Methods
+## Related methods
 
 - [Mastra.getMCPServerById()](/reference/core/getMCPServerById) - Retrieve an MCP server by its intrinsic `id` property
 - [Mastra.listMCPServers()](/reference/core/listMCPServers) - List all registered MCP servers
 
-## See Also
+## See also
 
 - [MCP overview](/docs/mcp/overview)
 - [MCP server reference](/reference/tools/mcp-server)

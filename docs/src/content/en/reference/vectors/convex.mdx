@@ -1,11 +1,11 @@
 ---
-title: "Reference: Convex Vector Store | Vectors"
+title: "Reference: Convex vector store | Vectors"
 description: Documentation for the ConvexVector class in Mastra, which provides vector search using Convex.
 packages:
   - "@mastra/convex"
 ---
 
-# Convex Vector Store
+# Convex vector store
 
 The ConvexVector class provides vector storage and similarity search using [Convex](https://convex.dev). It stores embeddings inside Convex and performs cosine similarity search.
 
@@ -15,37 +15,37 @@ The ConvexVector class provides vector storage and similarity search using [Conv
 npm install @mastra/convex@latest
 ```
 
-## Convex Setup
+## Convex setup
 
 Before using `ConvexVector`, you need to set up the Convex schema and storage handler. See [Convex Storage Setup](../storage/convex#convex-setup) for setup instructions.
 
-## Constructor Options
+## Constructor options
 
 <PropertiesTable
   content={[
-{
-name: "deploymentUrl",
-type: "string",
-description: "Convex deployment URL (e.g., https://your-project.convex.cloud)",
-isOptional: false,
-},
-{
-name: "adminAuthToken",
-type: "string",
-description: "Convex admin authentication token",
-isOptional: false,
-},
-{
-name: "storageFunction",
-type: "string",
-description: "Path to the storage mutation function",
-isOptional: true,
-defaultValue: "mastra/storage:handle",
-},
+  {
+    name: 'deploymentUrl',
+    type: 'string',
+    description: 'Convex deployment URL (e.g., https://your-project.convex.cloud)',
+    isOptional: false,
+  },
+  {
+    name: 'adminAuthToken',
+    type: 'string',
+    description: 'Convex admin authentication token',
+    isOptional: false,
+  },
+  {
+    name: 'storageFunction',
+    type: 'string',
+    description: 'Path to the storage mutation function',
+    isOptional: true,
+    defaultValue: 'mastra/storage:handle',
+  },
 ]}
 />
 
-## Constructor Examples
+## Constructor examples
 
 ### Basic Configuration
 
@@ -72,27 +72,27 @@ const vectorStore = new ConvexVector({
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to create",
-},
-{
-name: "dimension",
-type: "number",
-description: "Vector dimension (must match your embedding model)",
-},
-{
-name: "metric",
-type: "'cosine' | 'euclidean' | 'dotproduct'",
-isOptional: true,
-defaultValue: "cosine",
-description: "Distance metric for similarity search (only cosine is currently supported)",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to create',
+  },
+  {
+    name: 'dimension',
+    type: 'number',
+    description: 'Vector dimension (must match your embedding model)',
+  },
+  {
+    name: 'metric',
+    type: "'cosine' | 'euclidean' | 'dotproduct'",
+    isOptional: true,
+    defaultValue: 'cosine',
+    description: 'Distance metric for similarity search (only cosine is currently supported)',
+  },
 ]}
 />
 
@@ -103,32 +103,32 @@ await vectorStore.createIndex({
 })
 ```
 
-### upsert()
+### `upsert()`
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to upsert vectors into",
-},
-{
-name: "vectors",
-type: "number[][]",
-description: "Array of embedding vectors",
-},
-{
-name: "metadata",
-type: "Record<string, any>[]",
-isOptional: true,
-description: "Metadata for each vector",
-},
-{
-name: "ids",
-type: "string[]",
-isOptional: true,
-description: "Optional vector IDs (auto-generated if not provided)",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to upsert vectors into',
+  },
+  {
+    name: 'vectors',
+    type: 'number[][]',
+    description: 'Array of embedding vectors',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, any>[]',
+    isOptional: true,
+    description: 'Metadata for each vector',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Optional vector IDs (auto-generated if not provided)',
+  },
 ]}
 />
 
@@ -141,40 +141,40 @@ await vectorStore.upsert({
 });
 ```
 
-### query()
+### `query()`
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to query",
-},
-{
-name: "queryVector",
-type: "number[]",
-description: "Query vector",
-},
-{
-name: "topK",
-type: "number",
-isOptional: true,
-defaultValue: "10",
-description: "Number of results to return",
-},
-{
-name: "filter",
-type: "Record<string, any>",
-isOptional: true,
-description: "Metadata filters",
-},
-{
-name: "includeVector",
-type: "boolean",
-isOptional: true,
-defaultValue: "false",
-description: "Whether to include the vector in the result",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to query',
+  },
+  {
+    name: 'queryVector',
+    type: 'number[]',
+    description: 'Query vector',
+  },
+  {
+    name: 'topK',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '10',
+    description: 'Number of results to return',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filters',
+  },
+  {
+    name: 'includeVector',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description: 'Whether to include the vector in the result',
+  },
 ]}
 />
 
@@ -187,7 +187,7 @@ const results = await vectorStore.query({
 });
 ```
 
-### listIndexes()
+### `listIndexes()`
 
 Returns an array of index names as strings.
 
@@ -196,15 +196,15 @@ const indexes = await vectorStore.listIndexes()
 // ["my_vectors", "embeddings", ...]
 ```
 
-### describeIndex()
+### `describeIndex()`
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to describe",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to describe',
+  },
 ]}
 />
 
@@ -218,15 +218,15 @@ interface IndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to delete",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to delete',
+  },
 ]}
 />
 
@@ -236,34 +236,34 @@ Deletes the index and all its vectors.
 await vectorStore.deleteIndex({ indexName: 'my_vectors' })
 ```
 
-### updateVector()
+### `updateVector()`
 
 Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index containing the vector",
-},
-{
-name: "id",
-type: "string",
-isOptional: true,
-description: "ID of the vector to update (mutually exclusive with filter)",
-},
-{
-name: "filter",
-type: "Record<string, any>",
-isOptional: true,
-description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
-},
-{
-name: "update",
-type: "{ vector?: number[]; metadata?: Record<string, any>; }",
-description: "Object containing the vector and/or metadata to update",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index containing the vector',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    isOptional: true,
+    description: 'ID of the vector to update (mutually exclusive with filter)',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filter to identify vector(s) to update (mutually exclusive with id)',
+  },
+  {
+    name: 'update',
+    type: '{ vector?: number[]; metadata?: Record<string, any>; }',
+    description: 'Object containing the vector and/or metadata to update',
+  },
 ]}
 />
 
@@ -288,20 +288,20 @@ await vectorStore.updateVector({
 })
 ```
 
-### deleteVector()
+### `deleteVector()`
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index containing the vector",
-},
-{
-name: "id",
-type: "string",
-description: "ID of the vector to delete",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index containing the vector',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'ID of the vector to delete',
+  },
 ]}
 />
 
@@ -309,29 +309,29 @@ description: "ID of the vector to delete",
 await vectorStore.deleteVector({ indexName: 'my_vectors', id: 'vector123' })
 ```
 
-### deleteVectors()
+### `deleteVectors()`
 
 Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index containing the vectors to delete",
-},
-{
-name: "ids",
-type: "string[]",
-isOptional: true,
-description: "Array of vector IDs to delete (mutually exclusive with filter)",
-},
-{
-name: "filter",
-type: "Record<string, any>",
-isOptional: true,
-description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index containing the vectors to delete',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Array of vector IDs to delete (mutually exclusive with filter)',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filter to identify vectors to delete (mutually exclusive with ids)',
+  },
 ]}
 />
 
@@ -349,7 +349,7 @@ await vectorStore.deleteVectors({
 })
 ```
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -362,7 +362,7 @@ interface QueryResult {
 }
 ```
 
-## Metadata Filtering
+## Metadata filtering
 
 ConvexVector supports metadata filtering with various operators:
 

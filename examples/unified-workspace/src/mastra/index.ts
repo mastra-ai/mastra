@@ -9,6 +9,7 @@ import {
   testAgent,
   skillsOnlyAgent,
   dynamicSkillsAgent,
+  notesAgent,
 } from './agents';
 import { globalWorkspace } from './workspaces';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
@@ -23,6 +24,8 @@ export {
   testAgentWorkspace,
   skillsOnlyWorkspace,
   dynamicSkillsWorkspace,
+  agentfsWorkspace,
+  readonlyAgentfsWorkspace,
 } from './workspaces';
 
 /**
@@ -45,6 +48,7 @@ const storage = new LibSQLStore({
  * - testAgent: testAgentWorkspace (different basePath, different model)
  * - skillsOnlyAgent: skillsOnlyWorkspace (skills only, no filesystem or sandbox)
  * - dynamicSkillsAgent: dynamicSkillsWorkspace (skills resolve dynamically)
+ * - notesAgent: notes-workspace (AgentFS SQLite-backed filesystem)
  */
 export const mastra = new Mastra({
   agents: {
@@ -56,6 +60,7 @@ export const mastra = new Mastra({
     testAgent,
     skillsOnlyAgent,
     dynamicSkillsAgent,
+    notesAgent,
   },
   workspace: globalWorkspace,
   storage,

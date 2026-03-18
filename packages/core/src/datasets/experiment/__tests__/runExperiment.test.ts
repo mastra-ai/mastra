@@ -673,4 +673,54 @@ describe('runExperiment', () => {
       );
     });
   });
+
+  describe('empty dataset handling', () => {
+    it('marks pre-created experiment as failed when dataset has no items', async () => {
+      // Create an empty dataset
+      const emptyDs = await datasetsStorage.createDataset({ name: 'Empty DS' });
+
+      // Pre-create experiment record (simulates async trigger path)
+      const experiment = await experimentsStorage.createExperiment({
+        datasetId: emptyDs.id,
+        datasetVersion: emptyDs.version,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        totalItems: 0,
+      });
+
+      // Run experiment with pre-created ID — should throw and mark as failed
+      await expect(
+        runExperiment(mastra, {
+          datasetId: emptyDs.id,
+          experimentId: experiment.id,
+          targetType: 'agent',
+          targetId: 'test-agent',
+        }),
+      ).rejects.toThrow('No items in dataset');
+
+      // Verify experiment was marked as failed (not stuck in pending)
+      const updated = await experimentsStorage.getExperimentById({ id: experiment.id });
+      expect(updated?.status).toBe('failed');
+      expect(updated?.completedAt).toBeDefined();
+    });
+
+    it('throws without creating experiment record when no pre-created ID', async () => {
+      const emptyDs = await datasetsStorage.createDataset({ name: 'Empty DS 2' });
+
+      await expect(
+        runExperiment(mastra, {
+          datasetId: emptyDs.id,
+          targetType: 'agent',
+          targetId: 'test-agent',
+        }),
+      ).rejects.toThrow('No items in dataset');
+
+      // No experiment record should exist for this dataset
+      const result = await experimentsStorage.listExperiments({
+        datasetId: emptyDs.id,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(result.experiments.length).toBe(0);
+    });
+  });
 });

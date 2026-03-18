@@ -29,10 +29,11 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const { activateSkill } = useActivatedSkills();
 
   useEffect(() => {
-    if (toolName === 'skill-activate' && result?.success && args?.name) {
-      activateSkill(args.name);
-    }
-  }, [toolName, result, args, activateSkill]);
+    if (toolName !== 'skill') return;
+    if (!args?.name) return;
+    if (props.status?.type !== 'complete') return;
+    activateSkill(args.name);
+  }, [toolName, args?.name, props.status?.type, activateSkill]);
 
   useWorkflowStream(result);
 

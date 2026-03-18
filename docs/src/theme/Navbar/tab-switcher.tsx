@@ -27,6 +27,13 @@ const docsTabs = [
     href: '/reference',
     basePath: '/reference',
   },
+  {
+    id: 'Learn',
+    label: 'Learn',
+    href: '/learn',
+    basePath: '/learn',
+    badge: 'new',
+  },
 ]
 
 export const TabSwitcher = ({ className }: { className?: string }) => {
@@ -56,6 +63,7 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
                 aria-current={isActive ? 'page' : undefined}
               >
                 {tab.label}
+                {'badge' in tab && tab.badge && <span className="learn-tab-badge">{tab.badge}</span>}
 
                 {isActive && (
                   <div

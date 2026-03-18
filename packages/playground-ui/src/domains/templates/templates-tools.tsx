@@ -1,4 +1,5 @@
-import { SelectField, SearchField } from '@/ds/components/FormFields';
+import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
+import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 import { Button } from '@/ds/components/Button/Button';
 import { cn } from '@/lib/utils';
 import { XIcon } from 'lucide-react';
@@ -45,16 +46,27 @@ export function TemplatesTools({
   }
 
   return (
-    <div className={cn('flex flex-wrap mx-auto sticky top-0 gap-8 bg-surface2 py-8', className)}>
-      <SearchField
+    <div className={cn('flex flex-wrap mx-auto sticky top-0 gap-4 bg-surface2 py-8', className)}>
+      <SearchFieldBlock
+        name="search-templates"
         label="Search templates"
+        labelIsHidden
         value={searchTerm}
         onChange={e => onSearchChange?.(e.target.value)}
         placeholder="Search Template"
       />
-      <SelectField label="Filter by tag" value={selectedTag} onValueChange={onTagChange} options={tagOptions} />
-      <SelectField
+      <SelectFieldBlock
+        label="Filter by tag"
+        labelIsHidden={true}
+        name="filter-tag"
+        value={selectedTag}
+        onValueChange={onTagChange}
+        options={tagOptions}
+      />
+      <SelectFieldBlock
         label="Filter by provider"
+        labelIsHidden={true}
+        name="filter-provider"
         value={selectedProvider}
         onValueChange={onProviderChange}
         options={providerOptions}

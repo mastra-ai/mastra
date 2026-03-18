@@ -3,6 +3,7 @@ import clsx from 'clsx'
 import { useDocsSidebar } from '@docusaurus/plugin-content-docs/client'
 import type { Props } from '@theme/DocRoot/Layout/Main'
 import { useChatbotSidebar } from '../ChatbotSidebar/context'
+import { AnnouncementBanner } from '@site/src/components/AnnouncementBanner'
 
 import styles from './styles.module.css'
 
