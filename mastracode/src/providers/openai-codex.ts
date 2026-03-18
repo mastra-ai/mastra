@@ -108,7 +108,7 @@ function createCodexMiddleware(reasoningEffort?: string): LanguageModelMiddlewar
  */
 export function openaiCodexProvider(
   modelId: string = 'codex-mini-latest',
-  options?: { thinkingLevel?: ThinkingLevel },
+  options?: { thinkingLevel?: ThinkingLevel; headers?: Record<string, string> },
 ): MastraModelConfig {
   // Map thinkingLevel to OpenAI reasoningEffort, defaulting to 'medium'.
   // When level is 'off', reasoningEffort is undefined and the parameter is omitted.
@@ -122,6 +122,7 @@ export function openaiCodexProvider(
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
     const openai = createOpenAI({
       apiKey: 'test-api-key',
+      headers: options?.headers,
     });
     return wrapLanguageModel({
       model: openai.responses(modelId),
@@ -206,6 +207,7 @@ export function openaiCodexProvider(
   const openai = createOpenAI({
     // Use a dummy API key since we're using OAuth
     apiKey: 'oauth-dummy-key',
+    headers: options?.headers,
     fetch: oauthFetch as any,
   });
 
