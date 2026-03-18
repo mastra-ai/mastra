@@ -42,6 +42,20 @@ function createGenerateResult(text: string) {
   } as unknown as Awaited<ReturnType<Agent['generate']>>;
 }
 
+function createLegacyGenerateResult(text: string) {
+  return {
+    text,
+    usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+    finishReason: 'stop',
+    response: {
+      id: 'legacy-model-response',
+      timestamp: new Date(),
+      modelId: 'legacy-model',
+      messages: [],
+    },
+  } as unknown as Awaited<ReturnType<Agent['generateLegacy']>>;
+}
+
 function createStreamResult(text: string) {
   const fullStream = new ReadableStream({
     start(controller) {
@@ -69,8 +83,37 @@ function createStreamResult(text: string) {
   } as unknown as Awaited<ReturnType<Agent['stream']>>;
 }
 
+function createLegacyStreamResult(text: string) {
+  const fullStream = Promise.resolve(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue({
+          type: 'text-delta',
+          textDelta: 'Hello',
+        });
+        controller.enqueue({
+          type: 'text-delta',
+          textDelta: ' world',
+        });
+        controller.close();
+      },
+    }),
+  );
+
+  return {
+    fullStream,
+    text: Promise.resolve(text),
+    finishReason: Promise.resolve('stop'),
+    usage: Promise.resolve({ promptTokens: 12, completionTokens: 4, totalTokens: 16 }),
+  } as unknown as Awaited<ReturnType<Agent['streamLegacy']>>;
+}
+
 async function readJson(response: Response) {
   return response.json();
+}
+
+function mockAgentSpecVersion(agent: Agent, specificationVersion: 'v1' | 'v2' = 'v2') {
+  vi.spyOn(agent, 'getModel').mockResolvedValue({ specificationVersion } as never);
 }
 
 describe('Responses Handlers', () => {
@@ -98,6 +141,8 @@ describe('Responses Handlers', () => {
         'test-agent': agent,
       },
     });
+
+    mockAgentSpecVersion(agent);
   });
 
   it('creates and retrieves a stored non-streaming response', async () => {
@@ -119,18 +164,28 @@ describe('Responses Handlers', () => {
       model: 'test-agent',
       status: 'completed',
       store: true,
+      completed_at: expect.any(Number),
+      error: null,
+      incomplete_details: null,
+      tools: [],
       output: [
         {
           type: 'message',
           role: 'assistant',
           status: 'completed',
-          content: [{ type: 'output_text', text: 'Hello from Mastra' }],
+          content: [{ type: 'output_text', text: 'Hello from Mastra', annotations: [], logprobs: [] }],
         },
       ],
       usage: {
         input_tokens: 10,
         output_tokens: 5,
         total_tokens: 15,
+        input_tokens_details: {
+          cached_tokens: 0,
+        },
+        output_tokens_details: {
+          reasoning_tokens: 0,
+        },
       },
     });
 
@@ -158,6 +213,7 @@ describe('Responses Handlers', () => {
       },
     });
 
+    mockAgentSpecVersion(statelessAgent);
     vi.spyOn(statelessAgent, 'generate').mockResolvedValue(createGenerateResult('Stateless response'));
 
     const response = (await CREATE_RESPONSE_ROUTE.handler({
@@ -218,6 +274,40 @@ describe('Responses Handlers', () => {
     });
   });
 
+  it('falls back to generateLegacy for AI SDK v4 agents', async () => {
+    mockAgentSpecVersion(agent, 'v1');
+    const generateLegacySpy = vi
+      .spyOn(agent, 'generateLegacy')
+      .mockResolvedValue(createLegacyGenerateResult('Legacy hello'));
+    const generateSpy = vi.spyOn(agent, 'generate');
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'test-agent',
+      input: 'Hello',
+      store: false,
+      stream: false,
+    })) as Response;
+
+    const created = await readJson(response);
+    expect(created).toMatchObject({
+      model: 'test-agent',
+      status: 'completed',
+      output: [
+        {
+          content: [{ text: 'Legacy hello' }],
+        },
+      ],
+      usage: {
+        input_tokens: 10,
+        output_tokens: 5,
+        total_tokens: 15,
+      },
+    });
+    expect(generateLegacySpy).toHaveBeenCalledOnce();
+    expect(generateSpy).not.toHaveBeenCalled();
+  });
+
   it('streams SSE events and stores the completed response', async () => {
     vi.spyOn(agent, 'stream').mockResolvedValue(createStreamResult('Hello world'));
 
@@ -233,10 +323,15 @@ describe('Responses Handlers', () => {
 
     const body = await response.text();
     expect(body).toContain('event: response.created');
+    expect(body).toContain('event: response.in_progress');
     expect(body).toContain('event: response.output_item.added');
+    expect(body).toContain('event: response.content_part.added');
     expect(body).toContain('event: response.output_text.delta');
     expect(body).toContain('event: response.output_text.done');
+    expect(body).toContain('event: response.content_part.done');
+    expect(body).toContain('event: response.output_item.done');
     expect(body).toContain('event: response.completed');
+    expect(body).toContain('"sequence_number":1');
 
     const completedLine = body.split('\n').find(line => line.startsWith('data: {"type":"response.completed"'));
     expect(completedLine).toBeTruthy();
@@ -261,6 +356,27 @@ describe('Responses Handlers', () => {
         total_tokens: 16,
       },
     });
+  });
+
+  it('falls back to streamLegacy for AI SDK v4 agents', async () => {
+    mockAgentSpecVersion(agent, 'v1');
+    const streamLegacySpy = vi.spyOn(agent, 'streamLegacy').mockResolvedValue(createLegacyStreamResult('Hello world'));
+    const streamSpy = vi.spyOn(agent, 'stream');
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'test-agent',
+      input: 'Hello',
+      store: false,
+      stream: true,
+    })) as Response;
+
+    const body = await response.text();
+    expect(body).toContain('event: response.completed');
+    expect(body).toContain('event: response.output_item.done');
+    expect(body).toContain('"text":"Hello world"');
+    expect(streamLegacySpy).toHaveBeenCalledOnce();
+    expect(streamSpy).not.toHaveBeenCalled();
   });
 
   it('deletes a stored response', async () => {

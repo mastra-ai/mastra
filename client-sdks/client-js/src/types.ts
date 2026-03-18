@@ -92,6 +92,8 @@ export type ResponseInputMessage = {
 export type ResponseOutputText = {
   type: 'output_text';
   text: string;
+  annotations?: unknown[];
+  logprobs?: unknown[];
 };
 
 export type ResponseOutputMessage = {
@@ -106,18 +108,28 @@ export type ResponseUsage = {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  input_tokens_details?: {
+    cached_tokens: number;
+  };
+  output_tokens_details?: {
+    reasoning_tokens: number;
+  };
 };
 
 export type ResponsesResponse = {
   id: string;
   object: 'response';
   created_at: number;
+  completed_at?: number | null;
   model: string;
   status: 'in_progress' | 'completed' | 'incomplete';
   output: ResponseOutputMessage[];
   usage: ResponseUsage | null;
+  error?: null;
+  incomplete_details?: null;
   instructions?: string | null;
   previous_response_id?: string | null;
+  tools?: unknown[];
   store?: boolean;
   output_text: string;
 };
@@ -141,6 +153,13 @@ export type CreateResponseParams = {
 export type ResponsesCreatedEvent = {
   type: 'response.created';
   response: ResponsesResponse;
+  sequence_number?: number;
+};
+
+export type ResponsesInProgressEvent = {
+  type: 'response.in_progress';
+  response: ResponsesResponse;
+  sequence_number?: number;
 };
 
 export type ResponsesOutputItemAddedEvent = {
@@ -153,6 +172,16 @@ export type ResponsesOutputItemAddedEvent = {
     status: 'in_progress' | 'completed' | 'incomplete';
     content: ResponseOutputText[];
   };
+  sequence_number?: number;
+};
+
+export type ResponsesContentPartAddedEvent = {
+  type: 'response.content_part.added';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  part: ResponseOutputText;
+  sequence_number?: number;
 };
 
 export type ResponsesOutputTextDeltaEvent = {
@@ -161,6 +190,7 @@ export type ResponsesOutputTextDeltaEvent = {
   content_index: number;
   item_id: string;
   delta: string;
+  sequence_number?: number;
 };
 
 export type ResponsesOutputTextDoneEvent = {
@@ -169,18 +199,40 @@ export type ResponsesOutputTextDoneEvent = {
   content_index: number;
   item_id: string;
   text: string;
+  sequence_number?: number;
+};
+
+export type ResponsesContentPartDoneEvent = {
+  type: 'response.content_part.done';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  part: ResponseOutputText;
+  sequence_number?: number;
+};
+
+export type ResponsesOutputItemDoneEvent = {
+  type: 'response.output_item.done';
+  output_index: number;
+  item: ResponseOutputMessage;
+  sequence_number?: number;
 };
 
 export type ResponsesCompletedEvent = {
   type: 'response.completed';
   response: ResponsesResponse;
+  sequence_number?: number;
 };
 
 export type ResponsesStreamEvent =
   | ResponsesCreatedEvent
+  | ResponsesInProgressEvent
   | ResponsesOutputItemAddedEvent
+  | ResponsesContentPartAddedEvent
   | ResponsesOutputTextDeltaEvent
   | ResponsesOutputTextDoneEvent
+  | ResponsesContentPartDoneEvent
+  | ResponsesOutputItemDoneEvent
   | ResponsesCompletedEvent;
 
 type WithoutMethods<T> = {

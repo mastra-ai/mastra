@@ -14,6 +14,8 @@ export const responseInputMessageSchema = z.object({
   content: z.union([z.string(), z.array(responseInputTextPartSchema)]),
 });
 
+export type ResponseInputMessage = z.infer<typeof responseInputMessageSchema>;
+
 export const createResponseBodySchema = z
   .object({
     model: z.string().describe('Mastra agent ID used to resolve the target agent'),
@@ -25,9 +27,13 @@ export const createResponseBodySchema = z
   })
   .passthrough();
 
+export type CreateResponseBody = z.infer<typeof createResponseBodySchema>;
+
 export const responseOutputTextSchema = z.object({
   type: z.literal('output_text'),
   text: z.string(),
+  annotations: z.array(z.unknown()).optional(),
+  logprobs: z.array(z.unknown()).optional(),
 });
 
 export const responseOutputMessageSchema = z.object({
@@ -42,23 +48,43 @@ export const responseUsageSchema = z.object({
   input_tokens: z.number(),
   output_tokens: z.number(),
   total_tokens: z.number(),
+  input_tokens_details: z
+    .object({
+      cached_tokens: z.number(),
+    })
+    .optional(),
+  output_tokens_details: z
+    .object({
+      reasoning_tokens: z.number(),
+    })
+    .optional(),
 });
+
+export type ResponseUsage = z.infer<typeof responseUsageSchema>;
 
 export const responseObjectSchema = z.object({
   id: z.string(),
   object: z.literal('response'),
   created_at: z.number(),
+  completed_at: z.number().nullable(),
   model: z.string(),
   status: z.enum(['in_progress', 'completed', 'incomplete']),
   output: z.array(responseOutputMessageSchema),
   usage: responseUsageSchema.nullable(),
+  error: z.null().optional(),
+  incomplete_details: z.null().optional(),
   instructions: z.string().nullable().optional(),
   previous_response_id: z.string().nullable().optional(),
+  tools: z.array(z.unknown()).optional(),
   store: z.boolean().optional(),
 });
+
+export type ResponseObject = z.infer<typeof responseObjectSchema>;
 
 export const deleteResponseSchema = z.object({
   id: z.string(),
   object: z.literal('response'),
   deleted: z.literal(true),
 });
+
+export type DeleteResponse = z.infer<typeof deleteResponseSchema>;

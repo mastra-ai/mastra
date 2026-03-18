@@ -104,6 +104,7 @@ describe('Responses Resource', () => {
     mockSseResponse([
       {
         type: 'response.created',
+        sequence_number: 1,
         response: {
           id: 'resp_123',
           object: 'response',
@@ -118,14 +119,90 @@ describe('Responses Resource', () => {
         },
       },
       {
+        type: 'response.in_progress',
+        sequence_number: 2,
+        response: {
+          id: 'resp_123',
+          object: 'response',
+          created_at: 1234567890,
+          model: 'support-agent',
+          status: 'in_progress',
+          output: [],
+          usage: null,
+          instructions: null,
+          previous_response_id: null,
+          store: false,
+        },
+      },
+      {
+        type: 'response.output_item.added',
+        sequence_number: 3,
+        output_index: 0,
+        item: {
+          id: 'msg_123',
+          type: 'message',
+          role: 'assistant',
+          status: 'in_progress',
+          content: [],
+        },
+      },
+      {
+        type: 'response.content_part.added',
+        sequence_number: 4,
+        output_index: 0,
+        content_index: 0,
+        item_id: 'msg_123',
+        part: {
+          type: 'output_text',
+          text: '',
+          annotations: [],
+          logprobs: [],
+        },
+      },
+      {
         type: 'response.output_text.delta',
+        sequence_number: 5,
         output_index: 0,
         content_index: 0,
         item_id: 'msg_123',
         delta: 'Hello',
       },
       {
+        type: 'response.output_text.done',
+        sequence_number: 6,
+        output_index: 0,
+        content_index: 0,
+        item_id: 'msg_123',
+        text: 'Hello world',
+      },
+      {
+        type: 'response.content_part.done',
+        sequence_number: 7,
+        output_index: 0,
+        content_index: 0,
+        item_id: 'msg_123',
+        part: {
+          type: 'output_text',
+          text: 'Hello world',
+          annotations: [],
+          logprobs: [],
+        },
+      },
+      {
+        type: 'response.output_item.done',
+        sequence_number: 8,
+        output_index: 0,
+        item: {
+          id: 'msg_123',
+          type: 'message',
+          role: 'assistant',
+          status: 'completed',
+          content: [{ type: 'output_text', text: 'Hello world', annotations: [], logprobs: [] }],
+        },
+      },
+      {
         type: 'response.completed',
+        sequence_number: 9,
         response: {
           id: 'resp_123',
           object: 'response',
@@ -164,19 +241,104 @@ describe('Responses Resource', () => {
       events.push(event);
     }
 
-    expect(events).toHaveLength(3);
+    expect(events).toHaveLength(9);
     expect(events[0]).toMatchObject({
       type: 'response.created',
+      sequence_number: 1,
       response: {
         output_text: '',
       },
     });
     expect(events[1]).toMatchObject({
-      type: 'response.output_text.delta',
-      delta: 'Hello',
+      type: 'response.in_progress',
+      sequence_number: 2,
+      response: {
+        output_text: '',
+      },
     });
     expect(events[2]).toMatchObject({
+      type: 'response.output_item.added',
+      sequence_number: 3,
+    });
+    expect(events[3]).toMatchObject({
+      type: 'response.content_part.added',
+      sequence_number: 4,
+    });
+    expect(events[4]).toMatchObject({
+      type: 'response.output_text.delta',
+      sequence_number: 5,
+      delta: 'Hello',
+    });
+    expect(events[5]).toMatchObject({
+      type: 'response.output_text.done',
+      sequence_number: 6,
+      text: 'Hello world',
+    });
+    expect(events[6]).toMatchObject({
+      type: 'response.content_part.done',
+      sequence_number: 7,
+      part: {
+        text: 'Hello world',
+      },
+    });
+    expect(events[7]).toMatchObject({
+      type: 'response.output_item.done',
+      sequence_number: 8,
+      item: {
+        content: [{ text: 'Hello world' }],
+      },
+    });
+    expect(events[8]).toMatchObject({
       type: 'response.completed',
+      sequence_number: 9,
+      response: {
+        output_text: 'Hello world',
+      },
+    });
+  });
+
+  it('provides a stream helper with OpenAI-style naming', async () => {
+    mockSseResponse([
+      {
+        type: 'response.completed',
+        sequence_number: 1,
+        response: {
+          id: 'resp_123',
+          object: 'response',
+          created_at: 1234567890,
+          model: 'support-agent',
+          status: 'completed',
+          output: [
+            {
+              id: 'msg_123',
+              type: 'message',
+              role: 'assistant',
+              status: 'completed',
+              content: [{ type: 'output_text', text: 'Hello world' }],
+            },
+          ],
+          usage: null,
+          instructions: null,
+          previous_response_id: null,
+          store: false,
+        },
+      },
+    ]);
+
+    const stream = await client.responses.stream({
+      model: 'support-agent',
+      input: 'Say hello',
+    });
+
+    const events = [];
+    for await (const event of stream) {
+      events.push(event);
+    }
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: 'response.completed',
+      sequence_number: 1,
       response: {
         output_text: 'Hello world',
       },
@@ -223,7 +385,7 @@ describe('Responses Resource', () => {
       deleted: true,
     });
 
-    const response = await client.responses.del('resp_123');
+    const response = await client.responses.delete('resp_123');
 
     expect(response).toEqual({
       id: 'resp_123',

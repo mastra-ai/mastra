@@ -4,24 +4,24 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { StorageThreadType } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
-import type { z } from 'zod';
 import { HTTPException } from '../http-exception';
-import type { responseInputMessageSchema } from '../schemas/responses';
 import {
   createResponseBodySchema,
   deleteResponseSchema,
   responseIdPathParams,
   responseObjectSchema,
 } from '../schemas/responses';
+import type {
+  CreateResponseBody,
+  DeleteResponse,
+  ResponseInputMessage,
+  ResponseObject,
+  ResponseUsage,
+} from '../schemas/responses';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
 import { getEffectiveResourceId, getEffectiveThreadId, validateThreadOwnership } from './utils';
-
-type CreateResponseBody = z.infer<typeof createResponseBodySchema>;
-type ResponseInputMessage = z.infer<typeof responseInputMessageSchema>;
-type ResponseObject = z.infer<typeof responseObjectSchema>;
-type DeleteResponse = z.infer<typeof deleteResponseSchema>;
 
 type StoredResponseEntry = {
   id: string;
@@ -47,7 +47,24 @@ type UsageLike = {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  promptTokens?: number;
+  completionTokens?: number;
 } | null;
+
+type ResponseExecutionResult = {
+  text?: string;
+  finishReason?: string;
+  totalUsage?: UsageLike | Promise<UsageLike>;
+  usage?: UsageLike | Promise<UsageLike>;
+};
+
+type ResponseStreamResult = {
+  fullStream: ReadableStream<unknown> | Promise<ReadableStream<unknown>>;
+  text: Promise<string> | string;
+  finishReason: Promise<string | undefined> | string | undefined;
+  totalUsage?: Promise<UsageLike> | UsageLike;
+  usage?: Promise<UsageLike> | UsageLike;
+};
 
 const encoder = new TextEncoder();
 
@@ -127,19 +144,25 @@ function setStoredResponseEntries(
   };
 }
 
-function toUsage(usage: UsageLike): ResponseObject['usage'] {
+function toUsage(usage: UsageLike): ResponseUsage | null {
   if (!usage) {
     return null;
   }
 
-  const inputTokens = usage.inputTokens ?? 0;
-  const outputTokens = usage.outputTokens ?? 0;
+  const inputTokens = usage.inputTokens ?? usage.promptTokens ?? 0;
+  const outputTokens = usage.outputTokens ?? usage.completionTokens ?? 0;
   const totalTokens = usage.totalTokens ?? inputTokens + outputTokens;
 
   return {
     input_tokens: inputTokens,
     output_tokens: outputTokens,
     total_tokens: totalTokens,
+    input_tokens_details: {
+      cached_tokens: 0,
+    },
+    output_tokens_details: {
+      reasoning_tokens: 0,
+    },
   };
 }
 
@@ -156,6 +179,7 @@ function buildResponseObject({
   outputMessageId,
   model,
   createdAt,
+  completedAt,
   status,
   text,
   usage,
@@ -167,6 +191,7 @@ function buildResponseObject({
   outputMessageId: string;
   model: string;
   createdAt: number;
+  completedAt: number | null;
   status: ResponseObject['status'];
   text: string;
   usage: UsageLike;
@@ -178,6 +203,7 @@ function buildResponseObject({
     id: responseId,
     object: 'response',
     created_at: createdAt,
+    completed_at: completedAt,
     model,
     status,
     output: [
@@ -186,17 +212,15 @@ function buildResponseObject({
         type: 'message',
         role: 'assistant',
         status: status === 'completed' ? 'completed' : 'incomplete',
-        content: [
-          {
-            type: 'output_text',
-            text,
-          },
-        ],
+        content: [createOutputTextPart(text)],
       },
     ],
     usage: toUsage(usage),
+    error: null,
+    incomplete_details: null,
     instructions: instructions ?? null,
     previous_response_id: previousResponseId ?? null,
+    tools: [],
     store,
   };
 }
@@ -220,12 +244,16 @@ function buildCreatedResponseObject({
     id: responseId,
     object: 'response',
     created_at: createdAt,
+    completed_at: null,
     model,
     status: 'in_progress',
     output: [],
     usage: null,
+    error: null,
+    incomplete_details: null,
     instructions: instructions ?? null,
     previous_response_id: previousResponseId ?? null,
+    tools: [],
     store,
   };
 }
@@ -241,6 +269,15 @@ function jsonResponse(data: ResponseObject, status: number = 200): Response {
 
 function formatSseEvent(event: string, data: unknown): Uint8Array {
   return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
+function createOutputTextPart(text: string) {
+  return {
+    type: 'output_text' as const,
+    text,
+    annotations: [] as unknown[],
+    logprobs: [] as unknown[],
+  };
 }
 
 async function getMemoryStore(mastra: Mastra | undefined): Promise<MemoryStorage | null> {
@@ -418,19 +455,42 @@ async function executeGenerate({
   abortSignal: AbortSignal;
   threadContext: ThreadExecutionContext | null;
 }) {
-  return agent.generate(normalizeInput(body.input) as AgentExecutionInput, {
+  const normalizedInput = normalizeInput(body.input) as AgentExecutionInput;
+  const executionMemory =
+    threadContext &&
+    ({
+      memory: {
+        thread: threadContext.threadId,
+        resource: threadContext.resourceId,
+      },
+    } as const);
+  const commonOptions = {
     instructions: body.instructions,
     requestContext,
     abortSignal,
-    ...(threadContext
-      ? {
-          memory: {
-            thread: threadContext.threadId,
-            resource: threadContext.resourceId,
-          },
-        }
-      : {}),
-  });
+    ...(executionMemory ?? {}),
+  };
+  const model = await agent.getModel({ requestContext });
+
+  if (model.specificationVersion === 'v1') {
+    if (threadContext) {
+      return (await agent.generateLegacy(normalizedInput, {
+        instructions: body.instructions,
+        requestContext,
+        abortSignal,
+        resourceId: threadContext.resourceId,
+        threadId: threadContext.threadId,
+      })) as ResponseExecutionResult;
+    }
+
+    return (await agent.generateLegacy(normalizedInput, {
+      instructions: body.instructions,
+      requestContext,
+      abortSignal,
+    })) as ResponseExecutionResult;
+  }
+
+  return (await agent.generate(normalizedInput, commonOptions)) as ResponseExecutionResult;
 }
 
 async function executeStream({
@@ -446,19 +506,80 @@ async function executeStream({
   abortSignal: AbortSignal;
   threadContext: ThreadExecutionContext | null;
 }) {
-  return agent.stream(normalizeInput(body.input) as AgentExecutionInput, {
+  const normalizedInput = normalizeInput(body.input) as AgentExecutionInput;
+  const executionMemory =
+    threadContext &&
+    ({
+      memory: {
+        thread: threadContext.threadId,
+        resource: threadContext.resourceId,
+      },
+    } as const);
+  const commonOptions = {
     instructions: body.instructions,
     requestContext,
     abortSignal,
-    ...(threadContext
-      ? {
-          memory: {
-            thread: threadContext.threadId,
-            resource: threadContext.resourceId,
-          },
-        }
-      : {}),
-  });
+    ...(executionMemory ?? {}),
+  };
+  const model = await agent.getModel({ requestContext });
+
+  if (model.specificationVersion === 'v1') {
+    if (threadContext) {
+      return (await agent.streamLegacy(normalizedInput, {
+        instructions: body.instructions,
+        requestContext,
+        abortSignal,
+        resourceId: threadContext.resourceId,
+        threadId: threadContext.threadId,
+      })) as ResponseStreamResult;
+    }
+
+    return (await agent.streamLegacy(normalizedInput, {
+      instructions: body.instructions,
+      requestContext,
+      abortSignal,
+    })) as ResponseStreamResult;
+  }
+
+  return (await agent.stream(normalizedInput, commonOptions)) as ResponseStreamResult;
+}
+
+async function resolveUsage(result: ResponseExecutionResult | ResponseStreamResult): Promise<UsageLike> {
+  return (await (result.totalUsage ?? result.usage ?? null)) as UsageLike;
+}
+
+async function resolveFinishReason(
+  result: ResponseExecutionResult | ResponseStreamResult,
+): Promise<string | undefined> {
+  return (await result.finishReason) ?? undefined;
+}
+
+async function resolveText(result: ResponseExecutionResult | ResponseStreamResult): Promise<string> {
+  return (await result.text) ?? '';
+}
+
+function isTextDeltaChunk(value: unknown): value is { type: string; payload?: { text?: string }; textDelta?: string } {
+  return typeof value === 'object' && value !== null && 'type' in value;
+}
+
+function extractTextDelta(value: unknown): string | null {
+  if (!isTextDeltaChunk(value)) {
+    return null;
+  }
+
+  if (value.type === 'text-delta' && typeof value.payload?.text === 'string') {
+    return value.payload.text;
+  }
+
+  if (value.type === 'text-delta' && typeof value.textDelta === 'string') {
+    return value.textDelta;
+  }
+
+  if (value.type === 'text-delta' && 'text' in value && typeof (value as { text?: string }).text === 'string') {
+    return (value as { text: string }).text;
+  }
+
+  return null;
 }
 
 export const CREATE_RESPONSE_ROUTE = createRoute({
@@ -502,9 +623,10 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
           outputMessageId,
           model: body.model,
           createdAt,
-          status: toResponseStatus(result.finishReason),
-          text: result.text ?? '',
-          usage: result.totalUsage,
+          completedAt: Math.floor(Date.now() / 1000),
+          status: toResponseStatus(await resolveFinishReason(result)),
+          text: await resolveText(result),
+          usage: await resolveUsage(result),
           instructions: body.instructions,
           previousResponseId: body.previous_response_id,
           store: didStore,
@@ -546,28 +668,46 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
 
       const stream = new ReadableStream<Uint8Array>({
         async start(controller) {
-          controller.enqueue(
-            formatSseEvent('response.created', {
-              type: 'response.created',
-              response: createdResponse,
-            }),
-          );
-          controller.enqueue(
-            formatSseEvent('response.output_item.added', {
-              type: 'response.output_item.added',
-              output_index: 0,
-              item: {
-                id: outputMessageId,
-                type: 'message',
-                role: 'assistant',
-                status: 'in_progress',
-                content: [],
-              },
-            }),
-          );
+          let sequenceNumber = 1;
+          const enqueueEvent = (eventName: string, payload: Record<string, unknown>) => {
+            controller.enqueue(
+              formatSseEvent(eventName, {
+                ...payload,
+                sequence_number: sequenceNumber++,
+              }),
+            );
+          };
+
+          enqueueEvent('response.created', {
+            type: 'response.created',
+            response: createdResponse,
+          });
+          enqueueEvent('response.in_progress', {
+            type: 'response.in_progress',
+            response: createdResponse,
+          });
+          enqueueEvent('response.output_item.added', {
+            type: 'response.output_item.added',
+            output_index: 0,
+            item: {
+              id: outputMessageId,
+              type: 'message',
+              role: 'assistant',
+              status: 'in_progress',
+              content: [],
+            },
+          });
+          enqueueEvent('response.content_part.added', {
+            type: 'response.content_part.added',
+            output_index: 0,
+            content_index: 0,
+            item_id: outputMessageId,
+            part: createOutputTextPart(''),
+          });
 
           let text = '';
-          const reader = streamResult.fullStream.getReader();
+          const fullStream = await streamResult.fullStream;
+          const reader = fullStream.getReader();
 
           try {
             while (true) {
@@ -576,39 +716,37 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
                 break;
               }
 
-              if (value?.type === 'text-delta') {
-                text += value.payload.text;
-                controller.enqueue(
-                  formatSseEvent('response.output_text.delta', {
-                    type: 'response.output_text.delta',
-                    output_index: 0,
-                    content_index: 0,
-                    item_id: outputMessageId,
-                    delta: value.payload.text,
-                  }),
-                );
+              const delta = extractTextDelta(value);
+              if (delta) {
+                text += delta;
+                enqueueEvent('response.output_text.delta', {
+                  type: 'response.output_text.delta',
+                  output_index: 0,
+                  content_index: 0,
+                  item_id: outputMessageId,
+                  delta,
+                });
               }
             }
 
-            const finalText = (await streamResult.text) || text;
-            controller.enqueue(
-              formatSseEvent('response.output_text.done', {
-                type: 'response.output_text.done',
-                output_index: 0,
-                content_index: 0,
-                item_id: outputMessageId,
-                text: finalText,
-              }),
-            );
+            const finalText = (await resolveText(streamResult)) || text;
+            enqueueEvent('response.output_text.done', {
+              type: 'response.output_text.done',
+              output_index: 0,
+              content_index: 0,
+              item_id: outputMessageId,
+              text: finalText,
+            });
 
             const response = buildResponseObject({
               responseId,
               outputMessageId,
               model: body.model,
               createdAt,
-              status: toResponseStatus(await streamResult.finishReason),
+              completedAt: Math.floor(Date.now() / 1000),
+              status: toResponseStatus(await resolveFinishReason(streamResult)),
               text: finalText,
-              usage: await streamResult.totalUsage,
+              usage: await resolveUsage(streamResult),
               instructions: body.instructions,
               previousResponseId: body.previous_response_id,
               store: didStore,
@@ -628,12 +766,30 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
               });
             }
 
-            controller.enqueue(
-              formatSseEvent('response.completed', {
-                type: 'response.completed',
-                response,
-              }),
-            );
+            const completedItem = response.output[0] ?? {
+              id: outputMessageId,
+              type: 'message' as const,
+              role: 'assistant' as const,
+              status: 'completed' as const,
+              content: [createOutputTextPart(finalText)],
+            };
+
+            enqueueEvent('response.content_part.done', {
+              type: 'response.content_part.done',
+              output_index: 0,
+              content_index: 0,
+              item_id: outputMessageId,
+              part: createOutputTextPart(finalText),
+            });
+            enqueueEvent('response.output_item.done', {
+              type: 'response.output_item.done',
+              output_index: 0,
+              item: completedItem,
+            });
+            enqueueEvent('response.completed', {
+              type: 'response.completed',
+              response,
+            });
             controller.close();
           } catch (error) {
             controller.error(error);

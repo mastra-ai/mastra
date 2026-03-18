@@ -31,7 +31,7 @@ function hydrateStreamEvent(event: ResponsesStreamEvent | ResponsePayload): Resp
     typeof event === 'object' &&
     event !== null &&
     'response' in event &&
-    (event.type === 'response.created' || event.type === 'response.completed')
+    (event.type === 'response.created' || event.type === 'response.in_progress' || event.type === 'response.completed')
   ) {
     return {
       ...event,
@@ -41,6 +41,21 @@ function hydrateStreamEvent(event: ResponsesStreamEvent | ResponsePayload): Resp
 
   if (typeof event === 'object' && event !== null && 'output' in event) {
     return attachOutputText(event as ResponsePayload);
+  }
+
+  if (
+    typeof event === 'object' &&
+    event !== null &&
+    'item' in event &&
+    (event.type === 'response.output_item.added' || event.type === 'response.output_item.done')
+  ) {
+    return {
+      ...event,
+      item: {
+        ...(event.item as ResponseOutputMessage),
+        content: (event.item as ResponseOutputMessage).content ?? [],
+      },
+    } as ResponsesStreamEvent;
   }
 
   return event as ResponsesStreamEvent;
@@ -147,6 +162,10 @@ export class Responses extends BaseResource {
     return attachOutputText(response);
   }
 
+  stream(params: Omit<CreateResponseParams, 'stream'>): Promise<ResponsesStream> {
+    return this.create({ ...params, stream: true });
+  }
+
   async retrieve(
     responseId: string,
     requestContext?: RequestContext | Record<string, any>,
@@ -158,7 +177,7 @@ export class Responses extends BaseResource {
     return attachOutputText(response);
   }
 
-  del(responseId: string, requestContext?: RequestContext | Record<string, any>): Promise<ResponsesDeleteResponse> {
+  delete(responseId: string, requestContext?: RequestContext | Record<string, any>): Promise<ResponsesDeleteResponse> {
     return this.request(`/v1/responses/${encodeURIComponent(responseId)}${requestContextQueryString(requestContext)}`, {
       method: 'DELETE',
     });
