@@ -145,6 +145,21 @@ test.describe('Auth Infrastructure', () => {
       expect(data.access).toBeNull();
     });
 
+    test('rbac disabled shows links that are hidden when RBAC is enabled', async ({ page }) => {
+      await setupMockAuth(page, {
+        role: 'viewer',
+        permissions: ['agents:read', 'workflows:read'],
+        rbacEnabled: false,
+      });
+
+      await page.goto('/agents');
+      await expect(page.locator('h1')).toHaveText('Agents');
+
+      // With RBAC off, permission-gated links are visible again.
+      await expect(page.getByRole('link', { name: /^Tools$/i })).toBeVisible();
+      await expect(page.getByRole('link', { name: /^MCP Servers$/i })).toBeVisible();
+    });
+
     test('can mock auth disabled', async ({ page }) => {
       await setupMockAuth(page, {
         enabled: false,
