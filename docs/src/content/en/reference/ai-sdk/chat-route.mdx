@@ -14,6 +14,8 @@ Creates a chat route handler for streaming agent conversations using the AI SDK 
 
 Use [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream) if you need a framework-agnostic handler.
 
+`chatRoute()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'`.
+
 :::note Disconnect behavior
 
 `chatRoute()` forwards the incoming request's `AbortSignal` to `agent.stream()`. If the client disconnects, Mastra aborts the in-flight generation.
@@ -63,6 +65,14 @@ export const mastra = new Mastra({
 
 <PropertiesTable
   content={[
+  {
+    name: 'version',
+    type: "'v5' | 'v6'",
+    description:
+      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers.",
+    isOptional: true,
+    defaultValue: "'v5'",
+  },
   {
     name: 'path',
     type: 'string',

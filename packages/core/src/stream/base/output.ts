@@ -7,7 +7,7 @@ import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
-import { resolveObservabilityContext } from '../../observability';
+import { getRootExportSpan, resolveObservabilityContext } from '../../observability';
 import type { OutputResult } from '../../processors';
 import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
@@ -125,9 +125,9 @@ export type FullOutput<OUTPUT = undefined> = {
     input: Omit<ScorerRunInputForAgent, 'runId'>;
     output: ScorerRunOutputForAgent;
   };
-  /** Trace ID for observability */
+  /** Trace ID for this execution. */
   traceId: string | undefined;
-  /** Span ID for observability (root span ID for a top-level agent execution) */
+  /** Root span ID for this execution, identifying the top-level span in the trace. */
   spanId: string | undefined;
   /** Run ID for this execution */
   runId: string | undefined;
@@ -248,11 +248,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    */
   public messageList: MessageList;
   /**
-   * Trace ID used on the execution (if the execution was traced).
+   * Trace ID for this execution.
    */
   public traceId?: string;
   /**
-   * Span ID used on the execution (if the execution was traced).
+   * Root span ID for this execution, identifying the top-level span in the trace.
    */
   public spanId?: string;
   public messageId: string;
@@ -281,8 +281,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#transportRef = options.transportRef;
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
-    this.traceId = options.tracingContext?.currentSpan?.externalTraceId;
-    this.spanId = options.tracingContext?.currentSpan?.id;
+    const resultSpan = getRootExportSpan(options.tracingContext?.currentSpan);
+    this.traceId = resultSpan?.externalTraceId;
+    this.spanId = resultSpan?.id;
 
     this.#model = _model;
 

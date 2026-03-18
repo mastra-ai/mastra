@@ -96,7 +96,7 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
   const usesMergeSemantics = Boolean(schema);
 
   const description = schema
-    ? `Update the working memory with new information. Data is merged with existing memory - you only need to include fields you want to add or update. Set a field to null to remove it. Arrays are replaced entirely when provided.`
+    ? `Update the working memory with new information. Data is merged with existing memory - only include fields you want to add or update. To preserve existing data, omit the field entirely. Arrays are replaced entirely when provided, so pass the complete array or omit it to keep the existing values.`
     : `Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.`;
 
   return createTool({
