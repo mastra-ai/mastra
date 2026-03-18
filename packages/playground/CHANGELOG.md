@@ -1,5 +1,15 @@
 # @internal/playground
 
+## 1.3.13-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`8b4ce84`](https://github.com/mastra-ai/mastra/commit/8b4ce84aed0808b9805cc4fd7147c1f8a2ef7a36), [`8d4cfe6`](https://github.com/mastra-ai/mastra/commit/8d4cfe6b9a7157d3876206227ec9f04cde6dbc4a), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a)]:
+  - @mastra/core@1.14.0-alpha.3
+  - @mastra/client-js@1.9.0-alpha.3
+  - @mastra/react@0.2.15-alpha.3
+  - @mastra/playground-ui@17.0.0-alpha.3
+
 ## 1.3.13-alpha.2
 
 ### Patch Changes
