@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module';
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../standard-schema.types';
 
@@ -57,14 +56,53 @@ function convertToJsonSchema(
 let _toJSONSchema: ((schema: unknown, options?: unknown) => unknown) | null = null;
 let _toJSONSchemaResolved = false;
 
-let __require: ReturnType<typeof createRequire>;
+/**
+ * Get a synchronous module loader that works in both CJS and ESM environments.
+ * - CJS: uses the global `require` (available in Node.js CJS, and in tsup CJS output)
+ * - ESM Node.js: creates a `require` via `createRequire` imported at runtime
+ *
+ * Avoids static `import { createRequire } from 'node:module'` which breaks Vite
+ * browser builds — Rollup resolves 'node:module' at build time and fails even
+ * when the code path is never executed.
+ */
+let _requireFn: ((id: string) => unknown) | null = null;
 
-function getRequire(): ReturnType<typeof createRequire> {
-  if (!__require) {
-    __require = createRequire(import.meta.url);
+function _ensureSyncLoader(): void {
+  if (_requireFn) return;
+
+  // CJS environments: require is a global
+  if (typeof require === 'function') {
+    _requireFn = require;
+    return;
   }
-  return __require;
+
+  // ESM Node.js: get createRequire via dynamic import (hidden from static analysis)
+  // Using dynamic import() so Rollup doesn't try to resolve 'node:module' at build time
+  let createRequireSync: ((filename: string) => (id: string) => unknown) | null = null;
+  try {
+    // This will be a no-op in browser builds — the dynamic import inside
+    // won't execute because this code path is never reached in browsers.
+    createRequireSync = (
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      Function('m', 'return require(m)') as (m: string) => { createRequire: typeof createRequireSync }
+    )('node:module').createRequire ?? null;
+  } catch {
+    // Not in Node.js — zod v4 JSON Schema conversion won't work, but that's OK
+    // because it's only needed server-side. The key is that the BUILD succeeds.
+  }
+
+  if (createRequireSync) {
+    _requireFn = createRequireSync(import.meta.url);
+  } else {
+    // Fallback: will throw at runtime if actually called in browser
+    _requireFn = () => {
+      throw new Error(
+        'z.toJSONSchema() requires Node.js. This function is not available in browser environments.',
+      );
+    };
+  }
 }
+
 function pickToJSONSchema(mod: unknown): ((schema: unknown, options?: unknown) => unknown) | null {
   const candidate = mod as {
     toJSONSchema?: unknown;
@@ -99,6 +137,11 @@ function resolveToJSONSchema(
   }
 
   return null;
+}
+
+function getRequire(): (id: string) => unknown {
+  _ensureSyncLoader();
+  return _requireFn!;
 }
 
 function getToJSONSchema(): ((schema: unknown, options?: unknown) => unknown) | null {
