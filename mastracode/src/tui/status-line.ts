@@ -101,7 +101,8 @@ export function updateStatusLine(state: TUIState): void {
 
   const homedir = process.env.HOME || process.env.USERPROFILE || '';
   // Use thread title if available and not generic, otherwise use project root path
-  const threadTitle = state.currentThreadTitle && !isGenericTitle(state.currentThreadTitle) ? state.currentThreadTitle : null;
+  const threadTitle =
+    state.currentThreadTitle && !isGenericTitle(state.currentThreadTitle) ? state.currentThreadTitle : null;
   let displayPath = threadTitle || state.projectInfo.rootPath;
   if (!threadTitle && homedir && displayPath.startsWith(homedir)) {
     displayPath = '~' + displayPath.slice(homedir.length);
@@ -114,7 +115,8 @@ export function updateStatusLine(state: TUIState): void {
   const dirFull = !threadTitle && branch ? `${displayPath} (${branch})` : displayPath;
   const dirBranchOnly = !threadTitle && branch ? branch : null;
   // Abbreviate long branches: keep first 12 + last 8 chars with ".." in between
-  const dirBranchShort = !threadTitle && branch && branch.length > 24 ? branch.slice(0, 12) + '..' + branch.slice(-8) : dirBranchOnly;
+  const dirBranchShort =
+    !threadTitle && branch && branch.length > 24 ? branch.slice(0, 12) + '..' + branch.slice(-8) : dirBranchOnly;
 
   // --- Helper to style the model ID ---
   const modelTrail = tintBg ? chalk.hex(tintBg)('▌') : '';
@@ -239,8 +241,26 @@ export function updateStatusLine(state: TUIState): void {
         styled: theme.fg('warning', queuedLabel),
       });
     }
-    // Directory / branch (lowest priority on line 1)
-    const dirText = opts.dir !== undefined ? opts.dir : opts.showDir ? dirFull : null;
+    // Directory / branch / thread title (lowest priority on line 1)
+    let dirText = opts.dir !== undefined ? opts.dir : opts.showDir ? dirFull : null;
+
+    // Measure width of everything except dir to know how much space remains
+    const nonDirWidth =
+      useBadgeWidth + parts.reduce((sum, p, i) => sum + visibleWidth(p.plain) + (i > 0 ? SEP.length : 0), 0);
+
+    if (dirText) {
+      const availableForDir = termWidth - nonDirWidth - SEP.length - 1; // -1 buffer for ambiguous-width chars
+      const dirWidth = visibleWidth(dirText);
+      const MIN_TRUNCATED_DIR = 10; // don't show a tiny sliver
+      if (dirWidth > availableForDir && availableForDir >= MIN_TRUNCATED_DIR) {
+        // Truncate to fit the remaining space
+        dirText = dirText.slice(0, availableForDir - 1) + '…';
+      } else if (dirWidth > availableForDir) {
+        // Not enough room even for a truncated version — drop it
+        dirText = null;
+      }
+    }
+
     if (dirText) {
       parts.push({
         plain: dirText,
