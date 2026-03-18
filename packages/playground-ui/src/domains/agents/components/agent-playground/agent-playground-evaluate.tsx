@@ -4,14 +4,13 @@ import { Txt } from '@/ds/components/Txt';
 import { Button } from '@/ds/components/Button';
 import { Searchbar } from '@/ds/components/Searchbar';
 
-import { Badge } from '@/ds/components/Badge';
 import { Icon } from '@/ds/icons/Icon';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
-import { Sparkles, Database, Award, FlaskConical, ChevronRight } from 'lucide-react';
+import { Sparkles, Database, GaugeIcon, FlaskConical, ChevronRight } from 'lucide-react';
 
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { useAgentExperiments, type AgentExperiment } from '../../hooks/use-agent-experiments';
@@ -20,7 +19,6 @@ import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { useWatch } from 'react-hook-form';
 import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
 import { GenerateItemsDialog } from '@/domains/datasets/components/generate-items-dialog';
-import { usePlaygroundModel } from '../../context/playground-model-context';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useReviewQueue } from '../../context/review-queue-context';
 import { useStoredAgentMutations } from '../../hooks/use-stored-agents';
@@ -56,8 +54,7 @@ export function AgentPlaygroundEvaluate({ agentId, onSwitchToReview, pendingScor
   const [scorerSearch, setScorerSearch] = useState('');
   const { addItems } = useReviewQueue();
   const { updateExperimentResult, updateDataset } = useDatasetMutations();
-  const { provider, model } = usePlaygroundModel();
-  const modelId = provider && model ? `${provider}/${model}` : '';
+
 
   // Handle pending scorer items from Review tab
   useEffect(() => {
@@ -97,16 +94,15 @@ export function AgentPlaygroundEvaluate({ agentId, onSwitchToReview, pendingScor
     if (typeof ids === 'string') { try { const p = JSON.parse(ids); return Array.isArray(p) ? p : []; } catch { return []; } }
     return [];
   };
-  // Show datasets attached to this agent, plus unattached datasets
+  // Show only datasets explicitly attached to this agent
   const datasets = allDatasets.filter(ds => {
     const ids = parseTargetIds((ds as any).targetIds);
-    if (ids.length === 0) return true; // unattached
     return ids.includes(agentId);
   });
-  // Datasets that exist but aren't attached to this agent
+  // Datasets that are not attached to this agent (for "Attach Existing" dialog)
   const unattachedDatasets = allDatasets.filter(ds => {
     const ids = parseTargetIds((ds as any).targetIds);
-    return ids.length > 0 && !ids.includes(agentId);
+    return !ids.includes(agentId);
   });
 
   const datasetExperimentMap = (experiments || []).reduce<Record<string, AgentExperiment>>((acc, exp) => {
@@ -205,8 +201,44 @@ export function AgentPlaygroundEvaluate({ agentId, onSwitchToReview, pendingScor
       <div className="w-[240px] flex-shrink-0 border-r border-border1 flex flex-col overflow-hidden">
         <ScrollArea className="flex-1">
           <div className="p-3">
+            {/* Experiments */}
+            <Collapsible>
+              <div className="flex items-center justify-between mb-2">
+                <CollapsibleTrigger className="flex items-center gap-1">
+                  <ChevronRight className="h-3 w-3 text-neutral3" />
+                  <Txt variant="ui-xs" className="text-neutral3 font-semibold uppercase tracking-wider">
+                    Experiments
+                  </Txt>
+                </CollapsibleTrigger>
+              </div>
+              <CollapsibleContent>
+                {experiments && experiments.length > 0 ? (
+                  <div className="space-y-0.5">
+                    {experiments.slice(0, 10).map(exp => {
+                      const isActive = view.type === 'experiment' && view.id === exp.id;
+                      const ds = allDatasets.find(d => d.id === exp.datasetId);
+                      return (
+                        <NavItem
+                          key={exp.id}
+                          isActive={isActive}
+                          icon={<FlaskConical />}
+                          label={ds?.name || 'Unknown dataset'}
+                          onClick={() => setView({ type: 'experiment', id: exp.id, datasetId: exp.datasetId })}
+                          badge={<ExperimentBadge experiment={exp} />}
+                        />
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <Txt variant="ui-xs" className="text-neutral3 px-2">No runs yet</Txt>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
+
+            <div className="border-t border-border1 my-3" />
+
             {/* Datasets */}
-            <Collapsible defaultOpen>
+            <Collapsible>
               <div className="flex items-center justify-between mb-2">
                 <CollapsibleTrigger className="flex items-center gap-1">
                   <ChevronRight className="h-3 w-3 text-neutral3" />
@@ -274,7 +306,7 @@ export function AgentPlaygroundEvaluate({ agentId, onSwitchToReview, pendingScor
             <div className="border-t border-border1 my-3" />
 
             {/* Scorers */}
-            <Collapsible defaultOpen>
+            <Collapsible>
               <div className="flex items-center justify-between mb-2">
                 <CollapsibleTrigger className="flex items-center gap-1">
                   <ChevronRight className="h-3 w-3 text-neutral3" />
@@ -312,14 +344,9 @@ export function AgentPlaygroundEvaluate({ agentId, onSwitchToReview, pendingScor
                       <NavItem
                         key={id}
                         isActive={isActive}
-                        icon={<Award />}
+                        icon={<GaugeIcon />}
                         label={scorer.scorer?.name || id}
                         onClick={() => setView({ type: 'scorer', id })}
-                        badge={
-                          scorer.source === 'code' ? (
-                            <span title="Defined in code"><Badge variant="default" className="text-[9px] px-1 py-0">Code</Badge></span>
-                          ) : undefined
-                        }
                       />
                     );
                   })}
@@ -338,42 +365,6 @@ export function AgentPlaygroundEvaluate({ agentId, onSwitchToReview, pendingScor
                 </div>
               </CollapsibleContent>
             </Collapsible>
-
-            <div className="border-t border-border1 my-3" />
-
-            {/* Past Experiments */}
-            <Collapsible defaultOpen>
-              <div className="flex items-center justify-between mb-2">
-                <CollapsibleTrigger className="flex items-center gap-1">
-                  <ChevronRight className="h-3 w-3 text-neutral3" />
-                  <Txt variant="ui-xs" className="text-neutral3 font-semibold uppercase tracking-wider">
-                    Experiments
-                  </Txt>
-                </CollapsibleTrigger>
-              </div>
-              <CollapsibleContent>
-                {experiments && experiments.length > 0 ? (
-                  <div className="space-y-0.5">
-                    {experiments.slice(0, 10).map(exp => {
-                      const isActive = view.type === 'experiment' && view.id === exp.id;
-                      const ds = allDatasets.find(d => d.id === exp.datasetId);
-                      return (
-                        <NavItem
-                          key={exp.id}
-                          isActive={isActive}
-                          icon={<FlaskConical />}
-                          label={ds?.name || 'Unknown dataset'}
-                          onClick={() => setView({ type: 'experiment', id: exp.id, datasetId: exp.datasetId })}
-                          badge={<ExperimentBadge experiment={exp} />}
-                        />
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <Txt variant="ui-xs" className="text-neutral3 px-2">No runs yet</Txt>
-                )}
-              </CollapsibleContent>
-            </Collapsible>
           </div>
         </ScrollArea>
       </div>
@@ -381,7 +372,12 @@ export function AgentPlaygroundEvaluate({ agentId, onSwitchToReview, pendingScor
       {/* Right: Detail view */}
       <div className="flex-1 min-w-0 overflow-hidden">
         {view.type === 'overview' && (
-          <OverviewPanel datasetsCount={datasets.length} scorersCount={scorerEntries.length} />
+          <OverviewPanel
+            datasetsCount={datasets.length}
+            scorersCount={attachedScorers.length}
+            onCreateDataset={() => setShowCreateDialog(true)}
+            onAttachDataset={() => setShowAttachDialog(true)}
+          />
         )}
         {view.type === 'dataset' && (() => {
           // Look up in allDatasets — scorer datasets may not be in the agent-filtered `datasets` list
@@ -465,7 +461,6 @@ export function AgentPlaygroundEvaluate({ agentId, onSwitchToReview, pendingScor
       {generateDatasetId && (
         <GenerateItemsDialog
           datasetId={generateDatasetId}
-          modelId={modelId}
           agentContext={agentContext}
           onDismiss={() => setGenerateDatasetId(null)}
         />
@@ -554,12 +549,7 @@ export function AgentPlaygroundEvaluate({ agentId, onSwitchToReview, pendingScor
                       setShowAttachScorerDialog(false);
                     }}
                   >
-                    <div className="flex items-center gap-2">
-                      <Txt variant="ui-sm" className="font-medium">{scorer.scorer?.name || id}</Txt>
-                      {scorer.source === 'code' && (
-                        <Badge variant="default" className="text-[9px] px-1 py-0">Code</Badge>
-                      )}
-                    </div>
+                    <Txt variant="ui-sm" className="font-medium">{scorer.scorer?.name || id}</Txt>
                   </button>
                 ))}
               </div>
@@ -615,7 +605,30 @@ function NavItem({
   );
 }
 
-function OverviewPanel({ datasetsCount, scorersCount }: { datasetsCount: number; scorersCount: number }) {
+function OverviewPanel({ datasetsCount, scorersCount, onCreateDataset, onAttachDataset }: { datasetsCount: number; scorersCount: number; onCreateDataset: () => void; onAttachDataset: () => void }) {
+  if (datasetsCount === 0) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="text-center max-w-md space-y-4">
+          <Txt variant="ui-lg" className="text-neutral5 font-medium block">
+            Get started with evaluation
+          </Txt>
+          <Txt variant="ui-sm" className="text-neutral3 block">
+            Create a dataset to begin testing your agent. You can generate test data with AI or add items manually.
+          </Txt>
+          <div className="flex items-center justify-center gap-2">
+            <Button variant="default" onClick={onCreateDataset}>
+              Create your first dataset
+            </Button>
+            <Button variant="ghost" onClick={onAttachDataset}>
+              Attach existing dataset
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center justify-center h-full p-8">
       <div className="text-center max-w-md space-y-4">

@@ -1,16 +1,19 @@
-import { EyeIcon, FlaskConical, MessageSquare } from 'lucide-react';
+import { EyeIcon, FlaskConical, MessageSquare, ClipboardCheck, GitBranch } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Icon } from '@/ds/icons/Icon';
 import { Txt } from '@/ds/components/Txt';
 import { useLinkComponent } from '@/lib/framework';
 
-export type AgentPageTab = 'chat' | 'playground' | 'traces';
+export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'review' | 'traces';
 
 interface AgentPageTabsProps {
   agentId: string;
   activeTab: AgentPageTab;
   showPlayground?: boolean;
+  showObservability?: boolean;
+  reviewBadge?: number;
+  rightSlot?: React.ReactNode;
 }
 
 function TabLink({
@@ -18,11 +21,13 @@ function TabLink({
   active,
   icon,
   label,
+  badge,
 }: {
   href: string;
   active: boolean;
   icon: React.ReactNode;
   label: string;
+  badge?: number;
 }) {
   const { navigate } = useLinkComponent();
 
@@ -39,11 +44,16 @@ function TabLink({
       <Txt variant="ui-sm" className="text-inherit">
         {label}
       </Txt>
+      {badge !== undefined && badge > 0 && (
+        <span className="ml-1 bg-accent1 text-white text-xs font-medium rounded-full px-1.5 py-0 min-w-[18px] text-center leading-[18px]">
+          {badge}
+        </span>
+      )}
     </button>
   );
 }
 
-export function AgentPageTabs({ agentId, activeTab, showPlayground = false }: AgentPageTabsProps) {
+export function AgentPageTabs({ agentId, activeTab, showPlayground = false, showObservability = false, reviewBadge, rightSlot }: AgentPageTabsProps) {
   return (
     <div className="flex items-center border-b border-border1 px-4 bg-surface2">
       <TabLink
@@ -55,12 +65,32 @@ export function AgentPageTabs({ agentId, activeTab, showPlayground = false }: Ag
       {showPlayground && (
         <TabLink
           href={`/agents/${agentId}/playground`}
-          active={activeTab === 'playground'}
-          icon={<FlaskConical />}
-          label="Playground"
+          active={activeTab === 'versions'}
+          icon={<GitBranch />}
+          label="Versions"
         />
       )}
-      <TabLink href={`/agents/${agentId}/traces`} active={activeTab === 'traces'} icon={<EyeIcon />} label="Traces" />
+      {showObservability && (
+        <>
+          <TabLink
+            href={`/agents/${agentId}/evaluate`}
+            active={activeTab === 'evaluate'}
+            icon={<FlaskConical />}
+            label="Evaluate"
+          />
+          <TabLink
+            href={`/agents/${agentId}/review`}
+            active={activeTab === 'review'}
+            icon={<ClipboardCheck />}
+            label="Review"
+            badge={reviewBadge}
+          />
+        </>
+      )}
+      {showObservability && (
+        <TabLink href={`/agents/${agentId}/traces`} active={activeTab === 'traces'} icon={<EyeIcon />} label="Traces" />
+      )}
+      {rightSlot && <div className="ml-auto flex items-center gap-2">{rightSlot}</div>}
     </div>
   );
 }

@@ -10,8 +10,6 @@ import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
 import { GenerateItemsDialog } from '@/domains/datasets/components/generate-items-dialog';
 import { useAgentExperiments, type AgentExperiment } from '../../hooks/use-agent-experiments';
-import { usePlaygroundModel } from '../../context/playground-model-context';
-
 interface AgentPlaygroundDatasetsProps {
   agentId: string;
 }
@@ -19,7 +17,6 @@ interface AgentPlaygroundDatasetsProps {
 export function AgentPlaygroundDatasets({ agentId }: AgentPlaygroundDatasetsProps) {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [generateDatasetId, setGenerateDatasetId] = useState<string | null>(null);
-  const { provider, model } = usePlaygroundModel();
 
   const { data: datasetsData, isLoading: isDatasetsLoading } = useDatasets();
   const { data: experiments } = useAgentExperiments(agentId);
@@ -36,8 +33,6 @@ export function AgentPlaygroundDatasets({ agentId }: AgentPlaygroundDatasetsProp
     }
     return map;
   }, [experiments]);
-
-  const modelId = provider && model ? `${provider}/${model}` : '';
 
   return (
     <div className="flex flex-col h-full">
@@ -82,7 +77,7 @@ export function AgentPlaygroundDatasets({ agentId }: AgentPlaygroundDatasetsProp
                   version={dataset.version}
                   latestExperiment={latestExp}
                   onGenerate={() => setGenerateDatasetId(dataset.id)}
-                  hasModel={!!modelId}
+                  
                 />
               );
             })
@@ -95,7 +90,6 @@ export function AgentPlaygroundDatasets({ agentId }: AgentPlaygroundDatasetsProp
       {generateDatasetId && (
         <GenerateItemsDialog
           datasetId={generateDatasetId}
-          modelId={modelId}
           onDismiss={() => setGenerateDatasetId(null)}
         />
       )}
@@ -109,7 +103,6 @@ function DatasetCard({
   version,
   latestExperiment,
   onGenerate,
-  hasModel,
 }: {
   name: string;
   description?: string | null;
@@ -121,7 +114,6 @@ function DatasetCard({
     totalItems: number;
   };
   onGenerate: () => void;
-  hasModel: boolean;
 }) {
   const passRate = latestExperiment
     ? latestExperiment.totalItems > 0
@@ -155,7 +147,7 @@ function DatasetCard({
               passRate={passRate}
             />
           )}
-          <Button variant="ghost" size="sm" onClick={onGenerate} disabled={!hasModel} title="Generate test data with AI">
+          <Button variant="ghost" size="sm" onClick={onGenerate} title="Generate test data with AI">
             <Sparkles className="h-3.5 w-3.5" />
           </Button>
         </div>

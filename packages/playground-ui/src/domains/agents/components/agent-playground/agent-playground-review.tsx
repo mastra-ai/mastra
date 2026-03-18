@@ -23,6 +23,7 @@ import { useReviewQueue, type ReviewItem } from '../../context/review-queue-cont
 import { useReviewItems } from '../../hooks/use-review-items';
 import { useCompletedItems } from '../../hooks/use-completed-items';
 import { usePlaygroundModel } from '../../context/playground-model-context';
+import { LLMProviders, LLMModels, cleanProviderId } from '@/domains/llm';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 
@@ -74,6 +75,8 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
   const [showAnalyzeDialog, setShowAnalyzeDialog] = useState(false);
   const [analyzeMode, setAnalyzeMode] = useState<'untagged' | 'selected'>('untagged');
   const [analyzePrompt, setAnalyzePrompt] = useState('');
+  const [analyzeProvider, setAnalyzeProvider] = useState(provider);
+  const [analyzeModel, setAnalyzeModel] = useState(model);
 
   // Proposed tag assignments from Analyze
   const [proposedAssignments, setProposedAssignments] = useState<
@@ -125,13 +128,15 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
     (mode: 'untagged' | 'selected') => {
       setAnalyzeMode(mode);
       setAnalyzePrompt('');
+      setAnalyzeProvider(provider);
+      setAnalyzeModel(model);
       setShowAnalyzeDialog(true);
     },
-    [],
+    [provider, model],
   );
 
   const handleAnalyze = useCallback(async () => {
-    if (!provider || !model) return;
+    if (!analyzeProvider || !analyzeModel) return;
     const targetItems =
       analyzeMode === 'untagged'
         ? items.filter(i => i.tags.length === 0)
@@ -142,7 +147,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
     setShowAnalyzeDialog(false);
     setIsAnalyzing(true);
     try {
-      const modelId = `${provider}/${model}`;
+      const modelId = `${analyzeProvider}/${analyzeModel}`;
       const result = await client.clusterFailures({
         modelId,
         items: targetItems.map(item => ({
@@ -180,7 +185,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
     } finally {
       setIsAnalyzing(false);
     }
-  }, [items, provider, model, client, selectedItemIds, datasetTagVocabulary, analyzeMode, analyzePrompt]);
+  }, [items, analyzeProvider, analyzeModel, client, selectedItemIds, datasetTagVocabulary, analyzeMode, analyzePrompt]);
 
   const handleAcceptProposals = useCallback(() => {
     const accepted = proposedAssignments.filter(p => p.accepted);
@@ -295,7 +300,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
             </Txt>
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
-                <Button variant="ghost" size="sm" disabled={items.length === 0 || isAnalyzing || !provider || !model}>
+                <Button variant="ghost" size="sm" disabled={items.length === 0 || isAnalyzing}>
                   {isAnalyzing ? (
                     <>
                       <Icon size="sm">
@@ -600,12 +605,27 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
             <div className="space-y-4">
               <div className="space-y-1">
                 <Label>Model</Label>
-                <Txt variant="ui-sm" className="text-neutral4 bg-surface1 rounded-md px-3 py-2 block">
-                  {provider && model ? `${provider}/${model}` : 'No model selected'}
-                </Txt>
-                <Txt variant="ui-xs" className="text-neutral2">
-                  Change in the playground header
-                </Txt>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-[160px]">
+                    <LLMProviders
+                      value={analyzeProvider}
+                      onValueChange={value => {
+                        const cleaned = cleanProviderId(value);
+                        setAnalyzeProvider(cleaned);
+                        setAnalyzeModel('');
+                      }}
+                      size="sm"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <LLMModels
+                      llmId={analyzeProvider}
+                      value={analyzeModel}
+                      onValueChange={setAnalyzeModel}
+                      size="sm"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-1">
@@ -639,7 +659,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
             <Button
               variant="default"
               onClick={handleAnalyze}
-              disabled={isAnalyzing || !provider || !model}
+              disabled={isAnalyzing || !analyzeProvider || !analyzeModel}
             >
               {isAnalyzing ? (
                 <>

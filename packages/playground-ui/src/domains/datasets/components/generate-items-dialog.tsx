@@ -12,6 +12,8 @@ import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Input } from '@/ds/components/Input';
 import { toast } from '@/lib/toast';
+import { LLMProviders, LLMModels, cleanProviderId } from '@/domains/llm';
+import { usePlaygroundModel } from '@/domains/agents/context/playground-model-context';
 
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 
@@ -28,7 +30,6 @@ interface AgentContext {
 
 interface GenerateItemsDialogProps {
   datasetId: string;
-  modelId: string;
   agentContext?: AgentContext;
   onDismiss: () => void;
 }
@@ -56,7 +57,12 @@ function buildDefaultPrompt(agentContext?: AgentContext): string {
  * Parent keeps this mounted while generateDatasetId is set.
  * Call onDismiss to tell parent to unmount.
  */
-export function GenerateItemsDialog({ datasetId, modelId, agentContext, onDismiss }: GenerateItemsDialogProps) {
+export function GenerateItemsDialog({ datasetId, agentContext, onDismiss }: GenerateItemsDialogProps) {
+  const { provider: ctxProvider, model: ctxModel } = usePlaygroundModel();
+  const [localProvider, setLocalProvider] = useState(ctxProvider);
+  const [localModel, setLocalModel] = useState(ctxModel);
+  const modelId = localProvider && localModel ? `${localProvider}/${localModel}` : '';
+
   const [prompt, setPrompt] = useState(() => buildDefaultPrompt(agentContext));
   const [count, setCount] = useState(5);
   const [generatedItems, setGeneratedItems] = useState<GeneratedItem[]>([]);
@@ -77,7 +83,7 @@ export function GenerateItemsDialog({ datasetId, modelId, agentContext, onDismis
 
   const handleGenerate = useCallback(async () => {
     if (!modelId) {
-      toast.error('Please select a model in the playground header');
+      toast.error('Please select a provider and model');
       return;
     }
 
@@ -229,12 +235,27 @@ export function GenerateItemsDialog({ datasetId, modelId, agentContext, onDismis
             <div className="space-y-4">
               <div className="space-y-1">
                 <Label>Model</Label>
-                <Txt variant="ui-sm" className="text-neutral4 bg-surface1 rounded-md px-3 py-2 block">
-                  {modelId || 'No model selected'}
-                </Txt>
-                <Txt variant="ui-xs" className="text-neutral2">
-                  Change in the playground header
-                </Txt>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-[160px]">
+                    <LLMProviders
+                      value={localProvider}
+                      onValueChange={value => {
+                        const cleaned = cleanProviderId(value);
+                        setLocalProvider(cleaned);
+                        setLocalModel('');
+                      }}
+                      size="sm"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <LLMModels
+                      llmId={localProvider}
+                      value={localModel}
+                      onValueChange={setLocalModel}
+                      size="sm"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -260,7 +281,7 @@ export function GenerateItemsDialog({ datasetId, modelId, agentContext, onDismis
 
               {!modelId && (
                 <Txt variant="ui-xs" className="text-amber-400">
-                  Select a model in the playground header to generate items.
+                  Select a provider and model above to generate items.
                 </Txt>
               )}
             </div>
