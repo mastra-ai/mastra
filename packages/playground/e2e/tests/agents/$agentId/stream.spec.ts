@@ -37,7 +37,8 @@ test('text stream', async () => {
 
   await selectFixture(page, 'text-stream');
   await page.goto(`/agents/weather-agent/chat/new`);
-  await page.click('text=Model settings');
+  await page.getByTestId('chat-settings-button').click();
+  await page.getByRole('tab', { name: 'Model Settings' }).click();
   await page.click('text=Stream');
 
   await fillAndSend(page, 'Give me the Lorem Ipsum thing');
@@ -68,7 +69,8 @@ test('text stream', async () => {
 test('tool stream', async () => {
   await selectFixture(page, 'tool-stream');
   await page.goto(`/agents/weather-agent/chat/new`);
-  await page.click('text=Model settings');
+  await page.getByTestId('chat-settings-button').click();
+  await page.getByRole('tab', { name: 'Model Settings' }).click();
   await page.click('text=Stream');
 
   await fillAndSend(page, 'Give me the weather in Paris');
@@ -107,7 +109,8 @@ async function assertToolStream(page: Page) {
 test('workflow stream', async () => {
   await selectFixture(page, 'workflow-stream');
   await page.goto(`/agents/weather-agent/chat/new`);
-  await page.click('text=Model settings');
+  await page.getByTestId('chat-settings-button').click();
+  await page.getByRole('tab', { name: 'Model Settings' }).click();
   await page.click('text=Stream');
 
   await fillAndSend(page, 'Give me the weather in Paris');

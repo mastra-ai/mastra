@@ -31,13 +31,7 @@ const Tool = () => {
         </Breadcrumb>
 
         <HeaderAction>
-          <Button
-            as={Link}
-            to="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
-            target="_blank"
-            variant="ghost"
-            size="md"
-          >
+          <Button as={Link} to="https://mastra.ai/docs/agents/using-tools" target="_blank" variant="ghost" size="md">
             <DocsIcon />
             Tools documentation
           </Button>

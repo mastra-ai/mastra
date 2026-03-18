@@ -37,5 +37,6 @@ export * from './components/agent-cms-form-shell';
 export * from './components/agent-version-panel';
 export * from './components/agent-playground';
 export * from './components/agent-page-tabs';
+export * from './components/agent-tab-actions';
 export * from './hooks/use-agent-experiments';
 export * from './components/agent-traces-panel';

@@ -1,4 +1,4 @@
-import { Button } from '@/ds/components/Button';
+import { IconButton } from '@/ds/components/IconButton';
 import { Icon } from '@/ds/icons/Icon';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -71,23 +71,30 @@ export const ThreadItem = ({ children, isActive, className }: ThreadItemProps) =
 
 export interface ThreadDeleteButtonProps {
   onClick: () => void;
+  tooltip?: React.ReactNode;
+  className?: string;
 }
 
-export const ThreadDeleteButton = ({ onClick }: ThreadDeleteButtonProps) => {
+export const ThreadDeleteButton = ({
+  onClick,
+  tooltip = 'Delete conversation',
+  className,
+}: ThreadDeleteButtonProps) => {
   return (
-    <Button
+    <IconButton
+      tooltip={tooltip}
       variant="ghost"
+      size="sm"
       className={cn(
         'shrink-0 opacity-0',
         transitions.all,
         'group-focus-within:opacity-100 group-hover:opacity-100',
         'hover:bg-surface4 hover:text-accent2',
+        className,
       )}
       onClick={onClick}
     >
-      <Icon>
-        <X aria-label="delete thread" className="text-neutral3 hover:text-accent2 transition-colors" />
-      </Icon>
-    </Button>
+      <X aria-label="delete thread" className="text-neutral3 hover:text-accent2 transition-colors" />
+    </IconButton>
   );
 };

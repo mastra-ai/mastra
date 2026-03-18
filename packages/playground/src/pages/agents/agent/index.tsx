@@ -122,6 +122,7 @@ function Agent() {
                 <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
                   <AgentLayout
                     agentId={agentId!}
+                    rightDefaultCollapsed
                     leftSlot={
                       hasMemory && (
                         <AgentSidebar

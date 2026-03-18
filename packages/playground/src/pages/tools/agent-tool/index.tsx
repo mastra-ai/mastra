@@ -34,7 +34,7 @@ const AgentTool = () => {
         </Breadcrumb>
 
         <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/en/docs/agents/using-tools-and-mcp" target="_blank">
+          <Button as={Link} to="https://mastra.ai/docs/agents/using-tools" target="_blank">
             <Icon>
               <DocsIcon />
             </Icon>

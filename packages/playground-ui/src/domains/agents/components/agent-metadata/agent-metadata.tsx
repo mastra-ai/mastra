@@ -151,7 +151,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
       <AgentMetadataSection
         title="Tools"
         hint={{
-          link: 'https://mastra.ai/en/docs/agents/using-tools-and-mcp',
+          link: 'https://mastra.ai/docs/agents/using-tools',
           title: 'Using Tools and MCP documentation',
         }}
       >

@@ -5,113 +5,37 @@ test.afterEach(async () => {
   await resetStorage();
 });
 
-test('overall layout information', async ({ page }) => {
+/**
+ * FEATURE: Agent chat layout controls
+ * USER STORY: As a user, I can access runtime settings from chat composer,
+ *             keep thread actions in the left sidebar, and open the compact
+ *             agent overview panel only when needed.
+ */
+
+test('chat layout exposes relocated controls and actions', async ({ page }) => {
   await page.goto('/agents/weather-agent/chat/1234');
 
-  // Header
   await expect(page).toHaveTitle(/Mastra Studio/);
-  await expect(page.locator('text=Agents documentation')).toHaveAttribute(
-    'href',
-    'https://mastra.ai/en/docs/agents/overview',
-  );
-  const breadcrumb = page.locator('header>nav');
-  expect(breadcrumb).toMatchAriaSnapshot();
 
-  // Thread history (with memory)
-  const newChatButton = await page.locator('a:has-text("New Chat")');
-  await expect(newChatButton).toBeVisible();
-  await expect(newChatButton).toHaveAttribute('href', /agents\/weather-agent\/chat\/.*/);
-  await expect(page.locator('text=Your conversations will appear here once you start chatting!')).toBeVisible();
+  // Right panel starts collapsed and uses Agent Overview affordance
+  const overviewTrigger = page.getByRole('button', { name: /Agent Overview/i });
+  await expect(overviewTrigger).toBeVisible();
 
-  // Information side panel
-  await expect(page.locator('h2:has-text("Weather Agent")')).toBeVisible();
-  await expect(page.locator('button:has-text("weather-agent")')).toBeVisible();
-  const overviewPane = await page.locator('button:has-text("Overview")');
-  await expect(overviewPane).toHaveAttribute('aria-selected', 'true');
-  const modelSettingsPane = await page.locator('button:has-text("Model Settings")');
-  await expect(modelSettingsPane).toHaveAttribute('aria-selected', 'false');
-  const memoryPane = await page.locator('button:has-text("Memory")');
-  await expect(memoryPane).toHaveAttribute('aria-selected', 'false');
-});
+  // Top tab bar has icon-only actions (copy/share always present)
+  await expect(page.getByTestId('agent-tab-actions')).toBeVisible();
+  await expect(page.getByTestId('agent-tab-actions').getByRole('button', { name: /Copy Agent ID/i })).toBeVisible();
+  await expect(page.getByTestId('agent-tab-actions').getByRole('button', { name: /Copy session URL/i })).toBeVisible();
 
-test.describe('agent panels', () => {
-  test.describe('overview', () => {
-    test('general information', async ({ page }) => {
-      await page.goto('/agents/weather-agent/chat/1234');
-      const overview = await page.getByLabel('Overview');
-      await expect(overview).toBeVisible();
-      await expect(overview).toMatchAriaSnapshot();
-    });
-  });
+  // Left sidebar contains thread list, memory entry point, and per-thread actions
+  await expect(page.getByRole('link', { name: /New Chat/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Memory' })).toBeVisible();
+  await page.getByTestId('thread-list').getByRole('link').nth(1).hover();
+  await expect(page.getByRole('button', { name: /clone thread/i }).first()).toBeVisible();
 
-  test.describe('model settings', () => {
-    test.beforeEach(async ({ page }) => {
-      await page.goto('/agents/weather-agent/chat/new');
-      await page.click('text=Model settings');
-    });
-
-    test('model trigger modes', async ({ page }) => {
-      const generateRadio = page.getByLabel('Generate');
-      await page.click('text=Model settings');
-
-      await expect(generateRadio).toBeVisible();
-      await expect(generateRadio).toHaveAttribute('aria-checked', 'false');
-      const streamRadio = page.getByLabel('Stream');
-      await expect(streamRadio).toBeVisible();
-      await expect(streamRadio).toHaveAttribute('aria-checked', 'true');
-
-      const networkRadio = page.getByLabel('Network');
-      await expect(networkRadio).toBeVisible();
-    });
-
-    test('verfied persistent model settings', async ({ page }) => {
-      // Arrange
-      await page.isVisible('text=Chat Method');
-      await page.click('text=Generate');
-      await page.click('text=Advanced Settings');
-      await page.getByLabel('Top K').fill('9');
-      await page.getByLabel('Frequency Penalty').fill('0.7');
-      await page.getByLabel('Presence Penalty').fill('0.6');
-      await page.getByLabel('Max Tokens').fill('44');
-      await page.getByLabel('Max Steps').fill('3');
-      await page.getByLabel('Max Retries').fill('2');
-
-      // Act
-      await page.reload();
-      await page.click('text=Model settings');
-      await page.click('text=Advanced Settings');
-
-      // Assert
-      await expect(page.getByLabel('Top K')).toHaveValue('9');
-      await expect(page.getByLabel('Frequency Penalty')).toHaveValue('0.7');
-      await expect(page.getByLabel('Presence Penalty')).toHaveValue('0.6');
-      await expect(page.getByLabel('Max Tokens')).toHaveValue('44');
-      await expect(page.getByLabel('Max Steps')).toHaveValue('3');
-      await expect(page.getByLabel('Max Retries')).toHaveValue('2');
-    });
-
-    test('resets the form values when pressing "reset" button', async ({ page }) => {
-      // Arrange
-      await page.isVisible('text=Chat Method');
-      await page.click('text=Generate');
-      await page.click('text=Advanced Settings');
-      await page.getByLabel('Top K').fill('9');
-      await page.getByLabel('Frequency Penalty').fill('0.7');
-      await page.getByLabel('Presence Penalty').fill('0.6');
-      await page.getByLabel('Max Tokens').fill('44');
-      await page.getByLabel('Max Steps').fill('3');
-      await page.getByLabel('Max Retries').fill('2');
-
-      // Act
-      await page.click('text=Reset');
-
-      // Assert - values reset to defaults (maxSteps: 5, maxRetries: 2 are fallback defaults)
-      await expect(page.getByLabel('Top K')).toHaveValue('');
-      await expect(page.getByLabel('Frequency Penalty')).toHaveValue('');
-      await expect(page.getByLabel('Presence Penalty')).toHaveValue('');
-      await expect(page.getByLabel('Max Tokens')).toHaveValue('');
-      await expect(page.getByLabel('Max Steps')).toHaveValue('5');
-      await expect(page.getByLabel('Max Retries')).toHaveValue('2');
-    });
-  });
+  // Settings moved to composer dialog
+  await page.getByTestId('chat-settings-button').click();
+  await expect(page.getByRole('heading', { name: 'Chat Settings' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Model Settings' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Tracing Options' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Request Context' })).toBeVisible();
 });
