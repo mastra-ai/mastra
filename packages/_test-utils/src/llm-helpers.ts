@@ -316,15 +316,19 @@ export function hasNonEmptyRecordings(
   try {
     const content = fs.readFileSync(recordingPath, 'utf-8');
     const parsed = JSON.parse(content);
-    // Recording is an array of request/response pairs
-    if (!Array.isArray(parsed) || parsed.length === 0) return false;
+
+    // Handle both formats:
+    // - Legacy: plain array of recordings
+    // - Current: { meta, recordings: [...] }
+    const recordings = Array.isArray(parsed) ? parsed : parsed?.recordings;
+    if (!Array.isArray(recordings) || recordings.length === 0) return false;
 
     // If no provider specified, just check if any recordings exist
     if (!provider) return true;
 
     // Check if any recordings match the provider's URL patterns
     const patterns = PROVIDER_URL_PATTERNS[provider];
-    return parsed.some(
+    return recordings.some(
       (entry: { request?: { url?: string } }) =>
         entry.request?.url && patterns.some(pattern => entry.request!.url!.includes(pattern)),
     );
