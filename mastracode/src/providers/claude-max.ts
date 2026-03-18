@@ -134,15 +134,11 @@ export const promptCacheMiddleware: LanguageModelMiddleware = {
  * Creates an Anthropic model using Claude Max OAuth authentication
  * Uses OAuth tokens from AuthStorage (auto-refreshes when needed)
  */
-export function opencodeClaudeMaxProvider(
-  modelId: string = 'claude-sonnet-4-20250514',
-  options?: { headers?: Record<string, string> },
-): MastraModelConfig {
+export function opencodeClaudeMaxProvider(modelId: string = 'claude-sonnet-4-20250514'): MastraModelConfig {
   // Test environment: use API key
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
     const anthropic = createAnthropic({
       apiKey: 'test-api-key',
-      headers: options?.headers,
     });
     return wrapLanguageModel({
       model: anthropic(modelId),
@@ -175,7 +171,6 @@ export function opencodeClaudeMaxProvider(
     return fetch(url, {
       ...init,
       headers: {
-        ...(init?.headers instanceof Headers ? Object.fromEntries(init.headers.entries()) : (init?.headers ?? {})),
         Authorization: `Bearer ${accessToken}`,
         'anthropic-beta':
           'oauth-2025-04-20,claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14',
@@ -188,7 +183,6 @@ export function opencodeClaudeMaxProvider(
     // Provide a dummy API key - the actual auth is handled via OAuth in oauthFetch
     // This prevents the SDK from throwing "API key is missing" at model creation time
     apiKey: 'oauth-placeholder',
-    headers: options?.headers,
     fetch: oauthFetch as any,
   });
 
