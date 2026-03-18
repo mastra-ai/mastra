@@ -1,5 +1,14 @@
 # @mastra/memory
 
+## 1.8.3-alpha.2
+
+### Patch Changes
+
+- Fixed working memory tool description to accurately reflect merge behavior. The previous description incorrectly stated "Set a field to null to remove it" but null values are stripped by validation before reaching the merge logic. The updated description clarifies: omit fields to preserve existing data, and pass complete arrays or omit them since arrays are replaced entirely. ([#14424](https://github.com/mastra-ai/mastra/pull/14424))
+
+- Updated dependencies [[`8b4ce84`](https://github.com/mastra-ai/mastra/commit/8b4ce84aed0808b9805cc4fd7147c1f8a2ef7a36), [`8d4cfe6`](https://github.com/mastra-ai/mastra/commit/8d4cfe6b9a7157d3876206227ec9f04cde6dbc4a), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a)]:
+  - @mastra/core@1.14.0-alpha.3
+
 ## 1.8.3-alpha.1
 
 ### Patch Changes

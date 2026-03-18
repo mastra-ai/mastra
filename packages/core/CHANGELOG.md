@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 1.14.0-alpha.3
+
+### Patch Changes
+
+- Fixed `replaceString` utility to properly escape `$` characters in replacement strings. Previously, patterns like `$&` in the replacement text would be interpreted as regex backreferences instead of literal text. ([#14434](https://github.com/mastra-ai/mastra/pull/14434))
+
+- Fixed tool invocation updates to preserve `providerExecuted` and `providerMetadata` from the original tool call when updating to result state. ([#14431](https://github.com/mastra-ai/mastra/pull/14431))
+
+- Fixed schema-based working memory typing so `workingMemory.schema` accepts supported schemas such as Zod and JSON Schema. ([#14363](https://github.com/mastra-ai/mastra/pull/14363))
+
+- Fixed type inference for requestContext schemas when using Zod v3 and v4. Agent and tool configurations now correctly infer RequestContext types from Zod schemas and other StandardSchema-compatible schemas. ([#14363](https://github.com/mastra-ai/mastra/pull/14363))
+
 ## 1.14.0-alpha.2
 
 ### Patch Changes
