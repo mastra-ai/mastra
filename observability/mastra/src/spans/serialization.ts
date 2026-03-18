@@ -50,7 +50,7 @@ export interface DeepCleanOptions {
 
 export const DEFAULT_DEEP_CLEAN_OPTIONS: DeepCleanOptions = Object.freeze({
   keysToStrip: DEFAULT_KEYS_TO_STRIP,
-  maxDepth: 16,
+  maxDepth: 8,
   maxStringLength: 128 * 1024, // 128KB - sufficient for large LLM prompts/responses
   maxArrayLength: 50,
   maxObjectKeys: 50,
@@ -285,7 +285,7 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
           try {
             cleaned.push(helper(val[i], depth + 1));
           } catch (error) {
-            cleaned.push(`[${error instanceof Error ? error.message : String(error)}]`);
+            cleaned.push(`[${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`);
           }
         }
 
@@ -359,7 +359,7 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
           cleaned[key] = helper((val as Record<string, unknown>)[key], depth + 1);
           keyCount++;
         } catch (error) {
-          cleaned[key] = `[${error instanceof Error ? error.message : String(error)}]`;
+          cleaned[key] = `[${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`;
           keyCount++;
         }
       }

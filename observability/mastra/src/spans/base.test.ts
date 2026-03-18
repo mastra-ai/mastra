@@ -751,25 +751,24 @@ describe('Span', () => {
       expect(result.child.parent).toBe('[Circular]');
     });
 
-    it('should serialize deeply nested tool results with default depth', () => {
-      // 12-level deep object that mirrors real tool payloads
+    it('should serialize nested objects within default depth limit', () => {
+      // 6-level deep object — comfortably within maxDepth=8
       const payload: any = { level: 0 };
       let current = payload;
-      for (let i = 1; i <= 12; i++) {
+      for (let i = 1; i <= 6; i++) {
         current.nested = { level: i, data: `value-${i}` };
         current = current.nested;
       }
 
       const result = deepClean(payload);
 
-      // With maxDepth=16, all 12 levels should be intact
       let node = result;
-      for (let i = 0; i <= 11; i++) {
+      for (let i = 0; i <= 5; i++) {
         expect(node.level).toBe(i);
         node = node.nested;
       }
-      expect(node.level).toBe(12);
-      expect(node.data).toBe('value-12');
+      expect(node.level).toBe(6);
+      expect(node.data).toBe('value-6');
     });
 
     it('should handle max depth', () => {
