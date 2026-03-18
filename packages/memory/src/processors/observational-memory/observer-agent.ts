@@ -239,7 +239,21 @@ ACTIONABLE INSIGHTS:
 /**
  * Base output format for Observer (without patterns section)
  */
-export const OBSERVER_OUTPUT_FORMAT_BASE = `Use priority levels:
+export const OBSERVER_OUTPUT_FORMAT_BASE = buildObserverOutputFormat();
+
+export function buildObserverOutputFormat(includeThreadTitle: boolean = false): string {
+  const threadTitleSection = includeThreadTitle
+    ? `
+<thread-title>
+A short, noun-phrase title for this conversation (2-5 words). Examples:
+- "Auth bug fix" — not "Fixing the auth bug"
+- "Dark mode toggle" — not "User wants dark mode toggle added"
+- "Deployment pipeline setup" — not "Setting up deployment pipeline for project"
+Only update when the topic meaningfully changes.
+</thread-title>`
+    : '';
+
+  return `Use priority levels:
 - 🔴 High: explicit user facts, preferences, goals achieved, critical context
 - 🟡 Medium: project details, learned information, tool results
 - 🟢 Low: minor details, uncertain observations
@@ -275,15 +289,8 @@ Hint for the agent's immediate next message. Examples:
 - "I've updated the navigation model. Let me walk you through the changes..."
 - "The assistant should wait for the user to respond before continuing."
 - Call the view tool on src/example.ts to continue debugging.
-</suggested-response>
-
-<thread-title>
-A short, noun-phrase title for this conversation (2-5 words). Examples:
-- "Auth bug fix" — not "Fixing the auth bug"
-- "Dark mode toggle" — not "User wants dark mode toggle added"
-- "Deployment pipeline setup" — not "Setting up deployment pipeline for project"
-Only update when the topic meaningfully changes.
-</thread-title>`;
+</suggested-response>${threadTitleSection}`;
+}
 
 /**
  * The guidelines for the Observer.
@@ -308,10 +315,23 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
  * @param multiThread - Whether this is for multi-thread batched observation (default: false)
  * @param instruction - Optional custom instructions to append to the prompt
  */
-export function buildObserverSystemPrompt(multiThread: boolean = false, instruction?: string): string {
-  // Use condensed output format when condensed prompt is enabled
-  // Otherwise, use the base output format
-  const outputFormat = OBSERVER_OUTPUT_FORMAT_BASE;
+export function buildObserverSystemPrompt(
+  multiThread: boolean = false,
+  instruction?: string,
+  includeThreadTitle: boolean = false,
+): string {
+  const outputFormat = buildObserverOutputFormat(includeThreadTitle);
+  const multiThreadTitleInstruction = includeThreadTitle
+    ? ` Each thread's observations, current-task, suggested-response, and thread-title should be nested inside a <thread id="..."> block within <observations>.`
+    : ` Each thread's observations, current-task, and suggested-response should be nested inside a <thread id="..."> block within <observations>.`;
+  const multiThreadTitleExample = includeThreadTitle
+    ? `
+<thread-title>Feature X implementation</thread-title>`
+    : '';
+  const multiThreadSecondTitleExample = includeThreadTitle
+    ? `
+<thread-title>Deployment setup</thread-title>`
+    : '';
 
   if (multiThread) {
     return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
@@ -327,7 +347,7 @@ Process each thread separately and output observations for each thread.
 
 === OUTPUT FORMAT ===
 
-Your output MUST use XML tags to structure the response. Each thread's observations, current-task, suggested-response, and thread-title should be nested inside a <thread id="..."> block within <observations>.
+Your output MUST use XML tags to structure the response.${multiThreadTitleInstruction}
 
 <observations>
 <thread id="thread_id_1">
@@ -341,9 +361,7 @@ What the agent is currently working on in this thread
 
 <suggested-response>
 Hint for the agent's next message in this thread
-</suggested-response>
-
-<thread-title>Feature X implementation</thread-title>
+</suggested-response>${multiThreadTitleExample}
 </thread>
 
 <thread id="thread_id_2">
@@ -356,9 +374,7 @@ Current task for this thread
 
 <suggested-response>
 Suggested response for this thread
-</suggested-response>
-
-<thread-title>Deployment setup</thread-title>
+</suggested-response>${multiThreadSecondTitleExample}
 </thread>
 </observations>
 

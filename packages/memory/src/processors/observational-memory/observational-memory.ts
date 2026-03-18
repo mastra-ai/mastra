@@ -1239,7 +1239,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private getObserverAgent(): Agent {
     if (!this.observerAgent) {
-      const systemPrompt = buildObserverSystemPrompt(false, this.observationConfig.instruction);
+      const systemPrompt = buildObserverSystemPrompt(
+        false,
+        this.observationConfig.instruction,
+        this.observationConfig.threadTitle,
+      );
 
       this.observerAgent = new Agent({
         id: 'observational-memory-observer',
@@ -2005,7 +2009,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     // Create a multi-thread observer agent with the special system prompt
-    const systemPrompt = buildObserverSystemPrompt(true, this.observationConfig.instruction);
+    const systemPrompt = buildObserverSystemPrompt(
+      true,
+      this.observationConfig.instruction,
+      this.observationConfig.threadTitle,
+    );
     const agent = new Agent({
       id: 'multi-thread-observer',
       name: 'multi-thread-observer',
