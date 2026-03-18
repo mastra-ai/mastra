@@ -9,7 +9,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MastraServer } from '../src/index';
 
 const storage = new LibSQLStore({

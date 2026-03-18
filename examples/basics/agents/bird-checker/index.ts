@@ -1,6 +1,6 @@
 import { anthropic } from '@ai-sdk/anthropic';
 import { Agent } from '@mastra/core/agent';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 export type Image = {
   alt_description: string;
@@ -64,7 +64,7 @@ const getRandomImage = async ({ query }: { query: string }): Promise<ImageRespon
 };
 
 const instructions = `
-  You can view an image and figure out if it is a bird or not. 
+  You can view an image and figure out if it is a bird or not.
   You can also figure out the species of the bird and where the picture was taken.
 `;
 

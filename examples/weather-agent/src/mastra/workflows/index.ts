@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 const agent = new Agent({
   id: 'weather-agent',

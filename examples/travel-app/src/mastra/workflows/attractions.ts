@@ -2,7 +2,7 @@ import { createStep, createWorkflow } from "@mastra/core/workflows";
 import csvParser from "csv-parser";
 import fs from "fs";
 import path from "path";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 // Update the interface to match the new CSV column names
 interface CityData {

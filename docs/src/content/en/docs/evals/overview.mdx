@@ -62,7 +62,7 @@ You can also add scorers to individual workflow steps to evaluate outputs at spe
 
 ```typescript title="src/mastra/workflows/content-generation.ts" prettier:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { z } from "zod/v4";
 import { customStepScorer } from "../scorers/custom-step-scorer";
 
 const contentStep = createStep({

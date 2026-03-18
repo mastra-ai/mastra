@@ -2,7 +2,7 @@ import { confirm } from '@inquirer/prompts';
 import { Step, Workflow } from '@mastra/core/workflows';
 import chalk from 'chalk';
 import { execSync } from 'child_process';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { fsTool } from '../tools/fs.js';
 import { RequestContext } from '@mastra/core/di';

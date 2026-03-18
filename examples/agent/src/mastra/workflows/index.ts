@@ -1,5 +1,5 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 export const myWorkflow = createWorkflow({
   id: 'recipe-maker',

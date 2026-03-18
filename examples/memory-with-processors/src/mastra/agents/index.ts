@@ -5,7 +5,7 @@ import type { CoreMessage } from '@mastra/core/llm';
 import { MemoryProcessor, MemoryProcessorOpts } from '@mastra/core/memory';
 import { Memory } from '@mastra/memory';
 import { TokenLimiter, ToolCallFilter } from '@mastra/memory/processors';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 // Custom processor that makes the llm forget any messages that contain keywords
 class ForgetfulProcessor extends MemoryProcessor {

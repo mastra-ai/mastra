@@ -1,5 +1,5 @@
 import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 // Helper function to convert weather codes to human-readable descriptions
 function getWeatherCondition(code: number): string {

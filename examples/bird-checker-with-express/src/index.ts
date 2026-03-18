@@ -1,6 +1,6 @@
 import { config } from 'dotenv';
 import express, { Request, Response } from 'express';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { getRandomImage, ImageQuery } from './lib/utils';
 import { mastra } from './mastra/index';

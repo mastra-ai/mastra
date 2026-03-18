@@ -1,5 +1,5 @@
 import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { z } from "zod/v4";
 import { firecrawl, github } from "../integrations";
 import { randomUUID } from "crypto";
 

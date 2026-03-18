@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { google } from '@ai-sdk/google';
 import { jsonSchema, tool } from 'ai';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';

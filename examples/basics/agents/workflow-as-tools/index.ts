@@ -2,7 +2,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { Agent } from '@mastra/core/agent';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { openai } from '@ai-sdk/openai';
 
 const forecastSchema = z.object({

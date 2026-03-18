@@ -1,5 +1,5 @@
 import { Workflow, Step } from "@mastra/core/workflows";
-import { z } from "zod";
+import { z } from "zod/v4";
 import { addToGitHubTool, generateSpecTool, siteCrawlTool } from "../tools";
 // import { MDocument } from "@mastra/rag";
 

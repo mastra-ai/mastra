@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { readFileSync, writeFileSync } from 'fs';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 export const fsTool = createTool({
   id: 'fsTool',

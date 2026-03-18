@@ -1,5 +1,5 @@
 import { init } from '@mastra/inngest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { inngest } from './inngest-workflow';
 
 const { createWorkflow, createStep } = init(inngest);

@@ -44,7 +44,7 @@ Within a workflow step, access the logger via the `mastra` parameter inside the 
 
 ```typescript {6-7} title="src/mastra/workflows/test-workflow.ts" prettier:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 const step1 = createStep({
   execute: async ({ mastra }) => {
@@ -90,13 +90,13 @@ In this example, the log message includes an object with a key of `agent` and a 
 
 ```typescript {9} title="src/mastra/workflows/test-workflow.ts" prettier:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 const step1 = createStep({
   execute: async ({ mastra }) => {
     const testAgent = mastra.getAgent("testAgent");
     const logger = mastra.getLogger();
-    
+
     logger.info("workflow info log", { agent: testAgent });
 
     return {

@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { tool } from 'ai';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Agent } from '@mastra/core/agent';
 
 /**

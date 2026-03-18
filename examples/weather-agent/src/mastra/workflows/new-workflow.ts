@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { openai } from '@ai-sdk/openai';
 import { weatherTool } from '../tools';
 import { weatherReporterAgent } from '../agents';

@@ -75,7 +75,7 @@ Create a workflow using `createWorkflow()` with `inputSchema` and `outputSchema`
 
 ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" prettier:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 const step1 = createStep({...});
 

@@ -1,7 +1,7 @@
 import { input } from '@inquirer/prompts';
 import { Step, Workflow } from '@mastra/core/workflows';
 import chalk from 'chalk';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { dane } from '../agents/index.js';
 

@@ -1,5 +1,5 @@
 import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 function getWeatherCondition(code: number): string {
   const conditions: Record<number, string> = {

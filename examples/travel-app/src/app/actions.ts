@@ -4,7 +4,7 @@ import { PLACES } from "@/lib/types";
 
 import { mastra } from "@/mastra";
 
-import { z } from "zod";
+import { z } from "zod/v4";
 import { travelSchema } from "./utils";
 
 const tripDataSchema = z.object({

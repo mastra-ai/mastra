@@ -2,7 +2,7 @@
 
 import { format } from "date-fns";
 import { Plane, Clock, Calendar, Coffee } from "lucide-react";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 

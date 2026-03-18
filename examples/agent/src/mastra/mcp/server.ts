@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { MCPServer, MCPServerResources } from '@mastra/mcp';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { chefAgent } from '../agents';
 import { myWorkflow } from '../workflows';
 

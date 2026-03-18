@@ -8,7 +8,7 @@ import { Memory } from '@mastra/memory';
 import { Observability } from '@mastra/observability';
 import Koa from 'koa';
 import bodyParser from 'koa-bodyparser';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MastraServer } from '../src/index';
 
 const storage = new LibSQLStore({

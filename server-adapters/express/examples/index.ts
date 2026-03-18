@@ -12,7 +12,7 @@ import { Observability } from '@mastra/observability';
 import cors from 'cors';
 import express from 'express';
 import swaggerUi from 'swagger-ui-express';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MastraServer } from '../src/index';
 
 const storage = new LibSQLStore({

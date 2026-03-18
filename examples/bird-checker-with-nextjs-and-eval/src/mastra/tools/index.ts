@@ -1,6 +1,6 @@
 import { getRandomImage } from "@/lib/mastra/system-tools";
 import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 export const getRandomImageTool = createTool({
   id: "Get a random image from unsplash",

@@ -2,7 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import chalk from 'chalk';
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 // @ts-ignore
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';

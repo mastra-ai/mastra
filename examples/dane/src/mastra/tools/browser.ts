@@ -2,7 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { MDocument } from '@mastra/rag';
 import chalk from 'chalk';
 import { chromium } from 'playwright-core';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 export const browserTool = createTool({
   id: 'browserTool',

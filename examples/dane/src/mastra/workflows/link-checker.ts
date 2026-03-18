@@ -2,7 +2,7 @@ import { Step, Workflow } from '@mastra/core/workflows';
 import chalk from 'chalk';
 import child_process from 'node:child_process';
 import util from 'node:util';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { slack } from '../tools/mcp.js';
 

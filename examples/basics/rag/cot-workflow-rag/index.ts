@@ -5,7 +5,7 @@ import { Step, Workflow } from '@mastra/core/workflows';
 import { PgVector } from '@mastra/pg';
 import { createVectorQueryTool, MDocument } from '@mastra/rag';
 import { embedMany } from 'ai';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 export const ragWorkflow = new Workflow({
   name: 'rag-workflow',

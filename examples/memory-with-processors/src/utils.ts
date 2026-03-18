@@ -1,5 +1,5 @@
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Agent } from '@mastra/core/agent';
 import type { CoreMessage, StreamTextResult } from 'ai';
 import chalk from 'chalk';

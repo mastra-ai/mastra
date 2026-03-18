@@ -7,7 +7,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { Observability } from '@mastra/observability';
 import Fastify from 'fastify';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MastraServer } from '../src/index';
 
 // Type definitions for API responses

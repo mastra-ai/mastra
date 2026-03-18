@@ -6,7 +6,7 @@ import { LibSQLStore } from '@mastra/libsql';
 
 import { mastraAuth, rbacProvider } from './auth';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { ComposioToolProvider } from '@mastra/editor/composio';
 
 import {

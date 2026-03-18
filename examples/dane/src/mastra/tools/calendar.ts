@@ -2,7 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import chalk from 'chalk';
 import { execSync } from 'child_process';
 import Table from 'cli-table3';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 interface CalendarEvent {
   title: string;
@@ -19,11 +19,11 @@ class LocalCalendarReader {
             set eventList to {}
             set startDate to (current date) - 7 * days
             set endDate to (current date) + 365 * days
-            
+
             repeat with calendarAccount in calendars
               set eventList to eventList & (every event of calendarAccount whose start date is greater than or equal to startDate and start date is less than or equal to endDate)
             end repeat
-            
+
             set output to ""
             repeat with anEvent in eventList
               set theTitle to summary of anEvent
@@ -31,18 +31,18 @@ class LocalCalendarReader {
               set theEnd to end date of anEvent as string
               set theLoc to location of anEvent
               set theDesc to description of anEvent
-              
+
               if theLoc is missing value then
                 set theLoc to ""
               end if
               if theDesc is missing value then
                 set theDesc to ""
               end if
-              
+
               set output to output & theTitle & "|" & theStart & "|" & theEnd & "|" & theLoc & "|" & theDesc & "
     "
             end repeat
-            
+
             return output
           end tell
         `;

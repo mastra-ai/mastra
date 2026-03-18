@@ -1,7 +1,7 @@
 import { realtimeMiddleware } from '@inngest/realtime/middleware';
 import { init } from '@mastra/inngest';
 import { Inngest } from 'inngest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 // Create a single Inngest instance to be shared across the application
 export const inngest = new Inngest({

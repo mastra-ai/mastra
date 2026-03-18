@@ -194,7 +194,7 @@ You can configure retries at the workflow level, which applies to all steps in t
 
 ```typescript {7-10} title="src/mastra/workflows/test-workflow.ts" prettier:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 const step1 = createStep({...});
 
@@ -238,7 +238,7 @@ You can create alternative workflow paths based on the success or failure of pre
 
 ```typescript prettier:false {14,18,29-32} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 const step1 = createStep({
   execute: async () => {
@@ -278,7 +278,7 @@ Use `getStepResult()` to inspect a previous step’s results.
 
 ```typescript prettier:false {8} title="src/mastra/workflows/test-workflow.ts"
 import { createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 const step1 = createStep({...});
 
@@ -299,7 +299,7 @@ Use `bail()` in a step to exit early with a successful result. This returns the 
 
 ```typescript prettier:false {7} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 const step1 = createStep({
   id: 'step1',
@@ -321,7 +321,7 @@ Use `throw new Error()` in a step to exit with an error.
 
 ```typescript prettier:false {7} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 const step1 = createStep({
   id: 'step1',

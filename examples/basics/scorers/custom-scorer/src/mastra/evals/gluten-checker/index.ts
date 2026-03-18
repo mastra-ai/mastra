@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { createScorer } from '@mastra/core/evals';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { generateGlutenPrompt, generateReasonPrompt, GLUTEN_INSTRUCTIONS } from './prompts';
 
 export const glutenCheckerScorer = createScorer({

@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { tool } from 'ai';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 export const weatherInfo = createTool({
   id: 'weather-info',

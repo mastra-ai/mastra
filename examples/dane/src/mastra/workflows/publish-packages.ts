@@ -5,7 +5,7 @@ import { existsSync } from 'fs';
 import { readFileSync } from 'fs';
 import path from 'path';
 
-// import { z } from 'zod';
+// import { z } from 'zod/v4';
 
 // import { PACKAGES_LIST_PROMPT, /*PUBLISH_PACKAGES_PROMPT*/ } from '../agents/package-publisher.js';
 // import { pnpmBuild } from '../tools/pnpm.js';

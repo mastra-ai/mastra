@@ -2,7 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import chalk from 'chalk';
 import { execa, ExecaError } from 'execa';
 import { Transform } from 'stream';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 // Create transform stream that applies chalk
 const colorTransform = new Transform({

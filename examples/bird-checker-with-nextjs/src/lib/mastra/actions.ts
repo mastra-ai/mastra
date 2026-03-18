@@ -2,7 +2,7 @@
 
 import { mastra } from "@/mastra";
 import { getRandomImage, Image, ImageResponse } from "./system-tools";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 export type ImageQuery = "wildlife" | "feathers" | "flying" | "birds";
 

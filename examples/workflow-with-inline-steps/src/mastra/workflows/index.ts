@@ -1,5 +1,5 @@
 import { Step, Workflow } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 const myWorkflow = new Workflow({
   name: 'my-workflow',
