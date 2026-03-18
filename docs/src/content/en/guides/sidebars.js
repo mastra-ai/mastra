@@ -143,13 +143,24 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Concepts',
+      collapsed: false,
+      items: [
+        {
+          type: 'doc',
+          id: 'concepts/multi-agent-systems',
+          label: 'Multi-agent systems',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Tutorials',
       collapsed: false,
       items: [
         {
           type: 'category',
           label: 'Fundamentals',
-          collapsed: false,
           items: [
             {
               type: 'doc',
@@ -186,7 +197,6 @@ const sidebars = {
         {
           type: 'category',
           label: 'Multi-agent systems',
-          collapsed: false,
           items: [
             {
               type: 'doc',
@@ -198,7 +208,6 @@ const sidebars = {
         {
           type: 'category',
           label: 'Workspaces',
-          collapsed: false,
           items: [
             {
               type: 'doc',

@@ -22,6 +22,12 @@ Common use cases:
 - Multi-step tasks that need different expertise at each stage
 - Tasks where you need fine-grained control over delegation behavior
 
+:::note
+
+Supervisor agents are one approach to building multi-agent systems in Mastra. For other patterns, read the [conceptual overview](/guides/concepts/multi-agent-systems).
+
+:::
+
 ## Quickstart
 
 Define subagents with clear descriptions, then create a supervisor agent that references them:
@@ -220,6 +226,12 @@ How it works:
 
 This ensures subagents have the context they need without cluttering their memory with the entire supervisor conversation.
 
+:::note
+
+Visit [memory in multi-agent systems](/docs/memory/overview#memory-in-multi-agent-systems) for more details.
+
+:::
+
 ## Tool approval propagation
 
 Tool approvals propagate through the delegation chain. When a subagent uses a tool with `requireApproval: true` or calls `suspend()`, the approval request surfaces to the supervisor level.
@@ -314,3 +326,5 @@ Success criteria:
 - [Agent.stream() reference](/reference/streaming/agents/stream)
 - [Agent.generate() reference](/reference/agents/generate)
 - [Agent approval](./agent-approval)
+- [Memory in multi-agent systems](/docs/memory/overview#memory-in-multi-agent-systems)
+- [Concept: Multi-agent systems](/guides/concepts/multi-agent-systems)
