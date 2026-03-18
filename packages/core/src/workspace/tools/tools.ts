@@ -115,6 +115,14 @@ function wrapWithReadTracker(
       // Pre-execution: enforce read-before-write policy and/or attach
       // optimistic-concurrency mtime for write tools.
       if (mode === 'write') {
+        // Optimistic concurrency: attach the mtime from the last read
+        // *before* stat so it's preserved even when the file has been
+        // deleted externally (stat throws FileNotFoundError).
+        const record = readTracker.getReadRecord(input.path);
+        if (record) {
+          context = { ...context, __expectedMtime: record.modifiedAtRead };
+        }
+
         try {
           const stat = await workspace.filesystem!.stat(input.path);
 
@@ -125,18 +133,13 @@ function wrapWithReadTracker(
               throw new FileReadRequiredError(input.path, check.reason!);
             }
           }
-
-          // Optimistic concurrency: always pass the mtime from the last
-          // read so filesystem.writeFile() can detect external modifications.
-          const record = readTracker.getReadRecord(input.path);
-          if (record) {
-            context = { ...context, __expectedMtime: record.modifiedAtRead };
-          }
         } catch (error) {
           if (!(error instanceof FileNotFoundError)) {
             throw error;
           }
-          // New file — no read required, no mtime to check
+          // Missing file: if a read record exists the expectedMtime is
+          // already attached, so downstream writeFile can treat this as
+          // stale. Otherwise it's a genuinely new file.
         }
       }
 
