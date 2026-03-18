@@ -1382,7 +1382,7 @@ User asked about </current-task> parsing and how it works
     it('should inject ordinal anchors into observation lines only', () => {
       const observations = `Date: Mar 11, 2026
 - 🔴 First observation
-<observation-group id="abcd" range="m1-m2">
+<observation-group id="abcd" range="m1:m2">
   - 🟡 Nested observation
 </observation-group>
 - 🔴 Second observation`;
@@ -1391,7 +1391,7 @@ User asked about </current-task> parsing and how it works
 
       expect(lines[0]).toBe('Date: Mar 11, 2026');
       expect(lines[1]).toBe('[O1] - 🔴 First observation');
-      expect(lines[2]).toBe('<observation-group id="abcd" range="m1-m2">');
+      expect(lines[2]).toBe('<observation-group id="abcd" range="m1:m2">');
       expect(lines[3]).toBe('  [O1-N1] - 🟡 Nested observation');
       expect(lines[4]).toBe('</observation-group>');
       expect(lines[5]).toBe('[O2] - 🔴 Second observation');
@@ -1532,18 +1532,18 @@ describe('Reflector Agent Helpers', () => {
     });
 
     it('should render grouped observations as markdown sections for reflection', () => {
-      const observations = `<observation-group id="group-a" range="m1-m2">
+      const observations = `<observation-group id="group-a" range="m1:m2">
 - 🔴 User is building a React app
 </observation-group>
 
-<observation-group id="group-b" range="m3-m4">
+<observation-group id="group-b" range="m3:m4">
 - 🟡 Needs help with auth flow
 </observation-group>`;
 
       const prompt = buildReflectorPrompt(observations);
 
       expect(prompt).toContain('## Group `group-a`');
-      expect(prompt).toContain('_range: `m1-m2`_');
+      expect(prompt).toContain('_range: `m1:m2`_');
       expect(prompt).toContain('## Group `group-b`');
       expect(prompt).toContain('[O1] - 🔴 User is building a React app');
       expect(prompt).toContain('[O2] - 🟡 Needs help with auth flow');
@@ -1570,31 +1570,31 @@ describe('Reflector Agent Helpers', () => {
 
   describe('Observation Groups', () => {
     it('should render canonical groups into reflection markdown', () => {
-      const observations = `<observation-group id="group-a" range="m1-m2">
+      const observations = `<observation-group id="group-a" range="m1:m2">
 - 🔴 User is building a React app
 </observation-group>
 
-<observation-group id="group-b" range="m3-m4">
+<observation-group id="group-b" range="m3:m4">
 - 🟡 Needs help with auth flow
 </observation-group>`;
 
       expect(renderObservationGroupsForReflection(observations)).toBe(`## Group \`group-a\`
-_range: \`m1-m2\`_
+_range: \`m1:m2\`_
 
 - 🔴 User is building a React app
 
 ## Group \`group-b\`
-_range: \`m3-m4\`_
+_range: \`m3:m4\`_
 
 - 🟡 Needs help with auth flow`);
     });
 
     it('should derive merged group provenance from reflection edits', () => {
-      const sourceObservations = `<observation-group id="group-a" range="m1-m2">
+      const sourceObservations = `<observation-group id="group-a" range="m1:m2">
 - 🔴 User is building a React app
 </observation-group>
 
-<observation-group id="group-b" range="m3-m4">
+<observation-group id="group-b" range="m3:m4">
 - 🟡 Needs help with auth flow
 </observation-group>`;
       const reflection = `## Group \`merged-project\`
@@ -1606,7 +1606,7 @@ _range: \`ignored-by-reconciler\`_
       expect(deriveObservationGroupProvenance(reflection, parseObservationGroups(sourceObservations))).toEqual([
         {
           id: 'merged-project',
-          range: 'm1-m2,m3-m4',
+          range: 'm1:m2,m3:m4',
           content: '- 🔴 User is building a React app\n- 🟡 Needs help with auth flow',
           sourceGroupIds: ['group-a', 'group-b'],
         },
@@ -1614,11 +1614,11 @@ _range: \`ignored-by-reconciler\`_
     });
 
     it('should reconcile reflected markdown back into canonical grouped observations', () => {
-      const sourceObservations = `<observation-group id="group-a" range="m1-m2">
+      const sourceObservations = `<observation-group id="group-a" range="m1:m2">
 - 🔴 User is building a React app
 </observation-group>
 
-<observation-group id="group-b" range="m3-m4">
+<observation-group id="group-b" range="m3:m4">
 - 🟡 Needs help with auth flow
 </observation-group>`;
       const reflection = `## Group \`merged-project\`
@@ -1628,7 +1628,7 @@ _range: \`ignored-by-reconciler\`_
 - 🟡 Needs help with auth flow`;
 
       expect(reconcileObservationGroupsFromReflection(reflection, sourceObservations))
-        .toBe(`<observation-group id="merged-project" range="m1-m2,m3-m4" source-group-ids="group-a,group-b">
+        .toBe(`<observation-group id="merged-project" range="m1:m2,m3:m4" source-group-ids="group-a,group-b">
 - 🔴 User is building a React app
 - 🟡 Needs help with auth flow
 </observation-group>`);
@@ -1665,11 +1665,11 @@ _range: \`ignored-by-reconciler\`_
     });
 
     it('should reconcile reflected markdown groups back to canonical grouped observations', () => {
-      const sourceObservations = `<observation-group id="group-a" range="m1-m2">
+      const sourceObservations = `<observation-group id="group-a" range="m1:m2">
 - 🔴 User is building a React app
 </observation-group>
 
-<observation-group id="group-b" range="m3-m4">
+<observation-group id="group-b" range="m3:m4">
 - 🟡 Needs help with auth flow
 </observation-group>`;
       const output = `
@@ -1685,14 +1685,14 @@ _range: \`ignored-by-reconciler\`_
       const result = parseReflectorOutput(output, sourceObservations);
 
       expect(result.observations)
-        .toBe(`<observation-group id="merged-project" range="m1-m2,m3-m4" source-group-ids="group-a,group-b">
+        .toBe(`<observation-group id="merged-project" range="m1:m2,m3:m4" source-group-ids="group-a,group-b">
 - 🔴 User is building a React app
 - 🟡 Needs help with auth flow
 </observation-group>`);
     });
 
     it('should keep original group ids for unchanged reflected sections', () => {
-      const sourceObservations = `<observation-group id="group-a" range="m1-m2">
+      const sourceObservations = `<observation-group id="group-a" range="m1:m2">
 - 🔴 User is building a React app
 </observation-group>`;
       const output = `
@@ -1706,7 +1706,7 @@ _range: \`ignored-by-reconciler\`_
 
       const result = parseReflectorOutput(output, sourceObservations);
 
-      expect(result.observations).toBe(`<observation-group id="group-a" range="m1-m2" source-group-ids="group-a">
+      expect(result.observations).toBe(`<observation-group id="group-a" range="m1:m2" source-group-ids="group-a">
 - 🔴 User is building a React app
 </observation-group>`);
     });
@@ -2118,7 +2118,7 @@ describe('ObservationalMemory Integration', () => {
       });
 
       const formatted = (graphOm as any).formatObservationsForContext(
-        '<observation-group id="group-1" range="msg-1-msg-2">\n- 🔴 User prefers direct answers\n</observation-group>',
+        '<observation-group id="group-1" range="msg-1:msg-2">\n- 🔴 User prefers direct answers\n</observation-group>',
         undefined,
         undefined,
         undefined,
@@ -2128,7 +2128,7 @@ describe('ObservationalMemory Integration', () => {
       const formattedText = formatted.join('\n\n');
 
       expect(formattedText).toContain('## Group `group-1`');
-      expect(formattedText).toContain('_range: `msg-1-msg-2`_');
+      expect(formattedText).toContain('_range: `msg-1:msg-2`_');
       expect(formattedText).toContain('recall tool');
     });
 
@@ -3667,11 +3667,11 @@ describe('Thread Attribution Helpers', () => {
 
     it('should wrap observations in an observation group when a message range is provided', async () => {
       const observations = '- 🔴 User likes coffee';
-      const result = await (om as any).wrapWithThreadTag('thread-123', observations, 'msg-1-msg-2');
+      const result = await (om as any).wrapWithThreadTag('thread-123', observations, 'msg-1:msg-2');
 
       expect(result).toContain('<thread id="thread-123">');
       expect(result).toContain('<observation-group id="');
-      expect(result).toContain('range="msg-1-msg-2"');
+      expect(result).toContain('range="msg-1:msg-2"');
       expect(result).toContain(observations);
       expect(result).toContain('</observation-group>');
       expect(result).toContain('</thread>');
@@ -3908,7 +3908,7 @@ Ask about preferred brewing method
     expect(record?.activeObservations).toContain('<thread id="thread-1">');
     expect(record?.activeObservations).toContain('</thread>');
     expect(record?.activeObservations).toContain('<observation-group id="');
-    expect(record?.activeObservations).toContain('range="msg-1-msg-2"');
+    expect(record?.activeObservations).toContain('range="msg-1:msg-2"');
     expect(record?.activeObservations).toContain('User mentioned they like coffee');
   });
 
@@ -4109,7 +4109,7 @@ Ask about preferred brewing method
     // Should NOT have thread tags in thread scope
     expect(record?.activeObservations).not.toContain('<thread id=');
     expect(record?.activeObservations).toContain('<observation-group id="');
-    expect(record?.activeObservations).toContain('range="msg-1-msg-1"');
+    expect(record?.activeObservations).toContain('range="msg-1:msg-1"');
     expect(record?.activeObservations).toContain('User mentioned they like tea');
   });
 });

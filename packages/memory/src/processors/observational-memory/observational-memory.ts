@@ -4215,7 +4215,7 @@ ${formattedMessages}
 
       // Build new observations (use freshRecord if available)
       const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
-      const messageRange = `${messagesToObserve[0]!.id}-${messagesToObserve[messagesToObserve.length - 1]!.id}`;
+      const messageRange = `${messagesToObserve[0]!.id}:${messagesToObserve[messagesToObserve.length - 1]!.id}`;
       let newObservations: string;
       if (this.scope === 'resource') {
         // In resource scope: wrap with thread tag and replace/append
@@ -4680,7 +4680,7 @@ ${formattedMessages}
 
     // Get the new observations to buffer (just the new content, not merged)
     // The storage adapter will handle appending to existing buffered content
-    const messageRange = `${messagesToBuffer[0]!.id}-${messagesToBuffer[messagesToBuffer.length - 1]!.id}`;
+    const messageRange = `${messagesToBuffer[0]!.id}:${messagesToBuffer[messagesToBuffer.length - 1]!.id}`;
     let newObservations: string;
     if (this.scope === 'resource') {
       newObservations = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
@@ -5619,7 +5619,7 @@ ${formattedMessages}
         const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
 
         // Wrap with thread tag and append (in thread order for consistency)
-        const messageRange = `${threadMessages[0]!.id}-${threadMessages[threadMessages.length - 1]!.id}`;
+        const messageRange = `${threadMessages[0]!.id}:${threadMessages[threadMessages.length - 1]!.id}`;
         const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
         currentObservations = this.replaceOrAppendThreadSection(
           currentObservations,

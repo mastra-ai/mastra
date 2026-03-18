@@ -26,11 +26,47 @@ type RecallMemory = {
   }) => Promise<{ messages: MastraDBMessage[] }>;
 };
 
-async function resolveCursorMessage(memory: RecallMemory, cursor: string): Promise<MastraDBMessage> {
+function parseRangeFormat(cursor: string): { startId: string; endId: string } | null {
+  // Comma-separated merged ranges: "id1:id2,id3:id4"
+  if (cursor.includes(',')) {
+    const parts = cursor.split(',').map(p => p.trim()).filter(Boolean);
+    if (parts.length >= 1) {
+      const first = parts[0]!;
+      const last = parts[parts.length - 1]!;
+      const firstColon = first.indexOf(':');
+      const lastColon = last.indexOf(':');
+      return {
+        startId: firstColon > 0 ? first.slice(0, firstColon) : first,
+        endId: lastColon > 0 ? last.slice(lastColon + 1) : last,
+      };
+    }
+  }
+
+  // Colon-delimited range: "startId:endId"
+  const colonIndex = cursor.indexOf(':');
+  if (colonIndex > 0 && colonIndex < cursor.length - 1) {
+    return { startId: cursor.slice(0, colonIndex), endId: cursor.slice(colonIndex + 1) };
+  }
+
+  return null;
+}
+
+async function resolveCursorMessage(
+  memory: RecallMemory,
+  cursor: string,
+): Promise<MastraDBMessage | { hint: string; startId: string; endId: string }> {
   const normalized = cursor.trim();
 
   if (!normalized) {
     throw new Error('Cursor is required');
+  }
+
+  const rangeIds = parseRangeFormat(normalized);
+  if (rangeIds) {
+    return {
+      hint: `The cursor "${cursor}" looks like a range. Use one of the individual message IDs as the cursor instead: start="${rangeIds.startId}" or end="${rangeIds.endId}".`,
+      ...rangeIds,
+    };
   }
 
   const memoryStore = await memory.getMemoryStore();
@@ -74,7 +110,19 @@ export async function recallMessages({
   const normalizedPage = page === 0 ? 1 : page;
   const normalizedLimit = limit;
 
-  const anchor = await resolveCursorMessage(memory, cursor);
+  const resolved = await resolveCursorMessage(memory, cursor);
+
+  if ('hint' in resolved) {
+    return {
+      messages: resolved.hint,
+      count: 0,
+      cursor,
+      page: normalizedPage,
+      limit: normalizedLimit,
+    };
+  }
+
+  const anchor = resolved;
 
   if (anchor.threadId !== threadId) {
     throw new Error('The requested cursor does not belong to the current thread');
@@ -126,9 +174,12 @@ export const recallTool = (_memoryConfig?: MemoryConfigInternal) => {
   return createTool({
     id: 'recall',
     description:
-      'Retrieve raw message history near an observation group cursor. Use the exact message id from graph-mode observational memory when you need exact wording, chronology, or tool output details.',
+      'Retrieve raw message history near an observation group cursor. Observation group ranges use the format startId:endId. Pass either the start or end message ID as the cursor to retrieve messages around that point.',
     inputSchema: z.object({
-      cursor: z.string().min(1).describe('The message id to use as the pagination cursor.'),
+      cursor: z
+        .string()
+        .min(1)
+        .describe('A single message ID to use as the pagination cursor. Extract it from the start or end of a range.'),
       page: z
         .number()
         .int()

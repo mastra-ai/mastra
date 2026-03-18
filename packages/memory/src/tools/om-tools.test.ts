@@ -170,6 +170,32 @@ describe('om-tools', () => {
       ).rejects.toThrow('does not belong to the current thread');
     });
 
+    it('should return a hint when cursor is a colon-delimited range', async () => {
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-1:msg-3',
+      });
+
+      expect(result.count).toBe(0);
+      expect(result.messages).toContain('start="msg-1"');
+      expect(result.messages).toContain('end="msg-3"');
+    });
+
+    it('should return a hint when cursor is a comma-separated merged range', async () => {
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-1:msg-2,msg-3:msg-4',
+      });
+
+      expect(result.count).toBe(0);
+      expect(result.messages).toContain('start="msg-1"');
+      expect(result.messages).toContain('end="msg-4"');
+    });
+
     it('should surface missing memory context errors from the tool', async () => {
       const tool = recallTool();
 

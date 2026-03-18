@@ -108,7 +108,7 @@ The result is a three-tier system:
 OM now keeps durable observation-group boundaries in storage while giving the Reflector a cleaner editing surface.
 
 - **Canonical storage**: Observations are persisted as XML with `<observation-group>` tags that include a stable `id` and raw message `range` provenance.
-- **Reflection view**: Before reflection, grouped observations are rendered as Markdown sections such as `## Group \`a1b2\``with`_range: \`msg-1,msg-2\`_\` metadata.
+- **Reflection view**: Before reflection, grouped observations are rendered as Markdown sections such as `## Group \`a1b2\`` with `_range: \`startId:endId\`_` metadata. Ranges use a colon delimiter between start and end message IDs.
 - **Ephemeral anchors**: The Reflector sees temporary ordinal anchors like `O1` and `O1-N1` to make edits and references easier. These anchors are not stored.
 - **Derived groups**: If the Reflector merges content from multiple groups, OM reconciles the edited Markdown back into canonical XML and records the merged provenance with `source-group-ids` plus the combined message ranges.
 
@@ -134,7 +134,7 @@ Graph mode is only active for thread-scoped observational memory. If you set `gr
 
 Graph mode lets the actor inspect the raw messages behind a stored observation group.
 
-When thread-scoped `graph: true` is enabled, OM keeps each group's `_range` metadata visible in the actor context and registers a `recall` tool. The actor passes a cursor message id plus pagination arguments when it needs exact wording, tool outputs, or chronology that the observation summary compressed away.
+When thread-scoped `graph: true` is enabled, OM keeps each group's `_range` metadata visible in the actor context and registers a `recall` tool. Ranges use the format `startId:endId` with a colon delimiter. The actor extracts either the start or end message ID from the range and passes it as the cursor, along with pagination arguments, when it needs exact wording, tool outputs, or chronology that the observation summary compressed away.
 
 ```typescript
 const tools = memory.listTools()
