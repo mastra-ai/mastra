@@ -12,6 +12,7 @@ import type { ObservabilityContext, Span } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
+import { PrefillErrorHandler } from './prefill-error-handler';
 import type { ProcessorStepOutput } from './step-schema';
 import { isMaybeClaude46, TrailingAssistantGuard } from './trailing-assistant-guard';
 import { isProcessorWorkflow } from './index';
@@ -1281,6 +1282,117 @@ export class ProcessorRunner {
     }
 
     return messageList;
+  }
+
+  /**
+   * Run processAPIError on all processors that implement it (including auto-injected PrefillErrorHandler).
+   * Called when an LLM API call fails with a non-retryable error.
+   * Iterates through both input and output processors.
+   *
+   * @returns { retry: boolean; feedback?: string } indicating whether to retry the LLM call
+   */
+  async runProcessAPIError(
+    args: {
+      error: unknown;
+      messages: MastraDBMessage[];
+      messageList: MessageList;
+      stepNumber: number;
+      steps: Array<StepResult<any>>;
+      requestContext?: RequestContext;
+      retryCount?: number;
+      writer?: ProcessorStreamWriter;
+    } & Partial<ObservabilityContext>,
+  ): Promise<{ retry: boolean; feedback?: string }> {
+    const { error, messageList, stepNumber, steps, requestContext, retryCount = 0, writer } = args;
+    const observabilityContext = resolveObservabilityContext(args);
+
+    // Combine input and output processors, plus auto-injected error handlers
+    // PrefillErrorHandler is appended last so user-defined processors take priority
+    const userProcessors: ProcessorOrWorkflow[] = [...this.inputProcessors, ...this.outputProcessors];
+    const hasPrefillHandler = userProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'prefill-error-handler');
+    const allProcessors: ProcessorOrWorkflow[] = hasPrefillHandler
+      ? userProcessors
+      : [...userProcessors, new PrefillErrorHandler()];
+
+    for (const [index, processorOrWorkflow] of allProcessors.entries()) {
+      // Skip workflows — processAPIError is only available on Processor instances
+      if (isProcessorWorkflow(processorOrWorkflow)) {
+        continue;
+      }
+
+      const processor = processorOrWorkflow;
+      const processMethod = processor.processAPIError?.bind(processor);
+
+      if (!processMethod) {
+        continue;
+      }
+
+      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      };
+
+      const currentSpan = observabilityContext.tracingContext?.currentSpan;
+      const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+      const processorSpan = parentSpan?.createChildSpan({
+        type: SpanType.PROCESSOR_RUN,
+        name: `request error processor: ${processor.id}`,
+        entityType: EntityType.OUTPUT_STEP_PROCESSOR,
+        entityId: processor.id,
+        entityName: processor.name,
+        attributes: {
+          processorExecutor: 'legacy',
+          processorIndex: index,
+        },
+        input: { error: error instanceof Error ? error.message : String(error), stepNumber },
+      });
+
+      // Start recording MessageList mutations for this processor
+      messageList.startRecording();
+
+      const processableMessages: MastraDBMessage[] = messageList.get.all.db();
+
+      // Get or create processor state (persists across steps within a request)
+      const processorState = this.getProcessorState(processor.id);
+
+      try {
+        const result = await processMethod({
+          messages: processableMessages,
+          messageList,
+          stepNumber,
+          steps,
+          state: processorState.customState,
+          error,
+          abort,
+          ...createObservabilityContext({ currentSpan: processorSpan }),
+          requestContext,
+          retryCount,
+          writer,
+        });
+
+        // Stop recording and get mutations for this processor
+        const mutations = messageList.stopRecording();
+
+        processorSpan?.end({
+          output: { retry: result?.retry ?? false, feedback: result?.feedback },
+          attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
+        });
+
+        if (result?.retry) {
+          return { retry: true, feedback: result.feedback };
+        }
+      } catch (processorError) {
+        // Stop recording on error
+        messageList.stopRecording();
+        processorSpan?.error({ error: processorError as Error, endSpan: true });
+        this.logger.error(
+          `[Agent:${this.agentName}] - Request error processor ${processor.id} failed:`,
+          processorError,
+        );
+        // Don't re-throw — if the error processor itself fails, fall through to original error handling
+      }
+    }
+
+    return { retry: false };
   }
 
   static applyMessagesToMessageList(

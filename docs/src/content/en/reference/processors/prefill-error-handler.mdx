@@ -1,0 +1,92 @@
+---
+title: "Reference: PrefillErrorHandler | Processors"
+description: "Documentation for the PrefillErrorHandler processor in Mastra, which handles Anthropic assistant message prefill errors by appending a continue message and retrying."
+packages:
+  - "@mastra/core"
+---
+
+# PrefillErrorHandler
+
+The `PrefillErrorHandler` is an **error processor** that handles the Anthropic "assistant message prefill" error. This error occurs when a conversation ends with an assistant message and the model doesn't support prefilling assistant responses.
+
+When the error is detected, the processor appends a `<continue>` user message to the conversation and signals a retry. This breaks the trailing assistant message pattern, allowing the API call to succeed.
+
+This processor is **auto-injected** — you don't need to configure it. It runs automatically when an LLM API call fails with the prefill error.
+
+## How it works
+
+1. The LLM API call fails with a message containing "assistant message prefill"
+1. `PrefillErrorHandler` checks that the last message is from the assistant and this is the first retry attempt
+1. It appends a `<continue>` user message to the `messageList`
+1. It returns `{ retry: true }` to signal the LLM call should be retried with the modified messages
+
+## Usage example
+
+The `PrefillErrorHandler` is auto-injected and requires no setup. It activates when the specific prefill error occurs:
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+// No special configuration needed — PrefillErrorHandler is auto-injected
+export const agent = new Agent({
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'anthropic:claude-sonnet-4-20250514',
+})
+```
+
+If you want to disable auto-injection and handle prefill errors yourself, provide your own processor with a `processAPIError` method:
+
+```typescript title="src/mastra/agents/custom-error-handling.ts"
+import { Agent } from '@mastra/core/agent'
+import type { Processor } from '@mastra/core/processors'
+
+const customErrorHandler: Processor = {
+  id: 'prefill-error-handler', // Same ID prevents auto-injection of the built-in one
+  processAPIError({ error, messageList, retryCount }) {
+    // Your custom logic here
+  },
+}
+
+export const agent = new Agent({
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'anthropic:claude-sonnet-4-20250514',
+  inputProcessors: [customErrorHandler],
+})
+```
+
+## Constructor parameters
+
+The `PrefillErrorHandler` takes no constructor parameters.
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: "'prefill-error-handler'",
+    description: 'Processor identifier.',
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: "'Prefill Error Handler'",
+    description: 'Processor display name.',
+    isOptional: false,
+  },
+  {
+    name: 'processAPIError',
+    type: '(args: ProcessAPIErrorArgs) => ProcessAPIErrorResult | void',
+    description:
+      'Handles the Anthropic prefill error by appending a continue message and signaling retry. Only triggers on the first retry attempt and only when the last message is from the assistant.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Related
+
+- [Processor interface](/reference/processors/processor-interface)
+- [Guardrails](/docs/agents/guardrails)
