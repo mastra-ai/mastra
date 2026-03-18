@@ -24,7 +24,10 @@ function getHarnessState(requestContext: RequestContext) {
  */
 function getObserverModel({ requestContext }: { requestContext: RequestContext }) {
   const state = getHarnessState(requestContext);
-  return resolveModel(state?.observerModelId ?? DEFAULT_OM_MODEL_ID, { remapForCodexOAuth: true });
+  return resolveModel(state?.observerModelId ?? DEFAULT_OM_MODEL_ID, {
+    remapForCodexOAuth: true,
+    requestContext,
+  });
 }
 
 /**
@@ -33,7 +36,10 @@ function getObserverModel({ requestContext }: { requestContext: RequestContext }
  */
 function getReflectorModel({ requestContext }: { requestContext: RequestContext }) {
   const state = getHarnessState(requestContext);
-  return resolveModel(state?.reflectorModelId ?? DEFAULT_OM_MODEL_ID, { remapForCodexOAuth: true });
+  return resolveModel(state?.reflectorModelId ?? DEFAULT_OM_MODEL_ID, {
+    remapForCodexOAuth: true,
+    requestContext,
+  });
 }
 
 /**

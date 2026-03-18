@@ -1,13 +1,26 @@
-import { createUIMessageStream, createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
-import type { InferUIMessageChunk, UIMessage } from '@internal/ai-sdk-v5';
+import {
+  createUIMessageStream as createUIMessageStreamV5,
+  createUIMessageStreamResponse as createUIMessageStreamResponseV5,
+} from '@internal/ai-sdk-v5';
+import {
+  createUIMessageStream as createUIMessageStreamV6,
+  createUIMessageStreamResponse as createUIMessageStreamResponseV6,
+} from '@internal/ai-v6';
 import type { AgentExecutionOptions, AgentExecutionOptionsBase } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
-import { toAISdkV5Stream } from './convert-streams';
+import { toAISdkStream } from './convert-streams';
+import type {
+  SupportedUIMessage,
+  V5UIMessage,
+  V5UIMessageStream,
+  V6UIMessage,
+  V6UIMessageStream,
+} from './public-types';
 
 export type ChatStreamHandlerParams<
-  UI_MESSAGE extends UIMessage,
+  UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage,
   OUTPUT = undefined,
 > = AgentExecutionOptions<OUTPUT> & {
   messages: UI_MESSAGE[];
@@ -16,15 +29,30 @@ export type ChatStreamHandlerParams<
   trigger?: 'submit-message' | 'regenerate-message';
 };
 
-export type ChatStreamHandlerOptions<UI_MESSAGE extends UIMessage, OUTPUT = undefined> = {
+export type ChatStreamHandlerOptions<UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage, OUTPUT = undefined> = {
   mastra: Mastra;
   agentId: string;
   params: ChatStreamHandlerParams<UI_MESSAGE, OUTPUT>;
   defaultOptions?: AgentExecutionOptions<OUTPUT>;
+  version?: 'v5' | 'v6';
   sendStart?: boolean;
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
+};
+
+type ChatStreamHandlerOptionsV5<UI_MESSAGE extends V5UIMessage = V5UIMessage, OUTPUT = undefined> = Omit<
+  ChatStreamHandlerOptions<UI_MESSAGE, OUTPUT>,
+  'version'
+> & {
+  version?: 'v5';
+};
+
+type ChatStreamHandlerOptionsV6<UI_MESSAGE extends V6UIMessage = V6UIMessage, OUTPUT = undefined> = Omit<
+  ChatStreamHandlerOptions<UI_MESSAGE, OUTPUT>,
+  'version'
+> & {
+  version: 'v6';
 };
 
 /**
@@ -35,7 +63,7 @@ export type ChatStreamHandlerOptions<UI_MESSAGE extends UIMessage, OUTPUT = unde
  * ```ts
  * // Next.js App Router
  * import { handleChatStream } from '@mastra/ai-sdk';
- * import { createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
+ * import { createUIMessageStreamResponse } from 'ai';
  * import { mastra } from '@/src/mastra';
  *
  * export async function POST(req: Request) {
@@ -49,16 +77,23 @@ export type ChatStreamHandlerOptions<UI_MESSAGE extends UIMessage, OUTPUT = unde
  * }
  * ```
  */
-export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT = undefined>({
+export function handleChatStream<UI_MESSAGE extends V5UIMessage = V5UIMessage, OUTPUT = undefined>(
+  options: ChatStreamHandlerOptionsV5<UI_MESSAGE, OUTPUT>,
+): Promise<V5UIMessageStream<UI_MESSAGE>>;
+export function handleChatStream<UI_MESSAGE extends V6UIMessage = V6UIMessage, OUTPUT = undefined>(
+  options: ChatStreamHandlerOptionsV6<UI_MESSAGE, OUTPUT>,
+): Promise<V6UIMessageStream<UI_MESSAGE>>;
+export async function handleChatStream<OUTPUT = undefined>({
   mastra,
   agentId,
   params,
   defaultOptions,
+  version = 'v5',
   sendStart = true,
   sendFinish = true,
   sendReasoning = false,
   sendSources = false,
-}: ChatStreamHandlerOptions<UI_MESSAGE, OUTPUT>): Promise<ReadableStream<InferUIMessageChunk<UI_MESSAGE>>> {
+}: ChatStreamHandlerOptions<any, OUTPUT>): Promise<ReadableStream<any>> {
   const { messages, resumeData, runId, requestContext, trigger, ...rest } = params;
 
   if (resumeData && !runId) {
@@ -116,25 +151,45 @@ export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT = un
       ? await agentObj.stream(messagesToSend, { ...baseOptions, structuredOutput })
       : await agentObj.stream(messagesToSend, baseOptions as AgentExecutionOptionsBase<unknown>);
 
-  return createUIMessageStream<UI_MESSAGE>({
+  if (version === 'v6') {
+    return createUIMessageStreamV6<any>({
+      originalMessages: messages,
+      execute: async ({ writer }) => {
+        for await (const part of toAISdkStream(result, {
+          from: 'agent',
+          version: 'v6',
+          lastMessageId,
+          sendStart,
+          sendFinish,
+          sendReasoning,
+          sendSources,
+        })) {
+          writer.write(part);
+        }
+      },
+    }) as ReadableStream<any>;
+  }
+
+  return createUIMessageStreamV5<any>({
     originalMessages: messages,
     execute: async ({ writer }) => {
-      for await (const part of toAISdkV5Stream(result, {
+      for await (const part of toAISdkStream(result, {
         from: 'agent',
         lastMessageId,
         sendStart,
         sendFinish,
         sendReasoning,
         sendSources,
-      })!) {
-        writer.write(part as InferUIMessageChunk<UI_MESSAGE>);
+      })) {
+        writer.write(part);
       }
     },
-  });
+  }) as ReadableStream<any>;
 }
 
 export type chatRouteOptions<OUTPUT = undefined> = {
   defaultOptions?: AgentExecutionOptions<OUTPUT>;
+  version?: 'v5' | 'v6';
 } & (
   | {
       path: `${string}:agentId${string}`;
@@ -198,6 +253,7 @@ export function chatRoute<OUTPUT = undefined>({
   path = '/chat/:agentId',
   agent,
   defaultOptions,
+  version = 'v5',
   sendStart = true,
   sendFinish = true,
   sendReasoning = false,
@@ -309,7 +365,7 @@ export function chatRoute<OUTPUT = undefined>({
       },
     },
     handler: async c => {
-      const params = (await c.req.json()) as ChatStreamHandlerParams<UIMessage, OUTPUT>;
+      const params = (await c.req.json()) as ChatStreamHandlerParams<SupportedUIMessage, OUTPUT>;
       const mastra = c.get('mastra');
       const contextRequestContext = (c as any).get('requestContext') as RequestContext | undefined;
 
@@ -344,7 +400,7 @@ export function chatRoute<OUTPUT = undefined>({
         throw new Error('Agent ID is required');
       }
 
-      const uiMessageStream = await handleChatStream<UIMessage, OUTPUT>({
+      const handlerOptions = {
         mastra,
         agentId: agentToUse,
         params: {
@@ -357,11 +413,19 @@ export function chatRoute<OUTPUT = undefined>({
         sendFinish,
         sendReasoning,
         sendSources,
-      });
+      };
 
-      return createUIMessageStreamResponse({
-        stream: uiMessageStream,
-      });
+      if (version === 'v6') {
+        const uiMessageStream = await handleChatStream({
+          ...handlerOptions,
+          version: 'v6',
+        });
+
+        return createUIMessageStreamResponseV6({ stream: uiMessageStream });
+      }
+
+      const uiMessageStream = await handleChatStream(handlerOptions);
+      return createUIMessageStreamResponseV5({ stream: uiMessageStream });
     },
   });
 }

@@ -683,10 +683,21 @@
         "pixtral-12b-2409",
         "qwen3-235b-a22b-instruct-2507",
         "qwen3-coder-30b-a3b-instruct",
+        "qwen3-embedding-8b",
+        "qwen3.5-397b-a17b",
         "voxtral-small-24b-2507",
         "whisper-large-v3"
       ],
       "docUrl": "https://www.scaleway.com/en/docs/generative-apis/",
+      "gateway": "models.dev"
+    },
+    "dinference": {
+      "url": "https://api.dinference.com/v1",
+      "apiKeyEnvVar": "DINFERENCE_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "DInference",
+      "models": ["glm-4.7", "glm-5", "gpt-oss-120b"],
+      "docUrl": "https://dinference.com",
       "gateway": "models.dev"
     },
     "kuae-cloud-coding-plan": {
@@ -740,7 +751,14 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax Coding Plan (minimaxi.com)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+      "models": [
+        "MiniMax-M2",
+        "MiniMax-M2.1",
+        "MiniMax-M2.5",
+        "MiniMax-M2.5-highspeed",
+        "MiniMax-M2.7",
+        "MiniMax-M2.7-highspeed"
+      ],
       "docUrl": "https://platform.minimaxi.com/docs/coding-plan/intro",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -869,6 +887,8 @@
         "gpt-5.3-codex",
         "gpt-5.3-codex-spark",
         "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.4-nano",
         "gpt-5.4-pro",
         "kimi-k2.5",
         "mimo-v2-flash-free",
@@ -1032,7 +1052,14 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax (minimaxi.com)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+      "models": [
+        "MiniMax-M2",
+        "MiniMax-M2.1",
+        "MiniMax-M2.5",
+        "MiniMax-M2.5-highspeed",
+        "MiniMax-M2.7",
+        "MiniMax-M2.7-highspeed"
+      ],
       "docUrl": "https://platform.minimaxi.com/docs/guides/quickstart",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -1256,7 +1283,14 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax Coding Plan (minimax.io)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+      "models": [
+        "MiniMax-M2",
+        "MiniMax-M2.1",
+        "MiniMax-M2.5",
+        "MiniMax-M2.5-highspeed",
+        "MiniMax-M2.7",
+        "MiniMax-M2.7-highspeed"
+      ],
       "docUrl": "https://platform.minimax.io/docs/coding-plan/intro",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -2120,7 +2154,7 @@
       "gateway": "models.dev"
     },
     "firmware": {
-      "url": "https://app.firmware.ai/api/v1",
+      "url": "https://app.frogbot.ai/api/v1",
       "apiKeyEnvVar": "FIRMWARE_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Firmware",
@@ -2150,7 +2184,7 @@
         "kimi-k2.5",
         "minimax-m2-5"
       ],
-      "docUrl": "https://docs.firmware.ai",
+      "docUrl": "https://docs.frogbot.ai",
       "gateway": "models.dev"
     },
     "ovhcloud": {
@@ -2568,6 +2602,8 @@
         "minimax/minimax-m2.1-lightning",
         "minimax/minimax-m2.5",
         "minimax/minimax-m2.5-highspeed",
+        "minimax/minimax-m2.7",
+        "minimax/minimax-m2.7-highspeed",
         "mistral/codestral",
         "mistral/codestral-embed",
         "mistral/devstral-2",
@@ -2624,6 +2660,8 @@
         "openai/gpt-5.3-chat",
         "openai/gpt-5.3-codex",
         "openai/gpt-5.4",
+        "openai/gpt-5.4-mini",
+        "openai/gpt-5.4-nano",
         "openai/gpt-5.4-pro",
         "openai/gpt-oss-120b",
         "openai/gpt-oss-20b",
@@ -2682,7 +2720,8 @@
         "zai/glm-4.7",
         "zai/glm-4.7-flash",
         "zai/glm-4.7-flashx",
-        "zai/glm-5"
+        "zai/glm-5",
+        "zai/glm-5-turbo"
       ],
       "docUrl": "https://github.com/vercel/ai/tree/5eb85cc45a259553501f535b8ac79a77d0e79223/packages/gateway",
       "gateway": "models.dev"
@@ -2721,6 +2760,8 @@
         "gpt-5.3-codex",
         "gpt-5.3-codex-spark",
         "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.4-nano",
         "gpt-5.4-pro",
         "o1",
         "o1-mini",
@@ -2763,7 +2804,14 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax (minimax.io)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+      "models": [
+        "MiniMax-M2",
+        "MiniMax-M2.1",
+        "MiniMax-M2.5",
+        "MiniMax-M2.5-highspeed",
+        "MiniMax-M2.7",
+        "MiniMax-M2.7-highspeed"
+      ],
       "docUrl": "https://platform.minimax.io/docs/guides/quickstart",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -2976,6 +3024,24 @@
       "docUrl": "https://docs.anthropic.com/en/docs/about-claude/models",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
+    },
+    "tencent-coding-plan": {
+      "url": "https://api.lkeap.cloud.tencent.com/coding/v3",
+      "apiKeyEnvVar": "TENCENT_CODING_PLAN_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Tencent Coding Plan (China)",
+      "models": [
+        "glm-5",
+        "hunyuan-2.0-instruct",
+        "hunyuan-2.0-thinking",
+        "hunyuan-t1",
+        "hunyuan-turbos",
+        "kimi-k2.5",
+        "minimax-m2.5",
+        "tc-code-latest"
+      ],
+      "docUrl": "https://cloud.tencent.com/document/product/1772/128947",
+      "gateway": "models.dev"
     },
     "friendli": {
       "url": "https://api.friendli.ai/serverless/v1",
@@ -3946,6 +4012,7 @@
       "apiKeyHeader": "Authorization",
       "name": "Alibaba (China)",
       "models": [
+        "MiniMax-M2.5",
         "MiniMax/MiniMax-M2.5",
         "deepseek-r1",
         "deepseek-r1-0528",
@@ -3962,7 +4029,6 @@
         "kimi-k2-thinking",
         "kimi-k2.5",
         "kimi/kimi-k2.5",
-        "minimax-m2.5",
         "moonshot-kimi-k2-instruct",
         "qvq-max",
         "qwen-deep-research",
@@ -4709,9 +4775,12 @@
       "pixtral-12b-2409",
       "qwen3-235b-a22b-instruct-2507",
       "qwen3-coder-30b-a3b-instruct",
+      "qwen3-embedding-8b",
+      "qwen3.5-397b-a17b",
       "voxtral-small-24b-2507",
       "whisper-large-v3"
     ],
+    "dinference": ["glm-4.7", "glm-5", "gpt-oss-120b"],
     "kuae-cloud-coding-plan": ["GLM-4.7"],
     "upstage": ["solar-mini", "solar-pro2", "solar-pro3"],
     "inception": ["mercury", "mercury-2", "mercury-coder", "mercury-edit"],
@@ -4726,7 +4795,14 @@
       "zai-org/GLM-4.5-Air",
       "zai-org/GLM-4.5-FP8"
     ],
-    "minimax-cn-coding-plan": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+    "minimax-cn-coding-plan": [
+      "MiniMax-M2",
+      "MiniMax-M2.1",
+      "MiniMax-M2.5",
+      "MiniMax-M2.5-highspeed",
+      "MiniMax-M2.7",
+      "MiniMax-M2.7-highspeed"
+    ],
     "novita-ai": [
       "baichuan/baichuan-m2-32b",
       "baidu/ernie-4.5-21B-a3b",
@@ -4838,6 +4914,8 @@
       "gpt-5.3-codex",
       "gpt-5.3-codex-spark",
       "gpt-5.4",
+      "gpt-5.4-mini",
+      "gpt-5.4-nano",
       "gpt-5.4-pro",
       "kimi-k2.5",
       "mimo-v2-flash-free",
@@ -4977,7 +5055,14 @@
       "qwen3-max-2026-01-23",
       "qwen3.5-plus"
     ],
-    "minimax-cn": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+    "minimax-cn": [
+      "MiniMax-M2",
+      "MiniMax-M2.1",
+      "MiniMax-M2.5",
+      "MiniMax-M2.5-highspeed",
+      "MiniMax-M2.7",
+      "MiniMax-M2.7-highspeed"
+    ],
     "bailing": ["Ling-1T", "Ring-1T"],
     "alibaba": [
       "qvq-max",
@@ -5144,7 +5229,14 @@
       "qwen3-max-2026-01-23",
       "qwen3.5-plus"
     ],
-    "minimax-coding-plan": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+    "minimax-coding-plan": [
+      "MiniMax-M2",
+      "MiniMax-M2.1",
+      "MiniMax-M2.5",
+      "MiniMax-M2.5-highspeed",
+      "MiniMax-M2.7",
+      "MiniMax-M2.7-highspeed"
+    ],
     "kimi-for-coding": ["k2p5", "kimi-k2-thinking"],
     "mistral": [
       "codestral-latest",
@@ -6176,6 +6268,8 @@
       "minimax/minimax-m2.1-lightning",
       "minimax/minimax-m2.5",
       "minimax/minimax-m2.5-highspeed",
+      "minimax/minimax-m2.7",
+      "minimax/minimax-m2.7-highspeed",
       "mistral/codestral",
       "mistral/codestral-embed",
       "mistral/devstral-2",
@@ -6232,6 +6326,8 @@
       "openai/gpt-5.3-chat",
       "openai/gpt-5.3-codex",
       "openai/gpt-5.4",
+      "openai/gpt-5.4-mini",
+      "openai/gpt-5.4-nano",
       "openai/gpt-5.4-pro",
       "openai/gpt-oss-120b",
       "openai/gpt-oss-20b",
@@ -6290,7 +6386,8 @@
       "zai/glm-4.7",
       "zai/glm-4.7-flash",
       "zai/glm-4.7-flashx",
-      "zai/glm-5"
+      "zai/glm-5",
+      "zai/glm-5-turbo"
     ],
     "openai": [
       "codex-mini-latest",
@@ -6323,6 +6420,8 @@
       "gpt-5.3-codex",
       "gpt-5.3-codex-spark",
       "gpt-5.4",
+      "gpt-5.4-mini",
+      "gpt-5.4-nano",
       "gpt-5.4-pro",
       "o1",
       "o1-mini",
@@ -6340,7 +6439,14 @@
     ],
     "moark": ["GLM-4.7", "MiniMax-M2.1"],
     "morph": ["auto", "morph-v3-fast", "morph-v3-large"],
-    "minimax": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+    "minimax": [
+      "MiniMax-M2",
+      "MiniMax-M2.1",
+      "MiniMax-M2.5",
+      "MiniMax-M2.5-highspeed",
+      "MiniMax-M2.7",
+      "MiniMax-M2.7-highspeed"
+    ],
     "vultr": [
       "DeepSeek-R1-Distill-Llama-70B",
       "DeepSeek-R1-Distill-Qwen-32B",
@@ -6495,6 +6601,16 @@
       "claude-sonnet-4-5",
       "claude-sonnet-4-5-20250929",
       "claude-sonnet-4-6"
+    ],
+    "tencent-coding-plan": [
+      "glm-5",
+      "hunyuan-2.0-instruct",
+      "hunyuan-2.0-thinking",
+      "hunyuan-t1",
+      "hunyuan-turbos",
+      "kimi-k2.5",
+      "minimax-m2.5",
+      "tc-code-latest"
     ],
     "friendli": [
       "MiniMaxAI/MiniMax-M2.1",
@@ -7414,6 +7530,7 @@
       "grok-vision-beta"
     ],
     "alibaba-cn": [
+      "MiniMax-M2.5",
       "MiniMax/MiniMax-M2.5",
       "deepseek-r1",
       "deepseek-r1-0528",
@@ -7430,7 +7547,6 @@
       "kimi-k2-thinking",
       "kimi-k2.5",
       "kimi/kimi-k2.5",
-      "minimax-m2.5",
       "moonshot-kimi-k2-instruct",
       "qvq-max",
       "qwen-deep-research",
