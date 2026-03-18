@@ -7,7 +7,7 @@ import type { EmbeddingModelId } from '../llm/model/index.js';
 import type { ModelRouterModelId } from '../llm/model/provider-registry.js';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { RequestContext } from '../request-context';
-import type { StandardSchemaWithJSON, PublicSchema } from '../schema';
+import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
@@ -190,11 +190,6 @@ type TemplateWorkingMemory = BaseWorkingMemory & {
 };
 
 type SchemaWorkingMemory = BaseWorkingMemory & {
-  schema: StandardSchemaWithJSON;
-  template?: never;
-};
-
-type PublicSchemaWorkingMemory = BaseWorkingMemory & {
   schema: PublicSchema;
   template?: never;
 };
@@ -204,7 +199,7 @@ type WorkingMemoryNone = BaseWorkingMemory & {
   schema?: never;
 };
 
-export type WorkingMemory = TemplateWorkingMemory | SchemaWorkingMemory | PublicSchemaWorkingMemory | WorkingMemoryNone;
+export type WorkingMemory = TemplateWorkingMemory | SchemaWorkingMemory | WorkingMemoryNone;
 
 /**
  * Vector index configuration for optimizing semantic recall performance.
@@ -955,7 +950,7 @@ export type MemoryConfig = BaseMemoryConfig & {
    * }
    * ```
    */
-  workingMemory?: TemplateWorkingMemory | PublicSchemaWorkingMemory | WorkingMemoryNone;
+  workingMemory?: TemplateWorkingMemory | SchemaWorkingMemory | WorkingMemoryNone;
 };
 
 /**
@@ -1059,12 +1054,12 @@ export type SharedMemoryConfig = {
   processors?: MemoryProcessor[];
 };
 
+/** @deprecated Use the `format` field on `WorkingMemoryTemplate` discriminated union instead. */
 export type WorkingMemoryFormat = 'json' | 'markdown';
 
-export type WorkingMemoryTemplate = {
-  format: WorkingMemoryFormat;
-  content: string;
-};
+export type WorkingMemoryTemplate =
+  | { format: 'markdown'; content: string }
+  | { format: 'json'; content: string | Record<string, unknown> };
 
 // Type for flexible message deletion input
 export type MessageDeleteInput = string[] | { id: string }[];

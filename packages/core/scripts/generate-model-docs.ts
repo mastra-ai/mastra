@@ -576,7 +576,7 @@ Mastra provides a unified interface for working with LLMs across multiple provid
 
 - **Access the newest AI** - Use new models the moment they're released, no matter which provider they come from. Avoid vendor lock-in with Mastra's provider-agnostic interface.
 
-- [**Mix and match models**](#mix-and-match-models) - Use different models for different tasks. For example, run GPT-4o-mini for large-context processing, then switch to Claude Opus 4.1 for reasoning tasks.
+- [**Mix and match models**](#mix-and-match-models) - Use different models for different tasks. For example, run GPT-5-mini for large-context processing, then switch to Claude Opus 4.6 for reasoning tasks.
 
 - [**Model fallbacks**](#model-fallbacks) - If a provider experiences an outage, Mastra can automatically switch to another provider at the application level, minimizing latency compared to API gateways.
 

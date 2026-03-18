@@ -25,6 +25,7 @@ import {
   getOrCreateSpan,
   resolveObservabilityContext,
 } from '../observability';
+import { executeWithContext } from '../observability/utils';
 import { ProcessorRunner, ProcessorState } from '../processors';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
@@ -838,9 +839,11 @@ function createStepFromProcessor<TProcessorId extends string>(
       };
 
       // Helper to execute phase with proper span lifecycle management
+      // Uses executeWithContext to set the processor span as the active OTEL context,
+      // so auto-instrumented operations inside processors nest correctly under the span.
       const executePhaseWithSpan = async <T>(fn: () => Promise<T>): Promise<T> => {
         try {
-          const result = await fn();
+          const result = await executeWithContext({ span: processorSpan, fn });
           processorSpan?.end({ output: result });
           return result;
         } catch (error) {
@@ -2945,6 +2948,7 @@ export class Run<
     });
 
     const traceId = workflowSpan?.externalTraceId;
+    const spanId = workflowSpan?.id;
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
     await this._validateRequestContext(requestContext as RequestContext);
@@ -2974,6 +2978,7 @@ export class Run<
     }
 
     result.traceId = traceId;
+    result.spanId = spanId;
     return result;
   }
 
@@ -3721,6 +3726,7 @@ export class Run<
     });
 
     const traceId = workflowSpan?.externalTraceId;
+    const spanId = workflowSpan?.id;
 
     const executionResultPromise = this.executionEngine
       .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
@@ -3755,6 +3761,7 @@ export class Run<
           this.closeStreamAction?.().catch(() => {});
         }
         result.traceId = traceId;
+        result.spanId = spanId;
         return result;
       });
 
@@ -3855,6 +3862,7 @@ export class Run<
     });
 
     const traceId = workflowSpan?.externalTraceId;
+    const spanId = workflowSpan?.id;
 
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -3877,6 +3885,7 @@ export class Run<
     }
 
     result.traceId = traceId;
+    result.spanId = spanId;
     return result;
   }
 
@@ -3987,6 +3996,7 @@ export class Run<
     });
 
     const traceId = workflowSpan?.externalTraceId;
+    const spanId = workflowSpan?.id;
 
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -4011,6 +4021,7 @@ export class Run<
     }
 
     result.traceId = traceId;
+    result.spanId = spanId;
     return result;
   }
 

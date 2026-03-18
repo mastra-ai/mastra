@@ -44,6 +44,46 @@ describe('CloudflareDeployer', () => {
   });
 
   describe('writeFiles', () => {
+    describe('environment variable handling', () => {
+      it('should exclude .env variables from wrangler config vars', async () => {
+        deployer = new CloudflareDeployer({
+          name: 'test-worker',
+          vars: { NODE_ENV: 'production' },
+        });
+
+        vi.spyOn(deployer, 'loadEnvVars').mockResolvedValue(
+          new Map([
+            ['OPENAI_API_KEY', 'sk-secret-key'],
+            ['DATABASE_URL', 'postgres://user:pass@host/db'],
+          ]),
+        );
+
+        await deployer.writeFiles(tempDir);
+
+        const wranglerConfigPath = join(tempDir, 'output', 'wrangler.json');
+        const wranglerConfig = JSON.parse(await readFile(wranglerConfigPath, 'utf-8'));
+
+        expect(wranglerConfig.vars).not.toHaveProperty('OPENAI_API_KEY');
+        expect(wranglerConfig.vars).not.toHaveProperty('DATABASE_URL');
+        expect(wranglerConfig.vars).toHaveProperty('NODE_ENV', 'production');
+      });
+
+      it('should include only user-provided vars when no .env file exists', async () => {
+        deployer = new CloudflareDeployer({
+          name: 'test-worker',
+          vars: { APP_MODE: 'live' },
+        });
+        vi.spyOn(deployer, 'loadEnvVars').mockResolvedValue(new Map());
+
+        await deployer.writeFiles(tempDir);
+
+        const wranglerConfigPath = join(tempDir, 'output', 'wrangler.json');
+        const wranglerConfig = JSON.parse(await readFile(wranglerConfigPath, 'utf-8'));
+
+        expect(wranglerConfig.vars).toEqual({ APP_MODE: 'live' });
+      });
+    });
+
     describe('TypeScript stub for bundle size optimization', () => {
       it('should create typescript-stub.mjs and configure wrangler alias', async () => {
         deployer = new CloudflareDeployer({ name: 'test-worker' });

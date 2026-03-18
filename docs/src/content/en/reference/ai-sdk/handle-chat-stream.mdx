@@ -13,6 +13,8 @@ Framework-agnostic handler for streaming agent chat in AI SDK-compatible format.
 
 `handleChatStream()` returns a `ReadableStream` that you can wrap with [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response).
 
+`handleChatStream()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'`.
+
 Use [`chatRoute()`](/reference/ai-sdk/chat-route) if you want to create a chat route inside a Mastra server.
 
 ## Usage example
@@ -40,6 +42,14 @@ export async function POST(req: Request) {
 
 <PropertiesTable
   content={[
+  {
+    name: 'version',
+    type: "'v5' | 'v6'",
+    description:
+      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers.",
+    isOptional: true,
+    defaultValue: "'v5'",
+  },
   {
     name: 'mastra',
     type: 'Mastra',
