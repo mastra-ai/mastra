@@ -77,3 +77,5 @@ jobs:
             We use CodeRabbit for automated code reviews. Please address all feedback from CodeRabbit by either making changes to your PR or leaving a comment explaining why you disagree with the feedback. Since CodeRabbit is an AI, it may occasionally provide incorrect feedback.
 
             Addressing CodeRabbit's feedback will greatly increase the chances of your PR being merged. We appreciate your understanding and cooperation in helping us maintain high code quality standards.
+
+            Comment `@coderabbitai review` in case you want to trigger a review.
