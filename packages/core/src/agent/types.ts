@@ -331,7 +331,7 @@ export interface AgentConfig<
    * When provided, the request context will be validated against this schema at the start of generate() and stream() calls.
    * If validation fails, an error is thrown.
    */
-  requestContextSchema?: ZodSchema<TRequestContext>;
+  requestContextSchema?: PublicSchema<TRequestContext>;
 }
 
 export type AgentMemoryOption = {

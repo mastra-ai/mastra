@@ -1645,6 +1645,15 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     expect(directToolOptions.mcp.extra.authInfo.clientId).toBe('test-client-456');
     expect(directToolOptions.mcp.extra.sessionId).toBe('auth-test-session');
 
+    // Verify requestContext is populated from mcp.extra for regular tools
+    expect(directToolOptions.requestContext).toBeDefined();
+    expect(directToolOptions.requestContext.get('authInfo')).toEqual({
+      token: 'test-auth-token-123',
+      clientId: 'test-client-456',
+      scopes: ['read', 'write'],
+    });
+    expect(directToolOptions.requestContext.get('sessionId')).toBe('auth-test-session');
+
     let agentContextObj: any = null;
     let agentExecOptions: any = null;
 

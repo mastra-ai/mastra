@@ -10,16 +10,11 @@ import {
   paginationInfoSchema,
   sortDirectionSchema,
   tagsField,
+  traceIdField,
+  spanIdField,
 } from '../shared';
-// ============================================================================
-// Shared Identifier Fields (also re-exported from types.ts)
-// ============================================================================
 
-/** Zod schema for trace ID field */
-export const traceIdField = z.string().describe('Unique trace identifier');
-
-/** Zod schema for span ID field */
-export const spanIdField = z.string().describe('Unique span identifier within a trace');
+export { traceIdField, spanIdField };
 
 // ============================================================================
 // Helper utilities for creating omit key objects from schema shapes

@@ -1,6 +1,14 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 
+import {
+  DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS,
+  formatToolResultForObserver,
+  resolveToolResultValue,
+} from './tool-result-helpers';
+
+type ObserverFormatOptions = { maxPartLength?: number; maxToolResultTokens?: number };
+
 /**
  * The core extraction instructions for the Observer.
  * This is exported so the Reflector can understand how observations were created.
@@ -221,7 +229,38 @@ Only add a new observation for a repeated action if the NEW result changes the p
 ACTIONABLE INSIGHTS:
 - What worked well in explanations
 - What needs follow-up or clarification
-- User's stated goals or next steps (note if the user tells you not to do a next step, or asks for something specific, other next steps besides the users request should be marked as "waiting for user", unless the user explicitly says to continue all next steps)`;
+- User's stated goals or next steps (note if the user tells you not to do a next step, or asks for something specific, other next steps besides the users request should be marked as "waiting for user", unless the user explicitly says to continue all next steps)
+
+COMPLETION TRACKING:
+Completion observations are not just summaries. They are explicit memory signals to the assistant that a task, question, or subtask has been resolved.
+Without clear completion markers, the assistant may forget that work is already finished and may repeat, reopen, or continue an already-completed task.
+
+Use ✅ to answer: "What exactly is now done?"
+Choose completion observations that help the assistant know what is finished and should not be reworked unless new information appears.
+
+Use ✅ when:
+- The user explicitly confirms something worked or was answered ("thanks, that fixed it", "got it", "perfect")
+- The assistant provided a definitive, complete answer to a factual question and the user moved on
+- A multi-step task reached its stated goal
+- The user acknowledged receipt of requested information
+- A concrete subtask, fix, deliverable, or implementation step became complete during ongoing work
+
+Do NOT use ✅ when:
+- The assistant merely responded — the user might follow up with corrections
+- The topic is paused but not resolved ("I'll try that later")
+- The user's reaction is ambiguous
+
+FORMAT:
+As a sub-bullet under the related observation group:
+* 🔴 (14:30) User asked how to configure auth middleware
+  * -> Agent explained JWT setup with code example
+  * ✅ User confirmed auth is working
+
+Or as a standalone observation when closing out a broader task:
+* ✅ (14:45) Auth configuration task completed — user confirmed middleware is working
+
+Completion observations should be terse but specific about WHAT was completed.
+Prefer concrete resolved outcomes over abstract workflow status so the assistant remembers what is already done.`;
 
 /**
  * The output format instructions for the Observer.
@@ -232,15 +271,17 @@ ACTIONABLE INSIGHTS:
  * Base output format for Observer (without patterns section)
  */
 export const OBSERVER_OUTPUT_FORMAT_BASE = `Use priority levels:
-- 🔴 High: explicit user facts, preferences, goals achieved, critical context
+- 🔴 High: explicit user facts, preferences, unresolved goals, critical context
 - 🟡 Medium: project details, learned information, tool results
 - 🟢 Low: minor details, uncertain observations
+- ✅ Completed: concrete task finished, question answered, issue resolved, goal achieved, or subtask completed in a way that helps the assistant know it is done
 
 Group related observations (like tool sequences) by indenting:
 * 🔴 (14:33) Agent debugging auth issue
   * -> ran git status, found 3 modified files
   * -> viewed auth.ts:45-60, found missing null check
   * -> applied fix, tests now pass
+  * ✅ Tests passing, auth issue resolved
 
 Group observations by date, then list each with 24-hour time.
 
@@ -282,8 +323,12 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
 - If the agent calls tools, observe what was called, why, and what was learned
 - When observing files with line numbers, include the line number if useful
 - If the agent provides a detailed response, observe the contents so it could be repeated
-- Make sure you start each observation with a priority emoji (🔴, 🟡, 🟢)
-- User messages are always 🔴 priority, so are the completions of tasks. Capture the user's words closely — short/medium messages near-verbatim, long messages summarized with key quotes
+- Make sure you start each observation with a priority emoji (🔴, 🟡, 🟢) or a completion marker (✅)
+- Capture the user's words closely — short/medium messages near-verbatim, long messages summarized with key quotes. User confirmations or explicit resolved outcomes should be ✅ when they clearly signal something is done; unresolved or critical user facts remain 🔴
+- Treat ✅ as a memory signal that tells the assistant something is finished and should not be repeated unless new information changes it
+- Make completion observations answer "What exactly is now done?"
+- Prefer concrete resolved outcomes over meta-level workflow or bookkeeping updates
+- When multiple concrete things were completed, capture the concrete completed work rather than collapsing it into a vague progress summary
 - Observe WHAT the agent did and WHAT it means
 - If the user provides detailed messages or code snippets, observe all important details`;
 
@@ -313,6 +358,12 @@ Process each thread separately and output observations for each thread.
 
 Your output MUST use XML tags to structure the response. Each thread's observations, current-task, and suggested-response should be nested inside a <thread id="..."> block within <observations>.
 
+Use this observation format inside each thread block:
+
+${outputFormat}
+
+For multi-thread output, wrap each thread's observations like this:
+
 <observations>
 <thread id="thread_id_1">
 Date: Dec 4, 2025
@@ -341,11 +392,6 @@ Suggested response for this thread
 </suggested-response>
 </thread>
 </observations>
-
-Use priority levels:
-- 🔴 High: explicit user facts, preferences, goals achieved, critical context, user messages
-- 🟡 Medium: project details, learned information, tool results
-- 🟢 Low: minor details, uncertain observations
 
 === GUIDELINES ===
 
@@ -596,9 +642,10 @@ function formatObserverAttachmentPlaceholder(part: ObserverAttachmentPart, count
 function formatObserverMessage(
   msg: MastraDBMessage,
   counter: ObserverAttachmentCounter,
-  options?: { maxPartLength?: number },
+  options?: ObserverFormatOptions,
 ): ObserverFormattedMessage {
   const maxLen = options?.maxPartLength;
+  const maxToolResultTokens = options?.maxToolResultTokens ?? DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS;
   const timestamp = formatObserverTimestamp(msg.createdAt);
   const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
   const timestampStr = timestamp ? ` (${timestamp})` : '';
@@ -614,7 +661,11 @@ function formatObserverMessage(
         if (part.type === 'tool-invocation') {
           const inv = part.toolInvocation;
           if (inv.state === 'result') {
-            const resultStr = JSON.stringify(inv.result, null, 2);
+            const { value: resultForObserver } = resolveToolResultValue(
+              part as { providerMetadata?: Record<string, any> },
+              inv.result,
+            );
+            const resultStr = formatToolResultForObserver(resultForObserver, { maxTokens: maxToolResultTokens });
             return `[Tool Result: ${inv.toolName}]\n${maybeTruncate(resultStr, maxLen)}`;
           }
           const argsStr = JSON.stringify(inv.args, null, 2);
@@ -656,7 +707,7 @@ function formatObserverMessage(
   };
 }
 
-export function formatMessagesForObserver(messages: MastraDBMessage[], options?: { maxPartLength?: number }): string {
+export function formatMessagesForObserver(messages: MastraDBMessage[], options?: ObserverFormatOptions): string {
   const counter = { nextImageId: 1, nextFileId: 1 };
   return messages
     .map(msg => formatObserverMessage(msg, counter, options).text)
@@ -664,13 +715,13 @@ export function formatMessagesForObserver(messages: MastraDBMessage[], options?:
     .join('\n\n---\n\n');
 }
 
-export function buildObserverHistoryMessage(messages: MastraDBMessage[]): CoreMessage {
+export function buildObserverHistoryMessage(messages: MastraDBMessage[], options?: ObserverFormatOptions): CoreMessage {
   const counter = { nextImageId: 1, nextFileId: 1 };
   const content: any[] = [{ type: 'text', text: '## New Message History to Observe\n\n' }];
 
   let visibleCount = 0;
   messages.forEach(message => {
-    const formatted = formatObserverMessage(message, counter);
+    const formatted = formatObserverMessage(message, counter, options);
     if (!formatted.text && formatted.attachments.length === 0) return;
     if (visibleCount > 0) {
       content.push({ type: 'text', text: '\n\n---\n\n' });
@@ -701,6 +752,7 @@ function maybeTruncate(str: string, maxLen?: number): string {
 export function formatMultiThreadMessagesForObserver(
   messagesByThread: Map<string, MastraDBMessage[]>,
   threadOrder: string[],
+  options?: ObserverFormatOptions,
 ): string {
   const sections: string[] = [];
 
@@ -708,7 +760,7 @@ export function formatMultiThreadMessagesForObserver(
     const messages = messagesByThread.get(threadId);
     if (!messages || messages.length === 0) continue;
 
-    const formattedMessages = formatMessagesForObserver(messages);
+    const formattedMessages = formatMessagesForObserver(messages, options);
     sections.push(`<thread id="${threadId}">\n${formattedMessages}\n</thread>`);
   }
 
@@ -718,6 +770,7 @@ export function formatMultiThreadMessagesForObserver(
 export function buildMultiThreadObserverHistoryMessage(
   messagesByThread: Map<string, MastraDBMessage[]>,
   threadOrder: string[],
+  options?: ObserverFormatOptions,
 ): CoreMessage {
   const counter = { nextImageId: 1, nextFileId: 1 };
   const content: any[] = [
@@ -734,7 +787,7 @@ export function buildMultiThreadObserverHistoryMessage(
     const threadContent: any[] = [];
     let visibleCount = 0;
     messages.forEach(message => {
-      const formatted = formatObserverMessage(message, counter);
+      const formatted = formatObserverMessage(message, counter, options);
       if (!formatted.text && formatted.attachments.length === 0) return;
       if (visibleCount > 0) {
         threadContent.push({ type: 'text', text: '\n\n---\n\n' });
@@ -833,8 +886,9 @@ export function buildMultiThreadObserverPrompt(
   threadOrder: string[],
   priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string }>,
   wasTruncated?: boolean,
+  options?: ObserverFormatOptions,
 ): string {
-  const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder);
+  const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder, options);
   return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(existingObservations, threadOrder, priorMetadataByThread, wasTruncated)}`;
 }
 
