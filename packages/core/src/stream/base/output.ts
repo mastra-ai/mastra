@@ -7,7 +7,7 @@ import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
-import { resolveObservabilityContext } from '../../observability';
+import { getRootExportSpan, resolveObservabilityContext } from '../../observability';
 import type { OutputResult } from '../../processors';
 import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
@@ -281,8 +281,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#transportRef = options.transportRef;
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
-    this.traceId = options.tracingContext?.currentSpan?.externalTraceId;
-    this.spanId = options.tracingContext?.currentSpan?.id;
+    const resultSpan = getRootExportSpan(options.tracingContext?.currentSpan);
+    this.traceId = resultSpan?.externalTraceId;
+    this.spanId = resultSpan?.id;
 
     this.#model = _model;
 

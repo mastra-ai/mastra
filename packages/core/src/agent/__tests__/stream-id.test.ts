@@ -4,8 +4,10 @@ import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { Observability, TestExporter } from '../../../../../observability/mastra/src';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import { SpanType } from '../../observability';
 import type { Processor } from '../../processors';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
@@ -278,6 +280,69 @@ describe('Stream ID Consistency', () => {
     expect(savedMessages).toHaveLength(1);
     expect(savedMessages[0].id).toBe(messageId!);
     expect(customIdGenerator).toHaveBeenCalled();
+  });
+
+  it('should expose the root agent span ID on traced stream results', async () => {
+    const testExporter = new TestExporter({ logMetricsOnFlush: false, storeLogs: false });
+    const tracedMastra = new Mastra({
+      logger: false,
+      observability: new Observability({
+        configs: {
+          default: {
+            serviceName: 'stream-span-id-test',
+            exporters: [testExporter],
+          },
+        },
+      }),
+      agents: {
+        assistant: new Agent({
+          id: 'assistant',
+          name: 'Assistant',
+          instructions: 'You are a concise assistant.',
+          model: new MockLanguageModelV2({
+            doStream: async () => ({
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                {
+                  type: 'response-metadata',
+                  id: 'v2-msg-span-test',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Hello from Mastra.' },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            }),
+          }),
+        }),
+      },
+    });
+
+    try {
+      const streamResult = await tracedMastra.getAgent('assistant').stream('Say hello from Mastra in one sentence.');
+
+      await streamResult.consumeStream();
+      await tracedMastra.observability.getDefaultInstance()?.flush();
+
+      const [agentRunSpan] = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      const [modelGenerationSpan] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+
+      expect(agentRunSpan).toBeDefined();
+      expect(modelGenerationSpan).toBeDefined();
+      expect(streamResult.traceId).toBe(agentRunSpan?.traceId);
+      expect(streamResult.spanId).not.toBe(modelGenerationSpan?.id);
+      expect(streamResult.spanId).toBe(agentRunSpan?.id);
+    } finally {
+      await tracedMastra.observability.shutdown();
+    }
   });
 
   it('should let processInputStep rotate the active response message ID for stream output and persistence', async () => {
