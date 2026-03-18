@@ -1,5 +1,42 @@
 # @mastra/core
 
+## 1.15.0-alpha.0
+
+### Minor Changes
+
+- Add `server.studioHost`, `server.studioProtocol`, and `server.studioPort` options for Studio in cloud deployments ([#12899](https://github.com/mastra-ai/mastra/pull/12899))
+
+  When deploying to cloud environments (e.g., Google Cloud Run), `server.host` must be `0.0.0.0` for the container to accept traffic, and the internal port often differs from the external one (e.g., 8080 internally vs 443 externally). Studio needs the actual public domain, protocol, and port to make API calls from the browser. These new options decouple the server bind configuration from the Studio API URL.
+
+  ```typescript
+  export const mastra = new Mastra({
+    server: {
+      host: '0.0.0.0',
+      port: 8080,
+      studioHost: 'my-app.run.app',
+      studioProtocol: 'https',
+      studioPort: 443,
+    },
+  });
+  ```
+
+  All three options are optional and fall back to existing behavior when not set.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5))
+
+- Fixed agent.stream() so the returned spanId matches the top-level agent run span instead of the nested model span. ([#14447](https://github.com/mastra-ai/mastra/pull/14447))
+
+- Fixed trace context propagation in evented workflow steps and processors. Operations started inside those steps now appear under the correct parent in distributed traces. ([#14455](https://github.com/mastra-ai/mastra/pull/14455))
+
+- Fix OTEL context propagation in workflow step execution. Wrapping `step.execute()` in `executeWithContext` ensures auto-instrumented code inside a step (e.g. AI SDK spans) is correctly nested under the workflow step span rather than appearing as siblings. ([#13755](https://github.com/mastra-ai/mastra/pull/13755))
+
+- Added version query parameters to GET /api/agents/:agentId endpoint. Code-defined agents can now be resolved with specific stored config versions using ?status=draft (latest, default), ?status=published (active version), or ?versionId=<id> (specific version). ([#14156](https://github.com/mastra-ai/mastra/pull/14156))
+
+- Updated dependencies [[`b71bce1`](https://github.com/mastra-ai/mastra/commit/b71bce144912ed33f76c52a94e594988a649c3e1)]:
+  - @mastra/schema-compat@1.2.6-alpha.0
+
 ## 1.14.0
 
 ### Patch Changes
