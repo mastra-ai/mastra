@@ -142,86 +142,86 @@ export class StepExecutor extends MastraBase {
         fn: () =>
           step.execute(
             createDeprecationProxy(
-          {
-            workflowId: params.workflowId,
-            runId,
-            mastra: this.mastra!,
-            requestContext,
-            inputData,
-            state: params.state,
-            setState: async (newState: Record<string, any>) => {
-              // Capture state update - don't mutate params.state in place
-              // This matches default engine behavior where state changes
-              // are applied AFTER the step completes, not during execution
-              stateUpdate = { ...(stateUpdate ?? params.state), ...newState };
-            },
-            retryCount,
-            resumeData: params.resumeData,
-            suspendData: suspendDataToUse,
-            getInitData: () => stepResults?.input as any,
-            getStepResult: getStepResult.bind(this, stepResults),
-            suspend: async (suspendPayload: unknown, suspendOptions?: SuspendOptions): Promise<InnerOutput> => {
-              const { suspendData, validationError } = await validateStepSuspendData({
-                suspendData: suspendPayload,
-                step,
-                validateInputs: params.validateInputs ?? true,
-              });
-              if (validationError) {
-                throw validationError;
-              }
-              // Build resume labels if provided
-              const resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
-              if (suspendOptions?.resumeLabel) {
-                const labels = Array.isArray(suspendOptions.resumeLabel)
-                  ? suspendOptions.resumeLabel
-                  : [suspendOptions.resumeLabel];
-                for (const label of labels) {
-                  resumeLabels[label] = {
-                    stepId: step.id,
-                    foreachIndex: params.foreachIdx,
-                  };
-                }
-              }
-              suspended = {
-                payload: {
-                  ...suspendData,
-                  __workflow_meta: {
-                    runId,
-                    path: [step.id],
-                    foreachIndex: params.foreachIdx,
-                    resumeLabels: Object.keys(resumeLabels).length > 0 ? resumeLabels : undefined,
-                  },
-                },
-              };
-            },
-            bail: (result: any): InnerOutput => {
-              bailed = { payload: result };
-            },
-            writer: new ToolStream(
               {
-                prefix: 'workflow-step',
-                callId,
-                name: step.id,
+                workflowId: params.workflowId,
                 runId,
+                mastra: this.mastra!,
+                requestContext,
+                inputData,
+                state: params.state,
+                setState: async (newState: Record<string, any>) => {
+                  // Capture state update - don't mutate params.state in place
+                  // This matches default engine behavior where state changes
+                  // are applied AFTER the step completes, not during execution
+                  stateUpdate = { ...(stateUpdate ?? params.state), ...newState };
+                },
+                retryCount,
+                resumeData: params.resumeData,
+                suspendData: suspendDataToUse,
+                getInitData: () => stepResults?.input as any,
+                getStepResult: getStepResult.bind(this, stepResults),
+                suspend: async (suspendPayload: unknown, suspendOptions?: SuspendOptions): Promise<InnerOutput> => {
+                  const { suspendData, validationError } = await validateStepSuspendData({
+                    suspendData: suspendPayload,
+                    step,
+                    validateInputs: params.validateInputs ?? true,
+                  });
+                  if (validationError) {
+                    throw validationError;
+                  }
+                  // Build resume labels if provided
+                  const resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
+                  if (suspendOptions?.resumeLabel) {
+                    const labels = Array.isArray(suspendOptions.resumeLabel)
+                      ? suspendOptions.resumeLabel
+                      : [suspendOptions.resumeLabel];
+                    for (const label of labels) {
+                      resumeLabels[label] = {
+                        stepId: step.id,
+                        foreachIndex: params.foreachIdx,
+                      };
+                    }
+                  }
+                  suspended = {
+                    payload: {
+                      ...suspendData,
+                      __workflow_meta: {
+                        runId,
+                        path: [step.id],
+                        foreachIndex: params.foreachIdx,
+                        resumeLabels: Object.keys(resumeLabels).length > 0 ? resumeLabels : undefined,
+                      },
+                    },
+                  };
+                },
+                bail: (result: any): InnerOutput => {
+                  bailed = { payload: result };
+                },
+                writer: new ToolStream(
+                  {
+                    prefix: 'workflow-step',
+                    callId,
+                    name: step.id,
+                    runId,
+                  },
+                  outputWriter,
+                ),
+                abort: () => {
+                  abortController?.abort();
+                },
+                [PUBSUB_SYMBOL]: this.mastra!.pubsub,
+                [STREAM_FORMAT_SYMBOL]: params.format,
+                engine: {},
+                abortSignal: abortController?.signal,
+                ...createObservabilityContext(params.tracingContext),
               },
-              outputWriter,
+              {
+                paramName: 'runCount',
+                deprecationMessage: runCountDeprecationMessage,
+                logger: this.logger,
+              },
             ),
-            abort: () => {
-              abortController?.abort();
-            },
-            [PUBSUB_SYMBOL]: this.mastra!.pubsub,
-            [STREAM_FORMAT_SYMBOL]: params.format,
-            engine: {},
-            abortSignal: abortController?.signal,
-            ...createObservabilityContext(params.tracingContext),
-          },
-          {
-            paramName: 'runCount',
-            deprecationMessage: runCountDeprecationMessage,
-            logger: this.logger,
-          },
-        ),
-      ),
+          ),
       });
 
       const isNestedWorkflowStep = step.component === 'WORKFLOW';
