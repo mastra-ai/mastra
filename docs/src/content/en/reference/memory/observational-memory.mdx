@@ -96,6 +96,14 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             isOptional: true,
           },
           {
+            name: 'threadTitle',
+            type: 'boolean',
+            description:
+              'When `true`, the Observer suggests short thread titles and updates the thread title when the conversation topic meaningfully changes. This is opt-in and defaults to disabled.',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
             name: 'messageTokens',
             type: 'number',
             description:
