@@ -8,6 +8,7 @@ import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { TracingContext } from '../../observability';
 import { createObservabilityContext } from '../../observability';
+import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { getStepResult } from '../step';
@@ -136,8 +137,11 @@ export class StepExecutor extends MastraBase {
       const callId = randomUUID();
       const outputWriter = this.createOutputWriter(runId);
 
-      const stepOutput = await step.execute(
-        createDeprecationProxy(
+      const stepOutput = await executeWithContext({
+        span: params.tracingContext?.currentSpan,
+        fn: () =>
+          step.execute(
+            createDeprecationProxy(
           {
             workflowId: params.workflowId,
             runId,
@@ -217,7 +221,8 @@ export class StepExecutor extends MastraBase {
             logger: this.logger,
           },
         ),
-      );
+      ),
+      });
 
       const isNestedWorkflowStep = step.component === 'WORKFLOW';
 

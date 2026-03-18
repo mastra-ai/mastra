@@ -13,6 +13,7 @@ import type { MastraScorers } from '../../evals';
 import type { Event } from '../../events';
 import type { Mastra } from '../../mastra';
 import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
+import { executeWithContext } from '../../observability/utils';
 import type { ObservabilityContext } from '../../observability';
 import type { OutputResult, Processor } from '../../processors';
 import { ProcessorRunner, ProcessorState, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
@@ -876,9 +877,11 @@ function createStepFromProcessor<TProcessorId extends string>(
       };
 
       // Helper to execute phase with proper span lifecycle management
+      // Uses executeWithContext to set the processor span as the active OTEL context,
+      // so auto-instrumented operations inside processors nest correctly under the span.
       const executePhaseWithSpan = async <T>(fn: () => Promise<T>): Promise<T> => {
         try {
-          const result = await fn();
+          const result = await executeWithContext({ span: processorSpan, fn });
           processorSpan?.end({ output: result });
           return result;
         } catch (error) {
