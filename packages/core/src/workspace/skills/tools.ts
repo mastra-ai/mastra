@@ -52,8 +52,8 @@ async function resolveSkill(
   if (skill) return { skill };
 
   const allSkills = await skills.list();
-  const skillNames = allSkills.map(s => s.name);
-  return { notFound: `Skill "${identifier}" not found. Available skills: ${skillNames.join(', ')}` };
+  const skillEntries = allSkills.map(s => `${s.name} (${s.path})`);
+  return { notFound: `Skill "${identifier}" not found. Available skills: ${skillEntries.join(', ')}` };
 }
 
 function createSkillTool(skills: WorkspaceSkills) {
@@ -147,18 +147,18 @@ function createSkillReadTool(skills: WorkspaceSkills) {
       const resolved = await resolveSkill(skills, skillName);
       if ('notFound' in resolved) return resolved.notFound;
 
-      const resolvedName = resolved.skill.name;
+      const resolvedPath = resolved.skill.path;
 
-      // Try each reader — they all do the same thing (resolve name + readFile)
+      // Try each reader using the resolved path to target the exact skill candidate
       let content: string | Buffer | null = null;
-      content = await skills.getReference(resolvedName, path);
-      if (content === null) content = await skills.getScript(resolvedName, path);
-      if (content === null) content = await skills.getAsset(resolvedName, path);
+      content = await skills.getReference(resolvedPath, path);
+      if (content === null) content = await skills.getScript(resolvedPath, path);
+      if (content === null) content = await skills.getAsset(resolvedPath, path);
 
       if (content === null) {
-        const refs = (await skills.listReferences(resolvedName)).map(f => `references/${f}`);
-        const scriptsList = (await skills.listScripts(resolvedName)).map(f => `scripts/${f}`);
-        const assets = (await skills.listAssets(resolvedName)).map(f => `assets/${f}`);
+        const refs = (await skills.listReferences(resolvedPath)).map(f => `references/${f}`);
+        const scriptsList = (await skills.listScripts(resolvedPath)).map(f => `scripts/${f}`);
+        const assets = (await skills.listAssets(resolvedPath)).map(f => `assets/${f}`);
         const allFiles = [...refs, ...scriptsList, ...assets];
         const fileList = allFiles.length > 0 ? `\nAvailable files: ${allFiles.join(', ')}` : '';
         return `File "${path}" not found in skill "${skillName}".${fileList}`;

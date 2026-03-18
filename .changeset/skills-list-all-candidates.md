@@ -12,4 +12,12 @@ When multiple skills share the same name (e.g., a local `brand-guidelines` skill
 - If two skills share the same name _and_ source type, `get(name)` throws an error — rename one or move it to a different source type
 - `get(path)` bypasses tie-breaking entirely and returns the exact skill
 
-**Processor change:** `formatAvailableSkills()` now fetches each skill by path instead of name, so the LLM system prompt includes all same-named skills with their paths for disambiguation.
+Agents and UIs now receive all same-named skills with their paths, which improves disambiguation in prompts and tool calls.
+
+```ts
+const skills = await workspace.skills.list()
+// Returns both local and external "brand-guidelines" skills
+
+const exact = await workspace.skills.get('node_modules/@myorg/skills/brand-guidelines')
+// Fetches the external copy directly by path
+```

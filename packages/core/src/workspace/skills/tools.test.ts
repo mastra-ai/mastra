@@ -185,7 +185,9 @@ describe('skill tool', () => {
 
     const result = await exec(tool, { name: 'nonexistent' });
 
-    expect(result).toBe('Skill "nonexistent" not found. Available skills: alpha, beta');
+    expect(result).toBe(
+      'Skill "nonexistent" not found. Available skills: alpha (/skills/test-skill), beta (/skills/test-skill)',
+    );
   });
 
   it('returns error with empty list when no skills exist', async () => {
@@ -241,7 +243,7 @@ describe('skill tool', () => {
     const result = await exec(tool, { name: 'plan' });
 
     expect(result).toContain('Skill "plan" not found.');
-    expect(result).toContain('Available skills: plan, plan');
+    expect(result).toContain('Available skills: plan (.mastra/skills/plan), plan (user-skills/plan)');
   });
 });
 
