@@ -2,6 +2,7 @@ import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4';
 import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod/v3';
+import type { BrowserToolsetLike } from '../browser';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type {
   CoreMessage,
@@ -49,6 +50,7 @@ export type {
 } from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { LLMStepResult } from '../stream/types';
+export type { BrowserToolsetLike, ScreencastOptionsLike, ScreencastStreamLike } from '../browser';
 
 /**
  * Accepts Mastra tools, Vercel AI SDK tools, and provider-defined tools
@@ -289,6 +291,12 @@ export interface AgentConfig<
    * @default 'xml'
    */
   skillsFormat?: SkillFormat;
+  /**
+   * Browser toolset for browser automation capabilities.
+   * Tools from the browser toolset are automatically merged into agent tools.
+   * The toolset is accessible via agent.browser for server-side features like screencast.
+   */
+  browser?: BrowserToolsetLike;
   /**
    * Voice settings for speech input and output.
    */

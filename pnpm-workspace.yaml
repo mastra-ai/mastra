@@ -5,6 +5,7 @@ packages:
   - packages/*
   - deployers/*
   - stores/*
+  - browser/*
   - voice/*
   - workflows/*
   - workspaces/*

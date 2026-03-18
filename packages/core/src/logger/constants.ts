@@ -8,6 +8,7 @@ export const RegisteredLogger = {
   LLM: 'LLM',
   TTS: 'TTS',
   VOICE: 'VOICE',
+  BROWSER: 'BROWSER',
   VECTOR: 'VECTOR',
   BUNDLER: 'BUNDLER',
   DEPLOYER: 'DEPLOYER',

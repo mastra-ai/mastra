@@ -100,6 +100,7 @@ import type {
   StructuredOutputOptions,
   PublicStructuredOutputOptions,
   ModelWithRetries,
+  BrowserToolsetLike,
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
@@ -174,6 +175,7 @@ export class Agent<
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
+  #browser?: BrowserToolsetLike;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
@@ -297,6 +299,10 @@ export class Agent<
       this.#voice = new DefaultVoice();
     }
 
+    if (config.browser) {
+      this.#browser = config.browser;
+    }
+
     if (config.workspace) {
       this.#workspace = config.workspace;
     }
@@ -323,6 +329,14 @@ export class Agent<
 
   getMastraInstance() {
     return this.#mastra;
+  }
+
+  /**
+   * Returns the browser toolset for this agent, if configured.
+   * Used by server-side code to access browser features like screencast streaming.
+   */
+  get browser(): BrowserToolsetLike | undefined {
+    return this.#browser;
   }
 
   /**
@@ -1329,18 +1343,27 @@ export class Agent<
   /**
    * Gets the tools configured for this agent, resolving function-based tools if necessary.
    * Tools extend the agent's capabilities, allowing it to perform specific actions or access external systems.
+   * If a browser toolset is configured, its tools are automatically merged.
    *
    * @example
    * ```typescript
    * const tools = await agent.listTools();
-   * console.log(Object.keys(tools)); // ['calculator', 'weather']
+   * console.log(Object.keys(tools)); // ['calculator', 'weather', 'browser_navigate', ...]
    * ```
    */
   public listTools({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
     | TTools
     | Promise<TTools> {
+    const mergeBrowserTools = (baseTools: TTools): TTools => {
+      if (!this.#browser) {
+        return baseTools;
+      }
+      return { ...this.#browser.tools, ...baseTools } as TTools;
+    };
+
     if (typeof this.#tools !== 'function') {
-      return ensureToolProperties(this.#tools) as TTools;
+      const tools = ensureToolProperties(this.#tools) as TTools;
+      return mergeBrowserTools(tools);
     }
 
     const result = this.#tools({
@@ -1364,7 +1387,7 @@ export class Agent<
         throw mastraError;
       }
 
-      return ensureToolProperties(tools) as TTools;
+      return mergeBrowserTools(ensureToolProperties(tools) as TTools);
     });
   }
 
