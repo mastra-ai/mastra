@@ -430,17 +430,10 @@ export async function createHonoServer(
       const autoDetectUrl = process.env.MASTRA_AUTO_DETECT_URL === 'true';
 
       indexHtml = injectStudioHtmlConfig(indexHtml, {
-<<<<<<< feat/server-public-host-protocol
         host: `'${studioHost}'`,
         port: `'${studioPort}'`,
         protocol: `'${studioProtocol}'`,
         apiPrefix: `'${serverOptions?.apiPrefix ?? '/api'}'`,
-=======
-        host: `'${host}'`,
-        port: `'${port}'`,
-        protocol: `'${protocol}'`,
-        apiPrefix: `'${apiPrefix}'`,
->>>>>>> main
         basePath: studioBasePath,
         hideCloudCta: `'${hideCloudCta}'`,
         cloudApiEndpoint: `'${cloudApiEndpoint}'`,
