@@ -673,6 +673,8 @@ export type ProviderModelsMap = {
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
     'gpt-5.4',
+    'gpt-5.4-mini',
+    'gpt-5.4-nano',
     'gpt-5.4-pro',
     'kimi-k2.5',
     'mimo-v2-flash-free',
