@@ -73,7 +73,9 @@ describe('CustomEditor image paste handling', () => {
     mocks.superRender.mockReturnValue(['────', 'hello', '────']);
     mocks.chalkHex.mockImplementation((_color: string) => (value: string) => value);
     mocks.chalkBoldHex.mockImplementation((color: string) => (value: string) => `[hex:${color}]${value}`);
-    mocks.chalkBoldRgb.mockImplementation((r: number, g: number, b: number) => (value: string) => `[rgb:${r},${g},${b}]${value}`);
+    mocks.chalkBoldRgb.mockImplementation(
+      (r: number, g: number, b: number) => (value: string) => `[rgb:${r},${g},${b}]${value}`,
+    );
     mocks.matchesKey.mockImplementation((_data: string, _key: string) => false);
     mocks.statSync.mockReturnValue({ isFile: () => true });
     mocks.readFileSync.mockReturnValue(Buffer.from('dragged-image-binary'));
