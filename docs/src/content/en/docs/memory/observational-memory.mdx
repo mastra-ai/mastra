@@ -114,22 +114,25 @@ This two-representation model keeps provenance durable for graph-mode memory whi
 
 ### Graph mode
 
-Set `observationalMemory.graph: true` to preserve observation groups as durable pointers to raw message history.
+Set `observationalMemory.graph: true` with `scope: 'thread'` to preserve observation groups as durable pointers to raw message history.
 
 ```typescript
 const memory = new Memory({
   options: {
     observationalMemory: {
       model: 'google/gemini-2.5-flash',
+      scope: 'thread',
       graph: true,
     },
   },
 })
 ```
 
+Graph mode is only active for thread-scoped observational memory. If you set `graph: true` with `scope: 'resource'`, OM keeps resource-scoped memory behavior but skips graph-mode context and does not register the `recall` tool.
+
 Graph mode lets the actor inspect the raw messages behind a stored observation group.
 
-When `graph: true` is enabled, OM keeps each group's `_range` metadata visible in the actor context and registers a `recall` tool. The actor passes a cursor message id plus pagination arguments when it needs exact wording, tool outputs, or chronology that the observation summary compressed away.
+When thread-scoped `graph: true` is enabled, OM keeps each group's `_range` metadata visible in the actor context and registers a `recall` tool. The actor passes a cursor message id plus pagination arguments when it needs exact wording, tool outputs, or chronology that the observation summary compressed away.
 
 ```typescript
 const tools = memory.listTools()
@@ -152,7 +155,7 @@ await tools.recall?.execute?.(
 
 Positive `page` values move forward from the cursor, negative values move backward, and `page: 0` is treated as `page: 1`.
 
-`recall` is only available when `observationalMemory.graph` is enabled, and it only returns messages from the current thread around the requested cursor.
+`recall` is only available when `observationalMemory.graph` is enabled in thread scope, and it only returns messages from the current thread around the requested cursor.
 
 ## Models
 

@@ -262,12 +262,13 @@ describe('om-tools', () => {
   });
 
   describe('Memory.listTools', () => {
-    it('should register recall when observational memory graph mode is enabled', () => {
+    it('should register recall when observational memory graph mode is enabled for thread scope', () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
         options: {
           observationalMemory: {
             model: 'google/gemini-2.5-flash',
+            scope: 'thread',
             graph: true,
           } as any,
         },
@@ -275,6 +276,22 @@ describe('om-tools', () => {
 
       const tools = memory.listTools();
       expect(tools.recall).toBeDefined();
+    });
+
+    it('should not register recall when graph mode is enabled for resource scope', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          observationalMemory: {
+            model: 'google/gemini-2.5-flash',
+            scope: 'resource',
+            graph: true,
+          } as any,
+        },
+      });
+
+      const tools = memory.listTools();
+      expect(tools.recall).toBeUndefined();
     });
 
     it('should not register recall when graph mode is disabled', () => {
