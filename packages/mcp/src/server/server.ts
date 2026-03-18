@@ -488,9 +488,17 @@ export class MCPServer extends MCPServerBase {
           },
         };
 
+        const proxiedContext = new RequestContext();
+        if (extra) {
+          Object.entries(extra).forEach(([key, value]) => {
+            proxiedContext.set(key, value);
+          });
+        }
+
         const mcpOptions: MastraToolInvocationOptions = {
           messages: [],
           toolCallId: '',
+          requestContext: proxiedContext,
           // Pass MCP-specific context through the mcp property
           mcp: {
             elicitation: sessionElicitation,
