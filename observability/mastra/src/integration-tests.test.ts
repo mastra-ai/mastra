@@ -900,6 +900,49 @@ describe('Tracing Integration Tests', () => {
     },
   );
 
+  it('should export agent stream spans with AGENT_RUN as the root span', async () => {
+    const testAgent = new Agent({
+      id: 'test-agent-stream-root',
+      name: 'Test Agent Stream Root',
+      instructions: 'You are a test agent',
+      model: mockModelV2,
+    });
+
+    const mastra = new Mastra({
+      ...getBaseMastraConfig(testExporter),
+      agents: { testAgent },
+    });
+
+    const agent = mastra.getAgent('testAgent');
+    const result = await agent.stream('Hello');
+
+    let fullText = '';
+    for await (const chunk of result.textStream) {
+      fullText += chunk;
+    }
+
+    expect(fullText).toBe('Mock V2 stream response');
+    expect(result.traceId).toBeDefined();
+    expect(result.spanId).toBeDefined();
+
+    const [agentRunSpan] = testExporter.getSpansByType(SpanType.AGENT_RUN);
+    const [modelGenerationSpan] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+    const [modelStepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+    const rootSpans = testExporter.getRootSpans();
+
+    expect(agentRunSpan).toBeDefined();
+    expect(modelGenerationSpan).toBeDefined();
+    expect(modelStepSpan).toBeDefined();
+    expect(rootSpans).toHaveLength(1);
+    expect(rootSpans[0]?.id).toBe(agentRunSpan?.id);
+    expect(agentRunSpan?.traceId).toBe(result.traceId);
+    expect(result.spanId).toBe(agentRunSpan?.id);
+    expect(modelGenerationSpan?.parentSpanId).toBe(agentRunSpan?.id);
+    expect(modelStepSpan?.parentSpanId).toBe(modelGenerationSpan?.id);
+
+    finalExpectations(testExporter);
+  });
+
   describe.each(agentMethods)('should trace agent using structuredOutput format using $name', ({ method, model }) => {
     it(`should trace spans correctly`, async () => {
       const testAgent = new Agent({

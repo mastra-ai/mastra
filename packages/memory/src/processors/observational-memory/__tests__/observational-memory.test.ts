@@ -9512,6 +9512,40 @@ describe('Observer Context Optimization', () => {
       expect(tailKept.length).toBeGreaterThanOrEqual(Math.ceil(kept.length / 2));
     });
 
+    it('should preserve ✅ completion observations around truncation when budget allows', () => {
+      const tc = new TokenCounter();
+      const observations = [
+        '- Detail early 1',
+        '- ✅ Early completion marker',
+        '- Detail early 3',
+        ...Array.from({ length: 16 }, (_, i) => `- Observation line ${i + 4}`),
+      ].join('\n');
+      const desired = [
+        '- ✅ Early completion marker',
+        '[10 observations truncated here]',
+        '- Observation line 12',
+        '- Observation line 13',
+        '- Observation line 14',
+        '- Observation line 15',
+        '- Observation line 16',
+        '- Observation line 17',
+        '- Observation line 18',
+        '- Observation line 19',
+      ].join('\n');
+      const budget = tc.countObservations(desired) + 2;
+      const om = createOM({ previousObserverTokens: budget });
+
+      const result = prepareObserverContext(om, observations)!;
+      const lines = result.split('\n').filter(Boolean);
+      const kept = lines.filter(line => !/^\[\d+ observations truncated here\]$/.test(line));
+      const tailKept = kept.filter(line => /^- Observation line \d+$/.test(line));
+
+      expect(result).toMatch(/\[\d+ observations truncated here\]/);
+      expect(result).toContain('✅ Early completion marker');
+      expect(tc.countObservations(result)).toBeLessThanOrEqual(budget);
+      expect(tailKept.length).toBeGreaterThanOrEqual(Math.ceil(kept.length / 2));
+    });
+
     it('should drop oldest important observations first when still over budget', () => {
       const tc = new TokenCounter();
       // Budget just large enough to keep the newest important line + a small tail,
