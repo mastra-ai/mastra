@@ -21,41 +21,57 @@ import {
   WorkflowStreamToAISDKV6Transformer,
 } from './transformers';
 
-type WorkflowStreamOptions = {
+type WorkflowStreamOptionsBase = {
   from: 'workflow';
   includeTextStreamParts?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
 };
 
-type NetworkStreamOptions = {
+type WorkflowStreamOptionsV5 = WorkflowStreamOptionsBase & {
+  version?: 'v5';
+};
+
+type WorkflowStreamOptionsV6 = WorkflowStreamOptionsBase & {
+  version: 'v6';
+};
+
+type NetworkStreamOptionsBase = {
   from: 'network';
 };
 
-type AgentStreamOptionsV5 = {
+type NetworkStreamOptionsV5 = NetworkStreamOptionsBase & {
+  version?: 'v5';
+};
+
+type NetworkStreamOptionsV6 = NetworkStreamOptionsBase & {
+  version: 'v6';
+};
+
+type AgentStreamOptionsBase = {
   from: 'agent';
   lastMessageId?: string;
   sendStart?: boolean;
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
+};
+
+type AgentStreamOptionsV5 = AgentStreamOptionsBase & {
+  version?: 'v5';
   messageMetadata?: UIMessageStreamOptionsV5<UIMessageV5>['messageMetadata'];
   onError?: UIMessageStreamOptionsV5<UIMessageV5>['onError'];
 };
 
-type AgentStreamOptionsV6 = {
-  from: 'agent';
-  lastMessageId?: string;
-  sendStart?: boolean;
-  sendFinish?: boolean;
-  sendReasoning?: boolean;
-  sendSources?: boolean;
+type AgentStreamOptionsV6 = AgentStreamOptionsBase & {
+  version: 'v6';
   messageMetadata?: UIMessageStreamOptionsV6<UIMessageV6>['messageMetadata'];
   onError?: UIMessageStreamOptionsV6<UIMessageV6>['onError'];
 };
 
-type ToAISDKStreamOptions = WorkflowStreamOptions | NetworkStreamOptions | AgentStreamOptionsV5;
-type ToAISDKV6StreamOptions = WorkflowStreamOptions | NetworkStreamOptions | AgentStreamOptionsV6;
+type ToAISDKStreamOptionsV5 = WorkflowStreamOptionsV5 | NetworkStreamOptionsV5 | AgentStreamOptionsV5;
+type ToAISDKStreamOptionsV6 = WorkflowStreamOptionsV6 | NetworkStreamOptionsV6 | AgentStreamOptionsV6;
+type ToAISDKStreamOptions = ToAISDKStreamOptionsV5 | ToAISDKStreamOptionsV6;
 
 export function toAISdkV5Stream<
   TOutput extends ZodType<any>,
@@ -64,7 +80,7 @@ export function toAISdkV5Stream<
   TState extends ZodObject<any>,
 >(
   stream: MastraWorkflowStream<TState, TInput, TOutput, TSteps>,
-  options: WorkflowStreamOptions,
+  options: WorkflowStreamOptionsV5,
 ): ReadableStream<InferUIMessageChunkV5<UIMessageV5>>;
 export function toAISdkV5Stream<
   TOutput extends ZodType<any>,
@@ -73,11 +89,11 @@ export function toAISdkV5Stream<
   TState extends ZodObject<any>,
 >(
   stream: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>,
-  options: WorkflowStreamOptions,
+  options: WorkflowStreamOptionsV5,
 ): ReadableStream<InferUIMessageChunkV5<UIMessageV5>>;
 export function toAISdkV5Stream<OUTPUT = undefined>(
   stream: MastraAgentNetworkStream<OUTPUT>,
-  options: NetworkStreamOptions,
+  options: NetworkStreamOptionsV5,
 ): ReadableStream<InferUIMessageChunkV5<UIMessageV5>>;
 export function toAISdkV5Stream<TOutput>(
   stream: MastraModelOutput<TOutput>,
@@ -89,7 +105,7 @@ export function toAISdkV5Stream(
     | MastraWorkflowStream<any, any, any, any>
     | MastraAgentNetworkStream
     | MastraModelOutput,
-  options: ToAISDKStreamOptions = {
+  options: ToAISDKStreamOptionsV5 = {
     from: 'agent',
     sendStart: true,
     sendFinish: true,
@@ -134,41 +150,107 @@ export function toAISdkV5Stream(
   ) as ReadableStream<InferUIMessageChunkV5<UIMessageV5>>;
 }
 
-export function toAISdkV6Stream<
+export function toAISdkStream<
   TOutput extends ZodType<any>,
   TInput extends ZodType<any>,
   TSteps extends Step<string, any, any, any, any, any>[],
   TState extends ZodObject<any>,
->(stream: MastraWorkflowStream<TState, TInput, TOutput, TSteps>, options: WorkflowStreamOptions): V6UIMessageStream;
-export function toAISdkV6Stream<
+>(
+  stream: MastraWorkflowStream<TState, TInput, TOutput, TSteps>,
+  options: WorkflowStreamOptionsV5,
+): ReadableStream<InferUIMessageChunkV5<UIMessageV5>>;
+export function toAISdkStream<
   TOutput extends ZodType<any>,
   TInput extends ZodType<any>,
   TSteps extends Step<string, any, any, any, any, any>[],
   TState extends ZodObject<any>,
 >(
   stream: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>,
-  options: WorkflowStreamOptions,
-): V6UIMessageStream;
-export function toAISdkV6Stream<OUTPUT = undefined>(
+  options: WorkflowStreamOptionsV5,
+): ReadableStream<InferUIMessageChunkV5<UIMessageV5>>;
+export function toAISdkStream<OUTPUT = undefined>(
   stream: MastraAgentNetworkStream<OUTPUT>,
-  options: NetworkStreamOptions,
+  options: NetworkStreamOptionsV5,
+): ReadableStream<InferUIMessageChunkV5<UIMessageV5>>;
+export function toAISdkStream<TOutput>(
+  stream: MastraModelOutput<TOutput>,
+  options: AgentStreamOptionsV5,
+): ReadableStream<InferUIMessageChunkV5<UIMessageV5>>;
+export function toAISdkStream<
+  TOutput extends ZodType<any>,
+  TInput extends ZodType<any>,
+  TSteps extends Step<string, any, any, any, any, any>[],
+  TState extends ZodObject<any>,
+>(stream: MastraWorkflowStream<TState, TInput, TOutput, TSteps>, options: WorkflowStreamOptionsV6): V6UIMessageStream;
+export function toAISdkStream<
+  TOutput extends ZodType<any>,
+  TInput extends ZodType<any>,
+  TSteps extends Step<string, any, any, any, any, any>[],
+  TState extends ZodObject<any>,
+>(
+  stream: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>,
+  options: WorkflowStreamOptionsV6,
 ): V6UIMessageStream;
-export function toAISdkV6Stream<TOutput>(
+export function toAISdkStream<OUTPUT = undefined>(
+  stream: MastraAgentNetworkStream<OUTPUT>,
+  options: NetworkStreamOptionsV6,
+): V6UIMessageStream;
+export function toAISdkStream<TOutput>(
   stream: MastraModelOutput<TOutput>,
   options: AgentStreamOptionsV6,
 ): V6UIMessageStream;
-export function toAISdkV6Stream(
+export function toAISdkStream(
   stream:
     | WorkflowRunOutput<WorkflowResult<any, any, any, any>>
     | MastraWorkflowStream<any, any, any, any>
     | MastraAgentNetworkStream
     | MastraModelOutput,
-  options: ToAISDKV6StreamOptions = {
+  options: ToAISDKStreamOptions = {
     from: 'agent',
     sendStart: true,
     sendFinish: true,
   },
-): V6UIMessageStream {
+): ReadableStream<InferUIMessageChunkV5<UIMessageV5>> | V6UIMessageStream {
+  if (options.version === 'v6') {
+    const from = options.from;
+
+    if (from === 'workflow') {
+      const includeTextStreamParts = options.includeTextStreamParts ?? true;
+      const workflowStream =
+        'fullStream' in stream
+          ? (stream as WorkflowRunOutput<any>).fullStream
+          : (stream as ReadableStream<ChunkType<any>>);
+
+      return workflowStream.pipeThrough(
+        WorkflowStreamToAISDKV6Transformer({
+          includeTextStreamParts,
+          sendReasoning: options.sendReasoning,
+          sendSources: options.sendSources,
+        }),
+      ) as V6UIMessageStream;
+    }
+
+    if (from === 'network') {
+      return (stream as ReadableStream<ChunkType>).pipeThrough(AgentNetworkToAISDKV6Transformer()) as V6UIMessageStream;
+    }
+
+    const agentReadable: ReadableStream<ChunkType<any>> =
+      'fullStream' in stream
+        ? (stream as MastraModelOutput<any>).fullStream
+        : (stream as ReadableStream<ChunkType<any>>);
+    return agentReadable.pipeThrough(
+      AgentStreamToAISDKV6Transformer<any>({
+        lastMessageId: options.lastMessageId,
+        sendStart: options.sendStart,
+        sendFinish: options.sendFinish,
+        sendReasoning: options.sendReasoning,
+        sendSources: options.sendSources,
+        messageMetadata: options.messageMetadata,
+        onError: options.onError,
+      }),
+    ) as ReadableStream<InferUIMessageChunkV6<UIMessageV6>>;
+  }
+
   const from = options.from;
 
   if (from === 'workflow') {
@@ -179,22 +261,24 @@ export function toAISdkV6Stream(
         : (stream as ReadableStream<ChunkType<any>>);
 
     return workflowStream.pipeThrough(
-      WorkflowStreamToAISDKV6Transformer({
+      WorkflowStreamToAISDKTransformer({
         includeTextStreamParts,
         sendReasoning: options.sendReasoning,
         sendSources: options.sendSources,
       }),
-    ) as V6UIMessageStream;
+    ) as ReadableStream<InferUIMessageChunkV5<UIMessageV5>>;
   }
 
   if (from === 'network') {
-    return (stream as ReadableStream<ChunkType>).pipeThrough(AgentNetworkToAISDKV6Transformer()) as V6UIMessageStream;
+    return (stream as ReadableStream<ChunkType>).pipeThrough(AgentNetworkToAISDKTransformer()) as ReadableStream<
+      InferUIMessageChunkV5<UIMessageV5>
+    >;
   }
 
   const agentReadable: ReadableStream<ChunkType<any>> =
     'fullStream' in stream ? (stream as MastraModelOutput<any>).fullStream : (stream as ReadableStream<ChunkType<any>>);
   return agentReadable.pipeThrough(
-    AgentStreamToAISDKV6Transformer<any>({
+    AgentStreamToAISDKTransformer<any>({
       lastMessageId: options.lastMessageId,
       sendStart: options.sendStart,
       sendFinish: options.sendFinish,
@@ -203,5 +287,5 @@ export function toAISdkV6Stream(
       messageMetadata: options.messageMetadata,
       onError: options.onError,
     }),
-  ) as ReadableStream<InferUIMessageChunkV6<UIMessageV6>>;
+  ) as ReadableStream<InferUIMessageChunkV5<UIMessageV5>>;
 }

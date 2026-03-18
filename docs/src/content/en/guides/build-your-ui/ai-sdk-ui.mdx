@@ -904,13 +904,13 @@ For live examples of Custom UI patterns, visit [Mastra's UI Dojo](https://ui-doj
 
 To manually transform Mastra's streams to AI SDK-compatible format, use the [`toAISdkStream()`](/reference/ai-sdk/to-ai-sdk-stream) utility. See the [examples](/reference/ai-sdk/to-ai-sdk-stream#examples) for concrete usage patterns.
 
-If your app is typed against AI SDK v6, use `toAISdkV6Stream()` instead. `toAISdkStream()` remains the default path for AI SDK v5.
+`toAISdkStream()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'`.
 
 ```typescript
-import { toAISdkStream, toAISdkV6Stream } from '@mastra/ai-sdk'
+import { toAISdkStream } from '@mastra/ai-sdk'
 
 const v5Stream = toAISdkStream(mastraStream, { from: 'agent' })
-const v6Stream = toAISdkV6Stream(mastraStream, { from: 'agent' })
+const v6Stream = toAISdkStream(mastraStream, { from: 'agent', version: 'v6' })
 ```
 
 ### Loading historical messages

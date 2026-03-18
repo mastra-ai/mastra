@@ -159,7 +159,7 @@ export async function POST(req: Request) {
 
 If you have a raw Mastra `stream`, you can manually transform it to AI SDK UI message parts:
 
-Use `toAISdkStream` for the current v5/default path, or `toAISdkV6Stream` if your app is typed against `ai@6`.
+Use `toAISdkStream` for both versions. If your app is typed against `ai@6`, pass `version: 'v6'`.
 
 ```typescript
 import { toAISdkStream } from '@mastra/ai-sdk';
@@ -182,4 +182,20 @@ export async function POST(req: Request) {
 
   return createUIMessageStreamResponse({ stream: uiMessageStream });
 }
+```
+
+For AI SDK v6, select the v6 stream contract explicitly:
+
+```typescript
+const uiMessageStream = createUIMessageStream({
+  originalMessages: messages,
+  execute: async ({ writer }) => {
+    for await (const part of toAISdkStream(stream, {
+      from: 'agent',
+      version: 'v6',
+    })) {
+      writer.write(part);
+    }
+  },
+});
 ```
