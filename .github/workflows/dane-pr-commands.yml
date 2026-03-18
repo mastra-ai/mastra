@@ -107,6 +107,7 @@ jobs:
     needs: check-permission
     if: needs.check-permission.outputs.authorized == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       issues: write
@@ -135,6 +136,7 @@ jobs:
         with:
           install-dependencies: 'false'
           package-json-file: trusted/package.json
+          cache-dependency-path: trusted/pnpm-lock.yaml
 
       - name: Install dependencies (trusted)
         run: pnpm install --frozen-lockfile
