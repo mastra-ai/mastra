@@ -1,4 +1,5 @@
 import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL, throwApiError } from '../auth/client.js';
+import { getToken } from '../auth/credentials.js';
 
 export interface Project {
   id: string;
@@ -166,12 +167,13 @@ export async function pollDeploy(
 ): Promise<DeployStatus> {
   const start = Date.now();
   let lastStatus = '';
+  let currentToken = token;
 
   // Start streaming logs in the background via SSE
-  const logAbort = new AbortController();
-  streamDeployLogs(deployId, token, orgId, logAbort.signal).catch(() => {});
+  let logAbort = new AbortController();
+  streamDeployLogs(deployId, currentToken, orgId, logAbort.signal).catch(() => {});
 
-  const client = createApiClient(token, orgId);
+  let client = createApiClient(currentToken, orgId);
 
   try {
     while (Date.now() - start < maxWaitMs) {
@@ -180,6 +182,18 @@ export async function pollDeploy(
       });
 
       if (error) {
+        if (response.status === 401) {
+          // Token expired mid-poll — refresh and retry
+          currentToken = await getToken();
+          client = createApiClient(currentToken, orgId);
+
+          // Restart log stream with fresh token
+          logAbort.abort();
+          logAbort = new AbortController();
+          streamDeployLogs(deployId, currentToken, orgId, logAbort.signal).catch(() => {});
+
+          continue;
+        }
         throwApiError('Poll failed', response.status);
       }
 
