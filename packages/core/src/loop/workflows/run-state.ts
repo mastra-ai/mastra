@@ -12,6 +12,7 @@ type State = {
   hasToolCallStreaming: boolean;
   hasErrored: boolean;
   apiError: unknown | undefined;
+  deferredErrorChunk: any | undefined;
   reasoningDeltas: string[];
   textDeltas: string[];
   isReasoning: boolean;
@@ -42,6 +43,7 @@ export class AgenticRunState {
       hasToolCallStreaming: false,
       hasErrored: false,
       apiError: undefined,
+      deferredErrorChunk: undefined,
       reasoningDeltas: [],
       textDeltas: [],
       stepResult: undefined,

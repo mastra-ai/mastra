@@ -465,11 +465,12 @@ async function processOutputStream<OUTPUT = undefined>({
           },
         });
 
-        const error = getErrorFromUnknown(chunk.payload.error, {
-          fallbackMessage: 'Unknown error in agent stream',
+        // Defer enqueueing the error chunk — processAPIError handlers may intercept it
+        // after processOutputStream completes and signal a retry instead.
+        // Store the chunk so it can be enqueued later if no retry occurs.
+        runState.setState({
+          deferredErrorChunk: chunk,
         });
-        safeEnqueue(controller, { ...chunk, payload: { ...chunk.payload, error } });
-        await options?.onError?.({ error });
         break;
 
       // Provider-executed tool results (e.g. web_search). Client tool results
@@ -1056,16 +1057,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             }
 
             if (isLastModel) {
-              safeEnqueue(controller, {
-                type: 'error',
-                runId,
-                from: ChunkFrom.AGENT,
-                payload: { error },
-              });
-
+              // Defer enqueueing the error chunk — processAPIError handlers may intercept it
+              // and signal a retry instead.
               runState.setState({
                 hasErrored: true,
                 apiError: error,
+                deferredErrorChunk: {
+                  type: 'error',
+                  runId,
+                  from: ChunkFrom.AGENT,
+                  payload: { error },
+                },
                 stepResult: {
                   isContinued: false,
                   reason: 'error',
@@ -1074,55 +1076,50 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             } else {
               // For non-last models, try processAPIError before falling through to next model
               // This allows error processors to fix the request and retry with the SAME model
-              const allProcessors = [...(inputProcessors || []), ...(outputProcessors || [])];
-              const hasErrorProcessors = allProcessors.some(
-                p => 'processAPIError' in p && typeof (p as any).processAPIError === 'function',
-              );
+              // Note: ProcessorRunner auto-injects built-in error processors (e.g. PrefillErrorHandler),
+              // so we always attempt this even if the user hasn't explicitly configured error processors.
+              const processorRunner = new ProcessorRunner({
+                inputProcessors: inputProcessors || [],
+                outputProcessors: outputProcessors || [],
+                logger: logger || new ConsoleLogger({ level: 'error' }),
+                agentName: agentId || 'unknown',
+                processorStates,
+              });
 
-              if (hasErrorProcessors) {
-                const processorRunner = new ProcessorRunner({
-                  inputProcessors: inputProcessors || [],
-                  outputProcessors: outputProcessors || [],
-                  logger: logger || new ConsoleLogger({ level: 'error' }),
-                  agentName: agentId || 'unknown',
-                  processorStates,
+              const currentRetryCount = inputData.processorRetryCount || 0;
+              const canRetryError = maxProcessorRetries !== undefined && currentRetryCount < maxProcessorRetries;
+
+              if (canRetryError) {
+                const errorResult = await processorRunner.runProcessAPIError({
+                  error,
+                  messages: messageList.get.all.db(),
+                  messageList,
+                  stepNumber: inputData.output?.steps?.length || 0,
+                  steps: inputData.output?.steps || [],
+                  retryCount: currentRetryCount,
+                  requestContext,
                 });
 
-                const currentRetryCount = inputData.processorRetryCount || 0;
-                const canRetryError = maxProcessorRetries !== undefined && currentRetryCount < maxProcessorRetries;
-
-                if (canRetryError) {
-                  const errorResult = await processorRunner.runProcessAPIError({
-                    error,
-                    messages: messageList.get.all.db(),
-                    messageList,
-                    stepNumber: inputData.output?.steps?.length || 0,
-                    steps: inputData.output?.steps || [],
-                    retryCount: currentRetryCount,
-                    requestContext,
+                if (errorResult.retry) {
+                  // Signal retry - store on runState so it's handled after the callback returns
+                  runState.setState({
+                    hasErrored: false,
+                    apiError: undefined,
                   });
 
-                  if (errorResult.retry) {
-                    // Signal retry - store on runState so it's handled after the callback returns
-                    runState.setState({
-                      hasErrored: false,
-                      apiError: undefined,
-                    });
-
-                    // Return normally (don't throw) so executeStreamWithFallbackModels considers this done
-                    // The retry will be handled by the processAPIError handling below
-                    return {
-                      outputStream,
-                      callBail: false,
-                      runState,
-                      stepTools: currentStep.tools,
-                      stepWorkspace: currentStep.workspace,
-                      processAPIErrorRetry: {
-                        retry: true,
-                        feedback: errorResult.feedback,
-                      },
-                    };
-                  }
+                  // Return normally (don't throw) so executeStreamWithFallbackModels considers this done
+                  // The retry will be handled by the processAPIError handling below
+                  return {
+                    outputStream,
+                    callBail: false,
+                    runState,
+                    stepTools: currentStep.tools,
+                    stepWorkspace: currentStep.workspace,
+                    processAPIErrorRetry: {
+                      retry: true,
+                      feedback: errorResult.feedback,
+                    },
+                  };
                 }
               }
 
@@ -1199,42 +1196,36 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let apiErrorRetryResult: { retry: boolean; feedback?: string } | undefined = processAPIErrorRetry;
 
       if (!apiErrorRetryResult && runState.state.hasErrored && runState.state.apiError) {
-        const allProcessors = [...(inputProcessors || []), ...(outputProcessors || [])];
-        const hasErrorProcessors = allProcessors.some(
-          p => 'processAPIError' in p && typeof (p as any).processAPIError === 'function',
-        );
+        const currentRetryCount = inputData.processorRetryCount || 0;
+        const canRetryError = maxProcessorRetries !== undefined && currentRetryCount < maxProcessorRetries;
 
-        if (hasErrorProcessors) {
-          const currentRetryCount = inputData.processorRetryCount || 0;
-          const canRetryError = maxProcessorRetries !== undefined && currentRetryCount < maxProcessorRetries;
+        if (canRetryError) {
+          const processorRunner = new ProcessorRunner({
+            inputProcessors: inputProcessors || [],
+            outputProcessors: outputProcessors || [],
+            logger: logger || new ConsoleLogger({ level: 'error' }),
+            agentName: agentId || 'unknown',
+            processorStates,
+          });
 
-          if (canRetryError) {
-            const processorRunner = new ProcessorRunner({
-              inputProcessors: inputProcessors || [],
-              outputProcessors: outputProcessors || [],
-              logger: logger || new ConsoleLogger({ level: 'error' }),
-              agentName: agentId || 'unknown',
-              processorStates,
+          const errorResult = await processorRunner.runProcessAPIError({
+            error: runState.state.apiError,
+            messages: messageList.get.all.db(),
+            messageList,
+            stepNumber: inputData.output?.steps?.length || 0,
+            steps: inputData.output?.steps || [],
+            retryCount: currentRetryCount,
+            requestContext,
+          });
+
+          if (errorResult.retry) {
+            apiErrorRetryResult = errorResult;
+            // Clear error state for retry
+            runState.setState({
+              hasErrored: false,
+              apiError: undefined,
+              deferredErrorChunk: undefined,
             });
-
-            const errorResult = await processorRunner.runProcessAPIError({
-              error: runState.state.apiError,
-              messages: messageList.get.all.db(),
-              messageList,
-              stepNumber: inputData.output?.steps?.length || 0,
-              steps: inputData.output?.steps || [],
-              retryCount: currentRetryCount,
-              requestContext,
-            });
-
-            if (errorResult.retry) {
-              apiErrorRetryResult = errorResult;
-              // Clear error state for retry
-              runState.setState({
-                hasErrored: false,
-                apiError: undefined,
-              });
-            }
           }
         }
       }
@@ -1281,6 +1272,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           processorRetryCount: currentProcessorRetryCount + 1,
           processorRetryFeedback: retryFeedbackText,
         };
+      }
+
+      // If error was deferred and no retry was signaled, enqueue the error chunk now
+      if (runState.state.deferredErrorChunk && runState.state.hasErrored) {
+        const deferredChunk = runState.state.deferredErrorChunk;
+        const deferredError = getErrorFromUnknown(deferredChunk.payload.error, {
+          fallbackMessage: 'Unknown error in agent stream',
+        });
+        safeEnqueue(controller, { ...deferredChunk, payload: { ...deferredChunk.payload, error: deferredError } });
+        await options?.onError?.({ error: deferredError });
+        runState.setState({ deferredErrorChunk: undefined });
       }
 
       if (outputStream.tripwire) {

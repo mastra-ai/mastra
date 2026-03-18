@@ -48,11 +48,6 @@ export class PrefillErrorHandler implements Processor<'prefill-error-handler'> {
 
     if (!isPrefillError(error)) return;
 
-    // Check if the last non-system message is from the assistant
-    const messages = messageList.get.all.db();
-    const lastMessage = messages[messages.length - 1];
-    if (!lastMessage || lastMessage.role !== 'assistant') return;
-
     // Append a user message to break the trailing assistant pattern
     messageList.add(
       {

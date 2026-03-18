@@ -112,7 +112,7 @@ describe('PrefillErrorHandler', () => {
     expect(result).toBeUndefined();
   });
 
-  it('should return undefined when last message is not from assistant', () => {
+  it('should still retry even when last message is not from assistant', () => {
     const handler = new PrefillErrorHandler();
     const messageList = new MessageList({ threadId: 'test-thread' });
     messageList.add([createMessage('hello', 'user')], 'input');
@@ -123,7 +123,10 @@ describe('PrefillErrorHandler', () => {
 
     const result = handler.processAPIError(args);
 
-    expect(result).toBeUndefined();
+    expect(result).toEqual({ retry: true });
+    // Should have appended a <continue> user message
+    const allMessages = messageList.get.all.db();
+    expect(allMessages[allMessages.length - 1]?.role).toBe('user');
   });
 
   it('should not modify messageList when error is not a prefill error', () => {
