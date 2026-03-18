@@ -3,11 +3,12 @@ import type { StorageThreadType } from '../memory/types';
 import type { ApiRoute } from '../server/types';
 
 import type {
-  ChannelEvent,
   ChannelRouteConfig,
   ChannelSendParams,
   ChannelSendResult,
   GetOrCreateThreadParams,
+  ProcessWebhookEventParams,
+  ProcessWebhookResult,
 } from './types';
 
 export abstract class MastraChannel extends MastraBase {
@@ -24,25 +25,62 @@ export abstract class MastraChannel extends MastraBase {
 
   /**
    * Returns API routes for receiving webhook events from the platform.
-   * These routes should be registered via `server.apiRoutes` in the Mastra config.
+   * These routes are auto-registered when the channel is added to Mastra config.
    */
   abstract getWebhookRoutes(): ApiRoute[];
-
-  /**
-   * Verifies that an incoming webhook request is authentic.
-   * Each platform has its own verification mechanism (e.g. Slack signing secret).
-   */
-  abstract verifyWebhook(request: Request): Promise<boolean>;
-
-  /**
-   * Parses a verified webhook request into a normalized ChannelEvent.
-   */
-  abstract parseWebhookEvent(request: Request): Promise<ChannelEvent>;
 
   /**
    * Sends a message to the platform.
    */
   abstract send(params: ChannelSendParams): Promise<ChannelSendResult>;
+
+  /**
+   * Shared webhook processing pipeline: resolve agent → get/create thread → generate → send.
+   * Called by platform-specific webhook handlers after verification and event parsing.
+   */
+  async processWebhookEvent({ event, mastra }: ProcessWebhookEventParams): Promise<ProcessWebhookResult> {
+    const agentName = this.resolveAgentForEvent(event.type);
+    if (!agentName) {
+      this.logger.debug(`No agent configured for event type: ${event.type}`);
+      return { handled: false };
+    }
+
+    const agent = mastra.getAgent(agentName);
+
+    const resourceId = `${this.platform}:${event.externalChannelId}:${event.externalThreadId}`;
+
+    const thread = await this.getOrCreateThread({
+      externalThreadId: event.externalThreadId,
+      channelId: event.externalChannelId,
+      resourceId,
+      mastra,
+    });
+
+    const result = await agent.generate(event.text || '', {
+      memory: {
+        thread,
+        resource: `${this.platform}:${event.userId}`,
+      },
+    });
+
+    let sendResult: ChannelSendResult | undefined;
+
+    if (result.text) {
+      sendResult = await this.send({
+        channelId: event.externalChannelId,
+        threadId: event.externalThreadId,
+        content: { text: result.text },
+      });
+    }
+
+    return {
+      handled: true,
+      agentName,
+      threadId: thread.id,
+      responseText: result.text,
+      sendResult,
+    };
+  }
 
   /**
    * Resolves an existing Mastra thread for the given external IDs, or creates one.

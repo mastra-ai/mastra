@@ -6,7 +6,7 @@ import type { ApiRoute } from '../../server/types';
 import type { MemoryStorage } from '../../storage';
 
 import { MastraChannel } from '../base';
-import type { ChannelEvent, ChannelSendParams, ChannelSendResult } from '../types';
+import type { ChannelSendParams, ChannelSendResult, ChannelEvent } from '../types';
 
 /**
  * Concrete test implementation of MastraChannel for testing the base class.
@@ -14,23 +14,10 @@ import type { ChannelEvent, ChannelSendParams, ChannelSendResult } from '../type
 class TestChannel extends MastraChannel {
   readonly platform = 'test';
 
-  async verifyWebhook(_request: Request): Promise<boolean> {
-    return true;
-  }
+  sentMessages: ChannelSendParams[] = [];
 
-  async parseWebhookEvent(_request: Request): Promise<ChannelEvent> {
-    return {
-      type: 'message',
-      platform: 'test',
-      externalThreadId: 'thread-1',
-      externalChannelId: 'channel-1',
-      userId: 'user-1',
-      text: 'hello',
-      rawEvent: {},
-    };
-  }
-
-  async send(_params: ChannelSendParams): Promise<ChannelSendResult> {
+  async send(params: ChannelSendParams): Promise<ChannelSendResult> {
+    this.sentMessages.push(params);
     return { ok: true, externalMessageId: 'msg-1' };
   }
 
@@ -46,7 +33,7 @@ function createMockMemoryStore(existingThreads: StorageThreadType[] = []) {
   } as unknown as MemoryStorage;
 }
 
-function createMockMastra(memoryStore: MemoryStorage | null = null) {
+function createMockMastra(memoryStore: MemoryStorage | null = null, agents: Record<string, any> = {}) {
   const storage = memoryStore
     ? {
         getStore: vi.fn().mockImplementation((name: string) => {
@@ -58,7 +45,18 @@ function createMockMastra(memoryStore: MemoryStorage | null = null) {
 
   return {
     getStorage: vi.fn().mockReturnValue(storage),
+    getAgent: vi.fn().mockImplementation((name: string) => {
+      const agent = agents[name];
+      if (!agent) throw new Error(`Agent ${name} not found`);
+      return agent;
+    }),
   } as unknown as Mastra;
+}
+
+function createMockAgent(responseText: string = 'Hello from agent') {
+  return {
+    generate: vi.fn().mockResolvedValue({ text: responseText }),
+  };
 }
 
 describe('MastraChannel', () => {
@@ -76,7 +74,6 @@ describe('MastraChannel', () => {
 
   describe('resolveAgentForEvent', () => {
     it('returns the agent name for a matching event type', () => {
-      // resolveAgentForEvent is protected, access via any
       const result = (channel as any).resolveAgentForEvent('message');
       expect(result).toBe('my-agent');
     });
@@ -178,21 +175,100 @@ describe('MastraChannel', () => {
         }),
       ).rejects.toThrow('Storage is required');
     });
+  });
 
-    it('generates a valid UUID for new thread IDs', async () => {
+  describe('processWebhookEvent', () => {
+    it('resolves the correct agent and invokes generate', async () => {
       const memoryStore = createMockMemoryStore([]);
-      const mastra = createMockMastra(memoryStore);
+      const agent = createMockAgent('Hi there!');
+      const mastra = createMockMastra(memoryStore, { 'my-agent': agent });
 
-      await channel.getOrCreateThread({
-        externalThreadId: 'ext-thread-1',
-        channelId: 'ext-channel-1',
-        resourceId: 'user-1',
-        mastra,
+      const event: ChannelEvent = {
+        type: 'message',
+        platform: 'test',
+        externalThreadId: 'thread-1',
+        externalChannelId: 'channel-1',
+        userId: 'user-1',
+        text: 'Hello',
+        rawEvent: {},
+      };
+
+      const result = await channel.processWebhookEvent({ event, mastra });
+
+      expect(result.handled).toBe(true);
+      expect(result.agentName).toBe('my-agent');
+      expect(result.responseText).toBe('Hi there!');
+      expect(agent.generate).toHaveBeenCalledWith('Hello', {
+        memory: {
+          thread: expect.objectContaining({ resourceId: 'test:channel-1:thread-1' }),
+          resource: 'test:user-1',
+        },
       });
+    });
 
-      const savedThread = (memoryStore.saveThread as any).mock.calls[0][0].thread;
-      // UUID v4 format
-      expect(savedThread.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    it('sends the response back to the platform', async () => {
+      const memoryStore = createMockMemoryStore([]);
+      const agent = createMockAgent('Reply text');
+      const mastra = createMockMastra(memoryStore, { 'my-agent': agent });
+
+      const event: ChannelEvent = {
+        type: 'message',
+        platform: 'test',
+        externalThreadId: 'thread-1',
+        externalChannelId: 'channel-1',
+        userId: 'user-1',
+        text: 'Hello',
+        rawEvent: {},
+      };
+
+      await channel.processWebhookEvent({ event, mastra });
+
+      expect(channel.sentMessages).toHaveLength(1);
+      expect(channel.sentMessages[0]).toEqual({
+        channelId: 'channel-1',
+        threadId: 'thread-1',
+        content: { text: 'Reply text' },
+      });
+    });
+
+    it('returns handled: false when no agent is configured', async () => {
+      const mastra = createMockMastra(null);
+
+      const event: ChannelEvent = {
+        type: 'slash_command',
+        platform: 'test',
+        externalThreadId: 'thread-1',
+        externalChannelId: 'channel-1',
+        userId: 'user-1',
+        rawEvent: {},
+      };
+
+      const result = await channel.processWebhookEvent({ event, mastra });
+
+      expect(result.handled).toBe(false);
+      expect(result.agentName).toBeUndefined();
+    });
+
+    it('does not send when agent returns no text', async () => {
+      const memoryStore = createMockMemoryStore([]);
+      const agent = createMockAgent('');
+      const mastra = createMockMastra(memoryStore, { 'my-agent': agent });
+
+      const event: ChannelEvent = {
+        type: 'message',
+        platform: 'test',
+        externalThreadId: 'thread-1',
+        externalChannelId: 'channel-1',
+        userId: 'user-1',
+        text: 'Hello',
+        rawEvent: {},
+      };
+
+      const result = await channel.processWebhookEvent({ event, mastra });
+
+      expect(result.handled).toBe(true);
+      expect(channel.sentMessages).toHaveLength(0);
+      expect(result.sendResult).toBeUndefined();
     });
   });
 });

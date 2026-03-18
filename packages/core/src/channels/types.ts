@@ -92,3 +92,29 @@ export type ChannelRouteConfig = Record<
     events: ChannelEventType[];
   }
 >;
+
+/**
+ * Parameters for the shared processWebhookEvent pipeline.
+ */
+export type ProcessWebhookEventParams = {
+  /** The normalized event from the platform. */
+  event: ChannelEvent;
+  /** The Mastra instance for agent/storage access. */
+  mastra: Mastra;
+};
+
+/**
+ * Result of processing a webhook event.
+ */
+export type ProcessWebhookResult = {
+  /** Whether the event was handled (an agent was found and invoked). */
+  handled: boolean;
+  /** The name of the agent that handled the event. */
+  agentName?: string;
+  /** The Mastra thread ID used for the conversation. */
+  threadId?: string;
+  /** The text response from the agent. */
+  responseText?: string;
+  /** The result of sending the response back to the platform. */
+  sendResult?: ChannelSendResult;
+};
