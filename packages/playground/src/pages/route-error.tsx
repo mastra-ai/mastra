@@ -7,12 +7,27 @@ export function RouteError() {
 
   let title = 'Something went wrong';
   let description = 'An unexpected error occurred.';
+  const normalizeErrorDescription = (error: unknown, fallback: string): string => {
+    if (error instanceof Error) {
+      return error.message;
+    } else if (typeof error === 'string') {
+      return error;
+    } else if (typeof error === 'object' && error !== null) {
+      try {
+        return JSON.stringify(error);
+      } catch {
+        return fallback;
+      }
+    }
+
+    return fallback;
+  };
 
   if (isRouteErrorResponse(error)) {
     title = error.status === 404 ? 'Page not found' : `${error.status} ${error.statusText}`;
-    description = error.status === 404 ? 'The page you are looking for does not exist.' : (error.data ?? description);
-  } else if (error instanceof Error) {
-    description = error.message;
+    description = error.status === 404 ? 'The page you are looking for does not exist.' : normalizeErrorDescription(error.data, description);
+  } else {
+    description = normalizeErrorDescription(error, description);
   }
 
   return (

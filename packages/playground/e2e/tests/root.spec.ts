@@ -13,5 +13,5 @@ test('root path redirects to agents', async ({ page }) => {
 test('non-existent path shows 404', async ({ page }) => {
   await page.goto('/this-path-does-not-exist');
   await expect(page.getByTestId('route-error')).toBeVisible();
-  await expect(page.locator('h3')).toHaveText('Page not found');
+  await expect(page.getByTestId('route-error').locator('h3')).toHaveText('Page not found');
 });

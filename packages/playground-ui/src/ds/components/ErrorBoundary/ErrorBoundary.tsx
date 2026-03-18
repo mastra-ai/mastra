@@ -10,8 +10,12 @@ export class ErrorBoundary extends React.Component<React.PropsWithChildren, Erro
     this.state = { error: null };
   }
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { error };
+  static getDerivedStateFromError(error: unknown ): ErrorBoundaryState {
+    if (error instanceof Error) {
+      return { error };  
+    }
+
+    return { error: new Error(typeof error === 'string' ? error : 'An unexpected error occurred') };
   }
 
   override render() {
