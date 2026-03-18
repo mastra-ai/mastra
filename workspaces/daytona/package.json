@@ -39,7 +39,7 @@
     "@mastra/core": "workspace:*",
     "@mastra/gcs": "workspace:*",
     "@mastra/s3": "workspace:*",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.3.1",
@@ -66,5 +66,13 @@
   },
   "engines": {
     "node": ">=22.13.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "fast-xml-parser@<=5.3.8": "5.3.8",
+      "@aws-sdk/client-dynamodb@<=3.974.0": "3.974.0",
+      "@aws-sdk/lib-dynamodb@<=3.974.0": "3.974.0",
+      "@aws-sdk/client-s3vectors@<=3.974.0": "3.974.0"
+    }
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/client-js",
-  "version": "1.8.1",
+  "version": "1.9.0",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
   "type": "module",
@@ -42,6 +42,7 @@
     "test:unit": "vitest run"
   },
   "dependencies": {
+    "@ai-sdk/ui-utils": "^1.2.11",
     "@lukeed/uuid": "^2.0.1",
     "@mastra/core": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
@@ -53,11 +54,10 @@
   "devDependencies": {
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
-    "@ai-sdk/ui-utils": "^1.2.11",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",

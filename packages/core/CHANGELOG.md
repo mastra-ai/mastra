@@ -1,5 +1,216 @@
 # @mastra/core
 
+## 1.14.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5))
+
+- Added dated message boundary delimiters when activating buffered observations for improved cache stability. ([#14367](https://github.com/mastra-ai/mastra/pull/14367))
+
+- Fixed provider-executed tool calls being saved out of order or without results in memory replay. (Fixes #13762) ([#13860](https://github.com/mastra-ai/mastra/pull/13860))
+
+- Fix `generateEmptyFromSchema` to accept both string and pre-parsed object JSON schema inputs, recursively initialize nested object properties, and respect default values. Updated `WorkingMemoryTemplate` type to a discriminated union supporting `Record<string, unknown>` content for JSON format templates. Removed duplicate private schema generator in the working-memory processor in favor of the shared utility. ([#14310](https://github.com/mastra-ai/mastra/pull/14310))
+
+- Fixed provider-executed tool calls (e.g. Anthropic `web_search`) being dropped or incorrectly persisted when deferred by the provider. Tool call parts are now persisted in stream order, and deferred tool results are correctly merged back into the originating message. ([#14282](https://github.com/mastra-ai/mastra/pull/14282))
+
+- Fixed `replaceString` utility to properly escape `$` characters in replacement strings. Previously, patterns like `$&` in the replacement text would be interpreted as regex backreferences instead of literal text. ([#14434](https://github.com/mastra-ai/mastra/pull/14434))
+
+- Fixed tool invocation updates to preserve `providerExecuted` and `providerMetadata` from the original tool call when updating to result state. ([#14431](https://github.com/mastra-ai/mastra/pull/14431))
+
+- `@mastra/core`: patch ([#14327](https://github.com/mastra-ai/mastra/pull/14327))
+
+  Added `spanId` alongside `traceId` across user-facing execution results that return tracing identifiers (including agent stream/generate and workflow run results) so integrations can query observability vendors by run root span ID
+
+- Add AI Gateway tool support in the agentic loop. ([#14016](https://github.com/mastra-ai/mastra/pull/14016))
+
+  Gateway tools (e.g., `gateway.tools.perplexitySearch()`) are provider-executed but, unlike native provider tools (e.g., `openai.tools.webSearch()`), the LLM provider does not store their results server-side. The agentic loop now correctly infers `providerExecuted` for these tools, merges streamed provider results with their corresponding tool calls, and skips local execution when a provider result is already present.
+
+  Fixes #13190
+
+- Fixed schema-based working memory typing so `workingMemory.schema` accepts supported schemas such as Zod and JSON Schema. ([#14363](https://github.com/mastra-ai/mastra/pull/14363))
+
+- Fixed workspace search being wiped when skills refresh. Previously, calling `skills.refresh()` or triggering a skills re-discovery via `maybeRefresh()` would clear the entire BM25 search index, including auto-indexed workspace content. Now only skill entries are removed from the index during refresh, preserving workspace search results. ([#14287](https://github.com/mastra-ai/mastra/pull/14287))
+
+- Added client/server body schemas for feedback and scores that omit the timestamp field, allowing it to be set server-side ([#14270](https://github.com/mastra-ai/mastra/pull/14270))
+
+- Fixed processor state not persisting between processOutputStream and processOutputResult when processors are wrapped in workflows. State set during stream processing is now correctly accessible in processOutputResult. ([#14279](https://github.com/mastra-ai/mastra/pull/14279))
+
+- Fixed type inference for requestContext schemas when using Zod v3 and v4. Agent and tool configurations now correctly infer RequestContext types from Zod schemas and other StandardSchema-compatible schemas. ([#14363](https://github.com/mastra-ai/mastra/pull/14363))
+
+- Updated dependencies [[`4a7ce05`](https://github.com/mastra-ai/mastra/commit/4a7ce05125b8d3d260f68f1fc4a6c6866d22ba24)]:
+  - @mastra/schema-compat@1.2.5
+
+## 1.14.0-alpha.3
+
+### Patch Changes
+
+- Fixed `replaceString` utility to properly escape `$` characters in replacement strings. Previously, patterns like `$&` in the replacement text would be interpreted as regex backreferences instead of literal text. ([#14434](https://github.com/mastra-ai/mastra/pull/14434))
+
+- Fixed tool invocation updates to preserve `providerExecuted` and `providerMetadata` from the original tool call when updating to result state. ([#14431](https://github.com/mastra-ai/mastra/pull/14431))
+
+- Fixed schema-based working memory typing so `workingMemory.schema` accepts supported schemas such as Zod and JSON Schema. ([#14363](https://github.com/mastra-ai/mastra/pull/14363))
+
+- Fixed type inference for requestContext schemas when using Zod v3 and v4. Agent and tool configurations now correctly infer RequestContext types from Zod schemas and other StandardSchema-compatible schemas. ([#14363](https://github.com/mastra-ai/mastra/pull/14363))
+
+## 1.14.0-alpha.2
+
+### Patch Changes
+
+- Added dated message boundary delimiters when activating buffered observations for improved cache stability. ([#14367](https://github.com/mastra-ai/mastra/pull/14367))
+
+- Fixed provider-executed tool calls (e.g. Anthropic `web_search`) being dropped or incorrectly persisted when deferred by the provider. Tool call parts are now persisted in stream order, and deferred tool results are correctly merged back into the originating message. ([#14282](https://github.com/mastra-ai/mastra/pull/14282))
+
+- Added client/server body schemas for feedback and scores that omit the timestamp field, allowing it to be set server-side ([#14270](https://github.com/mastra-ai/mastra/pull/14270))
+
+## 1.13.3-alpha.1
+
+### Patch Changes
+
+- Fix `generateEmptyFromSchema` to accept both string and pre-parsed object JSON schema inputs, recursively initialize nested object properties, and respect default values. Updated `WorkingMemoryTemplate` type to a discriminated union supporting `Record<string, unknown>` content for JSON format templates. Removed duplicate private schema generator in the working-memory processor in favor of the shared utility. ([#14310](https://github.com/mastra-ai/mastra/pull/14310))
+
+- `@mastra/core`: patch ([#14327](https://github.com/mastra-ai/mastra/pull/14327))
+
+  Added `spanId` alongside `traceId` across user-facing execution results that return tracing identifiers (including agent stream/generate and workflow run results) so integrations can query observability vendors by run root span ID
+
+- Fixed workspace search being wiped when skills refresh. Previously, calling `skills.refresh()` or triggering a skills re-discovery via `maybeRefresh()` would clear the entire BM25 search index, including auto-indexed workspace content. Now only skill entries are removed from the index during refresh, preserving workspace search results. ([#14287](https://github.com/mastra-ai/mastra/pull/14287))
+
+## 1.13.3-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5))
+
+- Fixed provider-executed tool calls being saved out of order or without results in memory replay. (Fixes #13762) ([#13860](https://github.com/mastra-ai/mastra/pull/13860))
+
+- Add AI Gateway tool support in the agentic loop. ([#14016](https://github.com/mastra-ai/mastra/pull/14016))
+
+  Gateway tools (e.g., `gateway.tools.perplexitySearch()`) are provider-executed but, unlike native provider tools (e.g., `openai.tools.webSearch()`), the LLM provider does not store their results server-side. The agentic loop now correctly infers `providerExecuted` for these tools, merges streamed provider results with their corresponding tool calls, and skips local execution when a provider result is already present.
+
+  Fixes #13190
+
+- Fixed processor state not persisting between processOutputStream and processOutputResult when processors are wrapped in workflows. State set during stream processing is now correctly accessible in processOutputResult. ([#14279](https://github.com/mastra-ai/mastra/pull/14279))
+
+- Updated dependencies [[`4a7ce05`](https://github.com/mastra-ai/mastra/commit/4a7ce05125b8d3d260f68f1fc4a6c6866d22ba24)]:
+  - @mastra/schema-compat@1.2.5-alpha.0
+
+## 1.13.2
+
+### Patch Changes
+
+- Fix WorkingMemory type to accept Zod schemas in workingMemory.schema configuration ([#14261](https://github.com/mastra-ai/mastra/pull/14261))
+
+- Updated dependencies [[`1978bc4`](https://github.com/mastra-ai/mastra/commit/1978bc424dbb04f5f7c5d8522f07f1166006fa3f)]:
+  - @mastra/schema-compat@1.2.4
+
+## 1.13.2-alpha.0
+
+### Patch Changes
+
+- Fix WorkingMemory type to accept Zod schemas in workingMemory.schema configuration ([#14261](https://github.com/mastra-ai/mastra/pull/14261))
+
+- Updated dependencies [[`1978bc4`](https://github.com/mastra-ai/mastra/commit/1978bc424dbb04f5f7c5d8522f07f1166006fa3f)]:
+  - @mastra/schema-compat@1.2.4-alpha.0
+
+## 1.13.1
+
+### Patch Changes
+
+- Fixed tryRepairJson to handle unquoted date values (e.g. 2026-04-15) in tool call arguments. LLMs like Claude Sonnet sometimes produce bare date values without quotes, causing JSON.parse to fail and tool calls to silently lose all arguments. The repair function now detects and quotes date-like values matching YYYY-MM-DD and YYYY-MM-DDTHH:MM:SS patterns. See https://github.com/mastra-ai/mastra/issues/14230 ([#14233](https://github.com/mastra-ai/mastra/pull/14233))
+
+- Updated dependencies [[`c4e600e`](https://github.com/mastra-ai/mastra/commit/c4e600e39a04309c3a7ff182bd806ab2b3c788ea)]:
+  - @mastra/schema-compat@1.2.3
+
+## 1.13.0
+
+### Minor Changes
+
+- **Added observability storage domain schemas and implementations** ([#14214](https://github.com/mastra-ai/mastra/pull/14214))
+
+  Introduced comprehensive storage schemas and in-memory implementations for all observability signals (scores, logs, feedback, metrics, discovery). All schemas are zod-based with full type inference. The `ObservabilityStorage` base class includes default implementations for all new methods.
+
+  **Breaking changes:**
+  - `MetricType` (`counter`/`gauge`/`histogram`) is deprecated — metrics are now raw events with aggregation at query time
+  - Score schemas use `scorerId` instead of `scorerName` for scorer identification
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`ea86967`](https://github.com/mastra-ai/mastra/commit/ea86967449426e0a3673253bd1c2c052a99d970d))
+
+- Fixed provider tools (e.g. `openai.tools.webSearch()`) being silently dropped when using a custom gateway that returns AI SDK v6 (V3) models. The router now remaps tool types from `provider-defined` to `provider` when delegating to V3 models, so provider tools work correctly through gateways. Fixes #13667. ([#13895](https://github.com/mastra-ai/mastra/pull/13895))
+
+- Fixed TypeScript type errors in `onStepFinish` and `onFinish` callbacks, and resolved compatibility issues with `createOpenRouter()` across different AI SDK versions. ([#14229](https://github.com/mastra-ai/mastra/pull/14229))
+
+- Fixed a bug where thread metadata (e.g. title, custom properties) passed via `options.memory.thread` was discarded when `MASTRA_THREAD_ID_KEY` was set in the request context. The thread ID from context still takes precedence, but all other user-provided thread properties are now preserved. ([#13146](https://github.com/mastra-ai/mastra/pull/13146))
+
+- Fixed workspace tools such as `mastra_workspace_list_files` and `mastra_workspace_read_file` failing with `WorkspaceNotAvailableError` in some execution paths. ([#14228](https://github.com/mastra-ai/mastra/pull/14228))
+
+  Workspace tools now work consistently across execution paths.
+
+- Added observer context optimization for Observational Memory. The `observation.previousObserverTokens` field reduces Observer input token costs for long-running conversations: ([#13568](https://github.com/mastra-ai/mastra/pull/13568))
+  - **previousObserverTokens** (default: `2000`): Truncates the 'Previous Observations' section to a token budget, keeping the most recent observations and automatically replacing already-reflected lines with the buffered reflection summary. Set to `0` to omit previous observations entirely, or `false` to disable truncation and keep the full observation history.
+
+  ```typescript
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        observation: {
+          previousObserverTokens: 10_000,
+        },
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`a1d6b9c`](https://github.com/mastra-ai/mastra/commit/a1d6b9c907c909f259632a7ea26e9e3c221fb691), [`c562ec2`](https://github.com/mastra-ai/mastra/commit/c562ec228f1af63693e2984ffa9712aa6db8fea8)]:
+  - @mastra/schema-compat@1.2.2
+
+## 1.13.0-alpha.0
+
+### Minor Changes
+
+- **Added observability storage domain schemas and implementations** ([#14214](https://github.com/mastra-ai/mastra/pull/14214))
+
+  Introduced comprehensive storage schemas and in-memory implementations for all observability signals (scores, logs, feedback, metrics, discovery). All schemas are zod-based with full type inference. The `ObservabilityStorage` base class includes default implementations for all new methods.
+
+  **Breaking changes:**
+  - `MetricType` (`counter`/`gauge`/`histogram`) is deprecated — metrics are now raw events with aggregation at query time
+  - Score schemas use `scorerId` instead of `scorerName` for scorer identification
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`ea86967`](https://github.com/mastra-ai/mastra/commit/ea86967449426e0a3673253bd1c2c052a99d970d))
+
+- Fixed provider tools (e.g. `openai.tools.webSearch()`) being silently dropped when using a custom gateway that returns AI SDK v6 (V3) models. The router now remaps tool types from `provider-defined` to `provider` when delegating to V3 models, so provider tools work correctly through gateways. Fixes #13667. ([#13895](https://github.com/mastra-ai/mastra/pull/13895))
+
+- Fixed TypeScript type errors in `onStepFinish` and `onFinish` callbacks, and resolved compatibility issues with `createOpenRouter()` across different AI SDK versions. ([#14229](https://github.com/mastra-ai/mastra/pull/14229))
+
+- Fixed a bug where thread metadata (e.g. title, custom properties) passed via `options.memory.thread` was discarded when `MASTRA_THREAD_ID_KEY` was set in the request context. The thread ID from context still takes precedence, but all other user-provided thread properties are now preserved. ([#13146](https://github.com/mastra-ai/mastra/pull/13146))
+
+- Fixed workspace tools such as `mastra_workspace_list_files` and `mastra_workspace_read_file` failing with `WorkspaceNotAvailableError` in some execution paths. ([#14228](https://github.com/mastra-ai/mastra/pull/14228))
+
+  Workspace tools now work consistently across execution paths.
+
+- Added observer context optimization for Observational Memory. The `observation.previousObserverTokens` field reduces Observer input token costs for long-running conversations: ([#13568](https://github.com/mastra-ai/mastra/pull/13568))
+  - **previousObserverTokens** (default: `2000`): Truncates the 'Previous Observations' section to a token budget, keeping the most recent observations and automatically replacing already-reflected lines with the buffered reflection summary. Set to `0` to omit previous observations entirely, or `false` to disable truncation and keep the full observation history.
+
+  ```typescript
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        observation: {
+          previousObserverTokens: 10_000,
+        },
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`a1d6b9c`](https://github.com/mastra-ai/mastra/commit/a1d6b9c907c909f259632a7ea26e9e3c221fb691), [`c562ec2`](https://github.com/mastra-ai/mastra/commit/c562ec228f1af63693e2984ffa9712aa6db8fea8)]:
+  - @mastra/schema-compat@1.2.2-alpha.0
+
 ## 1.12.0
 
 ### Minor Changes

@@ -1385,6 +1385,116 @@ describe('validateToolInput - Null Stripping for Optional Fields (GitHub #12362)
   });
 });
 
+describe('validateToolInput - Absent Optional Fields in Nested Objects (GitHub #13518)', () => {
+  // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/13518
+  // When an LLM sends an empty nested object (e.g., { story: {} }) for a schema with
+  // optional string fields inside, the absent fields (undefined) should be accepted by
+  // the original Zod schema's .optional() wrapper. This was previously broken when
+  // processZodType converted .optional() to .nullable() without preserving .optional(),
+  // causing validateToolInput to reject absent fields.
+
+  it('should accept empty nested objects when inner fields are optional (the original #13518 scenario)', () => {
+    const schema = z.object({
+      name: z.string().optional(),
+      story: z
+        .object({
+          whyTheyCreate: z.string().optional(),
+          howLong: z.string().optional(),
+        })
+        .optional(),
+    });
+
+    // LLM sends { name: "Rafael", story: {} } — inner fields are absent
+    const input = { name: 'Rafael', story: {} };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'Rafael', story: {} });
+  });
+
+  it('should accept null for optional nested object fields', () => {
+    const schema = z.object({
+      name: z.string().optional(),
+      story: z
+        .object({
+          whyTheyCreate: z.string().optional(),
+          howLong: z.string().optional(),
+        })
+        .optional(),
+    });
+
+    // LLM sends null for the optional nested object
+    const input = { name: 'Rafael', story: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    // null is stripped and becomes undefined for .optional() field
+    expect(result.data).toEqual({ name: 'Rafael' });
+  });
+
+  it('should accept nested objects with null inner fields when outer fields are optional', () => {
+    const schema = z.object({
+      name: z.string().optional(),
+      story: z
+        .object({
+          whyTheyCreate: z.string().optional(),
+          howLong: z.string().optional(),
+        })
+        .optional(),
+    });
+
+    // LLM sends null for inner optional fields
+    const input = { name: 'Rafael', story: { whyTheyCreate: null, howLong: null } };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'Rafael', story: {} });
+  });
+
+  it('should accept partially filled nested objects', () => {
+    const schema = z.object({
+      name: z.string().optional(),
+      story: z
+        .object({
+          whyTheyCreate: z.string().optional(),
+          howLong: z.string().optional(),
+        })
+        .optional(),
+    });
+
+    // LLM sends one field but omits the other
+    const input = { name: 'Rafael', story: { whyTheyCreate: 'creativity' } };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'Rafael', story: { whyTheyCreate: 'creativity' } });
+  });
+
+  it('should accept completely absent optional nested object', () => {
+    const schema = z.object({
+      name: z.string().optional(),
+      story: z
+        .object({
+          whyTheyCreate: z.string().optional(),
+          howLong: z.string().optional(),
+        })
+        .optional(),
+    });
+
+    // LLM omits the optional nested object entirely
+    const input = { name: 'Rafael' };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'Rafael' });
+  });
+});
+
 describe('validateToolInput - Undefined to Null Conversion (GitHub #11457)', () => {
   // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/11457
   // When schemas are processed through OpenAI compat layers, .optional() is converted

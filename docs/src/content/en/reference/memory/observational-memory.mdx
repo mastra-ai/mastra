@@ -163,6 +163,14 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             isOptional: true,
             defaultValue: '1.2 (when bufferTokens is set)',
           },
+          {
+            name: 'previousObserverTokens',
+            type: 'number | false',
+            description:
+              "Optional token budget for the observer's previous-observations context. When set to a number, the observations passed to the Observer agent are tail-truncated to fit within this budget while keeping the newest observations and preserving highlighted 🔴 items when possible. When a buffered reflection is pending, the already-reflected observation lines are automatically replaced with the reflection summary before truncation. Set to `0` to omit previous observations entirely, or `false` to disable truncation explicitly.",
+            isOptional: true,
+            defaultValue: '2000',
+          },
         ],
       },
     ],
@@ -328,12 +336,12 @@ import { Agent } from '@mastra/core/agent'
 export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-5-mini',
+  model: 'openai/gpt-5.4',
   memory: new Memory({
     options: {
       observationalMemory: {
         // highlight-next-line
-        model: 'openai/gpt-4o-mini',
+        model: 'openai/gpt-5-mini',
       },
     },
   }),
@@ -349,7 +357,7 @@ import { Agent } from '@mastra/core/agent'
 export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-5-mini',
+  model: 'openai/gpt-5.4',
   memory: new Memory({
     options: {
       observationalMemory: {
@@ -358,7 +366,7 @@ export const agent = new Agent({
           model: 'google/gemini-2.5-flash',
         },
         reflection: {
-          model: 'openai/gpt-4o-mini',
+          model: 'openai/gpt-5-mini',
         },
         // highlight-end
       },
@@ -378,7 +386,7 @@ import { Agent } from '@mastra/core/agent'
 export const agent = new Agent({
   name: 'health-assistant',
   instructions: 'You are a health and wellness assistant.',
-  model: 'openai/gpt-5-mini',
+  model: 'openai/gpt-5.4',
   memory: new Memory({
     options: {
       observationalMemory: {

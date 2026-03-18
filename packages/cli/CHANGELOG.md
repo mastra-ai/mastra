@@ -1,5 +1,107 @@
 # mastra
 
+## 1.3.13
+
+### Patch Changes
+
+- Added a new `MASTRA_TEMPLATES` Studio runtime flag to control whether the **Templates** section appears in the sidebar. ([#14309](https://github.com/mastra-ai/mastra/pull/14309))
+  - `MASTRA_TEMPLATES=true` now enables Templates navigation in Studio.
+  - By default (`false` or unset), Templates is hidden.
+  - Studio HTML injection now propagates this value in both CLI-hosted and deployer-hosted Studio builds.
+  - Added tests covering environment variable injection for both paths.
+
+- Fixed dev server startup log to display the configured `apiPrefix` instead of always showing `/api`. ([#14325](https://github.com/mastra-ai/mastra/pull/14325))
+
+- Updated dependencies [[`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`9d4f992`](https://github.com/mastra-ai/mastra/commit/9d4f9921d2d3afb3301b2c93f0e4e6a80a4f81a3), [`5dfaf3d`](https://github.com/mastra-ai/mastra/commit/5dfaf3d1cf286d56d3645398dcb687a4eb02db96), [`085e371`](https://github.com/mastra-ai/mastra/commit/085e3718a7d0fe9a210fe7dd1c867b9bdfe8d16b), [`b77aa19`](https://github.com/mastra-ai/mastra/commit/b77aa1981361c021f2c881bee8f0c703687f00da), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8b4ce84`](https://github.com/mastra-ai/mastra/commit/8b4ce84aed0808b9805cc4fd7147c1f8a2ef7a36), [`8d4cfe6`](https://github.com/mastra-ai/mastra/commit/8d4cfe6b9a7157d3876206227ec9f04cde6dbc4a), [`dd6ca1c`](https://github.com/mastra-ai/mastra/commit/dd6ca1cdea3b8b6182f4cf61df41070ba0cc0deb), [`ce26fe2`](https://github.com/mastra-ai/mastra/commit/ce26fe2166dd90254f8bee5776e55977143e97de), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`4cb4edf`](https://github.com/mastra-ai/mastra/commit/4cb4edf3c909d197ec356c1790d13270514ffef6), [`f0dac25`](https://github.com/mastra-ai/mastra/commit/f0dac25d2753d022f66442f3d9057e0a40207ce7), [`0b0ba2f`](https://github.com/mastra-ai/mastra/commit/0b0ba2f251087df603b5ee512bb83ba81e79d9fb), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`e647a02`](https://github.com/mastra-ai/mastra/commit/e647a0215754bf91ed45c6d8857435bce4d387dc)]:
+  - @mastra/core@1.14.0
+  - @mastra/deployer@1.14.0
+  - @mastra/loggers@1.0.3
+
+## 1.3.13-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`8b4ce84`](https://github.com/mastra-ai/mastra/commit/8b4ce84aed0808b9805cc4fd7147c1f8a2ef7a36), [`8d4cfe6`](https://github.com/mastra-ai/mastra/commit/8d4cfe6b9a7157d3876206227ec9f04cde6dbc4a), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a)]:
+  - @mastra/core@1.14.0-alpha.3
+  - @mastra/deployer@1.14.0-alpha.3
+
+## 1.3.13-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f)]:
+  - @mastra/core@1.14.0-alpha.2
+  - @mastra/deployer@1.14.0-alpha.2
+
+## 1.3.13-alpha.1
+
+### Patch Changes
+
+- Added a new `MASTRA_TEMPLATES` Studio runtime flag to control whether the **Templates** section appears in the sidebar. ([#14309](https://github.com/mastra-ai/mastra/pull/14309))
+  - `MASTRA_TEMPLATES=true` now enables Templates navigation in Studio.
+  - By default (`false` or unset), Templates is hidden.
+  - Studio HTML injection now propagates this value in both CLI-hosted and deployer-hosted Studio builds.
+  - Added tests covering environment variable injection for both paths.
+
+- Fixed dev server startup log to display the configured `apiPrefix` instead of always showing `/api`. ([#14325](https://github.com/mastra-ai/mastra/pull/14325))
+
+- Updated dependencies [[`5dfaf3d`](https://github.com/mastra-ai/mastra/commit/5dfaf3d1cf286d56d3645398dcb687a4eb02db96), [`b77aa19`](https://github.com/mastra-ai/mastra/commit/b77aa1981361c021f2c881bee8f0c703687f00da), [`dd6ca1c`](https://github.com/mastra-ai/mastra/commit/dd6ca1cdea3b8b6182f4cf61df41070ba0cc0deb), [`4cb4edf`](https://github.com/mastra-ai/mastra/commit/4cb4edf3c909d197ec356c1790d13270514ffef6), [`e647a02`](https://github.com/mastra-ai/mastra/commit/e647a0215754bf91ed45c6d8857435bce4d387dc)]:
+  - @mastra/deployer@1.13.3-alpha.1
+  - @mastra/core@1.13.3-alpha.1
+
+## 1.3.13-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`9d4f992`](https://github.com/mastra-ai/mastra/commit/9d4f9921d2d3afb3301b2c93f0e4e6a80a4f81a3), [`085e371`](https://github.com/mastra-ai/mastra/commit/085e3718a7d0fe9a210fe7dd1c867b9bdfe8d16b), [`ce26fe2`](https://github.com/mastra-ai/mastra/commit/ce26fe2166dd90254f8bee5776e55977143e97de), [`f0dac25`](https://github.com/mastra-ai/mastra/commit/f0dac25d2753d022f66442f3d9057e0a40207ce7), [`0b0ba2f`](https://github.com/mastra-ai/mastra/commit/0b0ba2f251087df603b5ee512bb83ba81e79d9fb), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1)]:
+  - @mastra/core@1.13.3-alpha.0
+  - @mastra/deployer@1.13.3-alpha.0
+  - @mastra/loggers@1.0.3-alpha.0
+
+## 1.3.12
+
+### Patch Changes
+
+- Updated dependencies [[`0ce6035`](https://github.com/mastra-ai/mastra/commit/0ce603591189f547397704e53f23c77bc5630071)]:
+  - @mastra/core@1.13.2
+  - @mastra/deployer@1.13.2
+
+## 1.3.12-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`0ce6035`](https://github.com/mastra-ai/mastra/commit/0ce603591189f547397704e53f23c77bc5630071)]:
+  - @mastra/core@1.13.2-alpha.0
+  - @mastra/deployer@1.13.2-alpha.0
+
+## 1.3.11
+
+### Patch Changes
+
+- Updated dependencies [[`205e76c`](https://github.com/mastra-ai/mastra/commit/205e76c3ba652205dafb037f50a4a8eea73f6736)]:
+  - @mastra/core@1.13.1
+  - @mastra/deployer@1.13.1
+
+## 1.3.10
+
+### Patch Changes
+
+- Added dev session duration tracking on shutdown, package manager detection in analytics system properties, and component selection event tracking in the `create` command for both interactive and CLI-args paths. ([#13654](https://github.com/mastra-ai/mastra/pull/13654))
+
+- Updated dependencies [[`ea86967`](https://github.com/mastra-ai/mastra/commit/ea86967449426e0a3673253bd1c2c052a99d970d), [`db21c21`](https://github.com/mastra-ai/mastra/commit/db21c21a6ae5f33539262cc535342fa8757eb359), [`388ca2f`](https://github.com/mastra-ai/mastra/commit/388ca2f89c2ac24d2e7a6b40e546549c9452e89c), [`11f5dbe`](https://github.com/mastra-ai/mastra/commit/11f5dbe9a1e7ad8ef3b1ea34fb4a9fa3631d1587), [`11f5dbe`](https://github.com/mastra-ai/mastra/commit/11f5dbe9a1e7ad8ef3b1ea34fb4a9fa3631d1587), [`6751354`](https://github.com/mastra-ai/mastra/commit/67513544d1a64be891d9de7624d40aadc895d56e), [`e3a6722`](https://github.com/mastra-ai/mastra/commit/e3a6722fda342d833f556f0e8e9204e4c736c726), [`c958cd3`](https://github.com/mastra-ai/mastra/commit/c958cd36627c1eea122ec241b2b15492977a263a), [`86f2426`](https://github.com/mastra-ai/mastra/commit/86f242631d252a172d2f9f9a2ea0feb8647a76b0), [`950eb07`](https://github.com/mastra-ai/mastra/commit/950eb07b7e7354629630e218d49550fdd299c452)]:
+  - @mastra/core@1.13.0
+  - @mastra/deployer@1.13.0
+
+## 1.3.10-alpha.0
+
+### Patch Changes
+
+- Added dev session duration tracking on shutdown, package manager detection in analytics system properties, and component selection event tracking in the `create` command for both interactive and CLI-args paths. ([#13654](https://github.com/mastra-ai/mastra/pull/13654))
+
+- Updated dependencies [[`ea86967`](https://github.com/mastra-ai/mastra/commit/ea86967449426e0a3673253bd1c2c052a99d970d), [`db21c21`](https://github.com/mastra-ai/mastra/commit/db21c21a6ae5f33539262cc535342fa8757eb359), [`388ca2f`](https://github.com/mastra-ai/mastra/commit/388ca2f89c2ac24d2e7a6b40e546549c9452e89c), [`11f5dbe`](https://github.com/mastra-ai/mastra/commit/11f5dbe9a1e7ad8ef3b1ea34fb4a9fa3631d1587), [`11f5dbe`](https://github.com/mastra-ai/mastra/commit/11f5dbe9a1e7ad8ef3b1ea34fb4a9fa3631d1587), [`6751354`](https://github.com/mastra-ai/mastra/commit/67513544d1a64be891d9de7624d40aadc895d56e), [`e3a6722`](https://github.com/mastra-ai/mastra/commit/e3a6722fda342d833f556f0e8e9204e4c736c726), [`c958cd3`](https://github.com/mastra-ai/mastra/commit/c958cd36627c1eea122ec241b2b15492977a263a), [`86f2426`](https://github.com/mastra-ai/mastra/commit/86f242631d252a172d2f9f9a2ea0feb8647a76b0), [`950eb07`](https://github.com/mastra-ai/mastra/commit/950eb07b7e7354629630e218d49550fdd299c452)]:
+  - @mastra/core@1.13.0-alpha.0
+  - @mastra/deployer@1.13.0-alpha.0
+
 ## 1.3.9
 
 ### Patch Changes

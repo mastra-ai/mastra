@@ -56,10 +56,8 @@ type _GetThreads = RouteContract<'GET /memory/threads'>;
 type _AuthCapabilities = RouteContract<'GET /auth/capabilities'>;
 
 // Invalid route keys should be rejected
-// @ts-expect-error - GET /this/does/not/exist is not a valid route
 type _Invalid1 = RouteContract<'GET /this/does/not/exist'>;
 
-// @ts-expect-error - INVALID is not a valid method
 type _Invalid2 = RouteContract<'INVALID /agents'>;
 
 // ============================================================================

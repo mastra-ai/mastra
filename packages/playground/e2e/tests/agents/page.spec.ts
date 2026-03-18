@@ -15,14 +15,14 @@ test('has overall information', async ({ page }) => {
     'https://mastra.ai/en/docs/agents/overview',
   );
 
-  const list = page.locator('main').getByRole('list');
-  await expect(list).toMatchAriaSnapshot();
+  const table = page.locator('table');
+  await expect(table).toMatchAriaSnapshot();
 });
 
 test('clicking on the agent row redirects', async ({ page }) => {
   await page.goto('/agents');
 
-  const el = page.locator('main').getByRole('listitem').filter({ hasText: 'Weather Agent' });
+  const el = await page.locator('tr:has-text("Weather Agent")');
   await el.click();
 
   await expect(page).toHaveURL(/\/agents\/weather-agent\/chat.*/);

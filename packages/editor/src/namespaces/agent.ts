@@ -180,12 +180,19 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    * they may contain SDK instances or dynamic functions that cannot be safely serialized.
    * Returns the (possibly mutated) agent.
    */
-  async applyStoredOverrides(agent: Agent): Promise<Agent> {
+  async applyStoredOverrides(
+    agent: Agent,
+    options?: { status?: 'draft' | 'published' } | { versionId: string },
+  ): Promise<Agent> {
     let storedConfig: StorageResolvedAgentType | null = null;
     try {
       this.ensureRegistered();
       const adapter = await this.getStorageAdapter();
-      storedConfig = await adapter.getByIdResolved(agent.id, { status: 'draft' });
+      const resolvedOptions: { versionId: string } | { status: 'draft' | 'published' | 'archived' } =
+        options && 'versionId' in options
+          ? { versionId: options.versionId }
+          : { status: (options as { status?: 'draft' | 'published' } | undefined)?.status ?? 'draft' };
+      storedConfig = await adapter.getByIdResolved(agent.id, resolvedOptions);
     } catch {
       // Editor not registered, storage not available, or agent not found — restore and return unchanged
       this.restoreCodeDefaults(agent);

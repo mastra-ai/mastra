@@ -1,6 +1,6 @@
 // Components
 export { PromptBlockCreateContent } from './components/prompt-block-create-content';
-export { PromptBlockList, type PromptBlockListProps } from './components/prompt-block-list/prompt-blocks-list';
+export { PromptBlocksTable, type PromptBlocksTableProps } from './components/prompt-blocks-table/prompt-blocks-table';
 export {
   PromptBlockVersionCombobox,
   type PromptBlockVersionComboboxProps,

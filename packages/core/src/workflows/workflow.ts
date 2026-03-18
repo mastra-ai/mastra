@@ -1006,7 +1006,9 @@ function createStepFromProcessor<TProcessorId extends string>(
               // Manage per-processor span lifecycle across stream chunks
               // Use unique key to store span on shared state object
               const spanKey = `__outputStreamSpan_${processor.id}`;
-              const mutableState = (state ?? {}) as Record<string, unknown>;
+              // Use processorState (from the shared processorStates Map) so state persists
+              // across processOutputStream and processOutputResult calls
+              const mutableState = processorState;
               let processorSpan = mutableState[spanKey] as
                 | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
                 | undefined;
@@ -2943,6 +2945,7 @@ export class Run<
     });
 
     const traceId = workflowSpan?.externalTraceId;
+    const spanId = workflowSpan?.id;
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
     await this._validateRequestContext(requestContext as RequestContext);
@@ -2972,6 +2975,7 @@ export class Run<
     }
 
     result.traceId = traceId;
+    result.spanId = spanId;
     return result;
   }
 
@@ -3719,6 +3723,7 @@ export class Run<
     });
 
     const traceId = workflowSpan?.externalTraceId;
+    const spanId = workflowSpan?.id;
 
     const executionResultPromise = this.executionEngine
       .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
@@ -3753,6 +3758,7 @@ export class Run<
           this.closeStreamAction?.().catch(() => {});
         }
         result.traceId = traceId;
+        result.spanId = spanId;
         return result;
       });
 
@@ -3853,6 +3859,7 @@ export class Run<
     });
 
     const traceId = workflowSpan?.externalTraceId;
+    const spanId = workflowSpan?.id;
 
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -3875,6 +3882,7 @@ export class Run<
     }
 
     result.traceId = traceId;
+    result.spanId = spanId;
     return result;
   }
 
@@ -3985,6 +3993,7 @@ export class Run<
     });
 
     const traceId = workflowSpan?.externalTraceId;
+    const spanId = workflowSpan?.id;
 
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -4009,6 +4018,7 @@ export class Run<
     }
 
     result.traceId = traceId;
+    result.spanId = spanId;
     return result;
   }
 

@@ -20,7 +20,7 @@ import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
 import CodeMirror, { EditorView } from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { githubDarkInit } from '@uiw/codemirror-theme-github';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import { extractPrompt } from '../../utils/extractPrompt';
 import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
 import { useAgent } from '../../hooks/use-agent';
@@ -63,6 +63,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { mutate: reorderModelList } = useReorderModelList(agentId);
   const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
+  const codemirrorTheme = useCodemirrorTheme();
   const hasMemoryEnabled = Boolean(memory?.result);
 
   if (isLoading || isMemoryLoading) {
@@ -211,16 +212,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
           value={extractPrompt(agent.instructions)}
           editable={false}
           extensions={[markdown({ base: markdownLanguage, codeLanguages: languages }), EditorView.lineWrapping]}
-          theme={githubDarkInit({
-            settings: {
-              caret: '#c6c6c6',
-              fontFamily: 'monospace',
-              background: 'transparent',
-              gutterBackground: 'transparent',
-              gutterForeground: '#939393',
-              gutterBorder: 'none',
-            },
-          })}
+          theme={codemirrorTheme}
         />
       </AgentMetadataSection>
     </AgentMetadataWrapper>

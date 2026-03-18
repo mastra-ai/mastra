@@ -46,16 +46,28 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "baseten/deepseek-ai/DeepSeek-V3.2",
+    "model": "baseten/deepseek-ai/DeepSeek-V3-0324",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 163800,
-    "maxOutput": 131100,
-    "inputCost": 0.3,
-    "outputCost": 0.45
+    "contextWindow": 164000,
+    "maxOutput": 131000,
+    "inputCost": 0.77,
+    "outputCost": 0.77
+  },
+  {
+    "model": "baseten/deepseek-ai/DeepSeek-V3.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 164000,
+    "maxOutput": 131000,
+    "inputCost": 0.5,
+    "outputCost": 1.5
   },
   {
     "model": "baseten/MiniMaxAI/MiniMax-M2.5",
@@ -70,30 +82,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
-    "model": "baseten/moonshotai/Kimi-K2-Instruct-0905",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 0.6,
-    "outputCost": 2.5
-  },
-  {
-    "model": "baseten/moonshotai/Kimi-K2-Thinking",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 0.6,
-    "outputCost": 2.5
-  },
-  {
     "model": "baseten/moonshotai/Kimi-K2.5",
     "imageInput": false,
     "audioInput": false,
@@ -106,16 +94,28 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3
   },
   {
-    "model": "baseten/Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    "model": "baseten/nvidia/Nemotron-3-Super",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": false,
+    "reasoning": true,
     "contextWindow": 262144,
-    "maxOutput": 66536,
-    "inputCost": 0.38,
-    "outputCost": 1.53
+    "maxOutput": 32678,
+    "inputCost": 0.3,
+    "outputCost": 0.75
+  },
+  {
+    "model": "baseten/openai/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.1,
+    "outputCost": 0.5
   },
   {
     "model": "baseten/zai-org/GLM-4.6",

@@ -409,6 +409,73 @@ describe('WorkingMemory', () => {
       expect(resultMessages[0].content).not.toContain('IMPORTANT: When calling updateWorkingMemory');
     });
 
+    it('should handle JSON format template with pre-parsed object content', async () => {
+      const jsonTemplate: WorkingMemoryTemplate = {
+        format: 'json',
+        content: {
+          type: 'object',
+          properties: {
+            user: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                email: { type: 'string' },
+              },
+            },
+            score: { type: 'number' },
+          },
+        },
+      };
+
+      const processor = new WorkingMemory({
+        storage: mockStorage,
+        scope: 'thread',
+        template: jsonTemplate,
+      });
+
+      const threadId = 'thread-123';
+
+      requestContext.set('MastraMemory', {
+        thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
+        resourceId: 'resource-1',
+      });
+
+      vi.mocked(mockStorage.getThreadById).mockResolvedValue({
+        id: threadId,
+        resourceId: 'resource-1',
+        title: 'Test Thread',
+        metadata: { workingMemory: null },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+          createdAt: new Date(),
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+      const result = await processor.processInput({
+        messages,
+        messageList,
+        abort: () => {
+          throw new Error('Aborted');
+        },
+        requestContext,
+      });
+
+      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      expect(resultMessages[0].content).toContain('Use JSON format for all data');
+      // Should contain the recursively generated empty object template
+      expect(resultMessages[0].content).toContain('"user":{"name":"","email":""}');
+      expect(resultMessages[0].content).toContain('"score":0');
+    });
+
     it('should prepend working memory before existing messages', async () => {
       const processor = new WorkingMemory({
         storage: mockStorage,
