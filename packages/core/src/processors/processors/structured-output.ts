@@ -6,8 +6,9 @@ import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { IMastraLogger } from '../../logger';
 import type { ObservabilityContext } from '../../observability';
 import { resolveObservabilityContext } from '../../observability';
+import type { StandardSchemaWithJSON } from '../../schema';
 import { ChunkFrom } from '../../stream';
-import type { ChunkType, OutputSchema } from '../../stream';
+import type { ChunkType } from '../../stream';
 import type { ToolCallChunk, ToolResultChunk } from '../../stream/types';
 import type { Processor } from '../index';
 
@@ -31,7 +32,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
   readonly id = STRUCTURED_OUTPUT_PROCESSOR_NAME;
   readonly name = 'Structured Output';
 
-  public schema: NonNullable<OutputSchema<OUTPUT>>;
+  public schema: StandardSchemaWithJSON<OUTPUT>;
   private structuringAgent: Agent<any, any, undefined>;
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: OUTPUT;
@@ -117,7 +118,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       // Use structuredOutput in 'direct' mode (no model) since this agent already has a model
       const structuringAgentStream = await this.structuringAgent.stream(prompt, {
         structuredOutput: {
-          schema: this.schema!,
+          schema: this.schema,
           jsonPromptInjection: this.jsonPromptInjection,
         },
         providerOptions: this.providerOptions,
@@ -162,12 +163,12 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
           }
         }
 
-        const newChunk: ChunkType<OUTPUT> = {
+        const newChunk = {
           ...chunk,
           metadata: {
             from: 'structured-output',
           },
-        } as const;
+        } as unknown as ChunkType<OUTPUT>;
         controller.enqueue(newChunk);
       }
     } catch (error) {

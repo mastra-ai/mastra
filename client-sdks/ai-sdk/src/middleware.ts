@@ -14,6 +14,7 @@ import { MessageHistory, SemanticRecall, WorkingMemory } from '@mastra/core/proc
 import type {
   InputProcessor,
   OutputProcessor,
+  OutputResult,
   ProcessInputArgs,
   ProcessOutputResultArgs,
   ProcessOutputStreamArgs,
@@ -597,6 +598,13 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
               messages: messageList.get.all.db(),
               messageList,
               state: {},
+              result: {
+                text: '',
+                usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                finishReason: 'unknown',
+                steps: [],
+              },
+              retryCount: 0,
               requestContext,
               abort: (reason?: string): never => {
                 throw new TripWire(reason || 'Aborted by processor');
@@ -762,10 +770,26 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
               if (!processor.processOutputResult) continue;
               try {
                 const procState = processorStates.get(processor.id);
+                const finishChunk = (procState?.streamParts ?? []).find(p => p.type === 'finish') as any;
+                const outputResult: OutputResult = {
+                  text: (procState?.streamParts ?? [])
+                    .filter(p => p.type === 'text-delta')
+                    .map(p => (p as any).payload?.text ?? '')
+                    .join(''),
+                  usage: finishChunk?.payload?.output?.usage ?? {
+                    inputTokens: 0,
+                    outputTokens: 0,
+                    totalTokens: 0,
+                  },
+                  finishReason: finishChunk?.payload?.stepResult?.reason ?? 'unknown',
+                  steps: [],
+                };
                 await processor.processOutputResult({
                   messages: messageList.get.all.db(),
                   messageList,
                   state: procState?.customState ?? {},
+                  result: outputResult,
+                  retryCount: 0,
                   requestContext,
                   abort: (reason?: string): never => {
                     throw new TripWire(reason || 'Aborted by processor');

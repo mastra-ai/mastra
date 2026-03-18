@@ -4,10 +4,14 @@ import { coreFeatures } from '@mastra/core/features';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
+import { getObservationsAsOf } from '../observation-utils';
 import { ObservationalMemory } from '../observational-memory';
 import {
   buildObserverPrompt,
+  buildMultiThreadObserverPrompt,
   buildObserverSystemPrompt,
+  buildObserverHistoryMessage,
+  buildMultiThreadObserverHistoryMessage,
   parseObserverOutput,
   optimizeObservationsForContext,
   formatMessagesForObserver,
@@ -641,6 +645,232 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).toContain('2024');
       expect(formatted).toContain('Dec');
     });
+
+    it('should include attachment placeholders for image and file parts', () => {
+      const msg = createTestMessage('ignored', 'user');
+      msg.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Please inspect these attachments.' },
+          { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+          {
+            type: 'file',
+            data: 'https://example.com/specs/floorplan.pdf',
+            mimeType: 'application/pdf',
+            filename: 'floorplan.pdf',
+          } as any,
+        ],
+      };
+
+      const formatted = formatMessagesForObserver([msg]);
+      expect(formatted).toContain('[Image #1: reference-board.png]');
+      expect(formatted).toContain('[File #1: floorplan.pdf]');
+    });
+
+    it('should skip messages with only data-* parts', () => {
+      const dataMsg = createTestMessage('ignored', 'assistant');
+      dataMsg.content = {
+        format: 2,
+        parts: [{ type: 'data-om-status' as any }, { type: 'data-workspace-metadata' as any }],
+      };
+      const textMsg = createTestMessage('Hello', 'user');
+
+      const formatted = formatMessagesForObserver([dataMsg, textMsg]);
+      expect(formatted).not.toContain('**Assistant');
+      expect(formatted).toContain('**User');
+      expect(formatted).toContain('Hello');
+    });
+
+    it('should include non-obscured reasoning content', () => {
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          { type: 'reasoning' as any, reasoning: 'I need to think about this carefully' },
+          { type: 'text', text: 'Here is my answer' },
+        ],
+      };
+
+      const formatted = formatMessagesForObserver([msg]);
+      expect(formatted).toContain('I need to think about this carefully');
+      expect(formatted).toContain('Here is my answer');
+    });
+
+    it('should skip obscured/encrypted reasoning parts', () => {
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          { type: 'reasoning' as any, reasoning: '', details: [{ type: 'text', text: '' }] },
+          { type: 'text', text: 'Visible answer' },
+        ],
+      };
+
+      const formatted = formatMessagesForObserver([msg]);
+      expect(formatted).not.toContain('reasoning');
+      expect(formatted).toContain('Visible answer');
+    });
+
+    it('should skip messages with only encrypted reasoning parts', () => {
+      const reasoningMsg = createTestMessage('ignored', 'assistant');
+      reasoningMsg.content = {
+        format: 2,
+        parts: [{ type: 'reasoning' as any, reasoning: '' }],
+      };
+      const textMsg = createTestMessage('Real content', 'user');
+
+      const formatted = formatMessagesForObserver([reasoningMsg, textMsg]);
+      expect(formatted).not.toContain('**Assistant');
+      expect(formatted).toContain('**User');
+      expect(formatted).toContain('Real content');
+    });
+
+    it('should strip encryptedContent and truncate oversized tool results', () => {
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'web_search_20250305',
+              args: { q: 'WorkOS FGA Node SDK createResource assignRole check query' },
+              result: {
+                encryptedContent: 'x'.repeat(6000),
+                snippet: 'useful snippet '.repeat(3000),
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const formatted = formatMessagesForObserver([msg], { maxToolResultTokens: 200 });
+      expect(formatted).toContain('[Tool Result: web_search_20250305]');
+      expect(formatted).toContain('[stripped encryptedContent: 6000 characters]');
+      expect(formatted).toContain('[truncated ~');
+      expect(formatted).not.toContain('x'.repeat(200));
+    });
+  });
+
+  describe('buildObserverHistoryMessage', () => {
+    it('should preserve image attachments and image-like file attachments in observer input order', () => {
+      const msg = createTestMessage('ignored', 'user');
+      msg.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Look at these.' },
+          { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+          {
+            type: 'file',
+            data: 'https://example.com/annotated-photo.jpg',
+            mimeType: 'application/octet-stream',
+            filename: 'annotated-photo.jpg',
+          } as any,
+          {
+            type: 'file',
+            data: 'https://example.com/floorplan.pdf',
+            mimeType: 'application/pdf',
+            filename: 'floorplan.pdf',
+          } as any,
+        ],
+      };
+
+      const historyMessage = buildObserverHistoryMessage([msg]);
+      expect(historyMessage.role).toBe('user');
+      expect(Array.isArray(historyMessage.content)).toBe(true);
+
+      const content = historyMessage.content as any[];
+      expect(content[0]).toMatchObject({ type: 'text' });
+      expect(content[1]).toMatchObject({ type: 'text' });
+      expect(content[1].text).toContain('[Image #1: reference-board.png]');
+      expect(content[1].text).toContain('[Image #2: annotated-photo.jpg]');
+      expect(content[1].text).toContain('[File #1: floorplan.pdf]');
+      expect(content[2]).toMatchObject({ type: 'image', image: 'https://example.com/reference-board.png' });
+      expect(content[3]).toMatchObject({ type: 'image', image: 'https://example.com/annotated-photo.jpg' });
+      expect(content).not.toContainEqual(expect.objectContaining({ image: 'https://example.com/floorplan.pdf' }));
+    });
+
+    it('should preserve thread grouping while attaching multimodal content for multi-thread observer input', () => {
+      const threadA = createTestMessage('ignored', 'user', 'msg-a');
+      threadA.threadId = 'thread-a';
+      threadA.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Thread A' },
+          { type: 'image', image: 'https://example.com/a.png', mimeType: 'image/png' } as any,
+        ],
+      };
+
+      const threadB = createTestMessage('ignored', 'user', 'msg-b');
+      threadB.threadId = 'thread-b';
+      threadB.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Thread B' },
+          {
+            type: 'file',
+            data: 'https://example.com/b.jpeg',
+            mimeType: 'image/jpeg',
+            filename: 'b.jpeg',
+          } as any,
+        ],
+      };
+
+      const historyMessage = buildMultiThreadObserverHistoryMessage(
+        new Map([
+          ['thread-a', [threadA]],
+          ['thread-b', [threadB]],
+        ]),
+        ['thread-a', 'thread-b'],
+      );
+
+      const content = historyMessage.content as any[];
+      expect(content[0].text).toContain('2 different conversation threads');
+      expect(content.some(part => part.type === 'text' && part.text.includes('<thread id="thread-a">'))).toBe(true);
+      expect(content.some(part => part.type === 'text' && part.text.includes('[Image #1: a.png]'))).toBe(true);
+      expect(content.some(part => part.type === 'image' && part.image === 'https://example.com/a.png')).toBe(true);
+      expect(content.some(part => part.type === 'text' && part.text.includes('<thread id="thread-b">'))).toBe(true);
+      expect(content.some(part => part.type === 'text' && part.text.includes('[Image #2: b.jpeg]'))).toBe(true);
+      expect(content.some(part => part.type === 'image' && part.image === 'https://example.com/b.jpeg')).toBe(true);
+    });
+
+    it('should apply tool-result truncation in multi-thread observer history', () => {
+      const threadA = createTestMessage('ignored', 'assistant', 'msg-a');
+      threadA.threadId = 'thread-a';
+      threadA.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'web_search_20250305',
+              args: { q: 'search query' },
+              result: {
+                encryptedContent: 'y'.repeat(7000),
+                snippet: 'kept '.repeat(3000),
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const historyMessage = buildMultiThreadObserverHistoryMessage(new Map([['thread-a', [threadA]]]), ['thread-a'], {
+        maxToolResultTokens: 200,
+      });
+
+      const content = historyMessage.content as any[];
+      const joinedText = content
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('\n');
+      expect(joinedText).toContain('[stripped encryptedContent: 7000 characters]');
+      expect(joinedText).toContain('[truncated ~');
+      expect(joinedText).not.toContain('y'.repeat(200));
+    });
   });
 
   describe('buildObserverPrompt', () => {
@@ -667,6 +897,217 @@ describe('Observer Agent Helpers', () => {
       const prompt = buildObserverPrompt(undefined, messages);
 
       expect(prompt).not.toContain('Previous Observations');
+    });
+
+    it('should include prior current-task and suggested-response metadata when provided', () => {
+      const messages = [createTestMessage('Please continue', 'user')];
+      const prompt = buildObserverPrompt(undefined, messages, {
+        priorCurrentTask: 'Implement observer prompt improvements',
+        priorSuggestedResponse: 'I will update the observer prompt next.',
+      });
+
+      expect(prompt).toContain('Prior Thread Metadata');
+      expect(prompt).toContain('prior current-task: Implement observer prompt improvements');
+      expect(prompt).toContain('prior suggested-response: I will update the observer prompt next.');
+    });
+
+    it('should omit prior metadata section when not provided', () => {
+      const messages = [createTestMessage('Please continue', 'user')];
+      const prompt = buildObserverPrompt(undefined, messages, {});
+
+      expect(prompt).not.toContain('Prior Thread Metadata');
+    });
+  });
+
+  describe('buildMultiThreadObserverPrompt', () => {
+    it('should include per-thread prior metadata when provided', () => {
+      const messagesByThread = new Map<string, MastraDBMessage[]>([
+        ['thread-1', [createTestMessage('Thread 1 message', 'user')]],
+        ['thread-2', [createTestMessage('Thread 2 message', 'user')]],
+      ]);
+
+      const priorMetadata = new Map<string, { currentTask?: string; suggestedResponse?: string }>([
+        ['thread-1', { currentTask: 'Handle billing issue', suggestedResponse: 'Ask for invoice id.' }],
+      ]);
+
+      const prompt = buildMultiThreadObserverPrompt(
+        undefined,
+        messagesByThread,
+        ['thread-1', 'thread-2'],
+        priorMetadata,
+      );
+
+      expect(prompt).toContain('Prior Thread Metadata');
+      expect(prompt).toContain('thread thread-1');
+      expect(prompt).toContain('prior current-task: Handle billing issue');
+      expect(prompt).toContain('prior suggested-response: Ask for invoice id.');
+      expect(prompt).not.toContain('thread thread-2\n  - prior current-task');
+    });
+  });
+
+  describe('observer request payloads', () => {
+    it('should send multimodal observer history as structured messages', async () => {
+      let capturedPrompt: any;
+
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        observation: { messageTokens: 1000, bufferTokens: false, model: 'test-model' },
+        reflection: { observationTokens: 1000 },
+      });
+
+      (om as any).observerAgent = {
+        stream: async (prompt: any) => {
+          capturedPrompt = prompt;
+          return {
+            getFullOutput: async () => ({
+              text: '<observations>\n- saw image\n</observations>',
+              usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+            }),
+          };
+        },
+      };
+
+      const message = createTestMessage('ignored', 'user');
+      message.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Please inspect these.' },
+          { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+          {
+            type: 'file',
+            data: 'https://example.com/annotated-photo.jpg',
+            mimeType: 'application/octet-stream',
+            filename: 'annotated-photo.jpg',
+          } as any,
+          {
+            type: 'file',
+            data: 'https://example.com/floorplan.pdf',
+            mimeType: 'application/pdf',
+            filename: 'floorplan.pdf',
+          } as any,
+        ],
+      };
+
+      await (om as any).callObserver(undefined, [message]);
+
+      expect(Array.isArray(capturedPrompt)).toBe(true);
+      expect(capturedPrompt).toHaveLength(2);
+      expect(capturedPrompt[0]).toMatchObject({ role: 'user' });
+      expect(capturedPrompt[1]).toMatchObject({ role: 'user' });
+      expect(capturedPrompt[1].content[1].text).toContain('[Image #1: reference-board.png]');
+      expect(capturedPrompt[1].content[1].text).toContain('[Image #2: annotated-photo.jpg]');
+      expect(capturedPrompt[1].content[1].text).toContain('[File #1: floorplan.pdf]');
+      expect(capturedPrompt[1].content[2]).toMatchObject({
+        type: 'image',
+        image: 'https://example.com/reference-board.png',
+      });
+      expect(capturedPrompt[1].content[3]).toMatchObject({
+        type: 'image',
+        image: 'https://example.com/annotated-photo.jpg',
+      });
+      expect(capturedPrompt[1].content).toContainEqual(
+        expect.objectContaining({
+          type: 'file',
+          data: 'https://example.com/floorplan.pdf',
+          mimeType: 'application/pdf',
+          filename: 'floorplan.pdf',
+        }),
+      );
+    });
+  });
+
+  describe('buildObserverHistoryMessage', () => {
+    it('should preserve placeholders and attachments in order', () => {
+      const msg = createTestMessage('ignored', 'user');
+      msg.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Compare these.' },
+          { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+          {
+            type: 'file',
+            data: 'https://example.com/specs/floorplan.pdf',
+            mimeType: 'application/pdf',
+            filename: 'floorplan.pdf',
+          } as any,
+        ],
+      };
+
+      const historyMessage = buildObserverHistoryMessage([msg]) as any;
+
+      expect(historyMessage.role).toBe('user');
+      expect(historyMessage.content[0].text).toContain('New Message History');
+      expect(historyMessage.content[1].text).toContain('[Image #1: reference-board.png]');
+      expect(historyMessage.content[1].text).toContain('[File #1: floorplan.pdf]');
+      expect(historyMessage.content[2]).toMatchObject({
+        type: 'image',
+        image: 'https://example.com/reference-board.png',
+      });
+      expect(historyMessage.content).toContainEqual(
+        expect.objectContaining({
+          type: 'file',
+          data: 'https://example.com/specs/floorplan.pdf',
+          mimeType: 'application/pdf',
+          filename: 'floorplan.pdf',
+        }),
+      );
+    });
+
+    it('should preserve thread wrappers and attachments for multi-thread history', () => {
+      const imageMessage = createTestMessage('ignored', 'user', 'thread-a-image');
+      imageMessage.threadId = 'thread-a';
+      imageMessage.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Inspect this board.' },
+          { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+        ],
+      };
+
+      const fileMessage = createTestMessage('ignored', 'assistant', 'thread-b-file');
+      fileMessage.threadId = 'thread-b';
+      fileMessage.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Here is the floorplan.' },
+          {
+            type: 'file',
+            data: 'https://example.com/specs/floorplan.pdf',
+            mimeType: 'application/pdf',
+            filename: 'floorplan.pdf',
+          } as any,
+        ],
+      };
+
+      const historyMessage = buildMultiThreadObserverHistoryMessage(
+        new Map([
+          ['thread-a', [imageMessage]],
+          ['thread-b', [fileMessage]],
+        ]),
+        ['thread-a', 'thread-b'],
+      ) as any;
+
+      expect(historyMessage.content[0].text).toContain('2 different conversation threads');
+      expect(
+        historyMessage.content.some(
+          (part: any) => part.type === 'text' && part.text.includes('<thread id="thread-a">'),
+        ),
+      ).toBe(true);
+      expect(
+        historyMessage.content.some(
+          (part: any) => part.type === 'text' && part.text.includes('<thread id="thread-b">'),
+        ),
+      ).toBe(true);
+      expect(historyMessage.content.some((part: any) => part.type === 'image')).toBe(true);
+      expect(
+        historyMessage.content.some(
+          (part: any) =>
+            part.type === 'file' &&
+            part.filename === 'floorplan.pdf' &&
+            part.mimeType === 'application/pdf' &&
+            part.data === 'https://example.com/specs/floorplan.pdf',
+        ),
+      ).toBe(true);
     });
   });
 
@@ -1429,6 +1870,77 @@ describe('ObservationalMemory Integration', () => {
       const counter = om.getTokenCounter();
       expect(counter).toBeInstanceOf(TokenCounter);
     });
+
+    it('should use the actor model context before counting images', async () => {
+      const { MessageList } = await import('@mastra/core/agent');
+      const { RequestContext } = await import('@mastra/core/di');
+
+      const omWithDynamicObserverModel = new ObservationalMemory({
+        storage,
+        observation: {
+          messageTokens: 100_000,
+          model: ({ requestContext }) => requestContext?.get('observerModel') ?? 'openai/gpt-4o',
+        },
+        reflection: {
+          observationTokens: 100_000,
+          model: 'test-model',
+        },
+        scope: 'thread',
+      });
+
+      const makeContext = (observerModel: string) => {
+        const requestContext = new RequestContext();
+        requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+        requestContext.set('observerModel', observerModel);
+        return requestContext;
+      };
+
+      const imageMessage = {
+        id: 'image-message',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'image',
+              image: 'https://example.com/cat.png',
+              providerOptions: { openai: { detail: 'low' } },
+            },
+          ],
+        },
+        type: 'text',
+        createdAt: new Date(),
+      } as unknown as MastraDBMessage;
+
+      const countImageForModel = async (actorModel: string) => {
+        const [provider, modelId] = actorModel.split('/');
+
+        await omWithDynamicObserverModel.processInputStep({
+          messageList: new MessageList({ threadId, resourceId }),
+          messages: [imageMessage],
+          requestContext: makeContext(actorModel),
+          stepNumber: 0,
+          state: {},
+          steps: [],
+          systemMessages: [],
+          model: { provider, modelId } as any,
+          retryCount: 0,
+          abort: (() => {
+            throw new Error('aborted');
+          }) as any,
+        });
+
+        return omWithDynamicObserverModel.getTokenCounter().runWithModelContext({ provider, modelId }, () => {
+          return omWithDynamicObserverModel.getTokenCounter().countMessage(imageMessage);
+        });
+      };
+
+      const gpt4oTokens = await countImageForModel('openai/gpt-4o');
+      const gpt4oMiniTokens = await countImageForModel('openai/gpt-4o-mini');
+
+      expect(gpt4oTokens).toBeGreaterThan(0);
+      expect(gpt4oMiniTokens).toBeGreaterThan(gpt4oTokens);
+    });
   });
 
   describe('getStorage', () => {
@@ -1436,6 +1948,144 @@ describe('ObservationalMemory Integration', () => {
       const s = om.getStorage();
       expect(s).toBe(storage);
     });
+  });
+
+  it('should trigger observation when an image-heavy message crosses the threshold', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const multimodalOm = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 500,
+        bufferTokens: false,
+        model: 'openai/gpt-4o',
+      },
+      reflection: {
+        observationTokens: 100_000,
+        model: 'test-model',
+      },
+      scope: 'thread',
+    });
+
+    const imageMessage = {
+      id: 'image-threshold-msg',
+      role: 'user' as const,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'image',
+            image: 'https://example.com/reference-board.png',
+            providerOptions: { openai: { detail: 'high' } },
+            width: 1024,
+            height: 1024,
+          } as any,
+        ],
+      },
+      type: 'text',
+      createdAt: new Date('2025-01-01T12:00:00Z'),
+      threadId,
+      resourceId,
+    };
+
+    const textOnlyMessage = createTestMessage('Please review this design draft.', 'user', 'text-threshold-msg');
+
+    const messageList = new MessageList({ threadId, resourceId });
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await multimodalOm.processInputStep({
+      messageList,
+      messages: [imageMessage as any],
+      requestContext,
+      stepNumber: 0,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: 'test-model' as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const threshold = 500;
+    const textTokens = multimodalOm.getTokenCounter().countMessage(textOnlyMessage);
+    const imageTokens = multimodalOm.getTokenCounter().countMessage(imageMessage as any);
+
+    expect(textTokens).toBeLessThan(threshold);
+    expect(imageTokens).toBeGreaterThan(threshold);
+  });
+
+  it('should treat image-like file parts as image-heavy for threshold checks', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const multimodalOm = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 500,
+        bufferTokens: false,
+        model: 'openai/gpt-4o',
+      },
+      reflection: {
+        observationTokens: 100_000,
+        model: 'test-model',
+      },
+      scope: 'thread',
+    });
+
+    const imageLikeFileMessage = {
+      id: 'image-file-threshold-msg',
+      role: 'user' as const,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'file',
+            data: 'https://example.com/reference-board.png',
+            mimeType: 'image/png',
+            filename: 'reference-board.png',
+            providerOptions: { openai: { detail: 'high' } },
+            width: 1024,
+            height: 1024,
+          } as any,
+        ],
+      },
+      type: 'text',
+      createdAt: new Date('2025-01-01T12:00:00Z'),
+      threadId,
+      resourceId,
+    };
+
+    const textOnlyMessage = createTestMessage('Please review this design draft.', 'user', 'text-file-threshold-msg');
+
+    const messageList = new MessageList({ threadId, resourceId });
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await multimodalOm.processInputStep({
+      messageList,
+      messages: [imageLikeFileMessage as any],
+      requestContext,
+      stepNumber: 0,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: 'test-model' as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const threshold = 500;
+    const textTokens = multimodalOm.getTokenCounter().countMessage(textOnlyMessage);
+    const imageLikeFileTokens = multimodalOm.getTokenCounter().countMessage(imageLikeFileMessage as any);
+
+    expect(textTokens).toBeLessThan(threshold);
+    expect(imageLikeFileTokens).toBeGreaterThan(threshold);
   });
 
   describe('cursor-based message loading (lastObservedAt)', () => {
@@ -2345,6 +2995,150 @@ Ask about favorite vegetarian dishes
     expect(systemMessage.content).toContain('<current-task>');
   });
 
+  it('should include prior current-task and suggested-response in observer user prompt during synchronous observation', async () => {
+    const storage = createInMemoryStorage();
+
+    let capturedPrompt: any = null;
+    const mockModel = createStreamCapableMockModel({
+      doGenerate: async (options: any) => {
+        capturedPrompt = options.prompt;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>\n- User asked to continue implementation\n</observations>\n<current-task>Continue implementation</current-task>\n<suggested-response>I will continue.</suggested-response>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 100000,
+        model: mockModel as any,
+      },
+      reflection: { observationTokens: 10000 },
+      scope: 'thread',
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'Test Thread',
+        metadata: {
+          mastra: {
+            om: {
+              currentTask: 'Implement observer context optimization',
+              suggestedResponse: 'I will update the observer prompt context next.',
+            },
+          },
+        },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+
+    await (om as any).doSynchronousObservation({
+      record: await storage.getObservationalMemory('thread-1', 'resource-1'),
+      threadId: 'thread-1',
+      unobservedMessages: [createTestMessage('Please continue', 'user', 'msg-1')],
+    });
+
+    expect(capturedPrompt).not.toBeNull();
+    const userMessage = capturedPrompt.find((msg: any) => msg.role === 'user');
+    expect(userMessage).toBeDefined();
+    const userPromptText = Array.isArray(userMessage.content)
+      ? userMessage.content
+          .map((part: any) => (part?.type === 'text' ? part.text : ''))
+          .filter(Boolean)
+          .join('\n')
+      : String(userMessage.content ?? '');
+    expect(userPromptText).toContain('Prior Thread Metadata');
+    expect(userPromptText).toContain('prior current-task: Implement observer context optimization');
+    expect(userPromptText).toContain('prior suggested-response: I will update the observer prompt context next.');
+  });
+
+  it('should send attachment parts to the observer alongside placeholder text', async () => {
+    let capturedPrompt: any = null;
+
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      observation: {
+        messageTokens: 10,
+        model: 'test-model',
+      },
+      reflection: { observationTokens: 10000 },
+      scope: 'thread',
+    });
+
+    (om as any).observerAgent = {
+      stream: async (prompt: any) => {
+        capturedPrompt = prompt;
+        return {
+          getFullOutput: async () => ({
+            text: `<observations>\n- User shared a reference image and floorplan\n</observations>`,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          }),
+        };
+      },
+    };
+
+    const attachmentMessage = createTestMessage('ignored', 'user', 'msg-attachment');
+    attachmentMessage.content = {
+      format: 2,
+      parts: [
+        { type: 'text', text: 'Please compare these attachments.' },
+        { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+        {
+          type: 'file',
+          data: 'https://example.com/specs/floorplan.pdf',
+          mimeType: 'application/pdf',
+          filename: 'floorplan.pdf',
+        } as any,
+      ],
+    };
+
+    await (om as any).callObserver(undefined, [attachmentMessage]);
+
+    const historyMessage = capturedPrompt.find(
+      (msg: any) =>
+        msg.role === 'user' && Array.isArray(msg.content) && msg.content.some((part: any) => part.type === 'image'),
+    );
+
+    expect(historyMessage).toBeDefined();
+    expect(historyMessage.content[0].text).toContain('New Message History');
+    expect(historyMessage.content[1].text).toContain('[Image #1: reference-board.png]');
+    expect(historyMessage.content[1].text).toContain('[File #1: floorplan.pdf]');
+    expect(
+      historyMessage.content.some(
+        (part: any) => part.type === 'image' && part.image === 'https://example.com/reference-board.png',
+      ),
+    ).toBe(true);
+    expect(
+      historyMessage.content.some(
+        (part: any) =>
+          part.type === 'file' &&
+          part.filename === 'floorplan.pdf' &&
+          part.mimeType === 'application/pdf' &&
+          part.data === 'https://example.com/specs/floorplan.pdf',
+      ),
+    ).toBe(true);
+  });
+
   it('should pass reflection instruction to reflector agent during synchronous reflection', async () => {
     const storage = createInMemoryStorage();
     const customInstruction = 'Consolidate observations about user preferences and remove duplicates.';
@@ -2532,7 +3326,7 @@ describe('Scenario: Observation quality checks', () => {
     const message = createTestMessage('ignored-content', 'assistant');
     message.content = {
       format: 2,
-      parts: [{ type: 'text', text: 'Persistent tiktoken estimate on part metadata' } as any],
+      parts: [{ type: 'text', text: 'Persistent token estimate on part metadata' } as any],
     } as any;
 
     const firstCount = counter.countMessage(message);
@@ -2590,7 +3384,7 @@ describe('Thread Attribution Helpers', () => {
       const threadId = 'thread-1';
       const newSection = '<thread id="thread-1">\n- 🔴 New observation\n</thread>';
 
-      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection);
+      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection, new Date('2025-01-01'));
 
       expect(result).toBe(newSection);
     });
@@ -2600,11 +3394,12 @@ describe('Thread Attribution Helpers', () => {
       const threadId = 'thread-1';
       const newSection = '<thread id="thread-1">\n- 🔴 New observation\n</thread>';
 
-      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection);
+      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection, new Date('2025-01-01'));
 
       expect(result).toContain(existing);
       expect(result).toContain(newSection);
-      expect(result).toBe(`${existing}\n\n${newSection}`);
+      // Message boundary delimiter is inserted between chunks for cache stability
+      expect(result).toMatch(/--- message boundary \(\d{4}-\d{2}-\d{2}T[^)]+\) ---/);
     });
 
     it('should always append new thread sections (preserves temporal ordering)', () => {
@@ -2618,15 +3413,83 @@ describe('Thread Attribution Helpers', () => {
       const threadId = 'thread-1';
       const newSection = '<thread id="thread-1">\n- 🔴 Updated observation\n- 🟡 New detail\n</thread>';
 
-      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection);
+      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection, new Date('2025-01-01'));
 
       // Should append, not replace - preserves temporal ordering
       expect(result).toContain(newSection);
       expect(result).toContain('<thread id="thread-2">');
       // Old observation is preserved (appended, not replaced)
       expect(result).toContain('Old observation');
-      // New section is appended at the end
-      expect(result).toBe(`${existing}\n\n${newSection}`);
+      // New section is appended at the end with a message boundary delimiter
+      expect(result).toMatch(/--- message boundary \(\d{4}-\d{2}-\d{2}T[^)]+\) ---/);
+    });
+  });
+
+  describe('getObservationsAsOf', () => {
+    it('should return all chunks when asOf is after all boundaries', () => {
+      const observations = [
+        '- User likes cats',
+        ObservationalMemory.createMessageBoundary(new Date('2025-01-01T10:00:00Z')),
+        '- User prefers dark mode',
+        ObservationalMemory.createMessageBoundary(new Date('2025-01-02T15:00:00Z')),
+        '- User is working on a TypeScript project',
+      ].join('');
+
+      const result = getObservationsAsOf(observations, new Date('2025-01-03T00:00:00Z'));
+      expect(result).toContain('User likes cats');
+      expect(result).toContain('User prefers dark mode');
+      expect(result).toContain('User is working on a TypeScript project');
+    });
+
+    it('should exclude chunks after the asOf date', () => {
+      const observations = [
+        '- User likes cats',
+        ObservationalMemory.createMessageBoundary(new Date('2025-01-01T10:00:00Z')),
+        '- User prefers dark mode',
+        ObservationalMemory.createMessageBoundary(new Date('2025-01-02T15:00:00Z')),
+        '- User is working on a TypeScript project',
+      ].join('');
+
+      const result = getObservationsAsOf(observations, new Date('2025-01-01T12:00:00Z'));
+      expect(result).toContain('User likes cats');
+      expect(result).toContain('User prefers dark mode');
+      expect(result).not.toContain('User is working on a TypeScript project');
+    });
+
+    it('should return only the first chunk when asOf is before all boundaries', () => {
+      const observations = [
+        '- User likes cats',
+        ObservationalMemory.createMessageBoundary(new Date('2025-01-01T10:00:00Z')),
+        '- User prefers dark mode',
+      ].join('');
+
+      const result = getObservationsAsOf(observations, new Date('2024-12-31T00:00:00Z'));
+      expect(result).toContain('User likes cats');
+      expect(result).not.toContain('User prefers dark mode');
+    });
+
+    it('should include a chunk when asOf exactly matches its boundary date', () => {
+      const boundary = new Date('2025-01-01T10:00:00Z');
+      const observations = [
+        '- User likes cats',
+        ObservationalMemory.createMessageBoundary(boundary),
+        '- User prefers dark mode',
+      ].join('');
+
+      const result = getObservationsAsOf(observations, boundary);
+      expect(result).toContain('User likes cats');
+      expect(result).toContain('User prefers dark mode');
+    });
+
+    it('should return empty string for empty observations', () => {
+      expect(getObservationsAsOf('', new Date())).toBe('');
+      expect(getObservationsAsOf('  ', new Date())).toBe('');
+    });
+
+    it('should return the full text when there are no boundaries', () => {
+      const observations = '- User likes cats\n- User prefers dark mode';
+      const result = getObservationsAsOf(observations, new Date('2020-01-01'));
+      expect(result).toBe(observations);
     });
   });
 
@@ -2747,6 +3610,138 @@ Ask about preferred brewing method
     expect(record?.activeObservations).toContain('User mentioned they like coffee');
   });
 
+  it('should include per-thread prior metadata in multi-thread observer prompt during resource-scoped observation', async () => {
+    const storage = createInMemoryStorage();
+
+    let capturedPrompt: any = null;
+    const mockModel = createStreamCapableMockModel({
+      doGenerate: async (options: any) => {
+        capturedPrompt = options.prompt;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>
+<thread id="thread-1">
+- User asked for plan update
+</thread>
+<thread id="thread-2">
+- User asked about deployment timing
+</thread>
+</observations>
+<thread id="thread-1">
+<current-task>Update implementation plan</current-task>
+<suggested-response>I will share the updated plan.</suggested-response>
+</thread>
+<thread id="thread-2">
+<current-task>Confirm release window</current-task>
+<suggested-response>I will confirm deployment timing.</suggested-response>
+</thread>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const now = new Date();
+    await storage.saveThread({
+      thread: {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'Thread 1',
+        metadata: {
+          mastra: {
+            om: {
+              currentTask: 'Handle billing follow-up',
+              suggestedResponse: 'Ask for the invoice number.',
+            },
+          },
+        },
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: 'thread-2',
+        resourceId: 'resource-1',
+        title: 'Thread 2',
+        metadata: {
+          mastra: {
+            om: {
+              currentTask: 'Track rollout readiness',
+              suggestedResponse: 'Confirm deployment checklist status.',
+            },
+          },
+        },
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+
+    await storage.saveMessages({
+      messages: [
+        {
+          ...createTestMessage('Can you update me on billing?', 'user', 't1-msg-1'),
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+        },
+        {
+          ...createTestMessage('Any update on rollout?', 'user', 't2-msg-1'),
+          threadId: 'thread-2',
+          resourceId: 'resource-1',
+        },
+      ],
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 100000,
+        model: mockModel as any,
+      },
+      reflection: { observationTokens: 10000 },
+      scope: 'resource',
+    });
+
+    await storage.initializeObservationalMemory({
+      threadId: null,
+      resourceId: 'resource-1',
+      scope: 'resource',
+      config: {},
+    });
+
+    await (om as any).doResourceScopedObservation({
+      record: await storage.getObservationalMemory(null, 'resource-1'),
+      currentThreadId: 'thread-1',
+      resourceId: 'resource-1',
+      currentThreadMessages: [],
+    });
+
+    expect(capturedPrompt).not.toBeNull();
+    const userMessage = capturedPrompt.find((msg: any) => msg.role === 'user');
+    expect(userMessage).toBeDefined();
+    const userPromptText = Array.isArray(userMessage.content)
+      ? userMessage.content
+          .map((part: any) => (part?.type === 'text' ? part.text : ''))
+          .filter(Boolean)
+          .join('\n')
+      : String(userMessage.content ?? '');
+
+    expect(userPromptText).toContain('Prior Thread Metadata');
+    expect(userPromptText).toContain('thread thread-1');
+    expect(userPromptText).toContain('prior current-task: Handle billing follow-up');
+    expect(userPromptText).toContain('prior suggested-response: Ask for the invoice number.');
+    expect(userPromptText).toContain('thread thread-2');
+    expect(userPromptText).toContain('prior current-task: Track rollout readiness');
+    expect(userPromptText).toContain('prior suggested-response: Confirm deployment checklist status.');
+  });
+
   it('should NOT use thread tags in thread scope mode', async () => {
     const storage = createInMemoryStorage();
 
@@ -2785,7 +3780,7 @@ Ask about preferred brewing method
     const om = new ObservationalMemory({
       storage,
       observation: {
-        messageTokens: 10,
+        messageTokens: 100000,
         model: mockModel as any,
       },
       reflection: { observationTokens: 10000 },
@@ -3326,7 +4321,11 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
     });
     await storage.updateActiveObservations({
       id: record.id,
-      observations: '<thread id="thread-A">\n- 🔴 User\'s favorite color is blue\n</thread>',
+      observations: [
+        '<thread id="thread-A">\n- 🔴 User\'s favorite color is blue\n</thread>',
+        ObservationalMemory.createMessageBoundary(new Date('2025-01-01T09:30:00.000Z')).trim(),
+        '<thread id="thread-A">\n- 🔴 User is debugging observational memory prompt ordering\n</thread>',
+      ].join('\n\n'),
       tokenCount: 50,
       lastObservedAt: threadAObservedAt, // Resource-level cursor set to Thread A's observation time
     });
@@ -3381,13 +4380,23 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
       }) as any,
     });
 
-    // Extract the OM system message (tagged as 'observational-memory')
+    // Extract the OM system messages (tagged as 'observational-memory')
     const omSystemMessages = messageList.getSystemMessages('observational-memory');
-    expect(omSystemMessages.length).toBeGreaterThan(0);
+    expect(omSystemMessages.length).toBeGreaterThan(1);
 
-    const omSystemMessage = omSystemMessages[0]!;
-    const omContent =
-      typeof omSystemMessage.content === 'string' ? omSystemMessage.content : JSON.stringify(omSystemMessage.content);
+    const omContents = omSystemMessages.map(message =>
+      typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+    );
+    const omContent = omContents.join('\n\n');
+
+    expect(omContents[0]).toContain(
+      'The following observations block contains your memory of past conversations with this user.',
+    );
+    expect(omContents).toContain('<observations>');
+    expect(omContents).toContain(`<thread id="thread-A">\n- 🔴 User's favorite color is blue\n</thread>`);
+    expect(omContents).toContain(
+      `<thread id="thread-A">\n- 🔴 User is debugging observational memory prompt ordering\n</thread>`,
+    );
 
     // KEY ASSERTION: Thread A's messages should appear as <other-conversation> blocks
     // even though Thread A was already observed (its messages are older than resource-level lastObservedAt).
@@ -4868,7 +5877,6 @@ describe('Async Buffering Processor Logic', () => {
       const result = (om as any).combineObservationsForBuffering('- Active', '- Buffered');
       expect(result).toContain('- Active');
       expect(result).toContain('- Buffered');
-      expect(result).toContain('BUFFERED (pending activation)');
     });
   });
 
@@ -6464,6 +7472,370 @@ describe('Full Async Buffering Flow', () => {
     expect(observerCalls.length).toBeGreaterThan(0);
   });
 
+  it('should defer async buffering when messages contain pending tool calls (state: call)', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    // Clear static maps to avoid cross-test pollution
+    (ObservationalMemory as any).asyncBufferingOps.clear();
+    (ObservationalMemory as any).lastBufferedBoundary.clear();
+    (ObservationalMemory as any).lastBufferedAtTime.clear();
+    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    (ObservationalMemory as any).sealedMessageIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'pending-tool-thread';
+    const resourceId = 'pending-tool-resource';
+
+    const observerCalls: { input: string }[] = [];
+    const mockModel = createStreamCapableMockModel({
+      doGenerate: async ({ prompt }) => {
+        observerCalls.push({ input: JSON.stringify(prompt).slice(0, 200) });
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>\nDate: Jan 1, 2025\n* 🔴 Observed at call ${observerCalls.length}\n</observations>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: {
+        messageTokens: 2000, // Low threshold so observation would normally trigger
+        bufferTokens: 500,
+        bufferActivation: 0.7,
+      },
+      reflection: {
+        observationTokens: 50000, // High - don't trigger reflection
+      },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Pending Tool Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    // Save messages: enough text to exceed the threshold, but the last assistant
+    // message contains a pending tool call (state: 'call')
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10); // ~200 tokens
+    const messages: any[] = [];
+    for (let i = 0; i < 10; i++) {
+      messages.push({
+        id: `pending-msg-${i}`,
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+        },
+        type: 'text',
+        createdAt: new Date(Date.UTC(2025, 0, 1, 9, i)),
+        threadId,
+        resourceId,
+      });
+    }
+    // Add an assistant message with a pending tool call (state: 'call')
+    messages.push({
+      id: 'pending-msg-tool-call',
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text' as const, text: 'Let me search for that.' },
+          {
+            type: 'tool-invocation',
+            providerExecuted: true,
+            toolInvocation: {
+              state: 'call',
+              toolCallId: 'call_pending_123',
+              toolName: 'web_search',
+              args: { query: 'test query' },
+            },
+          },
+        ],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 9, 10)),
+      threadId,
+      resourceId,
+    });
+    await storage.saveMessages({ messages });
+
+    // Helper to wait for async buffering ops
+    async function waitForAsyncOps(timeoutMs = 3000) {
+      const ops = (ObservationalMemory as any).asyncBufferingOps as Map<string, Promise<void>>;
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        if (ops.size === 0) return;
+        await Promise.allSettled([...ops.values()]);
+        await new Promise(r => setTimeout(r, 50));
+      }
+    }
+
+    // Step 0: Load messages with pending tool call.
+    // Even though total tokens (~2200) exceed threshold (2000),
+    // OM should NOT trigger async buffering because a message has state: 'call'.
+    const messageList = new MessageList({ threadId, resourceId });
+    const sharedState: Record<string, unknown> = {};
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    requestContext.set('currentDate', new Date('2025-01-01T12:00:00Z').toISOString());
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state: sharedState,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+    await waitForAsyncOps();
+
+    // Observer should NOT have been called because there's a pending tool call
+    expect(observerCalls.length).toBe(0);
+
+    // ─── Simulate tool completion: update the message in the messageList ───
+    // In real usage, llm-execution-step mutates the state:'call' part to state:'result'
+    const allDbMsgs = messageList.get.all.db();
+    const toolMsg = allDbMsgs.find(m => m.id === 'pending-msg-tool-call');
+    expect(toolMsg).toBeDefined();
+    const toolPart = toolMsg!.content?.parts?.find(
+      (p: any) => p.type === 'tool-invocation' && p.toolInvocation?.state === 'call',
+    ) as any;
+    expect(toolPart).toBeDefined();
+    toolPart.toolInvocation.state = 'result';
+    toolPart.toolInvocation.result = { title: 'Test Result', url: 'https://example.com' };
+
+    // Step 1: Now all tool calls are resolved, async buffering should fire
+    const requestContext2 = new RequestContext();
+    requestContext2.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    requestContext2.set('currentDate', new Date('2025-01-01T12:00:00Z').toISOString());
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: requestContext2,
+      stepNumber: 1,
+      state: sharedState,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+    await waitForAsyncOps();
+
+    // NOW the observer should have been called since all tool calls are resolved
+    expect(observerCalls.length).toBeGreaterThan(0);
+  });
+
+  it('should defer sync observation when messages contain pending tool calls (state: call)', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    // Clear static maps to avoid cross-test pollution
+    (ObservationalMemory as any).asyncBufferingOps.clear();
+    (ObservationalMemory as any).lastBufferedBoundary.clear();
+    (ObservationalMemory as any).lastBufferedAtTime.clear();
+    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    (ObservationalMemory as any).sealedMessageIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'pending-tool-sync-thread';
+    const resourceId = 'pending-tool-sync-resource';
+
+    const observerCalls: { input: string }[] = [];
+    const mockModel = createStreamCapableMockModel({
+      doGenerate: async ({ prompt }) => {
+        observerCalls.push({ input: JSON.stringify(prompt).slice(0, 200) });
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>\nDate: Jan 1, 2025\n* 🔴 Observed at call ${observerCalls.length}\n</observations>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    // bufferTokens: false → async buffering disabled, only sync observation path
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: {
+        messageTokens: 500, // Low threshold so sync observation triggers at step > 0
+        bufferTokens: false as any, // Disable async buffering entirely
+      },
+      reflection: {
+        observationTokens: 50000,
+      },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Pending Tool Sync Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    // Save messages: enough text to exceed the threshold
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10); // ~200 tokens
+    const messages: any[] = [];
+    for (let i = 0; i < 10; i++) {
+      messages.push({
+        id: `sync-pending-msg-${i}`,
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+        },
+        type: 'text',
+        createdAt: new Date(Date.UTC(2025, 0, 1, 9, i)),
+        threadId,
+        resourceId,
+      });
+    }
+    // Add an assistant message with a pending tool call (state: 'call')
+    messages.push({
+      id: 'sync-pending-msg-tool-call',
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text' as const, text: 'Let me search for that.' },
+          {
+            type: 'tool-invocation',
+            providerExecuted: true,
+            toolInvocation: {
+              state: 'call',
+              toolCallId: 'call_sync_pending_123',
+              toolName: 'web_search',
+              args: { query: 'test query' },
+            },
+          },
+        ],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 9, 10)),
+      threadId,
+      resourceId,
+    });
+    await storage.saveMessages({ messages });
+
+    // Step 0: Load messages (sync observation doesn't run at step 0 regardless)
+    const messageList = new MessageList({ threadId, resourceId });
+    const sharedState: Record<string, unknown> = {};
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    requestContext.set('currentDate', new Date('2025-01-01T12:00:00Z').toISOString());
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state: sharedState,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    // Step 1: Sync observation would normally fire (stepNumber > 0, tokens >= threshold),
+    // but should be skipped because of the pending tool call
+    const requestContext2 = new RequestContext();
+    requestContext2.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    requestContext2.set('currentDate', new Date('2025-01-01T12:00:00Z').toISOString());
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: requestContext2,
+      stepNumber: 1,
+      state: sharedState,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    // Observer should NOT have been called because there's a pending tool call
+    expect(observerCalls.length).toBe(0);
+
+    // ─── Simulate tool completion: mutate the part in the messageList ───
+    const allDbMsgs = messageList.get.all.db();
+    const toolMsg = allDbMsgs.find(m => m.id === 'sync-pending-msg-tool-call');
+    expect(toolMsg).toBeDefined();
+    const toolPart = toolMsg!.content?.parts?.find(
+      (p: any) => p.type === 'tool-invocation' && p.toolInvocation?.state === 'call',
+    ) as any;
+    expect(toolPart).toBeDefined();
+    toolPart.toolInvocation.state = 'result';
+    toolPart.toolInvocation.result = { title: 'Test Result', url: 'https://example.com' };
+
+    // Step 2: Now all tool calls are resolved, sync observation should fire
+    const requestContext3 = new RequestContext();
+    requestContext3.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    requestContext3.set('currentDate', new Date('2025-01-01T12:00:00Z').toISOString());
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: requestContext3,
+      stepNumber: 2,
+      state: sharedState,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    // NOW the observer should have been called since all tool calls are resolved
+    expect(observerCalls.length).toBeGreaterThan(0);
+  });
+
   describe('Full Async Reflection Flow', () => {
     /**
      * Helper that directly exercises storage-level buffering and activation
@@ -7568,7 +8940,8 @@ describe('Full Async Buffering Flow', () => {
     // Lower thresholds so step 1 crosses them → triggers handleThresholdReached
     (om as any).observationConfig.messageTokens = 1000;
     (om as any).observationConfig.bufferTokens = 500;
-    (om as any).observationConfig.blockAfter = 1200;
+    // Lower blockAfter so activation still runs after refreshed pending-token recount
+    (om as any).observationConfig.blockAfter = 1100;
 
     const msgCountBefore = contextMsgs.length;
 
@@ -7997,6 +9370,386 @@ describe('threadId validation in thread scope', () => {
 });
 
 // =============================================================================
+// Observer Context Optimization (observation.previousObserverTokens)
+// =============================================================================
+
+describe('Observer Context Optimization', () => {
+  function createOM(observationOverrides: Record<string, unknown> = {}) {
+    return new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      observation: {
+        messageTokens: 50000,
+        bufferTokens: false,
+        ...observationOverrides,
+      },
+      reflection: { observationTokens: 40000 },
+    });
+  }
+
+  // Helper to call the private method
+  function prepareObserverContextFull(
+    om: ObservationalMemory,
+    existingObservations: string | undefined,
+    record?: Record<string, unknown> | null,
+  ): { context: string | undefined; wasTruncated: boolean } {
+    return (om as any).prepareObserverContext(existingObservations, record);
+  }
+
+  function prepareObserverContext(
+    om: ObservationalMemory,
+    existingObservations: string | undefined,
+    record?: Record<string, unknown> | null,
+  ): string | undefined {
+    return prepareObserverContextFull(om, existingObservations, record).context;
+  }
+
+  describe('config validation', () => {
+    it('should throw if observation.previousObserverTokens is invalid', () => {
+      expect(() => createOM({ previousObserverTokens: -100 })).toThrow(
+        'observation.previousObserverTokens must be false or a finite number >= 0',
+      );
+      expect(() => createOM({ previousObserverTokens: Infinity })).toThrow(
+        'observation.previousObserverTokens must be false or a finite number >= 0',
+      );
+      expect(() => createOM({ previousObserverTokens: NaN })).toThrow(
+        'observation.previousObserverTokens must be false or a finite number >= 0',
+      );
+    });
+
+    it('should accept valid observation.previousObserverTokens including 0 and false', () => {
+      expect(() => createOM({ previousObserverTokens: false })).not.toThrow();
+      expect(() => createOM({ previousObserverTokens: 0 })).not.toThrow();
+      expect(() => createOM({ previousObserverTokens: 1 })).not.toThrow();
+      expect(() => createOM({ previousObserverTokens: 5000 })).not.toThrow();
+    });
+  });
+
+  describe('prepareObserverContext - default behavior', () => {
+    it('should return existingObservations unchanged when observations fit within default budget', () => {
+      const om = createOM();
+      const observations = '- User likes TypeScript\n- User prefers dark mode\n- User uses React';
+      expect(prepareObserverContext(om, observations)).toBe(observations);
+    });
+
+    it('should return undefined when existingObservations is undefined', () => {
+      const om = createOM({ previousObserverTokens: 100 });
+      expect(prepareObserverContext(om, undefined)).toBeUndefined();
+    });
+
+    it('should set wasTruncated to false when observations fit within budget', () => {
+      const om = createOM({ previousObserverTokens: 1000 });
+      const observations = '- User likes TypeScript';
+      const result = prepareObserverContextFull(om, observations);
+      expect(result.wasTruncated).toBe(false);
+      expect(result.context).toBe(observations);
+    });
+
+    it('should set wasTruncated to true when observations exceed budget', () => {
+      const om = createOM({ previousObserverTokens: 5 });
+      const observations = Array.from({ length: 20 }, (_, i) => `- Observation line ${i + 1}`).join('\n');
+      const result = prepareObserverContextFull(om, observations);
+      expect(result.wasTruncated).toBe(true);
+    });
+
+    it('should set wasTruncated to false when truncation is disabled', () => {
+      const om = createOM({ previousObserverTokens: false });
+      const observations = '- User likes TypeScript';
+      const result = prepareObserverContextFull(om, observations);
+      expect(result.wasTruncated).toBe(false);
+    });
+  });
+
+  describe('prepareObserverContext - observation.previousObserverTokens truncation', () => {
+    it('should truncate observations from the start to fit within token budget', () => {
+      const om = createOM({ previousObserverTokens: 20 });
+      const tc = new TokenCounter();
+
+      const lines = Array.from({ length: 20 }, (_, i) => `- Observation line ${i + 1}`);
+      const observations = lines.join('\n');
+      expect(tc.countObservations(observations)).toBeGreaterThan(20);
+
+      const result = prepareObserverContext(om, observations);
+      expect(result).toBeDefined();
+      expect(tc.countObservations(result!)).toBeLessThanOrEqual(20);
+      expect(result!).toMatch(/\[\d+ observations truncated here\]/);
+      expect(result!).toContain('Observation line 20');
+      expect(result!).not.toContain('- Observation line 1\n');
+    });
+
+    it('should preserve important observations around truncation when budget allows', () => {
+      const tc = new TokenCounter();
+      const observations = [
+        '- 🔴 Critical early item 1',
+        '- Detail early 2',
+        '- 🔴 Critical early item 3',
+        ...Array.from({ length: 16 }, (_, i) => `- Observation line ${i + 4}`),
+      ].join('\n');
+      const desired = [
+        '- 🔴 Critical early item 3',
+        '[10 observations truncated here]',
+        '- Observation line 12',
+        '- Observation line 13',
+        '- Observation line 14',
+        '- Observation line 15',
+        '- Observation line 16',
+        '- Observation line 17',
+        '- Observation line 18',
+        '- Observation line 19',
+      ].join('\n');
+      const budget = tc.countObservations(desired) + 2;
+      const om = createOM({ previousObserverTokens: budget });
+
+      const result = prepareObserverContext(om, observations)!;
+      const lines = result.split('\n').filter(Boolean);
+      const kept = lines.filter(line => !/^\[\d+ observations truncated here\]$/.test(line));
+      const tailKept = kept.filter(line => /^- Observation line \d+$/.test(line));
+
+      expect(result).toMatch(/\[\d+ observations truncated here\]/);
+      expect(result).toContain('🔴 Critical early item 3');
+      expect(tc.countObservations(result)).toBeLessThanOrEqual(budget);
+      expect(tailKept.length).toBeGreaterThanOrEqual(Math.ceil(kept.length / 2));
+    });
+
+    it('should drop oldest important observations first when still over budget', () => {
+      const tc = new TokenCounter();
+      // Budget just large enough to keep the newest important line + a small tail,
+      // but not all three important lines.
+      const desired = [
+        '[2 observations truncated here]',
+        '- 🔴 Newer critical 3',
+        '[19 observations truncated here]',
+        '- Observation line 20',
+      ].join('\n');
+      const budget = tc.countObservations(desired) + 2;
+      const om = createOM({ previousObserverTokens: budget });
+      const observations = [
+        '- 🔴 Very old critical 1',
+        '- 🔴 Very old critical 2',
+        '- 🔴 Newer critical 3',
+        ...Array.from({ length: 20 }, (_, i) => `- Observation line ${i + 1}`),
+      ].join('\n');
+
+      const result = prepareObserverContext(om, observations)!;
+      expect(result).toMatch(/\[\d+ observations truncated here\]/);
+      expect(result).toContain('🔴 Newer critical 3');
+      expect(result).not.toContain('🔴 Very old critical 1');
+    });
+
+    it('should return observations unchanged when within budget', () => {
+      const om = createOM({ previousObserverTokens: 100_000 });
+      const observations = '- User likes TypeScript\n- User prefers dark mode';
+      expect(prepareObserverContext(om, observations)).toBe(observations);
+    });
+
+    it('should return truncation marker when budget is too small', () => {
+      const om = createOM({ previousObserverTokens: 1 });
+      const observations = 'Line one\nLine two\nLine three';
+      const result = prepareObserverContext(om, observations);
+      expect(result).toBe('[3 observations truncated here]');
+    });
+
+    it('should fully truncate context when observation.previousObserverTokens is 0', () => {
+      const om = createOM({ previousObserverTokens: 0 });
+      const observations = '- User likes TypeScript\n- User prefers dark mode';
+      const result = prepareObserverContext(om, observations);
+      expect(result).toBe('');
+    });
+
+    it('should fully truncate everything when observation.previousObserverTokens is 0 even with buffered reflection', () => {
+      const om = createOM({ previousObserverTokens: 0 });
+      const observations = '- User likes TypeScript\n- User prefers dark mode';
+      const record = { bufferedReflection: '- Condensed reflection content', reflectedObservationLineCount: 1 };
+      const result = prepareObserverContext(om, observations, record);
+      // Budget is 0 so everything is truncated — reflection is inside the budget
+      expect(result).toBe('');
+    });
+
+    it('should disable truncation when observation.previousObserverTokens is false', () => {
+      const om = createOM({ previousObserverTokens: false });
+      const observations = '- User likes TypeScript\n- User prefers dark mode';
+      const result = prepareObserverContext(om, observations);
+      expect(result).toBe(observations);
+    });
+  });
+
+  describe('prepareObserverContext - automatic buffered reflection', () => {
+    it('should NOT include buffered reflection when previousObserverTokens is false', () => {
+      const om = createOM({ previousObserverTokens: false });
+      const observations = '- User likes TypeScript';
+      const record = { bufferedReflection: '- Condensed reflection content', reflectedObservationLineCount: 1 };
+      const result = prepareObserverContext(om, observations, record);
+      // Truncation explicitly disabled, so no buffered reflection replacement
+      expect(result).toBe(observations);
+    });
+
+    it('should replace reflected lines with buffered reflection when previousObserverTokens is set', () => {
+      const om = createOM({ previousObserverTokens: 5000 });
+      const observations = '- Old observation 1\n- Old observation 2\n- Recent observation 3';
+      const record = {
+        bufferedReflection: '- Summary of old observations',
+        reflectedObservationLineCount: 2,
+      };
+      const result = prepareObserverContext(om, observations, record);
+      // Reflected lines (first 2) are replaced by the summary
+      expect(result).toContain('- Summary of old observations');
+      expect(result).toContain('- Recent observation 3');
+      expect(result).not.toContain('- Old observation 1');
+      expect(result).not.toContain('- Old observation 2');
+    });
+
+    it('should ignore buffered reflection when no reflectedObservationLineCount exists', () => {
+      const om = createOM({ previousObserverTokens: 5000 });
+      const observations = '- User likes TypeScript';
+      const record = { bufferedReflection: '- Condensed reflection content' };
+      const result = prepareObserverContext(om, observations, record);
+      expect(result).toBe(observations);
+    });
+
+    it('should not replace anything when no buffered reflection exists', () => {
+      const om = createOM({ previousObserverTokens: 5000 });
+      const observations = '- User likes TypeScript';
+      // No bufferedReflection in record
+      const record = {};
+      const result = prepareObserverContext(om, observations, record);
+      expect(result).toBe(observations);
+    });
+
+    it('should not replace anything when record is null', () => {
+      const om = createOM({ previousObserverTokens: 5000 });
+      const observations = '- User likes TypeScript';
+      const result = prepareObserverContext(om, observations, null);
+      expect(result).toBe(observations);
+    });
+  });
+
+  describe('prepareObserverContext - combined optimizations', () => {
+    it('should replace reflected lines and truncate assembled result to fit budget', () => {
+      const tc = new TokenCounter();
+      // 10 old lines (reflected) + 30 new lines
+      const oldLines = Array.from({ length: 10 }, (_, i) => `- Old observation ${i + 1}`);
+      const newLines = Array.from({ length: 30 }, (_, i) => `- New observation ${i + 11}`);
+      const observations = [...oldLines, ...newLines].join('\n');
+      const reflectionContent = '- Summary of first 10 observations';
+
+      const budget = 50;
+      const om = createOM({ previousObserverTokens: budget });
+      const record = {
+        bufferedReflection: reflectionContent,
+        reflectedObservationLineCount: 10,
+      };
+
+      const result = prepareObserverContext(om, observations, record);
+      expect(result).toBeDefined();
+      // Reflected lines are replaced, not present as raw lines
+      expect(result!).not.toContain('Old observation 1');
+      // Most recent observations preserved (tail)
+      expect(result!).toContain('New observation 40');
+      // Total fits within budget — truncation applies to the full assembled string
+      expect(tc.countObservations(result!)).toBeLessThanOrEqual(budget);
+    });
+
+    it('should preserve reflection when budget fits assembled result', () => {
+      const tc = new TokenCounter();
+      // 20 old lines (reflected) + 5 new lines — small enough that reflection + new lines fit in budget
+      const oldLines = Array.from({ length: 20 }, (_, i) => `- Old line ${i + 1}`);
+      const newLines = Array.from({ length: 5 }, (_, i) => `- New line ${i + 21}`);
+      const observations = [...oldLines, ...newLines].join('\n');
+      const reflectionContent = '- Reflection summary';
+
+      // Budget generous enough for reflection + all 5 new lines
+      const assembled = `${reflectionContent}\n\n${newLines.join('\n')}`;
+      const budget = tc.countObservations(assembled) + 5;
+      const om = createOM({
+        previousObserverTokens: budget,
+      });
+      const record = {
+        bufferedReflection: reflectionContent,
+        reflectedObservationLineCount: 20,
+      };
+
+      const result = prepareObserverContext(om, observations, record);
+      // Old lines replaced
+      expect(result!).not.toContain('Old line 1');
+      // Reflection present (budget is generous)
+      expect(result!).toContain('- Reflection summary');
+      // All new lines present
+      expect(result!).toContain('New line 25');
+      // Total fits within budget
+      expect(tc.countObservations(result!)).toBeLessThanOrEqual(budget);
+    });
+
+    it('should truncate reflection when budget is too tight for assembled result', () => {
+      const tc = new TokenCounter();
+      // 10 old lines (reflected) + 30 new lines — assembled result exceeds budget
+      const oldLines = Array.from({ length: 10 }, (_, i) => `- Old line ${i + 1}`);
+      const newLines = Array.from({ length: 30 }, (_, i) => `- New line ${i + 11}`);
+      const observations = [...oldLines, ...newLines].join('\n');
+
+      // Budget only fits ~8 lines — reflection is at the start so it gets truncated
+      const budget = 50;
+      const om = createOM({
+        previousObserverTokens: budget,
+      });
+      const record = {
+        bufferedReflection: '- Summary of first 10 observations',
+        reflectedObservationLineCount: 10,
+      };
+
+      const result = prepareObserverContext(om, observations, record);
+      expect(result).toBeDefined();
+      // Old raw lines are not present (were replaced)
+      expect(result!).not.toContain('Old line 1');
+      // Most recent observations preserved (tail)
+      expect(result!).toContain('New line 40');
+      // Total fits within budget
+      expect(tc.countObservations(result!)).toBeLessThanOrEqual(budget);
+    });
+  });
+
+  describe('truncateObservationsToTokenBudget', () => {
+    function truncate(om: ObservationalMemory, observations: string, budget: number): string {
+      return (om as any).truncateObservationsToTokenBudget(observations, budget);
+    }
+
+    it('should preserve recent lines, drop oldest, and include truncation marker', () => {
+      const om = createOM();
+      const tc = new TokenCounter();
+      // Use longer lines so that dropping even one line frees meaningful space
+      const lines = [
+        'Line A with extra content',
+        'Line B with extra content',
+        'Line C with extra content',
+        'Line D with extra content',
+        'Line E with extra content',
+      ];
+      const observations = lines.join('\n');
+      // Budget allows most but not all lines, forcing truncation
+      const budget = tc.countObservations(observations) - tc.countString(lines[0]!);
+      const result = truncate(om, observations, budget);
+      expect(result).toMatch(/\[\d+ observations truncated here\]/);
+      expect(result).toContain('Line E with extra content');
+      expect(result).not.toContain('Line A with extra content');
+    });
+
+    it('should return truncation marker when budget is very small', () => {
+      const om = createOM();
+      const observations = 'First line\nSecond line\nThird line';
+      const result = truncate(om, observations, 1);
+      expect(result).toBe('[3 observations truncated here]');
+    });
+
+    it('should return full observations when budget exceeds total tokens', () => {
+      const om = createOM();
+      const observations = 'Short obs';
+      const result = truncate(om, observations, 100_000);
+      expect(result).toBe(observations);
+    });
+  });
+});
+
+// =============================================================================
 // Per-step save: sealed message deduplication
 // =============================================================================
 describe('Per-step save deduplication', () => {
@@ -8014,7 +9767,7 @@ describe('Per-step save deduplication', () => {
     const threadId = 'dedup-thread';
     const resourceId = 'dedup-resource';
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -8339,5 +10092,677 @@ describe('Per-step save deduplication', () => {
 
     expect(sameLogical.length).toBe(1);
     expect(sameLogical[0]!.id).toBe('user-1');
+  });
+});
+
+describe('Single-thread replay red tests', () => {
+  async function createReplayFixture() {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const storage = createInMemoryStorage();
+    const threadId = 'single-thread-replay';
+    const resourceId = 'single-thread-replay-resource';
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: new MockLanguageModelV2({}) as any,
+      observation: { messageTokens: 5_000 },
+      reflection: { observationTokens: 200_000 },
+    });
+
+    const messageList = new MessageList({ threadId, resourceId });
+
+    return { om, messageList, threadId, resourceId };
+  }
+
+  function getModelTextParts(message: any): string[] {
+    if (typeof message?.content === 'string') return [message.content];
+    if (Array.isArray(message?.content)) {
+      return message.content.filter((p: any) => p?.type === 'text').map((p: any) => p.text);
+    }
+    return [];
+  }
+
+  function getModelVisibleText(messageList: any): string {
+    return messageList.get.all.aiV5
+      .model()
+      .flatMap((m: any) => getModelTextParts(m))
+      .join(' | ');
+  }
+
+  it('T1-A: messages at exact lastObservedAt boundary should not replay on next turn', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date(t0.getTime() + 1);
+
+    messageList.add(
+      {
+        id: 'boundary-old',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'old-at-boundary' }] },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'boundary-new',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'new-after-boundary' }] },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    await (om as any).filterAlreadyObservedMessages(messageList, {
+      lastObservedAt: t0,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).not.toContain('old-at-boundary');
+    expect(remainingText).toContain('new-after-boundary');
+  });
+
+  it('T2-B: marker-bearing mixed message should be trimmed to post-marker parts only', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    messageList.add(
+      {
+        id: 'pre-marker',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'fully-observed-before-marker' }] },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'marker-msg',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'observed-prefix-in-marker-message' },
+            { type: 'data-om-observation-end', data: { cycleId: 'marker-cycle' } },
+            { type: 'text', text: 'fresh-post-marker-tail' },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    await (om as any).filterAlreadyObservedMessages(messageList, {
+      lastObservedAt: t1,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remaining.map((m: any) => m.id)).toEqual(['marker-msg']);
+    expect(remainingText).not.toContain('fully-observed-before-marker');
+    expect(remainingText).not.toContain('observed-prefix-in-marker-message');
+    expect(remainingText).toContain('fresh-post-marker-tail');
+  });
+
+  it('T3-A: sealed remint (id=A->id=B) should not replay sealed prefix', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mastra: { sealed: true } },
+          parts: [
+            { type: 'text', text: 'sealed-prefix', metadata: { mastra: { sealedAt: t0.getTime() } } },
+            { type: 'data-om-observation-end', data: { cycleId: 'c1' } },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'sealed-prefix' },
+            { type: 'data-om-observation-end', data: { cycleId: 'c1' } },
+            { type: 'text', text: 'fresh-tail' },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    const messagesAfterRemint = messageList.get.all.db();
+    const reminted = messagesAfterRemint.find((m: any) => m.id !== 'A');
+    expect(reminted).toBeDefined();
+
+    await (om as any).filterAlreadyObservedMessages(messageList, {
+      observedMessageIds: ['A'],
+      lastObservedAt: t0,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).not.toContain('sealed-prefix');
+    expect(remainingText).toContain('fresh-tail');
+  });
+
+  it('T1-B: reminted +1ms boundary should not leak observed prefix on next turn', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mastra: { sealed: true } },
+          parts: [{ type: 'text', text: 'already-observed', metadata: { mastra: { sealedAt: t0.getTime() } } }],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'already-observed' },
+            { type: 'text', text: 'new-content-after-seal' },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    const reminted = messageList.get.all.db().find((m: any) => m.id !== 'A');
+    expect(reminted).toBeDefined();
+    expect(reminted!.createdAt.getTime()).toBe(t0.getTime() + 1);
+
+    await (om as any).filterAlreadyObservedMessages(messageList, {
+      observedMessageIds: ['A'],
+      lastObservedAt: t0,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).not.toContain('already-observed');
+    expect(remainingText).toContain('new-content-after-seal');
+  });
+
+  it('T4-B: post-activation step>0 should still prune already observed content before model sees it', async () => {
+    const { RequestContext } = await import('@mastra/core/di');
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    await (om as any).storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'replay',
+        metadata: {},
+        createdAt: new Date('2025-01-01T09:00:00.000Z'),
+        updatedAt: new Date('2025-01-01T09:00:00.000Z'),
+      },
+    });
+
+    const record = await (om as any).storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    await (om as any).storage.updateActiveObservations({
+      id: record.id,
+      observations: '- observed',
+      tokenCount: 10,
+      lastObservedAt: t0,
+      observedMessageIds: ['old-1'],
+    });
+
+    messageList.add(
+      {
+        id: 'old-1',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'already-observed' }] },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'new-1',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'fresh-after-activation' }] },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    const ctx = new RequestContext();
+    ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: ctx,
+      stepNumber: 6,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: new MockLanguageModelV2({}) as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).toContain('fresh-after-activation');
+    expect(remainingText).not.toContain('already-observed');
+  });
+
+  it('T4-C: post-activation step>0 should not replay sealed-split prefix when ID A is reused', async () => {
+    const { RequestContext } = await import('@mastra/core/di');
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    await (om as any).storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'replay',
+        metadata: {},
+        createdAt: new Date('2025-01-01T09:00:00.000Z'),
+        updatedAt: new Date('2025-01-01T09:00:00.000Z'),
+      },
+    });
+
+    const record = await (om as any).storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    await (om as any).storage.updateActiveObservations({
+      id: record.id,
+      observations: '- observed',
+      tokenCount: 10,
+      lastObservedAt: t0,
+      observedMessageIds: ['A'],
+    });
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mastra: { sealed: true } },
+          parts: [{ type: 'text', text: 'already-observed', metadata: { mastra: { sealedAt: t0.getTime() } } }],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'already-observed' },
+            { type: 'text', text: 'fresh-after-split' },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    const reminted = messageList.get.all.db().find((m: any) => m.id !== 'A');
+    expect(reminted).toBeDefined();
+
+    const ctx = new RequestContext();
+    ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: ctx,
+      stepNumber: 6,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: new MockLanguageModelV2({}) as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).toContain('fresh-after-split');
+    expect(remainingText).not.toContain('already-observed');
+  });
+
+  it('T4-D: repeated loop re-add of id A should not replay observed prefix across reminted tails on step>0', async () => {
+    const { RequestContext } = await import('@mastra/core/di');
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    await (om as any).storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'replay',
+        metadata: {},
+        createdAt: new Date('2025-01-01T09:00:00.000Z'),
+        updatedAt: new Date('2025-01-01T09:00:00.000Z'),
+      },
+    });
+
+    const record = await (om as any).storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    await (om as any).storage.updateActiveObservations({
+      id: record.id,
+      observations: '- observed',
+      tokenCount: 10,
+      lastObservedAt: t0,
+      observedMessageIds: ['A'],
+    });
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mastra: { sealed: true } },
+          parts: [{ type: 'text', text: 'already-observed', metadata: { mastra: { sealedAt: t0.getTime() } } }],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    for (let i = 1; i <= 3; i++) {
+      messageList.add(
+        {
+          id: 'A',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'already-observed' },
+              { type: 'text', text: `fresh-${i}` },
+            ],
+          },
+          createdAt: new Date(t0.getTime() + i),
+        } as any,
+        'response',
+      );
+    }
+
+    const reminted = messageList.get.all.db().filter((m: any) => m.id !== 'A');
+    expect(reminted.length).toBeGreaterThan(0);
+
+    const ctx = new RequestContext();
+    ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: ctx,
+      stepNumber: 6,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: new MockLanguageModelV2({}) as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).toContain('fresh-3');
+    expect(remainingText).not.toContain('already-observed');
+  });
+
+  it('T4-A: activation/save ordering race should not replay previously observed content', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'race-old',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'already-observed-race' }] },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    messageList.add(
+      {
+        id: 'race-fresh',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'fresh-next-turn' }] },
+        createdAt: new Date(t0.getTime() + 1),
+      } as any,
+      'input',
+    );
+
+    const originalSave = (om as any).saveMessagesWithSealedIdTracking.bind(om);
+    const saveStarted: { value: boolean } = { value: false };
+    (om as any).saveMessagesWithSealedIdTracking = async (...args: any[]) => {
+      saveStarted.value = true;
+      await new Promise(resolve => setTimeout(resolve, 25));
+      return originalSave(...args);
+    };
+
+    const cleanupPromise = (om as any).cleanupAfterObservation(
+      messageList,
+      new Set<string>(),
+      threadId,
+      resourceId,
+      {},
+      undefined,
+      undefined,
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 5));
+    expect(saveStarted.value).toBe(true);
+
+    await (om as any).filterAlreadyObservedMessages(
+      messageList,
+      {
+        observedMessageIds: ['race-old'],
+        lastObservedAt: t0,
+      },
+      { useMarkerBoundaryPruning: true },
+    );
+
+    const duringRaceText = getModelVisibleText(messageList);
+
+    expect(duringRaceText).not.toContain('already-observed-race');
+
+    await cleanupPromise;
+  });
+
+  it('T4-A-debug: activation/save ordering sample can drop fresh-next-turn during race window', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'race-old-debug',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'already-observed-race' }] },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    messageList.add(
+      {
+        id: 'race-fresh-debug',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'fresh-next-turn' }] },
+        createdAt: new Date(t0.getTime() + 1),
+      } as any,
+      'input',
+    );
+
+    const originalSave = (om as any).saveMessagesWithSealedIdTracking.bind(om);
+    let releaseSave!: () => void;
+    const saveBlocked = new Promise<void>(resolve => {
+      releaseSave = resolve;
+    });
+    (om as any).saveMessagesWithSealedIdTracking = async (...args: any[]) => {
+      await saveBlocked;
+      return originalSave(...args);
+    };
+
+    const cleanupPromise = (om as any).cleanupAfterObservation(
+      messageList,
+      new Set<string>(),
+      threadId,
+      resourceId,
+      {},
+      undefined,
+      undefined,
+    );
+
+    // Assert intermediate state before save completes.
+    const duringRaceText = getModelVisibleText(messageList);
+
+    // Keep this assertion as a debug signal for post-activation under-inclusion windows.
+    expect(duringRaceText).toContain('fresh-next-turn');
+
+    releaseSave();
+    await cleanupPromise;
+  });
+
+  it('T5-A: part excluded by getUnobservedMessages should not survive step-0 filter', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const observed = {
+      id: 'obs-1',
+      threadId,
+      resourceId,
+      role: 'assistant',
+      content: { format: 2, parts: [{ type: 'text', text: 'already-seen' }] },
+      createdAt: t0,
+    } as any;
+    const fresh = {
+      id: 'obs-2',
+      threadId,
+      resourceId,
+      role: 'assistant',
+      content: { format: 2, parts: [{ type: 'text', text: 'new-seen' }] },
+      createdAt: new Date(t0.getTime() + 1),
+    } as any;
+
+    const record = {
+      observedMessageIds: ['obs-1'],
+      lastObservedAt: t0,
+      bufferedObservations: [],
+    } as any;
+
+    const unobserved = (om as any).getUnobservedMessages([observed, fresh], record);
+    const unobservedIds = unobserved.map((m: any) => m.id);
+    expect(unobservedIds).toEqual(['obs-2']);
+
+    messageList.add(observed, 'memory');
+    messageList.add(fresh, 'memory');
+    await (om as any).filterAlreadyObservedMessages(messageList, record);
+
+    const remainingIds = messageList.get.all.db().map((m: any) => m.id);
+    expect(remainingIds).toEqual(unobservedIds);
   });
 });

@@ -1,18 +1,28 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { Stream } from 'node:stream';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
 import type { Tool } from '@mastra/core/tools';
-import { isZodType } from '@mastra/core/utils';
+
+import type { JSONSchema7 } from '@mastra/schema-compat';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import type { GetPromptResult, ListPromptsResult, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+import type {
+  EmptyResult,
+  GetPromptResult,
+  ListPromptsResult,
+  ListResourcesResult,
+  ListResourceTemplatesResult,
+  LoggingLevel,
+  ReadResourceResult,
+} from '@modelcontextprotocol/sdk/types.js';
 import {
   CallToolResultSchema,
   ListResourcesResultSchema,
@@ -26,13 +36,11 @@ import {
   ElicitRequestSchema,
   ProgressNotificationSchema,
   ListRootsRequestSchema,
+  LoggingMessageNotificationSchema,
+  EmptyResultSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
-import { z } from 'zod';
-import { convertJsonSchemaToZod } from 'zod-from-json-schema';
-import { convertJsonSchemaToZod as convertJsonSchemaToZodV3 } from 'zod-from-json-schema-v3';
-import type { JSONSchema } from 'zod-from-json-schema-v3';
 import { ElicitationClientActions } from './actions/elicitation';
 import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
@@ -204,20 +212,10 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private setupLogging(): void {
     if (this.enableServerLogs) {
-      this.client.setNotificationHandler(
-        z.object({
-          method: z.literal('notifications/message'),
-          params: z
-            .object({
-              level: z.string(),
-            })
-            .passthrough(),
-        }),
-        notification => {
-          const { level, ...params } = notification.params;
-          this.log(level as LoggingLevel, '[MCP SERVER LOG]', params);
-        },
-      );
+      this.client.setNotificationHandler(LoggingMessageNotificationSchema, (notification: any) => {
+        const { level, ...params } = notification.params;
+        this.log(level as LoggingLevel, '[MCP SERVER LOG]', params);
+      });
     }
   }
 
@@ -289,6 +287,8 @@ export class InternalMastraMCPClient extends MastraBase {
         command,
         args: this.serverConfig.args,
         env: { ...getDefaultEnvironment(), ...(this.serverConfig.env || {}) },
+        stderr: this.serverConfig.stderr,
+        cwd: this.serverConfig.cwd,
       });
       await this.client.connect(this.transport, { timeout: this.serverConfig.timeout ?? this.timeout });
       this.log('debug', `Successfully connected to MCP server via Stdio`);
@@ -456,6 +456,20 @@ export class InternalMastraMCPClient extends MastraBase {
     return undefined;
   }
 
+  /**
+   * Gets the stderr stream of the child process, if using stdio transport with `stderr: 'pipe'`.
+   *
+   * Returns null if not connected, not using stdio transport, or stderr is not piped.
+   *
+   * @internal
+   */
+  get stderr(): Stream | null {
+    if (this.transport instanceof StdioClientTransport) {
+      return this.transport.stderr;
+    }
+    return null;
+  }
+
   async disconnect() {
     if (!this.transport) {
       this.log('debug', 'Disconnect called but no transport was connected.');
@@ -562,35 +576,35 @@ export class InternalMastraMCPClient extends MastraBase {
     this.log('debug', 'Successfully reconnected to MCP server');
   }
 
-  async listResources() {
+  async listResources(): Promise<ListResourcesResult> {
     this.log('debug', `Requesting resources from MCP server`);
     return await this.client.request({ method: 'resources/list' }, ListResourcesResultSchema, {
       timeout: this.timeout,
     });
   }
 
-  async readResource(uri: string) {
+  async readResource(uri: string): Promise<ReadResourceResult> {
     this.log('debug', `Reading resource from MCP server: ${uri}`);
     return await this.client.request({ method: 'resources/read', params: { uri } }, ReadResourceResultSchema, {
       timeout: this.timeout,
     });
   }
 
-  async subscribeResource(uri: string) {
+  async subscribeResource(uri: string): Promise<EmptyResult> {
     this.log('debug', `Subscribing to resource on MCP server: ${uri}`);
-    return await this.client.request({ method: 'resources/subscribe', params: { uri } }, z.object({}), {
+    return await this.client.request({ method: 'resources/subscribe', params: { uri } }, EmptyResultSchema, {
       timeout: this.timeout,
     });
   }
 
-  async unsubscribeResource(uri: string) {
+  async unsubscribeResource(uri: string): Promise<EmptyResult> {
     this.log('debug', `Unsubscribing from resource on MCP server: ${uri}`);
-    return await this.client.request({ method: 'resources/unsubscribe', params: { uri } }, z.object({}), {
+    return await this.client.request({ method: 'resources/unsubscribe', params: { uri } }, EmptyResultSchema, {
       timeout: this.timeout,
     });
   }
 
-  async listResourceTemplates() {
+  async listResourceTemplates(): Promise<ListResourceTemplatesResult> {
     this.log('debug', `Requesting resource templates from MCP server`);
     return await this.client.request({ method: 'resources/templates/list' }, ListResourceTemplatesResultSchema, {
       timeout: this.timeout,
@@ -611,20 +625,11 @@ export class InternalMastraMCPClient extends MastraBase {
    * Get a prompt and its dynamic messages from the server.
    * @param name The prompt name
    * @param args Arguments for the prompt
-   * @param version (optional) The prompt version to retrieve
    */
-  async getPrompt({
-    name,
-    args,
-    version,
-  }: {
-    name: string;
-    args?: Record<string, any>;
-    version?: string;
-  }): Promise<GetPromptResult> {
+  async getPrompt({ name, args }: { name: string; args?: Record<string, any> }): Promise<GetPromptResult> {
     this.log('debug', `Requesting prompt from MCP server: ${name}`);
     return await this.client.request(
-      { method: 'prompts/get', params: { name, arguments: args, version } },
+      { method: 'prompts/get', params: { name, arguments: args } },
       GetPromptResultSchema,
       { timeout: this.timeout },
     );
@@ -641,11 +646,9 @@ export class InternalMastraMCPClient extends MastraBase {
     });
   }
 
-  setResourceUpdatedNotificationHandler(
-    handler: (params: z.infer<typeof ResourceUpdatedNotificationSchema>['params']) => void,
-  ): void {
+  setResourceUpdatedNotificationHandler(handler: (params: any) => void): void {
     this.log('debug', 'Setting resource updated notification handler');
-    this.client.setNotificationHandler(ResourceUpdatedNotificationSchema, notification => {
+    this.client.setNotificationHandler(ResourceUpdatedNotificationSchema, (notification: any) => {
       handler(notification.params);
     });
   }
@@ -673,34 +676,23 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private async convertInputSchema(
-    inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'] | JSONSchema,
-  ): Promise<z.ZodType> {
-    if (isZodType(inputSchema)) {
-      return inputSchema;
-    }
-
+    inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'],
+  ): Promise<JSONSchema7> {
     try {
       await $RefParser.dereference(inputSchema);
-      const jsonSchemaToConvert = ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema;
-      if ('toJSONSchema' in z) {
-        //@ts-expect-error - zod type issue
-        return convertJsonSchemaToZod(jsonSchemaToConvert);
-      } else {
-        return convertJsonSchemaToZodV3(jsonSchemaToConvert);
-      }
+      return ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
     } catch (error: unknown) {
       let errorDetails: string | undefined;
       if (error instanceof Error) {
         errorDetails = error.stack;
       } else {
-        // Attempt to stringify, fallback to String()
         try {
           errorDetails = JSON.stringify(error);
         } catch {
           errorDetails = String(error);
         }
       }
-      this.log('error', 'Failed to convert JSON schema to Zod schema using zodFromJsonSchema', {
+      this.log('error', 'Failed to dereference JSON schema', {
         error: errorDetails,
         originalJsonSchema: inputSchema,
       });
@@ -714,66 +706,26 @@ export class InternalMastraMCPClient extends MastraBase {
     }
   }
 
-  /**
-   * Recursively applies `.passthrough()` to all ZodObject schemas so that
-   * unknown keys returned by an MCP server are preserved instead of being
-   * silently stripped by Zod's default "strip" mode.
-   */
-  private applyPassthrough(schema: z.ZodType): z.ZodType {
-    if (schema instanceof z.ZodObject) {
-      const shape = schema.shape;
-      const newShape: Record<string, z.ZodType> = {};
-      for (const key of Object.keys(shape)) {
-        newShape[key] = this.applyPassthrough(shape[key]);
-      }
-      return z.object(newShape).passthrough();
-    }
-    if (schema instanceof z.ZodArray) {
-      return z.array(this.applyPassthrough(schema.element));
-    }
-    if (schema instanceof z.ZodOptional) {
-      return this.applyPassthrough(schema.unwrap()).optional();
-    }
-    if (schema instanceof z.ZodNullable) {
-      return this.applyPassthrough(schema.unwrap()).nullable();
-    }
-    return schema;
-  }
-
   private async convertOutputSchema(
-    outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'] | JSONSchema,
-  ): Promise<z.ZodType | undefined> {
+    outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'],
+  ): Promise<JSONSchema7 | undefined> {
     if (!outputSchema) return;
-    if (isZodType(outputSchema)) {
-      return outputSchema;
-    }
 
     try {
       await $RefParser.dereference(outputSchema);
-      const jsonSchemaToConvert = ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema;
-      let zodSchema: z.ZodType;
-      if ('toJSONSchema' in z) {
-        //@ts-expect-error - zod type issue
-        zodSchema = convertJsonSchemaToZod(jsonSchemaToConvert);
-      } else {
-        zodSchema = convertJsonSchemaToZodV3(jsonSchemaToConvert);
-      }
-      // Apply passthrough to all ZodObject schemas so that extra fields
-      // returned by the MCP server are not silently stripped by Zod.
-      return this.applyPassthrough(zodSchema);
+      return ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema7;
     } catch (error: unknown) {
       let errorDetails: string | undefined;
       if (error instanceof Error) {
         errorDetails = error.stack;
       } else {
-        // Attempt to stringify, fallback to String()
         try {
           errorDetails = JSON.stringify(error);
         } catch {
           errorDetails = String(error);
         }
       }
-      this.log('error', 'Failed to convert JSON schema to Zod schema using zodFromJsonSchema', {
+      this.log('error', 'Failed to dereference JSON schema', {
         error: errorDetails,
         originalJsonSchema: outputSchema,
       });
@@ -799,6 +751,10 @@ export class InternalMastraMCPClient extends MastraBase {
           description: tool.description || '',
           inputSchema: await this.convertInputSchema(tool.inputSchema),
           outputSchema: await this.convertOutputSchema(tool.outputSchema),
+          mcpMetadata: {
+            serverName: this.name,
+            serverVersion: this.client.getServerVersion()?.version,
+          },
           execute: async (
             input: any,
             context?: { requestContext?: RequestContext | null; runId?: string; abortSignal?: AbortSignal },

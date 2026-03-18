@@ -2,17 +2,17 @@ import { useState } from 'react';
 import { HeaderListForm, HeaderListFormItem } from './header-list-form';
 import { useStudioConfig } from '../context/studio-config-context';
 import { StudioConfig } from '../types';
-import { Link2 } from 'lucide-react';
+import { SaveIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button/Button';
-import { Icon } from '@/ds/icons/Icon';
 import { toast } from '@/lib/toast';
-import { InputField } from '@/ds/components/FormFields';
+import { TextFieldBlock } from '@/ds/components/FormFieldBlocks/fields/text-field-block';
 
 export interface StudioConfigFormProps {
   initialConfig?: StudioConfig;
+  onSave?: () => void;
 }
 
-export const StudioConfigForm = ({ initialConfig }: StudioConfigFormProps) => {
+export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProps) => {
   const { setConfig } = useStudioConfig();
   const [headers, setHeaders] = useState<HeaderListFormItem[]>(() => {
     if (!initialConfig) return [];
@@ -36,6 +36,7 @@ export const StudioConfigForm = ({ initialConfig }: StudioConfigFormProps) => {
     }
 
     setConfig({ headers: formHeaders, baseUrl: url, apiPrefix });
+    onSave?.();
     toast.success('Configuration saved');
   };
 
@@ -48,8 +49,8 @@ export const StudioConfigForm = ({ initialConfig }: StudioConfigFormProps) => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <InputField
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <TextFieldBlock
         name="url"
         label="Mastra instance URL"
         placeholder="e.g: http://localhost:4111"
@@ -57,7 +58,7 @@ export const StudioConfigForm = ({ initialConfig }: StudioConfigFormProps) => {
         defaultValue={initialConfig?.baseUrl}
       />
 
-      <InputField
+      <TextFieldBlock
         name="apiPrefix"
         label="API prefix"
         placeholder="e.g: /api (default)"
@@ -65,11 +66,10 @@ export const StudioConfigForm = ({ initialConfig }: StudioConfigFormProps) => {
       />
 
       <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
-      <Button type="submit" variant="light" className="w-full" size="lg">
-        <Icon>
-          <Link2 />
-        </Icon>
-        Set Configuration
+
+      <Button type="submit" className="!mt-10 ml-auto">
+        <SaveIcon />
+        Save Configuration
       </Button>
     </form>
   );

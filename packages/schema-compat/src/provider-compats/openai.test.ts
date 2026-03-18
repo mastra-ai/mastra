@@ -866,7 +866,7 @@ describe('OpenAISchemaCompatLayer - shouldApply', () => {
     expect(layer.shouldApply()).toBe(true);
   });
 
-  it('should not apply for OpenAI models with structured outputs', () => {
+  it('should apply for OpenAI models with structured outputs', () => {
     const modelInfo: ModelInformation = {
       provider: 'openai',
       modelId: 'gpt-4o',
@@ -874,7 +874,7 @@ describe('OpenAISchemaCompatLayer - shouldApply', () => {
     };
 
     const layer = new OpenAISchemaCompatLayer(modelInfo);
-    expect(layer.shouldApply()).toBe(false);
+    expect(layer.shouldApply()).toBe(true);
   });
 
   it('should not apply for non-OpenAI models', () => {
@@ -1297,5 +1297,317 @@ describe('OpenAISchemaCompatLayer - agent network defaultCompletionSchema with f
 
     expect(strictModeEnabled).toBe(true);
     expect(allPropsRequired(jsonSchema).valid).toBe(true);
+  });
+});
+
+describe('OpenAISchemaCompatLayer - processToAISDKSchema', () => {
+  const modelInfo: ModelInformation = {
+    provider: 'openai',
+    modelId: 'gpt-4o',
+    supportsStructuredOutputs: false,
+  };
+
+  it('should add additionalProperties: false to nested objects in anyOf (from optional)', () => {
+    const schema = z.object({
+      name: z.string(),
+      importSpec: z
+        .object({
+          module: z.string(),
+          names: z.array(z.string()).min(1),
+          isDefault: z.boolean().optional(),
+        })
+        .optional(),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+
+    const aiSdkSchema = layer.processToAISDKSchema(schema);
+    const resultSchema = (aiSdkSchema as any).jsonSchema;
+
+    // Root should have additionalProperties: false
+    expect(resultSchema.additionalProperties).toBe(false);
+
+    // All properties should be required
+    expect(resultSchema.required).toContain('name');
+    expect(resultSchema.required).toContain('importSpec');
+
+    // The importSpec should have been processed
+    const importSpecSchema = resultSchema.properties?.importSpec;
+    expect(importSpecSchema).toBeDefined();
+
+    // Find all object-typed nodes in anyOf and ensure they have additionalProperties: false
+    if (importSpecSchema?.anyOf) {
+      const objectVariant = importSpecSchema.anyOf.find((s: any) => s.type === 'object' || s.properties);
+      if (objectVariant) {
+        expect(objectVariant.additionalProperties).toBe(false);
+      }
+    }
+  });
+
+  it('should ensure all properties are required in tool schemas', () => {
+    const schema = z.object({
+      name: z.string(),
+      details: z.string().optional(),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const aiSdkSchema = layer.processToAISDKSchema(schema);
+
+    const jsonSchema = (aiSdkSchema as any).jsonSchema;
+
+    // All properties should be required (OpenAI strict mode)
+    expect(jsonSchema.required).toContain('name');
+    expect(jsonSchema.required).toContain('details');
+  });
+
+  it('should preserve validation in the returned AI SDK schema', () => {
+    const schema = z.object({
+      name: z.string(),
+      age: z.number().optional(),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const aiSdkSchema = layer.processToAISDKSchema(schema);
+
+    // Valid input should pass
+    const validResult = aiSdkSchema.validate!({ name: 'John', age: null });
+    expect(validResult.success).toBe(true);
+    if (validResult.success) {
+      expect(validResult.value).toEqual({ name: 'John', age: undefined });
+    }
+
+    // Invalid input should fail
+    const invalidResult = aiSdkSchema.validate!({ name: 123 });
+    expect(invalidResult.success).toBe(false);
+  });
+});
+
+describe('OpenAISchemaCompatLayer - ZodIntersection', () => {
+  const modelInfo: ModelInformation = {
+    provider: 'openai',
+    modelId: 'gpt-4o',
+    supportsStructuredOutputs: false,
+  };
+
+  it('should handle simple two-object intersection without throwing', () => {
+    const schemaA = z.object({ name: z.string() });
+    const schemaB = z.object({ age: z.number() });
+    const schema = z.object({ person: schemaA.and(schemaB) });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    expect(() => layer.processToJSONSchema(schema)).not.toThrow();
+
+    const jsonSchema = layer.processToJSONSchema(schema);
+    expect(jsonSchema.properties?.person).toBeDefined();
+  });
+
+  it('should handle chained .and().and() (three-way merge)', () => {
+    const schemaA = z.object({ name: z.string() });
+    const schemaB = z.object({ age: z.number() });
+    const schemaC = z.object({ email: z.string() });
+    const schema = z.object({ person: schemaA.and(schemaB).and(schemaC) });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    expect(layer.processToJSONSchema(schema)).toMatchInlineSnapshot(`
+      {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
+        "properties": {
+          "person": {
+            "additionalProperties": false,
+            "properties": {
+              "age": {
+                "type": "number",
+              },
+              "email": {
+                "type": "string",
+              },
+              "name": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "name",
+              "age",
+              "email",
+            ],
+            "type": "object",
+          },
+        },
+        "required": [
+          "person",
+        ],
+        "type": "object",
+      }
+    `);
+  });
+
+  it('should handle intersection inside a parent object', () => {
+    const schema = z.object({
+      metadata: z.object({ key: z.string() }).and(z.object({ value: z.number() })),
+      label: z.string(),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    expect(layer.processToJSONSchema(schema)).toMatchInlineSnapshot(`
+      {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string",
+          },
+          "metadata": {
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "type": "string",
+              },
+              "value": {
+                "type": "number",
+              },
+            },
+            "required": [
+              "key",
+              "value",
+            ],
+            "type": "object",
+          },
+        },
+        "required": [
+          "metadata",
+          "label",
+        ],
+        "type": "object",
+      }
+    `);
+  });
+
+  it('should handle optional intersection wrapper', () => {
+    const schema = z.object({
+      data: z
+        .object({ a: z.string() })
+        .and(z.object({ b: z.number() }))
+        .optional(),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    expect(layer.processToJSONSchema(schema)).toMatchInlineSnapshot(`
+      {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "a": {
+                    "type": "string",
+                  },
+                  "b": {
+                    "type": "number",
+                  },
+                },
+                "required": [
+                  "a",
+                  "b",
+                ],
+                "type": "object",
+              },
+              {
+                "type": "null",
+              },
+            ],
+          },
+        },
+        "required": [
+          "data",
+        ],
+        "type": "object",
+      }
+    `);
+  });
+
+  it('should handle intersection nested inside a union (allOf inside anyOf)', () => {
+    const schema = z.object({
+      locate: z.object({
+        prompt: z.union([
+          z.string(),
+          z.object({ prompt: z.string() }).and(
+            z.object({
+              images: z.array(z.object({ name: z.string(), url: z.string() })),
+              convertHttpImage2Base64: z.boolean(),
+            }),
+          ),
+        ]),
+      }),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    expect(layer.processToJSONSchema(schema)).toMatchInlineSnapshot(`
+      {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
+        "properties": {
+          "locate": {
+            "additionalProperties": false,
+            "properties": {
+              "prompt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "convertHttpImage2Base64": {
+                        "type": "boolean",
+                      },
+                      "images": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                            },
+                            "url": {
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "name",
+                            "url",
+                          ],
+                          "type": "object",
+                        },
+                        "type": "array",
+                      },
+                      "prompt": {
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "prompt",
+                      "images",
+                      "convertHttpImage2Base64",
+                    ],
+                    "type": "object",
+                  },
+                ],
+              },
+            },
+            "required": [
+              "prompt",
+            ],
+            "type": "object",
+          },
+        },
+        "required": [
+          "locate",
+        ],
+        "type": "object",
+      }
+    `);
   });
 });

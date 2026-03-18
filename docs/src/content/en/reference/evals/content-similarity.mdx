@@ -1,12 +1,12 @@
 ---
-title: "Reference: Content Similarity Scorer | Evals"
+title: "Reference: Content similarity scorer | Evals"
 description: Documentation for the Content Similarity Scorer in Mastra, which measures textual similarity between strings and provides a matching score.
 packages:
   - "@mastra/core"
   - "@mastra/evals"
 ---
 
-# Content Similarity Scorer
+# Content similarity scorer
 
 The `createContentSimilarityScorer()` function measures the textual similarity between two strings, providing a score that indicates how closely they match. It supports configurable options for case sensitivity and whitespace handling.
 
@@ -35,7 +35,7 @@ The `createContentSimilarityScorer()` function accepts a single options object w
 
 This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
 
-## .run() Returns
+## `.run()` returns
 
 <PropertiesTable
   content={[
@@ -62,7 +62,7 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 ]}
 />
 
-## Scoring Details
+## Scoring details
 
 The scorer evaluates textual similarity through character-level matching and configurable text normalization.
 

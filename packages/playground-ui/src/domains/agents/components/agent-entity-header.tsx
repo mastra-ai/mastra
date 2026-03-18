@@ -1,6 +1,6 @@
 import { EntityHeader } from '@/ds/components/EntityHeader';
 import { Badge } from '@/ds/components/Badge';
-import { CopyIcon, Pencil, CopyPlus } from 'lucide-react';
+import { CopyIcon, Pencil, CopyPlus, Link2, Check } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
@@ -19,6 +19,11 @@ export interface AgentEntityHeaderProps {
 export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
   const { data: agent, isLoading } = useAgent(agentId);
   const { handleCopy } = useCopyToClipboard({ text: agentId });
+  const sessionUrl = `${window.location.origin}/agents/${agentId}/session`;
+  const { handleCopy: handleShareLink, isCopied: isShareCopied } = useCopyToClipboard({
+    text: sessionUrl,
+    copyMessage: 'Session URL copied to clipboard!',
+  });
   const { isCmsAvailable } = useIsCmsAvailable();
   const { navigate } = useLinkComponent();
   const { cloneAgent, isCloning } = useCloneAgent();
@@ -43,46 +48,58 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
         title={agentName}
         isLoading={isLoading}
       >
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button onClick={handleCopy} className="h-badge-default shrink-0">
-              <Badge icon={<CopyIcon />} variant="default">
-                {showStoredAgentBadge ? (
-                  <Truncate untilChar="-" withTooltip={false}>
-                    {agentId}
-                  </Truncate>
-                ) : (
-                  agentId
-                )}
-              </Badge>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Copy Agent ID for use in code</TooltipContent>
-        </Tooltip>
-        {canWriteAgents && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
           <Tooltip>
             <TooltipTrigger asChild>
-              <button onClick={() => navigate(`/cms/agents/${agentId}/edit`)} className="h-badge-default shrink-0 ml-2">
-                <Badge icon={<Pencil />} variant="default">
-                  Edit
+              <button onClick={handleCopy} className="h-badge-default shrink-0">
+                <Badge icon={<CopyIcon />} variant="default">
+                  {showStoredAgentBadge ? (
+                    <Truncate untilChar="-" withTooltip={false}>
+                      {agentId}
+                    </Truncate>
+                  ) : (
+                    agentId
+                  )}
                 </Badge>
               </button>
             </TooltipTrigger>
-            <TooltipContent>{isStoredAgent ? 'Edit agent configuration' : 'Edit agent overrides'}</TooltipContent>
+            <TooltipContent>Copy Agent ID for use in code</TooltipContent>
           </Tooltip>
-        )}
-        {canWriteAgents && (
+          {canWriteAgents && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button onClick={() => navigate(`/cms/agents/${agentId}/edit`)} className="h-badge-default shrink-0">
+                  <Badge icon={<Pencil />} variant="default">
+                    Edit
+                  </Badge>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{isStoredAgent ? 'Edit agent configuration' : 'Edit agent overrides'}</TooltipContent>
+            </Tooltip>
+          )}
+          {canWriteAgents && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button onClick={handleClone} disabled={isCloning} className="h-badge-default shrink-0">
+                  <Badge icon={<CopyPlus />} variant="default">
+                    {isCloning ? 'Cloning...' : 'Clone'}
+                  </Badge>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Clone agent to a new stored agent</TooltipContent>
+            </Tooltip>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
-              <button onClick={handleClone} disabled={isCloning} className="h-badge-default shrink-0 ml-2">
-                <Badge icon={<CopyPlus />} variant="default">
-                  {isCloning ? 'Cloning...' : 'Clone'}
+              <button onClick={handleShareLink} className="h-badge-default shrink-0">
+                <Badge icon={isShareCopied ? <Check /> : <Link2 />} variant="default">
+                  Share
                 </Badge>
               </button>
             </TooltipTrigger>
-            <TooltipContent>Clone agent to a new stored agent</TooltipContent>
+            <TooltipContent>Copy session URL to share with your team</TooltipContent>
           </Tooltip>
-        )}
+        </div>
       </EntityHeader>
     </TooltipProvider>
   );

@@ -9,7 +9,7 @@ packages:
 
 The MastraVoice class is an abstract base class that defines the core interface for voice services in Mastra. All voice provider implementations (like OpenAI, Deepgram, PlayAI, Speechify) extend this class to provide their specific functionality. The class now includes support for real-time speech-to-speech capabilities through WebSocket connections.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { MastraVoice } from '@mastra/core/voice'
@@ -84,7 +84,7 @@ class MyVoiceProvider extends MastraVoice {
 }
 ```
 
-## Constructor Parameters
+## Constructor parameters
 
 <PropertiesTable
   content={[
@@ -190,11 +190,11 @@ class MyVoiceProvider extends MastraVoice {
 ]}
 />
 
-## Abstract Methods
+## Abstract methods
 
 These methods must be implemented by unknown class extending MastraVoice.
 
-### speak()
+### `speak()`
 
 Converts text to speech using the configured speech model.
 
@@ -216,7 +216,7 @@ Purpose:
 - Returns a stream of audio data that can be played or saved
 - May return void if the audio is handled by emitting 'speaking' event
 
-### listen()
+### `listen()`
 
 Converts speech to text using the configured listening model.
 
@@ -237,7 +237,7 @@ Purpose:
 - Not all providers support this functionality (e.g., PlayAI, Speechify)
 - May return void if the transcription is handled by emitting 'writing' event
 
-### getSpeakers()
+### `getSpeakers()`
 
 Returns a list of available voices supported by the provider.
 
@@ -252,11 +252,11 @@ Purpose:
 - Providers can include additional metadata about each voice
 - Used to discover available voices for text-to-speech conversion
 
-## Optional Methods
+## Optional methods
 
 These methods have default implementations but can be overridden by voice providers that support speech-to-speech capabilities.
 
-### connect()
+### `connect()`
 
 Establishes a WebSocket or WebRTC connection for communication.
 
@@ -271,7 +271,7 @@ Purpose:
 - Returns a Promise that resolves when the connection is established
 - Configuration is provider-specific
 
-### send()
+### `send()`
 
 Streams audio data in real-time to the voice provider.
 
@@ -286,7 +286,7 @@ Purpose:
 - Supports both ReadableStream and Int16Array audio formats
 - Must be in connected state before calling this method
 
-### answer()
+### `answer()`
 
 Triggers the voice provider to generate a response.
 
@@ -300,7 +300,7 @@ Purpose:
 - Used in real-time conversations to prompt the AI to respond
 - Response will be emitted through the event system (e.g., 'speaking' event)
 
-### addTools()
+### `addTools()`
 
 Equips the voice provider with tools that can be used during conversations.
 
@@ -314,7 +314,7 @@ Purpose:
 - Tools can extend the capabilities of the voice provider
 - Implementation is provider-specific
 
-### close()
+### `close()`
 
 Disconnects from the WebSocket or WebRTC connection.
 
@@ -328,7 +328,7 @@ Purpose:
 - Cleans up resources and stops any ongoing real-time processing
 - Should be called when you're done with the voice instance
 
-### on()
+### `on()`
 
 Registers an event listener for voice events.
 
@@ -346,7 +346,7 @@ Purpose:
 - Providers can emit custom events as well
 - Event data structure depends on the event type
 
-### off()
+### `off()`
 
 Removes an event listener.
 
@@ -362,7 +362,7 @@ Purpose:
 - Removes a previously registered event listener
 - Used to clean up event handlers when they're no longer needed
 
-## Event System
+## Event system
 
 The MastraVoice class includes an event system for real-time communication. Standard event types include:
 
@@ -386,7 +386,7 @@ The MastraVoice class includes an event system for real-time communication. Stan
 ]}
 />
 
-## Protected Properties
+## Protected properties
 
 <PropertiesTable
   content={[
@@ -417,13 +417,13 @@ The MastraVoice class includes an event system for real-time communication. Stan
 ]}
 />
 
-## Telemetry Support
+## Telemetry support
 
 MastraVoice includes built-in telemetry support through the `traced` method, which wraps method calls with performance tracking and error monitoring.
 
 ## Notes
 
-- MastraVoice is an abstract class and cannot be instantiated directly
+- MastraVoice is an abstract class and can't be instantiated directly
 - Implementations must provide concrete implementations for all abstract methods
 - The class provides a consistent interface across different voice service providers
 - Speech-to-speech capabilities are optional and provider-specific

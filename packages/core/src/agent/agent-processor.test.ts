@@ -4,9 +4,10 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { Processor, ProcessOutputStepArgs } from '../processors/index';
+import { isProcessorWorkflow } from '../processors/index';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
 import { RequestContext } from '../request-context';
-import { createStep, createWorkflow } from '../workflows';
+import { createStep, createWorkflow, isProcessor } from '../workflows';
 import type { MastraDBMessage } from './types';
 import { Agent } from './index';
 
@@ -3160,6 +3161,117 @@ describe('Workflow as Processor', () => {
       expect(tripwireChunk).toBeDefined();
       expect(tripwireChunk.payload.reason).toBe('Please rephrase your question');
       expect(tripwireChunk.payload.retry).toBe(true);
+    });
+  });
+
+  describe('listConfiguredInputProcessors and listConfiguredOutputProcessors', () => {
+    const testModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        content: [{ type: 'text' as const, text: 'ok' }],
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        rawCall: { rawPrompt: [], rawSettings: {} },
+        warnings: [],
+      }),
+    });
+
+    it('should return individual processors, not a combined workflow', async () => {
+      const inputProcessor1 = {
+        id: 'input-proc-1',
+        name: 'Input Processor 1',
+        processInput: async ({ messages }: any) => messages,
+      };
+
+      const inputProcessor2 = {
+        id: 'input-proc-2',
+        name: 'Input Processor 2',
+        processInput: async ({ messages }: any) => messages,
+      };
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'test',
+        model: testModel,
+        inputProcessors: [inputProcessor1, inputProcessor2],
+      });
+
+      const configuredProcessors = await agent.listConfiguredInputProcessors();
+
+      // Should return individual processors, not a single combined workflow
+      expect(configuredProcessors).toHaveLength(2);
+
+      // Each item should be identifiable as a processor with its original ID
+      expect(configuredProcessors[0]).toHaveProperty('id', 'input-proc-1');
+      expect(configuredProcessors[1]).toHaveProperty('id', 'input-proc-2');
+
+      // Each should pass the isProcessor check
+      expect(isProcessor(configuredProcessors[0])).toBe(true);
+      expect(isProcessor(configuredProcessors[1])).toBe(true);
+
+      // None should be a combined workflow
+      expect(isProcessorWorkflow(configuredProcessors[0])).toBe(false);
+      expect(isProcessorWorkflow(configuredProcessors[1])).toBe(false);
+    });
+
+    it('should return individual output processors, not a combined workflow', async () => {
+      const outputProcessor1 = {
+        id: 'output-proc-1',
+        name: 'Output Processor 1',
+        processOutputResult: async ({ messages }: any) => messages,
+      };
+
+      const outputProcessor2 = {
+        id: 'output-proc-2',
+        name: 'Output Processor 2',
+        processOutputResult: async ({ messages }: any) => messages,
+      };
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'test',
+        model: testModel,
+        outputProcessors: [outputProcessor1, outputProcessor2],
+      });
+
+      const configuredProcessors = await agent.listConfiguredOutputProcessors();
+
+      // Should return individual processors, not a single combined workflow
+      expect(configuredProcessors).toHaveLength(2);
+
+      // Each item should be identifiable as a processor with its original ID
+      expect(configuredProcessors[0]).toHaveProperty('id', 'output-proc-1');
+      expect(configuredProcessors[1]).toHaveProperty('id', 'output-proc-2');
+
+      // Each should pass the isProcessor check
+      expect(isProcessor(configuredProcessors[0])).toBe(true);
+      expect(isProcessor(configuredProcessors[1])).toBe(true);
+    });
+
+    it('should allow resolveProcessorById to find processors returned by listConfiguredInputProcessors', async () => {
+      const processor = {
+        id: 'findable-processor',
+        name: 'Findable Processor',
+        processInput: async ({ messages }: any) => messages,
+      };
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'test',
+        model: testModel,
+        inputProcessors: [processor],
+      });
+
+      // listConfiguredInputProcessors should return the processor in a form
+      // where its ID is still accessible
+      const configuredProcessors = await agent.listConfiguredInputProcessors();
+      expect(configuredProcessors).toHaveLength(1);
+
+      const found = await agent.resolveProcessorById('findable-processor');
+      expect(found).toBeDefined();
+      expect(found).toHaveProperty('id', 'findable-processor');
     });
   });
 });

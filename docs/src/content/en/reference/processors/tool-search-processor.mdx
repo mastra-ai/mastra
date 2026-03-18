@@ -136,7 +136,7 @@ const agent = new Agent({
   name: 'dynamic-tools-agent',
   instructions:
     'You are a helpful assistant with access to many tools. Use search_tools to find relevant tools, then load_tool to make them available.',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   inputProcessors: [toolSearch],
 })
 ```
@@ -157,7 +157,7 @@ import { ToolSearchProcessor, TokenLimiter } from '@mastra/core/processors'
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   inputProcessors: [
     new ToolSearchProcessor({
       tools: allTools,
