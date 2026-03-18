@@ -1,10 +1,9 @@
-import type { Server } from 'node:http';
-
 import { Mastra } from '@mastra/core';
-import express from 'express';
-import { afterEach, describe, expect, it } from 'vitest';
+import { RequestContext } from '@mastra/core/request-context';
+import type { NextFunction, Request, Response } from 'express';
+import { describe, expect, it, vi } from 'vitest';
 
-import { createAuthMiddleware, MastraServer } from '../index';
+import { createAuthMiddleware } from '../index';
 
 function createMastraWithAuth() {
   const mastra = new Mastra({ logger: false });
@@ -23,67 +22,83 @@ function createMastraWithAuth() {
   return mastra;
 }
 
-async function listen(app: express.Application): Promise<Server> {
-  return new Promise(resolve => {
-    const server = app.listen(0, () => resolve(server));
-  });
-}
-
 describe('Express auth middleware helper', () => {
-  let server: Server | null = null;
+  function createMockResponse(): Response {
+    const locals = {
+      requestContext: new RequestContext(),
+    } as any;
 
-  afterEach(async () => {
-    if (!server) return;
-    await new Promise<void>(resolve => server!.close(() => resolve()));
-    server = null;
-  });
+    const res = {
+      locals,
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn().mockReturnThis(),
+    } as unknown as Response;
+
+    return res;
+  }
 
   it('protects raw Express routes outside Mastra route registration', async () => {
     const mastra = createMastraWithAuth();
-    const app = express();
-    const adapter = new MastraServer({ app, mastra });
+    const middleware = createAuthMiddleware({ mastra });
+    const next = vi.fn<NextFunction>();
 
-    app.use(express.json());
-    adapter.registerContextMiddleware();
+    const unauthenticatedReq = {
+      method: 'GET',
+      path: '/custom/protected',
+      headers: {},
+      query: {},
+      protocol: 'http',
+      get: vi.fn().mockReturnValue('localhost'),
+      originalUrl: '/custom/protected',
+      url: '/custom/protected',
+    } as unknown as Request;
+    const unauthenticatedRes = createMockResponse();
 
-    app.get('/custom/protected', createAuthMiddleware({ mastra }), (req, res) => {
-      const user = res.locals.requestContext.get('user') as { id: string };
-      res.json({ userId: user.id });
+    await middleware(unauthenticatedReq, unauthenticatedRes, next);
+
+    expect(unauthenticatedRes.status).toHaveBeenCalledWith(401);
+    expect(next).not.toHaveBeenCalled();
+
+    const authenticatedReq = {
+      method: 'GET',
+      path: '/custom/protected',
+      headers: { authorization: 'Bearer valid-token' },
+      query: {},
+      protocol: 'http',
+      get: vi.fn().mockReturnValue('localhost'),
+      originalUrl: '/custom/protected',
+      url: '/custom/protected',
+    } as unknown as Request;
+    const authenticatedRes = createMockResponse();
+
+    await middleware(authenticatedReq, authenticatedRes, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(authenticatedRes.locals.requestContext.get('user')).toEqual({
+      id: 'user-1',
+      email: 'user@example.com',
     });
-
-    server = await listen(app);
-    const address = server.address();
-    if (!address || typeof address === 'string') throw new Error('Failed to get server address');
-    const baseUrl = `http://127.0.0.1:${address.port}`;
-
-    const unauthenticated = await fetch(`${baseUrl}/custom/protected`);
-    expect(unauthenticated.status).toBe(401);
-
-    const authenticated = await fetch(`${baseUrl}/custom/protected`, {
-      headers: { Authorization: 'Bearer valid-token' },
-    });
-    expect(authenticated.status).toBe(200);
-    await expect(authenticated.json()).resolves.toEqual({ userId: 'user-1' });
   });
 
   it('allows opting a raw Express route out with requiresAuth false', async () => {
     const mastra = createMastraWithAuth();
-    const app = express();
-    const adapter = new MastraServer({ app, mastra });
+    const middleware = createAuthMiddleware({ mastra, requiresAuth: false });
+    const next = vi.fn<NextFunction>();
+    const req = {
+      method: 'GET',
+      path: '/custom/public',
+      headers: {},
+      query: {},
+      protocol: 'http',
+      get: vi.fn().mockReturnValue('localhost'),
+      originalUrl: '/custom/public',
+      url: '/custom/public',
+    } as unknown as Request;
+    const res = createMockResponse();
 
-    app.use(express.json());
-    adapter.registerContextMiddleware();
+    await middleware(req, res, next);
 
-    app.get('/custom/public', createAuthMiddleware({ mastra, requiresAuth: false }), (_req, res) => {
-      res.json({ ok: true });
-    });
-
-    server = await listen(app);
-    const address = server.address();
-    if (!address || typeof address === 'string') throw new Error('Failed to get server address');
-
-    const response = await fetch(`http://127.0.0.1:${address.port}/custom/public`);
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ ok: true });
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
   });
 });

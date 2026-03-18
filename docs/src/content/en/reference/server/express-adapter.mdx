@@ -169,6 +169,7 @@ When you want Mastra-managed auth and route metadata such as `requiresAuth`, pre
 ```typescript title="server.ts"
 import express from 'express'
 import { createAuthMiddleware, MastraServer } from '@mastra/express'
+import { mastra } from './mastra'
 
 const app = express()
 app.use(express.json())

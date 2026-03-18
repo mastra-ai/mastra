@@ -169,6 +169,7 @@ When you want Mastra-managed auth and route metadata such as `requiresAuth`, pre
 ```typescript title="server.ts"
 import Koa from 'koa'
 import { createAuthMiddleware, MastraServer } from '@mastra/koa'
+import { mastra } from './mastra'
 
 const app = new Koa()
 const server = new MastraServer({ app, mastra })

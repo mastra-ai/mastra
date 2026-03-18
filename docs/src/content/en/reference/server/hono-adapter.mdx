@@ -149,6 +149,7 @@ When you want Mastra-managed auth and route metadata such as `requiresAuth`, pre
 ```typescript title="server.ts"
 import { Hono } from 'hono'
 import { createAuthMiddleware, HonoBindings, HonoVariables, MastraServer } from '@mastra/hono'
+import { mastra } from './mastra'
 
 const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>()
 const server = new MastraServer({ app, mastra })

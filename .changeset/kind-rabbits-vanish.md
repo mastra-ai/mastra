@@ -1,8 +1,8 @@
 ---
-'@mastra/express': patch
-'@mastra/fastify': patch
-'@mastra/hono': patch
-'@mastra/koa': patch
+'@mastra/express': minor
+'@mastra/fastify': minor
+'@mastra/hono': minor
+'@mastra/koa': minor
 ---
 
 Added adapter auth middleware helpers for raw framework routes.

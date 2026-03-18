@@ -132,6 +132,7 @@ When you want Mastra-managed auth and route metadata such as `requiresAuth`, pre
 ```typescript title="server.ts"
 import Fastify from 'fastify'
 import { createAuthMiddleware, MastraServer } from '@mastra/fastify'
+import { mastra } from './mastra'
 
 const app = Fastify()
 const server = new MastraServer({ app, mastra })
