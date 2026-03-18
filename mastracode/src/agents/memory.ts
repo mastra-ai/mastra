@@ -77,6 +77,7 @@ export function getDynamicMemory(storage: MastraCompositeStore) {
             messageTokens: obsThreshold,
             blockAfter: 2,
             previousObserverTokens: observerPreviousObservationTokens,
+            threadTitle: true,
           },
           reflection: {
             bufferActivation: isResourceScope ? undefined : 1 / 2,

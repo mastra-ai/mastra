@@ -33,7 +33,10 @@ export interface ThreadSelectorOptions {
 
 const MAX_VISIBLE_THREADS = 12;
 const INITIAL_PREVIEW_LOAD_COUNT = 24;
-const PREVIEW_BATCH_SIZE = 8;
+const PREVIEW_BATCH_SIZE = 2;
+const INITIAL_PREVIEW_LOAD_DELAY_MS = 150;
+const INTERACTION_PREVIEW_LOAD_DELAY_MS = 250;
+const FOLLOW_UP_PREVIEW_LOAD_DELAY_MS = 50;
 
 // =============================================================================
 // ThreadSelectorComponent
@@ -60,7 +63,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
   private attemptedPreviewThreadIds: Set<string>;
   private loadingPreviewThreadIds: Set<string> = new Set();
   private previewLoadVersion = 0;
-  private previewLoadScheduled = false;
+  private previewLoadTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Focusable implementation
   private _focused = false;
@@ -133,14 +136,20 @@ export class ThreadSelectorComponent extends Box implements Focusable {
     );
   }
 
-  private scheduleMessagePreviewLoad({ initialLoad = false }: { initialLoad?: boolean } = {}): void {
-    if (this.previewLoadScheduled) return;
+  private scheduleMessagePreviewLoad({
+    initialLoad = false,
+    delayMs,
+  }: { initialLoad?: boolean; delayMs?: number } = {}): void {
+    const previewDelayMs = delayMs ?? (initialLoad ? INITIAL_PREVIEW_LOAD_DELAY_MS : FOLLOW_UP_PREVIEW_LOAD_DELAY_MS);
 
-    this.previewLoadScheduled = true;
-    setTimeout(() => {
-      this.previewLoadScheduled = false;
+    if (this.previewLoadTimeout) {
+      clearTimeout(this.previewLoadTimeout);
+    }
+
+    this.previewLoadTimeout = setTimeout(() => {
+      this.previewLoadTimeout = null;
       void this.loadMessagePreviews({ initialLoad });
-    }, 0);
+    }, previewDelayMs);
   }
 
   private async loadMessagePreviews({ initialLoad = false }: { initialLoad?: boolean } = {}): Promise<void> {
@@ -153,6 +162,8 @@ export class ThreadSelectorComponent extends Box implements Focusable {
     if (threadIds.length === 0) return;
 
     threadIds.forEach(threadId => this.loadingPreviewThreadIds.add(threadId));
+    this.updateList();
+    this.tui.requestRender();
 
     try {
       const previews = await this.getMessagePreviews(threadIds);
@@ -177,7 +188,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
     this.tui.requestRender();
 
     if (candidates.length > PREVIEW_BATCH_SIZE) {
-      this.scheduleMessagePreviewLoad({ initialLoad });
+      this.scheduleMessagePreviewLoad({ initialLoad, delayMs: FOLLOW_UP_PREVIEW_LOAD_DELAY_MS });
     }
   }
 
@@ -285,8 +296,8 @@ export class ThreadSelectorComponent extends Box implements Focusable {
       const displayId = `${thread.resourceId}/${shortId}`;
       const timeAgo = theme.fg('muted', ` (${this.formatTimeAgo(thread.updatedAt)})`);
 
-      // Only show custom titles (not auto-generated "New Thread")
-      const hasCustomTitle = thread.title && thread.title !== 'New Thread';
+      // Show thread title when available, except the default placeholder title.
+      const displayTitle = thread.title && thread.title !== 'New Thread' ? thread.title : null;
 
       let line = '';
       if (isSelected) {
@@ -297,12 +308,13 @@ export class ThreadSelectorComponent extends Box implements Focusable {
 
       this.listContainer.addChild(new Text(line, 0, 0));
 
-      // Show message preview or custom title on second line
-      const preview = this.messagePreviews.get(thread.id);
-      if (preview) {
-        this.listContainer.addChild(new Text(`     ${theme.fg('muted', `"${preview}"`)}`, 0, 0));
-      } else if (hasCustomTitle) {
-        this.listContainer.addChild(new Text(`     ${theme.fg('muted', `"${thread.title}"`)}`, 0, 0));
+      if (displayTitle) {
+        this.listContainer.addChild(new Text(`     ${theme.fg('muted', displayTitle)}`, 0, 0));
+      } else {
+        const preview = this.messagePreviews.get(thread.id);
+        if (preview) {
+          this.listContainer.addChild(new Text(`     ${theme.fg('dim', `"${preview}"`)}`, 0, 0));
+        }
       }
     }
 
@@ -324,13 +336,13 @@ export class ThreadSelectorComponent extends Box implements Focusable {
       this.selectedIndex = this.selectedIndex === 0 ? this.filteredThreads.length - 1 : this.selectedIndex - 1;
       this.updateList();
       this.tui.requestRender();
-      this.scheduleMessagePreviewLoad();
+      this.scheduleMessagePreviewLoad({ delayMs: INTERACTION_PREVIEW_LOAD_DELAY_MS });
     } else if (kb.matches(keyData, 'selectDown')) {
       if (this.filteredThreads.length === 0) return;
       this.selectedIndex = this.selectedIndex === this.filteredThreads.length - 1 ? 0 : this.selectedIndex + 1;
       this.updateList();
       this.tui.requestRender();
-      this.scheduleMessagePreviewLoad();
+      this.scheduleMessagePreviewLoad({ delayMs: INTERACTION_PREVIEW_LOAD_DELAY_MS });
     } else if (kb.matches(keyData, 'selectConfirm')) {
       const selected = this.filteredThreads[this.selectedIndex];
       if (selected) {
@@ -347,6 +359,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
       this.searchInput.handleInput(keyData);
       this.filterThreads(this.searchInput.getValue());
       this.tui.requestRender();
+      this.scheduleMessagePreviewLoad({ delayMs: INTERACTION_PREVIEW_LOAD_DELAY_MS });
     }
   }
 }
