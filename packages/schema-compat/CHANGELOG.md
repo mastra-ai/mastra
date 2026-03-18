@@ -1,5 +1,22 @@
 # @mastra/schema-compat
 
+## 1.2.6-alpha.0
+
+### Patch Changes
+
+- fix(schema-compat): map Mastra draft target names to Zod v4 format ([#14401](https://github.com/mastra-ai/mastra/pull/14401))
+
+  Zod v4's `z.toJSONSchema()` expects `"draft-7"` / `"draft-4"` while
+  Mastra uses `"draft-07"` / `"draft-04"`. The mismatch caused repeated
+  `Invalid target: draft-07` console warnings and suppressed the `$schema`
+  field in generated JSON Schemas.
+
+  Adds `ZOD_V4_TARGET_MAP` in the zod-v4 adapter to translate target names
+  before calling `z.toJSONSchema()`. `"draft-2020-12"` is unchanged as both
+  sides already agree on that name.
+
+  Fixes `#14399`
+
 ## 1.2.5
 
 ### Patch Changes
