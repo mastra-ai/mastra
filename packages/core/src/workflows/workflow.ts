@@ -49,6 +49,7 @@ import type {
   Step,
   SuspendOptions,
 } from './step';
+import { forwardAgentStreamChunk } from './stream-utils';
 import type {
   DefaultEngineType,
   DynamicMapping,
@@ -503,7 +504,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         });
       } else {
         for await (const chunk of stream) {
-          await writer.write(chunk as any);
+          await forwardAgentStreamChunk({ writer, chunk });
           if (chunk.type === 'tripwire') {
             tripwireChunk = chunk;
             break;
@@ -1005,7 +1006,9 @@ function createStepFromProcessor<TProcessorId extends string>(
               // Manage per-processor span lifecycle across stream chunks
               // Use unique key to store span on shared state object
               const spanKey = `__outputStreamSpan_${processor.id}`;
-              const mutableState = (state ?? {}) as Record<string, unknown>;
+              // Use processorState (from the shared processorStates Map) so state persists
+              // across processOutputStream and processOutputResult calls
+              const mutableState = processorState;
               let processorSpan = mutableState[spanKey] as
                 | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
                 | undefined;
@@ -2942,6 +2945,7 @@ export class Run<
     });
 
     const traceId = workflowSpan?.externalTraceId;
+    const spanId = workflowSpan?.id;
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
     await this._validateRequestContext(requestContext as RequestContext);
@@ -2971,6 +2975,7 @@ export class Run<
     }
 
     result.traceId = traceId;
+    result.spanId = spanId;
     return result;
   }
 
@@ -3670,25 +3675,55 @@ export class Run<
       }
     });
 
+    // Build tracing options for the resumed span, linking to the original suspended span if available
+    // Priority: user-provided tracingOptions > persisted tracingContext from snapshot
+    const persistedTracingContext = snapshot?.tracingContext;
+    const userProvidedTraceId = params.tracingOptions?.traceId;
+    const userProvidedParentSpanId = params.tracingOptions?.parentSpanId;
+
+    // Only fall back to persisted traceId when the caller didn't provide either tracing identifier.
+    // If the caller provided parentSpanId without traceId, using the persisted traceId would create
+    // invalid cross-trace parentage (a span in one trace claiming a parent from another trace).
+    const effectiveTraceId =
+      userProvidedTraceId ?? (!userProvidedParentSpanId ? persistedTracingContext?.traceId : undefined);
+
+    // Only use persisted spanId as parentSpanId if:
+    // 1. User didn't provide their own parentSpanId, AND
+    // 2. Either no user traceId was provided, OR user traceId matches persisted traceId
+    // This prevents cross-trace parentage where a span in one trace claims a parent from another trace
+    const shouldUsePersistedParentSpan =
+      !userProvidedParentSpanId && (!userProvidedTraceId || userProvidedTraceId === persistedTracingContext?.traceId);
+
+    const resumeTracingOptions = {
+      ...params.tracingOptions,
+      traceId: effectiveTraceId,
+      parentSpanId: shouldUsePersistedParentSpan
+        ? persistedTracingContext?.spanId
+        : params.tracingOptions?.parentSpanId,
+    };
+
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
-      name: `workflow run: '${this.workflowId}'`,
+      name: `workflow run: '${this.workflowId}' (resumed)`,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
       input: resumeDataToUse,
       metadata: {
         resourceId: this.resourceId,
         runId: this.runId,
+        resumed: true,
+        resumedFromSpanId: persistedTracingContext?.spanId,
       },
       tracingPolicy: this.tracingPolicy,
-      tracingOptions: params.tracingOptions,
+      tracingOptions: resumeTracingOptions,
       tracingContext: observabilityContext.tracingContext,
       requestContext: requestContextToUse as RequestContext,
       mastra: this.#mastra,
     });
 
     const traceId = workflowSpan?.externalTraceId;
+    const spanId = workflowSpan?.id;
 
     const executionResultPromise = this.executionEngine
       .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
@@ -3723,6 +3758,7 @@ export class Run<
           this.closeStreamAction?.().catch(() => {});
         }
         result.traceId = traceId;
+        result.spanId = spanId;
         return result;
       });
 
@@ -3823,6 +3859,7 @@ export class Run<
     });
 
     const traceId = workflowSpan?.externalTraceId;
+    const spanId = workflowSpan?.id;
 
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -3845,6 +3882,7 @@ export class Run<
     }
 
     result.traceId = traceId;
+    result.spanId = spanId;
     return result;
   }
 
@@ -3955,6 +3993,7 @@ export class Run<
     });
 
     const traceId = workflowSpan?.externalTraceId;
+    const spanId = workflowSpan?.id;
 
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -3979,6 +4018,7 @@ export class Run<
     }
 
     result.traceId = traceId;
+    result.spanId = spanId;
     return result;
   }
 

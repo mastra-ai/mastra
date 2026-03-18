@@ -13,7 +13,7 @@ import TabItem from "@theme/TabItem";
 
 The `getSpeakers()` method retrieves a list of available voice options (speakers) from the voice provider. This allows applications to present users with voice choices or programmatically select the most appropriate voice for different contexts.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { OpenAIVoice } from '@mastra/voice-openai'
@@ -45,7 +45,7 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId })
 
 This method doesn't accept any parameters.
 
-## Return Value
+## Return value
 
 <PropertiesTable
   content={[
@@ -58,7 +58,7 @@ This method doesn't accept any parameters.
 ]}
 />
 
-## Provider-Specific Metadata
+## Provider-specific metadata
 
 Different voice providers return different metadata for their voices:
 

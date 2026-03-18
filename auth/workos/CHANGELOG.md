@@ -1,5 +1,13 @@
 # @mastra/auth-workos
 
+## 1.1.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f), [`6b7aa31`](https://github.com/mastra-ai/mastra/commit/6b7aa31e2506b03f5cbcc387dd51bf281804ad73)]:
+  - @mastra/core@1.14.0-alpha.2
+  - @mastra/auth@1.0.2-alpha.0
+
 ## 1.1.1
 
 ### Patch Changes

@@ -1,12 +1,12 @@
 ---
-title: "Supervisor Agents | Agents"
+title: "Supervisor agents | Agents"
 description: Learn how to coordinate multiple agents using the supervisor pattern with delegation hooks, iteration monitoring, message filtering, and task completion scoring.
 packages:
   - "@mastra/core"
   - "@mastra/memory"
 ---
 
-# Supervisor Agents
+# Supervisor agents
 
 A supervisor agent coordinates multiple subagents using `agent.stream()` or `agent.generate()`. You configure subagents on the supervisor's `agents` property, and the supervisor uses its instructions and each subagent's `description` to decide when and how to delegate tasks.
 
@@ -33,14 +33,14 @@ const researchAgent = new Agent({
   id: 'research-agent',
   // highlight-next-line
   description: 'Gathers factual information and returns bullet-point summaries.',
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
 })
 
 const writingAgent = new Agent({
   id: 'writing-agent',
   // highlight-next-line
   description: 'Transforms research into well-structured articles.',
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
 })
 
 // highlight-start
@@ -48,7 +48,7 @@ const supervisor = new Agent({
   id: 'supervisor',
   instructions: `You coordinate research and writing using specialized agents.
     Delegate to research-agent for facts, then writing-agent for content.`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   agents: { researchAgent, writingAgent },
   memory: new Memory({
     storage: new LibSQLStore({ id: 'storage', url: 'file:mastra.db' }),
@@ -69,7 +69,7 @@ for await (const chunk of stream.textStream) {
 
 Delegation hooks let you intercept, modify, or reject delegations as they happen. Configure them under the `delegation` option, either in the agent's `defaultOptions` or per-call.
 
-### onDelegationStart
+### `onDelegationStart`
 
 Called before the supervisor delegates to a subagent. Return an object to control the delegation:
 
@@ -116,7 +116,7 @@ The `context` object includes:
 | `prompt` | The prompt the supervisor is sending |
 | `iteration` | Current iteration number |
 
-### onDelegationComplete
+### `onDelegationComplete`
 
 Called after a delegation finishes. Use it to inspect results, provide feedback, or stop execution:
 

@@ -127,6 +127,8 @@ export type FullOutput<OUTPUT = undefined> = {
   };
   /** Trace ID for observability */
   traceId: string | undefined;
+  /** Span ID for observability (root span ID for a top-level agent execution) */
+  spanId: string | undefined;
   /** Run ID for this execution */
   runId: string | undefined;
   /** Payload for resuming suspended tool calls */
@@ -184,7 +186,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #toolCallDeltaIdNameMap: Record<string, string> = {};
   #toolCallStreamingMeta: Record<
     string,
-    { toolName: string; providerExecuted?: boolean; providerMetadata?: ProviderMetadata }
+    { toolName: string; providerExecuted?: boolean; providerMetadata?: ProviderMetadata; dynamic?: boolean }
   > = {};
   #toolCalls: LLMStepResult<OUTPUT>['toolCalls'] = [];
   #toolResults: LLMStepResult<OUTPUT>['toolResults'] = [];
@@ -249,6 +251,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    * Trace ID used on the execution (if the execution was traced).
    */
   public traceId?: string;
+  /**
+   * Span ID used on the execution (if the execution was traced).
+   */
+  public spanId?: string;
   public messageId: string;
 
   constructor({
@@ -276,6 +282,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
     this.traceId = options.tracingContext?.currentSpan?.externalTraceId;
+    this.spanId = options.tracingContext?.currentSpan?.id;
 
     this.#model = _model;
 
@@ -446,6 +453,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 toolName: chunk.payload.toolName,
                 providerExecuted: chunk.payload.providerExecuted,
                 providerMetadata: chunk.payload.providerMetadata,
+                dynamic: chunk.payload.dynamic,
               };
               break;
             case 'tool-call-input-streaming-end': {
@@ -475,6 +483,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     args,
                     providerExecuted: meta.providerExecuted,
                     providerMetadata: meta.providerMetadata,
+                    dynamic: meta.dynamic,
                   },
                 };
                 self.#toolCalls.push(synthetic);
@@ -543,9 +552,19 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               }
               break;
             }
-            case 'tool-call':
+            case 'tool-call': {
               // Skip if a synthetic tool-call was already created from tool-call-input-streaming-end
-              if (self.#toolCalls.some(tc => tc.payload.toolCallId === chunk.payload.toolCallId)) {
+              const existingSynthetic = self.#toolCalls.find(tc => tc.payload.toolCallId === chunk.payload.toolCallId);
+              if (existingSynthetic) {
+                // Merge properties from the real tool-call onto the synthetic one.
+                // The AI SDK's streaming path emits tool-input-start without providerMetadata
+                // but includes it on the final tool-call chunk (e.g., OpenAI's fc_* itemId).
+                if (chunk.payload.providerMetadata && !existingSynthetic.payload.providerMetadata) {
+                  existingSynthetic.payload.providerMetadata = chunk.payload.providerMetadata;
+                }
+                if (chunk.payload.dynamic != null && existingSynthetic.payload.dynamic == null) {
+                  existingSynthetic.payload.dynamic = chunk.payload.dynamic;
+                }
                 return;
               }
               self.#toolCalls.push(chunk);
@@ -560,6 +579,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 }
               }
               break;
+            }
             case 'tool-result':
               self.#toolResults.push(chunk);
               self.#bufferedByStep.toolResults.push(chunk);
@@ -1319,6 +1339,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       tripwire: this.#tripwire,
       ...(scoringData ? { scoringData } : {}),
       traceId: this.traceId,
+      spanId: this.spanId,
       runId: this.runId,
       suspendPayload: await this.suspendPayload,
       resumeSchema: await this.resumeSchema,

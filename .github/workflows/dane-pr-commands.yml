@@ -14,7 +14,8 @@ jobs:
     name: Check permission & parse command
     if: >-
       github.event.issue.pull_request &&
-      contains(github.event.comment.body, '@dane-ai-mastra')
+      (contains(github.event.comment.body, '@dane-ai-mastra') ||
+       contains(github.event.comment.body, '@daneatmastra'))
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -64,15 +65,15 @@ jobs:
             }
 
             // Parse the command from the comment body
-            const match = comment.body.match(/@dane-ai-mastra\s+(\S+)/);
+            const match = comment.body.match(/@(?:dane-ai-mastra|daneatmastra)\s+\/?(\S+)/);
             if (!match) {
-              core.info('No command found after @dane-ai-mastra mention');
+              core.info('No command found after @dane-ai-mastra or @daneatmastra mention');
               core.setOutput('authorized', 'false');
               return;
             }
 
             const command = match[1];
-            const supportedCommands = ['fix-ci', 'fix-lint', 'pr-comments'];
+            const supportedCommands = ['fix-ci', 'fix-lint', 'pr-comments', 'merge-main'];
 
             if (!supportedCommands.includes(command)) {
               // Sanitize for safe display — only allow alphanumeric, hyphens, underscores
@@ -133,6 +134,7 @@ jobs:
         uses: ./trusted/.github/actions/setup-pnpm-node
         with:
           install-dependencies: 'false'
+          package-json-file: trusted/package.json
 
       - name: Install dependencies (trusted)
         run: pnpm install --frozen-lockfile

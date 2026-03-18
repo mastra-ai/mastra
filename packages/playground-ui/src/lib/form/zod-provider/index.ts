@@ -74,7 +74,11 @@ function parseField(key: string, schema: AnySchema): ParsedField {
   const unionOptions = getUnionOptions(baseSchema);
   const constructorName = baseSchema?.constructor?.name?.slice(1);
   const baseDef = getDef(baseSchema);
-  const baseTypeName = baseDef?.typeName ?? constructorName;
+  const v4Type =
+    typeof baseDef?.type === 'string'
+      ? `Zod${baseDef.type.charAt(0).toUpperCase()}${baseDef.type.slice(1)}`
+      : undefined;
+  const baseTypeName = baseDef?.typeName ?? v4Type ?? constructorName;
 
   if ((baseTypeName === 'ZodUnion' || baseTypeName === 'ZodDiscriminatedUnion') && unionOptions) {
     subSchema = Object.entries(unionOptions).map(([k, field]: [string, AnySchema]) => {

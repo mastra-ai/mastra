@@ -61,7 +61,7 @@ export function ComparisonItemPanel({
           nextAriaLabel="Next comparison item"
         />
         <ButtonsGroup>
-          <Button variant="standard" size="default" onClick={onClose} aria-label="Close comparison detail panel">
+          <Button onClick={onClose} aria-label="Close comparison detail panel">
             <XIcon />
           </Button>
         </ButtonsGroup>

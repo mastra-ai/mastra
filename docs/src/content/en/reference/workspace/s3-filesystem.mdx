@@ -41,7 +41,7 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   name: 'file-agent',
-  model: 'anthropic/claude-opus-4-5',
+  model: 'anthropic/claude-opus-4-6',
   workspace,
 })
 ```
@@ -236,7 +236,7 @@ const config = filesystem.getMountConfig()
 // { type: 's3', bucket: 'my-bucket', region: 'us-east-1', ... }
 ```
 
-## Mounting in E2B Sandboxes
+## Mounting in E2B sandboxes
 
 S3Filesystem can be mounted into E2B sandboxes, making the bucket accessible as a local directory:
 

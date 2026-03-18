@@ -21,6 +21,12 @@ const SUPPORTED_COMMANDS: Record<string, string> = {
   'fix-ci': 'gh-fix-ci',
   'fix-lint': 'gh-fix-lint',
   'pr-comments': 'gh-pr-comments',
+  'merge-main': '',
+};
+
+// Commands with inline prompts instead of .claude/commands/ templates
+const INLINE_PROMPTS: Record<string, string> = {
+  'merge-main': `Please merge latest origin/main in and fix conflicts to the best of your ability. If you are struggling with fixing conflicts please throw an error and stop saying that the conflicts are too complex to fix without making mistakes.`,
 };
 
 async function main(): Promise<never> {
@@ -42,7 +48,7 @@ async function main(): Promise<never> {
   }
 
   const commandFileName = SUPPORTED_COMMANDS[commandName];
-  if (!commandFileName) {
+  if (commandFileName === undefined) {
     const available = Object.keys(SUPPORTED_COMMANDS).join(', ');
     console.error(`Error: Unknown command "${commandName}". Available commands: ${available}`);
     process.exit(1);
@@ -53,27 +59,34 @@ async function main(): Promise<never> {
   const trustedRoot = resolve(import.meta.dirname, '..', '..');
   const prWorkspace = process.env.PR_WORKSPACE || trustedRoot;
 
-  // Load the command template from TRUSTED code, not the PR branch
-  const commandPath = resolve(trustedRoot, '.claude', 'commands', `${commandFileName}.md`);
+  let prompt: string;
 
-  let template: string;
-  try {
-    template = readFileSync(commandPath, 'utf-8');
-  } catch (err) {
-    console.error(`Error: Could not read command file at ${commandPath}: ${err}`);
-    process.exit(1);
+  if (INLINE_PROMPTS[commandName]) {
+    // Inline prompt — no template file needed
+    prompt = INLINE_PROMPTS[commandName];
+  } else {
+    // Load the command template from TRUSTED code, not the PR branch
+    const commandPath = resolve(trustedRoot, '.claude', 'commands', `${commandFileName}.md`);
+
+    let template: string;
+    try {
+      template = readFileSync(commandPath, 'utf-8');
+    } catch (err) {
+      console.error(`Error: Could not read command file at ${commandPath}: ${err}`);
+      process.exit(1);
+    }
+
+    // Process the template (replaces $ARGUMENTS, $1, !`shell`, @file references)
+    const commandMeta: SlashCommandMetadata = {
+      name: commandFileName,
+      description: '',
+      template,
+      sourcePath: commandPath,
+    };
+
+    const args = [prNumber];
+    prompt = await processSlashCommand(commandMeta, args, trustedRoot);
   }
-
-  // Process the template (replaces $ARGUMENTS, $1, !`shell`, @file references)
-  const commandMeta: SlashCommandMetadata = {
-    name: commandFileName,
-    description: '',
-    template,
-    sourcePath: commandPath,
-  };
-
-  const args = [prNumber];
-  const prompt = await processSlashCommand(commandMeta, args, trustedRoot);
 
   console.log(`Running command: ${commandName} (file: ${commandFileName}.md)`);
   console.log(`PR: #${prNumber}`);

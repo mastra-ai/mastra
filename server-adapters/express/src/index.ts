@@ -177,7 +177,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
   }
 
   async getParams(route: ServerRoute, request: Request): Promise<ParsedRequestParams> {
-    const urlParams = request.params;
+    const urlParams = request.params as Record<string, string>;
     // Express's req.query can contain string | string[] | ParsedQs | ParsedQs[]
     const queryParams = normalizeQueryParams(request.query as Record<string, unknown>);
     let body: unknown;

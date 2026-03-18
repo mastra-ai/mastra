@@ -1,11 +1,11 @@
 ---
-title: "Reference: Agent Class | Agents"
+title: "Reference: Agent class | Agents"
 description: "Documentation for the `Agent` class in Mastra, which provides the foundation for creating AI agents with various capabilities."
 packages:
   - "@mastra/core"
 ---
 
-# Agent Class
+# Agent class
 
 The `Agent` class is the foundation for creating AI agents in Mastra. It provides methods for generating responses, streaming interactions, and handling voice capabilities.
 
@@ -21,7 +21,7 @@ export const agent = new Agent({
   id: 'test-agent',
   name: 'Test Agent',
   instructions: 'You are a helpful assistant that provides concise answers.',
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
 })
 
 // System message object
@@ -32,7 +32,7 @@ export const agent2 = new Agent({
     role: 'system',
     content: 'You are an expert programmer',
   },
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
 })
 
 // Array of system messages
@@ -43,11 +43,11 @@ export const agent3 = new Agent({
     { role: 'system', content: 'You are a helpful assistant' },
     { role: 'system', content: 'You have expertise in TypeScript' },
   ],
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
 })
 ```
 
-### Single CoreSystemMessage
+### Single `CoreSystemMessage`
 
 Use CoreSystemMessage format to access additional properties like `providerOptions` for provider-specific configurations:
 
@@ -66,11 +66,11 @@ export const agent = new Agent({
       },
     },
   },
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
 })
 ```
 
-### Multiple CoreSystemMessages
+### Multiple `CoreSystemMessages`
 
 ```typescript title="src/mastra/agents/multi-message-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -95,7 +95,7 @@ export const agent = new Agent({
       },
     },
   ],
-  model: 'anthropic/claude-sonnet-4-20250514',
+  model: 'anthropic/claude-sonnet-4-6',
 })
 ```
 
