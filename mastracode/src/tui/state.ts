@@ -115,6 +115,10 @@ export interface TUIState {
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
   pendingNewThread: boolean;
+  /** Cached thread previews for the current TUI session */
+  threadPreviewCache: Map<string, { preview: string; updatedAt: number }>;
+  /** Threads whose preview lookup already returned empty during this session */
+  attemptedThreadPreviewIds: Set<string>;
 
   // ── Inline interaction ────────────────────────────────────────────────
   /** Track the most recent ask_user component for inline question activation */
@@ -226,6 +230,8 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Thread / conversation
     pendingNewThread: false,
+    threadPreviewCache: new Map(),
+    attemptedThreadPreviewIds: new Set(),
 
     // Inline interaction
     lastClearedText: '',
