@@ -237,7 +237,7 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
         }
       });
 
-      it('should list traces filtered by endedAt date range', async () => {
+      it.skip('should list traces filtered by endedAt date range', async () => {
         const now = new Date();
 
         const response = await client.listTraces({

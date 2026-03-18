@@ -60,6 +60,8 @@ export interface McpServerStatus {
   name: string;
   /** Whether the server is currently connected */
   connected: boolean;
+  /** Whether the server is currently connecting */
+  connecting?: boolean;
   /** Number of tools provided by this server */
   toolCount: number;
   /** List of tool names provided */

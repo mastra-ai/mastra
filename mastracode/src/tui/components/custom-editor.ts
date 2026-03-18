@@ -7,8 +7,10 @@ import { extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Editor, matchesKey } from '@mariozechner/pi-tui';
 import type { EditorTheme, TUI } from '@mariozechner/pi-tui';
+import chalk from 'chalk';
 import { getClipboardImage, getClipboardText } from '../../clipboard/index.js';
 import type { ClipboardImage } from '../../clipboard/index.js';
+import { mastra, theme } from '../theme.js';
 
 const PASTE_START = '\x1b[200~';
 const PASTE_END = '\x1b[201~';
@@ -36,21 +38,150 @@ export type AppAction =
   | 'cycleMode'
   | 'toggleYolo';
 
+// Pre-compiled constants (avoid re-creation per render)
+const ANSI_STRIP_RE = /\x1b\[[0-9;]*m/g;
+const SLASH_CURSOR_RE = /\x1b\[7m\/\x1b\[0m/;
+const AT_CURSOR_RE = /\x1b\[7m@\x1b\[0m/;
+function parseHex(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
 export class CustomEditor extends Editor {
-  private actionHandlers: Map<AppAction, () => void> = new Map();
+  private actionHandlers: Map<AppAction, () => unknown> = new Map();
 
   public onCtrlD?: () => void;
   public escapeEnabled = true;
   public onImagePaste?: (image: ClipboardImage) => void;
-
+  public getModeColor?: () => string | undefined;
   private pendingBracketedPaste: string | null = null;
+
+  private _cachedModeColorHex?: string;
+  private _cachedColorFn?: (s: string) => string;
 
   constructor(tui: TUI, theme: EditorTheme) {
     super(tui, theme);
+    (this as any).getBestAutocompleteMatchIndex = (items: Array<{ value: string }>, prefix: string): number => {
+      if (!prefix) {
+        return -1;
+      }
+
+      const normalizeSlashCommandValue = (value: string) => value.replace(/^\/+/, '');
+      const shouldNormalizeSlashCommand = prefix.startsWith('/');
+      const normalizedPrefix = shouldNormalizeSlashCommand ? normalizeSlashCommandValue(prefix) : prefix;
+
+      let firstPrefixIndex = -1;
+      for (let i = 0; i < items.length; i++) {
+        const value = items[i]?.value ?? '';
+        const comparableValue = shouldNormalizeSlashCommand ? normalizeSlashCommandValue(value) : value;
+
+        if (comparableValue === normalizedPrefix) {
+          return i;
+        }
+
+        if (firstPrefixIndex === -1 && comparableValue.startsWith(normalizedPrefix)) {
+          firstPrefixIndex = i;
+        }
+      }
+
+      return firstPrefixIndex;
+    };
   }
 
-  onAction(action: AppAction, handler: () => void): void {
+  onAction(action: AppAction, handler: () => unknown): void {
     this.actionHandlers.set(action, handler);
+  }
+
+  render(width: number): string[] {
+    const text = this.getText().trimStart();
+    const isSlash = text.startsWith('/');
+    const isAt = text.startsWith('@');
+    const color = this.getModeColor?.() || mastra.green;
+    const promptChar = isSlash ? '/' : isAt ? '@' : '›';
+
+    // Cache colorFn and prompt — only recreate when color changes
+    if (this._cachedModeColorHex !== color) {
+      this._cachedModeColorHex = color;
+      this._cachedColorFn = chalk.hex(color);
+    }
+    const colorFn = this._cachedColorFn!;
+    const b = colorFn;
+    // Prompt changes with slash/at mode, so rebuild each time (cheap)
+    const prompt = chalk.bold.hex(color)(promptChar);
+
+    // Box structure: "│ > content │" or "│   content │"
+    // Left: "│ > " (4) or "│   " (4), Right: " │" (2) = 6 chars total
+    const promptWidth = 4; // "│ > " or "│   "
+    const contentWidth = width - 6;
+    // Editor renders at content width (prompt char space is separate)
+    const editorLines = super.render(contentWidth);
+
+    // Extract content lines (skip editor's invisible borders)
+    const contentLines: string[] = [];
+    const scrollIndicators: string[] = [];
+    let isTop = true;
+    for (const line of editorLines) {
+      const stripped = line.replace(ANSI_STRIP_RE, '');
+      if (stripped.length > 0 && stripped[0] === '─') {
+        if (isTop) {
+          isTop = false;
+          continue;
+        }
+        if (stripped.includes('↑') || stripped.includes('↓')) {
+          scrollIndicators.push(b(stripped));
+          continue;
+        }
+        continue;
+      }
+      contentLines.push(line);
+    }
+
+    // Strip leading "/" or "@" from first content line when shown in prompt
+    if ((isSlash || isAt) && contentLines.length > 0) {
+      let l = contentLines[0]!;
+      const char = isSlash ? '/' : '@';
+      // Handle cursor-highlighted char (reverse video)
+      l = l.replace(isSlash ? SLASH_CURSOR_RE : AT_CURSOR_RE, '');
+      // Remove the first plain occurrence
+      const idx = l.indexOf(char);
+      if (idx !== -1) {
+        l = l.slice(0, idx) + l.slice(idx + 1);
+      }
+      contentLines[0] = l;
+    }
+
+    // Build rounded box
+    const result: string[] = [];
+    const hBarLen = width - 2;
+
+    // Solid mode-color border
+    const top = b('╭') + b('─').repeat(hBarLen) + b('╮');
+    const leftBorder = b('│');
+    const rightBorder = b('│');
+    const bottom = b('╰') + b('─').repeat(hBarLen) + b('╯');
+
+    // Assemble box
+    const textColorOpen = `\x1b[38;2;${parseHex(theme.getTheme().text).join(';')}m`;
+    const textColorClose = '\x1b[39m';
+    result.push(top);
+
+    for (let i = 0; i < contentLines.length; i++) {
+      const line = `${textColorOpen}${contentLines[i]!}${textColorClose}`;
+      if (i === 0) {
+        result.push(`${leftBorder} ${prompt} ${line} ${rightBorder}`);
+      } else {
+        result.push(`${leftBorder}${' '.repeat(promptWidth - 1)}${line} ${rightBorder}`);
+      }
+    }
+
+    result.push(bottom);
+
+    // Scroll indicators below the box
+    for (const ind of scrollIndicators) {
+      result.push(ind);
+    }
+
+    return result;
   }
 
   private maybeHandleBracketedPaste(data: string): boolean {
@@ -309,14 +440,27 @@ export class CustomEditor extends Editor {
       }
     }
 
-    if (matchesKey(data, 'ctrl+f')) {
-      if (this.isShowingAutocomplete()) {
-        super.handleInput('\t');
+    if (matchesKey(data, 'enter')) {
+      // Let pi-tui handle \+Enter newline workaround
+      const lines = (this as any).state?.lines;
+      const cursorCol = (this as any).state?.cursorCol;
+      const currentLine = lines?.[(this as any).state?.cursorLine] || '';
+      if (cursorCol > 0 && currentLine[cursorCol - 1] === '\\') {
+        super.handleInput(data);
+        return;
       }
       const handler = this.actionHandlers.get('followUp');
       if (handler) {
-        handler();
-        return;
+        if (this.isShowingAutocomplete()) {
+          super.handleInput('\t');
+          if (this.getText().trimStart().startsWith('/') && handler() !== false) {
+            return;
+          }
+          return;
+        }
+        if (handler() !== false) {
+          return;
+        }
       }
     }
 

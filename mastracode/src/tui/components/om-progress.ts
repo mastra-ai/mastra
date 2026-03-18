@@ -148,7 +148,7 @@ function formatTokensThreshold(n: number): string {
 function colorByPercent(text: string, percent: number): string {
   if (percent >= 90) return chalk.hex(mastra.red)(text); // Mastra red
   if (percent >= 70) return chalk.hex(mastra.orange)(text); // Mastra orange
-  return chalk.hex(mastra.darkGray)(text); // Mastra dark gray
+  return chalk.hex('#71717a')(text); // Zinc-500
 }
 /**
  * Format OM observation threshold for status bar.
@@ -169,7 +169,7 @@ export function formatObservationStatus(
   // Status is now shown in the mode badge, so just show the metrics
   const percent = Math.round(state.thresholdPercent);
   const pct = colorByPercent(`${percent}%`, percent);
-  const defaultStyler = (s: string) => chalk.hex(mastra.specialGray)(s);
+  const defaultStyler = (s: string) => chalk.bold.hex(mastra.specialGray)(s);
   const styleLabel = labelStyler ?? defaultStyler;
   if (compact === 'percentOnly') {
     return styleLabel('msg ') + pct;
@@ -178,7 +178,9 @@ export function formatObservationStatus(
   const fraction = `${formatTokensValue(state.pendingTokens)}/${formatTokensThreshold(state.threshold)}`;
   const buffered =
     compact !== 'noBuffer' && state.buffered.observations.projectedMessageRemoval > 0
-      ? theme.fg('muted', ` ↓${formatTokensThreshold(state.buffered.observations.projectedMessageRemoval)}`)
+      ? chalk.italic(
+          theme.fg('muted', ` ↓${formatTokensThreshold(state.buffered.observations.projectedMessageRemoval)}`),
+        )
       : '';
   return styleLabel(`${label} `) + colorByPercent(fraction, percent) + buffered;
 }
@@ -201,7 +203,7 @@ export function formatReflectionStatus(
   // Status is now shown in the mode badge, so just show the metrics
   const percent = Math.round(state.reflectionThresholdPercent);
   const pct = colorByPercent(`${percent}%`, percent);
-  const defaultStyler = (s: string) => chalk.hex(mastra.specialGray)(s);
+  const defaultStyler = (s: string) => chalk.bold.hex(mastra.specialGray)(s);
   const styleLabel = labelStyler ?? defaultStyler;
   const label = styleLabel(compact === 'full' ? 'memory' : 'mem') + ' ';
   if (compact === 'percentOnly') {
@@ -211,7 +213,7 @@ export function formatReflectionStatus(
   const savings = state.buffered.reflection.inputObservationTokens - state.buffered.reflection.observationTokens;
   const buffered =
     compact !== 'noBuffer' && state.buffered.reflection.status === 'complete'
-      ? theme.fg('muted', ` ↓${formatTokensThreshold(savings)}`)
+      ? chalk.italic(theme.fg('muted', ` ↓${formatTokensThreshold(savings)}`))
       : '';
   return label + colorByPercent(fraction, percent) + buffered;
 }

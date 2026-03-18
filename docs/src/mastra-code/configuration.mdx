@@ -27,6 +27,15 @@ export CEREBRAS_API_KEY=...
 
 Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes requests to the correct provider based on the model ID and available API keys. No OAuth login is required when using API keys.
 
+### Interactive API key prompt
+
+When you select a model from the model selector (`/models`) that doesn't have an API key configured, Mastra Code prompts you to enter one. The prompt displays the required environment variable name (for example, `ANTHROPIC_API_KEY`) and lets you paste your key directly.
+
+- **Enter a key**: The key is stored in `auth.json` and set in the current process environment. The model becomes available immediately.
+- **Cancel the prompt**: Press Escape to dismiss. The model selection continues without storing a key, and the model remains marked as unavailable.
+
+Stored API keys persist across sessions. On the next startup, Mastra Code loads them into the environment automatically. Environment variables always take priority — if you later set a key via `export`, it overrides the stored value.
+
 ### OAuth login (optional)
 
 If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, you can authenticate via OAuth to use your subscription instead of API keys. Run `/login` in the TUI to start the flow.

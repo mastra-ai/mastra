@@ -9,9 +9,10 @@ import { TextFieldBlock } from '@/ds/components/FormFieldBlocks/fields/text-fiel
 
 export interface StudioConfigFormProps {
   initialConfig?: StudioConfig;
+  onSave?: () => void;
 }
 
-export const StudioConfigForm = ({ initialConfig }: StudioConfigFormProps) => {
+export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProps) => {
   const { setConfig } = useStudioConfig();
   const [headers, setHeaders] = useState<HeaderListFormItem[]>(() => {
     if (!initialConfig) return [];
@@ -35,6 +36,7 @@ export const StudioConfigForm = ({ initialConfig }: StudioConfigFormProps) => {
     }
 
     setConfig({ headers: formHeaders, baseUrl: url, apiPrefix });
+    onSave?.();
     toast.success('Configuration saved');
   };
 

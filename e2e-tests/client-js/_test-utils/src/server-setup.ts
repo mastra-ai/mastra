@@ -1,6 +1,4 @@
 import type { TestProject } from 'vitest/node';
-import type { Mastra } from '@mastra/core/mastra';
-import type { Server } from 'http';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import getPort from 'get-port';

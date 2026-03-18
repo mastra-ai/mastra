@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { Stream } from 'node:stream';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
@@ -115,6 +116,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private operationContextStore = new AsyncLocalStorage<RequestContext | null>();
   private exitHookUnsubscribe?: () => void;
   private sigTermHandler?: () => void;
+  private sigHupHandler?: () => void;
   private _roots: Root[];
 
   /** Provides access to resource operations (list, read, subscribe, etc.) */
@@ -429,6 +431,11 @@ export class InternalMastraMCPClient extends MastraBase {
       process.on('SIGTERM', this.sigTermHandler);
     }
 
+    if (!this.sigHupHandler) {
+      this.sigHupHandler = () => gracefulExit();
+      process.on('SIGHUP', this.sigHupHandler);
+    }
+
     this.log('debug', `Successfully connected to MCP server`);
     return this.isConnected;
   }
@@ -447,6 +454,20 @@ export class InternalMastraMCPClient extends MastraBase {
       return this.transport.sessionId;
     }
     return undefined;
+  }
+
+  /**
+   * Gets the stderr stream of the child process, if using stdio transport with `stderr: 'pipe'`.
+   *
+   * Returns null if not connected, not using stdio transport, or stderr is not piped.
+   *
+   * @internal
+   */
+  get stderr(): Stream | null {
+    if (this.transport instanceof StdioClientTransport) {
+      return this.transport.stderr;
+    }
+    return null;
   }
 
   async disconnect() {
@@ -475,6 +496,10 @@ export class InternalMastraMCPClient extends MastraBase {
       if (this.sigTermHandler) {
         process.off('SIGTERM', this.sigTermHandler);
         this.sigTermHandler = undefined;
+      }
+      if (this.sigHupHandler) {
+        process.off('SIGHUP', this.sigHupHandler);
+        this.sigHupHandler = undefined;
       }
     }
   }
@@ -600,20 +625,11 @@ export class InternalMastraMCPClient extends MastraBase {
    * Get a prompt and its dynamic messages from the server.
    * @param name The prompt name
    * @param args Arguments for the prompt
-   * @param version (optional) The prompt version to retrieve
    */
-  async getPrompt({
-    name,
-    args,
-    version,
-  }: {
-    name: string;
-    args?: Record<string, any>;
-    version?: string;
-  }): Promise<GetPromptResult> {
+  async getPrompt({ name, args }: { name: string; args?: Record<string, any> }): Promise<GetPromptResult> {
     this.log('debug', `Requesting prompt from MCP server: ${name}`);
     return await this.client.request(
-      { method: 'prompts/get', params: { name, arguments: args, version } },
+      { method: 'prompts/get', params: { name, arguments: args } },
       GetPromptResultSchema,
       { timeout: this.timeout },
     );
@@ -772,13 +788,15 @@ export class InternalMastraMCPClient extends MastraBase {
                   return res.structuredContent;
                 }
 
-                // When the tool has an outputSchema but the server didn't return
-                // structuredContent (e.g. older MCP protocol versions that predate the
-                // structuredContent spec), extract the result from the content array.
-                // Without this, the raw CallToolResult envelope ({ content, isError,
-                // _meta }) gets validated against the outputSchema and Zod strips all
-                // unrecognised keys, producing {}.
-                if (tool.outputSchema && !res.isError) {
+                // Extract the result from the content array when structuredContent
+                // is not available. This handles two cases:
+                // 1. Tools WITH outputSchema on older servers that don't return
+                //    structuredContent — without extraction, the raw CallToolResult
+                //    envelope ({ content, isError, _meta }) gets validated against the
+                //    outputSchema and Zod strips all unrecognised keys, producing {}.
+                // 2. Tools WITHOUT outputSchema — the raw envelope is not useful to
+                //    callers; they expect the actual response content.
+                if (!res.isError) {
                   const content = res.content as Array<{ type: string; text?: string }> | undefined;
                   if (
                     content &&

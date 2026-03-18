@@ -1,5 +1,100 @@
 # @mastra/playground-ui
 
+## 17.0.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5), [`b70443a`](https://github.com/mastra-ai/mastra/commit/b70443a9fe90dc10e25bd8c41b024cfd1faea917), [`b71bce1`](https://github.com/mastra-ai/mastra/commit/b71bce144912ed33f76c52a94e594988a649c3e1), [`62d1d3c`](https://github.com/mastra-ai/mastra/commit/62d1d3cc08fe8182e7080237fd975de862ec8c91), [`8681ecb`](https://github.com/mastra-ai/mastra/commit/8681ecb86184d5907267000e4576cc442a9a83fc), [`28d0249`](https://github.com/mastra-ai/mastra/commit/28d0249295782277040ad1e0d243e695b7ab1ce4), [`bb0f09d`](https://github.com/mastra-ai/mastra/commit/bb0f09dbac58401b36069f483acf5673202db5b5), [`5f7e9d0`](https://github.com/mastra-ai/mastra/commit/5f7e9d0db664020e1f3d97d7d18c6b0b9d4843d0)]:
+  - @mastra/core@1.15.0-alpha.0
+  - @mastra/ai-sdk@1.1.5-alpha.0
+  - @mastra/schema-compat@1.2.6-alpha.0
+  - @mastra/client-js@1.9.1-alpha.0
+  - @mastra/react@0.2.16-alpha.0
+
+## 17.0.0
+
+### Minor Changes
+
+- Added dedicated session page for agents at `/agents/<agentId>/session`. This minimal view shows only the chat interface without the sidebar or information pane, making it ideal for quick internal testing or sharing with non-technical team members. If request context presets are configured, a preset dropdown appears in the header. ([#13754](https://github.com/mastra-ai/mastra/pull/13754))
+
+  Added `hideModelSwitcher` prop to `AgentChat` and `Thread` components to allow hiding the model picker in the composer.
+
+### Patch Changes
+
+- Fixed crash during template installation by ensuring error values from stream events are converted to strings before being passed to the UI. This prevents the 'e?.includes is not a function' TypeError when the server returns non-string error payloads. ([#14267](https://github.com/mastra-ai/mastra/pull/14267))
+
+- Fixed crash when template installation errors are non-string values (e.g. objects). The error is now safely converted to a string before calling .includes(), preventing the 'e?.includes is not a function' TypeError in the studio. ([#14267](https://github.com/mastra-ai/mastra/pull/14267))
+
+- Updated dependencies [[`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`4a7ce05`](https://github.com/mastra-ai/mastra/commit/4a7ce05125b8d3d260f68f1fc4a6c6866d22ba24), [`7a167db`](https://github.com/mastra-ai/mastra/commit/7a167db025e63a616123dee5855ff572c91264c5), [`085e371`](https://github.com/mastra-ai/mastra/commit/085e3718a7d0fe9a210fe7dd1c867b9bdfe8d16b), [`b77aa19`](https://github.com/mastra-ai/mastra/commit/b77aa1981361c021f2c881bee8f0c703687f00da), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8b4ce84`](https://github.com/mastra-ai/mastra/commit/8b4ce84aed0808b9805cc4fd7147c1f8a2ef7a36), [`8d4cfe6`](https://github.com/mastra-ai/mastra/commit/8d4cfe6b9a7157d3876206227ec9f04cde6dbc4a), [`dd6ca1c`](https://github.com/mastra-ai/mastra/commit/dd6ca1cdea3b8b6182f4cf61df41070ba0cc0deb), [`ce26fe2`](https://github.com/mastra-ai/mastra/commit/ce26fe2166dd90254f8bee5776e55977143e97de), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`4cb4edf`](https://github.com/mastra-ai/mastra/commit/4cb4edf3c909d197ec356c1790d13270514ffef6), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f)]:
+  - @mastra/core@1.14.0
+  - @mastra/schema-compat@1.2.5
+  - @mastra/ai-sdk@1.1.4
+  - @mastra/client-js@1.9.0
+  - @mastra/react@0.2.15
+
+## 17.0.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`8b4ce84`](https://github.com/mastra-ai/mastra/commit/8b4ce84aed0808b9805cc4fd7147c1f8a2ef7a36), [`8d4cfe6`](https://github.com/mastra-ai/mastra/commit/8d4cfe6b9a7157d3876206227ec9f04cde6dbc4a), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a)]:
+  - @mastra/core@1.14.0-alpha.3
+  - @mastra/client-js@1.9.0-alpha.3
+  - @mastra/ai-sdk@1.1.4-alpha.0
+  - @mastra/react@0.2.15-alpha.3
+
+## 17.0.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f)]:
+  - @mastra/core@1.14.0-alpha.2
+  - @mastra/client-js@1.9.0-alpha.2
+  - @mastra/ai-sdk@1.1.4-alpha.0
+  - @mastra/react@0.2.15-alpha.2
+
+## 16.2.0-alpha.1
+
+### Minor Changes
+
+- Added dedicated session page for agents at `/agents/<agentId>/session`. This minimal view shows only the chat interface without the sidebar or information pane, making it ideal for quick internal testing or sharing with non-technical team members. If request context presets are configured, a preset dropdown appears in the header. ([#13754](https://github.com/mastra-ai/mastra/pull/13754))
+
+  Added `hideModelSwitcher` prop to `AgentChat` and `Thread` components to allow hiding the model picker in the composer.
+
+### Patch Changes
+
+- Updated dependencies [[`b77aa19`](https://github.com/mastra-ai/mastra/commit/b77aa1981361c021f2c881bee8f0c703687f00da), [`dd6ca1c`](https://github.com/mastra-ai/mastra/commit/dd6ca1cdea3b8b6182f4cf61df41070ba0cc0deb), [`4cb4edf`](https://github.com/mastra-ai/mastra/commit/4cb4edf3c909d197ec356c1790d13270514ffef6)]:
+  - @mastra/core@1.13.3-alpha.1
+  - @mastra/client-js@1.8.5-alpha.1
+  - @mastra/react@0.2.15-alpha.1
+
+## 16.1.3-alpha.0
+
+### Patch Changes
+
+- Fixed crash during template installation by ensuring error values from stream events are converted to strings before being passed to the UI. This prevents the 'e?.includes is not a function' TypeError when the server returns non-string error payloads. ([#14267](https://github.com/mastra-ai/mastra/pull/14267))
+
+- Fixed crash when template installation errors are non-string values (e.g. objects). The error is now safely converted to a string before calling .includes(), preventing the 'e?.includes is not a function' TypeError in the studio. ([#14267](https://github.com/mastra-ai/mastra/pull/14267))
+
+- Updated dependencies [[`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`4a7ce05`](https://github.com/mastra-ai/mastra/commit/4a7ce05125b8d3d260f68f1fc4a6c6866d22ba24), [`7a167db`](https://github.com/mastra-ai/mastra/commit/7a167db025e63a616123dee5855ff572c91264c5), [`085e371`](https://github.com/mastra-ai/mastra/commit/085e3718a7d0fe9a210fe7dd1c867b9bdfe8d16b), [`ce26fe2`](https://github.com/mastra-ai/mastra/commit/ce26fe2166dd90254f8bee5776e55977143e97de), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1)]:
+  - @mastra/core@1.13.3-alpha.0
+  - @mastra/schema-compat@1.2.5-alpha.0
+  - @mastra/ai-sdk@1.1.4-alpha.0
+  - @mastra/client-js@1.8.5-alpha.0
+  - @mastra/react@0.2.15-alpha.0
+
+## 16.1.2
+
+### Patch Changes
+
+- Revert "New style for list-type pages (#14173)" - restores Table components that were replaced with List components ([#14278](https://github.com/mastra-ai/mastra/pull/14278))
+
+- Updated dependencies [[`42c585b`](https://github.com/mastra-ai/mastra/commit/42c585bf863ab0a5081e7445f24a821f32b31c91), [`0ce6035`](https://github.com/mastra-ai/mastra/commit/0ce603591189f547397704e53f23c77bc5630071), [`1978bc4`](https://github.com/mastra-ai/mastra/commit/1978bc424dbb04f5f7c5d8522f07f1166006fa3f)]:
+  - @mastra/client-js@1.8.4
+  - @mastra/core@1.13.2
+  - @mastra/schema-compat@1.2.4
+  - @mastra/react@0.2.14
+  - @mastra/ai-sdk@1.1.3
+
 ## 16.1.2-alpha.0
 
 ### Patch Changes
