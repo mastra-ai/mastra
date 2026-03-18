@@ -6,18 +6,20 @@ import {
   Icon,
   Button,
   HeaderAction,
-  useLinkComponent,
   useDatasets,
   DatasetsTable,
   CreateDatasetDialog,
+  useLinkComponent,
+  DocsIcon,
 } from '@mastra/playground-ui';
 import { Plus, Database } from 'lucide-react';
 import { useState } from 'react';
 
 function Datasets() {
+  const { Link } = useLinkComponent();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { navigate, paths } = useLinkComponent();
-  const { data, isLoading } = useDatasets();
+  const { data, isLoading, error } = useDatasets();
   const datasets = data?.datasets ?? [];
 
   const handleDatasetCreated = (datasetId: string) => {
@@ -41,11 +43,20 @@ function Datasets() {
             </Icon>
             Create Dataset
           </Button>
+          <Button as={Link} to="https://mastra.ai/reference/datasets/dataset" target="_blank" variant="ghost" size="md">
+            <DocsIcon />
+            Datasets documentation
+          </Button>
         </HeaderAction>
       </Header>
 
       <MainContentContent isCentered={!isLoading && datasets.length === 0}>
-        <DatasetsTable datasets={datasets} isLoading={isLoading} onCreateClick={() => setIsCreateDialogOpen(true)} />
+        <DatasetsTable
+          datasets={datasets}
+          isLoading={isLoading}
+          error={error}
+          onCreateClick={() => setIsCreateDialogOpen(true)}
+        />
       </MainContentContent>
 
       <CreateDatasetDialog

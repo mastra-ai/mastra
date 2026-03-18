@@ -123,6 +123,9 @@ export type {
   SkillsContext,
 } from './skills';
 
+// Skill Tools
+export { createSkillTools } from './skills';
+
 // Skill Publishing
 export type { SkillPublishResult } from './skills';
 export { collectSkillForPublish, publishSkillFromSource } from './skills';

@@ -26,18 +26,31 @@ const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' })
 
 <PropertiesTable
   content={[
-{
-name: "path",
-type: "string",
-description: "File path relative to basePath",
-},
-{
-name: "options.encoding",
-type: "'utf-8' | 'binary'",
-description: "Text or binary encoding",
-isOptional: true,
-defaultValue: "'utf-8'",
-},
+  {
+    name: 'path',
+    type: 'string',
+    description: 'File path relative to basePath',
+  },
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'readFile options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'encoding',
+            type: "'utf-8' | 'binary'",
+            description: 'Text or binary encoding',
+            isOptional: true,
+            defaultValue: "'utf-8'",
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -56,30 +69,43 @@ await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
 
 <PropertiesTable
   content={[
-{
-name: "path",
-type: "string",
-description: "File path relative to basePath",
-},
-{
-name: "content",
-type: "string | Buffer",
-description: "File content",
-},
-{
-name: "options.recursive",
-type: "boolean",
-description: "Create parent directories if they don't exist",
-isOptional: true,
-defaultValue: "false",
-},
-{
-name: "options.overwrite",
-type: "boolean",
-description: "Overwrite existing file",
-isOptional: true,
-defaultValue: "true",
-},
+  {
+    name: 'path',
+    type: 'string',
+    description: 'File path relative to basePath',
+  },
+  {
+    name: 'content',
+    type: 'string | Buffer',
+    description: 'File content',
+  },
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'recursive',
+            type: 'boolean',
+            description: "Create parent directories if they don't exist",
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
+            name: 'overwrite',
+            type: 'boolean',
+            description: 'Overwrite existing file',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -96,24 +122,37 @@ await filesystem.deleteFile('/docs/maybe.md', { force: true }) // Don't throw if
 
 <PropertiesTable
   content={[
-{
-name: "path",
-type: "string",
-description: "File path",
-},
-{
-name: "options.force",
-type: "boolean",
-description: "Don't throw error if file doesn't exist",
-isOptional: true,
-defaultValue: "false",
-},
+  {
+    name: 'path',
+    type: 'string',
+    description: 'File path',
+  },
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'force',
+            type: 'boolean',
+            description: "Don't throw error if file doesn't exist",
+            isOptional: true,
+            defaultValue: 'false',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
 ### `appendFile(path, content)`
 
-Append content to a file, creating it if it does not already exist. Parent directories are created automatically.
+Append content to a file, creating it if it doesn't already exist. Parent directories are created automatically.
 
 ```typescript
 await filesystem.appendFile('/logs/app.log', 'New log entry\n')
@@ -123,16 +162,16 @@ await filesystem.appendFile('/logs/app.log', 'New log entry\n')
 
 <PropertiesTable
   content={[
-{
-name: "path",
-type: "string",
-description: "File path",
-},
-{
-name: "content",
-type: "string | Buffer",
-description: "Content to append",
-},
+  {
+    name: 'path',
+    type: 'string',
+    description: 'File path',
+  },
+  {
+    name: 'content',
+    type: 'string | Buffer',
+    description: 'Content to append',
+  },
 ]}
 />
 
@@ -148,23 +187,36 @@ await filesystem.copyFile('/docs/template.md', '/docs/new-doc.md')
 
 <PropertiesTable
   content={[
-{
-name: "src",
-type: "string",
-description: "Source file path",
-},
-{
-name: "dest",
-type: "string",
-description: "Destination file path",
-},
-{
-name: "options.overwrite",
-type: "boolean",
-description: "Overwrite destination if it exists",
-isOptional: true,
-defaultValue: "true",
-},
+  {
+    name: 'src',
+    type: 'string',
+    description: 'Source file path',
+  },
+  {
+    name: 'dest',
+    type: 'string',
+    description: 'Destination file path',
+  },
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'overwrite',
+            type: 'boolean',
+            description: 'Overwrite destination if it exists',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -180,23 +232,36 @@ await filesystem.moveFile('/docs/draft.md', '/docs/final.md')
 
 <PropertiesTable
   content={[
-{
-name: "src",
-type: "string",
-description: "Source file path",
-},
-{
-name: "dest",
-type: "string",
-description: "Destination file path",
-},
-{
-name: "options.overwrite",
-type: "boolean",
-description: "Overwrite destination if it exists",
-isOptional: true,
-defaultValue: "true",
-},
+  {
+    name: 'src',
+    type: 'string',
+    description: 'Source file path',
+  },
+  {
+    name: 'dest',
+    type: 'string',
+    description: 'Destination file path',
+  },
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'overwrite',
+            type: 'boolean',
+            description: 'Overwrite destination if it exists',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -234,18 +299,31 @@ await filesystem.mkdir('/deeply/nested/path', { recursive: true })
 
 <PropertiesTable
   content={[
-{
-name: "path",
-type: "string",
-description: "Directory path",
-},
-{
-name: "options.recursive",
-type: "boolean",
-description: "Create parent directories",
-isOptional: true,
-defaultValue: "false",
-},
+  {
+    name: 'path',
+    type: 'string',
+    description: 'Directory path',
+  },
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'recursive',
+            type: 'boolean',
+            description: 'Create parent directories',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -262,25 +340,38 @@ await filesystem.rmdir('/docs/nested', { recursive: true })
 
 <PropertiesTable
   content={[
-{
-name: "path",
-type: "string",
-description: "Directory path",
-},
-{
-name: "options.recursive",
-type: "boolean",
-description: "Remove contents recursively",
-isOptional: true,
-defaultValue: "false",
-},
-{
-name: "options.force",
-type: "boolean",
-description: "Don't throw if directory doesn't exist",
-isOptional: true,
-defaultValue: "false",
-},
+  {
+    name: 'path',
+    type: 'string',
+    description: 'Directory path',
+  },
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'recursive',
+            type: 'boolean',
+            description: 'Remove contents recursively',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
+            name: 'force',
+            type: 'boolean',
+            description: "Don't throw if directory doesn't exist",
+            isOptional: true,
+            defaultValue: 'false',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -317,7 +408,7 @@ interface FileStat {
 }
 ```
 
-## Optional Methods
+## Optional methods
 
 ### `init()`
 
@@ -375,12 +466,12 @@ const instructions = filesystem.getInstructions?.()
 
 <PropertiesTable
   content={[
-{
-name: "opts.requestContext",
-type: "RequestContext",
-description: "Forwarded to the `instructions` function if one was provided in the constructor.",
-isOptional: true,
-},
+  {
+    name: 'opts.requestContext',
+    type: 'RequestContext',
+    description: 'Forwarded to the `instructions` function if one was provided in the constructor.',
+    isOptional: true,
+  },
 ]}
 />
 

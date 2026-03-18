@@ -58,7 +58,14 @@ export class DevLogger {
     console.info(`${prefix} ${pc.blue('Starting Mastra dev server...')}`);
   }
 
-  ready(host: string, port: number, studioBasePath: string, startTime?: number, https?: HTTPSOptions): void {
+  ready(
+    host: string,
+    port: number,
+    studioBasePath: string,
+    apiPrefix: string,
+    startTime?: number,
+    https?: HTTPSOptions,
+  ): void {
     let protocol = 'http';
     if (https && https.key && https.cert) {
       protocol = 'https';
@@ -69,7 +76,7 @@ export class DevLogger {
     console.info(pc.inverse(pc.green(' mastra ')) + ` ${pc.green(version)} ${pc.gray('ready in')} ${timing}`);
     console.info('');
     console.info(`${pc.dim('│')} ${pc.bold('Studio:')} ${pc.cyan(`${protocol}://${host}:${port}${studioBasePath}`)}`);
-    console.info(`${pc.dim('│')} ${pc.bold('API:')}    ${`${protocol}://${host}:${port}/api`}`);
+    console.info(`${pc.dim('│')} ${pc.bold('API:')}    ${`${protocol}://${host}:${port}${apiPrefix}`}`);
     console.info('');
   }
 

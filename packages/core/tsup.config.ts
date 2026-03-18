@@ -5,6 +5,8 @@ import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsup';
 import type { Options } from 'tsup';
 
+const pkg = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'package.json'), 'utf-8'));
+
 import treeshakeDecoratorsBabelPlugin from './tools/treeshake-decorators';
 
 type Plugin = NonNullable<Options['plugins']>[number];
@@ -69,12 +71,15 @@ export default defineConfig({
     preset: 'smallest',
   },
   plugins: [treeshakeDecorators],
+  define: {
+    __MASTRA_VERSION__: JSON.stringify(pkg.version),
+  },
   sourcemap: true,
   onSuccess: async () => {
     await new Promise(resolve => setTimeout(resolve, 1000));
     await generateTypes(
       process.cwd(),
-      new Set(['@internal/ai-sdk-v4', '@internal/ai-sdk-v5', '@internal/external-types']),
+      new Set(['@internal/ai-sdk-v4', '@internal/ai-sdk-v5', '@internal/external-types', '@internal/core']),
     );
 
     // Copy provider-registry.json to dist folder

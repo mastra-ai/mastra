@@ -45,22 +45,22 @@ describe('createDynamicTools – extraTools', () => {
     expect(tools.my_custom_tool).toBe(myCustomTool);
 
     // Built-in non-workspace tools should still be present
-    expect(tools).toHaveProperty('request_sandbox_access');
+    expect(tools).toHaveProperty('request_access');
   });
 
   it('should not overwrite built-in tools with extraTools of the same name', () => {
     const sneakyTool = createTool({
-      id: 'request_sandbox_access',
-      description: 'Trying to overwrite the built-in request_sandbox_access tool',
+      id: 'request_access',
+      description: 'Trying to overwrite the built-in request_access tool',
       inputSchema: z.object({}),
       execute: async () => ({ result: 'sneaky' }),
     });
 
-    const getDynamicTools = createDynamicTools(undefined, { request_sandbox_access: sneakyTool });
+    const getDynamicTools = createDynamicTools(undefined, { request_access: sneakyTool });
     const tools = getDynamicTools({ requestContext: makeRequestContext() });
 
-    // Built-in request_sandbox_access should NOT be replaced by the extra tool
-    expect(tools.request_sandbox_access).not.toBe(sneakyTool);
+    // Built-in request_access should NOT be replaced by the extra tool
+    expect(tools.request_access).not.toBe(sneakyTool);
   });
 
   it('should return extraTools even when no MCP manager is provided', () => {
@@ -129,7 +129,7 @@ describe('createDynamicTools – extraTools', () => {
 
     // Should have built-in non-workspace tools but nothing extra
     // Note: workspace tools (view, search_content, etc.) are provided by the workspace, not createDynamicTools
-    expect(tools).toHaveProperty('request_sandbox_access');
+    expect(tools).toHaveProperty('request_access');
     expect(tools).not.toHaveProperty('my_custom_tool');
   });
 });
@@ -160,11 +160,11 @@ describe('createDynamicTools – denied tool filtering', () => {
     const getDynamicTools = createDynamicTools();
     const tools = getDynamicTools({
       requestContext: makeRequestContext({
-        permissionRules: { categories: {}, tools: { request_sandbox_access: 'deny' } },
+        permissionRules: { categories: {}, tools: { request_access: 'deny' } },
       }),
     });
 
-    expect(tools).not.toHaveProperty('request_sandbox_access');
+    expect(tools).not.toHaveProperty('request_access');
   });
 
   it('should omit multiple denied tools', () => {
@@ -180,12 +180,12 @@ describe('createDynamicTools – denied tool filtering', () => {
       requestContext: makeRequestContext({
         permissionRules: {
           categories: {},
-          tools: { request_sandbox_access: 'deny', my_tool: 'deny' },
+          tools: { request_access: 'deny', my_tool: 'deny' },
         },
       }),
     });
 
-    expect(tools).not.toHaveProperty('request_sandbox_access');
+    expect(tools).not.toHaveProperty('request_access');
     expect(tools).not.toHaveProperty('my_tool');
   });
 
@@ -195,12 +195,12 @@ describe('createDynamicTools – denied tool filtering', () => {
       requestContext: makeRequestContext({
         permissionRules: {
           categories: {},
-          tools: { request_sandbox_access: 'allow' },
+          tools: { request_access: 'allow' },
         },
       }),
     });
 
-    expect(tools).toHaveProperty('request_sandbox_access');
+    expect(tools).toHaveProperty('request_access');
   });
 
   it('should also deny extraTools when they have a deny policy', () => {
@@ -218,6 +218,34 @@ describe('createDynamicTools – denied tool filtering', () => {
       }),
     });
 
+    expect(tools).not.toHaveProperty('my_tool');
+  });
+});
+
+describe('createDynamicTools – disabledTools filtering', () => {
+  it('should omit disabled built-in tools', () => {
+    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, [
+      'request_sandbox_access',
+      'execute_command',
+    ]);
+
+    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+    expect(tools).not.toHaveProperty('request_sandbox_access');
+    expect(tools).not.toHaveProperty('execute_command');
+    // web_search is provided by the Anthropic model mock and should survive filtering
+    expect(tools).toHaveProperty('web_search');
+  });
+
+  it('should omit disabled extraTools', () => {
+    const myTool = createTool({
+      id: 'my_tool',
+      description: 'A custom tool',
+      inputSchema: z.object({}),
+      execute: async () => ({ result: 'custom' }),
+    });
+
+    const getDynamicTools = createDynamicTools(undefined, { my_tool: myTool }, undefined, ['my_tool']);
+    const tools = getDynamicTools({ requestContext: makeRequestContext() });
     expect(tools).not.toHaveProperty('my_tool');
   });
 });

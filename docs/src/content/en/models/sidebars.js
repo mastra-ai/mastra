@@ -118,6 +118,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/alibaba-coding-plan',
+          label: 'Alibaba Coding Plan',
+        },
+        {
+          type: 'doc',
+          id: 'providers/alibaba-coding-plan-cn',
+          label: 'Alibaba Coding Plan (China)',
+        },
+        {
+          type: 'doc',
           id: 'providers/amazon-bedrock',
           label: 'Amazon Bedrock',
         },
@@ -153,6 +163,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/clarifai',
+          label: 'Clarifai',
+        },
+        {
+          type: 'doc',
           id: 'providers/cloudferro-sherlock',
           label: 'CloudFerro Sherlock',
         },
@@ -178,8 +193,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/drun',
+          label: 'D.Run (China)',
+        },
+        {
+          type: 'doc',
           id: 'providers/deepinfra',
           label: 'Deep Infra',
+        },
+        {
+          type: 'doc',
+          id: 'providers/dinference',
+          label: 'DInference',
         },
         {
           type: 'doc',
@@ -450,6 +475,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/synthetic',
           label: 'Synthetic',
+        },
+        {
+          type: 'doc',
+          id: 'providers/tencent-coding-plan',
+          label: 'Tencent Coding Plan (China)',
         },
         {
           type: 'doc',

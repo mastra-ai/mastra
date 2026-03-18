@@ -47,7 +47,7 @@ function createMemoryWithEmbedder(specVersion: 'v1' | 'v2' | 'v3') {
       specificationVersion: specVersion,
       provider: 'test',
       modelId: 'test-model',
-      doEmbed: vi.fn().mockResolvedValue({ embeddings: [[0.1, 0.2]], usage: { tokens } }),
+      doEmbed: vi.fn().mockResolvedValue({ embeddings: [[0.1, 0.2]], usage: { tokens }, warnings: [] }),
     } as any,
     options: {
       semanticRecall: true,

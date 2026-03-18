@@ -17,37 +17,43 @@ The `speak()` method is a core function available in all Mastra voice providers 
 
 <PropertiesTable
   content={[
-{
-name: "input",
-type: "string | NodeJS.ReadableStream",
-description:
-"Text to convert to speech. Can be a string or a readable stream of text.",
-isOptional: false,
-},
-{
-name: "options",
-type: "object",
-description: "Options for speech synthesis",
-isOptional: true,
-},
-{
-name: "options.speaker",
-type: "string",
-description:
-"Voice ID to use for this specific request. Overrides the default speaker set in the constructor.",
-isOptional: true,
-},
+  {
+    name: 'input',
+    type: 'string | NodeJS.ReadableStream',
+    description: 'Text to convert to speech. Can be a string or a readable stream of text.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'object',
+    description: 'Options for speech synthesis',
+    isOptional: true,
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'string',
+            description:
+              'Voice ID to use for this specific request. Overrides the default speaker set in the constructor.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
-## Return Value
+## Return value
 
 Returns a `Promise<NodeJS.ReadableStream | void>` where:
 
 - `NodeJS.ReadableStream`: A stream of audio data that can be played or saved
 - `void`: When using a realtime voice provider that emits audio through events instead of returning it directly
 
-## Provider-Specific Options
+## Provider-specific options
 
 Each voice provider may support additional options specific to their implementation. Here are some examples:
 
@@ -55,14 +61,26 @@ Each voice provider may support additional options specific to their implementat
 
 <PropertiesTable
   content={[
-{
-name: "options.speed",
-type: "number",
-description:
-"Speech speed multiplier. Values between 0.25 and 4.0 are supported.",
-isOptional: true,
-defaultValue: "1.0",
-},
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'speed',
+            type: 'number',
+            description: 'Speech speed multiplier. Values between 0.25 and 4.0 are supported.',
+            isOptional: true,
+            defaultValue: '1.0',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -70,21 +88,33 @@ defaultValue: "1.0",
 
 <PropertiesTable
   content={[
-{
-name: "options.stability",
-type: "number",
-description:
-"Voice stability. Higher values result in more stable, less expressive speech.",
-isOptional: true,
-defaultValue: "0.5",
-},
-{
-name: "options.similarity_boost",
-type: "number",
-description: "Voice clarity and similarity to the original voice.",
-isOptional: true,
-defaultValue: "0.75",
-},
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'stability',
+            type: 'number',
+            description: 'Voice stability. Higher values result in more stable, less expressive speech.',
+            isOptional: true,
+            defaultValue: '0.5',
+          },
+          {
+            name: 'similarity_boost',
+            type: 'number',
+            description: 'Voice clarity and similarity to the original voice.',
+            isOptional: true,
+            defaultValue: '0.75',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -92,20 +122,32 @@ defaultValue: "0.75",
 
 <PropertiesTable
   content={[
-{
-name: "options.languageCode",
-type: "string",
-description: "Language code for the voice (e.g., 'en-US').",
-isOptional: true,
-},
-{
-name: "options.audioConfig",
-type: "object",
-description:
-"Audio configuration options from Google Cloud Text-to-Speech API.",
-isOptional: true,
-defaultValue: "{ audioEncoding: 'LINEAR16' }",
-},
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'languageCode',
+            type: 'string',
+            description: "Language code for the voice (e.g., 'en-US').",
+            isOptional: true,
+          },
+          {
+            name: 'audioConfig',
+            type: 'object',
+            description: 'Audio configuration options from Google Cloud Text-to-Speech API.',
+            isOptional: true,
+            defaultValue: "{ audioEncoding: 'LINEAR16' }",
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -113,28 +155,54 @@ defaultValue: "{ audioEncoding: 'LINEAR16' }",
 
 <PropertiesTable
   content={[
-{
-name: "options.properties.rate",
-type: "number",
-description: "Speech rate multiplier.",
-isOptional: true,
-},
-{
-name: "options.properties.pitch",
-type: "number",
-description: "Voice pitch adjustment.",
-isOptional: true,
-},
-{
-name: "options.properties.format",
-type: "'MP3' | 'WAV' | 'FLAC' | 'ALAW' | 'ULAW'",
-description: "Output audio format.",
-isOptional: true,
-},
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'properties',
+            type: 'object',
+            description: 'properties configuration.',
+            isOptional: true,
+            properties: [
+              {
+                type: 'object',
+                parameters: [
+                  {
+                    name: 'rate',
+                    type: 'number',
+                    description: 'Speech rate multiplier.',
+                    isOptional: true,
+                  },
+                  {
+                    name: 'pitch',
+                    type: 'number',
+                    description: 'Voice pitch adjustment.',
+                    isOptional: true,
+                  },
+                  {
+                    name: 'format',
+                    type: "'MP3' | 'WAV' | 'FLAC' | 'ALAW' | 'ULAW'",
+                    description: 'Output audio format.',
+                    isOptional: true,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { OpenAIVoice } from '@mastra/voice-openai'
@@ -159,7 +227,7 @@ const textStream = Readable.from(['Hello', ' from', ' a', ' stream!'])
 const audioStreamFromTextStream = await voice.speak(textStream)
 ```
 
-## Using with CompositeVoice
+## Using with `CompositeVoice`
 
 When using `CompositeVoice`, the `speak()` method delegates to the configured speaking provider:
 
@@ -209,7 +277,7 @@ const audioWithOptions = await voice.speak('Hello with options!', {
 
 See the [CompositeVoice reference](/reference/voice/composite-voice) for more details on AI SDK integration.
 
-## Realtime Voice Providers
+## Realtime voice providers
 
 When using realtime voice providers like `OpenAIRealtimeVoice`, the `speak()` method behaves differently:
 

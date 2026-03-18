@@ -1,6 +1,3 @@
-import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '@mastra/core/stream';
-import type { DataChunkType, ChunkType, MastraFinishReason } from '@mastra/core/stream';
-
 import type {
   InferUIMessageChunk,
   LanguageModelUsage as AISDKLanguageModelUsage,
@@ -9,7 +6,10 @@ import type {
   ToolSet,
   UIMessage,
   FinishReason,
-} from 'ai';
+} from '@internal/ai-sdk-v5';
+import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '@mastra/core/stream';
+import type { DataChunkType, ChunkType, MastraFinishReason } from '@mastra/core/stream';
+
 import { isDataChunkType } from './utils';
 
 /**

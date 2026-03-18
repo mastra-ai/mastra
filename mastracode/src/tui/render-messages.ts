@@ -5,8 +5,9 @@
  */
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItem } from '@mastra/core/harness';
+import { parseSubagentMeta } from '@mastra/core/harness';
 import chalk from 'chalk';
-import { parseSubagentMeta } from '../tools/subagent.js';
+import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
 import { OMMarkerComponent } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
@@ -18,7 +19,7 @@ import { ToolExecutionComponentEnhanced } from './components/tool-execution-enha
 import { UserMessageComponent } from './components/user-message.js';
 import { formatToolResult } from './handlers/tool.js';
 import type { TUIState } from './state.js';
-import { getMarkdownTheme, theme, mastra } from './theme.js';
+import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 
 // Re-export so existing consumers can still import from here
 export { formatToolResult };
@@ -40,8 +41,7 @@ export function renderCompletedTasksInline(
     theme.bold(theme.fg('accent', 'Tasks')) + theme.fg('dim', ` [${tasks.length}/${tasks.length} completed]`);
 
   const container = new Container();
-  container.addChild(new Spacer(1));
-  container.addChild(new Text(headerText, 0, 0));
+  container.addChild(new Text(headerText, BOX_INDENT, 0));
   const MAX_VISIBLE = 4;
   const shouldCollapse = collapsed && tasks.length > MAX_VISIBLE + 1;
   const visible = shouldCollapse ? tasks.slice(0, MAX_VISIBLE) : tasks;
@@ -50,17 +50,18 @@ export function renderCompletedTasksInline(
   for (const task of visible) {
     const icon = chalk.hex(mastra.green)('✓');
     const text = chalk.hex(mastra.green)(task.content);
-    container.addChild(new Text(`  ${icon} ${text}`, 0, 0));
+    container.addChild(new Text(`  ${icon} ${text}`, BOX_INDENT, 0));
   }
   if (remaining > 0) {
     container.addChild(
       new Text(
         theme.fg('dim', `  ... ${remaining} more completed task${remaining > 1 ? 's' : ''} (ctrl+e to expand)`),
-        0,
+        BOX_INDENT,
         0,
       ),
     );
   }
+  container.addChild(new Spacer(1));
 
   if (insertIndex >= 0) {
     state.chatContainer.children.splice(insertIndex, 0, container);
@@ -75,15 +76,15 @@ export function renderCompletedTasksInline(
  */
 export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem[], insertIndex = -1): void {
   const container = new Container();
-  container.addChild(new Spacer(1));
   const count = clearedTasks.length;
   const label = count === 1 ? 'Task' : 'Tasks';
-  container.addChild(new Text(theme.fg('accent', `${label} cleared`), 0, 0));
+  container.addChild(new Text(theme.fg('accent', `${label} cleared`), BOX_INDENT, 0));
   for (const task of clearedTasks) {
     const icon = task.status === 'completed' ? chalk.hex(mastra.green)('✓') : chalk.hex(mastra.darkGray)('○');
     const text = chalk.hex(theme.getTheme().dim).strikethrough(task.content);
-    container.addChild(new Text(`  ${icon} ${text}`, 0, 0));
+    container.addChild(new Text(`  ${icon} ${text}`, BOX_INDENT, 0));
   }
+  container.addChild(new Spacer(1));
   if (insertIndex >= 0) {
     state.chatContainer.children.splice(insertIndex, 0, container);
     state.chatContainer.invalidate();
@@ -118,7 +119,6 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
     });
 
     // System reminders always go at the end (after plan approval)
-    state.chatContainer.addChild(new Spacer(1));
     state.chatContainer.addChild(reminderComponent);
     state.ui.requestRender();
     return;
@@ -239,6 +239,26 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             state.chatContainer.addChild(subComponent);
             state.allToolComponents.push(subComponent as any);
             continue;
+          }
+
+          // Render ask_user with the proper question component
+          if (content.name === 'ask_user' && toolResult?.type === 'tool_result') {
+            const askArgs = content.args as
+              | { question?: string; options?: Array<{ label: string; description?: string }> }
+              | undefined;
+            const answer =
+              typeof toolResult.result === 'string' ? toolResult.result : formatToolResult(toolResult.result);
+            const cancelled = answer === '(skipped)';
+            if (askArgs?.question) {
+              const askComponent = AskQuestionInlineComponent.fromHistory(
+                askArgs.question,
+                askArgs.options,
+                answer,
+                cancelled,
+              );
+              state.chatContainer.addChild(askComponent);
+              continue;
+            }
           }
 
           // Render the tool call

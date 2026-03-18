@@ -3,8 +3,7 @@
 import { Button } from '@/ds/components/Button';
 import { Chip } from '@/ds/components/Chip';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { SelectField } from '@/ds/components/FormFields';
-import { Icon } from '@/ds/icons/Icon';
+import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
 import { GitCompare, MoveRightIcon, XIcon } from 'lucide-react';
 import type { DatasetExperimentsFilters } from '../../hooks/use-dataset-experiments';
 
@@ -61,13 +60,11 @@ export function DatasetExperimentsToolbar({
             <MoveRightIcon />
           </div>
           <ButtonsGroup>
-            <Button variant="cta" size="default" disabled={selectedCount !== 2} onClick={onExecuteCompare}>
+            <Button variant="primary" disabled={selectedCount !== 2} onClick={onExecuteCompare}>
               <GitCompare className="w-4 h-4" />
               Compare Experiments
             </Button>
-            <Button variant="standard" size="default" onClick={onCancelSelection}>
-              Cancel
-            </Button>
+            <Button onClick={onCancelSelection}>Cancel</Button>
           </ButtonsGroup>
         </div>
       </div>
@@ -77,54 +74,46 @@ export function DatasetExperimentsToolbar({
   return (
     <div className="flex items-center justify-between gap-4 w-full">
       <ButtonsGroup>
-        <SelectField
+        <SelectFieldBlock
           label="Status"
           labelIsHidden={true}
           name="filter-status"
           options={STATUS_OPTIONS}
           value={filters.status ?? 'all'}
           onValueChange={v => onFiltersChange({ ...filters, status: v === 'all' ? undefined : v })}
-          variant="experimental"
-          size="default"
         />
 
-        <SelectField
+        <SelectFieldBlock
           label="Type"
           labelIsHidden={true}
           name="filter-target-type"
           options={TARGET_TYPE_OPTIONS}
           value={filters.targetType ?? 'all'}
           onValueChange={v => onFiltersChange({ ...filters, targetType: v === 'all' ? undefined : v })}
-          variant="experimental"
-          size="default"
         />
 
         {targetIds.length > 0 && (
-          <SelectField
+          <SelectFieldBlock
             label="Target"
             labelIsHidden={true}
             name="filter-target-id"
             options={targetIdOptions}
             value={filters.targetId ?? 'all'}
             onValueChange={v => onFiltersChange({ ...filters, targetId: v === 'all' ? undefined : v })}
-            variant="experimental"
-            size="default"
           />
         )}
 
         {(filters.status || filters.targetType || filters.targetId) && (
-          <Button variant="standard" size="default" onClick={() => onFiltersChange({})}>
-            <Icon>
-              <XIcon />
-            </Icon>
+          <Button onClick={() => onFiltersChange({})}>
+            <XIcon />
             Reset
           </Button>
         )}
       </ButtonsGroup>
 
       {hasExperiments && (
-        <Button variant="standard" size="default" onClick={onCompareClick}>
-          <GitCompare className="w-4 h-4" />
+        <Button onClick={onCompareClick}>
+          <GitCompare />
           Compare
         </Button>
       )}

@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { toast } from '@/lib/toast';
-import { Combobox } from '@/ds/components/Combobox';
+import { Combobox, type ComboboxProps } from '@/ds/components/Combobox';
 import { useDatasets } from '../hooks/use-datasets';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -14,7 +14,7 @@ export interface DatasetComboboxProps {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'light' | 'outline' | 'ghost';
+  variant?: ComboboxProps['variant'];
 }
 
 export function DatasetCombobox({
@@ -25,7 +25,7 @@ export function DatasetCombobox({
   emptyText = 'No datasets found.',
   className,
   disabled = false,
-  variant = 'default',
+  variant = 'inputLike',
 }: DatasetComboboxProps) {
   const { data, isLoading, isError, error } = useDatasets();
   const { navigate, paths } = useLinkComponent();

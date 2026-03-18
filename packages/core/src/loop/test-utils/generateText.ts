@@ -2,7 +2,7 @@ import type { LanguageModelV2StreamPart, SharedV2ProviderMetadata } from '@ai-sd
 import type { generateText as generateText5, ToolSet } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, mockId } from '@internal/ai-sdk-v5/test';
 import { assertType, describe, expect, it } from 'vitest';
-import z from 'zod';
+import z from 'zod/v4';
 import type { loop } from '../loop';
 import type { LoopOptions } from '../types';
 import {
@@ -737,55 +737,14 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         expect(result.steps?.[0]?.response).toMatchInlineSnapshot(`
           {
             "body": "test body",
-            "headers": {
-              "custom-response-header": "response-header-value",
-            },
-            "id": "test-id-from-model",
-            "messages": [
-              {
-                "content": [
-                  {
-                    "text": "Hello, world!",
-                    "type": "text",
-                  },
-                ],
-                "role": "assistant",
-              },
-            ],
-            "modelId": "test-response-model-id",
-            "modelMetadata": {
-              "modelId": "mock-model-id",
-              "modelProvider": "mock-provider",
-              "modelVersion": "v2",
-            },
-            "modelProvider": "mock-provider",
-            "modelVersion": "v2",
-            "timestamp": 1970-01-01T00:00:10.000Z,
-            "uiMessages": [
-              {
-                "id": "1234",
-                "metadata": {
-                  "createdAt": 2024-01-01T00:00:00.001Z,
-                },
-                "parts": [
-                  {
-                    "text": "Hello, world!",
-                    "type": "text",
-                  },
-                ],
-                "role": "assistant",
-              },
-            ],
-          }
-        `);
-        expect(await result.response).toMatchInlineSnapshot(`
-          {
-            "body": "test body",
             "dbMessages": [
               {
                 "content": {
                   "content": "Hello, world!",
                   "format": 2,
+                  "metadata": {
+                    "modelId": "test-response-model-id",
+                  },
                   "parts": [
                     {
                       "text": "Hello, world!",
@@ -827,6 +786,72 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
                 "id": "1234",
                 "metadata": {
                   "createdAt": 2024-01-01T00:00:00.001Z,
+                  "modelId": "test-response-model-id",
+                },
+                "parts": [
+                  {
+                    "text": "Hello, world!",
+                    "type": "text",
+                  },
+                ],
+                "role": "assistant",
+              },
+            ],
+          }
+        `);
+        expect(await result.response).toMatchInlineSnapshot(`
+          {
+            "body": "test body",
+            "dbMessages": [
+              {
+                "content": {
+                  "content": "Hello, world!",
+                  "format": 2,
+                  "metadata": {
+                    "modelId": "test-response-model-id",
+                  },
+                  "parts": [
+                    {
+                      "text": "Hello, world!",
+                      "type": "text",
+                    },
+                  ],
+                },
+                "createdAt": 2024-01-01T00:00:00.001Z,
+                "id": "1234",
+                "role": "assistant",
+              },
+            ],
+            "headers": {
+              "custom-response-header": "response-header-value",
+            },
+            "id": "test-id-from-model",
+            "messages": [
+              {
+                "content": [
+                  {
+                    "text": "Hello, world!",
+                    "type": "text",
+                  },
+                ],
+                "role": "assistant",
+              },
+            ],
+            "modelId": "test-response-model-id",
+            "modelMetadata": {
+              "modelId": "mock-model-id",
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
+            },
+            "modelProvider": "mock-provider",
+            "modelVersion": "v2",
+            "timestamp": 1970-01-01T00:00:10.000Z,
+            "uiMessages": [
+              {
+                "id": "1234",
+                "metadata": {
+                  "createdAt": 2024-01-01T00:00:00.001Z,
+                  "modelId": "test-response-model-id",
                 },
                 "parts": [
                   {

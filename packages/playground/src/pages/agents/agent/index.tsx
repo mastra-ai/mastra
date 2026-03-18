@@ -7,7 +7,6 @@ import {
   ThreadInputProvider,
   useAgent,
   useMemory,
-  useThread,
   useThreads,
   AgentInformation,
   TracingSettingsProvider,
@@ -42,18 +41,14 @@ function Agent() {
     data: threads,
     isLoading: isThreadsLoading,
     refetch: refreshThreads,
-  } = useThreads({ agentId: agentId!, isMemoryEnabled: hasMemory });
-
-  const { data: thread } = useThread({ threadId, agentId });
-  const effectiveResourceId = thread?.resourceId ?? agentId!;
+  } = useThreads({ agentId: agentId!, isMemoryEnabled: hasMemory, resourceId: agentId! });
 
   useEffect(() => {
-    if (!hasMemory) return;
     if (threadId) return;
 
-    // After redirects on /agents/:agentId
+    // Normalize /agents/:agentId to /agents/:agentId/chat/new
     void navigate(`/agents/${agentId}/chat/new`);
-  }, [hasMemory, threadId, agentId, navigate]);
+  }, [threadId, agentId, navigate]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
 
@@ -106,6 +101,10 @@ function Agent() {
     return <div className="text-center py-4">Agent not found</div>;
   }
 
+  if (!threadId) {
+    return null;
+  }
+
   const actualThreadId = isNewThread ? newThreadId : threadId;
 
   const handleRefreshThreadList = async () => {
@@ -120,10 +119,10 @@ function Agent() {
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
       <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
         <SchemaRequestContextProvider>
-          <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={effectiveResourceId}>
+          <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
             <ThreadInputProvider>
               <ObservationalMemoryProvider>
-                <ActivatedSkillsProvider>
+                <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
                   <AgentLayout
                     agentId={agentId!}
                     leftSlot={

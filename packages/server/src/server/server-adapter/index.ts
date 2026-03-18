@@ -2,11 +2,14 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
-import type { ApiRoute, HttpLoggingConfig } from '@mastra/core/server';
+import type { ApiRoute, HttpLoggingConfig, ValidationErrorContext, ValidationErrorResponse } from '@mastra/core/server';
 import { Hono } from 'hono';
+import type { ZodError } from 'zod';
+import { z } from 'zod/v4';
 
 import type { InMemoryTaskStore } from '../a2a/store';
 import { coreAuthMiddleware } from '../auth/helpers';
+import { formatZodError } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 import { SERVER_ROUTES, getEffectivePermission } from './routes';
@@ -80,6 +83,73 @@ export interface ParsedRequestParams {
   bodyParseError?: {
     message: string;
   };
+}
+
+function getSchemaTypeName(schema: z.ZodTypeAny): string | undefined {
+  const schemaDef = (schema as any)?._def ?? (schema as any)?.def;
+  return schemaDef?.typeName ?? schemaDef?.type;
+}
+
+function unwrapOptionalNullable(schema: z.ZodTypeAny): z.ZodTypeAny {
+  let inner = schema;
+  let typeName = getSchemaTypeName(inner);
+
+  while (
+    typeName === 'ZodOptional' ||
+    typeName === 'ZodNullable' ||
+    typeName === 'optional' ||
+    typeName === 'nullable'
+  ) {
+    const innerDef = (inner as any)?._def ?? (inner as any)?.def;
+    if (!innerDef?.innerType) {
+      return inner;
+    }
+    inner = innerDef.innerType;
+    typeName = getSchemaTypeName(inner);
+  }
+
+  return inner;
+}
+
+function parseComplexQueryParams(
+  queryParamSchema: z.ZodTypeAny,
+  params: Record<string, QueryParamValue>,
+): Record<string, QueryParamValue | unknown> {
+  if (!(queryParamSchema instanceof z.ZodObject)) {
+    return params;
+  }
+
+  const parsedParams: Record<string, QueryParamValue | unknown> = { ...params };
+  const shape = queryParamSchema.shape as Record<string, z.ZodTypeAny>;
+
+  for (const [key, fieldSchema] of Object.entries(shape)) {
+    const rawValue = parsedParams[key];
+    if (typeof rawValue !== 'string') {
+      continue;
+    }
+
+    const unwrappedField = unwrapOptionalNullable(fieldSchema);
+    const typeName = getSchemaTypeName(unwrappedField);
+    const isComplex =
+      typeName === 'ZodObject' ||
+      typeName === 'ZodArray' ||
+      typeName === 'ZodRecord' ||
+      typeName === 'object' ||
+      typeName === 'array' ||
+      typeName === 'record';
+
+    if (!isComplex) {
+      continue;
+    }
+
+    try {
+      parsedParams[key] = JSON.parse(rawValue);
+    } catch {
+      // Keep original string; schema validation will surface a clear error.
+    }
+  }
+
+  return parsedParams;
 }
 
 /**
@@ -578,6 +648,33 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     }
   }
 
+  /**
+   * Builds the OpenAPI spec object with servers field and custom route paths.
+   */
+  private buildOpenAPISpec(config: { title: string; version: string; description: string }, prefix?: string): any {
+    const openApiSpec = generateOpenAPIDocument(SERVER_ROUTES, config);
+
+    if (prefix) {
+      openApiSpec.servers = [{ url: prefix }];
+    }
+
+    // Custom routes are served at root (/), not under the API prefix — add per-path servers override.
+    const allCustomRoutes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
+    if (allCustomRoutes && allCustomRoutes.length > 0) {
+      const customPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes);
+      if (prefix) {
+        for (const pathKey of Object.keys(customPaths)) {
+          if (!customPaths[pathKey].servers) {
+            customPaths[pathKey].servers = [{ url: '/' }];
+          }
+        }
+      }
+      openApiSpec.paths = { ...openApiSpec.paths, ...customPaths };
+    }
+
+    return openApiSpec;
+  }
+
   async registerOpenAPIRoute(app: TApp, config: OpenAPIConfig = {}, { prefix }: { prefix?: string }): Promise<void> {
     const {
       title = 'Mastra API',
@@ -586,22 +683,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       path = '/openapi.json',
     } = config;
 
-    const openApiSpec = generateOpenAPIDocument(SERVER_ROUTES, {
-      title,
-      version,
-      description,
-    });
-
-    // Set the servers field so Swagger UI knows routes are served under the prefix
-    if (prefix) {
-      openApiSpec.servers = [{ url: prefix }];
-    }
-
-    // Merge custom API routes into the OpenAPI spec
-    if (this.customApiRoutes && this.customApiRoutes.length > 0) {
-      const customPaths = convertCustomRoutesToOpenAPIPaths(this.customApiRoutes);
-      openApiSpec.paths = { ...openApiSpec.paths, ...customPaths };
-    }
+    const openApiSpec = this.buildOpenAPISpec({ title, version, description }, prefix);
 
     const openApiRoute: ServerRoute = {
       method: 'GET',
@@ -622,16 +704,13 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     }
 
     if (this.openapiPath) {
-      await this.registerOpenAPIRoute(
-        this.app,
-        {
-          title: 'Mastra API',
-          version: '1.0.0',
-          description: 'Mastra Server API',
-          path: this.openapiPath,
-        },
-        { prefix: this.prefix },
-      );
+      const specConfig = {
+        title: 'Mastra API',
+        version: '1.0.0',
+        description: 'Mastra Server API',
+      };
+
+      await this.registerOpenAPIRoute(this.app, { ...specConfig, path: this.openapiPath }, { prefix: this.prefix });
     }
   }
 
@@ -641,7 +720,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       return params;
     }
 
-    return pathParamSchema.parseAsync(params);
+    return pathParamSchema.parseAsync(params) as Promise<Record<string, any>>;
   }
 
   async parseQueryParams(route: ServerRoute, params: Record<string, QueryParamValue>): Promise<Record<string, any>> {
@@ -650,7 +729,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       return params;
     }
 
-    return queryParamSchema.parseAsync(params);
+    const normalizedParams = parseComplexQueryParams(queryParamSchema as z.ZodTypeAny, params);
+    return queryParamSchema.parseAsync(normalizedParams) as Promise<Record<string, any>>;
   }
 
   async parseBody(route: ServerRoute, body: unknown): Promise<unknown> {
@@ -660,5 +740,37 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     }
 
     return bodySchema.parseAsync(body);
+  }
+
+  private static readonly CONTEXT_LABELS: Record<ValidationErrorContext, string> = {
+    query: 'query parameters',
+    body: 'request body',
+    path: 'path parameters',
+  };
+
+  protected resolveValidationError(
+    route: ServerRoute,
+    error: ZodError,
+    context: ValidationErrorContext,
+  ): ValidationErrorResponse {
+    const hook = route.onValidationError ?? this.mastra.getServer()?.onValidationError;
+
+    if (hook) {
+      try {
+        const result = hook(error, context);
+        if (result) {
+          return result;
+        }
+      } catch (hookError) {
+        this.mastra.getLogger()?.error('Error in custom onValidationError hook', {
+          error: hookError instanceof Error ? { message: hookError.message, stack: hookError.stack } : hookError,
+        });
+      }
+    }
+
+    return {
+      status: 400,
+      body: formatZodError(error, MastraServer.CONTEXT_LABELS[context]),
+    };
   }
 }

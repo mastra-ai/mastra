@@ -23,6 +23,9 @@ export {
   type ObserveHooks,
 } from './observational-memory';
 
+// Observation utilities
+export { getObservationsAsOf } from './observation-utils';
+
 // Types
 export type {
   ObservationConfig,

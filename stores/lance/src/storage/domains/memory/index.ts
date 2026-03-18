@@ -373,6 +373,24 @@ export class StoreMemoryLance extends MemoryStorage {
 
       const whereClause = conditions.join(' AND ');
 
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
+      // When perPage is 0, we only need included messages — skip COUNT and data queries
+      if (perPage === 0 && include && include.length > 0) {
+        const includedMessages = await this._getIncludedMessages(table, include);
+        const list = new MessageList().add(includedMessages, 'memory');
+        return {
+          messages: this._sortMessages(list.get.all.db(), field, direction),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       // Get total count
       const total = await table.countRows(whereClause);
 
@@ -414,25 +432,7 @@ export class StoreMemoryLance extends MemoryStorage {
       // Step 2: Add included messages with context (if any), excluding duplicates
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        // Get all unique thread IDs from include items
-        const threadIds = [...new Set(include.map(item => item.threadId || threadId))];
-
-        // Fetch all messages from all relevant threads
-        const allThreadMessages: any[] = [];
-        for (const tid of threadIds) {
-          const threadQuery = table.query().where(`thread_id = '${tid}'`);
-          let threadRecords = await threadQuery.toArray();
-          allThreadMessages.push(...threadRecords);
-        }
-
-        // Sort all messages by createdAt
-        allThreadMessages.sort((a, b) => a.createdAt - b.createdAt);
-
-        // Apply processMessagesWithContext to get included messages with context
-        const contextMessages = this.processMessagesWithContext(allThreadMessages, include);
-        const includedMessages = contextMessages.map((row: any) => this.normalizeMessage(row));
-
-        // Deduplicate: only add messages that aren't already in the paginated results
+        const includedMessages = await this._getIncludedMessages(table, include);
         for (const includeMsg of includedMessages) {
           if (!messageIds.has(includeMsg.id)) {
             messages.push(includeMsg);
@@ -446,20 +446,7 @@ export class StoreMemoryLance extends MemoryStorage {
       let finalMessages = list.get.all.db();
 
       // Sort all messages (paginated + included) for final output
-      finalMessages = finalMessages.sort((a, b) => {
-        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
-        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
-
-        // Handle null/undefined - treat as "smallest" values
-        if (aValue == null && bValue == null) return 0;
-        if (aValue == null) return direction === 'ASC' ? -1 : 1;
-        if (bValue == null) return direction === 'ASC' ? 1 : -1;
-
-        if (typeof aValue === 'string' && typeof bValue === 'string') {
-          return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
-        }
-        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-      });
+      finalMessages = this._sortMessages(finalMessages, field, direction);
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
@@ -686,6 +673,89 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    return messages.sort((a, b) => {
+      const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+      const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+
+      if (aValue == null && bValue == null) return 0;
+      if (aValue == null) return direction === 'ASC' ? -1 : 1;
+      if (bValue == null) return direction === 'ASC' ? 1 : -1;
+
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+      }
+      return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+    });
+  }
+
+  private async _getIncludedMessages(
+    table: any,
+    include: NonNullable<StorageListMessagesInput['include']>,
+  ): Promise<(MastraMessageV1 | MastraDBMessage)[]> {
+    if (include.length === 0) return [];
+
+    // Phase 1: Fetch target messages by ID to discover their thread_ids
+    const targetIds = include.map(item => item.id);
+    const idCondition =
+      targetIds.length === 1
+        ? `id = '${this.escapeSql(targetIds[0]!)}'`
+        : `id IN (${targetIds.map(id => `'${this.escapeSql(id)}'`).join(', ')})`;
+    const targetRecords = await table.query().where(idCondition).toArray();
+
+    const needsContext = include.some(item => item.withPreviousMessages || item.withNextMessages);
+
+    if (!needsContext) {
+      // No context needed — return only the target messages themselves
+      return targetRecords.map((row: any) => this.normalizeMessage(row));
+    }
+
+    // Phase 2: Fetch full threads for context windows (each unique thread loaded once)
+    const threadIdsToFetch = [...new Set<string>(targetRecords.map((r: any) => r.thread_id as string))];
+    const threadCache = new Map<string, any[]>();
+    for (const tid of threadIdsToFetch) {
+      const threadRecords = await table
+        .query()
+        .where(`thread_id = '${this.escapeSql(tid)}'`)
+        .toArray();
+      threadRecords.sort((a: any, b: any) => a.createdAt - b.createdAt);
+      threadCache.set(tid, threadRecords);
+    }
+
+    // Process context windows per-thread to avoid cross-thread contamination
+    const targetThreadMap = new Map<string, any>();
+    for (const r of targetRecords) {
+      targetThreadMap.set(r.id, r.thread_id);
+    }
+
+    // Group include items by thread
+    const includeByThread = new Map<string, typeof include>();
+    for (const item of include) {
+      const tid = targetThreadMap.get(item.id);
+      if (!tid) continue;
+      const items = includeByThread.get(tid) ?? [];
+      items.push(item);
+      includeByThread.set(tid, items);
+    }
+
+    // Process each thread separately, then combine
+    const seen = new Set<string>();
+    const allContextMessages: any[] = [];
+    for (const [tid, threadInclude] of includeByThread) {
+      const threadMessages = threadCache.get(tid) ?? [];
+      const contextMessages = this.processMessagesWithContext(threadMessages, threadInclude);
+      for (const msg of contextMessages) {
+        if (!seen.has(msg.id)) {
+          seen.add(msg.id);
+          allContextMessages.push(msg);
+        }
+      }
+    }
+
+    allContextMessages.sort((a, b) => a.createdAt - b.createdAt);
+    return allContextMessages.map((row: any) => this.normalizeMessage(row));
+  }
+
   /**
    * Processes messages to include context messages based on withPreviousMessages and withNextMessages
    * @param records - The sorted array of records to process
@@ -699,7 +769,9 @@ export class StoreMemoryLance extends MemoryStorage {
     const messagesWithContext = include.filter(item => item.withPreviousMessages || item.withNextMessages);
 
     if (messagesWithContext.length === 0) {
-      return records;
+      // No context requested — return only the target messages themselves
+      const targetIds = new Set(include.map(item => item.id));
+      return records.filter(record => targetIds.has(record.id));
     }
 
     // Create a map of message id to index in the sorted array for quick lookup
@@ -733,9 +805,10 @@ export class StoreMemoryLance extends MemoryStorage {
       }
     }
 
-    // If we need to include additional messages, create a new set of records
+    // If no additional context messages needed, return only the target messages
     if (additionalIndices.size === 0) {
-      return records;
+      const targetIds = new Set(include.map(item => item.id));
+      return records.filter(record => targetIds.has(record.id));
     }
 
     // Get IDs of the records that matched the original query

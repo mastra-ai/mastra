@@ -248,6 +248,10 @@ export class ExperimentsPG extends ExperimentsStorage {
         setClauses.push(`"failedCount" = $${paramIndex++}`);
         values.push(input.failedCount);
       }
+      if (input.totalItems !== undefined) {
+        setClauses.push(`"totalItems" = $${paramIndex++}`);
+        values.push(input.totalItems);
+      }
       if (input.skippedCount !== undefined) {
         setClauses.push(`"skippedCount" = $${paramIndex++}`);
         values.push(input.skippedCount);

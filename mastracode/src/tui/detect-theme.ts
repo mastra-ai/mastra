@@ -8,6 +8,7 @@
  * 4. Default: 'dark'
  */
 
+import { luminance } from './theme.js';
 import type { ThemeMode } from './theme.js';
 
 /**
@@ -22,7 +23,7 @@ import type { ThemeMode } from './theme.js';
  * We parse the rgb components, compute relative luminance (WCAG),
  * and classify as dark (luma < 0.5) or light (luma >= 0.5).
  */
-function queryTerminalBackground(timeoutMs = 200): Promise<ThemeMode | null> {
+function queryTerminalBackground(timeoutMs = 200): Promise<ThemeDetectionResult | null> {
   return new Promise(resolve => {
     // Can't query if stdin isn't a TTY
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
@@ -81,11 +82,15 @@ function queryTerminalBackground(timeoutMs = 200): Promise<ThemeMode | null> {
         const g = normalize(gHex);
         const b = normalize(bHex);
 
-        // WCAG relative luminance
-        const linearize = (c: number) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
-        const luma = 0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b);
+        // Convert to hex and compute WCAG relative luminance
+        const toHexByte = (v: number) =>
+          Math.round(v * 255)
+            .toString(16)
+            .padStart(2, '0');
+        const detectedBgHex = `#${toHexByte(r)}${toHexByte(g)}${toHexByte(b)}`;
+        const luma = luminance(detectedBgHex);
 
-        resolve(luma >= 0.5 ? 'light' : 'dark');
+        resolve({ mode: luma >= 0.5 ? 'light' : 'dark', detectedBgHex });
         return;
       }
     };
@@ -144,11 +149,17 @@ function detectFromColorFgBg(): ThemeMode | null {
  * Returns 'dark' or 'light'. Does not check persisted settings —
  * the caller should check settings first and only call this for 'auto' mode.
  */
-export async function detectTerminalTheme(): Promise<ThemeMode> {
+export interface ThemeDetectionResult {
+  mode: ThemeMode;
+  /** The actual terminal background hex color, if detected via OSC 11. */
+  detectedBgHex?: string;
+}
+
+export async function detectTerminalTheme(): Promise<ThemeDetectionResult> {
   // 1. Explicit env var override
   const envTheme = process.env.MASTRA_THEME?.toLowerCase();
-  if (envTheme === 'light') return 'light';
-  if (envTheme === 'dark') return 'dark';
+  if (envTheme === 'light') return { mode: 'light' };
+  if (envTheme === 'dark') return { mode: 'dark' };
 
   // 2. OSC 11 query — ask the terminal for its actual background color
   const oscResult = await queryTerminalBackground(200);
@@ -156,8 +167,8 @@ export async function detectTerminalTheme(): Promise<ThemeMode> {
 
   // 3. COLORFGBG env var fallback
   const fgbgResult = detectFromColorFgBg();
-  if (fgbgResult) return fgbgResult;
+  if (fgbgResult) return { mode: fgbgResult };
 
   // 4. Default to dark
-  return 'dark';
+  return { mode: 'dark' };
 }

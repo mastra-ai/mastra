@@ -381,12 +381,14 @@ const observationalMemoryConfigSchema = z.object({
  * MemoryConfig is complex with many optional fields - using passthrough
  */
 export const memoryConfigResponseSchema = z.object({
-  config: z.object({
-    lastMessages: z.union([z.number(), z.literal(false)]).optional(),
-    semanticRecall: z.union([z.boolean(), z.any()]).optional(),
-    workingMemory: z.any().optional(),
-    observationalMemory: observationalMemoryConfigSchema.optional(),
-  }),
+  config: z
+    .object({
+      lastMessages: z.union([z.number(), z.literal(false)]).optional(),
+      semanticRecall: z.union([z.boolean(), z.any()]).optional(),
+      workingMemory: z.any().optional(),
+      observationalMemory: observationalMemoryConfigSchema.optional(),
+    })
+    .nullable(),
 });
 
 /**

@@ -1,6 +1,6 @@
 /**
  * Test for GitHub issue #13642: Parallel interactive tool calls (ask_user,
- * request_sandbox_access) should all be answerable, not just the most recent.
+ * request_access) should all be answerable, not just the most recent.
  *
  * Root cause: state.activeInlineQuestion is a single property that gets
  * overwritten when multiple ask_question events arrive concurrently.
@@ -61,6 +61,7 @@ function createMockContext(state: TUIState): EventHandlerContext {
     addUserMessage: vi.fn(),
     addChildBeforeFollowUps: vi.fn(),
     fireMessage: vi.fn(),
+    queueFollowUpMessage: vi.fn(),
     renderExistingMessages: vi.fn(),
     renderCompletedTasksInline: vi.fn(),
     renderClearedTasksInline: vi.fn(),

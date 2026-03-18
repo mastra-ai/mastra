@@ -59,8 +59,8 @@ async function demoFilesystem() {
 
   // List directory
   section('List Directory');
-  console.log('Listing /skills:');
-  const entries = await fs.readdir('/skills');
+  console.log('Listing skills:');
+  const entries = await fs.readdir('skills');
   for (const entry of entries) {
     const icon = entry.type === 'directory' ? '📁' : '📄';
     console.log(`  ${icon} ${entry.name}`);
@@ -69,7 +69,7 @@ async function demoFilesystem() {
 
   // Check existence
   section('Check Existence');
-  const paths = ['/skills', '/package.json', '/nonexistent'];
+  const paths = ['skills', 'package.json', 'nonexistent'];
   for (const path of paths) {
     const exists = await fs.exists(path);
     console.log(`  ${path}: ${exists ? '✓ exists' : '✗ not found'}`);
@@ -78,7 +78,7 @@ async function demoFilesystem() {
 
   // Read file
   section('Read File');
-  const content = await fs.readFile('/package.json');
+  const content = await fs.readFile('package.json');
   const pkg = JSON.parse(content.toString());
   console.log(`  Name: ${pkg.name}`);
   console.log(`  Description: ${pkg.description?.slice(0, 50)}...`);
@@ -86,7 +86,7 @@ async function demoFilesystem() {
 
   // Write/delete file
   section('Write and Delete');
-  const testFile = '/.demo-test.txt';
+  const testFile = '.demo-test.txt';
   await fs.writeFile(testFile, `Test: ${new Date().toISOString()}`);
   console.log(`  ✓ Wrote ${testFile}`);
   await fs.deleteFile(testFile);
@@ -138,26 +138,13 @@ async function demoSkills() {
   }
   console.log();
 
-  // CRUD
-  section('Skill CRUD');
-  const testName = 'demo-test-skill';
-  try {
-    const created = await globalWorkspace.skills?.create({
-      metadata: { name: testName, description: 'Demo test skill' },
-      instructions: 'Test instructions.',
-    });
-    console.log(`  ✓ Created: ${created?.name}`);
-
-    const updated = await globalWorkspace.skills?.update(testName, {
-      metadata: { description: 'Updated description' },
-    });
-    console.log(`  ✓ Updated: ${updated?.description}`);
-
-    await globalWorkspace.skills?.delete(testName);
-    console.log(`  ✓ Deleted`);
-  } catch (error) {
-    console.log(`  Error: ${(error as Error).message}`);
-  }
+  // Cache operations
+  section('Skill Cache');
+  const before = await globalWorkspace.skills?.list();
+  console.log(`  Skills before refresh: ${before?.length || 0}`);
+  await globalWorkspace.skills?.refresh();
+  const after = await globalWorkspace.skills?.list();
+  console.log(`  Skills after refresh: ${after?.length || 0}`);
 }
 
 // =============================================================================
@@ -189,8 +176,8 @@ async function demoWorkspace() {
   // Search API
   if (globalWorkspace.canBM25) {
     section('Search API (BM25)');
-    await globalWorkspace.index('/demo/ts.txt', 'TypeScript is a typed superset of JavaScript.');
-    await globalWorkspace.index('/demo/node.txt', 'Node.js is a JavaScript runtime.');
+    await globalWorkspace.index('demo/ts.txt', 'TypeScript is a typed superset of JavaScript.');
+    await globalWorkspace.index('demo/node.txt', 'Node.js is a JavaScript runtime.');
     console.log('  Indexed 2 documents');
 
     const results = await globalWorkspace.search('JavaScript', { topK: 2 });
@@ -254,7 +241,7 @@ async function demoSafety() {
   await readonlyWorkspace.init();
   console.log('  readonlyWorkspace.filesystem.readOnly: true');
   try {
-    await readonlyWorkspace.filesystem?.writeFile('/test.txt', 'test');
+    await readonlyWorkspace.filesystem?.writeFile('test.txt', 'test');
     console.log('  ERROR: Write should have failed!');
   } catch (error) {
     console.log(`  ✓ Write blocked: ${(error as Error).message.slice(0, 50)}...`);
@@ -278,16 +265,10 @@ async function demoSafety() {
   console.log();
 
   // Try to create skill in readonly source
-  console.log('  Testing CRUD on read-only skill source:');
-  try {
-    await skillsOnlyWorkspace.skills?.create({
-      metadata: { name: 'test', description: 'test' },
-      instructions: 'test',
-    });
-    console.log('  ERROR: Create should have failed!');
-  } catch (error) {
-    console.log(`  ✓ Create blocked: ${(error as Error).message.slice(0, 50)}...`);
-  }
+  // Skills-only workspace has no filesystem or sandbox — only skills
+  console.log('  Testing skill access:');
+  const skill = await skillsOnlyWorkspace.skills?.get('code-review');
+  console.log(`  ✓ Can read skill: ${skill?.name || 'not found'}`);
 }
 
 // =============================================================================

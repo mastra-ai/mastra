@@ -1,0 +1,35 @@
+You're at the point where the theme park agent can already pull park IDs and live wait times, but it's missing key planning info that isn't available in the QTimes JSON API. In this lesson, you'll extend the agent with an external tool source so it can answer questions like park hours and crowd forecasts.
+
+You'll connect the agent to an MCP server, bring in web extraction tooling, and make those tools available alongside your existing local tools. Then you'll update the agent's guidance so it knows when to look up a park ID first and when to fetch structured details from a park's web page.
+
+This matters because real-world assistants rarely get everything from a single API. By combining live API data with structured extraction from web pages—and adding a weather input when it's relevant—you turn the agent into something that can reliably fill information gaps without building one-off scrapers.
+
+> "Tool access alone doesn't guarantee the right behavior—you have to teach the agent when to use the tool, and why."
+>
+> — Guil Hernandez
+
+## Mentioned in the lesson
+
+Code:
+
+- [Course GitHub repo](https://github.com/mastra-ai/mastra-agent-course)
+
+Relevant Mastra docs:
+
+- [MCP Overview](/docs/mcp/overview)
+- [Using Tools](/docs/agents/using-tools)
+- [MCPClient](/reference/tools/mcp-client)
+- [Agent.listTools()](/reference/agents/listTools)
+
+## Join the community
+
+Ask questions:
+
+- [Discord](https://discord.gg/mastra) — chat with other learners and the Mastra team
+- [Guil on LinkedIn](https://www.linkedin.com/in/guiljh/) — ask him questions directly
+
+Follow Mastra:
+
+- [X](https://x.com/mastra) — follow Mastra for updates
+- [YouTube](https://www.youtube.com/@mastra-ai) — watch more tutorials
+- [LinkedIn](https://www.linkedin.com/company/mastra-ai) — follow for updates

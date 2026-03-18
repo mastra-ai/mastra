@@ -60,6 +60,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     const updated: Experiment = {
       ...existing,
       status: input.status ?? existing.status,
+      totalItems: input.totalItems ?? existing.totalItems,
       succeededCount: input.succeededCount ?? existing.succeededCount,
       failedCount: input.failedCount ?? existing.failedCount,
       skippedCount: input.skippedCount ?? existing.skippedCount,

@@ -642,6 +642,45 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         expect((resultError as any).requestId).toBe(testErrorRequestId);
       });
 
+      it('should throw APICallError in generate when model throws rate limit error', async () => {
+        const rateLimitError = new APICallError({
+          message: 'Rate limit exceeded',
+          url: 'https://api.example.com/v1/chat/completions',
+          requestBodyValues: {},
+          statusCode: 429,
+          isRetryable: true,
+          responseBody: 'Rate limit exceeded',
+        });
+
+        const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw rateLimitError;
+          },
+          doStream: async () => {
+            throw rateLimitError;
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-rate-limit-generate',
+          name: 'Test Rate Limit Generate',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let caughtError: Error | null = null;
+        try {
+          await agent.generate('Hello', { modelSettings: { maxRetries: 0 } });
+        } catch (err: any) {
+          caughtError = err;
+        }
+
+        expect(caughtError).toBeDefined();
+        expect(caughtError).toBeInstanceOf(APICallError);
+        expect(caughtError!.message).toBe('Rate limit exceeded');
+        expect((caughtError as InstanceType<typeof APICallError>).statusCode).toBe(429);
+      });
+
       it('should throw correct error in generate when model throws', async () => {
         const errorModel = new MockLanguageModelV2({
           doGenerate: async () => {
@@ -784,6 +823,301 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         expect(onErrorCalled).toBe(true);
         expect(onErrorArg).toBeInstanceOf(Error);
         expect((onErrorArg as unknown as Error).message).toMatch(/Model stream failed/i);
+      });
+
+      describe('error chunk with non-error finishReason', () => {
+        // Tests for the bug where error chunks are emitted mid-stream but the finish chunk
+        // has a non-'error' finishReason. Previously, generate() only threw when
+        // `finishReason === 'error' && error`, silently swallowing errors in this case.
+        const finishReasons = ['stop', 'length', 'content-filter', 'tool-calls', 'other', 'unknown'] as const;
+
+        for (const reason of finishReasons) {
+          it(`should throw in generate when error chunk is present but finishReason is '${reason}'`, async () => {
+            const streamError = new Error(`Stream error with finishReason '${reason}'`);
+
+            const errorModel = new MockLanguageModelV2({
+              doGenerate: async () => {
+                throw streamError;
+              },
+              doStream: async () => ({
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  {
+                    type: 'response-metadata',
+                    id: 'id-0',
+                    modelId: 'mock-model-id',
+                    timestamp: new Date(0),
+                  },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'partial response' },
+                  { type: 'text-end', id: 'text-1' },
+                  { type: 'error', error: streamError },
+                  {
+                    type: 'finish',
+                    finishReason: reason,
+                    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                  },
+                ]),
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                warnings: [],
+              }),
+            });
+
+            const agent = new Agent({
+              id: `test-error-finish-reason-${reason}`,
+              name: `Test Error FinishReason ${reason}`,
+              model: errorModel,
+              instructions: 'You are a helpful assistant.',
+            });
+
+            await expect(agent.generate('Hello', { modelSettings: { maxRetries: 0 } })).rejects.toThrow();
+          });
+        }
+
+        it('should expose error in stream output when error chunk has non-error finishReason', async () => {
+          const streamError = new Error('Mid-stream error with stop finish');
+
+          const errorModel = new MockLanguageModelV2({
+            doGenerate: async () => {
+              throw streamError;
+            },
+            doStream: async () => ({
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'partial' },
+                { type: 'text-end', id: 'text-1' },
+                { type: 'error', error: streamError },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            }),
+          });
+
+          const agent = new Agent({
+            id: 'test-error-stream-non-error-finish',
+            name: 'Test Error Stream NonError Finish',
+            model: errorModel,
+            instructions: 'You are a helpful assistant.',
+          });
+
+          const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+
+          let errorChunk: any;
+          for await (const chunk of output.fullStream) {
+            if (chunk.type === 'error') {
+              errorChunk = chunk;
+            }
+          }
+
+          expect(errorChunk).toBeDefined();
+          expect(errorChunk.payload.error).toBeInstanceOf(Error);
+          expect((errorChunk.payload.error as Error).message).toBe('Mid-stream error with stop finish');
+          expect(output.error).toBeInstanceOf(Error);
+          expect((output.error as Error).message).toBe('Mid-stream error with stop finish');
+        });
+
+        it('should call onError in generate when error chunk has non-error finishReason', async () => {
+          const streamError = new Error('Error with stop finish');
+
+          const errorModel = new MockLanguageModelV2({
+            doGenerate: async () => {
+              throw streamError;
+            },
+            doStream: async () => ({
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'error', error: streamError },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                },
+              ]),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            }),
+          });
+
+          const agent = new Agent({
+            id: 'test-onerror-non-error-finish',
+            name: 'Test OnError NonError Finish',
+            model: errorModel,
+            instructions: 'You are a helpful assistant.',
+          });
+
+          let onErrorCalled = false;
+          let onErrorArg: any = null;
+
+          try {
+            await agent.generate('Hello', {
+              onError: ({ error }) => {
+                onErrorCalled = true;
+                onErrorArg = error;
+              },
+              modelSettings: { maxRetries: 0 },
+            });
+          } catch {
+            // Expected to throw
+          }
+
+          expect(onErrorCalled).toBe(true);
+          expect(onErrorArg).toBeInstanceOf(Error);
+          expect((onErrorArg as Error).message).toBe('Error with stop finish');
+        });
+
+        // The error-chunk-with-mismatched-finishReason scenario requires bypassing the
+        // AISDKV5LanguageModel wrapper (which converts doGenerate results via
+        // createStreamFromGenerateResult and never inserts error chunks). We subclass
+        // AISDKV5LanguageModel so the model passes the instanceof check in resolveModel
+        // (avoiding re-wrapping), then override doGenerate to return a raw stream containing
+        // an error chunk with finishReason 'stop' — the exact scenario this fix addresses.
+        it('should throw in resumeGenerate when error chunk has non-error finishReason', async () => {
+          const { Mastra } = await import('../../mastra');
+          const { InMemoryStore } = await import('../../storage');
+          const { AISDKV5LanguageModel } = await import('../../llm/model/aisdk/v5/model');
+
+          const streamError = new Error('Resume model error with stop finish');
+          let generateCallCount = 0;
+
+          const suspendingTool = createTool({
+            id: 'suspend-tool',
+            description: 'A tool that suspends',
+            inputSchema: z.object({ input: z.string() }),
+            suspendSchema: z.object({ message: z.string() }),
+            resumeSchema: z.object({ data: z.string() }),
+            execute: async (_input, context) => {
+              if (!context?.agent?.resumeData) {
+                return await context?.agent?.suspend({ message: 'Need input' });
+              }
+              return { result: context.agent.resumeData.data };
+            },
+          });
+
+          const baseModel = new MockLanguageModelV2();
+
+          // Subclass to bypass resolveModel's instanceof check and return raw streams
+          class TestModel extends AISDKV5LanguageModel {
+            override async doGenerate(): Promise<any> {
+              generateCallCount++;
+              if (generateCallCount === 1) {
+                // First call: trigger tool suspension
+                return {
+                  stream: convertArrayToReadableStream([
+                    { type: 'stream-start' as const, warnings: [] },
+                    {
+                      type: 'response-metadata' as const,
+                      id: 'resp-1',
+                      modelId: 'mock-model-id',
+                      timestamp: new Date(0),
+                    },
+                    {
+                      type: 'tool-input-start' as const,
+                      id: 'tc-1',
+                      toolName: 'suspendTool',
+                    },
+                    {
+                      type: 'tool-input-delta' as const,
+                      id: 'tc-1',
+                      delta: '{"input": "test"}',
+                    },
+                    {
+                      type: 'tool-input-end' as const,
+                      id: 'tc-1',
+                    },
+                    {
+                      type: 'tool-call' as const,
+                      toolCallId: 'tc-1',
+                      toolName: 'suspendTool',
+                      input: '{"input": "test"}',
+                    },
+                    {
+                      type: 'finish' as const,
+                      finishReason: 'tool-calls' as const,
+                      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                    },
+                  ]),
+                  warnings: [],
+                  request: {},
+                  rawResponse: {},
+                };
+              }
+              // Second call (after resume): error chunk with non-error finishReason
+              return {
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start' as const, warnings: [] },
+                  {
+                    type: 'response-metadata' as const,
+                    id: 'resp-2',
+                    modelId: 'mock-model-id',
+                    timestamp: new Date(0),
+                  },
+                  { type: 'error' as const, error: streamError },
+                  {
+                    type: 'finish' as const,
+                    finishReason: 'stop' as const,
+                    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                  },
+                ]),
+                warnings: [],
+                request: {},
+                rawResponse: {},
+              };
+            }
+          }
+
+          const model = new TestModel(baseModel);
+          const storage = new InMemoryStore();
+
+          const agent = new Agent({
+            id: 'test-resume-error',
+            name: 'Test Resume Error',
+            model: model as any,
+            instructions: 'You are a helpful assistant.',
+            tools: { suspendTool: suspendingTool },
+          });
+
+          const mastra = new Mastra({
+            agents: { testResumeError: agent },
+            storage,
+            logger: false,
+          });
+
+          const registeredAgent = mastra.getAgent('testResumeError');
+
+          // First call suspends
+          const output = await registeredAgent.generate('test', {
+            maxSteps: 2,
+            modelSettings: { maxRetries: 0 },
+          });
+
+          expect(output.finishReason).toBe('suspended');
+
+          // Resume should throw because stream has error chunk despite finishReason 'stop'
+          await expect(
+            registeredAgent.resumeGenerate(
+              { data: 'resumed' },
+              { runId: output.runId!, modelSettings: { maxRetries: 0 } },
+            ),
+          ).rejects.toThrow();
+        });
       });
 
       // Helper to create a model that calls a tool which will throw during execution
@@ -1193,3 +1527,137 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
 saveAndErrorTests('v1');
 saveAndErrorTests('v2');
+
+/**
+ * Regression test for https://github.com/mastra-ai/mastra/issues/13984
+ *
+ * savePerStep: true does not actually persist messages to storage during step execution.
+ * It only accumulates messages in the in-memory MessageList via saveStepMessages(),
+ * which calls messageList.add() but never calls saveQueueManager.flushMessages().
+ *
+ * The actual persistence only happens in executeOnFinish, which is gated by
+ * !abortSignal.aborted. This means if the stream is aborted mid-generation,
+ * executeOnFinish is skipped and NO messages are persisted — including the user's
+ * original message.
+ */
+describe('savePerStep should persist messages during step execution (issue #13984)', () => {
+  it('should persist messages from completed steps when stream is aborted', async () => {
+    let doStreamCallCount = 0;
+
+    // Model that produces a tool call on first invocation, then text on second
+    const toolCallModel = new MockLanguageModelV2({
+      doStream: async () => {
+        doStreamCallCount++;
+        if (doStreamCallCount === 1) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: 'echo-tool',
+                input: '{"input": "hello"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Response after tool' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+
+    const mockMemory = new MockMemory();
+    const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
+
+    const echoTool = createTool({
+      id: 'echo-tool',
+      description: 'Echoes the input',
+      inputSchema: z.object({ input: z.string() }),
+      execute: async input => ({ output: input.input }),
+    });
+
+    const agent = new Agent({
+      id: 'save-per-step-abort-agent',
+      name: 'Save Per Step Abort Test',
+      instructions: 'test',
+      model: toolCallModel,
+      memory: mockMemory,
+      tools: { 'echo-tool': echoTool },
+    });
+
+    const abortController = new AbortController();
+    let stepFinishCount = 0;
+
+    const result = await agent.stream('test message', {
+      memory: {
+        thread: 'thread-save-per-step-abort',
+        resource: 'resource-save-per-step-abort',
+      },
+      savePerStep: true,
+      abortSignal: abortController.signal,
+      onStepFinish: async () => {
+        stepFinishCount++;
+        if (stepFinishCount === 1) {
+          // Abort after the first step completes (simulating page refresh).
+          // At this point savePerStep should have already persisted the user message
+          // and the first step's response to storage.
+          abortController.abort();
+        }
+      },
+    });
+
+    // Consume the stream (may throw due to abort)
+    try {
+      for await (const _chunk of result.fullStream) {
+        // consume
+      }
+    } catch {
+      // Expected: stream may error on abort
+    }
+
+    // Wait a tick for any async persistence to complete
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // The first step completed and onStepFinish fired with savePerStep: true.
+    // The abort signal then fired, causing executeOnFinish to be skipped.
+    //
+    // BUG: saveMessages should have been called at least once during step execution
+    // to persist the user message and/or the first step's response messages.
+    // Currently, onStepFinish only calls messageList.add() via saveStepMessages()
+    // but never calls saveQueueManager.flushMessages(), so nothing is persisted.
+    // executeOnFinish (the only persistence path) is gated by !abortSignal.aborted.
+    expect(stepFinishCount).toBeGreaterThanOrEqual(1);
+    expect(saveMessagesSpy).toHaveBeenCalled();
+
+    // Verify the persisted messages include the user's original message
+    const recalled = await mockMemory.recall({
+      threadId: 'thread-save-per-step-abort',
+      resourceId: 'resource-save-per-step-abort',
+    });
+    expect(recalled.messages.length).toBeGreaterThan(0);
+    expect(recalled.messages.some(m => m.role === 'user')).toBe(true);
+  });
+});

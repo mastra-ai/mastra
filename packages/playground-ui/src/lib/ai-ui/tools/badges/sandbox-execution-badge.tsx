@@ -217,9 +217,11 @@ export const SandboxExecutionBadge = ({
   // Combine streaming output into a single string
   const streamingContent = sandboxChunks.map(chunk => chunk.data?.output || '').join('');
 
-  // While running, show live streaming output.
-  // Once the tool completes, show the final result — it's what the LLM saw.
-  const outputContent = typeof result === 'string' ? result : streamingContent;
+  // During a live session, prefer the full streaming output the user watched build up.
+  // After hydration from storage (no streaming chunks available), fall back to the
+  // truncated tool result. With transient stdout/stderr chunks, streaming data won't
+  // survive a page refresh, so the result is the only option on reload.
+  const outputContent = streamingContent || (typeof result === 'string' ? result : '');
 
   const displayName =
     toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND

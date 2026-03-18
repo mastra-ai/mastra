@@ -70,6 +70,8 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   description?: string;
   /** Arbitrary metadata for the experiment */
   metadata?: Record<string, unknown>;
+  /** Global request context passed to agent.generate() for all items */
+  requestContext?: Record<string, unknown>;
 }
 
 /**

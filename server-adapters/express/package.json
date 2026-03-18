@@ -1,6 +1,6 @@
 {
   "name": "@mastra/express",
-  "version": "1.1.7",
+  "version": "1.2.5",
   "description": "Mastra Express adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -30,33 +30,33 @@
     "@mastra/server": "workspace:*"
   },
   "devDependencies": {
+    "@ai-sdk/openai": "^2.0.99",
     "@internal/lint": "workspace:*",
     "@internal/server-adapter-test-utils": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/evals": "workspace:*",
     "@mastra/libsql": "workspace:*",
-    "@mastra/observability": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@types/node": "^20.19.30",
-    "eslint": "^9.37.0",
+    "@mastra/observability": "workspace:*",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "22.19.15",
+    "@types/swagger-ui-express": "^4.1.8",
+    "cors": "^2.8.6",
+    "eslint": "^9.39.4",
+    "express": "^5.2.1",
+    "swagger-ui-express": "^5.0.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "@internal/types-builder": "workspace:*",
-    "express": "^5.1.0",
-    "@types/express": "^5.0.5",
-    "@types/cors": "^2.8.19",
-    "cors": "^2.8.6",
-    "@ai-sdk/openai": "^2.0.62",
-    "zod": "^3.25.0",
-    "swagger-ui-express": "^5.0.1",
-    "@types/swagger-ui-express": "^4.1.8"
+    "zod": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0",
-    "express": "^5.1.0",
-    "@types/express": "^5.0.5"
+    "@types/express": "^5.0.5",
+    "express": "^5.1.0"
   },
   "engines": {
     "node": ">=22.13.0"

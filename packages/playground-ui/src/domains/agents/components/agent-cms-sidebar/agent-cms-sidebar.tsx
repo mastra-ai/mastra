@@ -8,7 +8,7 @@ import { ScrollArea } from '@/ds/components/ScrollArea';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { Txt } from '@/ds/components/Txt';
 import { useSidebarDescriptions } from './use-sidebar-descriptions';
-import { AGENT_CMS_SECTIONS } from './agent-cms-sections';
+import { AGENT_CMS_SECTIONS, CODE_AGENT_OVERRIDE_SECTIONS } from './agent-cms-sections';
 import { isActive } from './agent-cms-is-active';
 
 interface AgentCmsSidebarProps {
@@ -18,21 +18,22 @@ interface AgentCmsSidebarProps {
 }
 
 export function AgentCmsSidebar({ basePath, currentPath, versionId }: AgentCmsSidebarProps) {
-  const { form } = useAgentEditFormContext();
+  const { form, isCodeAgentOverride } = useAgentEditFormContext();
   const descriptions = useSidebarDescriptions(form.control);
+  const sections = isCodeAgentOverride ? CODE_AGENT_OVERRIDE_SECTIONS : AGENT_CMS_SECTIONS;
 
   return (
     <div className="h-full flex flex-col">
       <ScrollArea className="flex-1 min-h-0">
         <nav className="py-4">
           <ul className="flex flex-col gap-0">
-            {AGENT_CMS_SECTIONS.map((section, index) => (
+            {sections.map((section, index) => (
               <SidebarLink
                 key={section.descriptionKey}
                 index={index}
                 name={section.name}
                 pathSuffix={section.pathSuffix}
-                isLast={index === AGENT_CMS_SECTIONS.length - 1}
+                isLast={index === sections.length - 1}
                 basePath={basePath}
                 active={isActive(basePath, currentPath, section.pathSuffix)}
                 description={descriptions[section.descriptionKey].description}

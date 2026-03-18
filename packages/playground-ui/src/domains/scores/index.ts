@@ -1,5 +1,6 @@
 export * from './components/scores-list';
 export * from './components/score-dialog';
+export * from './components/score-as-item-dialog';
 export * from './components/scores-tools';
 export * from './components/scorer-combobox';
 export * from './components/scorers-table/scorers-table';

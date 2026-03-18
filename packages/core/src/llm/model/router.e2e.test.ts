@@ -1,6 +1,15 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
+import { afterAll, beforeAll, describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent/index.js';
+
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['openai', 'anthropic', 'google', 'openrouter']);
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 // Test configuration for different providers
 const testConfigs = [

@@ -9,8 +9,11 @@ import {
   tryStreamWithJsonFallback,
   isSupportedLanguageModel,
 } from '@mastra/core/agent';
+import { toStandardSchema } from '@mastra/core/schema';
+import type { FullOutput } from '@mastra/core/stream';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { z } from 'zod';
 import { AgentBuilder } from '../..';
 import { AgentBuilderDefaults } from '../../defaults';
@@ -241,17 +244,23 @@ Return the actual exported names of the units, as well as the file names.`,
         other: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
       });
 
-      const result = isSupported
-        ? await tryGenerateWithJsonFallback(agent, prompt, {
-            structuredOutput: {
-              schema: output,
-            },
-            maxSteps: 100,
-          })
-        : await agent.generateLegacy(prompt, {
-            experimental_output: output,
-            maxSteps: 100,
-          });
+      let result: FullOutput<z.infer<typeof output>>;
+      if (isSupported) {
+        result = await tryGenerateWithJsonFallback(agent, prompt, {
+          structuredOutput: {
+            schema: output,
+          },
+          maxSteps: 100,
+        });
+      } else {
+        const standardSchema = toStandardSchema(output);
+        const jsonSchema = standardSchemaToJSONSchema(standardSchema);
+
+        result = (await agent.generateLegacy(prompt, {
+          experimental_output: jsonSchema,
+          maxSteps: 100,
+        })) as unknown as FullOutput<z.infer<typeof output>>;
+      }
 
       const template = result.object ?? {};
 
@@ -1177,6 +1186,7 @@ Start by listing your tasks and work through them systematically!
       // Process tasks systematically
       const resolvedModel = await agentBuilder.getModel();
       const isSupported = isSupportedLanguageModel(resolvedModel);
+
       const result = isSupported ? await agentBuilder.stream(prompt) : await agentBuilder.streamLegacy(prompt);
 
       // Extract actual conflict resolution details from agent execution
@@ -1462,7 +1472,7 @@ Previous iterations may have fixed some issues, so start by re-running validateC
               },
             })
           : await validationAgent.streamLegacy(iterationPrompt, {
-              experimental_output: output,
+              experimental_output: output as any,
             });
 
         let iterationErrors = 0;

@@ -45,6 +45,7 @@
               "status": "success"
             },
             "metadata": {
+              "runId": "<runId-1>",
               "customValue": "tacos",
               "stepType": "metadata-test",
               "executionTime": "<date>"

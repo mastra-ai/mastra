@@ -72,7 +72,7 @@ function AdmonitionContent({ children }: Pick<Props, 'children'>) {
 export default function AdmonitionLayout(props: Props): ReactNode {
   const { type, icon, children, title } = props
   return (
-    <AdmonitionContainer type={type} className={cn('', classes[type])}>
+    <AdmonitionContainer type={type} className={cn('admonition-container', classes[type])}>
       {icon ? <AdmonitionIconType title={title} type={type} /> : null}
       <AdmonitionContent>{children}</AdmonitionContent>
     </AdmonitionContainer>
