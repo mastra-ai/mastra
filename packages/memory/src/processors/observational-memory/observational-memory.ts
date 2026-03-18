@@ -28,6 +28,7 @@ import {
 } from './markers';
 import { findLastCompletedObservationBoundary, getUnobservedParts, getBufferedChunks } from './message-utils';
 import { ObservationStrategy } from './observation-strategies/index';
+import { ObservationTurn } from './observation-turn/index';
 
 import {
   buildObserverSystemPrompt,
@@ -984,7 +985,7 @@ export class ObservationalMemory {
    *
    * @param messages - Messages to seal (mutated in place)
    */
-  sealMessagesForBuffering(messages: MastraDBMessage[]): void {
+  private sealMessagesForBuffering(messages: MastraDBMessage[]): void {
     const sealedAt = Date.now();
 
     for (const msg of messages) {
@@ -1056,7 +1057,7 @@ export class ObservationalMemory {
    * This handles the case where a single message accumulates many parts
    * (like tool calls) during an agentic loop - we only observe the new parts.
    */
-  getUnobservedMessages(
+  private getUnobservedMessages(
     allMessages: MastraDBMessage[],
     record: ObservationalMemoryRecord,
     opts?: { excludeBuffered?: boolean },
@@ -2758,7 +2759,7 @@ ${formattedMessages}
    * integrations. The processor may still pass sealedIds/state so marker/fallback cleanup
    * can persist messages safely, but callers that do not need that bookkeeping can omit it.
    */
-  async cleanupMessages(opts: {
+  private async cleanupMessages(opts: {
     threadId: string;
     resourceId?: string;
     messages: MessageList | MastraDBMessage[];
@@ -2879,7 +2880,7 @@ ${formattedMessages}
    * Clears the lastBufferedBoundary, buffering flag, and optionally cleans up
    * static maps for activated message IDs.
    */
-  async resetBufferingState(opts: {
+  private async resetBufferingState(opts: {
     threadId: string;
     resourceId?: string;
     recordId: string;
@@ -2949,7 +2950,7 @@ ${formattedMessages}
    * Lists all threads for the resource, filters to unobserved messages,
    * and formats them as context blocks.
    */
-  async getOtherThreadsContext(resourceId: string, currentThreadId: string): Promise<string | undefined> {
+  private async getOtherThreadsContext(resourceId: string, currentThreadId: string): Promise<string | undefined> {
     const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId } });
     const messagesByThread = new Map<string, MastraDBMessage[]>();
 
@@ -3291,7 +3292,7 @@ ${formattedMessages}
    * }
    * ```
    */
-  async buffer(opts: {
+  private async buffer(opts: {
     threadId: string;
     resourceId?: string;
     messages?: MastraDBMessage[];
@@ -3496,7 +3497,7 @@ ${formattedMessages}
    * }
    * ```
    */
-  async activate(opts: {
+  private async activate(opts: {
     threadId: string;
     resourceId?: string;
     /** When true, skip activation if pending tokens are below the observation threshold. */
@@ -3827,5 +3828,29 @@ ${formattedMessages}
    */
   getReflectionConfig(): ResolvedReflectionConfig {
     return this.reflectionConfig;
+  }
+
+  /**
+   * Begin a new observation turn — the high-level API for managing the
+   * observe/buffer/activate/reflect lifecycle across agentic loop steps.
+   *
+   * @example
+   * ```ts
+   * const turn = om.beginTurn({ threadId, resourceId, messageList });
+   * await turn.start(memory);
+   *
+   * const step0 = turn.step(0);
+   * const ctx = await step0.prepare();
+   * // ... agent generates ...
+   *
+   * await turn.end();
+   * ```
+   */
+  beginTurn(opts: {
+    threadId: string;
+    resourceId?: string;
+    messageList: MessageList;
+  }): ObservationTurn {
+    return new ObservationTurn(this, opts.threadId, opts.resourceId, opts.messageList);
   }
 }

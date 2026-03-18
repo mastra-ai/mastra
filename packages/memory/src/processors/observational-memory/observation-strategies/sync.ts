@@ -46,7 +46,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
     if (bufferActivation && bufferActivation < 1 && messages.length >= 1) {
       const newestMsg = messages[messages.length - 1];
       if (newestMsg?.content?.parts?.length) {
-        this.om.sealMessagesForBuffering([newestMsg]);
+        (this.om as any).sealMessagesForBuffering([newestMsg]);
         omDebug(
           `[OM:sync-obs] sealed newest message (${newestMsg.role}, ${newestMsg.content.parts.length} parts) for ratio-aware observation`,
         );
