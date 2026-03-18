@@ -4,7 +4,6 @@
  *
  * Also includes pure helper functions for content partitioning.
  */
-import { Text } from '@mariozechner/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 
 import { AssistantMessageComponent } from '../components/assistant-message.js';
@@ -116,7 +115,6 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
       if (!state.seenToolCallIds.has(content.id)) {
         state.seenToolCallIds.add(content.id);
 
-        ctx.addChildBeforeFollowUps(new Text('', 0, 0));
         const component = new ToolExecutionComponentEnhanced(
           content.name,
           content.args,

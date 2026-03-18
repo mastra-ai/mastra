@@ -1,5 +1,17 @@
 # @mastra/schema-compat
 
+## 1.2.5
+
+### Patch Changes
+
+- Added ZodIntersection support so that MCP tools using allOf in their JSON Schema no longer throw 'does not support zod type: ZodIntersection'. Intersection types are flattened and merged into a single object schema across all provider compatibility layers (Anthropic, Google, OpenAI, OpenAI Reasoning, DeepSeek, Meta). ([#14255](https://github.com/mastra-ai/mastra/pull/14255))
+
+## 1.2.5-alpha.0
+
+### Patch Changes
+
+- Added ZodIntersection support so that MCP tools using allOf in their JSON Schema no longer throw 'does not support zod type: ZodIntersection'. Intersection types are flattened and merged into a single object schema across all provider compatibility layers (Anthropic, Google, OpenAI, OpenAI Reasoning, DeepSeek, Meta). ([#14255](https://github.com/mastra-ai/mastra/pull/14255))
+
 ## 1.2.4
 
 ### Patch Changes
