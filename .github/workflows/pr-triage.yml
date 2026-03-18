@@ -59,13 +59,13 @@ jobs:
               }
               throw error;
             }
-  coderabbit-comment:
+  comment:
     needs: check-permission
     if: needs.check-permission.outputs.authorized == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Add CodeRabbit comment
+      - name: Add comment
         uses: mshick/add-pr-comment@v2
         with:
           issue: ${{ github.event.pull_request.number }}
@@ -73,6 +73,8 @@ jobs:
           repo-token: ${{ steps.app_token.outputs.token }}
           message: |
             Thank you for your contribution!
+
+            Please ensure that your PR fixes an existing issue and that you have linked it in the description (e.g. with `Fixes #1234`).
 
             We use CodeRabbit for automated code reviews. Please address all feedback from CodeRabbit by either making changes to your PR or leaving a comment explaining why you disagree with the feedback. Since CodeRabbit is an AI, it may occasionally provide incorrect feedback.
 
