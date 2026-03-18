@@ -751,7 +751,14 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax Coding Plan (minimaxi.com)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+      "models": [
+        "MiniMax-M2",
+        "MiniMax-M2.1",
+        "MiniMax-M2.5",
+        "MiniMax-M2.5-highspeed",
+        "MiniMax-M2.7",
+        "MiniMax-M2.7-highspeed"
+      ],
       "docUrl": "https://platform.minimaxi.com/docs/coding-plan/intro",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -880,6 +887,8 @@
         "gpt-5.3-codex",
         "gpt-5.3-codex-spark",
         "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.4-nano",
         "gpt-5.4-pro",
         "kimi-k2.5",
         "mimo-v2-flash-free",
@@ -1043,7 +1052,14 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax (minimaxi.com)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+      "models": [
+        "MiniMax-M2",
+        "MiniMax-M2.1",
+        "MiniMax-M2.5",
+        "MiniMax-M2.5-highspeed",
+        "MiniMax-M2.7",
+        "MiniMax-M2.7-highspeed"
+      ],
       "docUrl": "https://platform.minimaxi.com/docs/guides/quickstart",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -1267,7 +1283,14 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax Coding Plan (minimax.io)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+      "models": [
+        "MiniMax-M2",
+        "MiniMax-M2.1",
+        "MiniMax-M2.5",
+        "MiniMax-M2.5-highspeed",
+        "MiniMax-M2.7",
+        "MiniMax-M2.7-highspeed"
+      ],
       "docUrl": "https://platform.minimax.io/docs/coding-plan/intro",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -2779,7 +2802,14 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax (minimax.io)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+      "models": [
+        "MiniMax-M2",
+        "MiniMax-M2.1",
+        "MiniMax-M2.5",
+        "MiniMax-M2.5-highspeed",
+        "MiniMax-M2.7",
+        "MiniMax-M2.7-highspeed"
+      ],
       "docUrl": "https://platform.minimax.io/docs/guides/quickstart",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -4763,7 +4793,14 @@
       "zai-org/GLM-4.5-Air",
       "zai-org/GLM-4.5-FP8"
     ],
-    "minimax-cn-coding-plan": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+    "minimax-cn-coding-plan": [
+      "MiniMax-M2",
+      "MiniMax-M2.1",
+      "MiniMax-M2.5",
+      "MiniMax-M2.5-highspeed",
+      "MiniMax-M2.7",
+      "MiniMax-M2.7-highspeed"
+    ],
     "novita-ai": [
       "baichuan/baichuan-m2-32b",
       "baidu/ernie-4.5-21B-a3b",
@@ -4875,6 +4912,8 @@
       "gpt-5.3-codex",
       "gpt-5.3-codex-spark",
       "gpt-5.4",
+      "gpt-5.4-mini",
+      "gpt-5.4-nano",
       "gpt-5.4-pro",
       "kimi-k2.5",
       "mimo-v2-flash-free",
@@ -5014,7 +5053,14 @@
       "qwen3-max-2026-01-23",
       "qwen3.5-plus"
     ],
-    "minimax-cn": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+    "minimax-cn": [
+      "MiniMax-M2",
+      "MiniMax-M2.1",
+      "MiniMax-M2.5",
+      "MiniMax-M2.5-highspeed",
+      "MiniMax-M2.7",
+      "MiniMax-M2.7-highspeed"
+    ],
     "bailing": ["Ling-1T", "Ring-1T"],
     "alibaba": [
       "qvq-max",
@@ -5181,7 +5227,14 @@
       "qwen3-max-2026-01-23",
       "qwen3.5-plus"
     ],
-    "minimax-coding-plan": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+    "minimax-coding-plan": [
+      "MiniMax-M2",
+      "MiniMax-M2.1",
+      "MiniMax-M2.5",
+      "MiniMax-M2.5-highspeed",
+      "MiniMax-M2.7",
+      "MiniMax-M2.7-highspeed"
+    ],
     "kimi-for-coding": ["k2p5", "kimi-k2-thinking"],
     "mistral": [
       "codestral-latest",
@@ -6382,7 +6435,14 @@
     ],
     "moark": ["GLM-4.7", "MiniMax-M2.1"],
     "morph": ["auto", "morph-v3-fast", "morph-v3-large"],
-    "minimax": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+    "minimax": [
+      "MiniMax-M2",
+      "MiniMax-M2.1",
+      "MiniMax-M2.5",
+      "MiniMax-M2.5-highspeed",
+      "MiniMax-M2.7",
+      "MiniMax-M2.7-highspeed"
+    ],
     "vultr": [
       "DeepSeek-R1-Distill-Llama-70B",
       "DeepSeek-R1-Distill-Qwen-32B",

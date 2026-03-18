@@ -1,5 +1,54 @@
 # mastracode
 
+## 0.9.0
+
+### Minor Changes
+
+- Improved MCP server management with interactive `/mcp` selector UI. ([#14377](https://github.com/mastra-ai/mastra/pull/14377))
+  - **Fixed stderr flooding** — MCP child process debug output no longer corrupts the terminal. Server stderr is piped and buffered instead of inherited.
+  - **Fixed console.info race condition** — MCP status messages now display properly in the chat area instead of racing with TUI rendering.
+  - **Better error detection** — Failed MCP servers now correctly show as failed instead of showing as connected with 0 tools.
+  - **Interactive `/mcp` command** — Replaces text-only output with a navigable overlay (↑↓ to select, Enter for actions, Esc to close). Sub-menus offer View tools, View error, View logs, and Reconnect per server.
+  - **Per-server reconnect** — Reconnect individual servers from the `/mcp` selector without restarting all connections.
+  - **Live status polling** — The `/mcp` selector auto-refreshes while servers are still connecting.
+  - **Connecting state** — Servers show as 'connecting...' during initial startup, visible via `/mcp`.
+
+  **Example**
+
+  ```text
+  /mcp
+  ```
+
+- Added adaptive light and dark terminal themes with WCAG-compliant contrast. Editor input, messages, tool output, and interactive components now automatically adjust colors and borders for readability across terminal backgrounds. ([#14337](https://github.com/mastra-ai/mastra/pull/14337))
+
+- Added interactive API key prompt when selecting a model without a configured key. When you choose a model from the model selector that lacks an API key, Mastra Code now displays a dialog to enter the key. The key is stored persistently in auth.json and loaded into the environment on subsequent startups. Environment variables always take priority over stored keys. Press Escape to dismiss the prompt and keep the previous behavior. ([#13573](https://github.com/mastra-ai/mastra/pull/13573))
+
+### Patch Changes
+
+- Improved Mastra Code terminal queueing and slash-command behavior while the agent is busy. ([#14250](https://github.com/mastra-ai/mastra/pull/14250))
+  - Press `Enter` to send a message normally, or queue a follow-up while the current run is still streaming.
+  - Queued follow-up messages and slash commands now drain in the same FIFO order they were entered.
+  - Custom slash commands use `//command` so they stay distinct from built-in `/command` entries, including when names overlap.
+  - Slash-command autocomplete now defaults to the first visible matching entry instead of jumping to a later custom command match.
+  - `/help` and related shortcut text now reflect the updated behavior.
+
+- Fix rendering corruption in some terminal emulators by replacing the per-character gradient animation on the editor input border with a solid mode-color border. ([#14359](https://github.com/mastra-ai/mastra/pull/14359))
+
+- Updated dependencies [[`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`bbcbbce`](https://github.com/mastra-ai/mastra/commit/bbcbbce4f0e268053cbb11ca58350f5ceba15498), [`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`085e371`](https://github.com/mastra-ai/mastra/commit/085e3718a7d0fe9a210fe7dd1c867b9bdfe8d16b), [`b77aa19`](https://github.com/mastra-ai/mastra/commit/b77aa1981361c021f2c881bee8f0c703687f00da), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8b4ce84`](https://github.com/mastra-ai/mastra/commit/8b4ce84aed0808b9805cc4fd7147c1f8a2ef7a36), [`8d4cfe6`](https://github.com/mastra-ai/mastra/commit/8d4cfe6b9a7157d3876206227ec9f04cde6dbc4a), [`247c353`](https://github.com/mastra-ai/mastra/commit/247c3531fa01d1af1014843729f0fba7d3acc953), [`dd6ca1c`](https://github.com/mastra-ai/mastra/commit/dd6ca1cdea3b8b6182f4cf61df41070ba0cc0deb), [`ce26fe2`](https://github.com/mastra-ai/mastra/commit/ce26fe2166dd90254f8bee5776e55977143e97de), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`b92d0c9`](https://github.com/mastra-ai/mastra/commit/b92d0c92ecc833bec9a99af98b3243839c1661be), [`4cb4edf`](https://github.com/mastra-ai/mastra/commit/4cb4edf3c909d197ec356c1790d13270514ffef6), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`133ef20`](https://github.com/mastra-ai/mastra/commit/133ef20c39c696eb0dbbee26e77c8acfec14b8c6), [`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e)]:
+  - @mastra/core@1.14.0
+  - @mastra/mcp@1.3.0
+  - @mastra/pg@1.8.1
+  - @mastra/libsql@1.7.1
+  - @mastra/memory@1.8.3
+
+## 0.9.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`8b4ce84`](https://github.com/mastra-ai/mastra/commit/8b4ce84aed0808b9805cc4fd7147c1f8a2ef7a36), [`8d4cfe6`](https://github.com/mastra-ai/mastra/commit/8d4cfe6b9a7157d3876206227ec9f04cde6dbc4a), [`247c353`](https://github.com/mastra-ai/mastra/commit/247c3531fa01d1af1014843729f0fba7d3acc953), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a)]:
+  - @mastra/core@1.14.0-alpha.3
+  - @mastra/memory@1.8.3-alpha.2
+
 ## 0.9.0-alpha.2
 
 ### Minor Changes
