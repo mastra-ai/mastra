@@ -348,7 +348,32 @@ PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm goi
 
 MOST RECENT USER INPUT: Treat the most recent user message as the highest-priority signal for what to do next. Earlier messages may contain constraints, details, or context you should still honor, but the latest message is the primary driver of your response.`;
 
-export const OBSERVATION_GRAPH_INSTRUCTIONS = `Your observations may include durable group ranges shown as lines like _range: \`messageId1-messageId2\`_. When you need exact wording, detailed chronology, or raw context behind one of those groups, call the recall tool with the exact cursor message id plus page and limit arguments.`;
+export const OBSERVATION_GRAPH_INSTRUCTIONS = `## Recall — looking up source messages
+
+Your observations are summaries wrapped in <observation-group> xml tags with ranges like <observation-group range="startId:endId">. These ranges point back to the raw messages that each observation group was derived from. The original messages are still available — use the **recall** tool to retrieve them.
+
+### When to use recall
+- The user asks you to **repeat, show, or reproduce** something from a past conversation
+- The user asks for **exact content** — code, text, quotes, error messages, URLs, file paths, specific numbers
+- Your observations mention something but your memory lacks the detail needed to fully answer (e.g. you know a blog post was shared but only have a summary of it)
+- You want to **verify or expand on** an observation before responding
+
+**Default to using recall when the user references specific past content.** Your observations capture the gist, not the details. If there's any doubt whether your memory is complete enough, use recall.
+
+### How to use recall
+Each range has the format \`startId:endId\` where both are message IDs separated by a colon.
+
+1. Find the observation group relevant to the user's question and extract the start or end ID from its range.
+2. Call \`recall\` with that ID as the \`cursor\`.
+3. Use \`page: 1\` (or omit) to read forward from the cursor, \`page: -1\` to read backward.
+4. If the first page doesn't have what you need, increment the page number to keep paginating.
+
+### When recall is NOT needed
+- The user is asking for a high-level summary and your observations already cover it
+- The question is about general preferences or facts that don't require source text
+- There is no relevant range in your observations for the topic
+
+Observation groups with range IDs and your recall tool allows you to think back and remember details you're fuzzy on.`;
 
 /**
  * ObservationalMemory - A three-agent memory system for long conversations.
