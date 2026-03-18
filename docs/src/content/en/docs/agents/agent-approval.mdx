@@ -1,5 +1,5 @@
 ---
-title: "Agent Approval | Agents"
+title: "Agent approval | Agents"
 description: Learn how to require approvals, suspend tool execution, and automatically resume suspended tools while keeping humans in control of agent workflows.
 packages:
   - "@mastra/core"
@@ -101,7 +101,7 @@ const handleDecline = async () => {
 }
 ```
 
-## Tool approval with generate()
+## Tool approval with `generate()`
 
 Tool approval also works with the `generate()` method for non-streaming use cases. When a tool requires approval during a `generate()` call, the method returns immediately instead of executing the tool.
 
@@ -287,7 +287,7 @@ const agent = new Agent({
   id: 'my-agent',
   name: 'My Agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
   tools: { weatherTool },
   memory: new Memory(),
   defaultOptions: {
@@ -349,7 +349,7 @@ const agent = new Agent({
   id: 'my-agent',
   name: 'My Agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
   tools: { weatherTool },
   memory: new Memory(),
   defaultOptions: {
@@ -452,7 +452,7 @@ const dataAgent = new Agent({
   id: 'data-agent',
   name: 'Data Agent',
   description: 'Handles database queries and user data retrieval',
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
   tools: { findUserTool },
 })
 
@@ -461,7 +461,7 @@ const supervisorAgent = new Agent({
   name: 'Supervisor Agent',
   instructions: `You coordinate data retrieval tasks.
     Delegate to data-agent for user lookups.`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   agents: { dataAgent },
   memory: new Memory(),
 })
@@ -514,7 +514,7 @@ for await (const chunk of stream.fullStream) {
 }
 ```
 
-### Using suspend() in supervisor pattern
+### Using `suspend()` in supervisor pattern
 
 Tools can also use [`suspend()`](#approval-using-suspend) to pause execution and return context to the user. This approach works through the supervisor delegation chain the same way `requireApproval` does — the suspension surfaces at the supervisor level:
 
@@ -563,7 +563,7 @@ for await (const chunk of stream.fullStream) {
 }
 ```
 
-### Tool approval with generate()
+### Tool approval with `generate()`
 
 Tool approval propagation also works with `generate()` in supervisor pattern:
 

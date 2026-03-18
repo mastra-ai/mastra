@@ -1,5 +1,5 @@
 ---
-title: "Speech-to-Speech Capabilities in Mastra | Voice"
+title: "Speech-to-Speech capabilities in Mastra | Voice"
 description: Overview of speech-to-speech capabilities in Mastra, including real-time interactions and event-driven architecture.
 packages:
   - "@mastra/core"
@@ -8,7 +8,7 @@ packages:
   - "@mastra/voice-openai-realtime"
 ---
 
-# Speech-to-Speech Capabilities in Mastra
+# Speech-to-Speech capabilities in Mastra
 
 ## Introduction
 
@@ -43,7 +43,7 @@ const agent = new Agent({
   id: 'agent',
   name: 'OpenAI Realtime Agent',
   instructions: `You are a helpful assistant with real-time voice capabilities.`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   voice: new OpenAIRealtimeVoice(),
 })
 
@@ -77,7 +77,7 @@ const agent = new Agent({
   name: 'Gemini Live Agent',
   instructions: 'You are a helpful assistant with real-time voice capabilities.',
   // Model used for text generation; voice provider handles realtime audio
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   voice: new GeminiLiveVoice({
     apiKey: process.env.GOOGLE_API_KEY,
     model: 'gemini-2.0-flash-exp',

@@ -108,8 +108,8 @@ export function SkillsPage() {
               descriptionSlot="Create a skill to give your agent specialized knowledge."
               actionSlot={
                 !readOnly ? (
-                  <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
-                    <Plus className="size-3" />
+                  <Button onClick={() => setDialogOpen(true)}>
+                    <Plus />
                     Add a skill
                   </Button>
                 ) : undefined

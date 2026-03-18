@@ -57,6 +57,8 @@ Running `mastra studio` as a long-running process is no different from running a
 
 Once Studio is connected to your Mastra server, it has full access to your agents, workflows, and tools. Be sure to secure it properly in production (e.g. behind authentication, VPN, etc.) to prevent unauthorized access.
 
+Visit the [Authentication](/docs/server/auth/) docs to learn more.
+
 :::
 
 ### Alongside your API
@@ -173,18 +175,21 @@ Follow the example below to create a SPA using Vite.
     MASTRA_STUDIO_BASE_PATH=
     MASTRA_TELEMETRY_DISABLED=true
     MASTRA_HIDE_CLOUD_CTA=false
+    MASTRA_TEMPLATES=false
     MASTRA_CLOUD_API_ENDPOINT=
     MASTRA_EXPERIMENTAL_FEATURES=false
     MASTRA_REQUEST_CONTEXT_PRESETS=
     ```
-  </StepItem>
 
-  <StepItem>
+    ````
+    </StepItem>
+
+    <StepItem>
     Run the build script to generate the static files in the `dist` folder:
 
     ```bash npm2yarn
     npm run build
-    ```
+    ````
   </StepItem>
 
   <StepItem>

@@ -162,6 +162,13 @@ const result = await run.start({
     description:
       'The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.',
   },
+  {
+    name: 'spanId',
+    type: 'string',
+    isOptional: true,
+    description:
+      'The root span ID associated with this execution when Tracing is enabled. Use this for span-level lookup and correlation.',
+  },
 ]}
 />
 

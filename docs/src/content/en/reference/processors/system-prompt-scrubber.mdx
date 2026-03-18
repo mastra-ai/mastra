@@ -1,5 +1,5 @@
 ---
-title: "Reference: System Prompt Scrubber | Processors"
+title: "Reference: SystemPromptScrubber | Processors"
 description: "Documentation for the SystemPromptScrubber in Mastra, which detects and redacts system prompts from AI responses."
 packages:
   - "@mastra/core"
@@ -134,7 +134,7 @@ import { BatchPartsProcessor, SystemPromptScrubber } from '@mastra/core/processo
 export const agent = new Agent({
   name: 'scrubbed-agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   outputProcessors: [
     // Batch stream parts first to reduce LLM calls
     new BatchPartsProcessor({

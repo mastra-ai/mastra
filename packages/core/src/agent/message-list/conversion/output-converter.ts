@@ -104,18 +104,15 @@ export function sanitizeV5UIMessages(
 
         if (!AIV5.isToolUIPart(p)) return true;
 
-        // When sending messages TO the LLM: only keep completed tool calls (output-available/output-error)
-        // This filters out input-available (incomplete client-side tool calls) and input-streaming
+        // When sending messages TO the LLM: keep completed tool calls and provider-executed tools.
+        // Filter out incomplete client-side tool calls (input-available without providerExecuted)
+        // and input-streaming states.
         if (filterIncompleteToolCalls) {
-          if (p.state === 'output-available' || p.state === 'output-error') {
-            // Strip completed provider-executed tools (e.g. Anthropic web_search). The provider
-            // already handled these internally — sending tool_result for server_tool_use is invalid.
-            if (p.providerExecuted) return false;
-            return true;
-          }
-          // Provider-executed tools (e.g. Anthropic web_search) remain in input-available state
-          // because no client-side result is added. Keep them so the provider API sees the
-          // server_tool_use block and can execute the deferred tool on the next request.
+          // Completed tools (client or provider) — keep them
+          if (p.state === 'output-available' || p.state === 'output-error') return true;
+          // Provider-executed tools may be deferred by the provider (e.g. Anthropic non-deterministically
+          // defers web_search when mixed with client tool calls). Keep these so the provider API sees
+          // the server_tool_use block on the next request.
           if (p.state === 'input-available' && p.providerExecuted) return true;
           return false;
         }
@@ -130,19 +127,36 @@ export function sanitizeV5UIMessages(
       const sanitized = {
         ...m,
         parts: safeParts.map(part => {
-          // When OpenAI reasoning was stripped, also clear providerMetadata.openai from
-          // remaining parts. Text parts carry msg_* itemIds that reference the stripped
-          // rs_* reasoning items — if retained, the SDK sends item_reference instead of
-          // inline content, and the API rejects the orphaned reference.
-          if (hasOpenAIReasoning && 'providerMetadata' in part && part.providerMetadata) {
-            const meta = part.providerMetadata as Record<string, unknown>;
-            if ('openai' in meta) {
-              const { openai: _, ...restMeta } = meta;
-              part = {
-                ...part,
-                providerMetadata:
-                  Object.keys(restMeta).length > 0 ? (restMeta as typeof part.providerMetadata) : undefined,
-              };
+          // When OpenAI reasoning was stripped, clear openai metadata from ALL remaining
+          // parts so the SDK sends inline content instead of item_reference. This covers:
+          //   - providerMetadata.openai on text/reasoning parts (msg_*/rs_* itemIds)
+          //   - callProviderMetadata.openai on tool parts (fc_* itemIds used by convertToModelMessages)
+          // Without paired reasoning items, OpenAI rejects orphaned item_references with:
+          //   "function_call was provided without its required reasoning item"
+          if (hasOpenAIReasoning) {
+            if ('providerMetadata' in part && part.providerMetadata) {
+              const meta = part.providerMetadata as Record<string, unknown>;
+              if ('openai' in meta) {
+                const { openai: _, ...restMeta } = meta;
+                part = {
+                  ...part,
+                  providerMetadata:
+                    Object.keys(restMeta).length > 0 ? (restMeta as typeof part.providerMetadata) : undefined,
+                };
+              }
+            }
+            if ('callProviderMetadata' in part && part.callProviderMetadata) {
+              const callMeta = part.callProviderMetadata as Record<string, unknown>;
+              if ('openai' in callMeta) {
+                const { openai: _, ...restCallMeta } = callMeta;
+                part = {
+                  ...part,
+                  callProviderMetadata:
+                    Object.keys(restCallMeta).length > 0
+                      ? (restCallMeta as typeof part.callProviderMetadata)
+                      : undefined,
+                } as typeof part;
+              }
             }
           }
 

@@ -1,5 +1,5 @@
 ---
-title: "Reference: Language Detector | Processors"
+title: "Reference: LanguageDetector | Processors"
 description: "Documentation for the LanguageDetector in Mastra, which detects language and can translate content in AI responses."
 packages:
   - "@mastra/core"
@@ -153,7 +153,7 @@ export const agent = new Agent({
   id: 'multilingual-agent',
   name: 'multilingual-agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   inputProcessors: [
     new LanguageDetector({
       model: 'openrouter/openai/gpt-oss-safeguard-20b',

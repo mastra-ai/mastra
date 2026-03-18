@@ -203,6 +203,65 @@ describe('recording file format', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
+  it('records and replays binary responses via artifact files', async () => {
+    const name = 'binary-response-artifact';
+    const filePath = path.join(tempDir, `${name}.json`);
+    const payload = new Uint8Array([82, 73, 70, 70, 0, 1, 2, 3]);
+
+    process.env.LLM_TEST_MODE = 'record';
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(payload, {
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'audio/wav' },
+      }),
+    );
+
+    const recorder = setupLLMRecording({
+      name,
+      recordingsDir: tempDir,
+      metaContext: { testFile: '/tmp/binary-response.test.ts', provider: 'openai', model: 'gpt-4o' },
+    });
+
+    recorder.start();
+    const liveResponse = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-4o', input: 'return audio bytes' }),
+    });
+    await recorder.save();
+    recorder.stop();
+
+    expect(fetchSpy).toHaveBeenCalled();
+    expect(new Uint8Array(await liveResponse.arrayBuffer())).toEqual(payload);
+
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(parsed.recordings[0].response.binaryArtifact).toBeDefined();
+    expect(parsed.recordings[0].response.body).toMatchObject({
+      __binary: true,
+      contentType: 'audio/wav',
+      size: payload.length,
+    });
+    const artifactPath = path.join(tempDir, parsed.recordings[0].response.binaryArtifact.path);
+    expect(fs.existsSync(artifactPath)).toBe(true);
+
+    process.env.LLM_TEST_MODE = 'replay';
+
+    const replayRecorder = setupLLMRecording({ name, recordingsDir: tempDir });
+    replayRecorder.start();
+    const replayResponse = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-4o', input: 'return audio bytes' }),
+    });
+    const replayBytes = new Uint8Array(await replayResponse.arrayBuffer());
+    replayRecorder.stop();
+
+    expect(replayResponse.headers.get('content-type')).toContain('audio/wav');
+    expect(replayBytes).toEqual(payload);
+  });
+
   it('loads legacy array recording format in replay mode', () => {
     const legacyName = 'legacy-array-format';
     const filePath = path.join(tempDir, `${legacyName}.json`);

@@ -1,42 +1,41 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
+import { PlusIcon, XIcon } from 'lucide-react';
 
-import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
-import { ToolsIcon } from '@/ds/icons';
-import { Section } from '@/ds/components/Section';
+import { DisplayConditionsDialog } from '@/domains/cms';
+import { Icon, ToolsIcon } from '@/ds/icons';
+import { Button } from '@/ds/components/Button';
 import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Section } from '@/ds/components/Section';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { IntegrationToolsSection } from '@/domains/tool-providers/components';
 import { MCPClientList } from '@/domains/mcps/components/mcp-client-list';
+import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
 import type { RuleGroup } from '@/lib/rule-engine';
+import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
+import { SubSectionRoot } from '@/ds/components/Section/section-root';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { SubSectionRoot } from '@/ds/components/Section/section-root';
-import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
 import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
-import { Switch } from '@/ds/components/Switch';
 import { cn } from '@/lib/utils';
-import { Searchbar } from '@/ds/components/Searchbar';
 
 export function ToolsPage() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;
-  const { data: tools, isLoading: isLoadingTools } = useTools();
-  const [search, setSearch] = useState('');
+  const { data: tools } = useTools();
   const selectedTools = useWatch({ control, name: 'tools' });
   const selectedIntegrationTools = useWatch({ control, name: 'integrationTools' });
   const variables = useWatch({ control, name: 'variables' });
 
   const options = useMemo(() => {
-    const opts: { value: string; label: string; description: string; start: React.ReactNode }[] = [];
+    const opts: { value: string; label: string; description: string }[] = [];
 
     if (tools) {
       for (const [id, tool] of Object.entries(tools)) {
         opts.push({
           value: id,
-          label: (tool as { name?: string }).name || id,
-          description: (tool as { description?: string }).description || '',
-          start: <ToolsIcon className="text-accent6 h-4 w-4" />,
+          label: id,
+          description: tool.description || '',
         });
       }
     }
@@ -45,7 +44,6 @@ export function ToolsPage() {
   }, [tools]);
 
   const selectedToolIds = Object.keys(selectedTools || {});
-  const totalCount = selectedToolIds.length + Object.keys(selectedIntegrationTools ?? {}).length;
 
   const getOriginalDescription = (id: string): string => {
     const option = options.find(opt => opt.value === id);
@@ -113,41 +111,46 @@ export function ToolsPage() {
     [form, selectedIntegrationTools],
   );
 
-  const filteredOptions = useMemo(() => {
-    return options.filter(option => option.label.toLowerCase().includes(search.toLowerCase()));
-  }, [options, search]);
-
   const selectedOptions = useMemo(() => {
     return options.filter(opt => selectedToolIds.includes(opt.value));
   }, [options, selectedToolIds]);
 
   const unselectedOptions = useMemo(() => {
-    return filteredOptions.filter(opt => !selectedToolIds.includes(opt.value));
-  }, [filteredOptions, selectedToolIds]);
+    return options.filter(opt => !selectedToolIds.includes(opt.value));
+  }, [options, selectedToolIds]);
 
-  const renderToolEntity = (tool: (typeof options)[number], isSelected: boolean) => {
-    const isDisabled = readOnly || !isSelected;
+  const handleAddTool = (toolId: string) => {
+    form.setValue(
+      'tools',
+      {
+        ...selectedTools,
+        [toolId]: { ...selectedTools?.[toolId], description: getOriginalDescription(toolId) },
+      },
+      { shouldDirty: true },
+    );
+  };
 
+  const renderToolEntity = (tool: (typeof options)[number]) => {
     return (
       <Entity key={tool.value} className="bg-surface2">
         <EntityContent>
-          <EntityName>{tool.label}</EntityName>
+          <EntityName className="!text-ui-md !leading-ui-md font-medium">{tool.label}</EntityName>
           <EntityDescription>
             <input
               type="text"
               aria-label={`Description for ${tool.label}`}
-              disabled={isDisabled}
+              disabled={readOnly}
               className={cn(
-                'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
-                !isDisabled && 'border-border1 border-dashed ',
+                'border border-transparent appearance-none block w-full text-neutral3 bg-transparent rounded px-1 -mx-1 transition-colors focus:outline focus:outline-1 focus:outline-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-white',
+                !readOnly && 'hover:bg-surface4 focus:bg-surface4',
               )}
-              value={isSelected ? (selectedTools?.[tool.value]?.description ?? tool.description) : tool.description}
+              value={selectedTools?.[tool.value]?.description ?? tool.description}
               onChange={e => handleDescriptionChange(tool.value, e.target.value)}
             />
           </EntityDescription>
         </EntityContent>
 
-        {isSelected && !readOnly && (
+        {!readOnly && (
           <DisplayConditionsDialog
             entityName={tool.label}
             schema={variables}
@@ -156,18 +159,60 @@ export function ToolsPage() {
           />
         )}
 
-        {!readOnly && <Switch checked={isSelected} onCheckedChange={() => handleValueChange(tool.value)} />}
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => handleValueChange(tool.value)}
+            className="text-neutral3 hover:text-neutral5 transition-colors rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
+            aria-label={`Remove ${tool.label}`}
+          >
+            <Icon size="sm">
+              <XIcon />
+            </Icon>
+          </button>
+        )}
       </Entity>
     );
   };
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6">
-        <SectionHeader
-          title="Tools"
-          subtitle={`Select the tools this agent can use.${totalCount > 0 ? ` (${totalCount} selected)` : ''}`}
-        />
+      <div className="flex flex-col gap-6 pt-4">
+        <SubSectionRoot>
+          <Section.Header>
+            <SubSectionHeader title="Tools" icon={<ToolsIcon />} />
+
+            {!readOnly && unselectedOptions.length > 0 && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="sm">
+                    <Icon size="sm">
+                      <PlusIcon />
+                    </Icon>
+                    Add Tools
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-80 p-0 pt-4 max-h-72 overflow-y-auto">
+                  {unselectedOptions.map(tool => (
+                    <button
+                      key={tool.value}
+                      type="button"
+                      onClick={() => handleAddTool(tool.value)}
+                      className="flex flex-col gap-0.5 w-full text-left px-3 py-2.5 hover:bg-white/10 focus:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-0"
+                    >
+                      <span className="text-ui-md font-normal text-neutral5">{tool.label}</span>
+                      {tool.description && <span className="text-ui-xs text-neutral3">{tool.description}</span>}
+                    </button>
+                  ))}
+                </PopoverContent>
+              </Popover>
+            )}
+          </Section.Header>
+
+          {selectedOptions.length > 0 && (
+            <div className="flex flex-col gap-1">{selectedOptions.map(tool => renderToolEntity(tool))}</div>
+          )}
+        </SubSectionRoot>
 
         <MCPClientList />
 
@@ -175,28 +220,6 @@ export function ToolsPage() {
           selectedToolIds={selectedIntegrationTools}
           onSubmitTools={readOnly ? undefined : handleIntegrationToolsSubmit}
         />
-
-        {selectedOptions.length > 0 && (
-          <SubSectionRoot>
-            <Section.Header>
-              <SubSectionHeader title="Configured Tools" icon={<ToolsIcon />} />
-            </Section.Header>
-
-            <div className="flex flex-col gap-1">{selectedOptions.map(tool => renderToolEntity(tool, true))}</div>
-          </SubSectionRoot>
-        )}
-
-        <SubSectionRoot>
-          <Section.Header>
-            <SubSectionHeader title="Available Tools" icon={<ToolsIcon />} />
-          </Section.Header>
-
-          <Searchbar onSearch={setSearch} label="Search tools" placeholder="Search tools" />
-
-          {unselectedOptions.length > 0 && (
-            <div className="flex flex-col gap-1">{unselectedOptions.map(tool => renderToolEntity(tool, false))}</div>
-          )}
-        </SubSectionRoot>
       </div>
     </ScrollArea>
   );
