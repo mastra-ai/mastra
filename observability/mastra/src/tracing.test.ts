@@ -1972,6 +1972,49 @@ describe('Tracing', () => {
 
       span.end();
     });
+
+    it('should handle plain object requestContext without crashing', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const plainObj = { userId: 'user-123', tenantId: 'tenant-456' };
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+        requestContext: plainObj as any,
+      });
+
+      expect(span.requestContext).toEqual({
+        userId: 'user-123',
+        tenantId: 'tenant-456',
+      });
+
+      span.end();
+    });
+
+    it('should handle empty plain object requestContext', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+        requestContext: {} as any,
+      });
+
+      expect(span.requestContext).toBeUndefined();
+
+      span.end();
+    });
   });
 
   describe('hideInput/hideOutput Support', () => {

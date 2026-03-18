@@ -569,12 +569,16 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   protected extractKeys(requestContext: RequestContext, keys: string[]): Record<string, any> {
     const result: Record<string, any> = {};
+    const getValue =
+      typeof requestContext.get === 'function'
+        ? (k: string) => requestContext.get(k)
+        : (k: string) => (requestContext as Record<string, any>)[k];
 
     for (const key of keys) {
       // Handle dot notation: get first part from RequestContext, then navigate nested properties
       const parts = key.split('.');
       const rootKey = parts[0]!; // parts[0] always exists since key is a non-empty string
-      const value = requestContext.get(rootKey);
+      const value = getValue(rootKey);
 
       if (value !== undefined) {
         // If there are nested parts, extract them from the value
