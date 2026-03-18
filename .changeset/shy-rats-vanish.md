@@ -1,97 +1,24 @@
 ---
 '@mastra/core': minor
-'@mastra/mcp-registry-registry': patch
-'@mastra/voice-google-gemini-live': patch
-'@mastra/otel-exporter': patch
-'@mastra/google-cloud-pubsub': patch
-'@mastra/otel-bridge': patch
-'@mastra/voice-openai-realtime': patch
-'@mastra/longmemeval': patch
-'@mastra/braintrust': patch
-'@mastra/mcp-docs-server': patch
-'@mastra/langsmith': patch
-'@mastra/express': patch
-'@mastra/fastify': patch
-'@mastra/langfuse': patch
-'@mastra/agent-builder': patch
-'create-mastra': patch
-'@mastra/playground-ui': patch
-'@mastra/schema-compat': patch
-'@mastra/client-js': patch
-'@mastra/opencode': patch
-'@mastra/datadog': patch
-'@mastra/laminar': patch
-'@mastra/posthog': patch
-'@mastra/deployer-cloudflare': patch
-'@mastra/observability': patch
-'@mastra/sentry': patch
-'@mastra/hono': patch
-'@mastra/cloudflare-d1': patch
-'@mastra/elasticsearch': patch
-'@mastra/arize': patch
-'@mastra/koa': patch
-'@mastra/fastembed': patch
-'@mastra/turbopuffer': patch
-'@mastra/agentfs': patch
-'@mastra/daytona': patch
-'@mastra/react': patch
-'@mastra/deployer-netlify': patch
-'@mastra/deployer': patch
-'@mastra/clickhouse': patch
-'@mastra/cloudflare': patch
-'@mastra/opensearch': patch
-'@mastra/inngest': patch
-'@mastra/blaxel': patch
-'@mastra/auth-better-auth': patch
-'@mastra/deployer-vercel': patch
-'@mastra/codemod': patch
-'@mastra/loggers': patch
-'@mastra/couchbase': patch
-'@mastra/s3vectors': patch
-'@mastra/vectorize': patch
-'@mastra/voice-cloudflare': patch
-'@mastra/voice-elevenlabs': patch
-'@mastra/deployer-cloud': patch
-'@mastra/memory': patch
 '@mastra/server': patch
-'@mastra/dynamodb': patch
-'@mastra/pinecone': patch
-'@mastra/voice-modelslab': patch
-'@mastra/voice-speechify': patch
-'@mastra/mongodb': patch
-'@mastra/upstash': patch
-'@mastra/voice-deepgram': patch
-'@mastra/e2b': patch
-'@mastra/gcs': patch
-'@mastra/auth-firebase': patch
-'@mastra/auth-supabase': patch
-'@mastra/auth': patch
-'@mastra/chroma': patch
-'@mastra/convex': patch
-'@mastra/duckdb': patch
-'@mastra/libsql': patch
-'@mastra/qdrant': patch
-'@mastra/s3': patch
-'mastra': patch
-'@mastra/mcp': patch
-'@mastra/rag': patch
-'@mastra/astra': patch
-'@mastra/lance': patch
-'@mastra/mssql': patch
-'@mastra/voice-gladia': patch
-'@mastra/voice-google': patch
-'@mastra/voice-openai': patch
-'@mastra/voice-playai': patch
-'@mastra/voice-sarvam': patch
-'@mastra/auth-studio': patch
-'@mastra/auth-workos': patch
-'@mastra/voice-azure': patch
-'@mastra/auth-auth0': patch
-'@mastra/auth-clerk': patch
-'@mastra/auth-cloud': patch
-'mastracode': patch
-'@mastra/voice-murf': patch
-'@mastra/pg': patch
+'@mastra/client-js': patch
+'@mastra/playground-ui': patch
 ---
 
-Use skill path as the unique identifier instead of name throughout workspace skills APIs. Skills are now keyed by filesystem path in `WorkspaceSkills`, preventing same-named skills from different directories from overwriting each other. `SkillMetadata` now includes `path`, server routes and schemas use `skillPath`, client SDK and Playground skill navigation use path-based identifiers, and agent skill tools now disambiguate duplicate names by prompting for the specific skill path when needed.
+Use skill path as the unique identifier instead of name throughout workspace skills APIs.
+
+**Breaking change:** `WorkspaceSkills` methods and server routes now use `skillPath` (the filesystem path) instead of `skillName` as the key for skill lookup.
+
+Before:
+```ts
+const skill = await workspaceSkills.get('my-skill');
+await client.searchSkills({ skillNames: ['my-skill'] });
+```
+
+After:
+```ts
+const skill = await workspaceSkills.get('/path/to/my-skill');
+await client.searchSkills({ skillPaths: ['/path/to/my-skill'] });
+```
+
+This prevents same-named skills from different directories from overwriting each other. `SkillMetadata` now includes a `path` field, and agent skill tools disambiguate duplicate names by prompting for the specific skill path when needed.

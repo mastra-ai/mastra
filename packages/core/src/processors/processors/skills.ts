@@ -127,7 +127,7 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
 
     // Get full skill objects to include source info (parallel fetch)
     const skillPromises = skillsList.map(meta => this.skills?.get(meta.path));
-    const fullSkills = (await Promise.all(skillPromises)).filter((s): s is Skill => s !== undefined);
+    const fullSkills = (await Promise.all(skillPromises)).filter((s): s is Skill => s !== undefined && s !== null);
 
     // Sort by name for deterministic output (avoids busting prompt cache)
     fullSkills.sort((a, b) => a.name.localeCompare(b.name));
