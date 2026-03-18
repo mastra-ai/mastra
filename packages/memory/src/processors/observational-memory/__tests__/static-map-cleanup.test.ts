@@ -7,9 +7,7 @@ const OM = ObservationalMemory as any;
 
 /**
  * Regression tests for OM static map cleanup.
- * Ensures that:
- *   1. cleanupStaticMaps uses the correct key for reflectionBufferCycleIds
- *   2. sealedMessageIds per-thread cap is enforced at the write site
+ * Ensures that cleanupStaticMaps uses the correct key for reflectionBufferCycleIds.
  */
 
 function clearAllStaticState(): void {
@@ -17,7 +15,6 @@ function clearAllStaticState(): void {
   OM.lastBufferedBoundary.clear();
   OM.lastBufferedAtTime.clear();
   OM.reflectionBufferCycleIds.clear();
-  OM.sealedMessageIds.clear();
 }
 
 describe('OM static map cleanup', () => {
@@ -38,7 +35,6 @@ describe('OM static map cleanup', () => {
       OM.asyncBufferingOps.set(obsBufKey, Promise.resolve());
       OM.asyncBufferingOps.set(reflBufKey, Promise.resolve());
       OM.reflectionBufferCycleIds.set(reflBufKey, 'cycle-abc');
-      OM.sealedMessageIds.set('thread-1', new Set(['msg-1', 'msg-2']));
 
       const fakeThis = {
         getLockKey: (_threadId: string, _resourceId?: string | null) => lockKey,
@@ -51,7 +47,6 @@ describe('OM static map cleanup', () => {
       ObservationalMemory.prototype['cleanupStaticMaps'].call(fakeThis, 'thread-1', null);
 
       // All entries should be removed
-      expect(OM.sealedMessageIds.has('thread-1')).toBe(false);
       expect(OM.lastBufferedAtTime.has(obsBufKey)).toBe(false);
       expect(OM.lastBufferedBoundary.has(obsBufKey)).toBe(false);
       expect(OM.lastBufferedBoundary.has(reflBufKey)).toBe(false);
@@ -61,10 +56,13 @@ describe('OM static map cleanup', () => {
       expect(OM.reflectionBufferCycleIds.has(reflBufKey)).toBe(false);
     });
 
-    it('partial cleanup removes only activated message IDs from sealedMessageIds', () => {
-      OM.sealedMessageIds.set('thread-1', new Set(['msg-1', 'msg-2', 'msg-3']));
-
+    it('partial cleanup is a no-op (sealed IDs are now flag-based)', () => {
       const lockKey = 'thread:thread-1';
+      const obsBufKey = `obs:${lockKey}`;
+
+      // Seed some state
+      OM.lastBufferedAtTime.set(obsBufKey, new Date());
+
       const fakeThis = {
         getLockKey: () => lockKey,
         getObservationBufferKey: (lk: string) => `obs:${lk}`,
@@ -72,30 +70,11 @@ describe('OM static map cleanup', () => {
         scope: 'thread',
       };
 
-      // Partial cleanup: pass activatedMessageIds
+      // Partial cleanup: pass activatedMessageIds — should not clear static maps
       ObservationalMemory.prototype['cleanupStaticMaps'].call(fakeThis, 'thread-1', null, ['msg-1', 'msg-3']);
 
-      // msg-2 should remain
-      const remaining = OM.sealedMessageIds.get('thread-1');
-      expect(remaining).toBeDefined();
-      expect(remaining.size).toBe(1);
-      expect(remaining.has('msg-2')).toBe(true);
-    });
-
-    it('partial cleanup deletes sealedMessageIds entry when all IDs are removed', () => {
-      OM.sealedMessageIds.set('thread-1', new Set(['msg-1']));
-
-      const lockKey = 'thread:thread-1';
-      const fakeThis = {
-        getLockKey: () => lockKey,
-        getObservationBufferKey: (lk: string) => `obs:${lk}`,
-        getReflectionBufferKey: (lk: string) => `refl:${lk}`,
-        scope: 'thread',
-      };
-
-      ObservationalMemory.prototype['cleanupStaticMaps'].call(fakeThis, 'thread-1', null, ['msg-1']);
-
-      expect(OM.sealedMessageIds.has('thread-1')).toBe(false);
+      // Static maps should be untouched (partial cleanup only affected sealedMessageIds, which is gone)
+      expect(OM.lastBufferedAtTime.has(obsBufKey)).toBe(true);
     });
   });
 });

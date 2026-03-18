@@ -184,3 +184,30 @@ export function getBufferedChunks(record: ObservationalMemoryRecord | null | und
   }
   return [];
 }
+
+/**
+ * Sort threads by their oldest unobserved message.
+ * Returns thread IDs in order from oldest to most recent.
+ */
+/**
+ * Combine active and buffered observations for the buffering observer context.
+ */
+export function combineObservationsForBuffering(
+  activeObservations: string | undefined,
+  bufferedObservations: string | undefined,
+): string | undefined {
+  if (!activeObservations && !bufferedObservations) return undefined;
+  if (!activeObservations) return bufferedObservations;
+  if (!bufferedObservations) return activeObservations;
+  return `${activeObservations}\n\n--- BUFFERED (pending activation) ---\n\n${bufferedObservations}`;
+}
+
+export function sortThreadsByOldestMessage(messagesByThread: Map<string, MastraDBMessage[]>): string[] {
+  return Array.from(messagesByThread.entries())
+    .map(([threadId, messages]) => ({
+      threadId,
+      oldestTimestamp: Math.min(...messages.map(m => (m.createdAt ? new Date(m.createdAt).getTime() : Date.now()))),
+    }))
+    .sort((a, b) => a.oldestTimestamp - b.oldestTimestamp)
+    .map(t => t.threadId);
+}

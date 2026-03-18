@@ -1370,26 +1370,26 @@ describe('token counting methods', () => {
     om = createOM(storage);
   });
 
-  it('countStringTokens should return a positive integer for non-empty strings', () => {
-    const count = om.countStringTokens('Hello, this is a test string for token counting.');
+  it('getTokenCounter should count tokens in strings', () => {
+    const count = om.getTokenCounter().countString('Hello, this is a test string for token counting.');
     expect(count).toBeGreaterThan(0);
     expect(Number.isInteger(count)).toBe(true);
   });
 
-  it('countStringTokens should return 0 for empty string', () => {
-    expect(om.countStringTokens('')).toBe(0);
+  it('getTokenCounter should return 0 for empty string', () => {
+    expect(om.getTokenCounter().countString('')).toBe(0);
   });
 
-  it('countMessageTokens should count tokens in messages', () => {
+  it('getTokenCounter should count tokens in messages', () => {
     const messages = [createTestMessage('Hello world', 'user'), createTestMessage('Hi there', 'assistant')];
-    const count = om.countMessageTokens(messages);
+    const count = om.getTokenCounter().countMessages(messages);
     expect(count).toBeGreaterThan(0);
   });
 
-  it('countMessageTokensAsync should return consistent results', async () => {
+  it('getTokenCounter async should return consistent results', async () => {
     const messages = [createTestMessage('Hello world', 'user')];
-    const sync = om.countMessageTokens(messages);
-    const asyncCount = await om.countMessageTokensAsync(messages);
+    const sync = om.getTokenCounter().countMessages(messages);
+    const asyncCount = await om.getTokenCounter().countMessagesAsync(messages);
 
     // Async may be slightly different due to image probing, but for text-only they should match
     expect(asyncCount).toBe(sync);
@@ -2051,7 +2051,7 @@ describe('getStatus', () => {
   });
 });
 
-describe('savePendingTokens', () => {
+describe('setPendingMessageTokens (via storage)', () => {
   let storage: InMemoryMemory;
   let om: ObservationalMemory;
   const threadId = 'pending-tokens-thread';
@@ -2063,7 +2063,7 @@ describe('savePendingTokens', () => {
 
   it('should persist pending token count to the record', async () => {
     const record = await om.getOrCreateRecord(threadId);
-    await om.savePendingTokens(record.id, 5000);
+    await om.getStorage().setPendingMessageTokens(record.id, 5000);
 
     const updated = (await om.getRecord(threadId))!;
     expect(updated.pendingMessageTokens).toBe(5000);
@@ -2071,8 +2071,8 @@ describe('savePendingTokens', () => {
 
   it('should update pending tokens on successive calls', async () => {
     const record = await om.getOrCreateRecord(threadId);
-    await om.savePendingTokens(record.id, 3000);
-    await om.savePendingTokens(record.id, 7000);
+    await om.getStorage().setPendingMessageTokens(record.id, 3000);
+    await om.getStorage().setPendingMessageTokens(record.id, 7000);
 
     const updated = (await om.getRecord(threadId))!;
     expect(updated.pendingMessageTokens).toBe(7000);
