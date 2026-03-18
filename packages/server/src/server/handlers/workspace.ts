@@ -1021,10 +1021,16 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Skill "${decodedSkillPath}" not found` });
       }
 
+      // Resolve the skill to get its name for the response
+      const skill = await skills.get(decodedSkillPath);
+      if (!skill) {
+        throw new HTTPException(404, { message: `Skill "${decodedSkillPath}" not found` });
+      }
+
       const references = await skills.listReferences(decodedSkillPath);
 
       return {
-        skillPath: decodedSkillPath,
+        skillName: skill.name,
         references,
       };
     } catch (error) {
@@ -1060,6 +1066,12 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
       // Refresh skills with request context (handles dynamic skill resolvers)
       await skills.maybeRefresh({ requestContext });
 
+      // Resolve skill to get its name for the response
+      const skill = await skills.get(decodedSkillPath);
+      if (!skill) {
+        throw new HTTPException(404, { message: `Skill "${decodedSkillPath}" not found` });
+      }
+
       // Decode the reference path (it may be URL encoded)
       const decodedPath = decodeURIComponent(referencePath);
 
@@ -1076,7 +1088,7 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
       }
 
       return {
-        skillPath: decodedSkillPath,
+        skillName: skill.name,
         referencePath: decodedPath,
         content,
       };
@@ -1096,7 +1108,7 @@ export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
   summary: 'Search skills',
   description: 'Searches across all skills content using BM25 keyword search',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, query, topK, minScore, skillPaths, includeReferences, workspaceId, requestContext }) => {
+  handler: async ({ mastra, query, topK, minScore, skillNames, includeReferences, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -1115,19 +1127,19 @@ export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
       // Refresh skills with request context (handles dynamic skill resolvers)
       await skills.maybeRefresh({ requestContext });
 
-      // Parse comma-separated skill paths if provided
-      const skillPathsList = skillPaths ? skillPaths.split(',').map((s: string) => s.trim()) : undefined;
+      // Parse comma-separated skill names if provided
+      const skillNamesList = skillNames ? skillNames.split(',').map((s: string) => s.trim()) : undefined;
 
       const results = await skills.search(query, {
         topK: topK || 5,
         minScore,
-        skillPaths: skillPathsList,
+        skillNames: skillNamesList,
         includeReferences: includeReferences ?? true,
       });
 
       return {
         results: results.map(r => ({
-          skillPath: r.skillPath,
+          skillName: r.skillName,
           source: r.source,
           content: r.content,
           score: r.score,

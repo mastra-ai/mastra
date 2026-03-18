@@ -178,8 +178,8 @@ export interface Skill extends SkillMetadata {
  * Search result when searching across skills
  */
 export interface SkillSearchResult extends BaseSearchResult {
-  /** Skill path (unique identifier) */
-  skillPath: string;
+  /** Skill name */
+  skillName: string;
   /** Source file (SKILL.md or reference path) */
   source: string;
 }
@@ -188,8 +188,8 @@ export interface SkillSearchResult extends BaseSearchResult {
  * Options for searching skills
  */
 export interface SkillSearchOptions extends BaseSearchOptions {
-  /** Only search within specific skill paths */
-  skillPaths?: string[];
+  /** Only search within specific skill names */
+  skillNames?: string[];
   /** Include reference files in search (default: true) */
   includeReferences?: boolean;
 }
@@ -215,8 +215,8 @@ export interface SkillSearchOptions extends BaseSearchOptions {
  * // List all skills
  * const skills = await workspace.skills.list();
  *
- * // Get a specific skill by path
- * const skill = await workspace.skills.get('skills/brand-guidelines');
+ * // Get a specific skill by name (or path for disambiguation)
+ * const skill = await workspace.skills.get('brand-guidelines');
  *
  * // Search skills
  * const results = await workspace.skills.search('color palette');
@@ -233,14 +233,16 @@ export interface WorkspaceSkills {
   list(): Promise<SkillMetadata[]>;
 
   /**
-   * Get a specific skill by path (full content)
+   * Get a specific skill by name (full content).
+   * Also accepts a skill path for disambiguation when multiple skills share the same name.
    */
-  get(skillPath: string): Promise<Skill | null>;
+  get(name: string): Promise<Skill | null>;
 
   /**
-   * Check if a skill exists by path
+   * Check if a skill exists by name.
+   * Also accepts a skill path for disambiguation.
    */
-  has(skillPath: string): Promise<boolean>;
+  has(name: string): Promise<boolean>;
 
   /**
    * Refresh skills from filesystem (re-scan skills)
@@ -278,17 +280,17 @@ export interface WorkspaceSkills {
   /**
    * Get reference file content from a skill
    */
-  getReference(skillPath: string, referencePath: string): Promise<string | null>;
+  getReference(skillName: string, referencePath: string): Promise<string | null>;
 
   /**
    * Get script file content from a skill
    */
-  getScript(skillPath: string, scriptPath: string): Promise<string | null>;
+  getScript(skillName: string, scriptPath: string): Promise<string | null>;
 
   /**
    * Get asset file content from a skill (returns Buffer for binary files)
    */
-  getAsset(skillPath: string, assetPath: string): Promise<Buffer | null>;
+  getAsset(skillName: string, assetPath: string): Promise<Buffer | null>;
 
   // ===========================================================================
   // Listing Accessors
@@ -297,17 +299,17 @@ export interface WorkspaceSkills {
   /**
    * Get all reference file paths for a skill
    */
-  listReferences(skillPath: string): Promise<string[]>;
+  listReferences(skillName: string): Promise<string[]>;
 
   /**
    * Get all script file paths for a skill
    */
-  listScripts(skillPath: string): Promise<string[]>;
+  listScripts(skillName: string): Promise<string[]>;
 
   /**
    * Get all asset file paths for a skill
    */
-  listAssets(skillPath: string): Promise<string[]>;
+  listAssets(skillName: string): Promise<string[]>;
 
   // ===========================================================================
   // Surgical Cache Updates
@@ -323,11 +325,11 @@ export interface WorkspaceSkills {
   addSkill?(skillPath: string): Promise<void>;
 
   /**
-   * Surgically remove a single skill from the cache by path.
+   * Surgically remove a single skill from the cache by name.
    * Removes the skill from the in-memory cache and search index,
    * and bumps the discovery timestamp so maybeRefresh() won't trigger a full scan.
    *
-   * @param skillPath - Path of the skill to remove
+   * @param skillName - Name of the skill to remove
    */
-  removeSkill?(skillPath: string): Promise<void>;
+  removeSkill?(skillName: string): Promise<void>;
 }

@@ -273,7 +273,7 @@ export const searchSkillsQuerySchema = z.object({
   query: z.string().describe('Search query text'),
   topK: z.coerce.number().optional().default(5).describe('Maximum number of results'),
   minScore: z.coerce.number().optional().describe('Minimum relevance score threshold'),
-  skillPaths: z.string().optional().describe('Comma-separated list of skill paths to search within'),
+  skillNames: z.string().optional().describe('Comma-separated list of skill names to search within'),
   includeReferences: z.coerce.boolean().optional().default(true).describe('Include reference files in search'),
 });
 
@@ -340,18 +340,18 @@ export const getAgentSkillResponseSchema = skillMetadataSchema.extend({
 });
 
 export const skillReferenceResponseSchema = z.object({
-  skillPath: z.string(),
+  skillName: z.string(),
   referencePath: z.string(),
   content: z.string(),
 });
 
 export const listReferencesResponseSchema = z.object({
-  skillPath: z.string(),
+  skillName: z.string(),
   references: z.array(z.string()),
 });
 
 export const skillSearchResultSchema = z.object({
-  skillPath: z.string(),
+  skillName: z.string(),
   source: z.string(),
   content: z.string(),
   score: z.number(),

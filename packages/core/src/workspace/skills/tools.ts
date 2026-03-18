@@ -41,34 +41,17 @@ export function createSkillTools(skills: WorkspaceSkills) {
 
 /**
  * Resolve a skill identifier (name or path) to a Skill.
- * If the identifier matches a path exactly, use it directly.
- * If it matches a single skill by name, use that.
- * If multiple skills share the same name, return a disambiguation message.
+ * The `skills.get()` method handles both name-based lookup (with tie-breaking)
+ * and path-based lookup (escape hatch for disambiguation).
  */
 async function resolveSkill(
   skills: WorkspaceSkills,
   identifier: string,
-): Promise<{ skill: Skill } | { disambiguation: string } | { notFound: string }> {
-  // Try exact path match first
-  const byPath = await skills.get(identifier);
-  if (byPath) return { skill: byPath };
+): Promise<{ skill: Skill } | { notFound: string }> {
+  const skill = await skills.get(identifier);
+  if (skill) return { skill };
 
-  // Fall back to name-based lookup
   const allSkills = await skills.list();
-  const matches = allSkills.filter(s => s.name === identifier);
-
-  if (matches.length === 1) {
-    const skill = await skills.get(matches[0]!.path);
-    if (skill) return { skill };
-  }
-
-  if (matches.length > 1) {
-    const listing = matches.map(s => `  - "${s.path}" (${s.name})`).join('\n');
-    return {
-      disambiguation: `Multiple skills named "${identifier}" found. Please call again with the specific path:\n${listing}`,
-    };
-  }
-
   const skillNames = allSkills.map(s => s.name);
   return { notFound: `Skill "${identifier}" not found. Available skills: ${skillNames.join(', ')}` };
 }
@@ -87,7 +70,6 @@ function createSkillTool(skills: WorkspaceSkills) {
       const result = await resolveSkill(skills, name);
 
       if ('notFound' in result) return result.notFound;
-      if ('disambiguation' in result) return result.disambiguation;
 
       const { skill } = result;
       const parts = [skill.instructions];
@@ -120,14 +102,7 @@ function createSkillSearchTool(skills: WorkspaceSkills) {
       topK: z.number().optional().describe('Maximum number of results to return (default: 5)'),
     }),
     execute: async ({ query, skillNames, topK }) => {
-      // Map skill names to paths for the search API
-      let skillPaths: string[] | undefined;
-      if (skillNames) {
-        const allSkills = await skills.list();
-        skillPaths = allSkills.filter(s => skillNames.includes(s.name)).map(s => s.path);
-      }
-
-      const results = await skills.search(query, { topK, skillPaths });
+      const results = await skills.search(query, { topK, skillNames });
 
       if (results.length === 0) {
         return 'No results found.';
@@ -137,7 +112,7 @@ function createSkillSearchTool(skills: WorkspaceSkills) {
         .map(r => {
           const preview = r.content.substring(0, 200) + (r.content.length > 200 ? '...' : '');
           const location = r.lineRange ? ` (lines ${r.lineRange.start}-${r.lineRange.end})` : '';
-          return `[${r.skillPath}]${location} (score: ${r.score.toFixed(2)})\n${preview}`;
+          return `[${r.skillName}]${location} (score: ${r.score.toFixed(2)})\n${preview}`;
         })
         .join('\n\n');
     },
@@ -168,23 +143,22 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         .describe('Ending line number (1-indexed, inclusive). If omitted, reads to the end.'),
     }),
     execute: async ({ skillName, path, startLine, endLine }) => {
-      // Resolve skill by name or path
+      // Resolve skill by name or path (get() handles both with tie-breaking)
       const resolved = await resolveSkill(skills, skillName);
       if ('notFound' in resolved) return resolved.notFound;
-      if ('disambiguation' in resolved) return resolved.disambiguation;
 
-      const resolvedPath = resolved.skill.path;
+      const resolvedName = resolved.skill.name;
 
-      // Try each reader — they all do the same thing (resolve path + readFile)
+      // Try each reader — they all do the same thing (resolve name + readFile)
       let content: string | Buffer | null = null;
-      content = await skills.getReference(resolvedPath, path);
-      if (content === null) content = await skills.getScript(resolvedPath, path);
-      if (content === null) content = await skills.getAsset(resolvedPath, path);
+      content = await skills.getReference(resolvedName, path);
+      if (content === null) content = await skills.getScript(resolvedName, path);
+      if (content === null) content = await skills.getAsset(resolvedName, path);
 
       if (content === null) {
-        const refs = (await skills.listReferences(resolvedPath)).map(f => `references/${f}`);
-        const scriptsList = (await skills.listScripts(resolvedPath)).map(f => `scripts/${f}`);
-        const assets = (await skills.listAssets(resolvedPath)).map(f => `assets/${f}`);
+        const refs = (await skills.listReferences(resolvedName)).map(f => `references/${f}`);
+        const scriptsList = (await skills.listScripts(resolvedName)).map(f => `scripts/${f}`);
+        const assets = (await skills.listAssets(resolvedName)).map(f => `assets/${f}`);
         const allFiles = [...refs, ...scriptsList, ...assets];
         const fileList = allFiles.length > 0 ? `\nAvailable files: ${allFiles.join(', ')}` : '';
         return `File "${path}" not found in skill "${skillName}".${fileList}`;
@@ -193,8 +167,7 @@ function createSkillReadTool(skills: WorkspaceSkills) {
       // Detect binary content — getReference/getScript may return binary as garbled utf-8 strings
       const textContent = typeof content === 'string' ? content : content.toString('utf-8');
       if (textContent.slice(0, 1000).includes('\0')) {
-        const skill = await skills.get(resolvedPath);
-        const fullPath = skill ? `${skill.path}/${path}` : path;
+        const fullPath = `${resolved.skill.path}/${path}`;
         const size = typeof content === 'string' ? Buffer.byteLength(content) : content.length;
         return `Binary file: ${fullPath} (${size} bytes)`;
       }

@@ -278,7 +278,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
           <div className="space-y-2">
             {results.map((result, index) => (
               <SkillSearchResultCard
-                key={`${result.skillPath}-${result.source}-${index}`}
+                key={`${result.skillName}-${result.source}-${index}`}
                 result={result}
                 onClick={() => onResultClick?.(result)}
               />
@@ -308,7 +308,7 @@ function SkillSearchResultCard({ result, onClick }: { result: SkillSearchResult;
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="font-medium text-neutral6">{result.skillPath}</span>
+            <span className="font-medium text-neutral6">{result.skillName}</span>
             <span className="text-xs text-neutral3">{result.source}</span>
             <span className="ml-auto text-xs text-neutral3">Score: {result.score.toFixed(3)}</span>
           </div>

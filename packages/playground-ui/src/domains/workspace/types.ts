@@ -194,7 +194,7 @@ export interface ListSkillsResponse {
 }
 
 export interface SkillSearchResult {
-  skillPath: string;
+  skillName: string;
   source: string;
   content: string;
   score: number;
@@ -214,12 +214,12 @@ export interface SearchSkillsResponse {
 }
 
 export interface ListReferencesResponse {
-  skillPath: string;
+  skillName: string;
   references: string[];
 }
 
 export interface GetReferenceResponse {
-  skillPath: string;
+  skillName: string;
   referencePath: string;
   content: string;
 }
@@ -229,7 +229,7 @@ export interface SearchSkillsParams {
   query: string;
   topK?: number;
   minScore?: number;
-  skillPaths?: string[];
+  skillNames?: string[];
   includeReferences?: boolean;
 }
 

@@ -470,7 +470,7 @@ describe('Workspace Resource', () => {
   describe('searchSkills()', () => {
     it('should search skills with query only', async () => {
       const mockResponse = {
-        results: [{ skillPath: 'skills/skill1', source: 'instructions', content: 'match', score: 0.9 }],
+        results: [{ skillName: 'skill1', source: 'instructions', content: 'match', score: 0.9 }],
         query: 'test',
       };
       mockFetchResponse(mockResponse);
@@ -497,13 +497,13 @@ describe('Workspace Resource', () => {
         query: 'search term',
         topK: 5,
         minScore: 0.7,
-        skillPaths: ['skills/skill1', 'skills/skill2'],
+        skillNames: ['skill1', 'skill2'],
         includeReferences: true,
       });
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/skills/search?query=search+term&topK=5&minScore=0.7&skillPaths=skills%2Fskill1%2Cskills%2Fskill2&includeReferences=true`,
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/skills/search?query=search+term&topK=5&minScore=0.7&skillNames=skill1%2Cskill2&includeReferences=true`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
@@ -592,7 +592,7 @@ describe('WorkspaceSkillResource', () => {
   describe('listReferences()', () => {
     it('should list skill references', async () => {
       const mockResponse = {
-        skillPath: 'my-skill',
+        skillName: 'my-skill',
         references: ['api.md', 'guide.md', 'examples/basic.md'],
       };
       mockFetchResponse(mockResponse);
@@ -613,7 +613,7 @@ describe('WorkspaceSkillResource', () => {
   describe('getReference()', () => {
     it('should get reference content', async () => {
       const mockResponse = {
-        skillPath: 'my-skill',
+        skillName: 'my-skill',
         referencePath: 'api.md',
         content: '# API Documentation\n\nThis is the API...',
       };
@@ -632,7 +632,7 @@ describe('WorkspaceSkillResource', () => {
 
     it('should encode reference path with special characters', async () => {
       const mockResponse = {
-        skillPath: 'my-skill',
+        skillName: 'my-skill',
         referencePath: 'examples/nested/doc.md',
         content: 'Content',
       };

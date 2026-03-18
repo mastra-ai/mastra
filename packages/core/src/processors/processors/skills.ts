@@ -125,7 +125,8 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
       return '';
     }
 
-    // Get full skill objects to include source info (parallel fetch)
+    // Get full skill objects to include source info (parallel fetch).
+    // Use meta.path (not meta.name) so same-named skills each resolve to their specific entry.
     const skillPromises = skillsList.map(meta => this.skills?.get(meta.path));
     const fullSkills = (await Promise.all(skillPromises)).filter((s): s is Skill => s !== undefined && s !== null);
 

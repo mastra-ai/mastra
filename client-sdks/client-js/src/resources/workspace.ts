@@ -263,8 +263,8 @@ export class Workspace extends BaseResource {
     if (params.minScore !== undefined) {
       searchParams.set('minScore', String(params.minScore));
     }
-    if (params.skillPaths && params.skillPaths.length > 0) {
-      searchParams.set('skillPaths', params.skillPaths.join(','));
+    if (params.skillNames && params.skillNames.length > 0) {
+      searchParams.set('skillNames', params.skillNames.join(','));
     }
     if (params.includeReferences !== undefined) {
       searchParams.set('includeReferences', String(params.includeReferences));
