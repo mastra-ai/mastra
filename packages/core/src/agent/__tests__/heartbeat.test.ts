@@ -1,0 +1,322 @@
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { Agent } from '../agent';
+
+function createMockModel(responseText: string) {
+  return new MockLanguageModelV2({
+    doGenerate: async () => ({
+      content: [{ type: 'text' as const, text: responseText }],
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      warnings: [],
+    }),
+  });
+}
+
+function createAgent(overrides: Record<string, any> = {}) {
+  return new Agent({
+    id: 'heartbeat-test-agent',
+    name: 'Heartbeat Test Agent',
+    model: createMockModel(overrides.responseText ?? 'HEARTBEAT_OK Everything is fine.'),
+    instructions: 'You are a monitoring agent.',
+    heartbeat: {
+      intervalMs: 1000,
+      prompt: 'Check if all services are running.',
+      ...overrides.heartbeat,
+    },
+    ...overrides.agentOverrides,
+  });
+}
+
+describe('Agent Heartbeat', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  describe('runHeartbeatTick()', () => {
+    it('should run an agent turn and return a result with status ok', async () => {
+      const agent = createAgent();
+
+      const result = await agent.runHeartbeatTick();
+
+      expect(result).not.toBeNull();
+      expect(result!.status).toBe('ok');
+      expect(result!.text).toContain('HEARTBEAT_OK');
+      expect(result!.timestamp).toBeInstanceOf(Date);
+    });
+
+    it('should return status alert when response does not start with HEARTBEAT_OK', async () => {
+      const agent = createAgent({ responseText: 'WARNING: Service X is down!' });
+
+      const result = await agent.runHeartbeatTick();
+
+      expect(result).not.toBeNull();
+      expect(result!.status).toBe('alert');
+      expect(result!.text).toContain('WARNING');
+    });
+
+    it('should capture token usage from the model response', async () => {
+      const agent = createAgent();
+
+      const result = await agent.runHeartbeatTick();
+
+      expect(result).not.toBeNull();
+      expect(result!.usage).toBeDefined();
+      expect(result!.usage!.inputTokens).toBe(10);
+      expect(result!.usage!.outputTokens).toBe(20);
+      expect(result!.usage!.totalTokens).toBe(30);
+    });
+
+    it('should call onHeartbeat callback with the result', async () => {
+      const onHeartbeat = vi.fn();
+      const agent = createAgent({ heartbeat: { onHeartbeat } });
+
+      const result = await agent.runHeartbeatTick();
+
+      expect(onHeartbeat).toHaveBeenCalledOnce();
+      expect(onHeartbeat).toHaveBeenCalledWith(result);
+    });
+
+    it('should not crash if onHeartbeat callback throws', async () => {
+      const onHeartbeat = vi.fn().mockRejectedValue(new Error('callback error'));
+      const agent = createAgent({ heartbeat: { onHeartbeat } });
+
+      const result = await agent.runHeartbeatTick();
+
+      // Should still return the result despite callback failure
+      expect(result).not.toBeNull();
+      expect(result!.status).toBe('ok');
+    });
+
+    it('should return null when agent has no heartbeat config', async () => {
+      const agent = new Agent({
+        id: 'no-heartbeat',
+        name: 'No Heartbeat Agent',
+        model: createMockModel('Hello'),
+        instructions: 'You are helpful.',
+      });
+
+      const result = await agent.runHeartbeatTick();
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('preCheck gate', () => {
+    it('should skip agent turn when preCheck returns false', async () => {
+      const onHeartbeat = vi.fn();
+      const agent = createAgent({
+        heartbeat: {
+          preCheck: () => false,
+          onHeartbeat,
+        },
+      });
+
+      const result = await agent.runHeartbeatTick();
+
+      expect(result).toBeNull();
+      expect(onHeartbeat).not.toHaveBeenCalled();
+    });
+
+    it('should run agent turn when preCheck returns true', async () => {
+      const onHeartbeat = vi.fn();
+      const agent = createAgent({
+        heartbeat: {
+          preCheck: () => true,
+          onHeartbeat,
+        },
+      });
+
+      const result = await agent.runHeartbeatTick();
+
+      expect(result).not.toBeNull();
+      expect(result!.status).toBe('ok');
+      expect(onHeartbeat).toHaveBeenCalledOnce();
+    });
+
+    it('should support async preCheck', async () => {
+      const agent = createAgent({
+        heartbeat: {
+          preCheck: async () => false,
+        },
+      });
+
+      const result = await agent.runHeartbeatTick();
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('dynamic prompt', () => {
+    it('should support a function that returns a prompt string', async () => {
+      const promptFn = vi.fn().mockReturnValue('Check database connections.');
+      const agent = createAgent({
+        heartbeat: {
+          prompt: promptFn,
+        },
+      });
+
+      await agent.runHeartbeatTick();
+
+      expect(promptFn).toHaveBeenCalledOnce();
+    });
+
+    it('should support an async function prompt', async () => {
+      const promptFn = vi.fn().mockResolvedValue('Check API endpoints.');
+      const agent = createAgent({
+        heartbeat: {
+          prompt: promptFn,
+        },
+      });
+
+      await agent.runHeartbeatTick();
+
+      expect(promptFn).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('startHeartbeat() / stopHeartbeat()', () => {
+    it('should schedule periodic ticks', async () => {
+      const onHeartbeat = vi.fn();
+      const agent = createAgent({
+        heartbeat: {
+          intervalMs: 5000,
+          onHeartbeat,
+        },
+      });
+
+      agent.startHeartbeat();
+
+      // No immediate run (default)
+      expect(onHeartbeat).not.toHaveBeenCalled();
+
+      // Advance past one interval
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(onHeartbeat).toHaveBeenCalledTimes(1);
+
+      // Advance past another interval
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(onHeartbeat).toHaveBeenCalledTimes(2);
+
+      agent.stopHeartbeat();
+    });
+
+    it('should run immediately when immediate is true', async () => {
+      const onHeartbeat = vi.fn();
+      const agent = createAgent({
+        heartbeat: {
+          intervalMs: 60000,
+          immediate: true,
+          onHeartbeat,
+        },
+      });
+
+      agent.startHeartbeat();
+
+      // Flush the microtask queue for the immediate tick
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(onHeartbeat).toHaveBeenCalledTimes(1);
+
+      agent.stopHeartbeat();
+    });
+
+    it('should stop ticks after stopHeartbeat()', async () => {
+      const onHeartbeat = vi.fn();
+      const agent = createAgent({
+        heartbeat: {
+          intervalMs: 5000,
+          onHeartbeat,
+        },
+      });
+
+      agent.startHeartbeat();
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(onHeartbeat).toHaveBeenCalledTimes(1);
+
+      agent.stopHeartbeat();
+
+      await vi.advanceTimersByTimeAsync(5000);
+      // Should not have been called again
+      expect(onHeartbeat).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not throw when stopping without starting', () => {
+      const agent = createAgent();
+      expect(() => agent.stopHeartbeat()).not.toThrow();
+    });
+
+    it('should not throw when starting without heartbeat config', () => {
+      const agent = new Agent({
+        id: 'no-config',
+        name: 'No Config Agent',
+        model: createMockModel('Hello'),
+        instructions: 'You are helpful.',
+      });
+      expect(() => agent.startHeartbeat()).not.toThrow();
+    });
+  });
+
+  describe('overlap prevention', () => {
+    it('should skip a tick if the previous one is still running', async () => {
+      vi.useRealTimers(); // Need real timers for this test
+
+      let resolveGenerate: (() => void) | undefined;
+      let onGenerateEntered: (() => void) | undefined;
+      const generateEntered = new Promise<void>(resolve => {
+        onGenerateEntered = resolve;
+      });
+
+      const slowModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          onGenerateEntered!();
+          await new Promise<void>(resolve => {
+            resolveGenerate = resolve;
+          });
+          return {
+            content: [{ type: 'text' as const, text: 'HEARTBEAT_OK' }],
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+            warnings: [],
+          };
+        },
+      });
+
+      const onHeartbeat = vi.fn();
+      const agent = new Agent({
+        id: 'overlap-test',
+        name: 'Overlap Agent',
+        model: slowModel,
+        instructions: 'Monitor things.',
+        heartbeat: {
+          intervalMs: 1000,
+          prompt: 'Check services.',
+          onHeartbeat,
+        },
+      });
+
+      // Start a tick (will be blocked by slow model)
+      const tick1 = agent.runHeartbeatTick();
+
+      // Wait until the model's doGenerate is actually entered
+      await generateEntered;
+
+      // Try a second tick — should be skipped because tick1 is still running
+      const tick2 = await agent.runHeartbeatTick();
+      expect(tick2).toBeNull();
+
+      // Now unblock the first tick
+      resolveGenerate!();
+      const result1 = await tick1;
+
+      expect(result1).not.toBeNull();
+      expect(result1!.status).toBe('ok');
+      expect(onHeartbeat).toHaveBeenCalledTimes(1);
+    });
+  });
+});
