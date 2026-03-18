@@ -128,14 +128,13 @@ async function resolveOrg(
     return { orgId: flagOrg, orgName: match?.name ?? flagOrg };
   }
 
-  // 2. project.json
+  // 2. project.json (only if user is a member of that org)
   if (projectConfig?.organizationId) {
     const orgs = await fetchOrgs(token);
     const match = orgs.find(o => o.id === projectConfig.organizationId);
-    return {
-      orgId: projectConfig.organizationId,
-      orgName: match?.name ?? projectConfig.organizationId,
-    };
+    if (match) {
+      return { orgId: match.id, orgName: match.name };
+    }
   }
 
   // 3. credentials currentOrgId
