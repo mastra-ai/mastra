@@ -33,7 +33,10 @@ export interface ThreadSelectorOptions {
 
 const MAX_VISIBLE_THREADS = 12;
 const INITIAL_PREVIEW_LOAD_COUNT = 24;
-const PREVIEW_BATCH_SIZE = 8;
+const PREVIEW_BATCH_SIZE = 2;
+const INITIAL_PREVIEW_LOAD_DELAY_MS = 150;
+const INTERACTION_PREVIEW_LOAD_DELAY_MS = 250;
+const FOLLOW_UP_PREVIEW_LOAD_DELAY_MS = 50;
 
 // =============================================================================
 // ThreadSelectorComponent
@@ -60,7 +63,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
   private attemptedPreviewThreadIds: Set<string>;
   private loadingPreviewThreadIds: Set<string> = new Set();
   private previewLoadVersion = 0;
-  private previewLoadScheduled = false;
+  private previewLoadTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Focusable implementation
   private _focused = false;
@@ -133,14 +136,20 @@ export class ThreadSelectorComponent extends Box implements Focusable {
     );
   }
 
-  private scheduleMessagePreviewLoad({ initialLoad = false }: { initialLoad?: boolean } = {}): void {
-    if (this.previewLoadScheduled) return;
+  private scheduleMessagePreviewLoad({
+    initialLoad = false,
+    delayMs,
+  }: { initialLoad?: boolean; delayMs?: number } = {}): void {
+    const previewDelayMs = delayMs ?? (initialLoad ? INITIAL_PREVIEW_LOAD_DELAY_MS : FOLLOW_UP_PREVIEW_LOAD_DELAY_MS);
 
-    this.previewLoadScheduled = true;
-    setTimeout(() => {
-      this.previewLoadScheduled = false;
+    if (this.previewLoadTimeout) {
+      clearTimeout(this.previewLoadTimeout);
+    }
+
+    this.previewLoadTimeout = setTimeout(() => {
+      this.previewLoadTimeout = null;
       void this.loadMessagePreviews({ initialLoad });
-    }, 0);
+    }, previewDelayMs);
   }
 
   private async loadMessagePreviews({ initialLoad = false }: { initialLoad?: boolean } = {}): Promise<void> {
@@ -153,6 +162,8 @@ export class ThreadSelectorComponent extends Box implements Focusable {
     if (threadIds.length === 0) return;
 
     threadIds.forEach(threadId => this.loadingPreviewThreadIds.add(threadId));
+    this.updateList();
+    this.tui.requestRender();
 
     try {
       const previews = await this.getMessagePreviews(threadIds);
@@ -177,7 +188,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
     this.tui.requestRender();
 
     if (candidates.length > PREVIEW_BATCH_SIZE) {
-      this.scheduleMessagePreviewLoad({ initialLoad });
+      this.scheduleMessagePreviewLoad({ initialLoad, delayMs: FOLLOW_UP_PREVIEW_LOAD_DELAY_MS });
     }
   }
 
@@ -325,13 +336,13 @@ export class ThreadSelectorComponent extends Box implements Focusable {
       this.selectedIndex = this.selectedIndex === 0 ? this.filteredThreads.length - 1 : this.selectedIndex - 1;
       this.updateList();
       this.tui.requestRender();
-      this.scheduleMessagePreviewLoad();
+      this.scheduleMessagePreviewLoad({ delayMs: INTERACTION_PREVIEW_LOAD_DELAY_MS });
     } else if (kb.matches(keyData, 'selectDown')) {
       if (this.filteredThreads.length === 0) return;
       this.selectedIndex = this.selectedIndex === this.filteredThreads.length - 1 ? 0 : this.selectedIndex + 1;
       this.updateList();
       this.tui.requestRender();
-      this.scheduleMessagePreviewLoad();
+      this.scheduleMessagePreviewLoad({ delayMs: INTERACTION_PREVIEW_LOAD_DELAY_MS });
     } else if (kb.matches(keyData, 'selectConfirm')) {
       const selected = this.filteredThreads[this.selectedIndex];
       if (selected) {
@@ -348,6 +359,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
       this.searchInput.handleInput(keyData);
       this.filterThreads(this.searchInput.getValue());
       this.tui.requestRender();
+      this.scheduleMessagePreviewLoad({ delayMs: INTERACTION_PREVIEW_LOAD_DELAY_MS });
     }
   }
 }
