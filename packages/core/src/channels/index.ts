@@ -8,4 +8,6 @@ export type {
   ChannelSendResult,
   ChannelThreadMetadata,
   GetOrCreateThreadParams,
+  ProcessWebhookEventParams,
+  ProcessWebhookResult,
 } from './types';
