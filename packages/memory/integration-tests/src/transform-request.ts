@@ -39,29 +39,31 @@ export function transformRequest({ url, body }: { url: string; body: unknown }):
 
   const transformedBody = JSON.parse(stringifiedBody);
 
-  // Debug logging for Gemini requests only
-  if (DEBUG_HASH && url.includes('generativelanguage.googleapis.com')) {
+  // Debug logging for all providers
+  if (DEBUG_HASH) {
     const hash = computeHash(url, transformedBody);
     const bodyObj = transformedBody as Record<string, unknown>;
-    const contents = bodyObj.contents as Array<Record<string, unknown>> | undefined;
-    console.error(`[DEBUG-HASH] Gemini request:`);
-    console.error(`[DEBUG-HASH]   URL: ${url}`);
-    console.error(`[DEBUG-HASH]   Hash: ${hash}`);
-    console.error(`[DEBUG-HASH]   Contents count: ${contents?.length ?? 'N/A'}`);
-    console.error(`[DEBUG-HASH]   Body keys: ${Object.keys(bodyObj).sort().join(', ')}`);
-    if (contents && contents.length > 0) {
-      const firstContent = contents[0];
-      console.error(`[DEBUG-HASH]   First content role: ${firstContent.role}`);
-      const parts = firstContent.parts as Array<Record<string, unknown>> | undefined;
-      if (parts && parts.length > 0) {
-        const firstPart = parts[0];
-        const text = firstPart.text as string | undefined;
-        console.error(`[DEBUG-HASH]   First content text: ${text?.slice(0, 80) ?? 'N/A'}...`);
-      }
+
+    let provider = 'Unknown';
+    let messageCount = 0;
+
+    if (url.includes('generativelanguage.googleapis.com')) {
+      provider = 'Gemini';
+      const contents = bodyObj.contents as Array<unknown> | undefined;
+      messageCount = contents?.length ?? 0;
+    } else if (url.includes('openai.com')) {
+      provider = 'OpenAI';
+      const input = bodyObj.input as Array<unknown> | undefined;
+      messageCount = input?.length ?? 0;
+    } else if (url.includes('anthropic.com')) {
+      provider = 'Anthropic';
+      const messages = bodyObj.messages as Array<unknown> | undefined;
+      messageCount = messages?.length ?? 0;
     }
-    // Log first 500 chars of normalized body for comparison
-    const normalizedForLog = JSON.stringify(stableSortKeys(transformedBody));
-    console.error(`[DEBUG-HASH]   Normalized body (first 500): ${normalizedForLog.slice(0, 500)}`);
+
+    if (provider !== 'Unknown') {
+      console.error(`[DEBUG-HASH] ${provider}: hash=${hash}, messages=${messageCount}`);
+    }
   }
 
   return {
