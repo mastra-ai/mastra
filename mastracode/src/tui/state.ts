@@ -115,6 +115,8 @@ export interface TUIState {
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
   pendingNewThread: boolean;
+  /** Current thread title (for display in status line) */
+  currentThreadTitle?: string;
 
   // ── Inline interaction ────────────────────────────────────────────────
   /** Track the most recent ask_user component for inline question activation */

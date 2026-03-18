@@ -275,7 +275,15 @@ Hint for the agent's immediate next message. Examples:
 - "I've updated the navigation model. Let me walk you through the changes..."
 - "The assistant should wait for the user to respond before continuing."
 - Call the view tool on src/example.ts to continue debugging.
-</suggested-response>`;
+</suggested-response>
+
+<thread-title>
+A short, noun-phrase title for this conversation (2-5 words). Examples:
+- "Auth bug fix" — not "Fixing the auth bug"
+- "Dark mode toggle" — not "User wants dark mode toggle added"
+- "Deployment pipeline setup" — not "Setting up deployment pipeline for project"
+Only update when the topic meaningfully changes.
+</thread-title>`;
 
 /**
  * The guidelines for the Observer.
@@ -319,7 +327,7 @@ Process each thread separately and output observations for each thread.
 
 === OUTPUT FORMAT ===
 
-Your output MUST use XML tags to structure the response. Each thread's observations, current-task, and suggested-response should be nested inside a <thread id="..."> block within <observations>.
+Your output MUST use XML tags to structure the response. Each thread's observations, current-task, suggested-response, and thread-title should be nested inside a <thread id="..."> block within <observations>.
 
 <observations>
 <thread id="thread_id_1">
@@ -334,6 +342,8 @@ What the agent is currently working on in this thread
 <suggested-response>
 Hint for the agent's next message in this thread
 </suggested-response>
+
+<thread-title>Feature X implementation</thread-title>
 </thread>
 
 <thread id="thread_id_2">
@@ -347,6 +357,8 @@ Current task for this thread
 <suggested-response>
 Suggested response for this thread
 </suggested-response>
+
+<thread-title>Deployment setup</thread-title>
 </thread>
 </observations>
 
@@ -412,6 +424,9 @@ export interface ObserverResult {
 
   /** Suggested continuation message for the Actor */
   suggestedContinuation?: string;
+
+  /** The suggested thread title (short/concise, for thread metadata) */
+  threadTitle?: string;
 
   /** Raw output from the model (for debugging) */
   rawOutput?: string;
@@ -778,8 +793,9 @@ export function buildMultiThreadObserverHistoryMessage(
 export function buildMultiThreadObserverTaskPrompt(
   existingObservations: string | undefined,
   threadOrder?: string[],
-  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string }>,
+  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
   wasTruncated?: boolean,
+  includeThreadTitle?: boolean,
 ): string {
   let prompt = '';
 
@@ -793,7 +809,9 @@ export function buildMultiThreadObserverTaskPrompt(
   const threadMetadataLines = threadOrder
     ?.map(threadId => {
       const metadata = priorMetadataByThread?.get(threadId);
-      if (!metadata?.currentTask && !metadata?.suggestedResponse) {
+      const hasRelevantMetadata =
+        metadata?.currentTask || metadata?.suggestedResponse || (includeThreadTitle && metadata?.threadTitle);
+      if (!hasRelevantMetadata) {
         return '';
       }
 
@@ -803,6 +821,9 @@ export function buildMultiThreadObserverTaskPrompt(
       }
       if (metadata.suggestedResponse) {
         lines.push(`  - prior suggested-response: ${metadata.suggestedResponse}`);
+      }
+      if (includeThreadTitle && metadata.threadTitle) {
+        lines.push(`  - prior thread-title: ${metadata.threadTitle}`);
       }
       return lines.join('\n');
     })
@@ -815,11 +836,13 @@ export function buildMultiThreadObserverTaskPrompt(
       prompt += `Previous observations were truncated for context budget reasons.\n`;
       prompt += `The main agent still has full memory context outside this observer window.\n`;
     }
-    prompt += `Use each thread's prior current-task and suggested-response as continuity hints, then update them based on that thread's new messages.\n\n---\n\n`;
+    const titleHint = includeThreadTitle ? ', and thread-title' : '';
+    prompt += `Use each thread's prior current-task, suggested-response${titleHint} as continuity hints, then update them based on that thread's new messages.\n\n---\n\n`;
   }
 
   prompt += `## Your Task\n\n`;
-  prompt += `Extract new observations from each thread. Output your observations grouped by thread using <thread id="..."> tags inside your <observations> block. Each thread block should contain that thread's observations, current-task, and suggested-response.\n\n`;
+  const titleInstruction = includeThreadTitle ? ', and thread-title' : '';
+  prompt += `Extract new observations from each thread. Output your observations grouped by thread using <thread id="..."> tags inside your <observations> block. Each thread block should contain that thread's observations, current-task, suggested-response${titleInstruction}.\n\n`;
   prompt += `Example output format:\n`;
   prompt += `<observations>\n`;
   prompt += `<thread id="thread1">\n`;
@@ -827,12 +850,14 @@ export function buildMultiThreadObserverTaskPrompt(
   prompt += `* 🔴 (14:30) User prefers direct answers\n`;
   prompt += `<current-task>Working on feature X</current-task>\n`;
   prompt += `<suggested-response>Continue with the implementation</suggested-response>\n`;
+  if (includeThreadTitle) prompt += `<thread-title>Feature X implementation</thread-title>\n`;
   prompt += `</thread>\n`;
   prompt += `<thread id="thread2">\n`;
   prompt += `Date: Dec 5, 2025\n`;
   prompt += `* 🔴 (09:15) User asked about deployment\n`;
   prompt += `<current-task>Discussing deployment options</current-task>\n`;
   prompt += `<suggested-response>Explain the deployment process</suggested-response>\n`;
+  if (includeThreadTitle) prompt += `<thread-title>Deployment setup</thread-title>\n`;
   prompt += `</thread>\n`;
   prompt += `</observations>`;
 
@@ -846,12 +871,13 @@ export function buildMultiThreadObserverPrompt(
   existingObservations: string | undefined,
   messagesByThread: Map<string, MastraDBMessage[]>,
   threadOrder: string[],
-  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string }>,
+  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
   wasTruncated?: boolean,
   options?: ObserverFormatOptions,
+  includeThreadTitle?: boolean,
 ): string {
   const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder, options);
-  return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(existingObservations, threadOrder, priorMetadataByThread, wasTruncated)}`;
+  return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(existingObservations, threadOrder, priorMetadataByThread, wasTruncated, includeThreadTitle)}`;
 }
 
 /**
@@ -910,6 +936,14 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
       observations = observations.replace(/<suggested-response>[\s\S]*?<\/suggested-response>/i, '');
     }
 
+    // Extract and remove thread-title
+    let threadTitle: string | undefined;
+    const threadTitleMatch = threadContent.match(/<thread-title>([\s\S]*?)<\/thread-title>/i);
+    if (threadTitleMatch?.[1]) {
+      threadTitle = threadTitleMatch[1].trim();
+      observations = observations.replace(/<thread-title>[\s\S]*?<\/thread-title>/i, '');
+    }
+
     // Clean up observations and apply line truncation
     observations = sanitizeObservationLines(observations.trim());
 
@@ -917,6 +951,7 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
       observations,
       currentTask,
       suggestedContinuation,
+      threadTitle,
       rawOutput: threadContent,
     });
   }
@@ -936,7 +971,9 @@ export function buildObserverTaskPrompt(
     skipContinuationHints?: boolean;
     priorCurrentTask?: string;
     priorSuggestedResponse?: string;
+    priorThreadTitle?: string;
     wasTruncated?: boolean;
+    includeThreadTitle?: boolean;
   },
 ): string {
   let prompt = '';
@@ -955,6 +992,9 @@ export function buildObserverTaskPrompt(
   if (options?.priorSuggestedResponse) {
     priorMetadataLines.push(`- prior suggested-response: ${options.priorSuggestedResponse}`);
   }
+  if (options?.includeThreadTitle && options?.priorThreadTitle) {
+    priorMetadataLines.push(`- prior thread-title: ${options.priorThreadTitle}`);
+  }
 
   if (priorMetadataLines.length > 0) {
     prompt += `## Prior Thread Metadata\n\n${priorMetadataLines.join('\n')}\n\n`;
@@ -962,14 +1002,20 @@ export function buildObserverTaskPrompt(
       prompt += `Previous observations were truncated for context budget reasons.\n`;
       prompt += `The main agent still has full memory context outside this observer window.\n`;
     }
-    prompt += `Use the prior current-task and suggested-response as continuity hints, then update them based on the new messages.\n\n---\n\n`;
+    const titleHint = options?.includeThreadTitle ? ', and thread-title' : '';
+    prompt += `Use the prior current-task, suggested-response${titleHint} as continuity hints, then update them based on the new messages.\n\n---\n\n`;
   }
 
   prompt += `## Your Task\n\n`;
   prompt += `Extract new observations from the message history above. Do not repeat observations that are already in the previous observations. Add your new observations in the format specified in your instructions.`;
 
+  // Add thread title guidance (independent of continuation hints)
+  if (options?.includeThreadTitle) {
+    prompt += `\n\nAlso output a <thread-title> — a short noun-phrase label for this conversation (2-5 words). Write it like a file name or PR title: "Auth bug fix", "Memory config refactor", "RAG pipeline setup". Avoid verbs/sentences ("Fixing the auth bug"), filler ("Working on stuff"), and generic labels ("Code review"). Only change it from the prior title if the topic meaningfully shifted.`;
+  }
+
   if (options?.skipContinuationHints) {
-    prompt += `\n\nIMPORTANT: Do NOT include <current-task> or <suggested-response> sections in your output. Only output <observations>.`;
+    prompt += `\n\nIMPORTANT: Do NOT include <current-task> or <suggested-response> sections in your output. Only output <observations>${options?.includeThreadTitle ? ' and <thread-title>' : ''}.`;
   }
 
   return prompt;
@@ -986,7 +1032,9 @@ export function buildObserverPrompt(
     skipContinuationHints?: boolean;
     priorCurrentTask?: string;
     priorSuggestedResponse?: string;
+    priorThreadTitle?: string;
     wasTruncated?: boolean;
+    includeThreadTitle?: boolean;
   },
 ): string {
   const formattedMessages = formatMessagesForObserver(messagesToObserve);
@@ -1017,6 +1065,7 @@ export function parseObserverOutput(output: string): ObserverResult {
     observations,
     currentTask: parsed.currentTask || undefined,
     suggestedContinuation: parsed.suggestedResponse || undefined,
+    threadTitle: parsed.threadTitle || undefined,
     rawOutput: output,
   };
 }
@@ -1028,6 +1077,7 @@ interface ParsedMemorySection {
   observations: string;
   currentTask: string;
   suggestedResponse: string;
+  threadTitle: string;
 }
 
 /**
@@ -1039,6 +1089,7 @@ export function parseMemorySectionXml(content: string): ParsedMemorySection {
     observations: '',
     currentTask: '',
     suggestedResponse: '',
+    threadTitle: '',
   };
 
   // Extract <observations> content (supports multiple blocks)
@@ -1069,6 +1120,14 @@ export function parseMemorySectionXml(content: string): ParsedMemorySection {
   const suggestedResponseMatch = content.match(/^[ \t]*<suggested-response>([\s\S]*?)^[ \t]*<\/suggested-response>/im);
   if (suggestedResponseMatch?.[1]) {
     result.suggestedResponse = suggestedResponseMatch[1].trim();
+  }
+
+  // Extract <thread-title> content (first match only)
+  // Opening tag must be at the start of a line; closing tag can be on the same line
+  // (titles are short, so LLMs typically output them on a single line)
+  const threadTitleMatch = content.match(/^[ \t]*<thread-title>([\s\S]*?)<\/thread-title>/im);
+  if (threadTitleMatch?.[1]) {
+    result.threadTitle = threadTitleMatch[1].trim();
   }
 
   return result;

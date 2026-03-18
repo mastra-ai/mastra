@@ -13,6 +13,17 @@ import { theme, mastra, tintHex, getTermWidth } from './theme.js';
 const getObserverColor = () => mastra.orange;
 const getReflectorColor = () => mastra.pink;
 
+/** Returns true if a thread title is generic/auto-generated and should not be displayed. */
+function isGenericTitle(title: string): boolean {
+  const lower = title.toLowerCase().trim();
+  return (
+    lower === 'new thread' ||
+    lower.startsWith('new thread') ||
+    lower.startsWith('clone of') ||
+    lower.startsWith('untitled')
+  );
+}
+
 /**
  * Update the status line at the bottom of the TUI.
  * Progressively reduces content to fit the terminal width.
@@ -89,18 +100,21 @@ export function updateStatusLine(state: TUIState): void {
   const tinyModelId = shortModelId.replace(/^claude-/, '').replace(/^(\w+)-(\d+)-(\d{1,2})$/, '$1 $2.$3');
 
   const homedir = process.env.HOME || process.env.USERPROFILE || '';
-  let displayPath = state.projectInfo.rootPath;
-  if (homedir && displayPath.startsWith(homedir)) {
+  // Use thread title if available and not generic, otherwise use project root path
+  const threadTitle = state.currentThreadTitle && !isGenericTitle(state.currentThreadTitle) ? state.currentThreadTitle : null;
+  let displayPath = threadTitle || state.projectInfo.rootPath;
+  if (!threadTitle && homedir && displayPath.startsWith(homedir)) {
     displayPath = '~' + displayPath.slice(homedir.length);
   }
   const branch = state.projectInfo.gitBranch;
   const queuedCount = state.pendingQueuedActions.length + state.harness.getFollowUpCount();
   const queuedLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
   // Build progressively shorter directory strings for layout fallback
-  const dirFull = branch ? `${displayPath} (${branch})` : displayPath;
-  const dirBranchOnly = branch || null;
+  // Only show branch when not showing thread title (thread title takes priority)
+  const dirFull = !threadTitle && branch ? `${displayPath} (${branch})` : displayPath;
+  const dirBranchOnly = !threadTitle && branch ? branch : null;
   // Abbreviate long branches: keep first 12 + last 8 chars with ".." in between
-  const dirBranchShort = branch && branch.length > 24 ? branch.slice(0, 12) + '..' + branch.slice(-8) : dirBranchOnly;
+  const dirBranchShort = !threadTitle && branch && branch.length > 24 ? branch.slice(0, 12) + '..' + branch.slice(-8) : dirBranchOnly;
 
   // --- Helper to style the model ID ---
   const modelTrail = tintBg ? chalk.hex(tintBg)('▌') : '';

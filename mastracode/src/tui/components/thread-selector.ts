@@ -195,8 +195,8 @@ export class ThreadSelectorComponent extends Box implements Focusable {
       const displayId = `${thread.resourceId}/${shortId}`;
       const timeAgo = theme.fg('muted', ` (${this.formatTimeAgo(thread.updatedAt)})`);
 
-      // Only show custom titles (not auto-generated "New Thread")
-      const hasCustomTitle = thread.title && thread.title !== 'New Thread';
+      // Show thread title when available, except the default placeholder title.
+      const displayTitle = thread.title && thread.title !== 'New Thread' ? thread.title : null;
 
       let line = '';
       if (isSelected) {
@@ -207,12 +207,13 @@ export class ThreadSelectorComponent extends Box implements Focusable {
 
       this.listContainer.addChild(new Text(line, 0, 0));
 
-      // Show message preview or custom title on second line
-      const preview = this.messagePreviews.get(thread.id);
-      if (preview) {
-        this.listContainer.addChild(new Text(`     ${theme.fg('muted', `"${preview}"`)}`, 0, 0));
-      } else if (hasCustomTitle) {
-        this.listContainer.addChild(new Text(`     ${theme.fg('muted', `"${thread.title}"`)}`, 0, 0));
+      if (displayTitle) {
+        this.listContainer.addChild(new Text(`     ${theme.fg('muted', displayTitle)}`, 0, 0));
+      } else {
+        const preview = this.messagePreviews.get(thread.id);
+        if (preview) {
+          this.listContainer.addChild(new Text(`     ${theme.fg('dim', `"${preview}"`)}`, 0, 0));
+        }
       }
     }
 

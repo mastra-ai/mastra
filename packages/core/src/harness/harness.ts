@@ -1547,6 +1547,18 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
           });
           break;
         }
+        case 'data-om-thread-update': {
+          const data = (part as { data?: Record<string, unknown> }).data ?? {};
+          if (data.newTitle) {
+            content.push({
+              type: 'om_thread_title_updated',
+              threadId: (data.threadId as string) ?? '',
+              oldTitle: (data.oldTitle as string) ?? undefined,
+              newTitle: data.newTitle as string,
+            });
+          }
+          break;
+        }
         // Skip other part types (step-start, data-om-status, etc.)
       }
     }
@@ -1949,6 +1961,19 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
               observationTokens: payload.observationTokens ?? 0,
               messagesActivated: payload.messagesActivated ?? 0,
               generationCount: payload.generationCount ?? 0,
+            });
+          }
+          break;
+        }
+        case 'data-om-thread-update': {
+          const payload = (chunk as any).data as Record<string, any> | undefined;
+          if (payload && payload.newTitle) {
+            this.emit({
+              type: 'om_thread_title_updated',
+              cycleId: payload.cycleId ?? 'unknown',
+              threadId: payload.threadId ?? this.currentThreadId ?? 'unknown',
+              oldTitle: payload.oldTitle,
+              newTitle: payload.newTitle,
             });
           }
           break;
