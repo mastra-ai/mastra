@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   check-permission:
-    if: github.event.pull_request.draft == false
+    if: ${{ github.repository == 'mastra-ai/mastra' && github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     outputs:
       authorized: ${{ steps.check.outputs.authorized }}
