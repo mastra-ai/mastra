@@ -3185,6 +3185,14 @@ describe('Scenario: Information should be preserved through observation cycle', 
     // Both should be identical
     expect(systemPrompt).toBe(systemPromptWithUndefined);
     expect(systemPrompt).toContain('<current-task>');
+    expect(systemPrompt).not.toContain('<thread-title>');
+  });
+
+  it('observer system prompt should include thread title instructions when enabled', () => {
+    const systemPrompt = buildObserverSystemPrompt(false, undefined, true);
+
+    expect(systemPrompt).toContain('<thread-title>');
+    expect(systemPrompt).toContain('A short, noun-phrase title for this conversation');
   });
 
   it('multi-thread observer system prompt should include custom instruction', () => {
@@ -3193,6 +3201,14 @@ describe('Scenario: Information should be preserved through observation cycle', 
 
     expect(systemPrompt).toContain(customInstruction);
     expect(systemPrompt).toContain('<thread id=');
+    expect(systemPrompt).not.toContain('<thread-title>');
+  });
+
+  it('multi-thread observer system prompt should include thread title instructions when enabled', () => {
+    const systemPrompt = buildObserverSystemPrompt(true, undefined, true);
+
+    expect(systemPrompt).toContain('<thread-title>Feature X implementation</thread-title>');
+    expect(systemPrompt).toContain('current-task, suggested-response, and thread-title');
   });
 });
 

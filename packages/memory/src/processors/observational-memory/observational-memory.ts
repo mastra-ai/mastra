@@ -70,6 +70,7 @@ import {
   createObservationEndMarker,
   createObservationFailedMarker,
   createObservationStartMarker,
+  createThreadUpdateMarker,
 } from './markers';
 import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import {
@@ -251,6 +252,8 @@ interface ResolvedObservationConfig {
   previousObserverTokens?: number | false;
   /** Custom instructions to append to the Observer's system prompt */
   instruction?: string;
+  /** Whether the Observer should suggest thread titles */
+  threadTitle?: boolean;
 }
 
 interface ResolvedReflectionConfig {
@@ -924,6 +927,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           ),
       previousObserverTokens: config.observation?.previousObserverTokens ?? 2000,
       instruction: config.observation?.instruction,
+      threadTitle: config.observation?.threadTitle ?? false,
     };
 
     // Resolve reflection config with defaults
@@ -1252,7 +1256,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private getObserverAgent(): Agent {
     if (!this.observerAgent) {
-      const systemPrompt = buildObserverSystemPrompt(false, this.observationConfig.instruction);
+      const systemPrompt = buildObserverSystemPrompt(
+        false,
+        this.observationConfig.instruction,
+        this.observationConfig.threadTitle,
+      );
 
       this.observerAgent = new Agent({
         id: 'observational-memory-observer',
@@ -1917,12 +1925,14 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       requestContext?: RequestContext;
       priorCurrentTask?: string;
       priorSuggestedResponse?: string;
+      priorThreadTitle?: string;
       wasTruncated?: boolean;
     },
   ): Promise<{
     observations: string;
     currentTask?: string;
     suggestedContinuation?: string;
+    threadTitle?: string;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     const agent = this.getObserverAgent();
@@ -1933,7 +1943,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           skipContinuationHints: options?.skipContinuationHints,
           priorCurrentTask: options?.priorCurrentTask,
           priorSuggestedResponse: options?.priorSuggestedResponse,
+          priorThreadTitle: options?.priorThreadTitle,
           wasTruncated: options?.wasTruncated,
+          includeThreadTitle: this.observationConfig.threadTitle,
         }),
       },
       buildObserverHistoryMessage(messagesToObserve),
@@ -1977,6 +1989,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       observations: parsed.observations,
       currentTask: parsed.currentTask,
       suggestedContinuation: parsed.suggestedContinuation,
+      threadTitle: parsed.threadTitle,
       usage: usage
         ? {
             inputTokens: usage.inputTokens,
@@ -1997,7 +2010,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     existingObservations: string | undefined,
     messagesByThread: Map<string, MastraDBMessage[]>,
     threadOrder: string[],
-    priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string }>,
+    priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
     abortSignal?: AbortSignal,
     requestContext?: RequestContext,
     wasTruncated?: boolean,
@@ -2008,12 +2021,17 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         observations: string;
         currentTask?: string;
         suggestedContinuation?: string;
+        threadTitle?: string;
       }
     >;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     // Create a multi-thread observer agent with the special system prompt
-    const systemPrompt = buildObserverSystemPrompt(true, this.observationConfig.instruction);
+    const systemPrompt = buildObserverSystemPrompt(
+      true,
+      this.observationConfig.instruction,
+      this.observationConfig.threadTitle,
+    );
     const agent = new Agent({
       id: 'multi-thread-observer',
       name: 'multi-thread-observer',
@@ -2029,6 +2047,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           threadOrder,
           priorMetadataByThread,
           wasTruncated,
+          this.observationConfig.threadTitle,
         ),
       },
       buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder),
@@ -2083,6 +2102,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         observations: string;
         currentTask?: string;
         suggestedContinuation?: string;
+        threadTitle?: string;
       }
     >();
 
@@ -2091,6 +2111,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         observations: threadResult.observations,
         currentTask: threadResult.currentTask,
         suggestedContinuation: threadResult.suggestedContinuation,
+        threadTitle: threadResult.threadTitle,
       });
     }
 
@@ -4185,6 +4206,7 @@ ${formattedMessages}
         requestContext,
         priorCurrentTask: threadOMMetadata?.currentTask,
         priorSuggestedResponse: threadOMMetadata?.suggestedResponse,
+        priorThreadTitle: thread?.title,
         wasTruncated,
       });
 
@@ -4235,11 +4257,44 @@ ${formattedMessages}
           currentTask: result.currentTask,
           lastObservedMessageCursor: this.getLastObservedMessageCursor(messagesToObserve),
         });
+
         await this.storage.updateThread({
           id: threadId,
-          title: threadForMetadata.title ?? '',
+          title: threadForMetadata.title || '',
           metadata: newMetadata,
         });
+      }
+
+      // Update thread title independently if observer suggested a meaningful one
+      // Only run if threadTitle config option is enabled
+      if (this.observationConfig.threadTitle && threadForMetadata && result.threadTitle) {
+        const oldTitle = threadForMetadata.title;
+        const newTitle = result.threadTitle;
+
+        // Only update title if:
+        // 1. It's not empty
+        // 2. It's different from the current title
+        // 3. It's not a generic title (length >= 3)
+        if (newTitle.trim().length >= 3 && newTitle !== oldTitle) {
+          await this.storage.updateThread({
+            id: threadId,
+            title: newTitle,
+            metadata: threadForMetadata.metadata ?? {},
+          });
+
+          // Emit thread update marker
+          if (writer) {
+            const threadUpdateMarker = createThreadUpdateMarker({
+              cycleId,
+              threadId,
+              oldTitle: oldTitle ?? undefined,
+              newTitle: newTitle,
+            });
+            await writer.custom(threadUpdateMarker).catch(() => {
+              // Ignore errors from streaming
+            });
+          }
+        }
       }
 
       await this.storage.updateActiveObservations({
@@ -4595,6 +4650,7 @@ ${formattedMessages}
         requestContext,
         priorCurrentTask: threadOMMetadata?.currentTask,
         priorSuggestedResponse: threadOMMetadata?.suggestedResponse,
+        priorThreadTitle: thread?.title,
         wasTruncated,
       },
     );
@@ -4603,6 +4659,23 @@ ${formattedMessages}
     if (!result.observations) {
       omDebug(`[OM:doAsyncBufferedObservation] empty observations returned, skipping buffer storage`);
       return;
+    }
+
+    // Apply thread title update if the observer suggested one (independent of continuation hints)
+    if (this.observationConfig.threadTitle && result.threadTitle) {
+      const newTitle = result.threadTitle;
+      if (newTitle.length >= 3 && newTitle !== thread?.title) {
+        await this.storage.updateThread({ id: threadId, title: newTitle, metadata: thread?.metadata ?? {} });
+        if (writer) {
+          const marker = createThreadUpdateMarker({
+            cycleId,
+            threadId,
+            oldTitle: thread?.title,
+            newTitle,
+          });
+          void writer.custom(marker).catch(() => {});
+        }
+      }
     }
 
     // Get the new observations to buffer (just the new content, not merged)
@@ -5189,7 +5262,7 @@ ${formattedMessages}
     const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId } });
     const threadMetadataMap = new Map<
       string,
-      { lastObservedAt?: string; currentTask?: string; suggestedResponse?: string }
+      { lastObservedAt?: string; currentTask?: string; suggestedResponse?: string; threadTitle?: string }
     >();
 
     for (const thread of allThreads) {
@@ -5198,6 +5271,7 @@ ${formattedMessages}
         lastObservedAt: omMetadata?.lastObservedAt,
         currentTask: omMetadata?.currentTask,
         suggestedResponse: omMetadata?.suggestedResponse,
+        threadTitle: thread.title,
       });
     }
 
@@ -5445,13 +5519,17 @@ ${formattedMessages}
 
       // Process batches in parallel
       const batchPromises = batches.map(async batch => {
-        const batchPriorMetadata = new Map<string, { currentTask?: string; suggestedResponse?: string }>();
+        const batchPriorMetadata = new Map<
+          string,
+          { currentTask?: string; suggestedResponse?: string; threadTitle?: string }
+        >();
         for (const threadId of batch.threadIds) {
           const metadata = threadMetadataMap.get(threadId);
-          if (metadata?.currentTask || metadata?.suggestedResponse) {
+          if (metadata?.currentTask || metadata?.suggestedResponse || metadata?.threadTitle) {
             batchPriorMetadata.set(threadId, {
               currentTask: metadata.currentTask,
               suggestedResponse: metadata.suggestedResponse,
+              threadTitle: metadata.threadTitle,
             });
           }
         }
@@ -5477,6 +5555,7 @@ ${formattedMessages}
           observations: string;
           currentTask?: string;
           suggestedContinuation?: string;
+          threadTitle?: string;
         }
       >();
       let totalBatchUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -5500,6 +5579,7 @@ ${formattedMessages}
           observations: string;
           currentTask?: string;
           suggestedContinuation?: string;
+          threadTitle?: string;
         };
       } | null> = [];
 
@@ -5553,6 +5633,15 @@ ${formattedMessages}
         // - currentTask, suggestedResponse: explicitly clear when omitted to avoid stale hints
         const thread = await this.storage.getThreadById({ threadId });
         if (thread) {
+          // Determine new title if thread title generation is enabled
+          let titleForUpdate = thread.title ?? '';
+          if (this.observationConfig.threadTitle && result.threadTitle) {
+            const newTitle = result.threadTitle.trim();
+            if (newTitle.length >= 3 && newTitle !== thread.title) {
+              titleForUpdate = newTitle;
+            }
+          }
+
           const newMetadata = setThreadOMMetadata(thread.metadata, {
             lastObservedAt: threadLastObservedAt.toISOString(),
             suggestedResponse: result.suggestedContinuation,
@@ -5561,7 +5650,7 @@ ${formattedMessages}
           });
           await this.storage.updateThread({
             id: threadId,
-            title: thread.title ?? '',
+            title: titleForUpdate,
             metadata: newMetadata,
           });
         }

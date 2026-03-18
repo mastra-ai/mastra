@@ -89,6 +89,8 @@ Date: 2026-01-15
 
 The compression is typically 5–40×. The Observer also tracks a **current task** and **suggested response** so the agent picks up where it left off.
 
+If you enable `observation.threadTitle`, the Observer can also suggest a short thread title when the conversation topic meaningfully changes. Thread title generation is opt-in and updates the thread metadata, so apps like Mastra Code can show the latest title in thread lists and status UI.
+
 Example: an agent using Playwright MCP might see 50,000+ tokens per page snapshot. With OM, the Observer watches the interaction and creates a few hundred tokens of observations about what was on the page and what actions were taken. The agent stays on task without carrying every raw snapshot.
 
 ### Reflections

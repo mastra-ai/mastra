@@ -130,8 +130,9 @@ describe('ThreadSelectorComponent preview caching', () => {
       .join('\n');
 
     expect(initialLines).toContain('"Cached preview"');
+    expect(getMessagePreviews).not.toHaveBeenCalled();
 
-    await vi.runAllTimersAsync();
+    await vi.advanceTimersByTimeAsync(150);
 
     expect(getMessagePreviews).toHaveBeenCalledTimes(1);
     expect(getMessagePreviews).toHaveBeenCalledWith(['thread-3']);
@@ -144,6 +145,44 @@ describe('ThreadSelectorComponent preview caching', () => {
     expect(attemptedIds.has('thread-2')).toBe(true);
     expect(attemptedIds.has('thread-3')).toBe(true);
     expect(requestRender).toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+
+  it('debounces preview fetching during navigation', async () => {
+    vi.useFakeTimers();
+
+    const threads = [
+      createThread('thread-1', 0),
+      createThread('thread-2', 1),
+      createThread('thread-3', 2),
+      createThread('thread-4', 3),
+    ];
+    const requestRender = vi.fn();
+    const getMessagePreviews = vi.fn(async (_threadIds: string[]) => new Map());
+
+    const selector = new ThreadSelectorComponent({
+      tui: { requestRender } as any,
+      threads,
+      currentThreadId: null,
+      currentResourceId: 'resource-1',
+      currentProjectPath: undefined,
+      onSelect: vi.fn(),
+      onCancel: vi.fn(),
+      getMessagePreviews,
+    });
+
+    await vi.advanceTimersByTimeAsync(149);
+    expect(getMessagePreviews).not.toHaveBeenCalled();
+
+    selector.handleInput('DOWN');
+    selector.handleInput('DOWN');
+
+    await vi.advanceTimersByTimeAsync(249);
+    expect(getMessagePreviews).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(getMessagePreviews).toHaveBeenCalledTimes(1);
 
     vi.useRealTimers();
   });
