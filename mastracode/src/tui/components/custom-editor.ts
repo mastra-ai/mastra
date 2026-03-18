@@ -48,22 +48,15 @@ function parseHex(hex: string): [number, number, number] {
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 }
 
-const DEFAULT_PROMPT_ICON = '●';
+const DEFAULT_PROMPT_ICON = '•';
 const PROMPT_ICON_CHOICES = [
-  '☀',
   '☯',
   '✺',
   '☻',
   '✿',
-  '✌',
-  '☠',
-  '◈',
-  '◉',
   '◒',
   '◓',
   '♞',
-  '♝',
-  '♜',
   '☘',
   '☸',
   '❂',
@@ -74,7 +67,6 @@ const PROMPT_ICON_CHOICES = [
   '❨',
   '❩',
   '✚',
-  '⚛',
   '⚉',
   '❣',
   '❥',
