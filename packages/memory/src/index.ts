@@ -2013,6 +2013,7 @@ Notes:
     return new ObservationalMemory({
       storage: memoryStore,
       scope: omConfig.scope,
+      graph: omConfig.graph,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
       observation: omConfig.observation
