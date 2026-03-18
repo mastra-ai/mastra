@@ -139,6 +139,8 @@ export async function POST(req: Request) {
 
 Pass AI SDK `UIMessage[]` from your installed `ai` version so TypeScript can infer the correct stream overload.
 
+Handlers keep the existing v5/default behavior. If your app is typed against `ai@6`, pass `version: 'v6'`.
+
 ```typescript
 import { handleNetworkStream } from '@mastra/ai-sdk';
 import { createUIMessageStreamResponse, type UIMessage } from 'ai';
@@ -149,6 +151,7 @@ export async function POST(req: Request) {
   const stream = await handleNetworkStream({
     mastra,
     agentId: 'routingAgent',
+    version: 'v6',
     params,
   });
   return createUIMessageStreamResponse({ stream });

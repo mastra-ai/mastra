@@ -14,4 +14,4 @@ const v5Stream = toAISdkStream(mastraStream, { from: 'agent' });
 const v6Stream = toAISdkStream(mastraStream, { from: 'agent', version: 'v6' });
 ```
 
-`toAISdkStream` keeps the existing v5/default behavior. Pass `version: 'v6'` when your app is typed against AI SDK v6 response helpers.
+`toAISdkStream` and the framework-agnostic `handle*Stream()` helpers keep the existing v5/default behavior. Pass `version: 'v6'` when your app is typed against AI SDK v6 response helpers.

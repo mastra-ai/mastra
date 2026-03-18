@@ -1,10 +1,17 @@
-import { createUIMessageStream, createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
-import type { InferUIMessageChunk, UIMessage } from '@internal/ai-sdk-v5';
+import { createUIMessageStream as createUIMessageStreamV5, createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
+import { createUIMessageStream as createUIMessageStreamV6 } from '@internal/ai-v6';
 import type { Mastra } from '@mastra/core/mastra';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
-import { toAISdkV5Stream } from './convert-streams';
+import { toAISdkStream } from './convert-streams';
+import type {
+  SupportedUIMessageStream,
+  V5UIMessage,
+  V5UIMessageStream,
+  V6UIMessage,
+  V6UIMessageStream,
+} from './public-types';
 
 export type WorkflowStreamHandlerParams = {
   runId?: string;
@@ -21,9 +28,18 @@ export type WorkflowStreamHandlerOptions = {
   mastra: Mastra;
   workflowId: string;
   params: WorkflowStreamHandlerParams;
+  version?: 'v5' | 'v6';
   includeTextStreamParts?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
+};
+
+type WorkflowStreamHandlerOptionsV5 = Omit<WorkflowStreamHandlerOptions, 'version'> & {
+  version?: 'v5';
+};
+
+type WorkflowStreamHandlerOptionsV6 = Omit<WorkflowStreamHandlerOptions, 'version'> & {
+  version: 'v6';
 };
 
 /**
@@ -48,14 +64,21 @@ export type WorkflowStreamHandlerOptions = {
  * }
  * ```
  */
-export async function handleWorkflowStream<UI_MESSAGE extends UIMessage>({
+export function handleWorkflowStream<UI_MESSAGE extends V5UIMessage = V5UIMessage>(
+  options: WorkflowStreamHandlerOptionsV5,
+): Promise<V5UIMessageStream<UI_MESSAGE>>;
+export function handleWorkflowStream<UI_MESSAGE extends V6UIMessage = V6UIMessage>(
+  options: WorkflowStreamHandlerOptionsV6,
+): Promise<V6UIMessageStream<UI_MESSAGE>>;
+export async function handleWorkflowStream({
   mastra,
   workflowId,
   params,
+  version = 'v5',
   includeTextStreamParts = true,
   sendReasoning = false,
   sendSources = false,
-}: WorkflowStreamHandlerOptions): Promise<ReadableStream<InferUIMessageChunk<UI_MESSAGE>>> {
+}: WorkflowStreamHandlerOptions): Promise<SupportedUIMessageStream> {
   const { runId, resourceId, inputData, initialState, resumeData, requestContext, ...rest } = params;
 
   const workflowObj = mastra.getWorkflowById(workflowId);
@@ -69,18 +92,34 @@ export async function handleWorkflowStream<UI_MESSAGE extends UIMessage>({
     ? run.resumeStream({ resumeData, ...rest, requestContext })
     : run.stream({ inputData, initialState, ...rest, requestContext });
 
-  return createUIMessageStream<UI_MESSAGE>({
+  if (version === 'v6') {
+    return createUIMessageStreamV6<V6UIMessage>({
+      execute: async ({ writer }) => {
+        for await (const part of toAISdkStream(stream, {
+          from: 'workflow',
+          version: 'v6',
+          includeTextStreamParts,
+          sendReasoning,
+          sendSources,
+        })) {
+          writer.write(part);
+        }
+      },
+    }) as SupportedUIMessageStream;
+  }
+
+  return createUIMessageStreamV5<V5UIMessage>({
     execute: async ({ writer }) => {
-      for await (const part of toAISdkV5Stream(stream, {
+      for await (const part of toAISdkStream(stream, {
         from: 'workflow',
         includeTextStreamParts,
         sendReasoning,
         sendSources,
       })) {
-        writer.write(part as InferUIMessageChunk<UI_MESSAGE>);
+        writer.write(part);
       }
     },
-  });
+  }) as SupportedUIMessageStream;
 }
 
 export type WorkflowRouteOptions = {
