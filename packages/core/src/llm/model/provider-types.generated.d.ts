@@ -2040,6 +2040,8 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2.1-lightning',
     'minimax/minimax-m2.5',
     'minimax/minimax-m2.5-highspeed',
+    'minimax/minimax-m2.7',
+    'minimax/minimax-m2.7-highspeed',
     'mistral/codestral',
     'mistral/codestral-embed',
     'mistral/devstral-2',

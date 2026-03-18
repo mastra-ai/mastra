@@ -2154,7 +2154,7 @@
       "gateway": "models.dev"
     },
     "firmware": {
-      "url": "https://app.firmware.ai/api/v1",
+      "url": "https://app.frogbot.ai/api/v1",
       "apiKeyEnvVar": "FIRMWARE_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Firmware",
@@ -2184,7 +2184,7 @@
         "kimi-k2.5",
         "minimax-m2-5"
       ],
-      "docUrl": "https://docs.firmware.ai",
+      "docUrl": "https://docs.frogbot.ai",
       "gateway": "models.dev"
     },
     "ovhcloud": {
@@ -2602,6 +2602,8 @@
         "minimax/minimax-m2.1-lightning",
         "minimax/minimax-m2.5",
         "minimax/minimax-m2.5-highspeed",
+        "minimax/minimax-m2.7",
+        "minimax/minimax-m2.7-highspeed",
         "mistral/codestral",
         "mistral/codestral-embed",
         "mistral/devstral-2",
@@ -6266,6 +6268,8 @@
       "minimax/minimax-m2.1-lightning",
       "minimax/minimax-m2.5",
       "minimax/minimax-m2.5-highspeed",
+      "minimax/minimax-m2.7",
+      "minimax/minimax-m2.7-highspeed",
       "mistral/codestral",
       "mistral/codestral-embed",
       "mistral/devstral-2",
