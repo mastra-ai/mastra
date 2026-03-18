@@ -63,7 +63,6 @@
     "test:server": "pnpm --filter ./packages/server test",
     "test:server-adapters": "pnpm --filter ./server-adapters/hono test && pnpm --filter ./server-adapters/express test",
     "test:core": "pnpm --filter ./packages/core test",
-    "test:core:zod": "pnpm --filter ./packages/core test:types:zod",
     "test:mcp": "pnpm --filter ./packages/mcp test",
     "test:rag": "pnpm --filter ./packages/rag test",
     "test:clients": "pnpm --filter \"./client-sdks/*\" test",

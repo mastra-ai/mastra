@@ -15,7 +15,7 @@ import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-com
 import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { WORKSPACE_TOOLS, resolveToolConfig } from '../constants';
 import type { WorkspaceToolName } from '../constants';
 

@@ -8,7 +8,7 @@ import type {
   UIMessage,
 } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod/v3';
+import type { ZodSchema } from 'zod/v4';
 import type { MessageList } from '../../agent';
 import type { LoopOptions } from '../../loop/types';
 import type { ObservabilityContext } from '../../observability';

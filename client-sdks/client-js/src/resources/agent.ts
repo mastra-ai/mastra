@@ -18,7 +18,7 @@ import type { FullOutput, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodType } from 'zod/v3';
+import type { ZodType } from 'zod/v4';
 import type {
   GenerateLegacyParams,
   GetAgentResponse,
