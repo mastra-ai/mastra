@@ -923,6 +923,7 @@ describe('Tracing Integration Tests', () => {
 
     expect(fullText).toBe('Mock V2 stream response');
     expect(result.traceId).toBeDefined();
+    expect(result.spanId).toBeDefined();
 
     const [agentRunSpan] = testExporter.getSpansByType(SpanType.AGENT_RUN);
     const [modelGenerationSpan] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
@@ -935,6 +936,7 @@ describe('Tracing Integration Tests', () => {
     expect(rootSpans).toHaveLength(1);
     expect(rootSpans[0]?.id).toBe(agentRunSpan?.id);
     expect(agentRunSpan?.traceId).toBe(result.traceId);
+    expect(result.spanId).toBe(agentRunSpan?.id);
     expect(modelGenerationSpan?.parentSpanId).toBe(agentRunSpan?.id);
     expect(modelStepSpan?.parentSpanId).toBe(modelGenerationSpan?.id);
 
