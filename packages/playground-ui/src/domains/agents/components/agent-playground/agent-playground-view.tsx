@@ -1,19 +1,24 @@
 import { useState } from 'react';
 import { Panel, Group, useDefaultLayout } from 'react-resizable-panels';
-import { FlaskConical, MessageSquare, Braces } from 'lucide-react';
+import { FlaskConical, MessageSquare, ClipboardCheck } from 'lucide-react';
 
 import { PanelSeparator } from '@/lib/resize/separator';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { cn } from '@/lib/utils';
 
+import { PlaygroundModelProvider } from '../../context/playground-model-context';
+import { ReviewQueueProvider, useReviewQueue } from '../../context/review-queue-context';
+import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { cleanProviderId } from '@/domains/llm';
 import { AgentPlaygroundConfig } from './agent-playground-config';
-import { AgentPlaygroundEval } from './agent-playground-eval';
 import { AgentPlaygroundTestChat } from './agent-playground-test-chat';
 import { AgentPlaygroundVersionBar } from './agent-playground-version-bar';
-import { AgentPlaygroundRequestContext } from './agent-playground-request-context';
+import { AgentPlaygroundEvaluate } from './agent-playground-evaluate';
+import { AgentPlaygroundReview } from './agent-playground-review';
+import { PlaygroundModelSelector } from './playground-model-selector';
 
-type RightPanelTab = 'experiment' | 'test-chat' | 'request-context';
+type RightPanelTab = 'chat' | 'evaluate' | 'review';
 
 interface AgentPlaygroundViewProps {
   agentId: string;
@@ -103,11 +108,13 @@ function TabButton({
   onClick,
   icon,
   label,
+  badge,
 }: {
   active: boolean;
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
+  badge?: number;
 }) {
   return (
     <button
@@ -122,8 +129,18 @@ function TabButton({
       <Txt variant="ui-sm" className="text-inherit">
         {label}
       </Txt>
+      {badge !== undefined && badge > 0 && (
+        <span className="ml-1 bg-accent1 text-white text-xs font-medium rounded-full px-1.5 py-0 min-w-[18px] text-center leading-[18px]">
+          {badge}
+        </span>
+      )}
     </button>
   );
+}
+
+function ReviewTabButton({ active, onClick }: { active: boolean; onClick: () => void }) {
+  const { items } = useReviewQueue();
+  return <TabButton active={active} onClick={onClick} icon={<ClipboardCheck />} label="Review" badge={items.length} />;
 }
 
 export function AgentPlaygroundView({
@@ -144,15 +161,32 @@ export function AgentPlaygroundView({
   onSaveDraft,
   onPublish,
 }: AgentPlaygroundViewProps) {
-  const [rightTab, setRightTab] = useState<RightPanelTab>('experiment');
+  const [rightTab, setRightTab] = useState<RightPanelTab>(() => {
+    const stored = sessionStorage.getItem(`playground-tab-${agentId}`);
+    return (stored === 'evaluate' || stored === 'review') ? stored : 'chat';
+  });
+  const [pendingScorerItems, setPendingScorerItems] = useState<Array<{ input: unknown; output: unknown }> | null>(null);
+  const handleSetRightTab = (tab: RightPanelTab) => {
+    sessionStorage.setItem(`playground-tab-${agentId}`, tab);
+    setRightTab(tab);
+  };
+  const handleCreateScorerFromReview = (items: Array<{ input: unknown; output: unknown }>) => {
+    setPendingScorerItems(items);
+    handleSetRightTab('evaluate');
+  };
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
     id: `agent-playground-${agentId}`,
     storage: localStorage,
   });
+  const { form } = useAgentEditFormContext();
+  const defaultProvider = cleanProviderId(form.getValues('model.provider') || '');
+  const defaultModel = form.getValues('model.name') || '';
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-surface2">
-      <Group className="flex-1 min-h-0" defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
+    <PlaygroundModelProvider defaultProvider={defaultProvider} defaultModel={defaultModel}>
+    <ReviewQueueProvider>
+      <div className="flex flex-col h-full overflow-hidden bg-surface2">
+        <Group className="flex-1 min-h-0" defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
         {/* Left panel - Version Bar + Configuration + Action Bar */}
         <Panel id="playground-config" minSize={30} defaultSize={50} className="overflow-hidden">
           <LeftPanel
@@ -173,49 +207,53 @@ export function AgentPlaygroundView({
 
         <PanelSeparator />
 
-        {/* Right panel - Experiment / Test Chat / Request Context */}
+        {/* Right panel - Chat / Evaluate / Review */}
         <Panel id="playground-eval" minSize={30} defaultSize={50} className="overflow-hidden">
           <div className="flex flex-col h-full overflow-hidden bg-surface1">
             <div className="flex items-center border-b border-border1 px-2">
               <TabButton
-                active={rightTab === 'experiment'}
-                onClick={() => setRightTab('experiment')}
-                icon={<FlaskConical />}
-                label="Experiment"
+                active={rightTab === 'chat'}
+                onClick={() => handleSetRightTab('chat')}
+                icon={<MessageSquare />}
+                label="Chat"
               />
               <TabButton
-                active={rightTab === 'test-chat'}
-                onClick={() => setRightTab('test-chat')}
-                icon={<MessageSquare />}
-                label="Test Chat"
+                active={rightTab === 'evaluate'}
+                onClick={() => handleSetRightTab('evaluate')}
+                icon={<FlaskConical />}
+                label="Evaluate"
               />
+              <ReviewTabButton active={rightTab === 'review'} onClick={() => handleSetRightTab('review')} />
               <div className="ml-auto">
-                <TabButton
-                  active={rightTab === 'request-context'}
-                  onClick={() => setRightTab('request-context')}
-                  icon={<Braces />}
-                  label="Request Context"
-                />
+                <PlaygroundModelSelector />
               </div>
             </div>
 
             <div className="flex-1 min-h-0">
-              {rightTab === 'experiment' ? (
-                <AgentPlaygroundEval agentId={agentId} onSaveDraft={onSaveDraft} />
-              ) : rightTab === 'test-chat' ? (
+              {rightTab === 'chat' ? (
                 <AgentPlaygroundTestChat
                   agentId={agentId}
                   agentName={agentName}
                   modelVersion={modelVersion}
                   hasMemory={hasMemory}
+                  requestContextSchema={requestContextSchema}
+                />
+              ) : rightTab === 'evaluate' ? (
+                <AgentPlaygroundEvaluate
+                  agentId={agentId}
+                  onSwitchToReview={() => handleSetRightTab('review')}
+                  pendingScorerItems={pendingScorerItems}
+                  onPendingScorerItemsConsumed={() => setPendingScorerItems(null)}
                 />
               ) : (
-                <AgentPlaygroundRequestContext requestContextSchema={requestContextSchema} />
+                <AgentPlaygroundReview agentId={agentId} onCreateScorer={handleCreateScorerFromReview} />
               )}
             </div>
           </div>
         </Panel>
       </Group>
     </div>
+    </ReviewQueueProvider>
+    </PlaygroundModelProvider>
   );
 }

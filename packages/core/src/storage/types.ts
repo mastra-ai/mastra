@@ -2149,9 +2149,17 @@ export interface DatasetRecord {
   inputSchema?: Record<string, unknown>;
   groundTruthSchema?: Record<string, unknown>;
   requestContextSchema?: Record<string, unknown>;
+  tags?: string[] | null;
+  targetType?: string | null;
+  targetIds?: string[] | null;
   version: number;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface DatasetItemSource {
+  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+  referenceId?: string;
 }
 
 export interface DatasetItem {
@@ -2162,6 +2170,7 @@ export interface DatasetItem {
   groundTruth?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -2176,6 +2185,7 @@ export interface DatasetItemRow {
   groundTruth?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -2196,6 +2206,8 @@ export interface CreateDatasetInput {
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
   requestContextSchema?: Record<string, unknown> | null;
+  targetType?: string;
+  targetIds?: string[];
 }
 
 export interface UpdateDatasetInput {
@@ -2206,6 +2218,9 @@ export interface UpdateDatasetInput {
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
   requestContextSchema?: Record<string, unknown> | null;
+  tags?: string[] | null;
+  targetType?: string | null;
+  targetIds?: string[] | null;
 }
 
 export interface AddDatasetItemInput {
@@ -2214,6 +2229,7 @@ export interface AddDatasetItemInput {
   groundTruth?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
 }
 
 export interface UpdateDatasetItemInput {
@@ -2223,6 +2239,7 @@ export interface UpdateDatasetItemInput {
   groundTruth?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
 }
 
 export interface ListDatasetsInput {
@@ -2263,6 +2280,7 @@ export interface BatchInsertItemsInput {
     groundTruth?: unknown;
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
+    source?: DatasetItemSource;
   }>;
 }
 
@@ -2291,11 +2309,14 @@ export interface Experiment {
   succeededCount: number;
   failedCount: number;
   skippedCount: number;
+  agentVersion?: string | null;
   startedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
+
+export type ExperimentResultStatus = 'needs-review' | 'reviewed' | 'complete';
 
 export interface ExperimentResult {
   id: string;
@@ -2310,7 +2331,15 @@ export interface ExperimentResult {
   completedAt: Date;
   retryCount: number;
   traceId: string | null;
+  status: ExperimentResultStatus | null;
+  tags: string[] | null;
   createdAt: Date;
+}
+
+export interface UpdateExperimentResultInput {
+  id: string;
+  status?: ExperimentResultStatus | null;
+  tags?: string[] | null;
 }
 
 export interface CreateExperimentInput {
@@ -2352,6 +2381,8 @@ export interface AddExperimentResultInput {
   completedAt: Date;
   retryCount: number;
   traceId?: string | null;
+  status?: ExperimentResultStatus | null;
+  tags?: string[] | null;
 }
 
 export interface ListExperimentsInput {

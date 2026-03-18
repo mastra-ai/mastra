@@ -17,25 +17,30 @@ interface AgentExperiment {
 }
 
 /**
- * Hook to fetch all experiments targeting a specific agent across all datasets.
- * Fetches experiments from each dataset and filters by targetId === agentId.
+ * Hook to fetch all experiments relevant to a specific agent across all datasets.
+ * Includes experiments targeting the agent directly and experiments targeting attached scorers.
  */
-export const useAgentExperiments = (agentId: string) => {
+export const useAgentExperiments = (agentId: string, attachedScorerIds: string[] = []) => {
   const client = useMastraClient();
   const { data: datasetsData } = useDatasets();
   const datasets = datasetsData?.datasets ?? [];
 
   return useQuery({
-    queryKey: ['agent-experiments', agentId, datasets.map(d => d.id)],
+    queryKey: ['agent-experiments', agentId, attachedScorerIds, datasets.map(d => d.id)],
     queryFn: async () => {
       if (datasets.length === 0) return [] as AgentExperiment[];
+
+      const scorerIdSet = new Set(attachedScorerIds);
 
       const results = await Promise.all(
         datasets.map(async dataset => {
           try {
             const response = await client.listDatasetExperiments(dataset.id);
             return response.experiments
-              .filter(exp => exp.targetType === 'agent' && exp.targetId === agentId)
+              .filter(exp =>
+                (exp.targetType === 'agent' && exp.targetId === agentId) ||
+                (exp.targetType === 'scorer' && scorerIdSet.has(exp.targetId))
+              )
               .map(exp => ({
                 ...exp,
                 datasetId: dataset.id,

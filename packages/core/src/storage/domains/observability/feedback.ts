@@ -46,6 +46,12 @@ export const feedbackRecordSchema = z
     // Identity
     userId: userIdField.nullish(),
 
+    // Source linkage (e.g. dataset item result ID)
+    sourceId: z
+      .string()
+      .nullish()
+      .describe('ID of the source record this feedback is linked to (e.g. experiment result ID)'),
+
     // User-defined metadata (context fields stored here)
     metadata: z.record(z.string(), z.unknown()).nullish().describe('User-defined metadata'),
   })
@@ -71,6 +77,7 @@ export const feedbackInputSchema = z
     userId: userIdField.optional(),
     metadata: z.record(z.string(), z.unknown()).optional().describe('Additional feedback-specific metadata'),
     experimentId: experimentIdField.optional(),
+    sourceId: z.string().optional().describe('ID of the source record this feedback is linked to'),
   })
   .describe('User-provided feedback input');
 

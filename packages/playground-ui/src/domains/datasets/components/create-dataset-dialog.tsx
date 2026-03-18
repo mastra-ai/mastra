@@ -13,13 +13,17 @@ export interface CreateDatasetDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: (datasetId: string) => void;
+  /** If provided, auto-attaches the dataset to this target on create */
+  targetType?: string;
+  targetIds?: string[];
 }
 
-export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDatasetDialogProps) {
+export function CreateDatasetDialog({ open, onOpenChange, onSuccess, targetType, targetIds }: CreateDatasetDialogProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [inputSchema, setInputSchema] = useState<Record<string, unknown> | null>(null);
   const [groundTruthSchema, setGroundTruthSchema] = useState<Record<string, unknown> | null>(null);
+  const [showCustomSchema, setShowCustomSchema] = useState(!targetType);
   const { createDataset } = useDatasetMutations();
 
   const handleSchemaChange = (schemas: {
@@ -44,6 +48,8 @@ export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDat
         description: description.trim() || undefined,
         inputSchema,
         groundTruthSchema,
+        targetType,
+        targetIds,
       })) as { id: string };
 
       toast.success('Dataset created successfully');
@@ -53,6 +59,7 @@ export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDat
       setDescription('');
       setInputSchema(null);
       setGroundTruthSchema(null);
+      setShowCustomSchema(!targetType);
       onOpenChange(false);
 
       // Navigate to new dataset
@@ -67,6 +74,7 @@ export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDat
     setDescription('');
     setInputSchema(null);
     setGroundTruthSchema(null);
+    setShowCustomSchema(!targetType);
     onOpenChange(false);
   };
 
@@ -99,12 +107,22 @@ export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDat
               />
             </div>
 
-            <SchemaConfigSection
-              inputSchema={inputSchema}
-              outputSchema={groundTruthSchema}
-              onChange={handleSchemaChange}
-              disabled={createDataset.isPending}
-            />
+            {targetType && !showCustomSchema ? (
+              <button
+                type="button"
+                className="text-xs text-neutral3 hover:text-accent1 transition-colors"
+                onClick={() => setShowCustomSchema(true)}
+              >
+                + Custom schema
+              </button>
+            ) : (
+              <SchemaConfigSection
+                inputSchema={inputSchema}
+                outputSchema={groundTruthSchema}
+                onChange={handleSchemaChange}
+                disabled={createDataset.isPending}
+              />
+            )}
 
             <div className="flex justify-end gap-2 pt-4">
               <Button type="button" onClick={handleCancel}>

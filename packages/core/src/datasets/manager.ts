@@ -95,6 +95,8 @@ export class DatasetsManager {
     groundTruthSchema?: unknown;
     requestContextSchema?: Record<string, unknown> | null;
     metadata?: Record<string, unknown>;
+    targetType?: string;
+    targetIds?: string[];
   }): Promise<Dataset> {
     const store = await this.#getDatasetsStore();
 
