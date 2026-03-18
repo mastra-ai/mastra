@@ -139,6 +139,7 @@ export class GradientAnimator {
     if (!this.intervalId) return;
     if (this._isFadingOut) return;
     this._isFadingOut = true;
+    this._isFadingIn = false;
     this._fadeProgress = 0;
     // Replace the animation interval with a fade interval
     clearInterval(this.intervalId);
@@ -158,6 +159,7 @@ export class GradientAnimator {
       this.intervalId = null;
     }
     this._isFadingOut = false;
+    this._isFadingIn = false;
     this._fadeProgress = 0;
     this.offset = 0;
   }

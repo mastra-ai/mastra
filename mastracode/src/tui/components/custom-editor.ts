@@ -10,8 +10,8 @@ import type { EditorTheme, TUI } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 import { getClipboardImage, getClipboardText } from '../../clipboard/index.js';
 import type { ClipboardImage } from '../../clipboard/index.js';
-import type { GradientAnimator } from './obi-loader.js';
 import { mastra, theme } from '../theme.js';
+import type { GradientAnimator } from './obi-loader.js';
 
 const PASTE_START = '\x1b[200~';
 const PASTE_END = '\x1b[201~';
@@ -75,7 +75,7 @@ const PROMPT_ICON_CHOICES = [
 ] as const;
 
 function getRandomPromptIcon(currentIcon: string): string {
-  if (Math.random() < 0.9) {
+  if (Math.random() < 0.99) {
     return DEFAULT_PROMPT_ICON;
   }
 
@@ -170,7 +170,10 @@ export class CustomEditor extends Editor {
       : 0;
 
     const isSteadyPulse = isPromptAnimated && !isTransitioningIn && !isTransitioningOut;
-    if (!isSteadyPulse) {
+    if (!isPromptAnimated) {
+      this.promptIcon = DEFAULT_PROMPT_ICON;
+      this.lastPromptWasInvisible = false;
+    } else if (!isSteadyPulse) {
       this.lastPromptWasInvisible = false;
     }
 
