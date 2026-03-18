@@ -550,11 +550,13 @@ export class Memory extends MastraMemory {
 
       let reason = '';
 
+      const templateContent = typeof template?.content === 'string' ? template.content : null;
+
       // Normalize content for comparison (handles whitespace variations)
       // This catches template duplicates even when LLM returns slightly different whitespace
       const normalizeForComparison = (str: string) => str.replace(/\s+/g, ' ').trim();
       const normalizedNewMemory = normalizeForComparison(workingMemory);
-      const normalizedTemplate = template?.content ? normalizeForComparison(template.content) : '';
+      const normalizedTemplate = templateContent ? normalizeForComparison(templateContent) : '';
 
       if (existingWorkingMemory) {
         if (searchString && existingWorkingMemory?.includes(searchString)) {
@@ -562,7 +564,7 @@ export class Memory extends MastraMemory {
           reason = `found and replaced searchString with newMemory`;
         } else if (
           existingWorkingMemory.includes(workingMemory) ||
-          template?.content?.trim() === workingMemory.trim() ||
+          templateContent?.trim() === workingMemory.trim() ||
           // Also check normalized versions to catch template variations with different whitespace
           normalizedNewMemory === normalizedTemplate
         ) {
@@ -591,7 +593,7 @@ export class Memory extends MastraMemory {
             `
 ${workingMemory}`;
         }
-      } else if (workingMemory === template?.content || normalizedNewMemory === normalizedTemplate) {
+      } else if (workingMemory === templateContent || normalizedNewMemory === normalizedTemplate) {
         return {
           success: false,
           reason: `try again when you have data to add. newMemory was equal to the working memory template`,
@@ -602,11 +604,11 @@ ${workingMemory}`;
 
       // Remove empty template insertions which models sometimes duplicate
       // Use both exact and normalized matching to catch variations
-      if (template?.content) {
-        workingMemory = workingMemory.replaceAll(template.content, '');
+      if (templateContent) {
+        workingMemory = workingMemory.replaceAll(templateContent, '');
         // Also try to remove template with normalized line endings
-        const templateWithUnixLineEndings = template.content.replace(/\r\n/g, '\n');
-        const templateWithWindowsLineEndings = template.content.replace(/\n/g, '\r\n');
+        const templateWithUnixLineEndings = templateContent.replace(/\r\n/g, '\n');
+        const templateWithWindowsLineEndings = templateContent.replace(/\n/g, '\r\n');
         workingMemory = workingMemory.replaceAll(templateWithUnixLineEndings, '');
         workingMemory = workingMemory.replaceAll(templateWithWindowsLineEndings, '');
       }
@@ -2038,3 +2040,6 @@ export { SemanticRecall, WorkingMemory, MessageHistory } from '@mastra/core/proc
 
 // Re-export clone-related types for convenience
 export type { StorageCloneThreadInput, StorageCloneThreadOutput, ThreadCloneMetadata } from '@mastra/core/storage';
+
+// Observational Memory utilities
+export { getObservationsAsOf } from './processors/observational-memory';

@@ -2550,12 +2550,13 @@ export class MemoryPG extends MemoryStorage {
       // With streaming, messages grow after buffering, so we rely on lastObservedAt for filtering.
       // New content after lastObservedAt will be picked up in subsequent observations.
 
-      // Atomic update
+      // Atomic update — include message boundary delimiter for cache stability
+      const boundary = `\n\n--- message boundary (${lastObservedAt.toISOString()}) ---\n\n`;
       await this.#db.client.query(
         `UPDATE ${tableName} SET
           "activeObservations" = CASE 
             WHEN "activeObservations" IS NOT NULL AND "activeObservations" != '' 
-            THEN "activeObservations" || E'\\n\\n' || $1
+            THEN "activeObservations" || $10 || $1
             ELSE $1
           END,
           "observationTokenCount" = COALESCE("observationTokenCount", 0) + $2,
@@ -2576,6 +2577,7 @@ export class MemoryPG extends MemoryStorage {
           nowStr,
           nowStr,
           input.id,
+          boundary,
         ],
       );
 

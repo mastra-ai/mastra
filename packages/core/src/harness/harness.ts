@@ -1398,17 +1398,31 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
   }
 
   async getFirstUserMessageForThread({ threadId }: { threadId: string }): Promise<HarnessMessage | null> {
-    if (!this.config.storage) return null;
+    const messages = await this.getFirstUserMessagesForThreads({ threadIds: [threadId] });
+    return messages.get(threadId) ?? null;
+  }
+
+  async getFirstUserMessagesForThreads({ threadIds }: { threadIds: string[] }): Promise<Map<string, HarnessMessage>> {
+    if (!this.config.storage || threadIds.length === 0) return new Map();
 
     const memoryStorage = await this.getMemoryStorage();
     const result = await memoryStorage.listMessages({
-      threadId,
-      perPage: 5,
-      page: 0,
+      threadId: threadIds,
+      perPage: false,
       orderBy: { field: 'createdAt', direction: 'ASC' },
     });
-    const userMsg = result.messages.find(m => m.role === 'user');
-    return userMsg ? this.convertToHarnessMessage(userMsg) : null;
+
+    const firstUserMessages = new Map<string, HarnessMessage>();
+    for (const message of result.messages) {
+      if (message.role !== 'user' || !message.threadId || firstUserMessages.has(message.threadId)) continue;
+      firstUserMessages.set(message.threadId, this.convertToHarnessMessage(message));
+
+      if (firstUserMessages.size === threadIds.length) {
+        break;
+      }
+    }
+
+    return firstUserMessages;
   }
 
   private convertToHarnessMessage(msg: {

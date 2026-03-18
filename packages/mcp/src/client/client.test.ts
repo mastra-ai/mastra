@@ -56,12 +56,7 @@ async function setupTestServer(withSessionManagement: boolean) {
 
   mcpServer.prompt('greet', 'A simple greeting prompt', () => {
     return {
-      prompt: {
-        name: 'greet',
-        version: 'v1',
-        description: 'A simple greeting prompt',
-        mimeType: 'application/json',
-      },
+      description: 'A simple greeting prompt',
       messages: [
         {
           role: 'assistant',
@@ -71,14 +66,34 @@ async function setupTestServer(withSessionManagement: boolean) {
     };
   });
 
-  const serverTransport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: withSessionManagement ? () => randomUUID() : undefined,
-  });
+  if (withSessionManagement) {
+    const serverTransport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+    });
 
-  await mcpServer.connect(serverTransport);
+    await mcpServer.connect(serverTransport);
 
+    httpServer.on('request', async (req, res) => {
+      await serverTransport.handleRequest(req, res);
+    });
+
+    const baseUrl = await new Promise<URL>(resolve => {
+      httpServer.listen(0, '127.0.0.1', () => {
+        const addr = httpServer.address() as AddressInfo;
+        resolve(new URL(`http://127.0.0.1:${addr.port}/mcp`));
+      });
+    });
+
+    return { httpServer, mcpServer, serverTransport, baseUrl };
+  }
+
+  // Stateless mode: SDK 1.27+ requires a new transport per request.
+  // We must close the previous connection before reconnecting.
   httpServer.on('request', async (req, res) => {
-    await serverTransport.handleRequest(req, res);
+    await mcpServer.close().catch(() => {});
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    await mcpServer.connect(transport);
+    await transport.handleRequest(req, res);
   });
 
   const baseUrl = await new Promise<URL>(resolve => {
@@ -88,7 +103,7 @@ async function setupTestServer(withSessionManagement: boolean) {
     });
   });
 
-  return { httpServer, mcpServer, serverTransport, baseUrl };
+  return { httpServer, mcpServer, serverTransport: undefined as any, baseUrl };
 }
 
 describe('MastraMCPClient with Streamable HTTP', () => {
@@ -115,7 +130,7 @@ describe('MastraMCPClient with Streamable HTTP', () => {
     afterEach(async () => {
       await client?.disconnect().catch(() => {});
       await testServer?.mcpServer.close().catch(() => {});
-      await testServer?.serverTransport.close().catch(() => {});
+      await testServer?.serverTransport?.close().catch(() => {});
       testServer?.httpServer.close();
     });
 
@@ -128,7 +143,7 @@ describe('MastraMCPClient with Streamable HTTP', () => {
     it('should call a tool', async () => {
       const tools = await client.tools();
       const result = await tools.greet?.execute?.({ name: 'Stateless' });
-      expect(result).toEqual({ content: [{ type: 'text', text: 'Hello, Stateless!' }] });
+      expect(result).toEqual('Hello, Stateless!');
     });
 
     it('should list resources', async () => {
@@ -157,17 +172,11 @@ describe('MastraMCPClient with Streamable HTTP', () => {
 
     it('should get a specific prompt', async () => {
       const result = await client.getPrompt({ name: 'greet' });
-      const { prompt, messages } = result;
-      expect(prompt).toBeDefined();
-      expect(prompt).toMatchObject({
-        name: 'greet',
-        version: 'v1',
-        description: expect.any(String),
-        mimeType: 'application/json',
-      });
+      const { description, messages } = result;
+      expect(description).toBe('A simple greeting prompt');
       expect(messages).toBeDefined();
       const messageItem = messages[0];
-      expect(messageItem.content.text).toBe('Hello, World!');
+      expect(messageItem.content.type === 'text' && messageItem.content.text).toBe('Hello, World!');
     });
   });
 
@@ -186,7 +195,7 @@ describe('MastraMCPClient with Streamable HTTP', () => {
     afterEach(async () => {
       await client?.disconnect().catch(() => {});
       await testServer?.mcpServer.close().catch(() => {});
-      await testServer?.serverTransport.close().catch(() => {});
+      await testServer?.serverTransport?.close().catch(() => {});
       testServer?.httpServer.close();
     });
 
@@ -206,7 +215,7 @@ describe('MastraMCPClient with Streamable HTTP', () => {
     it('should call a tool', async () => {
       const tools = await client.tools();
       const result = await tools.greet?.execute?.({ name: 'Stateful' });
-      expect(result).toEqual({ content: [{ type: 'text', text: 'Hello, Stateful!' }] });
+      expect(result).toEqual('Hello, Stateful!');
     });
   });
 });
@@ -240,7 +249,7 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
   afterEach(async () => {
     await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -288,6 +297,102 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
   });
 });
 
+describe('MastraMCPClient - no outputSchema (issue #12040)', () => {
+  // Reproduces the core scenario from issue #12040: MCP tools that do NOT
+  // declare an outputSchema at all should still return parsed content from
+  // the content array, not the raw CallToolResult envelope.
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'no-output-schema-test-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should return parsed JSON content when outputSchema is undefined', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    // Tool has NO outputSchema — common for FastMCP and many MCP servers
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'get_patient',
+          description: 'Get patient information',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { patientId: { type: 'string' } },
+          },
+          // No outputSchema defined
+        },
+      ],
+    });
+
+    const patientData = {
+      success: true,
+      patient: { id: '123', name: 'John Doe', dob: '1990-01-01' },
+      markdown: '## Patient: John Doe',
+    };
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify(patientData) }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const getTool = tools['get_patient'];
+    expect(getTool).toBeDefined();
+
+    const result = await getTool.execute?.({ patientId: '123' });
+
+    // Before the fix, this returned the raw envelope { content: [...], isError: false }
+    // or {} if Zod stripped the keys. Now it should return the parsed content.
+    expect(result).toEqual(patientData);
+  });
+
+  it('should return raw text when content is not valid JSON', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'describe',
+          description: 'Describe something',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { topic: { type: 'string' } },
+          },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: 'This is a plain text response' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const result = await tools['describe']!.execute?.({ topic: 'test' });
+
+    expect(result).toBe('This is a plain text response');
+  });
+});
+
 describe('MastraMCPClient - outputSchema Zod stripping', () => {
   // Reproduces the bug where the Zod output schema converted from the MCP tool's
   // JSON Schema strips unknown keys from the result. This happens because Zod's
@@ -319,7 +424,7 @@ describe('MastraMCPClient - outputSchema Zod stripping', () => {
   afterEach(async () => {
     await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -414,6 +519,130 @@ describe('MastraMCPClient - outputSchema Zod stripping', () => {
   });
 });
 
+describe('MastraMCPClient - tools without outputSchema', () => {
+  // Reproduces the bug where MCP tools that don't define an outputSchema return
+  // the raw CallToolResult envelope ({ content, isError, _meta }) instead of the
+  // actual response content. Callers expect the extracted text, not the envelope.
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'no-output-schema-test',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should return the text content, not the raw CallToolResult envelope', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    // Tool with NO outputSchema
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'simple_tool',
+          description: 'A tool without outputSchema',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+          },
+          // No outputSchema
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: 'Hello, world!' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const tool = tools['simple_tool'];
+    const result = await tool.execute?.({ query: 'test' });
+
+    // Before the fix this would return { content: [...], isError: false }
+    expect(result).toEqual('Hello, world!');
+  });
+
+  it('should parse JSON text content into an object when no outputSchema is defined', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'json_tool',
+          description: 'Returns JSON without outputSchema',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { id: { type: 'string' } },
+          },
+        },
+      ],
+    });
+
+    const payload = { name: 'Alice', age: 30 };
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify(payload) }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const tool = tools['json_tool'];
+    const result = await tool.execute?.({ id: '123' });
+
+    // JSON text should be parsed into an object
+    expect(result).toEqual(payload);
+  });
+
+  it('should return the raw envelope when content has multiple items or non-text types', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'multi_content_tool',
+          description: 'Returns multiple content items',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {},
+          },
+        },
+      ],
+    });
+
+    const multiContentResult = {
+      content: [
+        { type: 'text', text: 'part1' },
+        { type: 'text', text: 'part2' },
+      ],
+      isError: false,
+    };
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue(multiContentResult);
+
+    const tools = await client.tools();
+    const tool = tools['multi_content_tool'];
+    const result = await tool.execute?.({});
+
+    // Multiple content items can't be collapsed to a single value, so return envelope
+    expect(result).toEqual(multiContentResult);
+  });
+});
+
 describe('MastraMCPClient - AbortSignal forwarding', () => {
   let testServer: {
     httpServer: HttpServer;
@@ -442,7 +671,7 @@ describe('MastraMCPClient - AbortSignal forwarding', () => {
   afterEach(async () => {
     await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -499,7 +728,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
   let client: InternalMastraMCPClient;
 
   beforeEach(async () => {
-    testServer = await setupTestServer(false);
+    testServer = await setupTestServer(true);
 
     // Add elicitation-enabled tools to the test server
     testServer.mcpServer.tool(
@@ -580,7 +809,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
   afterEach(async () => {
     await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -620,12 +849,9 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     console.log('result', result);
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
-    expect(result.content).toBeDefined();
-    expect(result.content[0].type).toBe('text');
-
-    const elicitationResult = JSON.parse(result.content[0].text);
-    expect(elicitationResult.action).toBe('accept');
-    expect(elicitationResult.content).toEqual({
+    // Result is now extracted from the single text content item and JSON-parsed
+    expect(result.action).toBe('accept');
+    expect(result.content).toEqual({
       name: 'John Doe',
       email: 'john@example.com',
     });
@@ -655,11 +881,8 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     const result = await collectSensitiveInfoTool?.execute?.({ message: 'Please provide sensitive information' }, {});
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
-    expect(result.content).toBeDefined();
-    expect(result.content[0].type).toBe('text');
-
-    const elicitationResult = JSON.parse(result.content[0].text);
-    expect(elicitationResult.action).toBe('decline');
+    // Result is now extracted from the single text content item and JSON-parsed
+    expect(result.action).toBe('decline');
   });
 
   it('should handle elicitation request with cancel response', async () => {
@@ -685,11 +908,8 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     const result = await collectOptionalInfoTool?.execute?.({ message: 'Optional information request' }, {});
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
-    expect(result.content).toBeDefined();
-    expect(result.content[0].type).toBe('text');
-
-    const elicitationResult = JSON.parse(result.content[0].text);
-    expect(elicitationResult.action).toBe('cancel');
+    // Result is now extracted from the single text content item and JSON-parsed
+    expect(result.action).toBe('cancel');
   });
 
   it('should return an error when elicitation handler throws error', async () => {
@@ -796,7 +1016,7 @@ describe('MastraMCPClient - Progress Tests', () => {
   let client: InternalMastraMCPClient;
 
   beforeEach(async () => {
-    testServer = await setupTestServer(false);
+    testServer = await setupTestServer(true);
 
     // Add a tool that emits progress notifications while running
     testServer.mcpServer.tool(
@@ -835,7 +1055,7 @@ describe('MastraMCPClient - Progress Tests', () => {
   afterEach(async () => {
     await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -910,7 +1130,7 @@ describe('MastraMCPClient - AuthProvider Tests', () => {
   afterEach(async () => {
     await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -975,7 +1195,7 @@ describe('MastraMCPClient - Timeout Parameter Position Tests', () => {
   afterEach(async () => {
     await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -1119,7 +1339,7 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
 
   afterEach(async () => {
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -1195,6 +1415,71 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
     expect(afterDisconnectCount).toBe(initialListenerCount);
   });
 
+  it('should not accumulate SIGHUP listeners across multiple connect/disconnect cycles', async () => {
+    const initialListenerCount = process.listenerCount('SIGHUP');
+
+    for (let i = 0; i < 15; i++) {
+      const client = new InternalMastraMCPClient({
+        name: `sighup-cleanup-test-client-${i}`,
+        server: {
+          url: testServer.baseUrl,
+        },
+      });
+
+      await client.connect();
+      await client.disconnect();
+    }
+
+    const finalListenerCount = process.listenerCount('SIGHUP');
+
+    expect(finalListenerCount).toBeLessThanOrEqual(initialListenerCount + 1);
+  });
+
+  it('should clean up SIGHUP listeners on disconnect', async () => {
+    const initialListenerCount = process.listenerCount('SIGHUP');
+
+    const client = new InternalMastraMCPClient({
+      name: 'sighup-single-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+
+    await client.connect();
+
+    const afterConnectCount = process.listenerCount('SIGHUP');
+    expect(afterConnectCount).toBeLessThanOrEqual(initialListenerCount + 1);
+
+    await client.disconnect();
+
+    const afterDisconnectCount = process.listenerCount('SIGHUP');
+    expect(afterDisconnectCount).toBe(initialListenerCount);
+  });
+
+  it('should not add duplicate SIGHUP listeners when connect is called multiple times on the same client', async () => {
+    const initialListenerCount = process.listenerCount('SIGHUP');
+
+    const client = new InternalMastraMCPClient({
+      name: 'sighup-duplicate-connect-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+
+    await client.connect();
+    await client.connect();
+    await client.connect();
+
+    const afterMultipleConnects = process.listenerCount('SIGHUP');
+
+    expect(afterMultipleConnects).toBeLessThanOrEqual(initialListenerCount + 1);
+
+    await client.disconnect();
+
+    const afterDisconnectCount = process.listenerCount('SIGHUP');
+    expect(afterDisconnectCount).toBe(initialListenerCount);
+  });
+
   it('should not create duplicate connections when connect is called concurrently', async () => {
     const client = new InternalMastraMCPClient({
       name: 'concurrent-connect-test-client',
@@ -1254,14 +1539,12 @@ describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
       return { content: [{ type: 'text', text: message }] };
     });
 
-    const serverTransport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-    });
-
-    await mcpServer.connect(serverTransport);
-
+    // Stateless mode: SDK 1.27+ requires a new transport per request
     httpServer.on('request', async (req, res) => {
-      await serverTransport.handleRequest(req, res);
+      await mcpServer.close().catch(() => {});
+      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      await mcpServer.connect(transport);
+      await transport.handleRequest(req, res);
     });
 
     const baseUrl = await new Promise<URL>(resolve => {
@@ -1271,12 +1554,12 @@ describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
       });
     });
 
-    testServer = { httpServer, mcpServer, serverTransport, baseUrl };
+    testServer = { httpServer, mcpServer, serverTransport: undefined as any, baseUrl };
   });
 
   afterEach(async () => {
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -1447,7 +1730,7 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
 
     // First call should succeed
     const result1 = await pingTool.execute?.({ message: 'hello' });
-    expect(result1).toEqual({ content: [{ type: 'text', text: 'Ping: hello' }] });
+    expect(result1).toEqual('Ping: hello');
 
     // Verify we have a session ID
     const originalSessionId = client.sessionId;
@@ -1482,7 +1765,7 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
     // Step 4: Call tool again - should automatically reconnect and succeed
     // The client should detect the session error, reconnect, and retry
     const result2 = await pingTool.execute?.({ message: 'after restart' });
-    expect(result2).toEqual({ content: [{ type: 'text', text: 'Ping: after restart' }] });
+    expect(result2).toEqual('Ping: after restart');
 
     // Verify we got a new session ID (different from the original)
     const newSessionId = client.sessionId;
@@ -1542,11 +1825,11 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
 
     // First call should succeed - counter = 1
     const result1 = await counterTool.execute?.({});
-    expect(result1).toEqual({ content: [{ type: 'text', text: 'Call #1' }] });
+    expect(result1).toEqual('Call #1');
 
     // Second call - counter = 2
     const result2 = await counterTool.execute?.({});
-    expect(result2).toEqual({ content: [{ type: 'text', text: 'Call #2' }] });
+    expect(result2).toEqual('Call #2');
 
     // Step 3: Simulate server restart
     await serverTransport.close();
@@ -1572,7 +1855,7 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
     // Step 4: Call tool again - should reconnect and succeed
     // Counter should be 1 (not 3) because server restarted
     const result3 = await counterTool.execute?.({});
-    expect(result3).toEqual({ content: [{ type: 'text', text: 'Call #1' }] });
+    expect(result3).toEqual('Call #1');
 
     // Cleanup
     await client.disconnect().catch(() => {});
@@ -1822,7 +2105,7 @@ describe('MastraMCPClient - mcpMetadata on tools', () => {
   afterEach(async () => {
     await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -1854,7 +2137,7 @@ describe('MastraMCPClient fetch with requestContext', () => {
   afterEach(async () => {
     await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
-    await testServer?.serverTransport.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
   });
 
@@ -2032,8 +2315,9 @@ describe('MastraMCPClient - Stdio stderr and cwd forwarding', () => {
     expect(getCwdTool).toBeDefined();
 
     // Execute the tool and verify the child process cwd matches
-    const result = (await getCwdTool!.execute({}, {})) as { content: Array<{ type: string; text: string }> };
-    expect(result.content[0]!.text).toBe(targetDir);
+    // The result is now extracted from the single text content item
+    const result = await getCwdTool!.execute({}, {});
+    expect(result).toBe(targetDir);
 
     await client.disconnect();
   }, 30000);

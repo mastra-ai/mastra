@@ -1,6 +1,6 @@
 {
   "name": "@internal/test-utils",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Mastra-specific test helpers - version-agnostic agent wrappers, dummy API keys",
   "type": "module",
   "private": true,
@@ -42,7 +42,7 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/llm-recorder": "workspace:*",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",
@@ -50,7 +50,6 @@
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
-  "dependencies": {},
   "homepage": "https://mastra.ai",
   "repository": {
     "type": "git",

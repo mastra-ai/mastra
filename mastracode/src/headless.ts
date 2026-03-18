@@ -306,7 +306,9 @@ export async function headlessMain(): Promise<never> {
   const { harness, mcpManager } = result;
 
   if (mcpManager?.hasServers()) {
-    await mcpManager.init();
+    mcpManager.initInBackground().catch(() => {
+      // Non-fatal — tools from MCP servers won't be available
+    });
   }
 
   setupDebugLogging();
