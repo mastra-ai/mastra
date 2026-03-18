@@ -2051,7 +2051,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const existingTokenCount = Number(doc.observationTokenCount || 0);
 
       // Calculate new values
-      const newActive = existingActive ? `${existingActive}\n\n${activatedContent}` : activatedContent;
+      const boundary = `\n\n--- message boundary (${lastObservedAt.toISOString()}) ---\n\n`;
+      const newActive = existingActive ? `${existingActive}${boundary}${activatedContent}` : activatedContent;
       const newTokenCount = existingTokenCount + activatedTokens;
 
       // NOTE: We intentionally do NOT add message IDs to observedMessageIds during buffered activation.

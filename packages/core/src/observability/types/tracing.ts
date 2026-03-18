@@ -5,6 +5,8 @@
  * For top-level observability infrastructure (instances, exporters, bridges, config),
  * see observability.ts.
  */
+import { EntityType } from '@internal/core/storage';
+
 import type { MastraError } from '../../error';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
@@ -56,27 +58,7 @@ export enum SpanType {
   WORKFLOW_WAIT_EVENT = 'workflow_wait_event',
 }
 
-/** Types of entities that can produce observability spans. */
-export enum EntityType {
-  /** Agent/Model execution */
-  AGENT = 'agent',
-  /** Eval */
-  EVAL = 'eval',
-  /** Input Processor */
-  INPUT_PROCESSOR = 'input_processor',
-  /** Input Step Processor */
-  INPUT_STEP_PROCESSOR = 'input_step_processor',
-  /** Output Processor */
-  OUTPUT_PROCESSOR = 'output_processor',
-  /** Output Step Processor */
-  OUTPUT_STEP_PROCESSOR = 'output_step_processor',
-  /** Workflow Step */
-  WORKFLOW_STEP = 'workflow_step',
-  /** Tool */
-  TOOL = 'tool',
-  /** Workflow */
-  WORKFLOW_RUN = 'workflow_run',
-}
+export { EntityType };
 
 // ============================================================================
 // Type-Specific Attributes Interfaces
