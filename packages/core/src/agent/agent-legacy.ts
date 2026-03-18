@@ -1254,7 +1254,8 @@ export class AgentLegacyHandler {
     messages: MessageListInput,
     streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<
-    StreamTextResult<any, OUTPUT> | (StreamObjectResult<OUTPUT extends ZodSchema ? OUTPUT : never> & TracingProperties)
+    | StreamTextResult<any, EXPERIMENTAL_OUTPUT>
+    | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties)
   > {
     const defaultStreamOptionsLegacy = await Promise.resolve(
       this.capabilities.getDefaultStreamOptionsLegacy({
@@ -1368,8 +1369,8 @@ export class AgentLegacyHandler {
       };
 
       return emptyResult as unknown as
-        | StreamTextResult<any, OUTPUT>
-        | (StreamObjectResult<OUTPUT extends ZodSchema ? OUTPUT : never> & TracingProperties);
+        | StreamTextResult<any, EXPERIMENTAL_OUTPUT>
+        | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties);
     }
 
     const { onFinish, runId, output, experimental_output, agentSpan, messageList, requestContext, ...llmOptions } =
@@ -1438,8 +1439,8 @@ export class AgentLegacyHandler {
       (streamResult as any).spanId = spanId;
 
       return streamResult as unknown as
-        | StreamTextResult<any, OUTPUT>
-        | (StreamObjectResult<OUTPUT extends ZodSchema ? OUTPUT : never> & TracingProperties);
+        | StreamTextResult<any, EXPERIMENTAL_OUTPUT>
+        | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties);
     }
 
     this.capabilities.logger.debug(`Starting agent ${this.capabilities.name} llm streamObject call`, {
@@ -1516,6 +1517,7 @@ export class AgentLegacyHandler {
     (streamObjectResult as any).traceId = traceId;
     (streamObjectResult as any).spanId = spanId;
 
-    return streamObjectResult as StreamObjectResult<OUTPUT extends ZodSchema ? OUTPUT : never> & TracingProperties;
+    return streamObjectResult as StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> &
+      TracingProperties;
   }
 }

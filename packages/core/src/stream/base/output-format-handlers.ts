@@ -149,7 +149,7 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
   /**
    * Checks if the original schema is a Zod schema with safeParse method.
    */
-  protected isZodSchema(schema: unknown): schema is z.ZodType<any, z.ZodType, any> | z.ZodType<any, any> {
+  protected isZodSchema(schema: unknown): schema is z.ZodType<unknown, unknown> {
     return isZodType(schema);
   }
 
