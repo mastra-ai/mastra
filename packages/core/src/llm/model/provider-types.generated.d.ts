@@ -541,9 +541,12 @@ export type ProviderModelsMap = {
     'pixtral-12b-2409',
     'qwen3-235b-a22b-instruct-2507',
     'qwen3-coder-30b-a3b-instruct',
+    'qwen3-embedding-8b',
+    'qwen3.5-397b-a17b',
     'voxtral-small-24b-2507',
     'whisper-large-v3',
   ];
+  readonly dinference: readonly ['glm-4.7', 'glm-5', 'gpt-oss-120b'];
   readonly 'kuae-cloud-coding-plan': readonly ['GLM-4.7'];
   readonly upstage: readonly ['solar-mini', 'solar-pro2', 'solar-pro3'];
   readonly inception: readonly ['mercury', 'mercury-2', 'mercury-coder', 'mercury-edit'];
@@ -670,6 +673,8 @@ export type ProviderModelsMap = {
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
     'gpt-5.4',
+    'gpt-5.4-mini',
+    'gpt-5.4-nano',
     'gpt-5.4-pro',
     'kimi-k2.5',
     'mimo-v2-flash-free',
@@ -2070,6 +2075,8 @@ export type ProviderModelsMap = {
     'openai/gpt-5.3-chat',
     'openai/gpt-5.3-codex',
     'openai/gpt-5.4',
+    'openai/gpt-5.4-mini',
+    'openai/gpt-5.4-nano',
     'openai/gpt-5.4-pro',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
@@ -2129,6 +2136,7 @@ export type ProviderModelsMap = {
     'zai/glm-4.7-flash',
     'zai/glm-4.7-flashx',
     'zai/glm-5',
+    'zai/glm-5-turbo',
   ];
   readonly openai: readonly [
     'codex-mini-latest',
@@ -2161,6 +2169,8 @@ export type ProviderModelsMap = {
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
     'gpt-5.4',
+    'gpt-5.4-mini',
+    'gpt-5.4-nano',
     'gpt-5.4-pro',
     'o1',
     'o1-mini',
@@ -2333,6 +2343,16 @@ export type ProviderModelsMap = {
     'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
     'claude-sonnet-4-6',
+  ];
+  readonly 'tencent-coding-plan': readonly [
+    'glm-5',
+    'hunyuan-2.0-instruct',
+    'hunyuan-2.0-thinking',
+    'hunyuan-t1',
+    'hunyuan-turbos',
+    'kimi-k2.5',
+    'minimax-m2.5',
+    'tc-code-latest',
   ];
   readonly friendli: readonly [
     'MiniMaxAI/MiniMax-M2.1',
@@ -3252,6 +3272,7 @@ export type ProviderModelsMap = {
     'grok-vision-beta',
   ];
   readonly 'alibaba-cn': readonly [
+    'MiniMax-M2.5',
     'MiniMax/MiniMax-M2.5',
     'deepseek-r1',
     'deepseek-r1-0528',
@@ -3268,7 +3289,6 @@ export type ProviderModelsMap = {
     'kimi-k2-thinking',
     'kimi-k2.5',
     'kimi/kimi-k2.5',
-    'minimax-m2.5',
     'moonshot-kimi-k2-instruct',
     'qvq-max',
     'qwen-deep-research',
@@ -3452,6 +3472,10 @@ export type ProviderModelsMap = {
     'openai/gpt-5.3-codex',
     'openai/gpt-5.4',
     'openai/gpt-5.4-2026-03-05',
+    'openai/gpt-5.4-mini',
+    'openai/gpt-5.4-mini-2026-03-17',
+    'openai/gpt-5.4-nano',
+    'openai/gpt-5.4-nano-2026-03-17',
     'openai/gpt-5.4-pro',
     'openai/gpt-5.4-pro-2026-03-05',
     'openai/o3',
