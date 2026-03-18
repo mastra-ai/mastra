@@ -23,6 +23,9 @@ import { describe, expect, it, beforeEach, afterEach, beforeAll } from 'vitest';
 import { z } from 'zod';
 
 const MODE = getLLMTestMode();
+// Set dummy API keys for replay/auto modes. These keys contain '-dummy-' so
+// hasRealApiKey() will correctly identify them as dummy keys. The dummy keys
+// satisfy provider validation while MSW intercepts the actual HTTP calls.
 setupDummyApiKeys(MODE, ['openai']);
 
 // Local wrapper to handle Agent type compatibility

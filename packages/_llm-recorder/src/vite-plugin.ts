@@ -125,11 +125,12 @@ function matchesPattern(filepath: string, patterns: string[]): boolean {
         .replace(/\*/g, '[^/]*')
         .replaceAll(GLOBSTAR_DIR, '(?:.*/)?')
         .replaceAll(GLOBSTAR, '.*');
-      // If pattern starts with **, allow matching anywhere in path (after / or at start)
-      // This lets **/*.test.ts match absolute paths like /Users/.../foo.test.ts
-      const startsWithGlobstar = pattern.startsWith('**/');
+      // Only anchor to start for absolute patterns (starting with / or C:/)
+      // For relative patterns, allow matching anywhere in the path so that
+      // patterns like src/**/*.test.ts match /absolute/path/to/src/foo.test.ts
+      const isAbsolutePattern = pattern.startsWith('/') || /^[A-Za-z]:[\\/]/.test(pattern);
       const endAnchor = '\x24'; // $ character
-      const startPrefix = startsWithGlobstar ? '(?:^|/)' : '^';
+      const startPrefix = isAbsolutePattern ? '^' : '(?:^|/)';
       return new RegExp(startPrefix + regex + endAnchor).test(normalized);
     } catch {
       // Invalid pattern — skip it

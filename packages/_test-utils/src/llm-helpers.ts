@@ -218,6 +218,16 @@ export interface ProviderApiKeys {
  * @param mode - Current LLM test mode
  * @param providers - Which provider keys to set (default: all)
  */
+
+// Consolidated mapping of providers to their possible environment variable names.
+// Some providers (like Google) have multiple possible env var names.
+const PROVIDER_ENV_VARS: Record<keyof ProviderApiKeys, readonly string[]> = {
+  openai: ['OPENAI_API_KEY'],
+  anthropic: ['ANTHROPIC_API_KEY'],
+  google: ['GOOGLE_GENERATIVE_AI_API_KEY', 'GOOGLE_API_KEY'],
+  openrouter: ['OPENROUTER_API_KEY'],
+};
+
 export function setupDummyApiKeys(
   mode: string,
   providers: (keyof ProviderApiKeys)[] = ['openai', 'anthropic', 'google', 'openrouter'],
@@ -235,17 +245,11 @@ export function setupDummyApiKeys(
     openrouter: 'sk-or-dummy-for-replay-mode',
   };
 
-  const envVars: Record<keyof ProviderApiKeys, string> = {
-    openai: 'OPENAI_API_KEY',
-    anthropic: 'ANTHROPIC_API_KEY',
-    google: 'GOOGLE_API_KEY',
-    openrouter: 'OPENROUTER_API_KEY',
-  };
-
   for (const provider of providers) {
-    const envVar = envVars[provider];
-    if (!process.env[envVar]) {
-      process.env[envVar] = dummyKeys[provider];
+    for (const envVar of PROVIDER_ENV_VARS[provider]) {
+      if (!process.env[envVar]) {
+        process.env[envVar] = dummyKeys[provider];
+      }
     }
   }
 }
@@ -263,13 +267,7 @@ export function setupDummyApiKeys(
  * ```
  */
 export function hasApiKey(provider: keyof ProviderApiKeys): boolean {
-  const envVars: Record<keyof ProviderApiKeys, string> = {
-    openai: 'OPENAI_API_KEY',
-    anthropic: 'ANTHROPIC_API_KEY',
-    google: 'GOOGLE_API_KEY',
-    openrouter: 'OPENROUTER_API_KEY',
-  };
-  return !!process.env[envVars[provider]];
+  return PROVIDER_ENV_VARS[provider].some(name => !!process.env[name]?.trim());
 }
 
 /**
@@ -277,16 +275,7 @@ export function hasApiKey(provider: keyof ProviderApiKeys): boolean {
  * Returns false if the key is a dummy key set by setupDummyApiKeys.
  */
 export function hasRealApiKey(provider: keyof ProviderApiKeys): boolean {
-  // Some providers have multiple possible env var names
-  const envVars: Record<keyof ProviderApiKeys, string[]> = {
-    openai: ['OPENAI_API_KEY'],
-    anthropic: ['ANTHROPIC_API_KEY'],
-    google: ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY'],
-    openrouter: ['OPENROUTER_API_KEY'],
-  };
-
-  const possibleKeys = envVars[provider];
-  for (const envVar of possibleKeys) {
+  for (const envVar of PROVIDER_ENV_VARS[provider]) {
     const key = process.env[envVar]?.trim();
     if (key && !key.includes('-dummy-') && !key.includes('dummy-')) {
       return true;
