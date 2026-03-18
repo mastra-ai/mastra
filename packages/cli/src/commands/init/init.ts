@@ -21,6 +21,18 @@ import type { Component, LLMProvider } from './utils';
 
 const s = p.spinner();
 
+async function installWithFallback(depService: DepsService, pkg: string, versionTag: string) {
+  try {
+    await depService.installPackages([`${pkg}${versionTag}`]);
+  } catch {
+    if (versionTag && versionTag !== '@latest') {
+      await depService.installPackages([`${pkg}@latest`]);
+    } else {
+      throw new Error(`Failed to install ${pkg}`);
+    }
+  }
+}
+
 export const init = async ({
   directory = 'src/',
   components,
@@ -78,28 +90,28 @@ export const init = async ({
 
       const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
       if (needsLibsql) {
-        await depService.installPackages([`@mastra/libsql${packageVersionTag}`]);
+        await installWithFallback(depService, '@mastra/libsql', packageVersionTag);
       }
       const needsMemory =
         components.includes(`agents`) && (await depService.checkDependencies(['@mastra/memory'])) !== `ok`;
       if (needsMemory) {
-        await depService.installPackages([`@mastra/memory${packageVersionTag}`]);
+        await installWithFallback(depService, '@mastra/memory', packageVersionTag);
       }
 
       const needsLoggers = (await depService.checkDependencies(['@mastra/loggers'])) !== `ok`;
       if (needsLoggers) {
-        await depService.installPackages([`@mastra/loggers${packageVersionTag}`]);
+        await installWithFallback(depService, '@mastra/loggers', packageVersionTag);
       }
 
       const needsObservability = (await depService.checkDependencies(['@mastra/observability'])) !== `ok`;
       if (needsObservability) {
-        await depService.installPackages([`@mastra/observability${packageVersionTag}`]);
+        await installWithFallback(depService, '@mastra/observability', packageVersionTag);
       }
 
       const needsEvals =
         components.includes(`scorers`) && (await depService.checkDependencies(['@mastra/evals'])) !== `ok`;
       if (needsEvals) {
-        await depService.installPackages([`@mastra/evals${packageVersionTag}`]);
+        await installWithFallback(depService, '@mastra/evals', packageVersionTag);
       }
     }
 
