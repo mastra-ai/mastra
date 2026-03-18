@@ -48,6 +48,50 @@ function parseHex(hex: string): [number, number, number] {
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 }
 
+const DEFAULT_PROMPT_ICON = '●';
+const PROMPT_ICON_CHOICES = [
+  '☀',
+  '☯',
+  '✺',
+  '☻',
+  '✿',
+  '✌',
+  '☠',
+  '◈',
+  '◉',
+  '◒',
+  '◓',
+  '♞',
+  '♝',
+  '♜',
+  '☘',
+  '☸',
+  '❂',
+  '❁',
+  '✽',
+  '❉',
+  '✹',
+  '❨',
+  '❩',
+  '✚',
+  '⚛',
+  '⚉',
+  '❣',
+  '❥',
+  '♫',
+  '❤',
+] as const;
+
+function getRandomPromptIcon(currentIcon: string): string {
+  if (Math.random() < 0.9) {
+    return DEFAULT_PROMPT_ICON;
+  }
+
+  const nextChoices = PROMPT_ICON_CHOICES.filter(icon => icon !== currentIcon);
+  const choices = nextChoices.length > 0 ? nextChoices : PROMPT_ICON_CHOICES;
+  return choices[Math.floor(Math.random() * choices.length)]!;
+}
+
 export class CustomEditor extends Editor {
   private actionHandlers: Map<AppAction, () => unknown> = new Map();
 
@@ -60,6 +104,8 @@ export class CustomEditor extends Editor {
 
   private _cachedModeColorHex?: string;
   private _cachedColorFn?: (s: string) => string;
+  private promptIcon = DEFAULT_PROMPT_ICON;
+  private lastPromptWasInvisible = false;
 
   constructor(tui: TUI, theme: EditorTheme) {
     super(tui, theme);
@@ -128,8 +174,20 @@ export class CustomEditor extends Editor {
           ? transitionPhase < 0.5
             ? 0
             : Math.max(0, (transitionPhase - 0.5) * 2)
-          : 0.2 + pulseWave * 0.8
+          : pulseWave
       : 0;
+
+    const isSteadyPulse = isPromptAnimated && !isTransitioningIn && !isTransitioningOut;
+    if (!isSteadyPulse) {
+      this.lastPromptWasInvisible = false;
+    }
+
+    const promptIsInvisible = isSteadyPulse && dotBrightness <= 0.05;
+    if (promptIsInvisible && !this.lastPromptWasInvisible) {
+      this.promptIcon = getRandomPromptIcon(this.promptIcon);
+    }
+    this.lastPromptWasInvisible = promptIsInvisible;
+
     const promptChar = isSlash
       ? '/'
       : isAt
@@ -137,7 +195,7 @@ export class CustomEditor extends Editor {
         : chevronBrightness > 0.05
           ? '›'
           : dotBrightness > 0.05
-            ? '●'
+            ? this.promptIcon
             : ' ';
     const promptBrightness = isPromptAnimated ? Math.max(chevronBrightness, dotBrightness) : 1;
 
