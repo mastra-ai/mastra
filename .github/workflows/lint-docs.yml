@@ -6,10 +6,6 @@ permissions:
 
 on:
   pull_request:
-    paths:
-      - 'docs/**'
-      - '.github/scripts/**'
-      - '.github/workflows/lint-docs.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
