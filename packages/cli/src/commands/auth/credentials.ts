@@ -174,7 +174,9 @@ export async function getToken(): Promise<string> {
 
   const creds = await loadCredentials();
   if (!creds) {
-    throw new Error('Not logged in. Run: mastra auth login');
+    // No credentials — auto-login in interactive mode
+    const newCreds = await login();
+    return newCreds.token;
   }
 
   // Try a quick verify to see if the token is still valid
@@ -190,7 +192,9 @@ export async function getToken(): Promise<string> {
   const refreshed = await tryRefreshToken(creds);
   if (refreshed) return refreshed;
 
-  throw new Error('Session expired. Run: mastra auth login');
+  // Refresh failed — auto-login in interactive mode
+  const newCreds = await login();
+  return newCreds.token;
 }
 
 /**
