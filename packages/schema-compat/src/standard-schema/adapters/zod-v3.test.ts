@@ -88,6 +88,17 @@ describe('zod-v3 standard-schema adapter', () => {
       // For Zod schemas, input and output JSON schemas are typically the same
       expect(inputJsonSchema).toEqual(outputJsonSchema);
     });
+    it('should fall back to draft-07 for draft-2020-12 target', () => {
+      const zodSchema = z.object({
+        name: z.string(),
+      });
+      const standardSchema = toStandardSchema(zodSchema);
+      const outputSchema = standardSchema['~standard'].jsonSchema.output({ target: 'draft-2020-12' });
+      // Zod v3 does not support draft-2020-12 natively — falls back to jsonSchema7 (draft-07)
+      expect(outputSchema).toBeDefined();
+      expect(outputSchema.type).toBe('object');
+      expect(outputSchema.properties).toHaveProperty('name');
+    });
 
     it('should throw for unsupported targets', () => {
       const zodSchema = z.object({

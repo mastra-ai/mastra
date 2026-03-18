@@ -14,6 +14,8 @@ import type {
 const TARGET_MAP: Record<string, ZodToJsonSchemaTarget> = {
   'draft-07': 'jsonSchema7',
   'openapi-3.0': 'openApi3',
+  // draft-2020-12 is not supported by zod-to-json-schema, fall back to jsonSchema7
+  'draft-2020-12': 'jsonSchema7',
 };
 
 /**
