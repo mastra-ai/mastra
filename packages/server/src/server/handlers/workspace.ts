@@ -955,7 +955,12 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Skill path is required' });
       }
 
-      const decodedSkillPath = decodeURIComponent(skillPath);
+      let decodedSkillPath: string;
+      try {
+        decodedSkillPath = decodeURIComponent(skillPath);
+      } catch {
+        throw new HTTPException(400, { message: 'Malformed skillPath' });
+      }
 
       const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
@@ -1006,7 +1011,12 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Skill path is required' });
       }
 
-      const decodedSkillPath = decodeURIComponent(skillPath);
+      let decodedSkillPath: string;
+      try {
+        decodedSkillPath = decodeURIComponent(skillPath);
+      } catch {
+        throw new HTTPException(400, { message: 'Malformed skillPath' });
+      }
 
       const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
@@ -1056,7 +1066,12 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Skill path and reference path are required' });
       }
 
-      const decodedSkillPath = decodeURIComponent(skillPath);
+      let decodedSkillPath: string;
+      try {
+        decodedSkillPath = decodeURIComponent(skillPath);
+      } catch {
+        throw new HTTPException(400, { message: 'Malformed skillPath' });
+      }
 
       const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
@@ -1073,7 +1088,12 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
       }
 
       // Decode the reference path (it may be URL encoded)
-      const decodedPath = decodeURIComponent(referencePath);
+      let decodedPath: string;
+      try {
+        decodedPath = decodeURIComponent(referencePath);
+      } catch {
+        throw new HTTPException(400, { message: 'Malformed referencePath' });
+      }
 
       // Prevent path traversal via the reference path parameter
       assertSafeFilePath(decodedPath);

@@ -229,7 +229,7 @@ ${skillsMd}`;
         content:
           'IMPORTANT: Skills are NOT tools. Do not call skill names directly as tool names. ' +
           'To use a skill, call the `skill` tool with the skill name as the "name" parameter. ' +
-          'If multiple skills share the same name, use the skill path (shown in <location>) instead of the name to disambiguate. ' +
+          'If multiple skills share the same name, use the skill path (shown in the location field) instead of the name to disambiguate. ' +
           'When a user asks about a topic covered by an available skill, activate it immediately without asking for permission first.',
       });
     }
