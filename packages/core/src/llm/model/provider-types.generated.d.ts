@@ -561,7 +561,14 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.5-FP8',
   ];
-  readonly 'minimax-cn-coding-plan': readonly ['MiniMax-M2', 'MiniMax-M2.1', 'MiniMax-M2.5', 'MiniMax-M2.5-highspeed'];
+  readonly 'minimax-cn-coding-plan': readonly [
+    'MiniMax-M2',
+    'MiniMax-M2.1',
+    'MiniMax-M2.5',
+    'MiniMax-M2.5-highspeed',
+    'MiniMax-M2.7',
+    'MiniMax-M2.7-highspeed',
+  ];
   readonly 'novita-ai': readonly [
     'baichuan/baichuan-m2-32b',
     'baidu/ernie-4.5-21B-a3b',
@@ -814,7 +821,14 @@ export type ProviderModelsMap = {
     'qwen3-max-2026-01-23',
     'qwen3.5-plus',
   ];
-  readonly 'minimax-cn': readonly ['MiniMax-M2', 'MiniMax-M2.1', 'MiniMax-M2.5', 'MiniMax-M2.5-highspeed'];
+  readonly 'minimax-cn': readonly [
+    'MiniMax-M2',
+    'MiniMax-M2.1',
+    'MiniMax-M2.5',
+    'MiniMax-M2.5-highspeed',
+    'MiniMax-M2.7',
+    'MiniMax-M2.7-highspeed',
+  ];
   readonly bailing: readonly ['Ling-1T', 'Ring-1T'];
   readonly alibaba: readonly [
     'qvq-max',
@@ -981,7 +995,14 @@ export type ProviderModelsMap = {
     'qwen3-max-2026-01-23',
     'qwen3.5-plus',
   ];
-  readonly 'minimax-coding-plan': readonly ['MiniMax-M2', 'MiniMax-M2.1', 'MiniMax-M2.5', 'MiniMax-M2.5-highspeed'];
+  readonly 'minimax-coding-plan': readonly [
+    'MiniMax-M2',
+    'MiniMax-M2.1',
+    'MiniMax-M2.5',
+    'MiniMax-M2.5-highspeed',
+    'MiniMax-M2.7',
+    'MiniMax-M2.7-highspeed',
+  ];
   readonly 'kimi-for-coding': readonly ['k2p5', 'kimi-k2-thinking'];
   readonly mistral: readonly [
     'codestral-latest',
@@ -2188,7 +2209,14 @@ export type ProviderModelsMap = {
   ];
   readonly moark: readonly ['GLM-4.7', 'MiniMax-M2.1'];
   readonly morph: readonly ['auto', 'morph-v3-fast', 'morph-v3-large'];
-  readonly minimax: readonly ['MiniMax-M2', 'MiniMax-M2.1', 'MiniMax-M2.5', 'MiniMax-M2.5-highspeed'];
+  readonly minimax: readonly [
+    'MiniMax-M2',
+    'MiniMax-M2.1',
+    'MiniMax-M2.5',
+    'MiniMax-M2.5-highspeed',
+    'MiniMax-M2.7',
+    'MiniMax-M2.7-highspeed',
+  ];
   readonly vultr: readonly [
     'DeepSeek-R1-Distill-Llama-70B',
     'DeepSeek-R1-Distill-Qwen-32B',
