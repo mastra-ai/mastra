@@ -157,13 +157,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       options.parent?.metadata || options.metadata ? { ...options.parent?.metadata, ...options.metadata } : undefined,
       this.deepCleanOptions,
     );
-    if (options.requestContext) {
-      const ctx = options.requestContext;
-      const size = typeof ctx.size === 'function' ? ctx.size() : Object.keys(ctx).length;
-      if (size > 0) {
-        const all = typeof ctx.all !== 'undefined' ? ctx.all : ctx;
-        this.requestContext = deepClean(all, this.deepCleanOptions);
-      }
+    if (options.requestContext && options.requestContext.size() > 0) {
+      this.requestContext = deepClean(options.requestContext.all, this.deepCleanOptions);
     }
     this.parent = options.parent;
     this.startTime = options.startTime ?? new Date();
