@@ -336,8 +336,12 @@ export class DockerSandbox extends MastraSandbox {
         },
       });
       return containers[0] ?? null;
-    } catch {
-      return null;
+    } catch (error) {
+      // Log and re-throw infrastructure errors (daemon unreachable, auth, etc.)
+      this.logger.debug(
+        `${LOG_PREFIX} Failed to list containers: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
     }
   }
 
@@ -348,7 +352,13 @@ export class DockerSandbox extends MastraSandbox {
     try {
       await this._docker.getImage(this._image).inspect();
       this.logger.debug(`${LOG_PREFIX} Image ${this._image} available locally`);
-    } catch {
+    } catch (error) {
+      // Only attempt pull if the image doesn't exist (404).
+      // Re-throw infrastructure errors (daemon unreachable, auth, etc.)
+      if (!isImageNotFoundError(error)) {
+        throw error;
+      }
+
       this.logger.debug(`${LOG_PREFIX} Pulling image ${this._image}...`);
       try {
         const stream = await this._docker.pull(this._image);
@@ -388,6 +398,14 @@ function isContainerNotFoundError(error: unknown): boolean {
   if (error instanceof Error) {
     const msg = error.message.toLowerCase();
     return msg.includes('no such container') || (msg.includes('removal') && msg.includes('is already in progress'));
+  }
+  return false;
+}
+
+function isImageNotFoundError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    return msg.includes('no such image') || msg.includes('404');
   }
   return false;
 }

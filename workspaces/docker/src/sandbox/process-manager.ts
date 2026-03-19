@@ -215,7 +215,7 @@ export class DockerProcessManager extends SandboxProcessManager {
         // Get exit code from exec inspect
         try {
           const info = await exec.inspect();
-          const exitCode = info.ExitCode ?? 0;
+          const exitCode = info.ExitCode ?? 1;
           handle._setExitCode(exitCode);
           resolve({
             success: exitCode === 0,
