@@ -242,6 +242,7 @@ export class DockerSandbox extends MastraSandbox {
         throw error;
       }
     }
+    (this.processes as DockerProcessManager).reset();
     this.logger.debug(`${LOG_PREFIX} Container stopped`);
   }
 
@@ -257,6 +258,7 @@ export class DockerSandbox extends MastraSandbox {
         throw error;
       }
     }
+    (this.processes as DockerProcessManager).reset();
     this._container = null;
     this.logger.debug(`${LOG_PREFIX} Container destroyed`);
   }

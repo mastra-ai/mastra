@@ -389,6 +389,21 @@ describe('DockerSandbox', () => {
       await sandbox._stop();
       expect(mockContainer.stop).not.toHaveBeenCalled();
     });
+
+    it('should clear process list after stop', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      // Spawn a process so the list is non-empty
+      await sandbox.processes!.spawn('echo hello');
+      let list = await sandbox.processes!.list();
+      expect(list.length).toBe(1);
+
+      await sandbox._stop();
+
+      list = await sandbox.processes!.list();
+      expect(list.length).toBe(0);
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -417,6 +432,22 @@ describe('DockerSandbox', () => {
       const sandbox = new DockerSandbox();
       await sandbox._destroy();
       expect(mockContainer.remove).not.toHaveBeenCalled();
+    });
+
+    it('should clear process list after destroy', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      // Spawn a process so the list is non-empty
+      await sandbox.processes!.spawn('echo hello');
+      const list = await sandbox.processes!.list();
+      expect(list.length).toBe(1);
+
+      await sandbox._destroy();
+
+      // After destroy, list() would trigger ensureRunning() which re-starts the sandbox.
+      // Verify the tracked map was cleared directly via the process manager.
+      expect((sandbox.processes as any)._tracked.size).toBe(0);
     });
   });
 
@@ -474,6 +505,31 @@ describe('DockerSandbox', () => {
           WorkingDir: '/tmp',
         }),
       );
+    });
+
+    it('should use process group kill (negative PID)', async () => {
+      mockExec.inspect.mockResolvedValue({
+        Running: true,
+        ExitCode: null,
+        Pid: 42,
+      });
+
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sleep 100');
+
+      // Reset the mock to capture the kill exec call
+      mockContainer.exec.mockResolvedValueOnce({
+        id: 'kill-exec',
+        start: vi.fn().mockResolvedValue(undefined),
+      });
+
+      await handle.kill();
+
+      // The second exec call should be the kill command with negative PID
+      const killCall = mockContainer.exec.mock.calls[1]?.[0];
+      expect(killCall.Cmd).toEqual(['sh', '-c', 'kill -9 -42 2>/dev/null || kill -9 42']);
     });
 
     it('should track spawned processes in list()', async () => {

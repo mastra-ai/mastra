@@ -88,9 +88,9 @@ class DockerProcessHandle extends ProcessHandle {
       const pid = info.Pid;
       if (!pid) return false;
 
-      // Kill the process tree inside the container
+      // Kill the process group (negative PID), fall back to direct PID
       const killExec = await this._container.exec({
-        Cmd: ['kill', '-9', String(pid)],
+        Cmd: ['sh', '-c', `kill -9 -${pid} 2>/dev/null || kill -9 ${pid}`],
         AttachStdout: false,
         AttachStderr: false,
       });
@@ -251,6 +251,11 @@ export class DockerProcessManager extends SandboxProcessManager {
     handle._setWaitPromise(waitPromise);
     this._tracked.set(handle.pid, handle);
     return handle;
+  }
+
+  /** Clear all tracked process handles (e.g., after container stop/destroy) */
+  reset(): void {
+    this._tracked.clear();
   }
 
   async list(): Promise<ProcessInfo[]> {
