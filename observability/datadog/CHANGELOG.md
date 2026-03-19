@@ -1,5 +1,19 @@
 # @mastra/datadog
 
+## 1.0.8-alpha.1
+
+### Patch Changes
+
+- Fix cache token extraction in multi-step agent runs. Prefer AI SDK aggregated `inputTokenDetails` over `providerMetadata` (which only reflects the last step). Also fix truthiness checks to correctly handle zero values for cache and reasoning tokens. ([#14492](https://github.com/mastra-ai/mastra/pull/14492))
+
+  Fix Datadog metric keys to match dd-trace expected format: `cacheReadTokens`, `cacheWriteTokens`, `reasoningOutputTokens`.
+
+- Fixed span duration accuracy in Datadog LLM Observability traces. Previously, all spans in a trace appeared to have the same end time because dd-trace's `llmobs.trace()` does not honor `endTime` in span options. Now uses `ddSpan.finish()` to explicitly set each span's correct end time, so tools, LLM calls, and agent runs show their actual durations in Datadog. ([#14490](https://github.com/mastra-ai/mastra/pull/14490))
+
+- Updated dependencies [[`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`5ac24c4`](https://github.com/mastra-ai/mastra/commit/5ac24c4fa5275b9c837641d98ed1d988f6b7c327), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8)]:
+  - @mastra/core@1.15.0-alpha.2
+  - @mastra/observability@1.5.1-alpha.1
+
 ## 1.0.8-alpha.0
 
 ### Patch Changes
