@@ -1,6 +1,3 @@
-import { describe, expect, it } from 'vitest';
-
-import { closeInputSchema } from './tools/close.js';
 import {
   navigateInputSchema,
   snapshotInputSchema,
@@ -8,7 +5,10 @@ import {
   typeInputSchema,
   scrollInputSchema,
   screenshotInputSchema,
-} from './types.js';
+  closeInputSchema,
+  selectInputSchema,
+} from '@mastra/core/browser';
+import { describe, expect, it } from 'vitest';
 
 describe('navigateInputSchema', () => {
   it('accepts a valid URL', () => {
@@ -138,6 +138,28 @@ describe('screenshotInputSchema', () => {
   it('accepts an element ref', () => {
     const result = screenshotInputSchema.parse({ ref: '@e2' });
     expect(result.ref).toBe('@e2');
+  });
+});
+
+describe('selectInputSchema', () => {
+  it('accepts selection by value', () => {
+    const result = selectInputSchema.parse({ ref: '@e5', value: 'opt1' });
+    expect(result.ref).toBe('@e5');
+    expect(result.value).toBe('opt1');
+  });
+
+  it('accepts selection by label', () => {
+    const result = selectInputSchema.parse({ ref: '@e5', label: 'Option One' });
+    expect(result.label).toBe('Option One');
+  });
+
+  it('accepts selection by index', () => {
+    const result = selectInputSchema.parse({ ref: '@e5', index: 0 });
+    expect(result.index).toBe(0);
+  });
+
+  it('requires a ref', () => {
+    expect(selectInputSchema.safeParse({ value: 'opt1' }).success).toBe(false);
   });
 });
 

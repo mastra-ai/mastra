@@ -1,7 +1,6 @@
+import { createError } from '@mastra/core/browser';
+import type { ErrorCode } from '@mastra/core/browser';
 import { describe, expect, it } from 'vitest';
-
-import { createError } from './errors.js';
-import type { ErrorCode } from './errors.js';
 
 describe('createError', () => {
   it('creates a structured error with code and message', () => {

@@ -1,8 +1,7 @@
+import { createError, snapshotInputSchema, snapshotOutputSchema } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 
 import type { BrowserManagerLike } from '../browser-types.js';
-import { createError } from '../errors.js';
-import { snapshotInputSchema, snapshotOutputSchema } from '../types.js';
 
 /**
  * Maximum characters in the tree output to prevent context bloat.

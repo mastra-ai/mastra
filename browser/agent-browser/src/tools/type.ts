@@ -1,9 +1,8 @@
+import type { BrowserToolError, TypeOutput } from '@mastra/core/browser';
+import { typeInputSchema, typeOutputSchema } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 
 import type { BrowserManagerLike } from '../browser-types.js';
-import type { BrowserToolError } from '../errors.js';
-import { typeInputSchema, typeOutputSchema } from '../types.js';
-import type { TypeOutput } from '../types.js';
 
 /**
  * Creates a type tool that types text into form fields using ref identifiers.

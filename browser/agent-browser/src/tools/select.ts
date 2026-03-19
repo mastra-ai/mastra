@@ -1,34 +1,8 @@
+import { createError, selectInputSchema, selectOutputSchema } from '@mastra/core/browser';
+import type { BrowserToolError, SelectOutput } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
 
 import type { BrowserManagerLike } from '../browser-types.js';
-import { createError } from '../errors.js';
-import type { BrowserToolError } from '../errors.js';
-
-/**
- * Zod schema for select tool input parameters.
- */
-const selectInputSchema = z.object({
-  ref: z.string().describe('Element ref from snapshot (e.g., @e5) - should be a select/combobox element'),
-  value: z.string().optional().describe('Option value to select'),
-  label: z.string().optional().describe('Option label/text to select (use if value is unknown)'),
-  index: z.number().optional().describe('Option index to select (0-based)'),
-});
-
-/**
- * Zod schema for select tool output.
- */
-const selectOutputSchema = z.object({
-  success: z.boolean().describe('Whether the selection succeeded'),
-  selectedValue: z.string().optional().describe('The value that was selected'),
-  selectedLabel: z.string().optional().describe('The label/text of the selected option'),
-  url: z.string().optional().describe('Current page URL after selection'),
-  hint: z.string().optional().describe('Hint for next action'),
-  code: z.string().optional().describe('Error code if selection failed'),
-  message: z.string().optional().describe('Error message if selection failed'),
-  recoveryHint: z.string().optional().describe('Recovery hint for the agent'),
-  canRetry: z.boolean().optional().describe('Whether the operation can be retried'),
-});
 
 /**
  * Creates a select tool for interacting with dropdown/select elements.
@@ -46,7 +20,7 @@ export function createSelectTool(getBrowser: () => Promise<BrowserManagerLike>, 
     description: 'Select an option from a dropdown/select element. Use value, label, or index to specify which option.',
     inputSchema: selectInputSchema,
     outputSchema: selectOutputSchema,
-    execute: async (input): Promise<z.infer<typeof selectOutputSchema> | BrowserToolError> => {
+    execute: async (input): Promise<SelectOutput | BrowserToolError> => {
       const browser = await getBrowser();
 
       // Validate that at least one selection method is provided

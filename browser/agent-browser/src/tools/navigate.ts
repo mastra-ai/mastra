@@ -1,10 +1,8 @@
+import { createError, navigateInputSchema, navigateOutputSchema } from '@mastra/core/browser';
+import type { BrowserToolError, NavigateOutput } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 
 import type { BrowserManagerLike } from '../browser-types.js';
-import { createError } from '../errors.js';
-import type { BrowserToolError } from '../errors.js';
-import { navigateInputSchema, navigateOutputSchema } from '../types.js';
-import type { NavigateOutput } from '../types.js';
 
 /**
  * Creates a navigate tool that uses the BrowserManager to navigate to URLs.

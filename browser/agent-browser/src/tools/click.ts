@@ -1,9 +1,8 @@
+import type { BrowserToolError, ClickOutput } from '@mastra/core/browser';
+import { clickInputSchema, clickOutputSchema } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 
 import type { BrowserManagerLike } from '../browser-types.js';
-import type { BrowserToolError } from '../errors.js';
-import { clickInputSchema, clickOutputSchema } from '../types.js';
-import type { ClickOutput } from '../types.js';
 
 /**
  * Creates a click tool that clicks on elements using ref identifiers.

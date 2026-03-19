@@ -1,23 +1,6 @@
+import { closeInputSchema, closeOutputSchema } from '@mastra/core/browser';
+import type { CloseOutput } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
-
-/**
- * Input schema for the close tool.
- */
-export const closeInputSchema = z.object({
-  reason: z.string().optional().describe('Optional reason for closing the browser (for logging purposes)'),
-});
-
-/**
- * Output schema for the close tool.
- */
-export const closeOutputSchema = z.object({
-  success: z.boolean().describe('Whether the browser was closed successfully'),
-  message: z.string().describe('Status message'),
-});
-
-export type CloseInput = z.infer<typeof closeInputSchema>;
-export type CloseOutput = z.infer<typeof closeOutputSchema>;
 
 /**
  * Creates a close tool that closes the browser session.

@@ -1,10 +1,10 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { screenshotInputSchema, screenshotOutputSchema } from '@mastra/core/browser';
+import type { ScreenshotOutput } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 
 import type { BrowserManagerLike } from '../browser-types.js';
-import { screenshotInputSchema, screenshotOutputSchema } from '../types.js';
-import type { ScreenshotOutput } from '../types.js';
 
 /**
  * Maximum dimension (width or height) before emitting a warning.
