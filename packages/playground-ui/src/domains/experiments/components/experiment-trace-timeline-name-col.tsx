@@ -1,4 +1,4 @@
-import type {ExperimentUISpan, ExperimentUISpanStyle} from '../types';
+import type { ExperimentUISpan, ExperimentUISpanStyle } from '../types';
 import { ExperimentTraceTimelineStructureSign } from './experiment-trace-timeline-structure-sign';
 import { cn } from '@/lib/utils';
 

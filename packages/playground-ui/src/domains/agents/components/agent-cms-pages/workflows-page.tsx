@@ -15,7 +15,6 @@ import { WorkflowIcon } from '@/ds/icons';
 import type { RuleGroup } from '@/lib/rule-engine';
 import { cn } from '@/lib/utils';
 
-
 export function WorkflowsPage() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;

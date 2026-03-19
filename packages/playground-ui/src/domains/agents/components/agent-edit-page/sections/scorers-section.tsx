@@ -1,6 +1,6 @@
 import { Trash2, ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import type { Control} from 'react-hook-form';
+import type { Control } from 'react-hook-form';
 import { Controller, useWatch } from 'react-hook-form';
 
 import type { AgentFormValues, ScorerConfig } from '../utils/form-validation';

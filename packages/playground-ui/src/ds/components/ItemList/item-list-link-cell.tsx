@@ -1,4 +1,4 @@
-import { transitions, focusRing  } from '@/ds/primitives/transitions';
+import { transitions, focusRing } from '@/ds/primitives/transitions';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/lib/utils';
 

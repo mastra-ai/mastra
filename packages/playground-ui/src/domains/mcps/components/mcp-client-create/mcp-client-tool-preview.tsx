@@ -7,7 +7,6 @@ import { Icon, McpServerIcon } from '@/ds/icons';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { cn } from '@/lib/utils';
 
-
 interface MCPClientToolPreviewProps {
   serverType: 'stdio' | 'http';
   url: string;

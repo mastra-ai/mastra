@@ -15,8 +15,8 @@ import { useState } from 'react';
 import { ScoreAsItemDialog } from './score-as-item-dialog';
 import { Button } from '@/ds/components/Button';
 import { KeyValueList } from '@/ds/components/KeyValueList';
-import { SideDialog  } from '@/ds/components/SideDialog';
-import type {SideDialogRootProps} from '@/ds/components/SideDialog';
+import { SideDialog } from '@/ds/components/SideDialog';
+import type { SideDialogRootProps } from '@/ds/components/SideDialog';
 import { TextAndIcon, getShortId } from '@/ds/components/Text';
 import { Icon } from '@/ds/icons/Icon';
 

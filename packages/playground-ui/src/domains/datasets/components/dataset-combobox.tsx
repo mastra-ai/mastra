@@ -2,8 +2,8 @@
 
 import { useEffect } from 'react';
 import { useDatasets } from '../hooks/use-datasets';
-import { Combobox  } from '@/ds/components/Combobox';
-import type {ComboboxProps} from '@/ds/components/Combobox';
+import { Combobox } from '@/ds/components/Combobox';
+import type { ComboboxProps } from '@/ds/components/Combobox';
 import { useLinkComponent } from '@/lib/framework';
 import { toast } from '@/lib/toast';
 

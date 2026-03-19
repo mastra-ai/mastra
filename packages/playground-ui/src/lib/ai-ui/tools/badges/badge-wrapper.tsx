@@ -1,5 +1,5 @@
 import { ChevronUpIcon } from 'lucide-react';
-import { useEffect, useState  } from 'react';
+import { useEffect, useState } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';

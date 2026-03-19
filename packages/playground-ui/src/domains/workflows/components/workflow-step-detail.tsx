@@ -1,7 +1,6 @@
 import { ReactFlowProvider } from '@xyflow/react';
 import { List, X } from 'lucide-react';
 
-
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { CodeDialogContent } from '../workflow/workflow-code-dialog-content';
 import { WorkflowNestedGraph } from '../workflow/workflow-nested-graph';

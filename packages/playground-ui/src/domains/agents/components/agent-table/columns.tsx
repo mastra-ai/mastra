@@ -12,7 +12,6 @@ import { OpenAIIcon } from '@/ds/icons/OpenAIIcon';
 
 import { useLinkComponent } from '@/lib/framework';
 
-
 export type AgentTableColumn = {
   id: string;
 } & AgentTableData;

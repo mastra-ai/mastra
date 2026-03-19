@@ -7,7 +7,6 @@ import { usePromptBlockEditForm } from './prompt-block-edit-page/use-prompt-bloc
 import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
 import { toast } from '@/lib/toast';
 
-
 interface PromptBlockCreateContentProps {
   onSuccess?: (block: { id: string }) => void;
 }

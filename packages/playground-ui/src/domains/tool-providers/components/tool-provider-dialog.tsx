@@ -5,7 +5,6 @@ import { ToolkitList } from './toolkit-list';
 import { Button } from '@/ds/components/Button';
 import { SideDialog } from '@/ds/components/SideDialog';
 
-
 interface ToolProviderDialogProps {
   provider: { id: string; name: string; description?: string } | null;
   onClose: () => void;

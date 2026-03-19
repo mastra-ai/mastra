@@ -1,20 +1,19 @@
 import { Check, Plus, PlusIcon, Save } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
-import {  useWatch } from 'react-hook-form';
-import type {UseFormReturn} from 'react-hook-form';
+import { useWatch } from 'react-hook-form';
+import type { UseFormReturn } from 'react-hook-form';
 
 import type { PromptBlockFormValues } from './utils/form-validation';
 import { SectionHeader } from '@/domains/cms';
 import { Button } from '@/ds/components/Button';
 import { Input } from '@/ds/components/Input';
-import { JSONSchemaForm,  jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
-import type {SchemaField} from '@/ds/components/JSONSchemaForm';
+import { JSONSchemaForm, jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
+import type { SchemaField } from '@/ds/components/JSONSchemaForm';
 import { Label } from '@/ds/components/Label';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Spinner } from '@/ds/components/Spinner';
 import { Textarea } from '@/ds/components/Textarea';
 import type { JsonSchema } from '@/lib/json-schema';
-
 
 function RecursiveFieldRenderer({
   field,

@@ -1,19 +1,14 @@
-import type {
-  ThreadMessageLike,
-  AppendMessage} from '@assistant-ui/react';
-import {
-  useExternalStoreRuntime,
-  AssistantRuntimeProvider,
-} from '@assistant-ui/react';
+import type { ThreadMessageLike, AppendMessage } from '@assistant-ui/react';
+import { useExternalStoreRuntime, AssistantRuntimeProvider } from '@assistant-ui/react';
 import type { UIMessageWithMetadata } from '@mastra/client-js';
 import { MastraClient } from '@mastra/client-js';
 import { RequestContext } from '@mastra/core/di';
 import type { CoreUserMessage } from '@mastra/core/llm';
-import type { MastraUIMessage} from '@mastra/react';
-import { toAssistantUIMessage, useMastraClient, useChat  } from '@mastra/react';
+import type { MastraUIMessage } from '@mastra/react';
+import { toAssistantUIMessage, useMastraClient, useChat } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useEffect } from 'react';
-import type { ReactNode} from 'react';
+import type { ReactNode } from 'react';
 import { ToolCallProvider } from './tool-call-provider';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';

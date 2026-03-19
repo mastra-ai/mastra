@@ -1,6 +1,6 @@
 import { PackageIcon, GitBranchIcon, InfoIcon } from 'lucide-react';
-import { KeyValueList  } from '@/ds/components/KeyValueList';
-import type {KeyValueListItemData} from '@/ds/components/KeyValueList';
+import { KeyValueList } from '@/ds/components/KeyValueList';
+import type { KeyValueListItemData } from '@/ds/components/KeyValueList';
 import { GithubIcon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 
@@ -13,14 +13,7 @@ type TemplateInfoProps = {
   templateSlug?: string;
 };
 
-export function TemplateInfo({
-  title,
-  description,
-  githubUrl,
-  isLoading,
-  infoData,
-  templateSlug,
-}: TemplateInfoProps) {
+export function TemplateInfo({ title, description, githubUrl, isLoading, infoData, templateSlug }: TemplateInfoProps) {
   // Generate branch name that will be created
   const branchName = templateSlug ? `feat/install-template-${templateSlug}` : 'feat/install-template-[slug]';
 

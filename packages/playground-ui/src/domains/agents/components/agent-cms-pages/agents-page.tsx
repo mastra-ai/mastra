@@ -15,7 +15,6 @@ import { AgentIcon } from '@/ds/icons';
 import type { RuleGroup } from '@/lib/rule-engine';
 import { cn } from '@/lib/utils';
 
-
 export function AgentsPage() {
   const { form, readOnly, agentId: currentAgentId } = useAgentEditFormContext();
   const { control } = form;

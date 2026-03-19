@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { useAgents } from '../../agents/hooks/use-agents';
 import { useTools } from '../hooks/use-all-tools';
-import { Combobox  } from '@/ds/components/Combobox';
-import type {ComboboxProps} from '@/ds/components/Combobox';
+import { Combobox } from '@/ds/components/Combobox';
+import type { ComboboxProps } from '@/ds/components/Combobox';
 import { useLinkComponent } from '@/lib/framework';
 import { toast } from '@/lib/toast';
 

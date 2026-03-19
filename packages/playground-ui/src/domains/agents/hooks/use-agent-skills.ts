@@ -5,7 +5,6 @@ import { useMemo } from 'react';
 import { useStoredAgent } from './use-stored-agents';
 import { usePlaygroundStore } from '@/store/playground-store';
 
-
 /**
  * Hook to read and mutate the skills config for a stored agent.
  *

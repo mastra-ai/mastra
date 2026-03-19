@@ -1,5 +1,5 @@
 import type { GetAgentResponse } from '@mastra/client-js';
-import type { ColumnDef} from '@tanstack/react-table';
+import type { ColumnDef } from '@tanstack/react-table';
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { Plus, BookOpen } from 'lucide-react';
 import React, { useMemo, useState } from 'react';

@@ -9,8 +9,6 @@ import { Txt } from '@/ds/components/Txt';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/lib/utils';
 
-
-
 interface AgentCmsSidebarProps {
   basePath: string;
   currentPath: string;

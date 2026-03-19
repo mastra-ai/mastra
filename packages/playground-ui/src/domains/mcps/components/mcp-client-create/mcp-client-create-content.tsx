@@ -1,15 +1,13 @@
-
 import type { StoredMCPServerConfig } from '@mastra/client-js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWatch } from 'react-hook-form';
-
 
 import { useTryConnectMcp } from '../../hooks/use-try-connect-mcp';
 import { MCPClientEditLayout } from './mcp-client-edit-layout';
 import { MCPClientFormSidebar } from './mcp-client-form-sidebar';
 import { MCPClientToolPreview } from './mcp-client-tool-preview';
-import { useMCPClientForm  } from './use-mcp-client-form';
-import type {MCPClientFormValues} from './use-mcp-client-form';
+import { useMCPClientForm } from './use-mcp-client-form';
+import type { MCPClientFormValues } from './use-mcp-client-form';
 import { toast } from '@/lib/toast';
 
 interface MCPClientCreateContentProps {

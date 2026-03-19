@@ -7,7 +7,6 @@ import { z } from 'zod';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { resolveSerializedZodOutput } from '@/lib/form/utils';
 
-
 export interface SuspendedStep {
   stepId: string;
   runId: string;

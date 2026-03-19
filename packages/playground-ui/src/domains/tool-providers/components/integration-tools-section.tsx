@@ -1,7 +1,6 @@
 import { Plug } from 'lucide-react';
 import { useState } from 'react';
 
-
 import { useToolProviders } from '../hooks/use-tool-providers';
 import { ToolProviderDialog } from './tool-provider-dialog';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';

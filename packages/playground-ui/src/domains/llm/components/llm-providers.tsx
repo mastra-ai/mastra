@@ -4,8 +4,8 @@ import { useFilteredProviders } from '../hooks/use-filtered-providers';
 import { useLLMProviders } from '../hooks/use-llm-providers';
 import { cleanProviderId, findProviderById } from '../utils';
 import { ProviderLogo } from './provider-logo';
-import { Combobox  } from '@/ds/components/Combobox';
-import type {ComboboxProps, ComboboxOption} from '@/ds/components/Combobox';
+import { Combobox } from '@/ds/components/Combobox';
+import type { ComboboxProps, ComboboxOption } from '@/ds/components/Combobox';
 import { Skeleton } from '@/ds/components/Skeleton';
 
 export interface LLMProvidersProps {

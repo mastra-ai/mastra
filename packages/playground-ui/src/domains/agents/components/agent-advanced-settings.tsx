@@ -13,7 +13,6 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { formatJSON, isValidJson } from '@/lib/formatting';
 import { cn } from '@/lib/utils';
 
-
 export const AgentAdvancedSettings = () => {
   const { settings, setSettings } = useAgentSettings();
   const [isOpen, setIsOpen] = useState(false);

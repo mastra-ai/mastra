@@ -3,11 +3,10 @@ import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { JSONSchemaForm,  jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
-import type {SchemaField} from '@/ds/components/JSONSchemaForm';
+import { JSONSchemaForm, jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
+import type { SchemaField } from '@/ds/components/JSONSchemaForm';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import type { JsonSchema } from '@/lib/json-schema';
-
 
 function RecursiveFieldRenderer({
   field,

@@ -4,7 +4,7 @@ import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-di
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import { CodeEditor } from '@/ds/components/CodeEditor';
-import { ToolsIcon  } from '@/ds/icons';
+import { ToolsIcon } from '@/ds/icons';
 
 export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   toolName: string;

@@ -1,7 +1,7 @@
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import * as React from 'react';
 import { Select, SelectContent, SelectItem, SelectValue, SelectTrigger } from '@/ds/components/Select';
-import type {FormElementSize} from '@/ds/primitives/form-element';
+import type { FormElementSize } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
 export type SelectFieldProps = Omit<React.SelectHTMLAttributes<HTMLSelectElement>, 'size'> & {

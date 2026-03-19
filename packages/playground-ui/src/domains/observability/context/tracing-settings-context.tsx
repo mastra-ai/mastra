@@ -1,5 +1,5 @@
 import type { TracingOptions } from '@mastra/core/observability';
-import type { ReactNode} from 'react';
+import type { ReactNode } from 'react';
 import { createContext, useContext } from 'react';
 import { useTracingSettingsState } from '../hooks/use-tracing-settings-state';
 

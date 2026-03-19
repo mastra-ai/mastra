@@ -1,4 +1,4 @@
-import type { ColumnDef} from '@tanstack/react-table';
+import type { ColumnDef } from '@tanstack/react-table';
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { Cpu } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
@@ -15,7 +15,6 @@ import { TooltipProvider } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons/Icon';
 import { useLinkComponent } from '@/lib/framework';
 import { is403ForbiddenError } from '@/lib/query-utils';
-
 
 export interface ProcessorTableProps {
   processors: Record<string, ProcessorInfo>;

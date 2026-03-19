@@ -6,15 +6,14 @@ import { EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import CodeMirror from '@uiw/react-codemirror';
-import type {ReactCodeMirrorRef} from '@uiw/react-codemirror';
-import { forwardRef,  useMemo } from 'react';
-import type {HTMLAttributes} from 'react';
+import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
+import { forwardRef, useMemo } from 'react';
+import type { HTMLAttributes } from 'react';
 import { createVariableAutocomplete } from './variable-autocomplete-extension';
 import { variableHighlight } from './variable-highlight-extension';
 import { CopyButton } from '@/ds/components/CopyButton';
 import type { JsonSchema } from '@/lib/json-schema';
 import { cn } from '@/lib/utils';
-
 
 export type CodeEditorLanguage = 'json' | 'markdown';
 

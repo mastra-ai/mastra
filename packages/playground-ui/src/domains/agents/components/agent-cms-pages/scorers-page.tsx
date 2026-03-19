@@ -19,7 +19,6 @@ import { JudgeIcon } from '@/ds/icons';
 import type { RuleGroup } from '@/lib/rule-engine';
 import { cn } from '@/lib/utils';
 
-
 export function ScorersPage() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;

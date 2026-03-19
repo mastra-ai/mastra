@@ -1,5 +1,5 @@
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
-import type { MastraUIMessage} from '@mastra/react';
+import type { MastraUIMessage } from '@mastra/react';
 import { resolveToChildMessages } from '@mastra/react';
 import type { AgentMessage } from './agent-badge';
 import { AgentBadge } from './agent-badge';

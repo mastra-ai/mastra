@@ -1,6 +1,6 @@
 import { Check, PlusIcon, XIcon } from 'lucide-react';
-import { Controller,  useWatch } from 'react-hook-form';
-import type {UseFormReturn} from 'react-hook-form';
+import { Controller, useWatch } from 'react-hook-form';
+import type { UseFormReturn } from 'react-hook-form';
 
 import { MCPServerCombobox } from '../mcp-server-combobox';
 import type { MCPClientFormValues } from './use-mcp-client-form';
@@ -14,7 +14,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@/ds/components/Spinner';
 import { Textarea } from '@/ds/components/Textarea';
 import { Icon } from '@/ds/icons';
-
 
 interface MCPClientFormSidebarProps {
   form: UseFormReturn<MCPClientFormValues>;

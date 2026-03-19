@@ -1,4 +1,4 @@
-import type {ProcessStep} from './shared';
+import type { ProcessStep } from './shared';
 import { Spinner } from '@/ds/components/Spinner';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';

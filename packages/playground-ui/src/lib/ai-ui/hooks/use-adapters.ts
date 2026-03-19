@@ -1,5 +1,4 @@
-import type {
-  SpeechSynthesisAdapter} from '@assistant-ui/react';
+import type { SpeechSynthesisAdapter } from '@assistant-ui/react';
 import {
   CompositeAttachmentAdapter,
   SimpleImageAttachmentAdapter,

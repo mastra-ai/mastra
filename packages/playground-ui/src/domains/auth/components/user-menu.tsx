@@ -5,7 +5,6 @@ import { Button } from '@/ds/components/Button/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
 import { Txt } from '@/ds/components/Txt';
 
-
 export type UserMenuProps = {
   user: AuthenticatedUser | CurrentUser;
 };

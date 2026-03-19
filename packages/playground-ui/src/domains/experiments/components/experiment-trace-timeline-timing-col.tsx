@@ -1,7 +1,7 @@
 import * as HoverCard from '@radix-ui/react-hover-card';
 import { format } from 'date-fns/format';
 import { ChevronFirstIcon, ChevronLastIcon, ChevronsLeftRightIcon, ChevronsRightIcon, TimerIcon } from 'lucide-react';
-import type {ExperimentUISpan} from '../types';
+import type { ExperimentUISpan } from '../types';
 import { KeyValueList } from '@/ds/components/KeyValueList';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/lib/utils';

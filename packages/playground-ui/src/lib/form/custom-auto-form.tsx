@@ -1,5 +1,5 @@
 import { parseSchema, getDefaultValues } from '@autoform/core';
-import type { AutoFormProps} from '@autoform/react';
+import type { AutoFormProps } from '@autoform/react';
 import { AutoFormProvider } from '@autoform/react';
 import { useEffect, useMemo, useCallback } from 'react';
 import type { DefaultValues } from 'react-hook-form';

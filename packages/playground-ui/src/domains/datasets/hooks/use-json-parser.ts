@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { validateJSONData   } from '../utils/json-validation';
-import type {ImportableItem, JSONValidationError} from '../utils/json-validation';
+import { validateJSONData } from '../utils/json-validation';
+import type { ImportableItem, JSONValidationError } from '../utils/json-validation';
 
 /** Result of parsing a JSON file */
 export interface ParsedJSON {

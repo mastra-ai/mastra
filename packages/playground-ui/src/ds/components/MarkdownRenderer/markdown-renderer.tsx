@@ -7,7 +7,6 @@ import { highlight } from '@/ds/components/CodeEditor';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { cn } from '@/lib/utils';
 
-
 export type MarkdownRendererProps = {
   children: string;
 };

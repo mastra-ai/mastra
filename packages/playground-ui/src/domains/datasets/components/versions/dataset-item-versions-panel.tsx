@@ -2,8 +2,8 @@
 
 import { GitCompareIcon } from 'lucide-react';
 import { useState } from 'react';
-import { useDatasetItemVersions  } from '../../hooks/use-dataset-item-versions';
-import type {DatasetItemVersion} from '../../hooks/use-dataset-item-versions';
+import { useDatasetItemVersions } from '../../hooks/use-dataset-item-versions';
+import type { DatasetItemVersion } from '../../hooks/use-dataset-item-versions';
 import { Button, ButtonWithTooltip } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Checkbox } from '@/ds/components/Checkbox';
@@ -113,7 +113,7 @@ export function DatasetItemVersionsPanel({
 
           <ItemList.Scroller>
             <ItemList.Items>
-              {versions?.map((item) => {
+              {versions?.map(item => {
                 const versionKey = String(item.datasetVersion);
                 const versionDate = typeof item.updatedAt === 'string' ? new Date(item.updatedAt) : item.updatedAt;
 

@@ -1,5 +1,4 @@
-import type {
-  CodeHeaderProps} from '@assistant-ui/react-markdown';
+import type { CodeHeaderProps } from '@assistant-ui/react-markdown';
 import {
   MarkdownTextPrimitive,
   unstable_memoizeMarkdownComponents as memoizeMarkdownComponents,
@@ -8,7 +7,7 @@ import {
 import '@assistant-ui/react-markdown/styles/dot.css';
 import { makePrismLightSyntaxHighlighter } from '@assistant-ui/react-syntax-highlighter';
 import { CheckIcon, CopyIcon } from 'lucide-react';
-import type { FC, ImgHTMLAttributes} from 'react';
+import type { FC, ImgHTMLAttributes } from 'react';
 import { memo, useEffect, useState } from 'react';
 import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import remarkGfm from 'remark-gfm';

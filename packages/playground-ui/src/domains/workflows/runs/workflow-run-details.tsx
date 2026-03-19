@@ -7,8 +7,6 @@ import { WorkflowTrigger } from '../workflow/workflow-trigger';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
 
-
-
 export interface WorkflowRunDetailProps extends Omit<
   WorkflowTriggerProps,
   'paramsRunId' | 'workflowId' | 'observeWorkflowStream'

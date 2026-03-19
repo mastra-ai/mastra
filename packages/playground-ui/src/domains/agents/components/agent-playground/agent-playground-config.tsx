@@ -15,7 +15,6 @@ import { Icon } from '@/ds/icons/Icon';
 import type { JsonSchema } from '@/lib/json-schema';
 import { cn } from '@/lib/utils';
 
-
 // ---------------------------------------------------------------------------
 // Collapsible section
 // ---------------------------------------------------------------------------

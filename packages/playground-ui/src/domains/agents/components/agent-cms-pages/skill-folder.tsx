@@ -6,7 +6,6 @@ import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Combobox } from '@/ds/components/Combobox/combobox';
 import { Txt } from '@/ds/components/Txt';
 
-
 function findFileContent(nodes: InMemoryFileNode[], fileId: string): string | undefined {
   for (const node of nodes) {
     if (node.id === fileId && node.type === 'file') return node.content ?? '';

@@ -1,5 +1,5 @@
 import type { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
-import type { ColumnDef} from '@tanstack/react-table';
+import type { ColumnDef } from '@tanstack/react-table';
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
 import { columns } from './columns';
@@ -18,7 +18,6 @@ import { Icon } from '@/ds/icons/Icon';
 import { ToolCoinIcon } from '@/ds/icons/ToolCoinIcon';
 import { useLinkComponent } from '@/lib/framework';
 import { is403ForbiddenError } from '@/lib/query-utils';
-
 
 export interface ToolTableProps {
   tools: Record<string, GetToolResponse>;

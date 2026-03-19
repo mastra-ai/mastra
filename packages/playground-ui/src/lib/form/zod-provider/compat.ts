@@ -7,7 +7,6 @@
  * This module provides helpers that work with both versions.
  */
 
- 
 type AnySchema = any;
 
 export function isV4(schema: AnySchema): boolean {

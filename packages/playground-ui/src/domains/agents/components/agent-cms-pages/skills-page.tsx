@@ -14,7 +14,6 @@ import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Searchbar } from '@/ds/components/Searchbar';
 import { Switch } from '@/ds/components/Switch';
 
-
 export function SkillsPage() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;

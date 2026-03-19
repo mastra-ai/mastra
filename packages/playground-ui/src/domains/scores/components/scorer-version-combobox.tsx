@@ -1,7 +1,7 @@
 import { useScorerVersions } from '../hooks/use-scorer-versions';
 import { Badge } from '@/ds/components/Badge';
-import { Combobox  } from '@/ds/components/Combobox';
-import type {ComboboxProps} from '@/ds/components/Combobox';
+import { Combobox } from '@/ds/components/Combobox';
+import type { ComboboxProps } from '@/ds/components/Combobox';
 
 function formatTimestamp(isoString: string): string {
   const date = new Date(isoString);

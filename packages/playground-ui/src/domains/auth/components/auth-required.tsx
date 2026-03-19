@@ -1,4 +1,3 @@
-
 import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
 import { isAuthenticated } from '../types';
 import { LoginButton } from './login-button';

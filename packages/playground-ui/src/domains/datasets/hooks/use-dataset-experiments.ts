@@ -127,7 +127,6 @@ export const useScoresByExperimentId = (experimentId: string, experimentStatus?:
       let page = 0;
       const perPage = 100;
 
-       
       while (true) {
         const response = await client.listScoresByRunId({ runId: experimentId, page, perPage });
         allScores.push(...response.scores);

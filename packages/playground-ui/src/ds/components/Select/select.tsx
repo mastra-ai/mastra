@@ -2,9 +2,9 @@ import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 
-import type { ButtonProps} from '../Button';
+import type { ButtonProps } from '../Button';
 import { buttonVariants } from '../Button';
-import type {FormElementSize} from '@/ds/primitives/form-element';
+import type { FormElementSize } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 

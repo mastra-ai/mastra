@@ -2,7 +2,6 @@ import type { ColumnDef, Row } from '@tanstack/react-table';
 import type { ScorerTableData } from './types';
 import { EntryCell } from '@/ds/components/Table';
 
-
 import { useLinkComponent } from '@/lib/framework';
 
 const NameCell = ({ row }: { row: Row<ScorerTableData> }) => {

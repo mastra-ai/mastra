@@ -1,7 +1,6 @@
 import type { NavLink } from './main-sidebar-nav-link';
 import { cn } from '@/lib/utils';
 
-
 export type NavSection = {
   key: string;
   title?: string;

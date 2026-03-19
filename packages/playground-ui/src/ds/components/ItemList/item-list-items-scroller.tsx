@@ -9,12 +9,7 @@ export function ItemListItemsScroller({ children }: ItemListItemsScroller) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div
-      ref={containerRef}
-      className={cn(
-        'overflow-y-auto',
-      )}
-    >
+    <div ref={containerRef} className={cn('overflow-y-auto')}>
       {children}
     </div>
   );

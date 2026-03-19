@@ -5,7 +5,6 @@ import type { ScorerFormValues } from './utils/form-validation';
 import { SectionHeader } from '@/domains/cms';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 
-
 interface ScorerEditMainProps {
   form: UseFormReturn<ScorerFormValues>;
 }

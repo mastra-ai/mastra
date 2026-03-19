@@ -1,8 +1,5 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
 
-
-
-
 import type { MastraUIMessage } from '@mastra/react';
 import { useContext, useEffect } from 'react';
 import { BadgeWrapper } from './badge-wrapper';

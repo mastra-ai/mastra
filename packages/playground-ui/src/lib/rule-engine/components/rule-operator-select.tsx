@@ -21,7 +21,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 
-
 /**
  * Icons for each operator type
  */

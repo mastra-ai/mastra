@@ -10,7 +10,6 @@ import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 
-
 export type AfterNode = Node<
   {
     steps: string[];

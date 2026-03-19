@@ -1,7 +1,7 @@
 import { PackageOpenIcon } from 'lucide-react';
 import { Container } from './shared';
-import {  KeyValueList } from '@/ds/components/KeyValueList';
-import type {KeyValueListItemData} from '@/ds/components/KeyValueList';
+import { KeyValueList } from '@/ds/components/KeyValueList';
+import type { KeyValueListItemData } from '@/ds/components/KeyValueList';
 import { cn } from '@/lib/utils';
 
 type TemplateSuccessProps = {

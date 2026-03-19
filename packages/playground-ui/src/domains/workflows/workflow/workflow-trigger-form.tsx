@@ -5,7 +5,6 @@ import { WorkflowInputData } from './workflow-input-data';
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons';
 
-
 export interface WorkflowTriggerFormProps {
   zodSchema: ZodSchema | null;
   isStreaming: boolean;

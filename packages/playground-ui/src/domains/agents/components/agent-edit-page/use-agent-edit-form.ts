@@ -1,7 +1,7 @@
 import type { Resolver } from 'react-hook-form';
 import { useForm } from 'react-hook-form';
 
-import type { AgentFormValues} from './utils/form-validation';
+import type { AgentFormValues } from './utils/form-validation';
 import { createInstructionBlock } from './utils/form-validation';
 
 // Simple validation resolver without zod to avoid version conflicts

@@ -4,7 +4,7 @@ import * as React from 'react';
 import type { ComboboxOption } from './combobox';
 import { comboboxStyles } from './combobox-styles';
 import { buttonVariants } from '@/ds/components/Button/Button';
-import type {FormElementSize} from '@/ds/primitives/form-element';
+import type { FormElementSize } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
 export type { ComboboxOption };

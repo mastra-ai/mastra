@@ -1,4 +1,4 @@
-import type {GetScorerResponse} from '@mastra/client-js';
+import type { GetScorerResponse } from '@mastra/client-js';
 import { InfoIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTriggerScorer } from '@/domains/scores/hooks/use-trigger-scorer';

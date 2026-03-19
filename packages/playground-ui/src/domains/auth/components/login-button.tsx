@@ -1,4 +1,3 @@
-
 import { useSSOLogin } from '../hooks';
 import type { LoginConfig, SSOConfig } from '../types';
 import { Button } from '@/ds/components/Button/Button';

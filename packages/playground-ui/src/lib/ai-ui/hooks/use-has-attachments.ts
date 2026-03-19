@@ -1,6 +1,5 @@
 import { useComposerRuntime } from '@assistant-ui/react';
-import { useState, useEffect  } from 'react';
-
+import { useState, useEffect } from 'react';
 
 export const useHasAttachments = () => {
   const composer = useComposerRuntime();

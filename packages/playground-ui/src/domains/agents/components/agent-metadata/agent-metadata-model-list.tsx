@@ -1,4 +1,4 @@
-import type { DropResult} from '@hello-pangea/dnd';
+import type { DropResult } from '@hello-pangea/dnd';
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import type { GetAgentResponse, ReorderModelListParams, UpdateModelInModelListParams } from '@mastra/client-js';
 import { GripVertical } from 'lucide-react';

@@ -1,5 +1,5 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import type { ColumnDef} from '@tanstack/react-table';
+import type { ColumnDef } from '@tanstack/react-table';
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
 import { columns } from './columns';

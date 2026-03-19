@@ -1,5 +1,5 @@
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
-import type {SelectTriggerProps} from '../../Select/select';
+import type { SelectTriggerProps } from '../../Select/select';
 import { FieldBlock } from '../block/field-block';
 import type { FieldBlockErrorMsgProps } from '../block/field-block-error-msg';
 import type { FieldBlockHelpTextProps } from '../block/field-block-help-text';

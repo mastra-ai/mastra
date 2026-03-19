@@ -1,8 +1,8 @@
 import { Copy, Check, MoveRight, Info, ExternalLink } from 'lucide-react';
 import { useState } from 'react';
 import { useMastraPackages } from '../hooks/use-mastra-packages';
-import { usePackageUpdates  } from '../hooks/use-package-updates';
-import type {PackageUpdateInfo} from '../hooks/use-package-updates';
+import { usePackageUpdates } from '../hooks/use-package-updates';
+import type { PackageUpdateInfo } from '../hooks/use-package-updates';
 import {
   Dialog,
   DialogContent,

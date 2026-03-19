@@ -1,15 +1,13 @@
-
-
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { Braces, Loader2 } from 'lucide-react';
 import { useState, useEffect, useContext } from 'react';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
-import { useSuspendedSteps, useWorkflowSchemas  } from './use-workflow-trigger';
+import { useSuspendedSteps, useWorkflowSchemas } from './use-workflow-trigger';
 import { WorkflowCancelButton } from './workflow-cancel-button';
 import { WorkflowStepsStatus } from './workflow-steps-status';
-import { WorkflowSuspendedSteps  } from './workflow-suspended-steps';
-import type {ResumeStepParams} from './workflow-suspended-steps';
+import { WorkflowSuspendedSteps } from './workflow-suspended-steps';
+import type { ResumeStepParams } from './workflow-suspended-steps';
 import { WorkflowTriggerForm } from './workflow-trigger-form';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';

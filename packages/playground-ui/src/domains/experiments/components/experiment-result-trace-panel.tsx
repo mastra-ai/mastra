@@ -1,6 +1,6 @@
 'use client';
 
-import { EyeIcon, XIcon  } from 'lucide-react';
+import { EyeIcon, XIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useExperimentTrace } from '../hooks/use-experiment-trace';
 import { formatTraceSpans } from '../utils/format-trace-spans';

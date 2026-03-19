@@ -4,7 +4,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
-
 import { useAgentEditForm } from '../components/agent-edit-page/use-agent-edit-form';
 import type { AgentFormValues, EntityConfig } from '../components/agent-edit-page/utils/form-validation';
 import {
@@ -14,8 +13,8 @@ import {
   transformIntegrationToolsForApi,
 } from '../utils/agent-form-mappers';
 import { collectMCPClientIds } from '../utils/collect-mcp-client-ids';
-import { computeAgentInitialValues  } from '../utils/compute-agent-initial-values';
-import type {AgentDataSource} from '../utils/compute-agent-initial-values';
+import { computeAgentInitialValues } from '../utils/compute-agent-initial-values';
+import type { AgentDataSource } from '../utils/compute-agent-initial-values';
 import { useStoredAgentMutations } from './use-stored-agents';
 import { toast } from '@/lib/toast';
 

@@ -12,7 +12,6 @@ import { Icon } from '@/ds/icons/Icon';
 import { PanelSeparator } from '@/lib/resize/separator';
 import { cn } from '@/lib/utils';
 
-
 type RightPanelTab = 'experiment' | 'test-chat' | 'request-context';
 
 interface AgentPlaygroundViewProps {

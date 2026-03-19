@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type {ExperimentUISpan} from '../types';
+import type { ExperimentUISpan } from '../types';
 import { getSpanDescendantIds } from '../utils/get-span-descendant-ids';
 import { getExperimentSpanTypeUi } from './experiment-trace-shared';
 import { ExperimentTraceTimelineExpandCol } from './experiment-trace-timeline-expand-col';

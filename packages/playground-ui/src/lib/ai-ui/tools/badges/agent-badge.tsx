@@ -4,7 +4,6 @@ import Markdown from 'react-markdown';
 import { ToolFallback } from '../tool-fallback';
 import { BadgeWrapper } from './badge-wrapper';
 
-
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';

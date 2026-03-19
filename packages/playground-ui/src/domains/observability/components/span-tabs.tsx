@@ -4,19 +4,11 @@ import { EntityType } from '@mastra/core/observability';
 import type { SpanRecord } from '@mastra/core/storage';
 import { CircleGaugeIcon } from 'lucide-react';
 import { SpanDetails } from './span-details';
-import { TraceSpanUsage  } from './trace-span-usage';
-import type {TokenUsage} from './trace-span-usage';
+import { TraceSpanUsage } from './trace-span-usage';
+import type { TokenUsage } from './trace-span-usage';
 import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
-import type {
-  KeyValueListItemData} from '@/index';
-import {
-  KeyValueList,
-  Section,
-  Sections,
-  SpanScoring,
-  SpanScoreList,
-  useLinkComponent,
-} from '@/index';
+import type { KeyValueListItemData } from '@/index';
+import { KeyValueList, Section, Sections, SpanScoring, SpanScoreList, useLinkComponent } from '@/index';
 
 type SpanTabsProps = {
   trace?: SpanRecord;

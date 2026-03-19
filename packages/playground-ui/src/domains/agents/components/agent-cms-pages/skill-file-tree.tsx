@@ -8,7 +8,6 @@ import { IconButton } from '@/ds/components/IconButton';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { Tree } from '@/ds/components/Tree/tree';
 
-
 export interface SkillFileTreeProps {
   files: InMemoryFileNode[];
   onChange: (files: InMemoryFileNode[]) => void;

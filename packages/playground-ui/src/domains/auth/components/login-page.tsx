@@ -8,7 +8,6 @@ import { Button } from '@/ds/components/Button/Button';
 import { Input } from '@/ds/components/Input';
 import { LogoWithoutText } from '@/ds/components/Logo/MastraLogo';
 
-
 export type LoginPageProps = {
   /** URL to redirect to after successful login */
   redirectUri?: string;

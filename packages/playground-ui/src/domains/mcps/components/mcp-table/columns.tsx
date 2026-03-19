@@ -11,7 +11,6 @@ import { AgentIcon } from '@/ds/icons/AgentIcon';
 
 import { useLinkComponent } from '@/lib/framework';
 
-
 const NameCell = ({ row }: { row: Row<MCPTableColumn> }) => {
   const client = useMastraClient();
   const mcp = row.original;

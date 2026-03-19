@@ -6,7 +6,6 @@ import { DisplayConditionsDialog, SectionHeader } from '@/domains/cms';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import type { JsonSchema, RuleGroup } from '@/lib/rule-engine';
 
-
 interface PromptBlockEditMainProps {
   form: UseFormReturn<PromptBlockFormValues>;
 }

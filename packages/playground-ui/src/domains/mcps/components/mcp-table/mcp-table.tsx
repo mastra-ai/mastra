@@ -1,5 +1,5 @@
 import type { McpServerListResponse } from '@mastra/client-js';
-import type { ColumnDef} from '@tanstack/react-table';
+import type { ColumnDef } from '@tanstack/react-table';
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
 import { columns } from './columns';
@@ -14,7 +14,6 @@ import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { McpCoinIcon, McpServerIcon } from '@/ds/icons';
 import { Icon } from '@/ds/icons/Icon';
-
 
 import { useLinkComponent } from '@/lib/framework';
 import { is403ForbiddenError } from '@/lib/query-utils';

@@ -2,8 +2,8 @@
 
 import { useCallback, useState } from 'react';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { useJSONParser  } from '../../hooks/use-json-parser';
-import type {ParsedJSON} from '../../hooks/use-json-parser';
+import { useJSONParser } from '../../hooks/use-json-parser';
+import type { ParsedJSON } from '../../hooks/use-json-parser';
 import { JSONPreviewTable } from './json-preview-table';
 import { JSONUploadStep } from './json-upload-step';
 import { JSONValidationSummary } from './json-validation-summary';

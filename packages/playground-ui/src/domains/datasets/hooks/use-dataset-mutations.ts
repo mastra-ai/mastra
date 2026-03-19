@@ -53,7 +53,9 @@ export const useDatasetMutations = () => {
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
       void queryClient.invalidateQueries({ queryKey: ['dataset-item', variables.datasetId, variables.itemId] });
-      void queryClient.invalidateQueries({ queryKey: ['dataset-item-versions', variables.datasetId, variables.itemId] });
+      void queryClient.invalidateQueries({
+        queryKey: ['dataset-item-versions', variables.datasetId, variables.itemId],
+      });
       void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
     },
   });

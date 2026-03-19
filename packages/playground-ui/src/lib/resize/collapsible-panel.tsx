@@ -1,6 +1,6 @@
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { useState } from 'react';
-import type { PanelProps} from 'react-resizable-panels';
+import type { PanelProps } from 'react-resizable-panels';
 import { Panel, usePanelRef } from 'react-resizable-panels';
 import { Button } from '@/ds/components/Button/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';

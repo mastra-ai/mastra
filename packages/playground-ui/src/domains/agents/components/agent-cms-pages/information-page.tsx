@@ -10,7 +10,6 @@ import { ScrollArea } from '@/ds/components/ScrollArea';
 import { SectionRoot, SubSectionRoot } from '@/ds/components/Section/section-root';
 import { Textarea } from '@/ds/components/Textarea';
 
-
 export function InformationPage() {
   const { form, readOnly } = useAgentEditFormContext();
   const {

@@ -7,7 +7,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 
-
 /**
  * Parses a string value to the appropriate type
  */

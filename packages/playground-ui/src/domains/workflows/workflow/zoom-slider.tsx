@@ -3,7 +3,6 @@ import { Panel, useViewport, useReactFlow } from '@xyflow/react';
 import { Maximize, Minus, Plus } from 'lucide-react';
 import React, { forwardRef } from 'react';
 
-
 import { Button } from '@/ds/components/Button/Button';
 import { Slider } from '@/ds/components/Slider';
 import { cn } from '@/lib/utils';

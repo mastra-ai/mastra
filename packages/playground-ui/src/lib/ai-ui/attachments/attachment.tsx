@@ -1,4 +1,4 @@
-import type { AttachmentState} from '@assistant-ui/react';
+import type { AttachmentState } from '@assistant-ui/react';
 import { AttachmentPrimitive, ComposerPrimitive, useAttachment } from '@assistant-ui/react';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { CircleXIcon } from 'lucide-react';

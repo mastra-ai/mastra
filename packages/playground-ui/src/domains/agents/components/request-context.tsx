@@ -1,7 +1,7 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import CodeMirror from '@uiw/react-codemirror';
 import { Braces, CopyIcon, ExternalLink } from 'lucide-react';
-import type { ReactNode} from 'react';
+import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { useRequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 import { Button } from '@/ds/components/Button';

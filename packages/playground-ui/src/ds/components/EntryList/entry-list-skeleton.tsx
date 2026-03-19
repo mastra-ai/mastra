@@ -1,6 +1,6 @@
 import { EntryList } from './entry-list';
-import { EntryListEntriesSkeleton  } from './entry-list-entries-skeleton';
-import type {EntryListEntriesSkeletonProps} from './entry-list-entries-skeleton';
+import { EntryListEntriesSkeleton } from './entry-list-entries-skeleton';
+import type { EntryListEntriesSkeletonProps } from './entry-list-entries-skeleton';
 import { EntryListHeader } from './entry-list-header';
 import { EntryListTrim } from './entry-list-trim';
 

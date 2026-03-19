@@ -1,12 +1,10 @@
-
 import type { StoredMCPServerConfig } from '@mastra/client-js';
 import { LaptopMinimal, PlusIcon, XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
-
-import { MCPClientCreateContent  } from '../mcp-client-create';
-import type {MCPClientFormValues} from '../mcp-client-create';
+import { MCPClientCreateContent } from '../mcp-client-create';
+import type { MCPClientFormValues } from '../mcp-client-create';
 import { useAgentEditFormContext } from '@/domains/agents/context/agent-edit-form-context';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
 import { Button } from '@/ds/components/Button';

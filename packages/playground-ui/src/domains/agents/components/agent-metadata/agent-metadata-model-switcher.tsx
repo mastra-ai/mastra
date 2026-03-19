@@ -1,4 +1,4 @@
-import type { UpdateModelParams} from '@mastra/client-js';
+import type { UpdateModelParams } from '@mastra/client-js';
 import { RotateCcw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useModelReset } from '../../context/model-reset-context';

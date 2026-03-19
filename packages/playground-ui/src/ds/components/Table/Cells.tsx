@@ -5,7 +5,6 @@ import { Txt } from '../Txt';
 import { formatDateCell } from './utils';
 import { cn } from '@/lib/utils';
 
-
 export interface CellProps extends React.TdHTMLAttributes<HTMLTableCellElement> {
   className?: string;
   children: React.ReactNode;

@@ -1,6 +1,5 @@
 import { Controller } from 'react-hook-form';
 
-
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { AgentCMSBlocks } from '../agent-cms-blocks';
 import { ScrollArea } from '@/ds/components/ScrollArea';

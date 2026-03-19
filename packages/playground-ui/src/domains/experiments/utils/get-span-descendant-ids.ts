@@ -1,4 +1,4 @@
-import type {ExperimentUISpan} from '../types';
+import type { ExperimentUISpan } from '../types';
 
 export function getSpanDescendantIds(span: ExperimentUISpan): string[] {
   if (!span.spans || span.spans.length === 0) {

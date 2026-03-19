@@ -1,4 +1,4 @@
-import type {GetScorerResponse} from '@mastra/client-js';
+import type { GetScorerResponse } from '@mastra/client-js';
 import type { SpanRecord } from '@mastra/core/storage';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import {
@@ -12,7 +12,7 @@ import {
   SaveIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import type {UISpan} from '../types';
+import type { UISpan } from '../types';
 import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
 import { getSpanInfo, useTraceInfo } from './helpers';
 import { SpanDialog } from './span-dialog';

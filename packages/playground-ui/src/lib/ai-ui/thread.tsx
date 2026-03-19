@@ -1,10 +1,5 @@
-import type {
-  MessagePrimitive} from '@assistant-ui/react';
-import {
-  ComposerPrimitive,
-  ThreadPrimitive,
-  useComposerRuntime,
-} from '@assistant-ui/react';
+import type { MessagePrimitive } from '@assistant-ui/react';
+import { ComposerPrimitive, ThreadPrimitive, useComposerRuntime } from '@assistant-ui/react';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AttachFileDialog } from './attachments/attach-file-dialog';

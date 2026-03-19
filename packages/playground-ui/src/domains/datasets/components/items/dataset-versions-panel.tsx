@@ -3,8 +3,8 @@
 import { format } from 'date-fns';
 import { XIcon, GitCompareIcon, ArrowRightIcon } from 'lucide-react';
 import { useState } from 'react';
-import { useDatasetVersions  } from '../../hooks/use-dataset-versions';
-import type {DatasetVersion} from '../../hooks/use-dataset-versions';
+import { useDatasetVersions } from '../../hooks/use-dataset-versions';
+import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 import { Button, ButtonWithTooltip } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Checkbox } from '@/ds/components/Checkbox';

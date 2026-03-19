@@ -1,6 +1,6 @@
 import { X, CircleCheck, CircleX, CircleAlert, Info } from 'lucide-react';
 import React from 'react';
-import type { ExternalToast} from 'sonner';
+import type { ExternalToast } from 'sonner';
 import { toast as sonnerToast } from 'sonner';
 
 import { Icon } from '@/ds/icons';
@@ -168,7 +168,6 @@ toast.dismiss = (toastId: string | number | null | undefined) => {
   }
 };
 
- 
 toast.promise = <T extends unknown>({
   myPromise,
   loadingMessage,

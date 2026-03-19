@@ -1,7 +1,4 @@
-
-
 import { RefreshCw, Info } from 'lucide-react';
-
 
 import { useAgentSettings } from '../context/agent-context';
 

@@ -1,7 +1,7 @@
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
-import { Controller, useWatch  } from 'react-hook-form';
-import type {UseFormSetValue, Control} from 'react-hook-form';
+import { Controller, useWatch } from 'react-hook-form';
+import type { UseFormSetValue, Control } from 'react-hook-form';
 
 import type { AgentFormValues } from '../utils/form-validation';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';

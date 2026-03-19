@@ -1,6 +1,6 @@
 import * as React from 'react';
-import { TextFieldBlock  } from '../FormFieldBlocks/fields/text-field-block';
-import type {TextFieldBlockProps} from '../FormFieldBlocks/fields/text-field-block';
+import { TextFieldBlock } from '../FormFieldBlocks/fields/text-field-block';
+import type { TextFieldBlockProps } from '../FormFieldBlocks/fields/text-field-block';
 import { useJSONSchemaFormField } from './json-schema-form-field-context';
 
 export type JSONSchemaFormFieldNameProps = Omit<TextFieldBlockProps, 'value' | 'onChange' | 'name'>;

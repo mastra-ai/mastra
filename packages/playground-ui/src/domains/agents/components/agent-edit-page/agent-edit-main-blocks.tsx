@@ -1,11 +1,10 @@
 import { Blocks } from 'lucide-react';
-import type { UseFormReturn} from 'react-hook-form';
+import type { UseFormReturn } from 'react-hook-form';
 import { Controller } from 'react-hook-form';
 
 import { AgentCMSBlocks } from '../agent-cms-blocks';
 import type { AgentFormValues } from './utils/form-validation';
 import { SectionHeader } from '@/domains/cms';
-
 
 interface AgentEditMainProps {
   form: UseFormReturn<AgentFormValues>;

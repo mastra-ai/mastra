@@ -1,5 +1,5 @@
-import { Handle, Position   } from '@xyflow/react';
-import type {NodeProps, Node} from '@xyflow/react';
+import { Handle, Position } from '@xyflow/react';
+import type { NodeProps, Node } from '@xyflow/react';
 import { CircleDashed, HourglassIcon, Loader2, PauseIcon, ShieldAlert } from 'lucide-react';
 import { useCurrentRun } from '../context/use-current-run';
 

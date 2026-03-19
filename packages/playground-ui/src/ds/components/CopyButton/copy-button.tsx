@@ -6,7 +6,6 @@ import { Button } from '../Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
-
 export type CopyButtonProps = {
   content: string;
   copyMessage?: string;

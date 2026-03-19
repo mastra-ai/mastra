@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { AgentSettingsType as AgentSettings} from '@/types';
+import type { AgentSettingsType as AgentSettings } from '@/types';
 
 export interface AgentSettingsStateProps {
   agentId: string;

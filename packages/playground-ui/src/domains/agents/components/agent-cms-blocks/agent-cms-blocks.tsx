@@ -1,12 +1,8 @@
 import { ChevronDownIcon, FileText, PenLine, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 
-import {
-  createInstructionBlock,
-  createRefInstructionBlock
-  
-} from '../agent-edit-page/utils/form-validation';
-import type {InstructionBlock} from '../agent-edit-page/utils/form-validation';
+import { createInstructionBlock, createRefInstructionBlock } from '../agent-edit-page/utils/form-validation';
+import type { InstructionBlock } from '../agent-edit-page/utils/form-validation';
 import { AgentCMSBlock } from './agent-cms-block';
 import { PromptBlockPickerDialog } from './prompt-block-picker-dialog';
 import { Button } from '@/ds/components/Button';

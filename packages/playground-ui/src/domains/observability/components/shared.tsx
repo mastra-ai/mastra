@@ -1,5 +1,5 @@
 import { BrainIcon } from 'lucide-react';
-import type {UISpanStyle} from '../types';
+import type { UISpanStyle } from '../types';
 import { AgentIcon, McpServerIcon, ToolsIcon, WorkflowIcon } from '@/ds/icons';
 
 export const spanTypePrefixes = ['agent', 'workflow', 'model', 'mcp', 'tool', 'other'];

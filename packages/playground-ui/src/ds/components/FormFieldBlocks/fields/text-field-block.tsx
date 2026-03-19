@@ -1,6 +1,6 @@
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
-import {  Input } from '../../Input';
-import type {InputProps} from '../../Input';
+import { Input } from '../../Input';
+import type { InputProps } from '../../Input';
 import { FieldBlock } from '../block/field-block';
 import type { FieldBlockErrorMsgProps } from '../block/field-block-error-msg';
 import type { FieldBlockHelpTextProps } from '../block/field-block-help-text';

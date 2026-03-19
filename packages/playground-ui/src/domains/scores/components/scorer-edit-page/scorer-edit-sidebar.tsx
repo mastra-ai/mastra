@@ -1,7 +1,7 @@
 import { Check, Save } from 'lucide-react';
 import type { RefObject } from 'react';
-import { Controller,  useWatch } from 'react-hook-form';
-import type {UseFormReturn} from 'react-hook-form';
+import { Controller, useWatch } from 'react-hook-form';
+import type { UseFormReturn } from 'react-hook-form';
 
 import type { ScorerFormValues } from './utils/form-validation';
 import { SectionHeader } from '@/domains/cms';
@@ -14,7 +14,6 @@ import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Spinner } from '@/ds/components/Spinner';
 import { Textarea } from '@/ds/components/Textarea';
 import { Icon } from '@/ds/icons';
-
 
 interface ScorerEditSidebarProps {
   form: UseFormReturn<ScorerFormValues>;

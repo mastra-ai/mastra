@@ -1,8 +1,7 @@
-import type { ReactNode} from 'react';
+import type { ReactNode } from 'react';
 import { createContext, useContext } from 'react';
 import { useAgentSettingsState } from '@/domains/agents/hooks/use-agent-settings-state';
 import type { AgentSettingsType as AgentSettings } from '@/types';
-
 
 type AgentContextType = {
   settings?: AgentSettings;
