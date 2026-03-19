@@ -171,15 +171,15 @@ export function ReviewQueueProvider({ children }: { children: ReactNode }) {
   const rateItem = useCallback(
     (id: string, rating: 'positive' | 'negative' | undefined) => {
       const item = items.find(i => i.id === id);
-      // Persist rating via feedback API
-      if (item?.traceId) {
+      // Persist rating via feedback API (skip when rating is cleared)
+      if (item?.traceId && rating !== undefined) {
         client
           .createFeedback({
             feedback: {
               traceId: item.traceId,
               source: 'studio',
               feedbackType: 'rating',
-              value: rating === 'positive' ? 1 : rating === 'negative' ? -1 : 0,
+              value: rating === 'positive' ? 1 : -1,
               experimentId: item.experimentId ?? undefined,
               sourceId: item.id,
             },
