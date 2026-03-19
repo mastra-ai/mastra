@@ -52,10 +52,10 @@ export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProp
   return (
     <TooltipProvider delayDuration={0}>
       <form onSubmit={handleSubmit} className="space-y-6">
-          <TextFieldBlock
-            name="url"
-            label="Mastra instance URL"
-            placeholder="e.g: http://localhost:4111"
+        <TextFieldBlock
+          name="url"
+          label="Mastra instance URL"
+          placeholder="e.g: http://localhost:4111"
           required
           defaultValue={initialConfig?.baseUrl}
         />
