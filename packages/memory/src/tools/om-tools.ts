@@ -526,7 +526,8 @@ export async function recallMessages({
       hints.push(`next part: partIndex=${nextPart.partIndex} on cursor="${firstPart.messageId}"`);
     }
     if (otherMsgParts.length > 0) {
-      hints.push(`next message: cursor="${otherMsgParts[0]!.messageId}"`);
+      const next = otherMsgParts[0]!;
+      hints.push(`next message: partIndex=${next.partIndex} on cursor="${next.messageId}"`);
     } else if (hasNextPage) {
       hints.push(`more messages available on page ${normalizedPage + 1}`);
     }
