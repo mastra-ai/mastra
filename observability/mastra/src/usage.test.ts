@@ -48,6 +48,30 @@ describe('extractUsageMetrics', () => {
 
       expect(result.outputDetails?.reasoning).toBe(400);
     });
+
+    it('should handle cachedInputTokens with value 0', () => {
+      const usage = {
+        inputTokens: 500,
+        outputTokens: 100,
+        cachedInputTokens: 0,
+      } as LanguageModelUsage;
+
+      const result = extractUsageMetrics(usage);
+
+      expect(result.inputDetails?.cacheRead).toBe(0);
+    });
+
+    it('should handle reasoningTokens with value 0', () => {
+      const usage = {
+        inputTokens: 100,
+        outputTokens: 50,
+        reasoningTokens: 0,
+      } as LanguageModelUsage;
+
+      const result = extractUsageMetrics(usage);
+
+      expect(result.outputDetails?.reasoning).toBe(0);
+    });
   });
 
   describe('Anthropic cache tokens', () => {
@@ -174,6 +198,153 @@ describe('extractUsageMetrics', () => {
 
       expect(result.inputDetails?.cacheRead).toBe(150);
       expect(result.outputDetails?.reasoning).toBe(250);
+    });
+  });
+
+  describe('AI SDK inputTokenDetails (multi-step aggregation)', () => {
+    it('should prefer inputTokenDetails.cacheReadTokens over providerMetadata', () => {
+      // Simulates multi-step: inputTokenDetails is aggregated, providerMetadata is last step only
+      const usage = {
+        inputTokens: 500,
+        outputTokens: 100,
+        inputTokenDetails: {
+          cacheReadTokens: 10000, // aggregated across all steps
+          cacheWriteTokens: 5000,
+        },
+      } as LanguageModelUsage;
+
+      const providerMetadata: ProviderMetadata = {
+        anthropic: {
+          cacheReadInputTokens: 3000, // last step only (wrong for aggregation)
+          cacheCreationInputTokens: 0, // last step only
+        },
+      };
+
+      const result = extractUsageMetrics(usage, providerMetadata);
+
+      // Should use inputTokenDetails values (aggregated), not providerMetadata (last step)
+      expect(result.inputDetails?.cacheRead).toBe(10000);
+      expect(result.inputDetails?.cacheWrite).toBe(5000);
+    });
+
+    it('should use inputTokenDetails as fallback when providerMetadata has no cache data', () => {
+      const usage = {
+        inputTokens: 500,
+        outputTokens: 100,
+        inputTokenDetails: {
+          cacheReadTokens: 300,
+          cacheWriteTokens: 50,
+        },
+      } as LanguageModelUsage;
+
+      const result = extractUsageMetrics(usage);
+
+      expect(result.inputDetails?.cacheRead).toBe(300);
+      expect(result.inputDetails?.cacheWrite).toBe(50);
+    });
+
+    it('should handle inputTokenDetails with zero values', () => {
+      const usage = {
+        inputTokens: 500,
+        outputTokens: 100,
+        inputTokenDetails: {
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+        },
+      } as LanguageModelUsage;
+
+      const result = extractUsageMetrics(usage);
+
+      expect(result.inputDetails?.cacheRead).toBe(0);
+      expect(result.inputDetails?.cacheWrite).toBe(0);
+    });
+
+    it('should fall back to providerMetadata when inputTokenDetails is absent', () => {
+      const usage: LanguageModelUsage = {
+        inputTokens: 100,
+        outputTokens: 50,
+      };
+
+      const providerMetadata: ProviderMetadata = {
+        anthropic: {
+          cacheReadInputTokens: 800,
+          cacheCreationInputTokens: 200,
+        },
+      };
+
+      const result = extractUsageMetrics(usage, providerMetadata);
+
+      expect(result.inputDetails?.cacheRead).toBe(800);
+      expect(result.inputDetails?.cacheWrite).toBe(200);
+      expect(result.inputTokens).toBe(1100); // Anthropic adjustment: 100 + 800 + 200
+    });
+
+    it('should prefer inputTokenDetails over usage.cachedInputTokens', () => {
+      const usage = {
+        inputTokens: 1000,
+        outputTokens: 200,
+        cachedInputTokens: 400, // stale or partial value
+        inputTokenDetails: {
+          cacheReadTokens: 800, // aggregated value
+        },
+      } as LanguageModelUsage;
+
+      const result = extractUsageMetrics(usage);
+
+      expect(result.inputDetails?.cacheRead).toBe(800);
+    });
+
+    it('should use Anthropic inputTokens adjustment with inputTokenDetails values', () => {
+      // Multi-step Anthropic run: inputTokenDetails has aggregated cache,
+      // providerMetadata has last step only
+      const usage = {
+        inputTokens: 100, // Anthropic base (does NOT include cache)
+        outputTokens: 50,
+        inputTokenDetails: {
+          cacheReadTokens: 8000,
+          cacheWriteTokens: 2000,
+        },
+      } as LanguageModelUsage;
+
+      const providerMetadata: ProviderMetadata = {
+        anthropic: {
+          cacheReadInputTokens: 3000, // last step only — should be ignored
+          cacheCreationInputTokens: 0,
+        },
+      };
+
+      const result = extractUsageMetrics(usage, providerMetadata);
+
+      // inputTokenDetails values should be used (aggregated)
+      expect(result.inputDetails?.cacheRead).toBe(8000);
+      expect(result.inputDetails?.cacheWrite).toBe(2000);
+      // Anthropic adjustment uses the correct aggregated values
+      expect(result.inputTokens).toBe(10100); // 100 + 8000 + 2000
+      expect(result.inputDetails?.text).toBe(100);
+    });
+
+    it('should prefer inputTokenDetails over Google providerMetadata for cacheRead', () => {
+      const usage = {
+        inputTokens: 500,
+        outputTokens: 100,
+        inputTokenDetails: {
+          cacheReadTokens: 7000, // aggregated
+        },
+      } as LanguageModelUsage;
+
+      const providerMetadata: ProviderMetadata = {
+        google: {
+          usageMetadata: {
+            cachedContentTokenCount: 3000, // last step only
+            thoughtsTokenCount: 49,
+          },
+        },
+      };
+
+      const result = extractUsageMetrics(usage, providerMetadata);
+
+      expect(result.inputDetails?.cacheRead).toBe(7000); // inputTokenDetails wins
+      expect(result.outputDetails?.reasoning).toBe(49); // thoughts still extracted from Google
     });
   });
 

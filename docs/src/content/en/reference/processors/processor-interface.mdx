@@ -101,6 +101,13 @@ interface Processor<TId extends string = string> {
     description: 'Optional display name for the processor. Falls back to id if not provided.',
     isOptional: true,
   },
+  {
+    name: 'processDataParts',
+    type: 'boolean',
+    description:
+      'When true, the processOutputStream method also receives `data-*` chunks emitted by tools via writer.custom(). Defaults to false.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -315,7 +322,7 @@ The method can return any combination of these properties:
   {
     name: 'model',
     type: 'LanguageModelV2 | string',
-    description: "Change the model for this step. Can be a model instance or router ID like 'openai/gpt-4o'.",
+    description: "Change the model for this step. Can be a model instance or router ID like 'openai/gpt-5.4'.",
     isOptional: true,
   },
   {
@@ -714,12 +721,12 @@ export class DynamicModelProcessor implements Processor {
   }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
     // Use a fast model for initial response
     if (stepNumber === 0) {
-      return { model: 'openai/gpt-4o-mini' }
+      return { model: 'openai/gpt-5-mini' }
     }
 
     // Switch to powerful model after tool calls
     if (steps.length > 0 && steps[steps.length - 1].toolCalls?.length) {
-      return { model: 'openai/gpt-4o' }
+      return { model: 'openai/gpt-5.4' }
     }
 
     // Disable tools after 5 steps to force completion

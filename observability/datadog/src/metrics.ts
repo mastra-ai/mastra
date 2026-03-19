@@ -19,17 +19,17 @@ export function formatUsageMetrics(usage?: UsageStats): DatadogAnnotationMetrics
   }
 
   if (usage?.outputDetails?.reasoning !== undefined) {
-    result.reasoningTokens = usage.outputDetails.reasoning;
+    result.reasoningOutputTokens = usage.outputDetails.reasoning;
   }
 
-  const cachedTokens = usage?.inputDetails?.cacheRead;
-  if (cachedTokens !== undefined) {
-    result.cachedInputTokens = cachedTokens;
+  const cacheReadTokens = usage?.inputDetails?.cacheRead;
+  if (cacheReadTokens !== undefined) {
+    result.cacheReadTokens = cacheReadTokens;
   }
 
-  const cachedOutputTokens = usage?.inputDetails?.cacheWrite;
-  if (cachedOutputTokens !== undefined) {
-    result.cachedOutputTokens = cachedOutputTokens;
+  const cacheWriteTokens = usage?.inputDetails?.cacheWrite;
+  if (cacheWriteTokens !== undefined) {
+    result.cacheWriteTokens = cacheWriteTokens;
   }
 
   return Object.keys(result).length > 0 ? result : undefined;

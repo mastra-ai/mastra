@@ -115,6 +115,12 @@ export interface TUIState {
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
   pendingNewThread: boolean;
+  /** Current thread title (for display in status line) */
+  currentThreadTitle?: string;
+  /** Cached thread previews for the current TUI session */
+  threadPreviewCache: Map<string, { preview: string; updatedAt: number }>;
+  /** Threads whose preview lookup already returned empty during this session */
+  attemptedThreadPreviewIds: Set<string>;
 
   // ── Inline interaction ────────────────────────────────────────────────
   /** Track the most recent ask_user component for inline question activation */
@@ -194,15 +200,6 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   const footer = new Container();
   const editor = new CustomEditor(ui, getEditorTheme());
   editor.getModeColor = () => options.harness.getCurrentMode()?.color;
-  // Wire up gradient animation info for editor border animation
-  editor.getGradientInfo = () => {
-    const ga = state?.gradientAnimator;
-    if (!ga) return undefined;
-    return { offset: ga.getOffset(), fade: ga.getFadeProgress(), running: ga.isRunning() };
-  };
-
-  // Need a reference to state for the gradient callback above
-  let state: TUIState | undefined;
   const result: TUIState = {
     // Core dependencies
     harness: options.harness,
@@ -235,6 +232,9 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Thread / conversation
     pendingNewThread: false,
+    currentThreadTitle: undefined,
+    threadPreviewCache: new Map(),
+    attemptedThreadPreviewIds: new Set(),
 
     // Inline interaction
     lastClearedText: '',
@@ -258,6 +258,5 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     lastCtrlCTime: 0,
     userInitiatedAbort: false,
   };
-  state = result;
   return result;
 }

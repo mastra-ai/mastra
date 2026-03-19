@@ -22,5 +22,5 @@ export const providerMapToIcon = {
   GROQ: <GroqIcon />,
   X_GROK: <XGroqIcon />,
   MISTRAL: <MistralIcon />,
-  netlify: <NetlifyIcon fill="white" />,
+  netlify: <NetlifyIcon />,
 };

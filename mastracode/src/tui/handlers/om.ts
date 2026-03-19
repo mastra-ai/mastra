@@ -219,3 +219,13 @@ export function handleOMActivation(
   state.activeBufferingMarker = undefined;
   state.ui.requestRender();
 }
+
+export function handleOMThreadTitleUpdated(ctx: EventHandlerContext, newTitle: string, oldTitle?: string): void {
+  const marker = new OMMarkerComponent({
+    type: 'om_thread_title_updated',
+    newTitle,
+    oldTitle,
+  });
+  addChildBeforeStreaming(ctx, marker);
+  ctx.state.ui.requestRender();
+}

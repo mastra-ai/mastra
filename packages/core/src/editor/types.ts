@@ -179,7 +179,10 @@ export interface IEditorAgentNamespace {
       requestContext?: RequestContext;
     },
   ): Promise<StorageResolvedAgentType>;
-  applyStoredOverrides(agent: Agent): Promise<Agent>;
+  applyStoredOverrides(
+    agent: Agent,
+    options?: { status?: 'draft' | 'published' } | { versionId: string },
+  ): Promise<Agent>;
 }
 
 // ============================================================================

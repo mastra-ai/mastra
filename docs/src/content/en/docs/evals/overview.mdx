@@ -45,11 +45,11 @@ import { createAnswerRelevancyScorer, createToxicityScorer } from '@mastra/evals
 export const evaluatedAgent = new Agent({
   scorers: {
     relevancy: {
-      scorer: createAnswerRelevancyScorer({ model: 'openai/gpt-4.1-nano' }),
+      scorer: createAnswerRelevancyScorer({ model: 'openai/gpt-5-mini' }),
       sampling: { type: 'ratio', rate: 0.5 },
     },
     safety: {
-      scorer: createToxicityScorer({ model: 'openai/gpt-4.1-nano' }),
+      scorer: createToxicityScorer({ model: 'openai/gpt-5-mini' }),
       sampling: { type: 'ratio', rate: 1 },
     },
   },
