@@ -21,6 +21,7 @@ import { listOrgsAction, switchOrgAction } from './commands/auth/orgs';
 import { createTokenAction, listTokensAction, revokeTokenAction } from './commands/auth/tokens';
 import { whoamiAction } from './commands/auth/whoami';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
+import { serverDeployAction } from './commands/server/deploy';
 import { deployAction } from './commands/studio/deploy';
 import { deploysAction } from './commands/studio/deploy-list';
 import { logsAction } from './commands/studio/deploy-logs';
@@ -212,6 +213,19 @@ const studioProjects = studioCommand
   .action(wrapAction(listProjectsAction));
 
 studioProjects.command('create').description('Create a new project').action(wrapAction(createProjectAction));
+
+// ---- Server commands ----
+
+const serverCommand = program.command('server').description('Manage Mastra Server deployments');
+
+serverCommand
+  .command('deploy [dir]')
+  .description('Deploy to Mastra Server')
+  .option('--org <id>', 'Organization ID')
+  .option('--project <id>', 'Project ID')
+  .option('-y, --yes', 'Auto-accept defaults without confirmation')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .action(wrapAction(serverDeployAction));
 
 program
   .command('migrate')
