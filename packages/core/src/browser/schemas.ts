@@ -168,6 +168,7 @@ export const screenshotInputSchema = z.object({
 export const screenshotOutputSchema = z.object({
   success: z.boolean().describe('Whether the screenshot was captured successfully'),
   message: z.string().describe('Description of the captured screenshot'),
+  base64: z.string().optional().describe('Base64-encoded image data (used by toModelOutput for vision models)'),
   path: z.string().optional().describe('File path where the screenshot was saved'),
   publicPath: z.string().optional().describe('Public URL path for viewing the screenshot'),
   mimeType: z.enum(['image/png', 'image/jpeg']).describe('Image MIME type'),
