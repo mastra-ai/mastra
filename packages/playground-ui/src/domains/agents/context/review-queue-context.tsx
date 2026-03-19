@@ -197,7 +197,7 @@ export function ReviewQueueProvider({ children }: { children: ReactNode }) {
     (id: string, comment: string) => {
       const item = items.find(i => i.id === id);
       // Persist comment via feedback API if we have a traceId
-      if (item?.traceId && comment.trim()) {
+      if (item?.traceId) {
         client
           .createFeedback({
             feedback: {

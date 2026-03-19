@@ -1247,7 +1247,7 @@ function ReviewItemCard({
                 setCommentSaved(false);
               }}
               onBlur={() => {
-                if (localComment.trim() && localComment !== item.comment) {
+                if (localComment !== item.comment) {
                   onComment(localComment);
                   setCommentSaved(true);
                   setTimeout(() => setCommentSaved(false), 2000);
