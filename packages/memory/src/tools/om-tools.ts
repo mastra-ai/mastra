@@ -119,9 +119,10 @@ interface FormattedPart {
   text: string;
 }
 
-function truncateText(text: string, maxChars: number): string {
+function truncateText(text: string, maxChars: number, hint?: string): string {
   if (text.length <= maxChars) return text;
-  return text.slice(0, maxChars) + '…';
+  const suffix = hint ? `… [truncated — ${hint}]` : '…';
+  return text.slice(0, maxChars) + suffix;
 }
 
 function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): FormattedPart[] {
@@ -134,7 +135,10 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
       partIndex: 0,
       role,
       type: 'text',
-      text: detail === 'low' ? truncateText(msg.content, LOW_DETAIL_TEXT_LIMIT) : msg.content,
+      text:
+        detail === 'low'
+          ? truncateText(msg.content, LOW_DETAIL_TEXT_LIMIT, `recall cursor="${msg.id}" partIndex=0 detail="high"`)
+          : msg.content,
     });
     return parts;
   }
@@ -151,7 +155,10 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
           partIndex: i,
           role,
           type: 'text',
-          text: detail === 'low' ? truncateText(text, LOW_DETAIL_TEXT_LIMIT) : text,
+          text:
+            detail === 'low'
+              ? truncateText(text, LOW_DETAIL_TEXT_LIMIT, `recall cursor="${msg.id}" partIndex=${i} detail="high"`)
+              : text,
         });
       } else if (partType === 'tool-invocation') {
         const inv = (part as any).toolInvocation;
@@ -167,7 +174,7 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
               partIndex: i,
               role,
               type: 'tool-result',
-              text: `[Tool Result: ${inv.toolName}] ${truncateText(resultStr, LOW_DETAIL_TEXT_LIMIT)}`,
+              text: `[Tool Result: ${inv.toolName}] ${truncateText(resultStr, LOW_DETAIL_TEXT_LIMIT, `recall cursor="${msg.id}" partIndex=${i} detail="high"`)}`,
             });
           } else {
             const resultStr = formatToolResultForObserver(resultValue, { maxTokens: HIGH_DETAIL_TOOL_RESULT_TOKENS });
@@ -207,7 +214,14 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
             partIndex: i,
             role,
             type: 'reasoning',
-            text: detail === 'low' ? truncateText(reasoning, LOW_DETAIL_TEXT_LIMIT) : reasoning,
+            text:
+              detail === 'low'
+                ? truncateText(
+                    reasoning,
+                    LOW_DETAIL_TEXT_LIMIT,
+                    `recall cursor="${msg.id}" partIndex=${i} detail="high"`,
+                  )
+                : reasoning,
           });
         }
       } else if (partType === 'image' || partType === 'file') {
@@ -239,7 +253,14 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
       partIndex: 0,
       role,
       type: 'text',
-      text: detail === 'low' ? truncateText(msg.content.content, LOW_DETAIL_TEXT_LIMIT) : msg.content.content,
+      text:
+        detail === 'low'
+          ? truncateText(
+              msg.content.content,
+              LOW_DETAIL_TEXT_LIMIT,
+              `recall cursor="${msg.id}" partIndex=0 detail="high"`,
+            )
+          : msg.content.content,
     });
   }
 

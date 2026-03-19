@@ -260,7 +260,8 @@ describe('om-tools', () => {
         detail: 'low',
       });
 
-      expect(lowResult.messages).toContain('…');
+      expect(lowResult.messages).toContain('… [truncated');
+      expect(lowResult.messages).toContain('detail="high"');
       expect(lowResult.messages).not.toContain(longText);
 
       const highResult = await recallMessages({
