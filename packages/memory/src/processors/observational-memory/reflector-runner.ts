@@ -15,7 +15,6 @@ import {
   createObservationFailedMarker,
   createObservationStartMarker,
 } from './markers';
-import type { ObservationalMemory } from './observational-memory';
 import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
 import {
   buildReflectorSystemPrompt,
@@ -26,6 +25,7 @@ import {
 import { getMaxThreshold } from './thresholds';
 import type { TokenCounter } from './token-counter';
 import type {
+  ObservationDebugEvent,
   ObservationMarkerConfig,
   ObserveHooks,
   ResolvedObservationConfig,
@@ -49,20 +49,50 @@ export class ReflectorRunner {
   private readonly observationConfig: ResolvedObservationConfig;
   private readonly tokenCounter: TokenCounter;
   private readonly storage: MemoryStorage;
-  private readonly om: ObservationalMemory;
+  private readonly scope: 'thread' | 'resource';
+  private readonly buffering: BufferingCoordinator;
+  private readonly emitDebugEvent: (event: ObservationDebugEvent) => void;
+  private readonly persistMarkerToStorage: (
+    marker: { type: string; data: unknown },
+    threadId: string,
+    resourceId?: string,
+  ) => Promise<void>;
+  private readonly persistMarkerToMessage: (
+    marker: { type: string; data: unknown },
+    messageList: MessageList | undefined,
+    threadId: string,
+    resourceId?: string,
+  ) => Promise<void>;
 
   constructor(opts: {
     reflectionConfig: ResolvedReflectionConfig;
     observationConfig: ResolvedObservationConfig;
     tokenCounter: TokenCounter;
     storage: MemoryStorage;
-    om: ObservationalMemory;
+    scope: 'thread' | 'resource';
+    buffering: BufferingCoordinator;
+    emitDebugEvent: (event: ObservationDebugEvent) => void;
+    persistMarkerToStorage: (
+      marker: { type: string; data: unknown },
+      threadId: string,
+      resourceId?: string,
+    ) => Promise<void>;
+    persistMarkerToMessage: (
+      marker: { type: string; data: unknown },
+      messageList: MessageList | undefined,
+      threadId: string,
+      resourceId?: string,
+    ) => Promise<void>;
   }) {
     this.reflectionConfig = opts.reflectionConfig;
     this.observationConfig = opts.observationConfig;
     this.tokenCounter = opts.tokenCounter;
     this.storage = opts.storage;
-    this.om = opts.om;
+    this.scope = opts.scope;
+    this.buffering = opts.buffering;
+    this.emitDebugEvent = opts.emitDebugEvent;
+    this.persistMarkerToStorage = opts.persistMarkerToStorage;
+    this.persistMarkerToMessage = opts.persistMarkerToMessage;
   }
 
   private getAgent(): Agent {
@@ -81,12 +111,8 @@ export class ReflectorRunner {
     return {
       messageTokens: getMaxThreshold(this.observationConfig.messageTokens),
       observationTokens: getMaxThreshold(this.reflectionConfig.observationTokens),
-      scope: this.om.scope,
+      scope: this.scope,
     };
-  }
-
-  private get bc() {
-    return this.om.buffering;
   }
 
   /**
@@ -258,9 +284,9 @@ export class ReflectorRunner {
     writer?: ProcessorStreamWriter,
     requestContext?: RequestContext,
   ): void {
-    const bufferKey = this.bc.getReflectionBufferKey(lockKey);
+    const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
 
-    if (this.bc.isAsyncBufferingInProgress(bufferKey)) {
+    if (this.buffering.isAsyncBufferingInProgress(bufferKey)) {
       return;
     }
 
@@ -284,7 +310,7 @@ export class ReflectorRunner {
             threadId: record.threadId ?? '',
           });
           void writer.custom(failedMarker).catch(() => {});
-          await this.om.persistMarkerToStorage(failedMarker, record.threadId ?? '', record.resourceId ?? undefined);
+          await this.persistMarkerToStorage(failedMarker, record.threadId ?? '', record.resourceId ?? undefined);
         }
         omError('[OM] Async buffered reflection failed', error);
       })
@@ -393,7 +419,7 @@ export class ReflectorRunner {
         observations: reflectResult.observations,
       });
       void writer.custom(endMarker).catch(() => {});
-      await this.om.persistMarkerToStorage(endMarker, currentRecord.threadId ?? '', currentRecord.resourceId ?? undefined);
+      await this.persistMarkerToStorage(endMarker, currentRecord.threadId ?? '', currentRecord.resourceId ?? undefined);
     }
   }
 
@@ -407,7 +433,7 @@ export class ReflectorRunner {
     writer?: ProcessorStreamWriter,
     messageList?: MessageList,
   ): Promise<boolean> {
-    const bufferKey = this.bc.getReflectionBufferKey(lockKey);
+    const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
 
     const asyncOp = BufferingCoordinator.asyncBufferingOps.get(bufferKey);
     if (asyncOp) {
@@ -480,7 +506,7 @@ export class ReflectorRunner {
         config: this.getObservationMarkerConfig(),
       });
       void writer.custom(activationMarker).catch(() => {});
-      await this.om.persistMarkerToMessage(
+      await this.persistMarkerToMessage(
         activationMarker,
         messageList,
         freshRecord.threadId ?? '',
@@ -509,22 +535,22 @@ export class ReflectorRunner {
     requestContext?: RequestContext;
   }): Promise<void> {
     const { record, observationTokens, writer, abortSignal, messageList, reflectionHooks, requestContext } = opts;
-    const lockKey = this.bc.getLockKey(record.threadId, record.resourceId);
+    const lockKey = this.buffering.getLockKey(record.threadId, record.resourceId);
     const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
 
     // ════════════════════════════════════════════════════════════════════════
     // ASYNC BUFFERING: Trigger background reflection at bufferActivation ratio
     // ════════════════════════════════════════════════════════════════════════
-    if (this.bc.isAsyncReflectionEnabled() && observationTokens < reflectThreshold) {
+    if (this.buffering.isAsyncReflectionEnabled() && observationTokens < reflectThreshold) {
       const shouldTrigger = (() => {
-        if (!this.bc.isAsyncReflectionEnabled()) return false;
+        if (!this.buffering.isAsyncReflectionEnabled()) return false;
         if (record.isBufferingReflection) {
           if (isOpActiveInProcess(record.id, 'bufferingReflection')) return false;
           omDebug(`[OM:shouldTriggerAsyncRefl] isBufferingReflection=true but stale, clearing`);
           this.storage.setBufferingReflectionFlag(record.id, false).catch(() => {});
         }
-        const bufferKey = this.bc.getReflectionBufferKey(lockKey);
-        if (this.bc.isAsyncBufferingInProgress(bufferKey)) return false;
+        const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
+        if (this.buffering.isAsyncBufferingInProgress(bufferKey)) return false;
         if (BufferingCoordinator.lastBufferedBoundary.has(bufferKey)) return false;
         if (record.bufferedReflection) return false;
         const activationPoint = reflectThreshold * this.reflectionConfig.bufferActivation!;
@@ -554,7 +580,7 @@ export class ReflectorRunner {
     // ════════════════════════════════════════════════════════════════════════
     // ASYNC ACTIVATION: Try to activate buffered reflection first
     // ════════════════════════════════════════════════════════════════════════
-    if (this.bc.isAsyncReflectionEnabled()) {
+    if (this.buffering.isAsyncReflectionEnabled()) {
       const activationSuccess = await this.tryActivateBufferedReflection(record, lockKey, writer, messageList);
       if (activationSuccess) {
         return;
@@ -596,7 +622,7 @@ export class ReflectorRunner {
       await writer.custom(startMarker).catch(() => {});
     }
 
-    this.om.emitDebugEvent({
+    this.emitDebugEvent({
       type: 'reflection_triggered',
       timestamp: new Date(),
       threadId,
@@ -648,7 +674,7 @@ export class ReflectorRunner {
         await writer.custom(endMarker).catch(() => {});
       }
 
-      this.om.emitDebugEvent({
+      this.emitDebugEvent({
         type: 'reflection_complete',
         timestamp: new Date(),
         threadId,

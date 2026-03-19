@@ -211,3 +211,11 @@ export function sortThreadsByOldestMessage(messagesByThread: Map<string, MastraD
     .sort((a, b) => a.oldestTimestamp - b.oldestTimestamp)
     .map(t => t.threadId);
 }
+
+/**
+ * Strip any thread tags that the Observer might have added.
+ * Thread attribution is handled externally by the system, not by the Observer.
+ */
+export function stripThreadTags(observations: string): string {
+  return observations.replace(/<thread[^>]*>|<\/thread>/gi, '').trim();
+}

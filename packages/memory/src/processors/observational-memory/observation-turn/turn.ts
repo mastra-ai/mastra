@@ -169,7 +169,7 @@ export class ObservationTurn {
    */
   async refreshOtherThreadsContext(): Promise<string | undefined> {
     if (this.om.scope === 'resource' && this.resourceId) {
-      const otherThreadsContext = await (this.om as any).getOtherThreadsContext(this.resourceId, this.threadId);
+      const otherThreadsContext = await this.om.getOtherThreadsContext(this.resourceId!, this.threadId);
       if (this._context) {
         this._context.otherThreadsContext = otherThreadsContext;
       }

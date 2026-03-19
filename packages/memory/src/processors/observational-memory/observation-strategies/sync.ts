@@ -4,9 +4,9 @@ import { setThreadOMMetadata } from '@mastra/core/memory';
 import { omDebug } from '../debug';
 import { createObservationEndMarker, createObservationFailedMarker, createObservationStartMarker } from '../markers';
 import { getLastObservedMessageCursor } from '../message-utils';
-import type { ObservationalMemory } from '../observational-memory';
 
 import { ObservationStrategy } from './base';
+import type { StrategyDeps } from './base';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
 
 export class SyncObservationStrategy extends ObservationStrategy {
@@ -15,8 +15,8 @@ export class SyncObservationStrategy extends ObservationStrategy {
   private tokensToObserve = 0;
   private observerResult!: ObserverOutput;
 
-  constructor(om: ObservationalMemory, opts: ObservationRunOpts) {
-    super(om, opts);
+  constructor(deps: StrategyDeps, opts: ObservationRunOpts) {
+    super(deps, opts);
     this.lastMessage = opts.messages[opts.messages.length - 1];
   }
 
@@ -30,7 +30,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
   async prepare() {
     const { record, threadId, messages } = this.opts;
 
-    this.om.emitDebugEvent({
+    this.deps.emitDebugEvent({
       type: 'observation_triggered',
       timestamp: new Date(),
       threadId,
@@ -46,7 +46,17 @@ export class SyncObservationStrategy extends ObservationStrategy {
     if (bufferActivation && bufferActivation < 1 && messages.length >= 1) {
       const newestMsg = messages[messages.length - 1];
       if (newestMsg?.content?.parts?.length) {
-        (this.om as any).sealMessagesForBuffering([newestMsg]);
+        // Seal the newest message's parts for buffering boundary tracking
+        for (const part of newestMsg.content.parts) {
+          if (part && typeof part === 'object' && !('metadata' in part)) {
+            (part as any).metadata = {};
+          }
+          if (part && typeof part === 'object' && 'metadata' in part) {
+            const meta = part.metadata as Record<string, unknown>;
+            if (!meta.mastra) meta.mastra = {};
+            (meta.mastra as Record<string, unknown>).sealed = true;
+          }
+        }
         omDebug(
           `[OM:sync-obs] sealed newest message (${newestMsg.role}, ${newestMsg.content.parts.length} parts) for ratio-aware observation`,
         );
@@ -76,7 +86,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
   }
 
   async observe(existingObservations: string, messages: MastraDBMessage[]) {
-    const result = await this.om.observer.call(existingObservations, messages, this.opts.abortSignal, {
+    const result = await this.deps.observer.call(existingObservations, messages, this.opts.abortSignal, {
       requestContext: this.opts.requestContext,
     });
     this.observerResult = result;
@@ -86,7 +96,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
   async process(output: ObserverOutput, existingObservations: string): Promise<ProcessedObservation> {
     const { record, threadId, messages } = this.opts;
 
-    const newObservations = await this.om.wrapObservations(output.observations, existingObservations, threadId);
+    const newObservations = await this.wrapObservations(output.observations, existingObservations, threadId);
     const observationTokens = this.tokenCounter.countObservations(newObservations);
     const cycleObservationTokens = this.tokenCounter.countObservations(output.observations);
     const lastObservedAt = this.getMaxMessageTimestamp(messages);
@@ -95,7 +105,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
     const existingIds = record.observedMessageIds ?? [];
     const observedMessageIds = [...new Set([...(Array.isArray(existingIds) ? existingIds : []), ...newMessageIds])];
 
-    this.om.emitDebugEvent({
+    this.deps.emitDebugEvent({
       type: 'observation_complete',
       timestamp: new Date(),
       threadId,

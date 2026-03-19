@@ -20,7 +20,12 @@ import { omDebug, omError } from './debug';
 import {
   createBufferingStartMarker,
 } from './markers';
-import { findLastCompletedObservationBoundary, getUnobservedParts, getBufferedChunks } from './message-utils';
+import {
+  findLastCompletedObservationBoundary,
+  getUnobservedParts,
+  getBufferedChunks,
+  stripThreadTags,
+} from './message-utils';
 import { ObservationStrategy } from './observation-strategies/index';
 import { ObservationTurn } from './observation-turn/index';
 import { optimizeObservationsForContext, formatMessagesForObserver } from './observer-agent';
@@ -106,7 +111,6 @@ export class ObservationalMemory {
 
   private shouldObscureThreadIds = false;
   private hasher = xxhash();
-  private threadIdCache = new Map<string, string>();
 
   /**
    * Track message IDs observed during this instance's lifetime.
@@ -360,7 +364,11 @@ export class ObservationalMemory {
       observationConfig: this.observationConfig,
       tokenCounter: this.tokenCounter,
       storage: this.storage,
-      om: this,
+      scope: this.scope,
+      buffering: this.buffering,
+      emitDebugEvent: (e) => this.emitDebugEvent(e),
+      persistMarkerToStorage: (m, t, r) => this.persistMarkerToStorage(m, t, r),
+      persistMarkerToMessage: (m, ml, t, r) => this.persistMarkerToMessage(m, ml, t, r),
     });
 
     // Validate buffer configuration
@@ -819,7 +827,8 @@ export class ObservationalMemory {
    *
    * @param messages - Messages to seal (mutated in place)
    */
-  private sealMessagesForBuffering(messages: MastraDBMessage[]): void {
+  /** @internal Used by ObservationStep. */
+  sealMessagesForBuffering(messages: MastraDBMessage[]): void {
     const sealedAt = Date.now();
 
     for (const msg of messages) {
@@ -891,7 +900,8 @@ export class ObservationalMemory {
    * This handles the case where a single message accumulates many parts
    * (like tool calls) during an agentic loop - we only observe the new parts.
    */
-  private getUnobservedMessages(
+  /** @internal Used by ObservationStep. */
+  getUnobservedMessages(
     allMessages: MastraDBMessage[],
     record: ObservationalMemoryRecord,
     opts?: { excludeBuffered?: boolean },
@@ -1185,29 +1195,12 @@ ${formattedMessages}
 
   private async representThreadIDInContext(threadId: string): Promise<string> {
     if (this.shouldObscureThreadIds) {
-      // Check cache first
-      const cached = this.threadIdCache.get(threadId);
-      if (cached) return cached;
-
-      // Use xxhash (32-bit) to create short, opaque, non-reversible identifiers
-      // This prevents LLMs from recognizing patterns like "answer_" in base64
       const hasher = await this.hasher;
-      const hashed = hasher.h32ToString(threadId);
-      this.threadIdCache.set(threadId, hashed);
-      return hashed;
+      return hasher.h32ToString(threadId);
     }
     return threadId;
   }
 
-  /**
-   * Strip any thread tags that the Observer might have added.
-   * Thread attribution is handled externally by the system, not by the Observer.
-   * This is a defense-in-depth measure.
-   */
-  private stripThreadTags(observations: string): string {
-    // Remove any <thread...> or </thread> tags the Observer might add
-    return observations.replace(/<thread[^>]*>|<\/thread>/gi, '').trim();
-  }
 
   /**
    * Get the maximum createdAt timestamp from a list of messages.
@@ -1235,7 +1228,7 @@ ${formattedMessages}
    */
   async wrapWithThreadTag(threadId: string, observations: string): Promise<string> {
     // First strip any thread tags the Observer might have added
-    const cleanObservations = this.stripThreadTags(observations);
+    const cleanObservations = stripThreadTags(observations);
     const obscuredId = await this.representThreadIDInContext(threadId);
     return `<thread id="${obscuredId}">\n${cleanObservations}\n</thread>`;
   }
@@ -1667,7 +1660,8 @@ ${formattedMessages}
    * integrations. The processor may still pass sealedIds/state so marker/fallback cleanup
    * can persist messages safely, but callers that do not need that bookkeeping can omit it.
    */
-  private async cleanupMessages(opts: {
+  /** @internal Used by ObservationStep. */
+  async cleanupMessages(opts: {
     threadId: string;
     resourceId?: string;
     messages: MessageList | MastraDBMessage[];
@@ -1788,7 +1782,8 @@ ${formattedMessages}
    * Clears the lastBufferedBoundary, buffering flag, and optionally cleans up
    * static maps for activated message IDs.
    */
-  private async resetBufferingState(opts: {
+  /** @internal Used by ObservationStep. */
+  async resetBufferingState(opts: {
     threadId: string;
     resourceId?: string;
     recordId: string;
@@ -1858,7 +1853,8 @@ ${formattedMessages}
    * Lists all threads for the resource, filters to unobserved messages,
    * and formats them as context blocks.
    */
-  private async getOtherThreadsContext(resourceId: string, currentThreadId: string): Promise<string | undefined> {
+  /** @internal Used by ObservationTurn. */
+  async getOtherThreadsContext(resourceId: string, currentThreadId: string): Promise<string | undefined> {
     const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId } });
     const messagesByThread = new Map<string, MastraDBMessage[]>();
 
@@ -2200,7 +2196,8 @@ ${formattedMessages}
    * }
    * ```
    */
-  private async buffer(opts: {
+  /** @internal Used by ObservationStep. */
+  async buffer(opts: {
     threadId: string;
     resourceId?: string;
     messages?: MastraDBMessage[];
@@ -2405,7 +2402,8 @@ ${formattedMessages}
    * }
    * ```
    */
-  private async activate(opts: {
+  /** @internal Used by ObservationStep. */
+  async activate(opts: {
     threadId: string;
     resourceId?: string;
     /** When true, skip activation if pending tokens are below the observation threshold. */
@@ -2736,6 +2734,20 @@ ${formattedMessages}
    */
   getReflectionConfig(): ResolvedReflectionConfig {
     return this.reflectionConfig;
+  }
+
+  /**
+   * Get the message history instance for marker persistence.
+   */
+  getMessageHistory(): MessageHistory {
+    return this.messageHistory;
+  }
+
+  /**
+   * Get whether thread IDs should be obscured in observations.
+   */
+  getObscureThreadIds(): boolean {
+    return this.shouldObscureThreadIds;
   }
 
   /**

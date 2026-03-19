@@ -47,7 +47,7 @@ export class ObservationStep {
 
     const { threadId, resourceId, messageList } = this.turn;
     // Cast to any for internal access to private OM methods (Turn/Step are internal consumers)
-    const om = this.turn.om as any;
+    const om = this.turn.om;
     let activated = false;
     let observed = false;
     let buffered = false;
@@ -236,7 +236,7 @@ export class ObservationStep {
     activatedMessageIds?: string[];
   }> {
     const { threadId, resourceId, messageList } = this.turn;
-    const om = this.turn.om as any;
+    const om = this.turn.om;
 
     // Wait for any in-flight buffering to settle
     await om.waitForBuffering(threadId, resourceId);
