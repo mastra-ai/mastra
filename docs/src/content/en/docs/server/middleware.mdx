@@ -131,14 +131,14 @@ export const mastra = new Mastra({
       {
         path: '/api/*',
         handler: async (c, next) => {
-          const authToken = c.req.header('Authorization')
-          if (!authToken) {
+          const token = c.req.header('Authorization')
+          if (!token) {
             return c.json({ error: 'Unauthorized' }, 401)
           }
 
           const user = await getAuthenticatedUser<{ id: string }>({
             mastra: c.get('mastra'),
-            authToken,
+            token,
             request: c.req.raw,
           })
           const requestContext = c.get('requestContext')

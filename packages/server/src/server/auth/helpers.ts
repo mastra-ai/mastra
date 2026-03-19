@@ -242,16 +242,16 @@ const pass: AuthResult = { action: 'next' };
 
 export interface GetAuthenticatedUserOptions {
   mastra: Mastra;
-  authToken: string;
+  token: string;
   request: Request | HonoRequest;
 }
 
 export const getAuthenticatedUser = async <TUser = unknown>({
   mastra,
-  authToken,
+  token,
   request,
 }: GetAuthenticatedUserOptions): Promise<TUser | null> => {
-  const normalizedToken = authToken.replace(/^Bearer\s+/i, '').trim();
+  const normalizedToken = token.replace(/^Bearer\s+/i, '').trim();
   if (!normalizedToken) {
     return null;
   }

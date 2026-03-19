@@ -165,7 +165,7 @@ describe('auth helpers', () => {
             },
           }),
         } as any,
-        authToken: '',
+        token: '',
         request: new Request('http://localhost/api/test'),
       });
 
@@ -177,7 +177,7 @@ describe('auth helpers', () => {
         mastra: {
           getServer: () => ({}),
         } as any,
-        authToken: 'valid-token',
+        token: 'valid-token',
         request: new Request('http://localhost/api/test'),
       });
 
@@ -201,7 +201,7 @@ describe('auth helpers', () => {
             },
           }),
         } as any,
-        authToken: 'valid-token',
+        token: 'valid-token',
         request,
       });
 
@@ -221,7 +221,7 @@ describe('auth helpers', () => {
             },
           }),
         } as any,
-        authToken: 'Bearer valid-token',
+        token: 'Bearer valid-token',
         request: new Request('http://localhost/api/test'),
       });
 

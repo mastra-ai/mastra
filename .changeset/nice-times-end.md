@@ -11,7 +11,7 @@ import { getAuthenticatedUser } from '@mastra/server/auth'
 
 const user = await getAuthenticatedUser({
   mastra,
-  authToken,
+  token,
   request: c.req.raw,
 })
 ```
