@@ -19,8 +19,12 @@ export type ChannelEvent = {
   externalChannelId: string;
   /** The platform user ID who triggered the event. */
   userId: string;
+  /** Display name of the user (e.g. 'Caleb Barnes'). */
+  userName?: string;
   /** Text content of the event, if applicable. */
   text?: string;
+  /** For slash_command events, the command name (e.g. '/summarize'). */
+  commandName?: string;
   /** The original, unmodified platform payload. */
   rawEvent: unknown;
 };
@@ -82,16 +86,30 @@ export type ChannelSendParams = {
 };
 
 /**
- * Configuration for routing channel events to agents.
- * Maps agent names to the event types they should handle.
+ * A slash command definition for a channel.
+ * The command's prompt is prepended to the agent's generate call.
  */
-export type ChannelRouteConfig = Record<
-  string,
-  {
-    /** Which event types this agent should handle. */
-    events: ChannelEventType[];
-  }
->;
+export type ChannelCommand = {
+  /** Description shown to users in the platform's command UI. */
+  description: string;
+  /** Prompt prepended to the agent's generate call when this command is invoked. */
+  prompt: string;
+};
+
+/**
+ * Channel context placed on `requestContext` under the 'channel' key.
+ * Available to input processors via `requestContext.get('channel')`.
+ */
+export type ChannelContext = {
+  /** Platform identifier (e.g. 'slack', 'discord'). */
+  platform: string;
+  /** Event type that triggered this generation. */
+  eventType: ChannelEventType;
+  /** Platform user ID of the sender. */
+  userId: string;
+  /** Display name of the sender, if available. */
+  userName?: string;
+};
 
 /**
  * Parameters for the shared processWebhookEvent pipeline.
@@ -99,7 +117,7 @@ export type ChannelRouteConfig = Record<
 export type ProcessWebhookEventParams = {
   /** The normalized event from the platform. */
   event: ChannelEvent;
-  /** The Mastra instance for agent/storage access. */
+  /** The Mastra instance for storage access. */
   mastra: Mastra;
 };
 
@@ -107,10 +125,8 @@ export type ProcessWebhookEventParams = {
  * Result of processing a webhook event.
  */
 export type ProcessWebhookResult = {
-  /** Whether the event was handled (an agent was found and invoked). */
+  /** Whether the event was handled. */
   handled: boolean;
-  /** The name of the agent that handled the event. */
-  agentName?: string;
   /** The Mastra thread ID used for the conversation. */
   threadId?: string;
   /** The text response from the agent. */

@@ -3,6 +3,7 @@ import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypev4 } from 'zod/v4';
+import type { MastraChannel } from '../channels/base';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type {
   CoreMessage,
@@ -295,6 +296,11 @@ export interface AgentConfig<
    * Voice settings for speech input and output.
    */
   voice?: MastraVoice;
+  /**
+   * Messaging channels the agent communicates over (e.g. Slack, Discord).
+   * Webhook routes are auto-registered when the agent is added to Mastra.
+   */
+  channels?: Record<string, MastraChannel>;
   /**
    * Workspace for file storage and code execution.
    * When configured, workspace tools are automatically injected into the agent.

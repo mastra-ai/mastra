@@ -2,11 +2,10 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, expect, it } from 'vitest';
 
 import { Agent } from '../../agent';
-import { MastraError } from '../../error';
 import { Mastra } from '../../mastra';
 import type { ApiRoute } from '../../server/types';
 import { MastraChannel } from '../base';
-import type { ChannelEvent, ChannelSendParams, ChannelSendResult } from '../types';
+import type { ChannelSendParams, ChannelSendResult } from '../types';
 
 /**
  * Test channel implementation for integration testing.
@@ -17,9 +16,9 @@ class TestChannel extends MastraChannel {
   sentMessages: ChannelSendParams[] = [];
   webhookPath: string;
 
-  constructor(config: { name: string; webhookPath?: string; routes: Record<string, { events: string[] }> }) {
-    super({ name: config.name, routes: config.routes as any });
-    this.webhookPath = config.webhookPath ?? `/channels/${config.name}/webhook`;
+  constructor(config: { name: string; webhookPath?: string }) {
+    super({ name: config.name });
+    this.webhookPath = config.webhookPath ?? `/api/agents/__test__/channels/${config.name}/webhook`;
   }
 
   async send(params: ChannelSendParams): Promise<ChannelSendResult> {
@@ -44,7 +43,8 @@ class TestChannel extends MastraChannel {
 /**
  * Creates a mock agent for testing with AI SDK v5 model.
  */
-function createTestAgent(id: string, responseText: string = 'Hello from agent') {
+function createTestAgent(id: string, options?: { responseText?: string; channels?: Record<string, MastraChannel> }) {
+  const { responseText = 'Hello from agent', channels } = options ?? {};
   return new Agent({
     id,
     name: `Test Agent ${id}`,
@@ -70,116 +70,100 @@ function createTestAgent(id: string, responseText: string = 'Hello from agent') 
         ]),
       }),
     }),
+    channels,
   });
 }
 
 describe('Mastra Channel Integration', () => {
-  describe('channel registration', () => {
-    it('registers channels from config', () => {
-      const channel = new TestChannel({
-        name: 'test',
-        routes: { 'test-agent': { events: ['message'] } },
-      });
+  describe('agent-level channel registration', () => {
+    it('registers channels on agent', () => {
+      const channel = new TestChannel({ name: 'test' });
+      const agent = createTestAgent('test-agent', { channels: { test: channel } });
 
-      const mastra = new Mastra({
-        logger: false,
-        channels: { test: channel },
-      });
-
-      expect(mastra.getChannel('test')).toBe(channel);
+      expect(agent.getChannel('test')).toBe(channel);
+      expect(channel.agent).toBe(agent);
     });
 
-    it('registers multiple channels', () => {
-      const channel1 = new TestChannel({
-        name: 'slack',
-        routes: { agent1: { events: ['message'] } },
-      });
-      const channel2 = new TestChannel({
-        name: 'discord',
-        routes: { agent2: { events: ['message'] } },
-      });
+    it('registers multiple channels on agent', () => {
+      const slack = new TestChannel({ name: 'slack' });
+      const discord = new TestChannel({ name: 'discord' });
+      const agent = createTestAgent('multi-agent', { channels: { slack, discord } });
 
-      const mastra = new Mastra({
-        logger: false,
-        channels: { slack: channel1, discord: channel2 },
-      });
-
-      expect(mastra.getChannel('slack')).toBe(channel1);
-      expect(mastra.getChannel('discord')).toBe(channel2);
+      expect(agent.getChannel('slack')).toBe(slack);
+      expect(agent.getChannel('discord')).toBe(discord);
     });
 
-    it('throws when getting non-existent channel', () => {
-      const mastra = new Mastra({ logger: false });
+    it('throws when getting non-existent channel from agent', () => {
+      const agent = createTestAgent('no-channels');
 
-      expect(() => mastra.getChannel('nonexistent')).toThrow(MastraError);
-      expect(() => mastra.getChannel('nonexistent')).toThrow('Channel with name nonexistent not found');
+      expect(() => agent.getChannel('nonexistent')).toThrow();
     });
 
-    it('returns all channels via getChannels()', () => {
-      const channel1 = new TestChannel({
-        name: 'slack',
-        routes: { agent1: { events: ['message'] } },
-      });
-      const channel2 = new TestChannel({
-        name: 'discord',
-        routes: { agent2: { events: ['message'] } },
-      });
+    it('returns all channels via agent.getChannels()', () => {
+      const slack = new TestChannel({ name: 'slack' });
+      const discord = new TestChannel({ name: 'discord' });
+      const agent = createTestAgent('multi-agent', { channels: { slack, discord } });
 
-      const mastra = new Mastra({
-        logger: false,
-        channels: { slack: channel1, discord: channel2 },
-      });
-
-      const channels = mastra.getChannels();
+      const channels = agent.getChannels();
       expect(Object.keys(channels)).toHaveLength(2);
-      expect(channels.slack).toBe(channel1);
-      expect(channels.discord).toBe(channel2);
+      expect(channels.slack).toBe(slack);
+      expect(channels.discord).toBe(discord);
     });
 
     it('returns empty object when no channels configured', () => {
-      const mastra = new Mastra({ logger: false });
-
-      expect(mastra.getChannels()).toEqual({});
+      const agent = createTestAgent('no-channels');
+      expect(agent.getChannels()).toEqual({});
     });
+  });
 
-    it('skips null/undefined channels in config', () => {
-      const validChannel = new TestChannel({
-        name: 'valid',
-        routes: { agent: { events: ['message'] } },
-      });
+  describe('mastra-level channel aggregation', () => {
+    it('aggregates channels from agents via mastra.getChannels()', () => {
+      const slackChannel = new TestChannel({ name: 'slack' });
+      const discordChannel = new TestChannel({ name: 'discord' });
+
+      const agent1 = createTestAgent('agent1', { channels: { slack: slackChannel } });
+      const agent2 = createTestAgent('agent2', { channels: { discord: discordChannel } });
 
       const mastra = new Mastra({
         logger: false,
-        channels: {
-          valid: validChannel,
-          nullChannel: null as any,
-          undefinedChannel: undefined as any,
-        },
+        agents: { agent1, agent2 },
       });
 
-      expect(mastra.getChannel('valid')).toBe(validChannel);
-      expect(Object.keys(mastra.getChannels())).toHaveLength(1);
+      const channels = mastra.getChannels();
+      expect(channels['agent1:slack']).toBe(slackChannel);
+      expect(channels['agent2:discord']).toBe(discordChannel);
+    });
+
+    it('returns empty object when no agents have channels', () => {
+      const agent = createTestAgent('no-channels');
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: { agent },
+      });
+
+      expect(mastra.getChannels()).toEqual({});
     });
   });
 
   describe('webhook route auto-wiring', () => {
-    it('adds channel webhook routes to server config', () => {
+    it('adds channel webhook routes to server config when agent is added', () => {
       const channel = new TestChannel({
         name: 'test',
-        webhookPath: '/channels/test/webhook',
-        routes: { agent: { events: ['message'] } },
+        webhookPath: '/api/agents/test-agent/channels/test/webhook',
       });
+      const agent = createTestAgent('test-agent', { channels: { test: channel } });
 
       const mastra = new Mastra({
         logger: false,
-        channels: { test: channel },
+        agents: { 'test-agent': agent },
       });
 
       const server = mastra.getServer();
       expect(server?.apiRoutes).toBeDefined();
       expect(server?.apiRoutes?.length).toBeGreaterThan(0);
 
-      const webhookRoute = server?.apiRoutes?.find(r => r.path === '/channels/test/webhook');
+      const webhookRoute = server?.apiRoutes?.find(r => r.path === '/api/agents/test-agent/channels/test/webhook');
       expect(webhookRoute).toBeDefined();
       expect(webhookRoute?.method).toBe('POST');
       expect(webhookRoute?.requiresAuth).toBe(false);
@@ -188,9 +172,9 @@ describe('Mastra Channel Integration', () => {
     it('merges channel routes with existing server routes', () => {
       const channel = new TestChannel({
         name: 'test',
-        webhookPath: '/channels/test/webhook',
-        routes: { agent: { events: ['message'] } },
+        webhookPath: '/api/agents/test-agent/channels/test/webhook',
       });
+      const agent = createTestAgent('test-agent', { channels: { test: channel } });
 
       const existingRoute: ApiRoute = {
         path: '/api/custom',
@@ -200,7 +184,7 @@ describe('Mastra Channel Integration', () => {
 
       const mastra = new Mastra({
         logger: false,
-        channels: { test: channel },
+        agents: { 'test-agent': agent },
         server: {
           apiRoutes: [existingRoute],
         },
@@ -212,101 +196,55 @@ describe('Mastra Channel Integration', () => {
       const customRoute = server?.apiRoutes?.find(r => r.path === '/api/custom');
       expect(customRoute).toBeDefined();
 
-      const webhookRoute = server?.apiRoutes?.find(r => r.path === '/channels/test/webhook');
+      const webhookRoute = server?.apiRoutes?.find(r => r.path === '/api/agents/test-agent/channels/test/webhook');
       expect(webhookRoute).toBeDefined();
     });
 
-    it('adds routes from multiple channels', () => {
-      const channel1 = new TestChannel({
+    it('adds routes from multiple agents with channels', () => {
+      const slack = new TestChannel({
         name: 'slack',
-        webhookPath: '/channels/slack/webhook',
-        routes: { agent: { events: ['message'] } },
+        webhookPath: '/api/agents/agent1/channels/slack/webhook',
       });
-      const channel2 = new TestChannel({
+      const discord = new TestChannel({
         name: 'discord',
-        webhookPath: '/channels/discord/webhook',
-        routes: { agent: { events: ['message'] } },
+        webhookPath: '/api/agents/agent2/channels/discord/webhook',
       });
+
+      const agent1 = createTestAgent('agent1', { channels: { slack } });
+      const agent2 = createTestAgent('agent2', { channels: { discord } });
 
       const mastra = new Mastra({
         logger: false,
-        channels: { slack: channel1, discord: channel2 },
+        agents: { agent1, agent2 },
       });
 
       const server = mastra.getServer();
       expect(server?.apiRoutes?.length).toBe(2);
 
-      expect(server?.apiRoutes?.find(r => r.path === '/channels/slack/webhook')).toBeDefined();
-      expect(server?.apiRoutes?.find(r => r.path === '/channels/discord/webhook')).toBeDefined();
+      expect(server?.apiRoutes?.find(r => r.path === '/api/agents/agent1/channels/slack/webhook')).toBeDefined();
+      expect(server?.apiRoutes?.find(r => r.path === '/api/agents/agent2/channels/discord/webhook')).toBeDefined();
     });
   });
 
-  describe('channel with agents', () => {
-    it('can access agents registered in the same Mastra instance', () => {
-      const agent = createTestAgent('slack-agent');
-      const channel = new TestChannel({
-        name: 'slack',
-        routes: { 'slack-agent': { events: ['message'] } },
-      });
+  describe('channel-agent relationship', () => {
+    it('channel has a reference back to its owning agent', () => {
+      const channel = new TestChannel({ name: 'test' });
+      const agent = createTestAgent('test-agent', { channels: { test: channel } });
 
-      const mastra = new Mastra({
-        logger: false,
-        agents: { 'slack-agent': agent },
-        channels: { slack: channel },
-      });
-
-      // Both should be accessible
-      expect(mastra.getAgent('slack-agent')).toBe(agent);
-      expect(mastra.getChannel('slack')).toBe(channel);
-    });
-  });
-
-  describe('processWebhookEvent integration', () => {
-    it('returns handled: false when no agent is configured for event type', async () => {
-      const channel = new TestChannel({
-        name: 'test',
-        routes: { 'test-agent': { events: ['message'] } },
-      });
-
-      const mastra = new Mastra({
-        logger: false,
-        channels: { test: channel },
-      });
-
-      const event: ChannelEvent = {
-        type: 'reaction', // Not configured
-        platform: 'test-platform',
-        externalThreadId: 'thread-1',
-        externalChannelId: 'channel-1',
-        userId: 'user-1',
-        rawEvent: {},
-      };
-
-      const result = await channel.processWebhookEvent({ event, mastra });
-
-      expect(result.handled).toBe(false);
-      expect(result.agentName).toBeUndefined();
+      expect(channel.agent).toBe(agent);
     });
 
-    it('resolves agent correctly for matching event type', async () => {
-      const agent = createTestAgent('test-agent', 'Response');
-      const channel = new TestChannel({
-        name: 'test',
-        routes: { 'test-agent': { events: ['message'] } },
-      });
+    it('agent is accessible from Mastra after registration', () => {
+      const channel = new TestChannel({ name: 'test' });
+      const agent = createTestAgent('test-agent', { channels: { test: channel } });
 
       const mastra = new Mastra({
         logger: false,
         agents: { 'test-agent': agent },
-        channels: { test: channel },
       });
 
-      // Test that agent resolution works
-      const agentName = (channel as any).resolveAgentForEvent('message');
-      expect(agentName).toBe('test-agent');
-
-      // And that the agent can be retrieved
       expect(mastra.getAgent('test-agent')).toBe(agent);
+      expect(mastra.getAgent('test-agent').getChannel('test')).toBe(channel);
     });
   });
 });

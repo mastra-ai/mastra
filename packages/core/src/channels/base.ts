@@ -1,9 +1,12 @@
+import type { Agent } from '../agent/agent';
 import { MastraBase } from '../base';
 import type { StorageThreadType } from '../memory/types';
+import { RequestContext } from '../request-context';
 import type { ApiRoute } from '../server/types';
 
 import type {
-  ChannelRouteConfig,
+  ChannelCommand,
+  ChannelContext,
   ChannelSendParams,
   ChannelSendResult,
   GetOrCreateThreadParams,
@@ -15,17 +18,20 @@ export abstract class MastraChannel extends MastraBase {
   /** Platform identifier (e.g. 'slack', 'discord'). */
   abstract readonly platform: string;
 
-  /** Route configuration mapping agent names to event types. */
-  protected routes: ChannelRouteConfig;
+  /** The agent that owns this channel. Set during Agent construction. */
+  #agent?: Agent<any, any, any, any>;
 
-  constructor({ name, routes }: { name?: string; routes: ChannelRouteConfig }) {
+  /** Slash command definitions. */
+  protected commands: Record<string, ChannelCommand>;
+
+  constructor({ name, commands }: { name?: string; commands?: Record<string, ChannelCommand> }) {
     super({ component: 'CHANNEL', name });
-    this.routes = routes;
+    this.commands = commands ?? {};
   }
 
   /**
    * Returns API routes for receiving webhook events from the platform.
-   * These routes are auto-registered when the channel is added to Mastra config.
+   * These routes are auto-registered when the channel's agent is added to Mastra.
    */
   abstract getWebhookRoutes(): ApiRoute[];
 
@@ -35,17 +41,57 @@ export abstract class MastraChannel extends MastraBase {
   abstract send(params: ChannelSendParams): Promise<ChannelSendResult>;
 
   /**
-   * Shared webhook processing pipeline: resolve agent → get/create thread → generate → send.
-   * Called by platform-specific webhook handlers after verification and event parsing.
+   * Returns tools that let the agent interact with this channel.
+   * Override in subclasses to provide platform-specific tools.
+   */
+  getTools(): Record<string, unknown> {
+    return {};
+  }
+
+  /**
+   * Sets the owning agent. Called by the Agent constructor.
+   * @internal
+   */
+  __setAgent(agent: Agent<any, any, any, any>): void {
+    this.#agent = agent;
+  }
+
+  /**
+   * Returns the owning agent.
+   */
+  get agent(): Agent<any, any, any, any> {
+    if (!this.#agent) {
+      throw new Error(`Channel "${this.platform}" has no owning agent. Channels must be registered on an agent.`);
+    }
+    return this.#agent;
+  }
+
+  /**
+   * Resolves the prompt for a slash command, or undefined if no command is registered.
+   */
+  protected resolveCommand(commandName: string): ChannelCommand | undefined {
+    return this.commands[commandName];
+  }
+
+  /**
+   * Shared webhook processing pipeline: get/create thread → generate → send.
+   * Always routes to the owning agent. For slash commands, prepends the command prompt.
    */
   async processWebhookEvent({ event, mastra }: ProcessWebhookEventParams): Promise<ProcessWebhookResult> {
-    const agentName = this.resolveAgentForEvent(event.type);
-    if (!agentName) {
-      this.logger.debug(`No agent configured for event type: ${event.type}`);
-      return { handled: false };
-    }
+    const agent = this.agent;
 
-    const agent = mastra.getAgent(agentName);
+    // For slash commands, resolve the command prompt
+    let prompt = event.text || '';
+    if (event.type === 'slash_command' && event.commandName) {
+      const command = this.resolveCommand(event.commandName);
+      if (command) {
+        // Prepend command prompt, append any user-provided text
+        prompt = event.text ? `${command.prompt}\n\n${event.text}` : command.prompt;
+      } else {
+        this.logger.debug(`No command registered for: ${event.commandName}`);
+        return { handled: false };
+      }
+    }
 
     const resourceId = `${this.platform}:${event.externalChannelId}:${event.externalThreadId}`;
 
@@ -56,7 +102,18 @@ export abstract class MastraChannel extends MastraBase {
       mastra,
     });
 
-    const result = await agent.generate(event.text || '', {
+    const channelCtx: ChannelContext = {
+      platform: this.platform,
+      eventType: event.type,
+      userId: event.userId,
+      userName: event.userName,
+    };
+
+    const requestContext = new RequestContext();
+    requestContext.set('channel', channelCtx);
+
+    const result = await agent.generate(prompt, {
+      requestContext,
       memory: {
         thread,
         resource: `${this.platform}:${event.userId}`,
@@ -75,7 +132,6 @@ export abstract class MastraChannel extends MastraBase {
 
     return {
       handled: true,
-      agentName,
       threadId: thread.id,
       responseText: result.text,
       sendResult,
@@ -105,9 +161,9 @@ export abstract class MastraChannel extends MastraBase {
     }
 
     const metadata = {
-      'channel.platform': this.platform,
-      'channel.externalThreadId': externalThreadId,
-      'channel.externalChannelId': channelId,
+      channel_platform: this.platform,
+      channel_externalThreadId: externalThreadId,
+      channel_externalChannelId: channelId,
     };
 
     const { threads } = await memoryStore.listThreads({
@@ -122,24 +178,12 @@ export abstract class MastraChannel extends MastraBase {
     return memoryStore.saveThread({
       thread: {
         id: crypto.randomUUID(),
+        title: `${this.platform} conversation`,
         resourceId,
         createdAt: new Date(),
         updatedAt: new Date(),
         metadata,
       },
     });
-  }
-
-  /**
-   * Finds the agent name configured to handle the given event type.
-   * Returns undefined if no agent is configured for this event type.
-   */
-  protected resolveAgentForEvent(eventType: string): string | undefined {
-    for (const [agentName, config] of Object.entries(this.routes)) {
-      if (config.events.includes(eventType as any)) {
-        return agentName;
-      }
-    }
-    return undefined;
   }
 }

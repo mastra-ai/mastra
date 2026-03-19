@@ -7,6 +7,7 @@ import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
+import type { MastraChannel } from '../channels/base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
   ScorerRunInputForAgent,
@@ -173,6 +174,7 @@ export class Agent<
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
   #agents: DynamicArgument<Record<string, Agent>, TRequestContext>;
   #voice: MastraVoice;
+  #channels: Record<string, MastraChannel> = {};
   #workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[], TRequestContext>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
@@ -298,6 +300,14 @@ export class Agent<
       this.#voice = new DefaultVoice();
     }
 
+    if (config.channels) {
+      for (const [key, channel] of Object.entries(config.channels)) {
+        if (channel == null) continue;
+        channel.__setAgent(this);
+        this.#channels[key] = channel;
+      }
+    }
+
     if (config.workspace) {
       this.#workspace = config.workspace;
     }
@@ -324,6 +334,30 @@ export class Agent<
 
   getMastraInstance() {
     return this.#mastra;
+  }
+
+  /**
+   * Retrieves a registered channel by name.
+   * @throws {Error} When the channel is not found.
+   */
+  getChannel(name: string): MastraChannel {
+    const channel = this.#channels[name];
+    if (!channel) {
+      throw new MastraError({
+        id: 'AGENT_GET_CHANNEL_NOT_FOUND',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Channel "${name}" not found on agent "${this.name}"`,
+      });
+    }
+    return channel;
+  }
+
+  /**
+   * Returns all channels registered on this agent.
+   */
+  getChannels(): Record<string, MastraChannel> {
+    return { ...this.#channels };
   }
 
   /**
@@ -2152,6 +2186,66 @@ export class Agent<
   }
 
   /**
+   * Returns tools provided by the agent's channels (e.g. discord_send_message).
+   * @internal
+   */
+  private async listChannelTools({
+    runId,
+    resourceId,
+    threadId,
+    requestContext,
+    mastraProxy,
+    autoResumeSuspendedTools,
+    ...rest
+  }: {
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+    requestContext: RequestContext;
+    mastraProxy?: MastraUnion;
+    autoResumeSuspendedTools?: boolean;
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
+    let convertedChannelTools: Record<string, CoreTool> = {};
+
+    if (Object.keys(this.#channels).length === 0) {
+      return convertedChannelTools;
+    }
+
+    const channelTools: Record<string, any> = {};
+    for (const channel of Object.values(this.#channels)) {
+      Object.assign(channelTools, channel.getTools());
+    }
+
+    if (Object.keys(channelTools).length > 0) {
+      this.logger.debug(`[Agent:${this.name}] - Adding channel tools: ${Object.keys(channelTools).join(', ')}`, {
+        runId,
+      });
+
+      const memory = await this.getMemory({ requestContext });
+
+      for (const [toolName, tool] of Object.entries(channelTools)) {
+        const options: ToolOptions = {
+          name: toolName,
+          runId,
+          threadId,
+          resourceId,
+          logger: this.logger,
+          mastra: mastraProxy as MastraUnion | undefined,
+          memory,
+          agentName: this.name,
+          requestContext,
+          ...observabilityContext,
+          tracingPolicy: this.#options?.tracingPolicy,
+        };
+        convertedChannelTools[toolName] = makeCoreTool(tool, options, undefined, autoResumeSuspendedTools);
+      }
+    }
+
+    return convertedChannelTools;
+  }
+
+  /**
    * Returns skill tools (skill, skill_search, skill_read) when the workspace
    * has skills configured. These are added at the Agent level (like workspace
    * tools) rather than inside a processor, so they persist across turns and
@@ -3883,6 +3977,16 @@ export class Agent<
       autoResumeSuspendedTools,
     });
 
+    const channelTools = await this.listChannelTools({
+      runId,
+      resourceId,
+      threadId,
+      requestContext,
+      ...observabilityContext,
+      mastraProxy,
+      autoResumeSuspendedTools,
+    });
+
     const allTools = {
       ...assignedTools,
       ...memoryTools,
@@ -3892,6 +3996,7 @@ export class Agent<
       ...workflowTools,
       ...workspaceTools,
       ...skillTools,
+      ...channelTools,
     };
     return this.formatTools(allTools);
   }

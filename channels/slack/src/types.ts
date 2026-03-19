@@ -1,4 +1,4 @@
-import type { ChannelRouteConfig } from '@mastra/core/channels';
+import type { ChannelCommand } from '@mastra/core/channels';
 
 /**
  * Configuration for the Slack channel provider.
@@ -8,8 +8,8 @@ export type SlackChannelConfig = {
   signingSecret: string;
   /** Slack bot token (xoxb-...) for sending messages. */
   botToken: string;
-  /** Maps agent names to the Slack event types they should handle. */
-  routes: ChannelRouteConfig;
+  /** Slash command definitions (e.g. { '/summarize': { description: '...', prompt: '...' } }). */
+  commands?: Record<string, ChannelCommand>;
 };
 
 /**

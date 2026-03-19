@@ -15,7 +15,7 @@ export class SlackChannel extends MastraChannel {
   #botToken: string;
 
   constructor(config: SlackChannelConfig) {
-    super({ name: 'slack', routes: config.routes });
+    super({ name: 'slack', commands: config.commands });
     this.#signingSecret = config.signingSecret;
     this.#botToken = config.botToken;
   }
@@ -56,7 +56,7 @@ export class SlackChannel extends MastraChannel {
     const channel = this;
     return [
       {
-        path: '/channels/slack/webhook',
+        path: `/api/agents/${this.agent.id}/channels/slack/webhook`,
         method: 'POST',
         requiresAuth: false,
         createHandler: async ({ mastra }: { mastra: Mastra }) => {
@@ -86,7 +86,7 @@ export class SlackChannel extends MastraChannel {
               return c.json({ ok: true });
             }
 
-            // 5. Process via base class pipeline (resolve agent → thread → generate → send)
+            // 5. Process via base class pipeline (agent → thread → generate → send)
             await channel.processWebhookEvent({ event, mastra });
 
             return c.json({ ok: true });

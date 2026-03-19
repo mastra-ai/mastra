@@ -1,9 +1,10 @@
 export { MastraChannel } from './base';
 export type {
+  ChannelCommand,
+  ChannelContext,
   ChannelEvent,
   ChannelEventType,
   ChannelMessageContent,
-  ChannelRouteConfig,
   ChannelSendParams,
   ChannelSendResult,
   ChannelThreadMetadata,

@@ -243,10 +243,10 @@ export interface Config<
   workspace?: AnyWorkspace;
 
   /**
-   * Channels enable agents to communicate over messaging platforms (Slack, Discord, etc.).
-   * Webhook routes are auto-registered with the server.
+   * @deprecated Channels are now configured on individual agents via `AgentConfig.channels`.
+   * Any channels passed here will be ignored.
    */
-  channels?: Record<string, MastraChannel>;
+  channels?: never;
 
   /**
    * Custom model router gateways for accessing LLM providers.
@@ -348,7 +348,7 @@ export class Mastra<
   #idGenerator?: MastraIdGenerator;
   #pubsub: PubSub;
   #gateways?: Record<string, MastraModelGateway>;
-  #channels: Record<string, MastraChannel> = {};
+
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
@@ -745,14 +745,6 @@ export class Mastra<
       });
     }
 
-    if (config?.agents) {
-      Object.entries(config.agents).forEach(([key, agent]) => {
-        if (agent != null) {
-          this.addAgent(agent, key);
-        }
-      });
-    }
-
     if (config?.tts) {
       Object.entries(config.tts).forEach(([key, tts]) => {
         if (tts != null) {
@@ -765,22 +757,14 @@ export class Mastra<
       this.#server = config.server;
     }
 
-    if (config?.channels) {
-      const channelRoutes: ApiRoute[] = [];
-
-      for (const [key, channel] of Object.entries(config.channels)) {
-        if (channel == null) continue;
-        channel.__setLogger(this.#logger);
-        this.#channels[key] = channel;
-        channelRoutes.push(...channel.getWebhookRoutes());
-      }
-
-      if (channelRoutes.length > 0) {
-        this.#server = {
-          ...this.#server,
-          apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
-        };
-      }
+    // Agents must be added after server config so that channel webhook routes
+    // are appended to (not replaced by) the server config.
+    if (config?.agents) {
+      Object.entries(config.agents).forEach(([key, agent]) => {
+        if (agent != null) {
+          this.addAgent(agent, key);
+        }
+      });
     }
 
     registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
@@ -849,33 +833,17 @@ export class Mastra<
   }
 
   /**
-   * Retrieves a registered channel by its name.
-   *
-   * @throws {MastraError} When the channel with the specified name is not found
-   */
-  public getChannel(name: string): MastraChannel {
-    const channel = this.#channels[name];
-    if (!channel) {
-      throw new MastraError({
-        id: 'MASTRA_GET_CHANNEL_BY_NAME_NOT_FOUND',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: `Channel with name ${name} not found`,
-        details: {
-          status: 404,
-          channelName: name,
-          channels: Object.keys(this.#channels).join(', '),
-        },
-      });
-    }
-    return channel;
-  }
-
-  /**
-   * Returns all registered channels.
+   * Returns all channels across all registered agents.
+   * Keys are `agentId:channelName` to avoid collisions.
    */
   public getChannels(): Record<string, MastraChannel> {
-    return { ...this.#channels };
+    const result: Record<string, MastraChannel> = {};
+    for (const [agentKey, agent] of Object.entries(this.#agents ?? {})) {
+      for (const [channelKey, channel] of Object.entries(agent.getChannels())) {
+        result[`${agentKey}:${channelKey}`] = channel;
+      }
+    }
+    return result;
   }
 
   /**
@@ -1103,6 +1071,20 @@ export class Mastra<
       .catch(err => {
         this.#logger?.debug(`Failed to register scorers from agent ${agentKey}:`, err);
       });
+
+    // Register webhook routes from the agent's channels
+    const agentChannels = mastraAgent.getChannels();
+    const channelRoutes: ApiRoute[] = [];
+    for (const [, channel] of Object.entries(agentChannels)) {
+      channel.__setLogger(this.#logger);
+      channelRoutes.push(...channel.getWebhookRoutes());
+    }
+    if (channelRoutes.length > 0) {
+      this.#server = {
+        ...this.#server,
+        apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
+      };
+    }
   }
 
   /**
