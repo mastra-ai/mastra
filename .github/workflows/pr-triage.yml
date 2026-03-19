@@ -13,7 +13,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -28,14 +28,12 @@ jobs:
         with:
           sparse-checkout: .github/actions
           sparse-checkout-cone-mode: false
-
       - name: Generate GitHub App token
         id: app_token
         uses: ./.github/actions/app-auth
         with:
           app-id: ${{ vars.DANE_APP_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
-
       - name: Check PR author org membership
         id: check
         uses: actions/github-script@v7
@@ -65,6 +63,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Checkout (sparse — only .github/actions)
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: .github/actions
+          sparse-checkout-cone-mode: false
+
+      - name: Generate GitHub App token
+        id: app_token
+        uses: ./.github/actions/app-auth
+        with:
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
       - name: Add comment
         uses: mshick/add-pr-comment@v2
         with:
