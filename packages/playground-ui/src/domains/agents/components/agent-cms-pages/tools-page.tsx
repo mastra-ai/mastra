@@ -13,9 +13,9 @@ import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/compo
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Section } from '@/ds/components/Section';
+import { SubSectionRoot } from '@/ds/components/Section/section-root';
 import { Icon, ToolsIcon } from '@/ds/icons';
 import type { RuleGroup } from '@/lib/rule-engine';
-import { SubSectionRoot } from '@/ds/components/Section/section-root';
 
 import { cn } from '@/lib/utils';
 

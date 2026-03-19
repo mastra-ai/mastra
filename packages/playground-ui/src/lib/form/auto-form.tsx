@@ -7,14 +7,14 @@ import { DateField } from './components/date-field';
 import { DiscriminatedUnionField } from './components/discriminated-union-field';
 import { ErrorMessage } from './components/error-message';
 import { FieldWrapper } from './components/field-wrapper';
+import { Form } from './components/form';
 import { NumberField } from './components/number-field';
-import { StringField } from './components/string-field';
-import { SubmitButton } from './components/submit-button';
-import { SelectField } from './components/select-field';
 import { ObjectWrapper } from './components/object-wrapper';
 import { RecordField } from './components/record-field';
+import { SelectField } from './components/select-field';
+import { StringField } from './components/string-field';
+import { SubmitButton } from './components/submit-button';
 import { UnionField } from './components/union-field';
-import { Form } from './components/form';
 import { CustomAutoForm } from './custom-auto-form';
 import type { AutoFormProps } from './types';
 

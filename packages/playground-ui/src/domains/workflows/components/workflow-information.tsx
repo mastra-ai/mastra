@@ -10,13 +10,13 @@ import { TracingRunOptions } from '@/domains/observability/components/tracing-ru
 import { RequestContextSchemaForm } from '@/domains/request-context';
 import { Badge } from '@/ds/components/Badge';
 import { EntityHeader } from '@/ds/components/EntityHeader';
+import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { useWorkflow } from '@/hooks/use-workflows';
-import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { toast } from '@/lib/toast';
-import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 
 export interface WorkflowInformationProps {
   workflowId: string;

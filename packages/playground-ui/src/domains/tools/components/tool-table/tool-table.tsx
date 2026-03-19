@@ -15,10 +15,10 @@ import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { ToolsIcon } from '@/ds/icons';
 import { Icon } from '@/ds/icons/Icon';
+import { ToolCoinIcon } from '@/ds/icons/ToolCoinIcon';
+import { useLinkComponent } from '@/lib/framework';
 import { is403ForbiddenError } from '@/lib/query-utils';
 
-import { useLinkComponent } from '@/lib/framework';
-import { ToolCoinIcon } from '@/ds/icons/ToolCoinIcon';
 
 export interface ToolTableProps {
   tools: Record<string, GetToolResponse>;

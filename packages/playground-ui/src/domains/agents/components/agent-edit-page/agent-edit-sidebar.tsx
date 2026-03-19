@@ -16,8 +16,8 @@ import { Label } from '@/ds/components/Label';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Spinner } from '@/ds/components/Spinner';
 import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
-import { Icon, AgentIcon, ToolsIcon, VariablesIcon } from '@/ds/icons';
 import { Textarea } from '@/ds/components/Textarea';
+import { Icon, AgentIcon, ToolsIcon, VariablesIcon } from '@/ds/icons';
 import type { JsonSchema } from '@/lib/json-schema';
 
 

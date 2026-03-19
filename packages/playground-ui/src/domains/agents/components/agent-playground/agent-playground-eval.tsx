@@ -13,13 +13,13 @@ import { LLMProviders, LLMModels } from '@/domains/llm';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
-import { Spinner } from '@/ds/components/Spinner';
-import { Label } from '@/ds/components/Label';
-import { Txt } from '@/ds/components/Txt';
-import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible/collapsible';
 import { CopyButton } from '@/ds/components/CopyButton/copy-button';
+import { Label } from '@/ds/components/Label';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Spinner } from '@/ds/components/Spinner';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 

@@ -1,5 +1,4 @@
 import type { CompareExperimentsResponse } from '@mastra/client-js';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { AlertTriangleIcon } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useCompareExperiments } from '../../hooks/use-compare-experiments';
@@ -14,6 +13,7 @@ import { Columns } from '@/ds/components/Columns';
 import { ItemList } from '@/ds/components/ItemList';
 import { Notice } from '@/ds/components/Notice';
 import { Spinner } from '@/ds/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { cn } from '@/lib/utils';
 
 interface DatasetExperimentsComparisonProps {

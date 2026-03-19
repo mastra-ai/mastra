@@ -13,12 +13,12 @@ import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
 import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
+import { TooltipProvider } from '@/ds/components/Tooltip';
 import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
-import { is403ForbiddenError } from '@/lib/query-utils';
 import { Icon } from '@/ds/icons/Icon';
 
 import { useLinkComponent } from '@/lib/framework';
-import { TooltipProvider } from '@/ds/components/Tooltip';
+import { is403ForbiddenError } from '@/lib/query-utils';
 
 export interface AgentsTableProps {
   agents: Record<string, GetAgentResponse>;

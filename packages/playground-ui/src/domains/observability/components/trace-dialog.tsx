@@ -12,24 +12,24 @@ import {
   SaveIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { getSpanInfo, useTraceInfo } from './helpers';
-import { TraceTimeline } from './trace-timeline';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { KeyValueList } from '@/ds/components/KeyValueList';
-import { SideDialog } from '@/ds/components/SideDialog';
-import { TextAndIcon, getShortId } from '@/ds/components/Text';
-import { Section } from '@/ds/components/Section';
-import { Sections } from '@/ds/components/Sections';
-import { Icon } from '@/ds/icons/Icon';
-import { useLinkComponent } from '@/lib/framework';
-import { SpanDialog } from './span-dialog';
-import { TraceAsItemDialog } from './trace-as-item-dialog';
-import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
 import type {UISpan, UISpanState} from '../types';
+import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
+import { getSpanInfo, useTraceInfo } from './helpers';
+import { SpanDialog } from './span-dialog';
+import { SpanTabs } from './span-tabs';
+import { TraceAsItemDialog } from './trace-as-item-dialog';
+import { TraceTimeline } from './trace-timeline';
 import { TraceTimelineTools } from './trace-timeline-tools';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
 import { Button } from '@/ds/components/Button/Button';
-import { SpanTabs } from './span-tabs';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { KeyValueList } from '@/ds/components/KeyValueList';
+import { Section } from '@/ds/components/Section';
+import { Sections } from '@/ds/components/Sections';
+import { SideDialog } from '@/ds/components/SideDialog';
+import { TextAndIcon, getShortId } from '@/ds/components/Text';
+import { Icon } from '@/ds/icons/Icon';
+import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/lib/utils';
 
 type TraceDialogProps = {

@@ -13,9 +13,9 @@ import { Skeleton } from '@/ds/components/Skeleton';
 import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons/Icon';
+import { useLinkComponent } from '@/lib/framework';
 import { is403ForbiddenError } from '@/lib/query-utils';
 
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ProcessorTableProps {
   processors: Record<string, ProcessorInfo>;
