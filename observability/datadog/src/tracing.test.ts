@@ -1272,6 +1272,34 @@ describe('DatadogExporter', () => {
       expect(annotateCall.metadata).not.toHaveProperty('parameters');
     });
 
+    it('includes cachedInputTokens in metrics when usage has inputDetails.cacheRead', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({
+        type: SpanType.MODEL_GENERATION,
+        attributes: {
+          usage: {
+            inputTokens: 1000,
+            outputTokens: 200,
+            inputDetails: { cacheRead: 400 },
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      expect(mockAnnotate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          metrics: expect.objectContaining({
+            inputTokens: 1000,
+            outputTokens: 200,
+            totalTokens: 1200,
+            cachedInputTokens: 400,
+          }),
+        }),
+      );
+    });
+
     it('handles spans without attributes gracefully', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
