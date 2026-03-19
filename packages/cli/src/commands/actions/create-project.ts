@@ -32,6 +32,7 @@ export const createProject = async (projectNameArg: string | undefined, args: Cr
           llmProvider: 'openai',
           addExample: true,
           timeout,
+          projectName: projectNameArg,
           mcpServer: args.mcp,
           skills: args.skills,
           template: args.template,
