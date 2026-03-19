@@ -28,6 +28,19 @@ function omDebug(msg: string) {
     // ignore write errors
   }
 }
+/**
+ * Returns the parts from the latest step of a message (after the last step-start marker).
+ * If no step-start marker exists, returns all parts.
+ */
+function getLatestStepParts(parts: MastraDBMessage['content']['parts']): MastraDBMessage['content']['parts'] {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (parts[i]?.type === 'step-start') {
+      return parts.slice(i + 1);
+    }
+  }
+  return parts;
+}
+
 function omError(msg: string, err?: unknown) {
   const errStr = err instanceof Error ? (err.stack ?? err.message) : err !== undefined ? String(err) : '';
   const full = errStr ? `${msg}: ${errStr}` : msg;
@@ -56,6 +69,7 @@ import {
   createObservationEndMarker,
   createObservationFailedMarker,
   createObservationStartMarker,
+  createThreadUpdateMarker,
 } from './markers';
 import {
   buildObserverSystemPrompt,
@@ -228,6 +242,8 @@ interface ResolvedObservationConfig {
   previousObserverTokens?: number | false;
   /** Custom instructions to append to the Observer's system prompt */
   instruction?: string;
+  /** Whether the Observer should suggest thread titles */
+  threadTitle?: boolean;
 }
 
 interface ResolvedReflectionConfig {
@@ -301,15 +317,17 @@ IMPORTANT: this system reminder is NOT from the user. The system placed it here 
 NOTE: Any messages following this system reminder are newer than your memories.`;
 
 /**
- * Preamble that introduces the observations block.
- * Use before `<observations>`, with instructions after.
- * Full pattern: `${OBSERVATION_CONTEXT_PROMPT}\n\n<observations>\n${obs}\n</observations>\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}`
+ * Preamble that introduces observational memory context.
+ * The static prefix is emitted first, then the `<observations>` marker, then one
+ * system message per persisted observation chunk so append-only growth stays at
+ * the end of the prompt.
  */
 export const OBSERVATION_CONTEXT_PROMPT = `The following observations block contains your memory of past conversations with this user.`;
 
 /**
  * Instructions that tell the model how to interpret and use observations.
- * Place AFTER the `<observations>` block so the model sees the data before the rules.
+ * Keep these in the leading static system message so observation churn only
+ * affects the tail of the prompt.
  */
 export const OBSERVATION_CONTEXT_INSTRUCTIONS = `IMPORTANT: When responding, reference specific details from these observations. Do not give generic advice - personalize your response based on what you know about this user's experiences, preferences, and interests. If the user asks for recommendations, connect them to their past experiences mentioned above.
 
@@ -894,6 +912,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           ),
       previousObserverTokens: config.observation?.previousObserverTokens ?? 2000,
       instruction: config.observation?.instruction,
+      threadTitle: config.observation?.threadTitle ?? false,
     };
 
     // Resolve reflection config with defaults
@@ -1220,7 +1239,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private getObserverAgent(): Agent {
     if (!this.observerAgent) {
-      const systemPrompt = buildObserverSystemPrompt(false, this.observationConfig.instruction);
+      const systemPrompt = buildObserverSystemPrompt(
+        false,
+        this.observationConfig.instruction,
+        this.observationConfig.threadTitle,
+      );
 
       this.observerAgent = new Agent({
         id: 'observational-memory-observer',
@@ -1763,7 +1786,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const isImportant: boolean[] = new Array(totalCount);
     for (let i = 0; i < totalCount; i++) {
       lineTokens[i] = this.tokenCounter.countString(lines[i]!);
-      isImportant[i] = lines[i]!.includes('🔴');
+      isImportant[i] = lines[i]!.includes('🔴') || lines[i]!.includes('✅');
     }
 
     // Precompute suffix sums so tail cost is O(1).
@@ -1884,12 +1907,14 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       requestContext?: RequestContext;
       priorCurrentTask?: string;
       priorSuggestedResponse?: string;
+      priorThreadTitle?: string;
       wasTruncated?: boolean;
     },
   ): Promise<{
     observations: string;
     currentTask?: string;
     suggestedContinuation?: string;
+    threadTitle?: string;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     const agent = this.getObserverAgent();
@@ -1900,7 +1925,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           skipContinuationHints: options?.skipContinuationHints,
           priorCurrentTask: options?.priorCurrentTask,
           priorSuggestedResponse: options?.priorSuggestedResponse,
+          priorThreadTitle: options?.priorThreadTitle,
           wasTruncated: options?.wasTruncated,
+          includeThreadTitle: this.observationConfig.threadTitle,
         }),
       },
       buildObserverHistoryMessage(messagesToObserve),
@@ -1944,6 +1971,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       observations: parsed.observations,
       currentTask: parsed.currentTask,
       suggestedContinuation: parsed.suggestedContinuation,
+      threadTitle: parsed.threadTitle,
       usage: usage
         ? {
             inputTokens: usage.inputTokens,
@@ -1964,7 +1992,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     existingObservations: string | undefined,
     messagesByThread: Map<string, MastraDBMessage[]>,
     threadOrder: string[],
-    priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string }>,
+    priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
     abortSignal?: AbortSignal,
     requestContext?: RequestContext,
     wasTruncated?: boolean,
@@ -1975,12 +2003,17 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         observations: string;
         currentTask?: string;
         suggestedContinuation?: string;
+        threadTitle?: string;
       }
     >;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     // Create a multi-thread observer agent with the special system prompt
-    const systemPrompt = buildObserverSystemPrompt(true, this.observationConfig.instruction);
+    const systemPrompt = buildObserverSystemPrompt(
+      true,
+      this.observationConfig.instruction,
+      this.observationConfig.threadTitle,
+    );
     const agent = new Agent({
       id: 'multi-thread-observer',
       name: 'multi-thread-observer',
@@ -1996,6 +2029,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           threadOrder,
           priorMetadataByThread,
           wasTruncated,
+          this.observationConfig.threadTitle,
         ),
       },
       buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder),
@@ -2050,6 +2084,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         observations: string;
         currentTask?: string;
         suggestedContinuation?: string;
+        threadTitle?: string;
       }
     >();
 
@@ -2058,6 +2093,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         observations: threadResult.observations,
         currentTask: threadResult.currentTask,
         suggestedContinuation: threadResult.suggestedContinuation,
+        threadTitle: threadResult.threadTitle,
       });
     }
 
@@ -2273,7 +2309,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     suggestedResponse?: string,
     unobservedContextBlocks?: string,
     currentDate?: Date,
-  ): string {
+  ): string[] {
     // Optimize observations to save tokens
     let optimized = optimizeObservationsForContext(observations);
 
@@ -2282,39 +2318,51 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       optimized = addRelativeTimeToObservations(optimized, currentDate);
     }
 
-    let content = `
-${OBSERVATION_CONTEXT_PROMPT}
-
-<observations>
-${optimized}
-</observations>
-
-${OBSERVATION_CONTEXT_INSTRUCTIONS}`;
+    const messages = [`${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}`];
 
     // Add unobserved context from other threads (resource scope only)
     if (unobservedContextBlocks) {
-      content += `\n\nThe following content is from OTHER conversations different from the current conversation, they're here for reference,  but they're not necessarily your focus:\nSTART_OTHER_CONVERSATIONS_BLOCK\n${unobservedContextBlocks}\nEND_OTHER_CONVERSATIONS_BLOCK`;
+      messages.push(
+        `The following content is from OTHER conversations different from the current conversation, they're here for reference,  but they're not necessarily your focus:\nSTART_OTHER_CONVERSATIONS_BLOCK\n${unobservedContextBlocks}\nEND_OTHER_CONVERSATIONS_BLOCK`,
+      );
+    }
+
+    const observationChunks = this.splitObservationContextChunks(optimized);
+    if (observationChunks.length > 0) {
+      messages.push('<observations>', ...observationChunks);
     }
 
     // Dynamically inject current-task from thread metadata (not stored in observations)
     if (currentTask) {
-      content += `
-
-<current-task>
-${currentTask}
-</current-task>`;
+      messages.push(`<current-task>\n${currentTask}\n</current-task>`);
     }
 
     if (suggestedResponse) {
-      content += `
-
-<suggested-response>
-${suggestedResponse}
-</suggested-response>
-`;
+      messages.push(`<suggested-response>\n${suggestedResponse}\n</suggested-response>`);
     }
 
-    return content;
+    return messages;
+  }
+
+  private splitObservationContextChunks(observations: string): string[] {
+    const trimmed = observations.trim();
+    if (!trimmed) {
+      return [];
+    }
+
+    return trimmed
+      .split(/\n{2,}--- message boundary \(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\) ---\n{2,}/)
+      .map(chunk => chunk.trim())
+      .filter(Boolean);
+  }
+
+  /**
+   * Create a message boundary delimiter with an ISO 8601 date.
+   * The date should be the lastObservedAt timestamp — the latest message
+   * timestamp that was observed to produce the observations following this boundary.
+   */
+  static createMessageBoundary(date: Date): string {
+    return `\n\n--- message boundary (${date.toISOString()}) ---\n\n`;
   }
 
   /**
@@ -2972,7 +3020,7 @@ ${suggestedResponse}
       return;
     }
 
-    const observationSystemMessage = this.formatObservationsForContext(
+    const observationSystemMessages = this.formatObservationsForContext(
       record.activeObservations,
       currentTask,
       suggestedResponse,
@@ -2980,9 +3028,10 @@ ${suggestedResponse}
       currentDate,
     );
 
-    // Clear any existing observation system message and add fresh one
+    // Clear any existing observation system messages and re-add them with the
+    // append-only observation chunks at the tail for better cache stability.
     messageList.clearSystemMessages('observational-memory');
-    messageList.addSystem(observationSystemMessage, 'observational-memory');
+    messageList.addSystem(observationSystemMessages, 'observational-memory');
 
     // Add continuation reminder
     const continuationMessage: MastraDBMessage = {
@@ -3384,6 +3433,19 @@ ${suggestedResponse}
         state.sealedIds = sealedIds;
         const lockKey = this.getLockKey(threadId, resourceId);
 
+        // Defer observation/buffering if the latest step of the last message has a pending
+        // tool call (state: 'call'). Provider-executed tools (e.g. Anthropic web_search) may
+        // have their result deferred to a later step. We skip this cycle and let the next step
+        // observe with complete data.
+        const lastMessage = allMessages[allMessages.length - 1];
+        const latestStepParts = getLatestStepParts(lastMessage?.content?.parts ?? []);
+        const hasIncompleteToolCalls = latestStepParts.some(
+          part => part?.type === 'tool-invocation' && part.toolInvocation?.state === 'call',
+        );
+        omDebug(
+          `[OM:deferred-check] hasIncompleteToolCalls=${hasIncompleteToolCalls}, latestStepPartsCount=${latestStepParts.length}`,
+        );
+
         // ════════════════════════════════════════════════════════════════════════
         // ASYNC BUFFERING: Trigger background observation at bufferTokens intervals
         // ════════════════════════════════════════════════════════════════════════
@@ -3391,9 +3453,9 @@ ${suggestedResponse}
         if (this.isAsyncObservationEnabled() && totalPendingTokens < threshold) {
           const shouldTrigger = this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey, record, threshold);
           omDebug(
-            `[OM:async-obs] belowThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, shouldTrigger=${shouldTrigger}, isBufferingObs=${record.isBufferingObservation}, lastBufferedAt=${record.lastBufferedAtTokens}`,
+            `[OM:async-obs] belowThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, shouldTrigger=${shouldTrigger}, isBufferingObs=${record.isBufferingObservation}, lastBufferedAt=${record.lastBufferedAtTokens}, hasIncompleteToolCalls=${hasIncompleteToolCalls}`,
           );
-          if (shouldTrigger) {
+          if (shouldTrigger && !hasIncompleteToolCalls) {
             void this.startAsyncBufferedObservation(
               record,
               threadId,
@@ -3410,9 +3472,9 @@ ${suggestedResponse}
           // - Below blockAfter, sync observation won't run, so we need chunks ready
           const shouldTrigger = this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey, record, threshold);
           omDebug(
-            `[OM:async-obs] atOrAboveThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, step=${stepNumber}, shouldTrigger=${shouldTrigger}`,
+            `[OM:async-obs] atOrAboveThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, step=${stepNumber}, shouldTrigger=${shouldTrigger}, hasIncompleteToolCalls=${hasIncompleteToolCalls}`,
           );
-          if (shouldTrigger) {
+          if (shouldTrigger && !hasIncompleteToolCalls) {
             void this.startAsyncBufferedObservation(
               record,
               threadId,
@@ -3438,7 +3500,7 @@ ${suggestedResponse}
         // ════════════════════════════════════════════════════════════════════════
         // THRESHOLD REACHED: Observe and clean up
         // ════════════════════════════════════════════════════════════════════════
-        if (stepNumber > 0 && totalPendingTokens >= threshold) {
+        if (stepNumber > 0 && !hasIncompleteToolCalls && totalPendingTokens >= threshold) {
           reproCaptureDetails.thresholdReached = true;
           const { observationSucceeded, updatedRecord, activatedMessageIds } = await this.handleThresholdReached(
             messageList,
@@ -3933,6 +3995,7 @@ ${formattedMessages}
     existingObservations: string,
     _threadId: string,
     newThreadSection: string,
+    lastObservedAt: Date,
   ): string {
     if (!existingObservations) {
       return newThreadSection;
@@ -3943,8 +4006,8 @@ ${formattedMessages}
     const dateMatch = newThreadSection.match(/Date:\s*([A-Za-z]+\s+\d+,\s+\d+)/);
 
     if (!threadIdMatch || !dateMatch) {
-      // Can't parse, just append
-      return `${existingObservations}\n\n${newThreadSection}`;
+      // Can't parse, just append with message boundary for cache stability
+      return `${existingObservations}${ObservationalMemory.createMessageBoundary(lastObservedAt)}${newThreadSection}`;
     }
 
     const newThreadId = threadIdMatch[1]!;
@@ -3992,8 +4055,8 @@ ${formattedMessages}
       }
     }
 
-    // No existing section with same thread ID and date - append
-    return `${existingObservations}\n\n${newThreadSection}`;
+    // No existing section with same thread ID and date - append with message boundary for cache stability
+    return `${existingObservations}${ObservationalMemory.createMessageBoundary(lastObservedAt)}${newThreadSection}`;
   }
 
   /**
@@ -4116,8 +4179,12 @@ ${formattedMessages}
         requestContext,
         priorCurrentTask: threadOMMetadata?.currentTask,
         priorSuggestedResponse: threadOMMetadata?.suggestedResponse,
+        priorThreadTitle: thread?.title,
         wasTruncated,
       });
+
+      // Use the max message timestamp as cursor — only for the messages we actually observed
+      const lastObservedAt = this.getMaxMessageTimestamp(messagesToObserve);
 
       // Build new observations (use freshRecord if available)
       const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
@@ -4125,11 +4192,16 @@ ${formattedMessages}
       if (this.scope === 'resource') {
         // In resource scope: wrap with thread tag and replace/append
         const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
-        newObservations = this.replaceOrAppendThreadSection(existingObservations, threadId, threadSection);
+        newObservations = this.replaceOrAppendThreadSection(
+          existingObservations,
+          threadId,
+          threadSection,
+          lastObservedAt,
+        );
       } else {
-        // In thread scope: simple append
+        // In thread scope: simple append with message boundary delimiter for cache stability
         newObservations = existingObservations
-          ? `${existingObservations}\n\n${result.observations}`
+          ? `${existingObservations}${ObservationalMemory.createMessageBoundary(lastObservedAt)}${result.observations}`
           : result.observations;
       }
 
@@ -4137,9 +4209,6 @@ ${formattedMessages}
 
       // Calculate tokens generated in THIS cycle only (for UI marker)
       const cycleObservationTokens = this.tokenCounter.countObservations(result.observations);
-
-      // Use the max message timestamp as cursor — only for the messages we actually observed
-      const lastObservedAt = this.getMaxMessageTimestamp(messagesToObserve);
 
       // Collect message IDs being observed for the safeguard
       // Only mark the messages we actually observed, not the ones we kept
@@ -4159,11 +4228,44 @@ ${formattedMessages}
           currentTask: result.currentTask,
           lastObservedMessageCursor: this.getLastObservedMessageCursor(messagesToObserve),
         });
+
         await this.storage.updateThread({
           id: threadId,
-          title: threadForMetadata.title ?? '',
+          title: threadForMetadata.title || '',
           metadata: newMetadata,
         });
+      }
+
+      // Update thread title independently if observer suggested a meaningful one
+      // Only run if threadTitle config option is enabled
+      if (this.observationConfig.threadTitle && threadForMetadata && result.threadTitle) {
+        const oldTitle = threadForMetadata.title;
+        const newTitle = result.threadTitle;
+
+        // Only update title if:
+        // 1. It's not empty
+        // 2. It's different from the current title
+        // 3. It's not a generic title (length >= 3)
+        if (newTitle.trim().length >= 3 && newTitle !== oldTitle) {
+          await this.storage.updateThread({
+            id: threadId,
+            title: newTitle,
+            metadata: threadForMetadata.metadata ?? {},
+          });
+
+          // Emit thread update marker
+          if (writer) {
+            const threadUpdateMarker = createThreadUpdateMarker({
+              cycleId,
+              threadId,
+              oldTitle: oldTitle ?? undefined,
+              newTitle: newTitle,
+            });
+            await writer.custom(threadUpdateMarker).catch(() => {
+              // Ignore errors from streaming
+            });
+          }
+        }
       }
 
       await this.storage.updateActiveObservations({
@@ -4519,6 +4621,7 @@ ${formattedMessages}
         requestContext,
         priorCurrentTask: threadOMMetadata?.currentTask,
         priorSuggestedResponse: threadOMMetadata?.suggestedResponse,
+        priorThreadTitle: thread?.title,
         wasTruncated,
       },
     );
@@ -4527,6 +4630,23 @@ ${formattedMessages}
     if (!result.observations) {
       omDebug(`[OM:doAsyncBufferedObservation] empty observations returned, skipping buffer storage`);
       return;
+    }
+
+    // Apply thread title update if the observer suggested one (independent of continuation hints)
+    if (this.observationConfig.threadTitle && result.threadTitle) {
+      const newTitle = result.threadTitle;
+      if (newTitle.length >= 3 && newTitle !== thread?.title) {
+        await this.storage.updateThread({ id: threadId, title: newTitle, metadata: thread?.metadata ?? {} });
+        if (writer) {
+          const marker = createThreadUpdateMarker({
+            cycleId,
+            threadId,
+            oldTitle: thread?.title,
+            newTitle,
+          });
+          void writer.custom(marker).catch(() => {});
+        }
+      }
     }
 
     // Get the new observations to buffer (just the new content, not merged)
@@ -5112,7 +5232,7 @@ ${formattedMessages}
     const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId } });
     const threadMetadataMap = new Map<
       string,
-      { lastObservedAt?: string; currentTask?: string; suggestedResponse?: string }
+      { lastObservedAt?: string; currentTask?: string; suggestedResponse?: string; threadTitle?: string }
     >();
 
     for (const thread of allThreads) {
@@ -5121,6 +5241,7 @@ ${formattedMessages}
         lastObservedAt: omMetadata?.lastObservedAt,
         currentTask: omMetadata?.currentTask,
         suggestedResponse: omMetadata?.suggestedResponse,
+        threadTitle: thread.title,
       });
     }
 
@@ -5368,13 +5489,17 @@ ${formattedMessages}
 
       // Process batches in parallel
       const batchPromises = batches.map(async batch => {
-        const batchPriorMetadata = new Map<string, { currentTask?: string; suggestedResponse?: string }>();
+        const batchPriorMetadata = new Map<
+          string,
+          { currentTask?: string; suggestedResponse?: string; threadTitle?: string }
+        >();
         for (const threadId of batch.threadIds) {
           const metadata = threadMetadataMap.get(threadId);
-          if (metadata?.currentTask || metadata?.suggestedResponse) {
+          if (metadata?.currentTask || metadata?.suggestedResponse || metadata?.threadTitle) {
             batchPriorMetadata.set(threadId, {
               currentTask: metadata.currentTask,
               suggestedResponse: metadata.suggestedResponse,
+              threadTitle: metadata.threadTitle,
             });
           }
         }
@@ -5400,6 +5525,7 @@ ${formattedMessages}
           observations: string;
           currentTask?: string;
           suggestedContinuation?: string;
+          threadTitle?: string;
         }
       >();
       let totalBatchUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -5423,6 +5549,7 @@ ${formattedMessages}
           observations: string;
           currentTask?: string;
           suggestedContinuation?: string;
+          threadTitle?: string;
         };
       } | null> = [];
 
@@ -5458,16 +5585,28 @@ ${formattedMessages}
         // Track tokens generated for this thread
         cycleObservationTokens += this.tokenCounter.countObservations(result.observations);
 
+        // Use the max message timestamp as cursor — only for the messages we actually observed
+        const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
+
         // Wrap with thread tag and append (in thread order for consistency)
         const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
-        currentObservations = this.replaceOrAppendThreadSection(currentObservations, threadId, threadSection);
-
-        // Update thread-specific metadata:
-        // - lastObservedAt: ALWAYS update to track per-thread observation progress
-        // - currentTask, suggestedResponse: explicitly clear when omitted to avoid stale hints
-        const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
+        currentObservations = this.replaceOrAppendThreadSection(
+          currentObservations,
+          threadId,
+          threadSection,
+          threadLastObservedAt,
+        );
         const thread = await this.storage.getThreadById({ threadId });
         if (thread) {
+          // Determine new title if thread title generation is enabled
+          let titleForUpdate = thread.title ?? '';
+          if (this.observationConfig.threadTitle && result.threadTitle) {
+            const newTitle = result.threadTitle.trim();
+            if (newTitle.length >= 3 && newTitle !== thread.title) {
+              titleForUpdate = newTitle;
+            }
+          }
+
           const newMetadata = setThreadOMMetadata(thread.metadata, {
             lastObservedAt: threadLastObservedAt.toISOString(),
             suggestedResponse: result.suggestedContinuation,
@@ -5476,7 +5615,7 @@ ${formattedMessages}
           });
           await this.storage.updateThread({
             id: threadId,
-            title: thread.title ?? '',
+            title: titleForUpdate,
             metadata: newMetadata,
           });
         }

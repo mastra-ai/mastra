@@ -136,6 +136,7 @@ export class MastraTUI {
       this.state.editor.insertTextAtCursor?.('[image] ');
       this.state.ui.requestRender();
     };
+    this.state.editor.getPromptAnimator = () => this.state.gradientAnimator;
 
     setupKeyboardShortcuts(this.state, {
       stop: () => this.stop(),
@@ -319,9 +320,43 @@ export class MastraTUI {
     // This emits om_status → display_state_changed → updateStatusLine.
     await this.state.harness.loadOMProgress();
 
+    // Sync current thread title — the thread_changed event from
+    // promptForThreadSelection fired before we subscribed above.
+    const initThreadId = this.state.harness.getCurrentThreadId();
+    if (initThreadId) {
+      const initThreads = await this.state.harness.listThreads();
+      const initThread = initThreads.find(t => t.id === initThreadId);
+      if (initThread?.title) {
+        this.state.currentThreadTitle = initThread.title;
+      }
+    }
+
     // Start the UI
     this.state.ui.start();
     this.state.isInitialized = true;
+
+    // Start MCP connections now that the TUI owns the terminal.
+    // Using showInfo() instead of console.info() avoids corrupting the display.
+    if (this.state.mcpManager?.hasServers()) {
+      const serverCount = Object.keys(this.state.mcpManager.getConfig().mcpServers ?? {}).length;
+      showInfo(this.state, `MCP: Connecting to ${serverCount} server(s)...`);
+      this.state.mcpManager
+        .initInBackground()
+        .then(result => {
+          if (result.connected.length > 0) {
+            showInfo(this.state, `MCP: ${result.connected.length} server(s) connected, ${result.totalTools} tool(s)`);
+          }
+          for (const s of result.failed) {
+            showInfo(this.state, `MCP: Failed to connect to "${s.name}": ${s.error}`);
+          }
+          for (const s of result.skipped) {
+            showInfo(this.state, `MCP: Skipped "${s.name}": ${s.reason}`);
+          }
+        })
+        .catch(error => {
+          showInfo(this.state, `MCP: Initialization failed: ${error instanceof Error ? error.message : String(error)}`);
+        });
+    }
 
     // Set terminal title
     updateTerminalTitle(this.state);

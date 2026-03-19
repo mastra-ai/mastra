@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.13.3-alpha.1",
+  "version": "1.15.0-alpha.1",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -254,6 +254,7 @@
   },
   "devDependencies": {
     "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.61",
+    "@internal/core": "workspace:*",
     "@ai-sdk/azure": "^2.0.101",
     "@ai-sdk/cerebras-v5": "npm:@ai-sdk/cerebras@1.0.36",
     "@ai-sdk/deepinfra-v5": "npm:@ai-sdk/deepinfra@1.0.35",

@@ -1,5 +1,34 @@
 # @mastra/schema-compat
 
+## 1.2.6-alpha.1
+
+### Patch Changes
+
+- Add support for `draft-2020-12` and `draft-04` JSON Schema targets in the Zod v3 adapter, and fix the `toJSONSchema` target mapping to properly translate all `zod-to-json-schema` target names (like `openApi3`) to standard-schema target names. Fixes "Unsupported JSON Schema target" errors when serializing tool schemas. ([#14471](https://github.com/mastra-ai/mastra/pull/14471))
+
+## 1.2.6-alpha.0
+
+### Patch Changes
+
+- fix(schema-compat): map Mastra draft target names to Zod v4 format ([#14401](https://github.com/mastra-ai/mastra/pull/14401))
+
+  Zod v4's `z.toJSONSchema()` expects `"draft-7"` / `"draft-4"` while
+  Mastra uses `"draft-07"` / `"draft-04"`. The mismatch caused repeated
+  `Invalid target: draft-07` console warnings and suppressed the `$schema`
+  field in generated JSON Schemas.
+
+  Adds `ZOD_V4_TARGET_MAP` in the zod-v4 adapter to translate target names
+  before calling `z.toJSONSchema()`. `"draft-2020-12"` is unchanged as both
+  sides already agree on that name.
+
+  Fixes `#14399`
+
+## 1.2.5
+
+### Patch Changes
+
+- Added ZodIntersection support so that MCP tools using allOf in their JSON Schema no longer throw 'does not support zod type: ZodIntersection'. Intersection types are flattened and merged into a single object schema across all provider compatibility layers (Anthropic, Google, OpenAI, OpenAI Reasoning, DeepSeek, Meta). ([#14255](https://github.com/mastra-ai/mastra/pull/14255))
+
 ## 1.2.5-alpha.0
 
 ### Patch Changes

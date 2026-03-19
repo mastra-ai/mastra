@@ -31,13 +31,11 @@ const sizeClasses = {
 
 // Enhanced variant classes with transitions and subtle interactions
 const variantClasses = {
-  default:
-    'bg-white/10 border-2 border-transparent hover:text-white hover:bg-white/15 active:bg-white/20 text-neutral4',
-  primary:
-    'bg-white/20 border-2 border-transparent hover:text-white hover:bg-white/25 active:bg-white/30 text-neutral5',
+  default: 'bg-surface3 border-2 border-border1 hover:text-neutral6 hover:bg-surface4 active:bg-surface5 text-neutral5',
+  primary: 'bg-surface4 border-2 border-border2 hover:text-neutral6 hover:bg-surface5 active:bg-surface6 text-neutral6',
   cta: 'bg-accent1/50 hover:bg-accent1/80 text-neutral5 font-semibold',
   ghost:
-    'bg-transparent border-2 border-transparent hover:text-neutral4 hover:bg-white/10 active:bg-white/15 text-neutral3',
+    'bg-transparent border-2 border-transparent hover:text-neutral6 hover:bg-surface4 active:bg-surface5 text-neutral4',
   inputLike: sharedFormElementStyle,
   light: '',
   outline: '',

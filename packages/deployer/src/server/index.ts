@@ -402,11 +402,17 @@ export async function createHonoServer(
         serverOptions?.https?.cert ??
         (process.env.MASTRA_HTTPS_CERT ? Buffer.from(process.env.MASTRA_HTTPS_CERT, 'base64') : undefined);
       const protocol = key && cert ? 'https' : 'http';
+      // Studio host/protocol/port for Studio URL injection — allows bind address
+      // (e.g. 0.0.0.0) to differ from the domain browsers should connect to
+      const studioHost = serverOptions?.studioHost ?? host;
+      const studioProtocol = serverOptions?.studioProtocol ?? protocol;
+      const studioPort = serverOptions?.studioPort ?? port;
 
       const cloudApiEndpoint = process.env.MASTRA_CLOUD_API_ENDPOINT || '';
       const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
       const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
       const requestContextPresets = process.env.MASTRA_REQUEST_CONTEXT_PRESETS || '';
+      const themeToggle = process.env.MASTRA_THEME_TOGGLE === 'true' ? 'true' : 'false';
 
       // Helper function to escape JSON for embedding in HTML/JavaScript
       const escapeForHtml = (json: string): string => {
@@ -424,10 +430,10 @@ export async function createHonoServer(
       const autoDetectUrl = process.env.MASTRA_AUTO_DETECT_URL === 'true';
 
       indexHtml = injectStudioHtmlConfig(indexHtml, {
-        host: `'${host}'`,
-        port: `'${port}'`,
-        protocol: `'${protocol}'`,
-        apiPrefix: `'${apiPrefix}'`,
+        host: `'${studioHost}'`,
+        port: `'${studioPort}'`,
+        protocol: `'${studioProtocol}'`,
+        apiPrefix: `'${serverOptions?.apiPrefix ?? '/api'}'`,
         basePath: studioBasePath,
         hideCloudCta: `'${hideCloudCta}'`,
         cloudApiEndpoint: `'${cloudApiEndpoint}'`,
@@ -435,6 +441,7 @@ export async function createHonoServer(
         templates: `'${templatesEnabled}'`,
         telemetryDisabled: `''`,
         requestContextPresets: `'${escapeForHtml(requestContextPresets)}'`,
+        themeToggle: `'${themeToggle}'`,
         autoDetectUrl: `'${autoDetectUrl}'`,
       });
 
@@ -482,6 +489,9 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   const host = serverOptions?.host ?? process.env.MASTRA_HOST ?? 'localhost';
   const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
   const protocol = isHttpsEnabled ? 'https' : 'http';
+  const studioHost = serverOptions?.studioHost ?? host;
+  const studioProtocol = serverOptions?.studioProtocol ?? protocol;
+  const studioPort = serverOptions?.studioPort ?? port;
 
   const server = serve(
     {
@@ -503,7 +513,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       logger.info(` Mastra API running on ${protocol}://${host}:${port}${apiPrefix}`);
       if (options?.studio) {
         const studioBasePath = normalizeStudioBase(serverOptions?.studioBase ?? '/');
-        const studioUrl = `${protocol}://${host}:${port}${studioBasePath}`;
+        const studioUrl = `${studioProtocol}://${studioHost}:${studioPort}${studioBasePath}`;
         logger.info(`👨‍💻 Studio available at ${studioUrl}`);
       }
 

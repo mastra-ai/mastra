@@ -1,5 +1,75 @@
 # @mastra/mcp
 
+## 1.3.1-alpha.0
+
+### Patch Changes
+
+- Fix MCP tool results returning empty `{}` when tool has no outputSchema ([#14372](https://github.com/mastra-ai/mastra/pull/14372))
+
+- Fixed child processes started by the MCP client staying alive after the terminal session closes. ([#13977](https://github.com/mastra-ai/mastra/pull/13977))
+
+- Fixed regular tools executed via MCPServer now receive `requestContext` populated from `mcp.extra`, matching the behavior of agent and workflow tools. All tool types now consistently propagate authentication and request context. ([#14349](https://github.com/mastra-ai/mastra/pull/14349))
+
+- Updated dependencies [[`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5), [`62d1d3c`](https://github.com/mastra-ai/mastra/commit/62d1d3cc08fe8182e7080237fd975de862ec8c91), [`8681ecb`](https://github.com/mastra-ai/mastra/commit/8681ecb86184d5907267000e4576cc442a9a83fc), [`28d0249`](https://github.com/mastra-ai/mastra/commit/28d0249295782277040ad1e0d243e695b7ab1ce4), [`bb0f09d`](https://github.com/mastra-ai/mastra/commit/bb0f09dbac58401b36069f483acf5673202db5b5), [`5f7e9d0`](https://github.com/mastra-ai/mastra/commit/5f7e9d0db664020e1f3d97d7d18c6b0b9d4843d0)]:
+  - @mastra/core@1.15.0-alpha.0
+
+## 1.3.0
+
+### Minor Changes
+
+- Added new MCP client APIs for per-server control and diagnostics. ([#14377](https://github.com/mastra-ai/mastra/pull/14377))
+  - Added `reconnectServer(serverName)` to reconnect a single MCP server without restarting all servers.
+  - Added `listToolsetsWithErrors()` to return both toolsets and per-server errors.
+  - Added `getServerStderr(serverName)` to inspect piped stderr for stdio servers.
+
+  **Example**
+
+  ```ts
+  const { toolsets, errors } = await mcpClient.listToolsetsWithErrors();
+  await mcpClient.reconnectServer('slack');
+  const stderr = mcpClient.getServerStderr('slack');
+  ```
+
+### Patch Changes
+
+- **Improved** ([#14260](https://github.com/mastra-ai/mastra/pull/14260))
+  - Updated `@modelcontextprotocol/sdk` from `^1.17.5` to `^1.27.1`.
+
+  **Deprecated**
+  - Deprecated prompt `version` usage in `@mastra/mcp`.
+  - Prompt versions are not part of MCP protocol behavior and will be removed.
+
+  **Migration**
+  - Use unique prompt names instead of prompt versions.
+  - Before: `client.prompts.get({ name: 'explain-code', version: 'v1', args })`
+  - After: `client.prompts.get({ name: 'explain-code-v1', args })`
+  - `MastraPrompt` is available for migration and is also deprecated.
+
+- Updated dependencies [[`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`085e371`](https://github.com/mastra-ai/mastra/commit/085e3718a7d0fe9a210fe7dd1c867b9bdfe8d16b), [`b77aa19`](https://github.com/mastra-ai/mastra/commit/b77aa1981361c021f2c881bee8f0c703687f00da), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8b4ce84`](https://github.com/mastra-ai/mastra/commit/8b4ce84aed0808b9805cc4fd7147c1f8a2ef7a36), [`8d4cfe6`](https://github.com/mastra-ai/mastra/commit/8d4cfe6b9a7157d3876206227ec9f04cde6dbc4a), [`dd6ca1c`](https://github.com/mastra-ai/mastra/commit/dd6ca1cdea3b8b6182f4cf61df41070ba0cc0deb), [`ce26fe2`](https://github.com/mastra-ai/mastra/commit/ce26fe2166dd90254f8bee5776e55977143e97de), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`4cb4edf`](https://github.com/mastra-ai/mastra/commit/4cb4edf3c909d197ec356c1790d13270514ffef6), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a)]:
+  - @mastra/core@1.14.0
+
+## 1.3.0-alpha.1
+
+### Minor Changes
+
+- Added new MCP client APIs for per-server control and diagnostics. ([#14377](https://github.com/mastra-ai/mastra/pull/14377))
+  - Added `reconnectServer(serverName)` to reconnect a single MCP server without restarting all servers.
+  - Added `listToolsetsWithErrors()` to return both toolsets and per-server errors.
+  - Added `getServerStderr(serverName)` to inspect piped stderr for stdio servers.
+
+  **Example**
+
+  ```ts
+  const { toolsets, errors } = await mcpClient.listToolsetsWithErrors();
+  await mcpClient.reconnectServer('slack');
+  const stderr = mcpClient.getServerStderr('slack');
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f)]:
+  - @mastra/core@1.14.0-alpha.2
+
 ## 1.2.2-alpha.0
 
 ### Patch Changes

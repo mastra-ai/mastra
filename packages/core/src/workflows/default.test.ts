@@ -18,6 +18,10 @@ class TestableExecutionEngine extends DefaultExecutionEngine {
   ) {
     return this.fmtReturnValue<FormattedWorkflowResult>(pubsub, stepResults, lastOutput, error, stepExecutionPath);
   }
+
+  deserializeRequestContextPublic(obj: Record<string, any>): RequestContext {
+    return this.deserializeRequestContext(obj);
+  }
 }
 
 describe('DefaultExecutionEngine.executeConditional error handling', () => {
@@ -334,5 +338,29 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
     const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
 
     expect(result.steps.step1.payload).toBe(circular);
+  });
+});
+
+describe('DefaultExecutionEngine.deserializeRequestContext', () => {
+  it('should return a RequestContext instance with all entries from the plain object', () => {
+    const engine = new TestableExecutionEngine({ mastra: undefined });
+    const plainObj = { userId: 'user-123', tenantId: 'tenant-456', nested: { flag: true } };
+
+    const result = engine.deserializeRequestContextPublic(plainObj);
+
+    expect(result).toBeInstanceOf(RequestContext);
+    expect(result.get('userId')).toBe('user-123');
+    expect(result.get('tenantId')).toBe('tenant-456');
+    expect(result.get('nested')).toEqual({ flag: true });
+    expect(result.size()).toBe(3);
+  });
+
+  it('should return an empty RequestContext for an empty object', () => {
+    const engine = new TestableExecutionEngine({ mastra: undefined });
+
+    const result = engine.deserializeRequestContextPublic({});
+
+    expect(result).toBeInstanceOf(RequestContext);
+    expect(result.size()).toBe(0);
   });
 });
