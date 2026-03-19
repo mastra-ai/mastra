@@ -156,7 +156,7 @@ describe('auth helpers', () => {
   });
 
   describe('getAuthenticatedUser', () => {
-    it('returns null when token is missing', async () => {
+    it('returns null when the auth token is empty', async () => {
       const user = await getAuthenticatedUser({
         mastra: {
           getServer: () => ({
@@ -165,7 +165,7 @@ describe('auth helpers', () => {
             },
           }),
         } as any,
-        token: null,
+        authToken: '',
         request: new Request('http://localhost/api/test'),
       });
 
@@ -177,7 +177,7 @@ describe('auth helpers', () => {
         mastra: {
           getServer: () => ({}),
         } as any,
-        token: 'valid-token',
+        authToken: 'valid-token',
         request: new Request('http://localhost/api/test'),
       });
 
@@ -201,7 +201,7 @@ describe('auth helpers', () => {
             },
           }),
         } as any,
-        token: 'valid-token',
+        authToken: 'valid-token',
         request,
       });
 
@@ -221,7 +221,7 @@ describe('auth helpers', () => {
             },
           }),
         } as any,
-        token: 'Bearer valid-token',
+        authToken: 'Bearer valid-token',
         request: new Request('http://localhost/api/test'),
       });
 
