@@ -564,5 +564,30 @@ describe('convertFullStreamChunkToMastra', () => {
         expect(result.payload.stepResult.reason).toBe('stop');
       }
     });
+
+    it('should extract cachedInputTokens from inputTokenDetails in finish usage', () => {
+      const chunk = {
+        type: 'finish',
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 100,
+          outputTokens: 50,
+          inputTokenDetails: { cacheReadTokens: 80 },
+        },
+        providerMetadata: {},
+        messages: { all: [], user: [], nonUser: [] },
+      } as StreamPart;
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('finish');
+      if (result?.type === 'finish') {
+        expect(result.payload.output.usage).toMatchObject({
+          inputTokens: 100,
+          outputTokens: 50,
+          cachedInputTokens: 80,
+        });
+      }
+    });
   });
 });
