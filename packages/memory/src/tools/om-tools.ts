@@ -421,8 +421,11 @@ export async function recallMessages({
     throw new Error('recall requires a Memory instance with storage access');
   }
 
-  const normalizedPage = page === 0 ? 1 : page;
-  const normalizedLimit = limit;
+  const MAX_PAGE = 50;
+  const MAX_LIMIT = 20;
+  const rawPage = page === 0 ? 1 : page;
+  const normalizedPage = Math.max(Math.min(rawPage, MAX_PAGE), -MAX_PAGE);
+  const normalizedLimit = Math.min(limit, MAX_LIMIT);
 
   const resolved = await resolveCursorMessage(memory, cursor);
 
@@ -575,11 +578,19 @@ export const recallTool = (_memoryConfig?: MemoryConfigInternal) => {
       page: z
         .number()
         .int()
+        .min(-50)
+        .max(50)
         .optional()
         .describe(
           'Pagination offset from the cursor. Positive pages move forward, negative pages move backward, and 0 is treated as 1.',
         ),
-      limit: z.number().int().positive().optional().describe('Maximum number of messages to return. Defaults to 20.'),
+      limit: z
+        .number()
+        .int()
+        .positive()
+        .max(20)
+        .optional()
+        .describe('Maximum number of messages to return. Defaults to 20.'),
       detail: z
         .enum(['low', 'high'])
         .optional()
