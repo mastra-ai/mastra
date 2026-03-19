@@ -2,8 +2,6 @@
 '@mastra/pg': patch
 ---
 
-Fix concurrent query deprecation warning in PostgreSQL transactions
+Fixed PostgreSQL transaction query execution in `@mastra/pg`.
 
-Replaced `Promise.all()` with sequential `await` loops in two locations within `saveMessages()` and `deleteMessages()` methods. This prevents concurrent queries on the same pg client within transactions, which was triggering deprecation warnings in pg@8.19+ and would break in pg@9.0.
-
-Fixes #14481
+Message save/delete operations now run transaction queries one at a time on the same client. This removes the pg deprecation warning in 8.19+ and prevents failures in pg 9.0.
