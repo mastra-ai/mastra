@@ -36,6 +36,8 @@ export default function WorkspaceSkillDetailPage() {
   // Validate agentId against cached agent list (no extra API call).
   // If the cache is cold (e.g. direct URL visit) or the ID doesn't match,
   // we fall back to the workspace breadcrumb.
+  // Note: getQueriesData matches all queries starting with ['agents'] (across requestContext variants).
+  // We take the first match, which is acceptable since agent IDs are globally unique.
   const agentsCache = queryClient.getQueriesData<Record<string, unknown>>({ queryKey: ['agents'] });
   const cachedAgents = agentsCache?.[0]?.[1] ?? null;
   const validAgentId = validateAgentId(decodedAgentId, cachedAgents);

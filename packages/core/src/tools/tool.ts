@@ -352,6 +352,7 @@ export class Tool<
               agent: baseContext.agent
                 ? {
                     ...baseContext.agent,
+                    agentId: baseContext.agent.agentId ?? '',
                     suspend: (args: any, suspendOptions?: SuspendOptions) => {
                       suspendData = args;
                       return baseContext.agent?.suspend?.(args, suspendOptions);

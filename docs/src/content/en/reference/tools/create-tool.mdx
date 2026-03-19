@@ -273,6 +273,12 @@ export const weatherTool = createTool({
                     isOptional: true,
                     description: 'Resource ID for memory-enabled agents.',
                   },
+                  {
+                    name: 'writableStream',
+                    type: 'WritableStream<any>',
+                    isOptional: true,
+                    description: 'Original WritableStream from the AI SDK for streaming tool outputs.',
+                  },
                 ],
               },
               {
