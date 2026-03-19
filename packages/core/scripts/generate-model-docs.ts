@@ -76,6 +76,12 @@ function cleanDocumentationUrl(url: string | undefined): string | undefined {
   }
 }
 
+/** Extract `${VAR_NAME}` template variable names embedded in a URL string. */
+function extractUrlTemplateVars(url?: string): string[] {
+  if (!url) return [];
+  return [...url.matchAll(/\$\{([^}]+)\}/g)].map(m => m[1]);
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -246,12 +252,20 @@ async function generateProviderPage(
   const rawDocUrl = (providerRegistry[provider.id] as any).docUrl;
   const docUrl = cleanDocumentationUrl(rawDocUrl);
 
+  // Build the complete list of required env vars: URL template vars (e.g. CLOUDFLARE_ACCOUNT_ID
+  // embedded in the path) plus the API key var, deduplicated.
+  const urlTemplateVars = extractUrlTemplateVars(provider.url);
+  const apiKeyVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
+  const allEnvVars = [...new Set([...urlTemplateVars, ...apiKeyVars])];
+
+  const envVarList = allEnvVars.map(v => `\`${v}\``).join(' and ');
+
   // Create intro with optional documentation link
   const introText = docUrl
-    ? `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. Authentication is handled automatically using the \`${provider.apiKeyEnvVar}\` environment variable.
+    ? `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. Authentication is handled automatically using the ${envVarList} environment variable${allEnvVars.length > 1 ? 's' : ''}.
 
 Learn more in the [${provider.name} documentation](${docUrl}).`
-    : `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. Authentication is handled automatically using the \`${provider.apiKeyEnvVar}\` environment variable.`;
+    : `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. Authentication is handled automatically using the ${envVarList} environment variable${allEnvVars.length > 1 ? 's' : ''}.`;
 
   // Fetch model capabilities from models.dev
   const { models: modelsWithCapabilities, packageName } = await fetchProviderInfo(provider.id);
@@ -275,7 +289,7 @@ ${getGeneratedComment()}
 ${introText}
 
 \`\`\`bash title=".env"
-${provider.apiKeyEnvVar}=your-api-key
+${allEnvVars.map(v => `${v}=${/(_ID|_ACCOUNT)$/i.test(v) ? 'your-account-id' : 'your-api-key'}`).join('\n')}
 \`\`\`
 
 \`\`\`typescript title="src/mastra/agents/my-agent.ts" {7}

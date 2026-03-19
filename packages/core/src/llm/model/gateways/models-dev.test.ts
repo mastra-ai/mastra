@@ -112,6 +112,28 @@ describe('ModelsDevGateway', () => {
       expect(providers.openai.url).toBe('https://api.openai.com/v1');
     });
 
+    it('should use CLOUDFLARE_API_TOKEN (not CLOUDFLARE_ACCOUNT_ID) as apiKeyEnvVar for cloudflare-workers-ai', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          'cloudflare-workers-ai': {
+            id: 'cloudflare-workers-ai',
+            name: 'Cloudflare Workers AI',
+            models: { '@cf/meta/llama-3-8b-instruct': {} },
+            env: ['CLOUDFLARE_ACCOUNT_ID'], // models.dev reports account ID, not the API token
+            api: 'https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1',
+            npm: '@ai-sdk/openai-compatible',
+          },
+        }),
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers['cloudflare-workers-ai']).toBeDefined();
+      // The override must redirect auth to the API token, not the account ID
+      expect(providers['cloudflare-workers-ai'].apiKeyEnvVar).toBe('CLOUDFLARE_API_TOKEN');
+    });
+
     it('should keep hyphens in provider IDs', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -240,6 +262,14 @@ describe('ModelsDevGateway', () => {
             env: ['OPENAI_API_KEY'],
             api: 'https://api.openai.com/v1',
           },
+          'cloudflare-workers-ai': {
+            id: 'cloudflare-workers-ai',
+            name: 'Cloudflare Workers AI',
+            models: { '@cf/meta/llama-3-8b-instruct': {} },
+            env: ['CLOUDFLARE_ACCOUNT_ID'],
+            api: 'https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1',
+            npm: '@ai-sdk/openai-compatible',
+          },
         }),
       });
       await gateway.fetchProviders();
@@ -260,6 +290,29 @@ describe('ModelsDevGateway', () => {
 
     it('should return false for invalid model ID format', () => {
       expect(() => gateway.buildUrl('invalid-format', { OPENAI_API_KEY: 'sk-test' })).toThrow();
+    });
+
+    it('should substitute ${VAR_NAME} template variables in URLs', () => {
+      const url = gateway.buildUrl('cloudflare-workers-ai/@cf/meta/llama-3-8b-instruct', {
+        CLOUDFLARE_ACCOUNT_ID: 'abc123',
+        CLOUDFLARE_API_TOKEN: 'token-xyz',
+      });
+      expect(url).toBe('https://api.cloudflare.com/client/v4/accounts/abc123/ai/v1');
+    });
+
+    it('should substitute URL template vars from process.env when envVars not passed', () => {
+      const original = process.env.CLOUDFLARE_ACCOUNT_ID;
+      process.env.CLOUDFLARE_ACCOUNT_ID = 'env-account-id';
+      try {
+        const url = gateway.buildUrl('cloudflare-workers-ai/@cf/meta/llama-3-8b-instruct');
+        expect(url).toBe('https://api.cloudflare.com/client/v4/accounts/env-account-id/ai/v1');
+      } finally {
+        if (original === undefined) {
+          delete process.env.CLOUDFLARE_ACCOUNT_ID;
+        } else {
+          process.env.CLOUDFLARE_ACCOUNT_ID = original;
+        }
+      }
     });
   });
 

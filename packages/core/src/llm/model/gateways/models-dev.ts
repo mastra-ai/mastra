@@ -53,6 +53,11 @@ const PROVIDER_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
     url: 'https://api.moonshot.cn/anthropic/v1',
     npm: '@ai-sdk/anthropic',
   },
+  // Cloudflare Workers AI: the URL uses CLOUDFLARE_ACCOUNT_ID as a path parameter,
+  // but authentication requires a separate API token in the Authorization header.
+  'cloudflare-workers-ai': {
+    apiKeyEnvVar: 'CLOUDFLARE_API_TOKEN',
+  },
 };
 
 export class ModelsDevGateway extends MastraModelGateway {
@@ -113,9 +118,12 @@ export class ModelsDevGateway extends MastraModelGateway {
           continue;
         }
 
-        // Get the API key env var from the provider info
-        // Convert hyphens to underscores for env var naming convention
-        const apiKeyEnvVar = providerInfo.env?.[0] || `${normalizedId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
+        // Get the API key env var — overrides take priority (e.g. cloudflare-workers-ai needs
+        // CLOUDFLARE_API_TOKEN for auth even though models.dev reports CLOUDFLARE_ACCOUNT_ID)
+        const apiKeyEnvVar =
+          PROVIDER_OVERRIDES[normalizedId]?.apiKeyEnvVar ||
+          providerInfo.env?.[0] ||
+          `${normalizedId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
 
         // Determine the API key header (special case for Anthropic)
         const apiKeyHeader = !hasInstalledPackage
@@ -162,7 +170,14 @@ export class ModelsDevGateway extends MastraModelGateway {
     const baseUrlEnvVar = `${providerId.toUpperCase().replace(/-/g, '_')}_BASE_URL`;
     const customBaseUrl = envVars?.[baseUrlEnvVar] || process.env[baseUrlEnvVar];
 
-    return customBaseUrl || config.url;
+    const url = customBaseUrl || config.url;
+
+    // Substitute ${VAR_NAME} template variables in the URL with env var values.
+    // Cloudflare Workers AI embeds the account ID in the path:
+    //   https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1
+    return url.replace(/\$\{([^}]+)\}/g, (_, varName) => {
+      return envVars?.[varName] ?? process.env[varName] ?? '';
+    });
   }
 
   getApiKey(modelId: string): Promise<string> {
