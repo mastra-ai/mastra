@@ -48,18 +48,6 @@ async function zipOutput(projectDir: string): Promise<string> {
   await mkdir(tmpDir, { recursive: true });
   const zipPath = join(tmpDir, `server-deploy-${Date.now()}.zip`);
 
-  // Detect lockfile before archiving
-  let lockfileName: string | undefined;
-  for (const name of ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock']) {
-    try {
-      await access(join(projectDir, name));
-      lockfileName = name;
-      break;
-    } catch {
-      // not found, try next
-    }
-  }
-
   return new Promise((resolvePromise, reject) => {
     const output = createWriteStream(zipPath);
     const archive = archiver('zip', { zlib: { level: 6 } });
@@ -68,15 +56,9 @@ async function zipOutput(projectDir: string): Promise<string> {
     archive.on('error', reject);
 
     archive.pipe(output);
-    // Mirror the project layout the Dockerfile expects:
-    //   .mastra/output/  — pre-built Mastra output
-    //   package.json     — for npm install in container
-    //   lockfile          — for deterministic installs
+    // Ship only the pre-built .mastra/output + package.json for dependency metadata
     archive.glob('**', { cwd: outputDir, ignore: ['node_modules/**'] }, { prefix: '.mastra/output' });
     archive.file(join(projectDir, 'package.json'), { name: 'package.json' });
-    if (lockfileName) {
-      archive.file(join(projectDir, lockfileName), { name: lockfileName });
-    }
     void archive.finalize();
   });
 }
