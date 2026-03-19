@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ButtonsGroup } from './buttons-group';
 import { Button } from '../Button';
+import { ChevronDown, ChevronDownIcon } from 'lucide-react';
 
 const meta: Meta<typeof ButtonsGroup> = {
   title: 'Composite/ButtonsGroup',
@@ -24,32 +25,31 @@ export const Default: Story = {
   ),
 };
 
-export const TwoButtons: Story = {
+export const DefaultSpacing: Story = {
   render: () => (
     <ButtonsGroup>
-      <Button variant="outline">Cancel</Button>
+      <Button>Cancel</Button>
       <Button>Save</Button>
     </ButtonsGroup>
   ),
 };
 
-export const ManyButtons: Story = {
+export const CloseSpacing: Story = {
   render: () => (
-    <ButtonsGroup>
-      <Button variant="ghost">Reset</Button>
-      <Button variant="outline">Cancel</Button>
-      <Button variant="light">Draft</Button>
-      <Button>Submit</Button>
+    <ButtonsGroup spacing="close">
+      <Button>Cancel</Button>
+      <Button>Save</Button>
     </ButtonsGroup>
   ),
 };
 
-export const ActionButtons: Story = {
+export const AsSplitButton: Story = {
   render: () => (
-    <ButtonsGroup>
-      <Button variant="outline">Edit</Button>
-      <Button variant="outline">Duplicate</Button>
-      <Button>Run</Button>
+    <ButtonsGroup spacing="close">
+      <Button>Cancel</Button>
+      <Button aria-label="Open Menu">
+        <ChevronDownIcon />
+      </Button>
     </ButtonsGroup>
   ),
 };

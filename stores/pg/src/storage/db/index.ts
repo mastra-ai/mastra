@@ -142,11 +142,11 @@ export function resolvePgConfig(config: PgDomainConfig): {
   };
 }
 
-function getSchemaName(schema?: string) {
+export function getSchemaName(schema?: string) {
   return schema ? `"${parseSqlIdentifier(schema, 'schema name')}"` : '"public"';
 }
 
-function getTableName({ indexName, schemaName }: { indexName: string; schemaName?: string }) {
+export function getTableName({ indexName, schemaName }: { indexName: string; schemaName?: string }) {
   const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
   const quotedIndexName = `"${parsedIndexName}"`;
   const quotedSchemaName = schemaName;
@@ -164,18 +164,31 @@ function mapToSqlType(type: StorageColumn['type']): string {
   }
 }
 
-function generateTableSQL({
+export function generateTableSQL({
   tableName,
   schema,
   schemaName,
+  compositePrimaryKey,
   includeAllConstraints = false,
 }: {
   tableName: TABLE_NAMES;
   schema: Record<string, StorageColumn>;
   schemaName?: string;
+  compositePrimaryKey?: string[];
   /** When true, includes all constraints in the SQL (for exports). When false, some constraints are added at runtime after data migration. */
   includeAllConstraints?: boolean;
 }): string {
+  // Validate composite PK columns exist in schema
+  if (compositePrimaryKey) {
+    for (const col of compositePrimaryKey) {
+      if (!(col in schema)) {
+        throw new Error(`compositePrimaryKey column "${col}" does not exist in schema for table "${tableName}"`);
+      }
+    }
+  }
+
+  const compositePKSet = compositePrimaryKey ? new Set(compositePrimaryKey) : null;
+
   const timeZColumns = Object.entries(schema)
     .filter(([_, def]) => def.type === 'timestamp')
     .map(([name]) => {
@@ -186,12 +199,19 @@ function generateTableSQL({
   const columns = Object.entries(schema).map(([name, def]) => {
     const parsedName = parseSqlIdentifier(name, 'column name');
     const constraints = [];
-    if (def.primaryKey) constraints.push('PRIMARY KEY');
+    // Skip per-column PRIMARY KEY if column is part of composite PK
+    if (def.primaryKey && !compositePKSet?.has(name)) constraints.push('PRIMARY KEY');
     if (!def.nullable) constraints.push('NOT NULL');
     return `"${parsedName}" ${mapToSqlType(def.type)} ${constraints.join(' ')}`;
   });
 
-  const finalColumns = [...columns, ...timeZColumns].join(',\n');
+  const tableConstraints: string[] = [];
+  if (compositePrimaryKey) {
+    const pkCols = compositePrimaryKey.map(c => `"${parseSqlIdentifier(c, 'column name')}"`).join(', ');
+    tableConstraints.push(`PRIMARY KEY (${pkCols})`);
+  }
+
+  const finalColumns = [...columns, ...timeZColumns, ...tableConstraints].join(',\n');
   // Sanitize schema name before using it in constraint names to ensure valid SQL identifiers
   const parsedSchemaName = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
   // Use the original (long) base name so existing databases that already have
@@ -226,6 +246,17 @@ function generateTableSQL({
                 ADD CONSTRAINT ${workflowSnapshotConstraint}
                 UNIQUE (workflow_name, run_id);
               END IF;
+              IF EXISTS (
+                SELECT 1 FROM pg_index i
+                JOIN pg_class c ON i.indexrelid = c.oid
+                JOIN pg_namespace n ON c.relnamespace = n.oid
+                WHERE c.relname = lower('${workflowSnapshotConstraint}')
+                AND n.nspname = '${schemaFilter}'
+                AND i.indisreplident = false
+              ) THEN
+                ALTER TABLE ${getTableName({ indexName: tableName, schemaName: quotedSchemaName })}
+                REPLICA IDENTITY USING INDEX ${workflowSnapshotConstraint};
+              END IF;
             END $$;
             `
                 : ''
@@ -254,34 +285,71 @@ function generateTableSQL({
 }
 
 /**
- * Exports the Mastra database schema as SQL DDL statements.
- * Does not require a database connection.
+ * Generates a CREATE INDEX SQL statement from index options.
+ * Used by exportSchemas to produce index DDL without a database connection.
  */
-export function exportSchemas(schemaName?: string): string {
-  const statements: string[] = [];
+export function generateIndexSQL(options: CreateIndexOptions, schemaName?: string): string {
+  const { name, table, columns, unique = false, where, method = 'btree' } = options;
 
-  // Add schema creation if needed
-  if (schemaName) {
-    const quotedSchemaName = getSchemaName(schemaName);
-    statements.push(`-- Create schema if it doesn't exist`);
-    statements.push(`CREATE SCHEMA IF NOT EXISTS ${quotedSchemaName};`);
-    statements.push('');
-  }
+  const quotedSchemaName = getSchemaName(schemaName);
+  const fullTableName = getTableName({ indexName: table, schemaName: quotedSchemaName });
 
-  // Generate SQL for all tables
-  for (const [tableName, schema] of Object.entries(TABLE_SCHEMAS)) {
-    statements.push(`-- Table: ${tableName}`);
-    const sql = generateTableSQL({
-      tableName: tableName as TABLE_NAMES,
-      schema,
-      schemaName,
-      includeAllConstraints: true, // Include all constraints for exports/documentation
-    });
-    statements.push(sql.trim());
-    statements.push('');
-  }
+  const uniqueStr = unique ? 'UNIQUE ' : '';
+  const methodStr = method !== 'btree' ? `USING ${method} ` : '';
 
-  return statements.join('\n');
+  const columnsStr = columns
+    .map(col => {
+      if (col.includes(' DESC') || col.includes(' ASC')) {
+        const [colName, ...modifiers] = col.split(' ');
+        if (!colName) {
+          throw new Error(`Invalid column specification: ${col}`);
+        }
+        return `"${parseSqlIdentifier(colName, 'column name')}" ${modifiers.join(' ')}`;
+      }
+      return `"${parseSqlIdentifier(col, 'column name')}"`;
+    })
+    .join(', ');
+
+  const whereStr = where ? ` WHERE ${where}` : '';
+  const quotedIndexName = `"${parseSqlIdentifier(name, 'index name')}"`;
+
+  return `CREATE ${uniqueStr}INDEX IF NOT EXISTS ${quotedIndexName} ON ${fullTableName} ${methodStr}(${columnsStr})${whereStr};`;
+}
+
+/**
+ * Generates the SQL for a timestamp trigger function and trigger on a table.
+ * Returns the DDL string without executing it.
+ */
+export function generateTimestampTriggerSQL(tableName: string, schemaName?: string): string {
+  const quotedSchemaName = getSchemaName(schemaName);
+  const fullTableName = getTableName({ indexName: tableName, schemaName: quotedSchemaName });
+  const functionName = `${quotedSchemaName}.trigger_set_timestamps`;
+  const triggerName = `"${parseSqlIdentifier(`${tableName}_timestamps`, 'trigger name')}"`;
+
+  return `CREATE OR REPLACE FUNCTION ${functionName}()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        NEW."createdAt" = NOW();
+        NEW."updatedAt" = NOW();
+        NEW."createdAtZ" = NOW();
+        NEW."updatedAtZ" = NOW();
+    ELSIF TG_OP = 'UPDATE' THEN
+        NEW."updatedAt" = NOW();
+        NEW."updatedAtZ" = NOW();
+        NEW."createdAt" = OLD."createdAt";
+        NEW."createdAtZ" = OLD."createdAtZ";
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS ${triggerName} ON ${fullTableName};
+
+CREATE TRIGGER ${triggerName}
+    BEFORE INSERT OR UPDATE ON ${fullTableName}
+    FOR EACH ROW
+    EXECUTE FUNCTION ${functionName}();`;
 }
 
 /**
@@ -303,6 +371,9 @@ export class PgDB extends MastraBase {
   public schemaName?: string;
   public skipDefaultIndexes?: boolean;
 
+  /** Cache of actual table columns: tableName -> Set<columnName> */
+  private tableColumnsCache = new Map<string, Set<string>>();
+
   constructor(config: PgDBInternalConfig) {
     super({
       component: 'STORAGE',
@@ -312,6 +383,48 @@ export class PgDB extends MastraBase {
     this.client = config.client;
     this.schemaName = config.schemaName;
     this.skipDefaultIndexes = config.skipDefaultIndexes;
+  }
+
+  /**
+   * Gets the set of column names that actually exist in the database table.
+   * Results are cached; the cache is invalidated when alterTable() adds new columns.
+   */
+  private async getTableColumns(tableName: TABLE_NAMES): Promise<Set<string>> {
+    const cached = this.tableColumnsCache.get(tableName);
+    if (cached) return cached;
+
+    const schema = this.schemaName || 'public';
+    const rows = await this.client.manyOrNone<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2`,
+      [schema, tableName],
+    );
+
+    const columns = new Set(rows.map(r => r.column_name));
+    if (columns.size > 0) {
+      this.tableColumnsCache.set(tableName, columns);
+    }
+    return columns;
+  }
+
+  /**
+   * Filters a record to only include columns that exist in the actual database table.
+   * Unknown columns are silently dropped to ensure forward compatibility when newer
+   * domain packages add fields that haven't been migrated yet.
+   */
+  private async filterRecordToKnownColumns(
+    tableName: TABLE_NAMES,
+    record: Record<string, any>,
+  ): Promise<Record<string, any>> {
+    const knownColumns = await this.getTableColumns(tableName);
+    if (knownColumns.size === 0) return record; // Table may not exist yet
+
+    const filtered: Record<string, any> = {};
+    for (const [key, value] of Object.entries(record)) {
+      if (knownColumns.has(key)) {
+        filtered[key] = value;
+      }
+    }
+    return filtered;
   }
 
   async hasColumn(table: string, column: string): Promise<boolean> {
@@ -457,9 +570,13 @@ export class PgDB extends MastraBase {
     try {
       this.addTimestampZColumns(record);
 
+      // Filter out columns that don't exist in the actual database table
+      const filteredRecord = await this.filterRecordToKnownColumns(tableName, record);
+
       const schemaName = getSchemaName(this.schemaName);
-      const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
-      const values = this.prepareValuesForInsert(record, tableName);
+      const columns = Object.keys(filteredRecord).map(col => parseSqlIdentifier(col, 'column name'));
+      if (columns.length === 0) return; // No known columns after filtering - skip insert
+      const values = this.prepareValuesForInsert(filteredRecord, tableName);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
       const fullTableName = getTableName({ indexName: tableName, schemaName });
       const columnList = columns.map(c => `"${c}"`).join(', ');
@@ -537,9 +654,11 @@ export class PgDB extends MastraBase {
   async createTable({
     tableName,
     schema,
+    compositePrimaryKey,
   }: {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
+    compositePrimaryKey?: string[];
   }): Promise<void> {
     try {
       const timeZColumnNames = Object.entries(schema)
@@ -550,7 +669,7 @@ export class PgDB extends MastraBase {
         await this.setupSchema();
       }
 
-      const sql = generateTableSQL({ tableName, schema, schemaName: this.schemaName });
+      const sql = generateTableSQL({ tableName, schema, schemaName: this.schemaName, compositePrimaryKey });
 
       await this.client.none(sql);
 
@@ -623,42 +742,17 @@ export class PgDB extends MastraBase {
         },
         error,
       );
+    } finally {
+      // Clear cached columns so subsequent inserts see the fresh schema
+      this.tableColumnsCache.delete(tableName);
     }
   }
 
   private async setupTimestampTriggers(tableName: TABLE_NAMES): Promise<void> {
-    const schemaName = getSchemaName(this.schemaName);
-    const fullTableName = getTableName({ indexName: tableName, schemaName });
-    const functionName = `${schemaName}.trigger_set_timestamps`;
+    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
 
     try {
-      const triggerSQL = `
-        CREATE OR REPLACE FUNCTION ${functionName}()
-        RETURNS TRIGGER AS $$
-        BEGIN
-            IF TG_OP = 'INSERT' THEN
-                NEW."createdAt" = NOW();
-                NEW."updatedAt" = NOW();
-                NEW."createdAtZ" = NOW();
-                NEW."updatedAtZ" = NOW();
-            ELSIF TG_OP = 'UPDATE' THEN
-                NEW."updatedAt" = NOW();
-                NEW."updatedAtZ" = NOW();
-                NEW."createdAt" = OLD."createdAt";
-                NEW."createdAtZ" = OLD."createdAtZ";
-            END IF;
-            RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
-
-        DROP TRIGGER IF EXISTS ${tableName}_timestamps ON ${fullTableName};
-
-        CREATE TRIGGER ${tableName}_timestamps
-            BEFORE INSERT OR UPDATE ON ${fullTableName}
-            FOR EACH ROW
-            EXECUTE FUNCTION ${functionName}();
-      `;
-
+      const triggerSQL = generateTimestampTriggerSQL(tableName, this.schemaName);
       await this.client.none(triggerSQL);
       this.logger?.debug?.(`Set up timestamp triggers for table ${fullTableName}`);
     } catch (error) {
@@ -1057,6 +1151,9 @@ export class PgDB extends MastraBase {
         },
         error,
       );
+    } finally {
+      // Invalidate cached columns after DDL completes so concurrent writers see the new schema
+      this.tableColumnsCache.delete(tableName);
     }
   }
 
@@ -1140,6 +1237,9 @@ export class PgDB extends MastraBase {
         },
         error,
       );
+    } finally {
+      // Clear cached columns so subsequent createTable+insert sees the fresh schema
+      this.tableColumnsCache.delete(tableName);
     }
   }
 
@@ -1421,11 +1521,15 @@ export class PgDB extends MastraBase {
     data: Record<string, any>;
   }): Promise<void> {
     try {
+      // Filter out columns that don't exist in the actual database table
+      const filteredData = await this.filterRecordToKnownColumns(tableName, data);
+      if (Object.keys(filteredData).length === 0) return; // Nothing to update after filtering
+
       const setColumns: string[] = [];
       const setValues: any[] = [];
       let paramIndex = 1;
 
-      Object.entries(data).forEach(([key, value]) => {
+      Object.entries(filteredData).forEach(([key, value]) => {
         const parsedKey = parseSqlIdentifier(key, 'column name');
         setColumns.push(`"${parsedKey}" = $${paramIndex++}`);
         setValues.push(this.prepareValue(value, key, tableName));

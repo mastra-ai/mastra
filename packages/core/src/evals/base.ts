@@ -1,13 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../agent';
 import { tryGenerateWithJsonFallback } from '../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { resolveModelConfig } from '../llm/model/resolve-model';
 import type { MastraModelConfig } from '../llm/model/shared.types';
+import { noopLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { TracingContext } from '../observability';
-import { InternalSpans } from '../observability';
+import { InternalSpans, resolveObservabilityContext } from '../observability';
+import type { ObservabilityContext } from '../observability';
+import type { PublicSchema } from '../schema';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import { createWorkflow, createStep } from '../workflows';
 import type { ScoringSamplingConfig, ScorerRunInputForAgent, ScorerRunOutputForAgent } from './types';
 
@@ -46,13 +49,12 @@ interface ScorerConfig<TID extends string, TInput = any, TRunOutput = any> {
 }
 
 // Standardized input type for all pipelines
-interface ScorerRun<TInput = any, TOutput = any> {
+interface ScorerRun<TInput = any, TOutput = any> extends Partial<ObservabilityContext> {
   runId?: string;
   input?: TInput;
   output: TOutput;
   groundTruth?: any;
   requestContext?: Record<string, any>;
-  tracingContext?: TracingContext;
 }
 
 // Prompt object definition with conditional typing
@@ -64,7 +66,14 @@ interface PromptObject<
   TRunOutput = any,
 > {
   description: string;
-  outputSchema: z.ZodSchema<TOutput>;
+  /**
+   * Schema defining the expected output structure.
+   * Accepts any schema type supported by Mastra (Zod v3, Zod v4, JSON Schema, AI SDK Schema, or StandardSchema).
+   * Will be converted to StandardSchemaWithJSON at runtime via toStandardSchema().
+   *
+   * The TOutput generic is inferred from this schema's output type.
+   */
+  outputSchema: PublicSchema<TOutput>;
   judge?: {
     model: MastraModelConfig;
     instructions: string;
@@ -165,11 +174,15 @@ interface GenerateReasonPromptObject<TAccumulated extends Record<string, any>, T
 // Step definition types that support both function and prompt object steps
 type PreprocessStepDef<TAccumulated extends Record<string, any>, TStepOutput, TInput, TRunOutput> =
   | FunctionStep<TAccumulated, TInput, TRunOutput, TStepOutput>
-  | PromptObject<TStepOutput, TAccumulated, 'preprocess', TInput, TRunOutput>;
+  | (PromptObject<TStepOutput, TAccumulated, 'preprocess', TInput, TRunOutput> & {
+      outputSchema: PublicSchema<TStepOutput>;
+    });
 
 type AnalyzeStepDef<TAccumulated extends Record<string, any>, TStepOutput, TInput, TRunOutput> =
   | FunctionStep<TAccumulated, TInput, TRunOutput, TStepOutput>
-  | PromptObject<TStepOutput, TAccumulated, 'analyze', TInput, TRunOutput>;
+  | (PromptObject<TStepOutput, TAccumulated, 'analyze', TInput, TRunOutput> & {
+      outputSchema: PublicSchema<TStepOutput>;
+    });
 
 // Conditional type for generateScore step definition
 type GenerateScoreStepDef<TAccumulated extends Record<string, any>, TInput, TRunOutput> =
@@ -408,7 +421,7 @@ class MastraScorer<
       });
     }
 
-    const { tracingContext } = input;
+    const observabilityContext = resolveObservabilityContext(input);
 
     let runId = input.runId;
     if (!runId) {
@@ -423,20 +436,23 @@ class MastraScorer<
       inputData: {
         run,
       },
-      tracingContext,
+      ...observabilityContext,
     });
 
     if (workflowResult.status === 'failed') {
-      throw new MastraError({
-        id: 'MASTR_SCORER_FAILED_TO_RUN_WORKFLOW_FAILED',
-        domain: ErrorDomain.SCORER,
-        category: ErrorCategory.USER,
-        text: `Scorer Run Failed: ${workflowResult.error}`,
-        details: {
-          scorerId: this.config.id ?? this.config.name,
-          steps: this.steps.map(s => s.name).join(', '),
+      throw new MastraError(
+        {
+          id: 'MASTR_SCORER_FAILED_TO_RUN_WORKFLOW_FAILED',
+          domain: ErrorDomain.SCORER,
+          category: ErrorCategory.USER,
+          text: `Scorer Run Failed: ${typeof workflowResult.error === 'string' ? workflowResult.error : workflowResult.error.message}`,
+          details: {
+            scorerId: this.config.id ?? this.config.name,
+            steps: this.steps.map(s => s.name).join(', '),
+          },
         },
-      });
+        workflowResult.error instanceof Error ? workflowResult.error : undefined,
+      );
     }
 
     return this.transformToScorerResult({ workflowResult, originalInput: run });
@@ -476,7 +492,8 @@ class MastraScorer<
         description: `Scorer step: ${scorerStep.name}`,
         inputSchema: z.any(),
         outputSchema: z.any(),
-        execute: async ({ inputData, getInitData, tracingContext }) => {
+        execute: async ({ inputData, getInitData, ...rest }) => {
+          const observabilityContext = resolveObservabilityContext(rest);
           const { accumulatedResults = {}, generatedPrompts = {} } = inputData;
           const { run } = getInitData<{ run: ScorerRun<TInput, TRunOutput> }>();
 
@@ -485,7 +502,7 @@ class MastraScorer<
           let stepResult;
           let newGeneratedPrompts = generatedPrompts;
           if (scorerStep.isPromptObject) {
-            const { result, prompt } = await this.executePromptStep(scorerStep, tracingContext, context);
+            const { result, prompt } = await this.executePromptStep(scorerStep, observabilityContext, context);
             stepResult = result;
             newGeneratedPrompts = {
               ...generatedPrompts,
@@ -535,6 +552,9 @@ class MastraScorer<
       },
     });
 
+    // update logger
+    workflow.__setLogger(this.#mastra?.getLogger() ?? noopLogger);
+
     let chainedWorkflow = workflow;
     for (const step of workflowSteps) {
       chainedWorkflow = chainedWorkflow.then(step);
@@ -560,7 +580,11 @@ class MastraScorer<
     return await scorerStep.definition(context);
   }
 
-  private async executePromptStep(scorerStep: ScorerStepDefinition, tracingContext: TracingContext, context: any) {
+  private async executePromptStep(
+    scorerStep: ScorerStepDefinition,
+    observabilityContext: ObservabilityContext,
+    context: any,
+  ) {
     const originalStep = this.originalPromptObjects.get(scorerStep.name);
     if (!originalStep) {
       throw new Error(`Step "${scorerStep.name}" is not a prompt object`);
@@ -597,46 +621,53 @@ class MastraScorer<
 
     // GenerateScore output must be a number
     if (scorerStep.name === 'generateScore') {
-      const schema = z.object({ score: z.number() });
       let result;
       if (isSupportedLanguageModel(resolvedModel)) {
         result = await tryGenerateWithJsonFallback(judge, prompt, {
           structuredOutput: {
-            schema,
+            schema: z.object({ score: z.number() }),
           },
-          tracingContext,
+          ...observabilityContext,
         });
       } else {
+        const schema = z.object({
+          score: z.number(),
+        });
+        const standardSchema = toStandardSchema(schema as PublicSchema);
         result = await judge.generateLegacy(prompt, {
-          output: schema,
-          tracingContext,
+          output: standardSchemaToJSONSchema(standardSchema),
+          ...observabilityContext,
         });
       }
-      return { result: result.object.score, prompt };
+      return { result: (result.object as { score: number }).score, prompt };
 
       // GenerateReason output must be a string
     } else if (scorerStep.name === 'generateReason') {
       let result;
       if (isSupportedLanguageModel(resolvedModel)) {
-        result = await judge.generate(prompt, { tracingContext });
+        result = await judge.generate(prompt, { ...observabilityContext });
       } else {
-        result = await judge.generateLegacy(prompt, { tracingContext });
+        result = await judge.generateLegacy(prompt, { ...observabilityContext });
       }
       return { result: result.text, prompt };
     } else {
       const promptStep = originalStep as PromptObject<any, any, any, TInput, TRunOutput>;
+      // Convert to StandardSchemaWithJSON at runtime to ensure ~standard.jsonSchema is available
+      // Cast to PublicSchema since outputSchema can be any schema type
+      const standardSchema = toStandardSchema(promptStep.outputSchema as PublicSchema);
       let result;
       if (isSupportedLanguageModel(resolvedModel)) {
+        // Use type assertion to any to bypass complex type checking - runtime schema is validated by toStandardSchema
         result = await tryGenerateWithJsonFallback(judge, prompt, {
           structuredOutput: {
-            schema: promptStep.outputSchema,
+            schema: standardSchema as any,
           },
-          tracingContext,
+          ...observabilityContext,
         });
       } else {
         result = await judge.generateLegacy(prompt, {
-          output: promptStep.outputSchema,
-          tracingContext,
+          output: standardSchemaToJSONSchema(standardSchema),
+          ...observabilityContext,
         });
       }
       return { result: result.object, prompt };

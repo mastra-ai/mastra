@@ -1,6 +1,7 @@
 import { HTTPException } from '../http-exception';
 import {
   storedScorerIdPathParams,
+  statusQuerySchema,
   listStoredScorersQuerySchema,
   createStoredScorerBodySchema,
   updateStoredScorerBodySchema,
@@ -14,6 +15,19 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { toSlug } from '../utils';
 
 import { handleError } from './error';
+import { handleAutoVersioning } from './version-helpers';
+import type { VersionedStoreInterface } from './version-helpers';
+
+const SCORER_SNAPSHOT_CONFIG_FIELDS = [
+  'name',
+  'description',
+  'type',
+  'model',
+  'instructions',
+  'scoreRange',
+  'presetConfig',
+  'defaultSampling',
+] as const;
 
 // ============================================================================
 // Route Definitions
@@ -32,7 +46,7 @@ export const LIST_STORED_SCORERS_ROUTE = createRoute({
   description: 'Returns a paginated list of all scorer definitions stored in the database',
   tags: ['Stored Scorers'],
   requiresAuth: true,
-  handler: async ({ mastra, page, perPage, orderBy, authorId, metadata }) => {
+  handler: async ({ mastra, page, perPage, orderBy, status, authorId, metadata }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -49,6 +63,7 @@ export const LIST_STORED_SCORERS_ROUTE = createRoute({
         page,
         perPage,
         orderBy,
+        status,
         authorId,
         metadata,
       });
@@ -68,13 +83,14 @@ export const GET_STORED_SCORER_ROUTE = createRoute({
   path: '/stored/scorers/:storedScorerId',
   responseType: 'json',
   pathParamSchema: storedScorerIdPathParams,
+  queryParamSchema: statusQuerySchema,
   responseSchema: getStoredScorerResponseSchema,
   summary: 'Get stored scorer definition by ID',
   description:
-    'Returns a specific scorer definition from storage by its unique identifier (resolved with active version config)',
+    'Returns a specific scorer definition from storage by its unique identifier. Use ?status=draft to resolve with the latest (draft) version, or ?status=published (default) for the active published version.',
   tags: ['Stored Scorers'],
   requiresAuth: true,
-  handler: async ({ mastra, storedScorerId }) => {
+  handler: async ({ mastra, storedScorerId, status }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -87,7 +103,7 @@ export const GET_STORED_SCORER_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Scorer definitions storage domain is not available' });
       }
 
-      const scorer = await scorerStore.getByIdResolved(storedScorerId);
+      const scorer = await scorerStore.getByIdResolved(storedScorerId, { status });
 
       if (!scorer) {
         throw new HTTPException(404, { message: `Stored scorer definition with id ${storedScorerId} not found` });
@@ -171,7 +187,8 @@ export const CREATE_STORED_SCORER_ROUTE = createRoute({
       });
 
       // Return the resolved scorer definition (thin record + version config)
-      const resolved = await scorerStore.getByIdResolved(id);
+      // Use draft status since newly created entities start as drafts
+      const resolved = await scorerStore.getByIdResolved(id, { status: 'draft' });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve created scorer definition' });
       }
@@ -232,8 +249,7 @@ export const UPDATE_STORED_SCORER_ROUTE = createRoute({
       }
 
       // Update the scorer definition with both metadata-level and config-level fields
-      // The storage layer handles separating these into record updates vs new-version creation
-      await scorerStore.update({
+      const updatedScorer = await scorerStore.update({
         id: storedScorerId,
         authorId,
         metadata,
@@ -247,14 +263,42 @@ export const UPDATE_STORED_SCORER_ROUTE = createRoute({
         defaultSampling,
       });
 
+      // Build the snapshot config for auto-versioning comparison
+      const configFields = {
+        name,
+        description,
+        type,
+        model,
+        instructions,
+        scoreRange,
+        presetConfig,
+        defaultSampling,
+      };
+
+      // Filter out undefined values to get only the config fields that were provided
+      const providedConfigFields = Object.fromEntries(Object.entries(configFields).filter(([_, v]) => v !== undefined));
+
+      // Handle auto-versioning with retry logic for race conditions
+      // This creates a new version if there are meaningful config changes.
+      // It does NOT update activeVersionId — the version stays as a draft until explicitly published.
+      await handleAutoVersioning(
+        scorerStore as unknown as VersionedStoreInterface,
+        storedScorerId,
+        'scorerDefinitionId',
+        SCORER_SNAPSHOT_CONFIG_FIELDS,
+        existing,
+        updatedScorer,
+        providedConfigFields,
+      );
+
       // Clear the cached scorer instance so the next request gets the updated config
       const editor = mastra.getEditor();
       if (editor) {
         editor.scorer.clearCache(storedScorerId);
       }
 
-      // Return the resolved scorer definition with the updated config
-      const resolved = await scorerStore.getByIdResolved(storedScorerId);
+      // Return the resolved scorer definition with the latest (draft) version so the UI sees its edits
+      const resolved = await scorerStore.getByIdResolved(storedScorerId, { status: 'draft' });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve updated scorer definition' });
       }

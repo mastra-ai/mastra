@@ -64,7 +64,11 @@ function spawn(command: string, args: string[] = [], options: SpawnOptions = {})
 
 export function validate(
   file: string,
-  { injectESMShim = false, moduleResolveMapLocation }: { injectESMShim?: boolean; moduleResolveMapLocation: string },
+  {
+    injectESMShim = false,
+    moduleResolveMapLocation,
+    stubbedExternals = [],
+  }: { injectESMShim?: boolean; moduleResolveMapLocation: string; stubbedExternals?: string[] },
 ) {
   let prefixCode = '';
   if (injectESMShim) {
@@ -105,6 +109,7 @@ globalThis.__dirname = dirname(__filename);
       env: {
         ...process.env,
         MODULE_MAP: `${moduleResolveMapLocation}`,
+        STUBBED_EXTERNALS: JSON.stringify(stubbedExternals),
       },
       cwd: dirname(file),
     },

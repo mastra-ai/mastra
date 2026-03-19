@@ -5,3 +5,4 @@
  */
 
 export { GCSFilesystem, type GCSFilesystemOptions, type GCSMountConfig } from './filesystem';
+export { gcsFilesystemProvider } from './provider';

@@ -1,4 +1,3 @@
-import { Plus } from 'lucide-react';
 import {
   Header,
   HeaderTitle,
@@ -13,12 +12,17 @@ import {
   AgentsTable,
   AgentIcon,
   useIsCmsAvailable,
+  usePermissions,
 } from '@mastra/playground-ui';
+import { Plus } from 'lucide-react';
 
 function Agents() {
   const { Link, navigate } = useLinkComponent();
-  const { data: agents = {}, isLoading } = useAgents();
+  const { data: agents = {}, isLoading, error } = useAgents();
   const { isCmsAvailable } = useIsCmsAvailable();
+  const { canEdit } = usePermissions();
+
+  const canCreateAgent = isCmsAvailable && canEdit('stored-agents');
 
   const handleCreateClick = () => {
     navigate('/cms/agents/create');
@@ -35,18 +39,14 @@ function Agents() {
         </HeaderTitle>
 
         <HeaderAction>
-          {isCmsAvailable && (
-            <Button variant="light" as={Link} to="/cms/agents/create">
-              <Icon>
-                <Plus />
-              </Icon>
+          {canCreateAgent && (
+            <Button as={Link} to="/cms/agents/create">
+              <Plus />
               Create an agent
             </Button>
           )}
-          <Button variant="outline" as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
+          <Button variant="ghost" size="md" as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
+            <DocsIcon />
             Agents documentation
           </Button>
         </HeaderAction>
@@ -56,7 +56,8 @@ function Agents() {
         <AgentsTable
           agents={agents}
           isLoading={isLoading}
-          onCreateClick={isCmsAvailable ? handleCreateClick : undefined}
+          error={error}
+          onCreateClick={canCreateAgent ? handleCreateClick : undefined}
         />
       </MainContentContent>
     </MainContentLayout>

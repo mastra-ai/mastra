@@ -4,13 +4,13 @@
  * Creates a comprehensive test suite for sandbox providers.
  */
 
-import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import { callLifecycle } from '@mastra/core/workspace';
+import type { MastraSandbox } from '@mastra/core/workspace';
 import { describe, beforeAll, afterAll } from 'vitest';
 
 import { createCommandExecutionTests } from './domains/command-execution';
 import { createSandboxLifecycleTests } from './domains/lifecycle';
 import { createMountOperationsTests } from './domains/mount-operations';
+import { createProcessManagementTests } from './domains/process-management';
 import { createReconnectionTests } from './domains/reconnection';
 import type { SandboxTestConfig, SandboxCapabilities } from './types';
 
@@ -19,13 +19,14 @@ import type { SandboxTestConfig, SandboxCapabilities } from './types';
  */
 const DEFAULT_CAPABILITIES: Required<SandboxCapabilities> = {
   supportsMounting: false,
-  supportsReconnection: false,
+  supportsReconnection: true,
   supportsConcurrency: true,
   supportsEnvVars: true,
   supportsWorkingDirectory: true,
   supportsTimeout: true,
   defaultCommandTimeout: 30000,
   supportsStreaming: true,
+  supportsStdin: true,
 };
 
 /**
@@ -53,12 +54,14 @@ export function createSandboxTestSuite(config: SandboxTestConfig): void {
   const {
     suiteName,
     createSandbox,
+    createInvalidSandbox,
     cleanupSandbox,
     capabilities: userCapabilities = {},
     testDomains = {},
     testTimeout = 30000,
     fastOnly = false,
     createMountableFilesystem,
+    killSandboxExternally,
   } = config;
 
   // Merge capabilities with defaults
@@ -68,11 +71,11 @@ export function createSandboxTestSuite(config: SandboxTestConfig): void {
   };
 
   describe(suiteName, () => {
-    let sandbox: WorkspaceSandbox;
+    let sandbox: MastraSandbox;
 
     beforeAll(async () => {
       sandbox = await createSandbox();
-      await callLifecycle(sandbox, 'start');
+      await sandbox._start();
     }, 120000); // Allow 2 minutes for sandbox startup
 
     afterAll(async () => {
@@ -80,7 +83,7 @@ export function createSandboxTestSuite(config: SandboxTestConfig): void {
       if (cleanupSandbox) {
         await cleanupSandbox(sandbox);
       } else {
-        await callLifecycle(sandbox, 'destroy');
+        await sandbox._destroy();
       }
     }, 60000);
 
@@ -91,7 +94,9 @@ export function createSandboxTestSuite(config: SandboxTestConfig): void {
       testTimeout,
       fastOnly,
       createSandbox,
+      createInvalidSandbox,
       createMountableFilesystem,
+      killSandboxExternally,
     });
 
     // Register domain tests
@@ -109,6 +114,10 @@ export function createSandboxTestSuite(config: SandboxTestConfig): void {
 
     if (testDomains.reconnection !== false && capabilities.supportsReconnection) {
       createReconnectionTests(getContext);
+    }
+
+    if (testDomains.processManagement !== false) {
+      createProcessManagementTests(getContext);
     }
   });
 }

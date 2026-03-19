@@ -1,3 +1,4 @@
+import { generateText, streamText } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type {
   InputProcessor,
@@ -9,7 +10,7 @@ import type {
 } from '@mastra/core/processors';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { LibSQLStore } from '@mastra/libsql';
-import { generateText, streamText } from 'ai';
+import { ObservationalMemory } from '@mastra/memory/processors';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -339,6 +340,178 @@ describe('withMastra middleware', () => {
       // Should have counted 2 text-delta chunks ("Test " and "response")
       expect(finalChunkCount).toBe(2);
     });
+
+    it('should run processOutputResult after streaming completes', async () => {
+      let outputText = '';
+
+      const upperCaseProcessor: OutputProcessor = {
+        id: 'upper',
+        async processOutputStream(args: ProcessOutputStreamArgs) {
+          if (args.part.type === 'text-delta') {
+            return {
+              ...args.part,
+              payload: {
+                ...args.part.payload,
+                text: args.part.payload.text.toUpperCase(),
+              },
+            };
+          }
+          return args.part;
+        },
+      };
+
+      const inspectorProcessor: OutputProcessor = {
+        id: 'inspector',
+        async processOutputResult(args: ProcessOutputResultArgs) {
+          outputText = args.messageList.get.response
+            .db()
+            .map(
+              m =>
+                m.content?.parts
+                  ?.filter((p: any) => p.type === 'text')
+                  .map((p: any) => p.text)
+                  .join('') || '',
+            )
+            .join('');
+          return args.messageList;
+        },
+      };
+
+      const model = withMastra(createMockModel(), {
+        outputProcessors: [upperCaseProcessor, inspectorProcessor],
+      });
+
+      const { textStream } = await streamText({
+        model,
+        prompt: 'Hello',
+      });
+
+      let fullText = '';
+      for await (const chunk of textStream) {
+        fullText += chunk;
+      }
+
+      expect(fullText).toBe('TEST RESPONSE');
+      expect(outputText).toBe('TEST RESPONSE');
+    });
+
+    it('should not run processOutputResult when stream errors without finishing', async () => {
+      let processOutputResultCalled = false;
+
+      const inspectorProcessor: OutputProcessor = {
+        id: 'inspector',
+        async processOutputResult(args: ProcessOutputResultArgs) {
+          processOutputResultCalled = true;
+          return args.messageList;
+        },
+      };
+
+      const errorModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Partial' },
+            { type: 'error', error: new Error('Provider crashed') },
+            // No 'finish' chunk
+          ]),
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        }),
+      });
+
+      const model = withMastra(errorModel, {
+        outputProcessors: [inspectorProcessor],
+      });
+
+      const { textStream } = await streamText({
+        model,
+        prompt: 'Test',
+      });
+
+      const chunks: string[] = [];
+      try {
+        for await (const chunk of textStream) {
+          chunks.push(chunk);
+        }
+      } catch {
+        // Stream may throw on error chunk
+      }
+
+      expect(processOutputResultCalled).toBe(false);
+    });
+
+    it('should accumulate tool-call chunks for processOutputResult', async () => {
+      let responseParts: any[] = [];
+
+      const inspectorProcessor: OutputProcessor = {
+        id: 'inspector',
+        async processOutputResult(args: ProcessOutputResultArgs) {
+          const responseMessages = args.messageList.get.response.db();
+          for (const msg of responseMessages) {
+            if (msg.content?.parts) {
+              responseParts.push(...msg.content.parts);
+            }
+          }
+          return args.messageList;
+        },
+      };
+
+      const toolModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'Calling tool' },
+            { type: 'text-end', id: '1' },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'getWeather',
+              input: JSON.stringify({ city: 'London' }),
+            },
+            {
+              type: 'tool-result',
+              toolCallId: 'call-1',
+              toolName: 'getWeather',
+              result: { type: 'json', value: { temp: 15 } },
+            },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            },
+          ]),
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        }),
+      });
+
+      const model = withMastra(toolModel, {
+        outputProcessors: [inspectorProcessor],
+      });
+
+      const { textStream } = await streamText({
+        model,
+        prompt: 'What is the weather?',
+      });
+
+      for await (const _ of textStream) {
+        // consume
+      }
+
+      const textParts = responseParts.filter((p: any) => p.type === 'text');
+      const toolParts = responseParts.filter((p: any) => p.type === 'tool-invocation');
+
+      expect(textParts).toHaveLength(1);
+      expect(textParts[0].text).toBe('Calling tool');
+      expect(toolParts).toHaveLength(1);
+      expect(toolParts[0].toolInvocation.toolName).toBe('getWeather');
+      expect(toolParts[0].toolInvocation.toolCallId).toBe('call-1');
+      expect(toolParts[0].toolInvocation.state).toBe('result');
+      expect(toolParts[0].toolInvocation.result).toEqual({ type: 'json', value: { temp: 15 } });
+    });
   });
 
   describe('tripwire/abort functionality', () => {
@@ -594,6 +767,62 @@ describe('withMastra middleware', () => {
       expect(texts).toContain('The answer is 42.');
     });
 
+    it('should save messages via observational memory after streaming completes', async () => {
+      const observationalMemory = new ObservationalMemory({
+        storage: memoryStore,
+        observation: { messageTokens: 100000, model: 'test-model', bufferTokens: false },
+        reflection: { observationTokens: 200000, model: 'test-model' },
+      });
+
+      const model = withMastra(createMockModel(), {
+        memory: {
+          storage: memoryStore,
+          threadId,
+          resourceId,
+          lastMessages: false,
+        },
+        inputProcessors: [observationalMemory],
+        outputProcessors: [observationalMemory],
+      });
+
+      const { messages: initialMessages } = await memoryStore.listMessages({ threadId });
+      expect(initialMessages).toHaveLength(0);
+
+      const { textStream } = await streamText({
+        model,
+        prompt: 'What is streaming?',
+      });
+
+      let fullText = '';
+      for await (const chunk of textStream) {
+        fullText += chunk;
+      }
+
+      expect(fullText).toBe('Test response');
+
+      const { messages: storedMessages } = await memoryStore.listMessages({
+        threadId,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+
+      expect(storedMessages.length).toBeGreaterThanOrEqual(2);
+
+      const roles = storedMessages.map(m => m.role);
+      expect(roles).toContain('user');
+      expect(roles).toContain('assistant');
+
+      const texts = storedMessages.map(
+        m =>
+          m.content?.parts
+            ?.filter((p: any) => p.type === 'text')
+            .map((p: any) => p.text)
+            .join('') || '',
+      );
+
+      expect(texts).toContain('What is streaming?');
+      expect(texts).toContain('Test response');
+    });
+
     it('should respect lastMessages limit', async () => {
       // Seed 10 historical messages
       const historicalMessages: MastraDBMessage[] = [];
@@ -692,6 +921,80 @@ describe('withMastra middleware', () => {
       const definedIds = messageIds.filter(Boolean);
       const uniqueIds = new Set(definedIds);
       expect(uniqueIds.size).toBe(definedIds.length);
+    });
+
+    it('should not re-persist historical messages on subsequent turns', async () => {
+      const model1 = withMastra(createMockModel('First response'), {
+        memory: {
+          storage: memoryStore,
+          threadId,
+          resourceId,
+          lastMessages: 10,
+        },
+      });
+
+      await generateText({
+        model: model1,
+        prompt: 'First question',
+      });
+
+      const { messages: afterTurn1 } = await memoryStore.listMessages({
+        threadId,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+      expect(afterTurn1).toHaveLength(2);
+      const turn1Roles = afterTurn1.map(m => m.role);
+      expect(turn1Roles).toContain('user');
+      expect(turn1Roles).toContain('assistant');
+
+      const model2 = withMastra(createMockModel('Second response'), {
+        memory: {
+          storage: memoryStore,
+          threadId,
+          resourceId,
+          lastMessages: 10,
+        },
+      });
+
+      await generateText({
+        model: model2,
+        prompt: 'Second question',
+      });
+
+      const { messages: afterTurn2 } = await memoryStore.listMessages({
+        threadId,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+      expect(afterTurn2).toHaveLength(4);
+
+      const texts = afterTurn2.map(
+        m =>
+          m.content?.parts
+            ?.filter((p: any) => p.type === 'text')
+            .map((p: any) => p.text)
+            .join('') || '',
+      );
+      expect(texts.sort()).toEqual(['First question', 'First response', 'Second question', 'Second response'].sort());
+
+      const model3 = withMastra(createMockModel('Third response'), {
+        memory: {
+          storage: memoryStore,
+          threadId,
+          resourceId,
+          lastMessages: 10,
+        },
+      });
+
+      await generateText({
+        model: model3,
+        prompt: 'Third question',
+      });
+
+      const { messages: afterTurn3 } = await memoryStore.listMessages({
+        threadId,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+      expect(afterTurn3).toHaveLength(6);
     });
 
     it('should handle multi-turn conversation with persistent storage', async () => {

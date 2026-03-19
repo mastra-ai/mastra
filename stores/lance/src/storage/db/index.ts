@@ -33,9 +33,63 @@ export function resolveLanceConfig(config: LanceDomainConfig): Connection {
 
 export class LanceDB extends MastraBase {
   client: Connection;
+
+  /** Cache of actual table columns: tableName -> Set<columnName> */
+  /** Cache of actual table columns: tableName -> Promise<Set<columnName>> (stores in-flight promise to coalesce concurrent calls) */
+  private tableColumnsCache = new Map<string, Promise<Set<string>>>();
+
   constructor({ client }: { client: Connection }) {
     super({ name: 'lance-db' });
     this.client = client;
+  }
+
+  /**
+   * Gets the set of column names that actually exist in the database table.
+   * Results are cached; the cache is invalidated when alterTable() adds new columns.
+   */
+  private async getTableColumns(tableName: string): Promise<Set<string>> {
+    const cached = this.tableColumnsCache.get(tableName);
+    if (cached) return cached;
+
+    // Store the in-flight promise so concurrent callers (e.g. Promise.all in batchInsert) await the same query
+    const promise = (async () => {
+      try {
+        const table = await this.client.openTable(tableName);
+        const schema = await table.schema();
+        const columns = new Set(schema.fields.map((f: any) => f.name as string));
+        if (columns.size === 0) {
+          this.tableColumnsCache.delete(tableName);
+        }
+        return columns;
+      } catch {
+        // Table may not exist yet
+        this.tableColumnsCache.delete(tableName);
+        return new Set<string>();
+      }
+    })();
+    this.tableColumnsCache.set(tableName, promise);
+
+    return promise;
+  }
+
+  /**
+   * Filters a record to only include columns that exist in the actual database table.
+   * Unknown columns are silently dropped to ensure forward compatibility.
+   */
+  private async filterRecordToKnownColumns(
+    tableName: string,
+    record: Record<string, any>,
+  ): Promise<Record<string, any>> {
+    const knownColumns = await this.getTableColumns(tableName);
+    if (knownColumns.size === 0) return record;
+
+    const filtered: Record<string, any> = {};
+    for (const [key, value] of Object.entries(record)) {
+      if (knownColumns.has(key)) {
+        filtered[key] = value;
+      }
+    }
+    return filtered;
   }
 
   protected getDefaultValue(type: StorageColumn['type']): string {
@@ -149,6 +203,8 @@ export class LanceDB extends MastraBase {
         },
         error,
       );
+    } finally {
+      this.tableColumnsCache.delete(tableName);
     }
   }
 
@@ -189,6 +245,8 @@ export class LanceDB extends MastraBase {
         },
         error,
       );
+    } finally {
+      this.tableColumnsCache.delete(tableName);
     }
   }
 
@@ -269,6 +327,9 @@ export class LanceDB extends MastraBase {
         },
         error,
       );
+    } finally {
+      // Invalidate cached columns after DDL completes so concurrent writers see the new schema
+      this.tableColumnsCache.delete(tableName);
     }
   }
 
@@ -353,7 +414,11 @@ export class LanceDB extends MastraBase {
         }
       }
 
-      await table.mergeInsert(primaryId).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([processedRecord]);
+      // Filter out columns that don't exist in the actual database table
+      const filteredRecord = await this.filterRecordToKnownColumns(tableName, processedRecord);
+      if (Object.keys(filteredRecord).length === 0) return; // No known columns after filtering - skip insert
+
+      await table.mergeInsert(primaryId).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([filteredRecord]);
     } catch (error: any) {
       throw new MastraError(
         {
@@ -416,7 +481,15 @@ export class LanceDB extends MastraBase {
         return processedRecord;
       });
 
-      await table.mergeInsert(primaryId).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute(processedRecords);
+      // Filter out columns that don't exist in the actual database table
+      const filteredRecords = await Promise.all(
+        processedRecords.map(r => this.filterRecordToKnownColumns(tableName, r)),
+      );
+      // Skip records that have no known columns after filtering
+      const nonEmptyRecords = filteredRecords.filter(r => Object.keys(r).length > 0);
+      if (nonEmptyRecords.length === 0) return;
+
+      await table.mergeInsert(primaryId).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute(nonEmptyRecords);
     } catch (error: any) {
       throw new MastraError(
         {

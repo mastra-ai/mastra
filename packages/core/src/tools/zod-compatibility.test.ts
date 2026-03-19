@@ -1,8 +1,7 @@
 import { describe, it, expect, expectTypeOf } from 'vitest';
-import { z } from 'zod';
-import { z as zv4 } from 'zod/v4';
+import { z as zv4 } from 'zod';
+import { z } from 'zod/v3';
 
-import type { ZodLikeSchema } from '../types/zod-compat';
 import { createTool } from './tool';
 
 describe('Zod v3 and v4 Compatibility', () => {
@@ -81,8 +80,8 @@ describe('Zod v3 and v4 Compatibility', () => {
       expect(typeof v4Schema.safeParse).toBe('function');
 
       // Type assertion to ensure they match our interface
-      const testV3: ZodLikeSchema = v3Schema;
-      const testV4: ZodLikeSchema = v4Schema;
+      const testV3: z.ZodSchema = v3Schema;
+      const testV4: z.ZodSchema = v4Schema;
 
       expect(testV3).toBeDefined();
       expect(testV4).toBeDefined();

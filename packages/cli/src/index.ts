@@ -15,8 +15,8 @@ import { listScorers } from './commands/actions/list-scorers';
 import { migrate } from './commands/actions/migrate';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
+import { startStudio } from './commands/actions/start-studio';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
-import { studio } from './commands/studio';
 import { parseComponents, parseLlmProvider, parseMcp, parseSkills } from './commands/utils';
 
 const mastraPkg = pkgJson as PackageJson;
@@ -162,7 +162,7 @@ program
   .option('-x, --server-protocol <serverProtocol>', 'Protocol of the Mastra API server (default: http)')
   .option('--server-api-prefix <serverApiPrefix>', 'API route prefix of the Mastra server (default: /api)')
   .option('--request-context-presets <file>', 'Path to request context presets JSON file')
-  .action(studio);
+  .action(startStudio);
 
 program
   .command('migrate')

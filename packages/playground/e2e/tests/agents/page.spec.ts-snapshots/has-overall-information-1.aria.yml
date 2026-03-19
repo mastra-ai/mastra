@@ -7,16 +7,49 @@
     - rowgroup:
         - 'row "Weather Agent You are a helpful weather assistant that provides accurate weather information. Your primary function is to help users get weather details for specific locations. When responding: - Always ask for a location if none is provided - If the location name isn''t in English, please translate it - If giving a location with multiple parts (e.g. \"New York, NY\"), use the most relevant part (e.g. \"New York\") - Include relevant details like humidity, wind conditions, and precipitation - Keep responses concise but informative mock-model-id 1 agent 2 tools 1 workflow"':
             - 'cell "Weather Agent You are a helpful weather assistant that provides accurate weather information. Your primary function is to help users get weather details for specific locations. When responding: - Always ask for a location if none is provided - If the location name isn''t in English, please translate it - If giving a location with multiple parts (e.g. \"New York, NY\"), use the most relevant part (e.g. \"New York\") - Include relevant details like humidity, wind conditions, and precipitation - Keep responses concise but informative"':
+                - img
                 - link "Weather Agent":
-                    - /url: /agents/weather-agent
-                - text: 'You are a helpful weather assistant that provides accurate weather information. Your primary function is to help users get weather details for specific locations. When responding: - Always ask for a location if none is provided - If the location name isn''t in English, please translate it - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York") - Include relevant details like humidity, wind conditions, and precipitation - Keep responses concise but informative'
+                    - /url: /agents/weather-agent/chat/new
+                - text: ''
             - cell "mock-model-id":
                 - img
-                - text: mock-model-id
+                - text: ''
             - cell "1 agent 2 tools 1 workflow":
                 - img
-                - text: 1 agent
+                - text: ''
                 - img
-                - text: 2 tools
+                - text: ''
                 - img
-                - text: 1 workflow
+                - text: ''
+        - row "OM Agent You are a helpful assistant with observational memory enabled. Your memory system automatically observes and compresses conversation history. Always use the test tool first before responding to the user. gpt-4o-mini 0 agents 1 tool 0 workflows":
+            - cell "OM Agent You are a helpful assistant with observational memory enabled. Your memory system automatically observes and compresses conversation history. Always use the test tool first before responding to the user.":
+                - img
+                - link "OM Agent":
+                    - /url: /agents/om-agent/chat/new
+                - text: ''
+            - cell "gpt-4o-mini":
+                - img
+                - text: ''
+            - cell "0 agents 1 tool 0 workflows":
+                - img
+                - text: ''
+                - img
+                - text: ''
+                - img
+                - text: ''
+        - row "OM Adaptive Agent You are a helpful assistant with adaptive observational memory. Your memory thresholds adjust dynamically based on current observation size. Always use the test tool first before responding to the user. gpt-4o-mini 0 agents 1 tool 0 workflows":
+            - cell "OM Adaptive Agent You are a helpful assistant with adaptive observational memory. Your memory thresholds adjust dynamically based on current observation size. Always use the test tool first before responding to the user.":
+                - img
+                - link "OM Adaptive Agent":
+                    - /url: /agents/om-adaptive-agent/chat/new
+                - text: ''
+            - cell "gpt-4o-mini":
+                - img
+                - text: ''
+            - cell "0 agents 1 tool 0 workflows":
+                - img
+                - text: ''
+                - img
+                - text: ''
+                - img
+                - text: ''

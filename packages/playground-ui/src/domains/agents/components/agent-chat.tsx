@@ -19,7 +19,12 @@ export const AgentChat = ({
   modelList,
   messageId,
   isNewThread,
-}: Omit<ChatProps, 'initialMessages' | 'initialLegacyMessages'> & { messageId?: string; isNewThread?: boolean }) => {
+  hideModelSwitcher,
+}: Omit<ChatProps, 'initialMessages' | 'initialLegacyMessages'> & {
+  messageId?: string;
+  isNewThread?: boolean;
+  hideModelSwitcher?: boolean;
+}) => {
   const { settings } = useAgentSettings();
   const requestContext = useMergedRequestContext();
 
@@ -46,7 +51,12 @@ export const AgentChat = ({
     }
   }, [messageId, data, isMessagesLoading]);
 
-  const messages = data?.messages ?? [];
+  // Stable empty array per thread: stays the same reference across re-renders
+  // (preventing useChat from wiping streamed messages), but changes when threadId
+  // changes (allowing useChat to reset when switching threads).
+  const emptyMessages = useMemo(() => [] as never[], [threadId]);
+
+  const messages = data?.messages ?? emptyMessages;
   const v5Messages = useMemo(() => toAISdkV5Messages(messages) as MastraUIMessage[], [messages]);
   const v4Messages = useMemo(() => toAISdkV4Messages(messages), [messages]);
 
@@ -63,7 +73,13 @@ export const AgentChat = ({
       settings={settings}
       requestContext={requestContext}
     >
-      <Thread agentName={agentName ?? ''} hasMemory={memory} agentId={agentId} hasModelList={Boolean(modelList)} />
+      <Thread
+        agentName={agentName ?? ''}
+        hasMemory={memory}
+        agentId={agentId}
+        hasModelList={Boolean(modelList)}
+        hideModelSwitcher={hideModelSwitcher}
+      />
     </MastraRuntimeProvider>
   );
 };

@@ -14,6 +14,8 @@ import type {
   DeleteVectorsParams,
 } from '@mastra/core/vector';
 import { MastraVector, validateUpsert, validateTopK } from '@mastra/core/vector';
+
+import packageJson from '../../package.json';
 import { ElasticSearchFilterTranslator } from './filter';
 import type { ElasticSearchVectorFilter } from './filter';
 
@@ -33,18 +35,39 @@ type ElasticSearchVectorParams = QueryVectorParams<ElasticSearchVectorFilter>;
 
 export type ElasticSearchAuth = { apiKey: string } | { username: string; password: string } | { bearer: string };
 
+export type ElasticSearchVectorConfig =
+  | { id: string; client: ElasticSearchClient; url?: never; auth?: never }
+  | { id: string; url: string; auth?: ElasticSearchAuth; client?: never };
+
 export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter> {
   private client: ElasticSearchClient;
 
   /**
    * Creates a new ElasticSearchVector client.
    *
-   * @param {string} url - The url of the ElasticSearch node.
-   * @param {ElasticSearchAuth} [auth] - The authentication credentials for ElasticSearch.
+   * Accepts either a pre-configured ElasticSearch client or connection parameters:
+   * - `{ id, client }` - Use an existing ElasticSearch client
+   * - `{ id, url, auth? }` - Create a new client from connection parameters
    */
-  constructor({ url, id, auth }: { url: string } & { id: string } & { auth?: ElasticSearchAuth }) {
-    super({ id });
-    this.client = new ElasticSearchClient({ node: url, ...(auth && { auth }) });
+  constructor(config: ElasticSearchVectorConfig) {
+    super({ id: config.id });
+    if ('client' in config && config.client) {
+      this.client = config.client;
+    } else if ('url' in config && config.url) {
+      this.client = new ElasticSearchClient({
+        node: config.url,
+        ...(config.auth && { auth: config.auth }),
+        name: 'mastra-elasticsearch',
+        headers: { 'user-agent': `mastra-es/${packageJson.version}` },
+      });
+    } else {
+      throw new MastraError({
+        id: 'ELASTIC_SEARCH_CONSTRUCTOR_ERROR',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Invalid config: provide either { client } or { url }.',
+      });
+    }
   }
 
   /**
@@ -364,6 +387,16 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     topK = 10,
     includeVector = false,
   }: ElasticSearchVectorParams): Promise<QueryResult[]> {
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('ELASTICSEARCH', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for Elasticsearch queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     // Validate topK parameter
     validateTopK('ELASTICSEARCH', topK);
 

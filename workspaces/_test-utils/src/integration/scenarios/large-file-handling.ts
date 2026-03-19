@@ -10,16 +10,7 @@ import { createHash } from 'node:crypto';
 import { describe, it, expect, afterEach } from 'vitest';
 
 import { generateTextContent, generateBinaryContent, cleanupTestPath } from '../../test-helpers';
-import type { WorkspaceSetup } from '../types';
-
-interface TestContext {
-  setup: WorkspaceSetup;
-  getTestPath: () => string;
-  /** Mount path prefix for sandbox commands (e.g. '/data/s3'). Empty string if paths match. */
-  mountPath: string;
-  testTimeout: number;
-  fastOnly: boolean;
-}
+import type { TestContext } from './test-context';
 
 const FIVE_MB = 5 * 1024 * 1024;
 const ONE_MB = 1 * 1024 * 1024;
@@ -27,8 +18,10 @@ const ONE_MB = 1 * 1024 * 1024;
 export function createLargeFileHandlingTests(getContext: () => TestContext): void {
   describe('Large File Handling', () => {
     afterEach(async () => {
-      const { setup, getTestPath } = getContext();
-      await cleanupTestPath(setup.filesystem, getTestPath());
+      const { workspace, getTestPath } = getContext();
+      if (workspace.filesystem) {
+        await cleanupTestPath(workspace.filesystem, getTestPath());
+      }
     });
 
     it(
@@ -36,12 +29,13 @@ export function createLargeFileHandlingTests(getContext: () => TestContext): voi
       async () => {
         const ctx = getContext();
         if (ctx.fastOnly) return;
+        if (!ctx.workspace.filesystem) return;
 
         const filePath = `${ctx.getTestPath()}/large-text-5mb.txt`;
         const content = generateTextContent(FIVE_MB);
 
-        await ctx.setup.filesystem.writeFile(filePath, content);
-        const result = await ctx.setup.filesystem.readFile(filePath, { encoding: 'utf-8' });
+        await ctx.workspace.filesystem.writeFile(filePath, content);
+        const result = await ctx.workspace.filesystem.readFile(filePath, { encoding: 'utf-8' });
 
         expect(result).toBe(content);
       },
@@ -53,13 +47,14 @@ export function createLargeFileHandlingTests(getContext: () => TestContext): voi
       async () => {
         const ctx = getContext();
         if (ctx.fastOnly) return;
+        if (!ctx.workspace.filesystem) return;
 
         const filePath = `${ctx.getTestPath()}/large-binary-5mb.bin`;
         const content = generateBinaryContent(FIVE_MB);
         const expectedHash = createHash('sha256').update(content).digest('hex');
 
-        await ctx.setup.filesystem.writeFile(filePath, content);
-        const result = await ctx.setup.filesystem.readFile(filePath);
+        await ctx.workspace.filesystem.writeFile(filePath, content);
+        const result = await ctx.workspace.filesystem.readFile(filePath);
 
         const resultBuffer = Buffer.isBuffer(result) ? result : Buffer.from(result as string);
         const actualHash = createHash('sha256').update(resultBuffer).digest('hex');
@@ -74,16 +69,15 @@ export function createLargeFileHandlingTests(getContext: () => TestContext): voi
       async () => {
         const ctx = getContext();
         if (ctx.fastOnly) return;
-        if (!ctx.setup.sandbox.executeCommand) return;
+        if (!ctx.workspace.filesystem || !ctx.workspace.sandbox?.executeCommand) return;
 
-        const fsPath = `${ctx.getTestPath()}/large-sandbox-1mb.txt`;
-        const sandboxPath = `${ctx.mountPath}${fsPath}`;
+        const filePath = `${ctx.getTestPath()}/large-sandbox-1mb.txt`;
         const content = generateTextContent(ONE_MB);
 
-        await ctx.setup.filesystem.writeFile(fsPath, content);
+        await ctx.workspace.filesystem.writeFile(filePath, content);
 
-        // Verify size via wc -c in sandbox
-        const result = await ctx.setup.sandbox.executeCommand('wc', ['-c', sandboxPath]);
+        // Verify size via wc -c in sandbox (same path — mountPath baked into getTestPath)
+        const result = await ctx.workspace.sandbox.executeCommand('wc', ['-c', filePath]);
         expect(result.exitCode).toBe(0);
 
         // wc -c output is like "1048576 /path/to/file" or just "1048576"
@@ -99,13 +93,14 @@ export function createLargeFileHandlingTests(getContext: () => TestContext): voi
       async () => {
         const ctx = getContext();
         if (ctx.fastOnly) return;
+        if (!ctx.workspace.filesystem) return;
 
         const filePath = `${ctx.getTestPath()}/large-stat-5mb.bin`;
         const content = generateBinaryContent(FIVE_MB);
 
-        await ctx.setup.filesystem.writeFile(filePath, content);
+        await ctx.workspace.filesystem.writeFile(filePath, content);
 
-        const statResult = await ctx.setup.filesystem.stat(filePath);
+        const statResult = await ctx.workspace.filesystem.stat(filePath);
         expect(statResult.size).toBe(FIVE_MB);
       },
       getContext().testTimeout,

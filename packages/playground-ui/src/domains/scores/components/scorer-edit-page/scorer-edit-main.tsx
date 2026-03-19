@@ -1,8 +1,6 @@
 import { Controller, UseFormReturn } from 'react-hook-form';
-import { FileText } from 'lucide-react';
 
 import { CodeEditor } from '@/ds/components/CodeEditor';
-import { Icon } from '@/ds/icons';
 import { SectionHeader } from '@/domains/cms';
 
 import type { ScorerFormValues } from './utils/form-validation';
@@ -16,15 +14,7 @@ export function ScorerEditMain({ form }: ScorerEditMainProps) {
 
   return (
     <div className="flex flex-col gap-3 h-full px-4">
-      <SectionHeader
-        title="Instructions"
-        subtitle="Write your scorer's system prompt."
-        icon={
-          <Icon>
-            <FileText className="text-accent5" />
-          </Icon>
-        }
-      />
+      <SectionHeader title="Instructions" subtitle="Write your scorer's system prompt." />
       <Controller
         name="instructions"
         control={control}

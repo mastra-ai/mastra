@@ -15,7 +15,7 @@ import {
 import { Link } from 'react-router';
 
 function Workflows() {
-  const { data: workflows, isLoading } = useWorkflows();
+  const { data: workflows, isLoading, error } = useWorkflows();
 
   const isEmpty = !isLoading && Object.keys(workflows || {}).length === 0;
 
@@ -30,17 +30,15 @@ function Workflows() {
         </HeaderTitle>
 
         <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/en/docs/workflows/overview" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
+          <Button as={Link} to="https://mastra.ai/en/docs/workflows/overview" target="_blank" variant="ghost" size="md">
+            <DocsIcon />
             Workflows documentation
           </Button>
         </HeaderAction>
       </Header>
 
       <MainContentContent isCentered={isEmpty}>
-        <WorkflowTable workflows={workflows || {}} isLoading={isLoading} />
+        <WorkflowTable workflows={workflows || {}} isLoading={isLoading} error={error} />
       </MainContentContent>
     </MainContentLayout>
   );

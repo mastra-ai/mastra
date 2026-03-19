@@ -127,12 +127,7 @@ export async function getVersionBumps(
   };
 
   if (skipPrompt) {
-    const bumpTypes: Array<keyof PreSelectedPackages> = ['major', 'minor', 'patch'];
-    bumpTypes.forEach(bumpType => {
-      preSelectedPackages[bumpType].forEach(pkg => {
-        versionBumps[pkg] = bumpType as BumpType;
-      });
-    });
+    versionBumps = processBumpSelections(preSelectedPackages, versionBumps);
   } else {
     const bumpSelections = await promptForVersionBumps({ preSelectedPackages, onCancel });
 

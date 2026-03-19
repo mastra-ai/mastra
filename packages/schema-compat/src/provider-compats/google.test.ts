@@ -105,6 +105,76 @@ describe('GoogleSchemaCompatLayer', () => {
 
       expect(jsonSchema).toMatchSnapshot();
     });
+
+    it('should handle nullish fields (optional + nullable)', () => {
+      const schema = z.object({
+        name: z.string(),
+        threadId: z.string().nullish(),
+        maxSteps: z.number().nullish(),
+      });
+
+      const layer = new GoogleSchemaCompatLayer(modelInfo);
+      const jsonSchema = layer.processToJSONSchema(schema);
+
+      // Nullish fields should not produce union type arrays like ["string", "null"]
+      // which Gemini rejects with INVALID_ARGUMENT
+      expect(jsonSchema).toMatchSnapshot();
+      const properties = jsonSchema.properties as Record<string, any>;
+      if (properties?.threadId?.type) {
+        expect(Array.isArray(properties.threadId.type)).toBe(false);
+      }
+      if (properties?.maxSteps?.type) {
+        expect(Array.isArray(properties.maxSteps.type)).toBe(false);
+      }
+    });
+
+    it('should handle nullish fields in AI SDK schema', () => {
+      const schema = z.object({
+        name: z.string(),
+        threadId: z.string().nullish(),
+        maxSteps: z.number().nullish(),
+      });
+
+      const layer = new GoogleSchemaCompatLayer(modelInfo);
+      const result = layer.processToAISDKSchema(schema);
+
+      expect(result).toHaveProperty('jsonSchema');
+      expect(result).toHaveProperty('validate');
+      // AI SDK schema should not contain union type arrays for nullish fields
+      const properties = (result.jsonSchema as any).properties;
+      if (properties?.threadId?.type) {
+        expect(Array.isArray(properties.threadId.type)).toBe(false);
+      }
+      if (properties?.maxSteps?.type) {
+        expect(Array.isArray(properties.maxSteps.type)).toBe(false);
+      }
+    });
+
+    it('should handle agent delegation tool schema pattern', () => {
+      // This mirrors the exact schema used in agent network delegation tools
+      const schema = z.object({
+        threadId: z.string().nullish().describe('The thread ID to use'),
+        resourceId: z.string().nullish().describe('The resource ID to use'),
+        instructions: z.string().describe('Instructions for the agent'),
+        maxSteps: z.number().nullish().describe('Max steps for the agent'),
+        suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional().default(''),
+        resumeData: z
+          .any()
+          .describe('The resumeData object created from the resumeSchema of suspended tool')
+          .optional(),
+      });
+
+      const layer = new GoogleSchemaCompatLayer(modelInfo);
+      const result = layer.processToAISDKSchema(schema);
+
+      // Verify no union type arrays exist in the schema
+      const properties = (result.jsonSchema as any).properties;
+      for (const [_key, prop] of Object.entries(properties || {})) {
+        if ((prop as any)?.type) {
+          expect(Array.isArray((prop as any).type)).toBe(false);
+        }
+      }
+    });
   });
 
   describe('processZodType - Nested Objects', () => {
@@ -809,6 +879,226 @@ describe('GoogleSchemaCompatLayer', () => {
       const jsonSchema = layer.processToJSONSchema(schema);
 
       expect(jsonSchema).toMatchSnapshot();
+    });
+  });
+
+  describe('processZodType - ZodIntersection', () => {
+    const modelInfo: ModelInformation = {
+      provider: 'google',
+      modelId: 'gemini-pro',
+      supportsStructuredOutputs: false,
+    };
+
+    it('should handle simple two-object intersection without throwing', () => {
+      const schemaA = z.object({ name: z.string() });
+      const schemaB = z.object({ age: z.number() });
+      const schema = z.object({ person: schemaA.and(schemaB) });
+
+      const layer = new GoogleSchemaCompatLayer(modelInfo);
+      expect(() => layer.processToJSONSchema(schema)).not.toThrow();
+
+      const jsonSchema = layer.processToJSONSchema(schema);
+      expect(jsonSchema.properties?.person).toBeDefined();
+    });
+
+    it('should handle chained .and().and() (three-way merge)', () => {
+      const schemaA = z.object({ name: z.string() });
+      const schemaB = z.object({ age: z.number() });
+      const schemaC = z.object({ email: z.string() });
+      const schema = z.object({ person: schemaA.and(schemaB).and(schemaC) });
+
+      const layer = new GoogleSchemaCompatLayer(modelInfo);
+      expect(layer.processToJSONSchema(schema)).toMatchInlineSnapshot(`
+        {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false,
+          "properties": {
+            "person": {
+              "additionalProperties": false,
+              "properties": {
+                "age": {
+                  "type": "number",
+                },
+                "email": {
+                  "type": "string",
+                },
+                "name": {
+                  "type": "string",
+                },
+              },
+              "required": [
+                "name",
+                "age",
+                "email",
+              ],
+              "type": "object",
+            },
+          },
+          "required": [
+            "person",
+          ],
+          "type": "object",
+        }
+      `);
+    });
+
+    it('should handle intersection inside a parent object', () => {
+      const schema = z.object({
+        metadata: z.object({ key: z.string() }).and(z.object({ value: z.number() })),
+        label: z.string(),
+      });
+
+      const layer = new GoogleSchemaCompatLayer(modelInfo);
+      expect(layer.processToJSONSchema(schema)).toMatchInlineSnapshot(`
+        {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false,
+          "properties": {
+            "label": {
+              "type": "string",
+            },
+            "metadata": {
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "type": "string",
+                },
+                "value": {
+                  "type": "number",
+                },
+              },
+              "required": [
+                "key",
+                "value",
+              ],
+              "type": "object",
+            },
+          },
+          "required": [
+            "metadata",
+            "label",
+          ],
+          "type": "object",
+        }
+      `);
+    });
+
+    it('should handle optional intersection wrapper', () => {
+      const schema = z.object({
+        data: z
+          .object({ a: z.string() })
+          .and(z.object({ b: z.number() }))
+          .optional(),
+      });
+
+      const layer = new GoogleSchemaCompatLayer(modelInfo);
+      expect(layer.processToJSONSchema(schema)).toMatchInlineSnapshot(`
+        {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false,
+          "properties": {
+            "data": {
+              "additionalProperties": false,
+              "properties": {
+                "a": {
+                  "type": "string",
+                },
+                "b": {
+                  "type": "number",
+                },
+              },
+              "required": [
+                "a",
+                "b",
+              ],
+              "type": "object",
+            },
+          },
+          "type": "object",
+        }
+      `);
+    });
+
+    it('should handle intersection nested inside a union (allOf inside anyOf)', () => {
+      const schema = z.object({
+        locate: z.object({
+          prompt: z.union([
+            z.string(),
+            z.object({ prompt: z.string() }).and(
+              z.object({
+                images: z.array(z.object({ name: z.string(), url: z.string() })),
+                convertHttpImage2Base64: z.boolean(),
+              }),
+            ),
+          ]),
+        }),
+      });
+
+      const layer = new GoogleSchemaCompatLayer(modelInfo);
+      expect(layer.processToJSONSchema(schema)).toMatchInlineSnapshot(`
+        {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false,
+          "properties": {
+            "locate": {
+              "additionalProperties": false,
+              "properties": {
+                "prompt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "convertHttpImage2Base64": {
+                          "type": "boolean",
+                        },
+                        "images": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                              },
+                              "url": {
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "name",
+                              "url",
+                            ],
+                            "type": "object",
+                          },
+                          "type": "array",
+                        },
+                        "prompt": {
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "prompt",
+                        "images",
+                        "convertHttpImage2Base64",
+                      ],
+                      "type": "object",
+                    },
+                  ],
+                },
+              },
+              "required": [
+                "prompt",
+              ],
+              "type": "object",
+            },
+          },
+          "required": [
+            "locate",
+          ],
+          "type": "object",
+        }
+      `);
     });
   });
 });

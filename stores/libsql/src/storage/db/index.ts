@@ -74,6 +74,9 @@ export class LibSQLDB extends MastraBase {
   initialBackoffMs: number;
   executeWriteOperationWithRetry: <T>(operationFn: () => Promise<T>, operationDescription: string) => Promise<T>;
 
+  /** Cache of actual table columns: tableName -> Promise<Set<columnName>> (stores in-flight promise to coalesce concurrent calls) */
+  private tableColumnsCache = new Map<string, Promise<Set<string>>>();
+
   constructor({
     client,
     maxRetries,
@@ -97,6 +100,58 @@ export class LibSQLDB extends MastraBase {
       maxRetries: this.maxRetries,
       initialBackoffMs: this.initialBackoffMs,
     });
+  }
+
+  /**
+   * Gets the set of column names that actually exist in the database table.
+   * Results are cached; the cache is invalidated when alterTable() adds new columns.
+   */
+  private async getTableColumns(tableName: TABLE_NAMES): Promise<Set<string>> {
+    const cached = this.tableColumnsCache.get(tableName);
+    if (cached) return cached;
+
+    // Store the in-flight promise so concurrent callers (e.g. Promise.all in doBatchInsert) await the same query
+    const promise = (async () => {
+      try {
+        const sanitizedTable = parseSqlIdentifier(tableName, 'table name');
+        const result = await this.client.execute({
+          sql: `PRAGMA table_info("${sanitizedTable}")`,
+        });
+
+        const columns = new Set((result.rows || []).map((row: any) => row.name as string));
+        if (columns.size === 0) {
+          this.tableColumnsCache.delete(tableName);
+        }
+        return columns;
+      } catch (error) {
+        // Remove rejected promise so transient errors don't stay permanently cached
+        this.tableColumnsCache.delete(tableName);
+        throw error;
+      }
+    })();
+    this.tableColumnsCache.set(tableName, promise);
+
+    return promise;
+  }
+
+  /**
+   * Filters a record to only include columns that exist in the actual database table.
+   * Unknown columns are silently dropped to ensure forward compatibility.
+   */
+  private async filterRecordToKnownColumns(
+    tableName: TABLE_NAMES,
+    record: Record<string, any>,
+  ): Promise<Record<string, any>> {
+    const knownColumns = await this.getTableColumns(tableName);
+    if (knownColumns.size === 0) return record;
+
+    const filtered: Record<string, any> = {};
+    for (const [key, value] of Object.entries(record)) {
+      if (knownColumns.has(key)) {
+        filtered[key] = value;
+      }
+    }
+    return filtered;
   }
 
   /**
@@ -124,10 +179,13 @@ export class LibSQLDB extends MastraBase {
     tableName: TABLE_NAMES;
     record: Record<string, any>;
   }): Promise<void> {
+    // Filter out columns that don't exist in the actual database table
+    const filteredRecord = await this.filterRecordToKnownColumns(tableName, record);
+    if (Object.keys(filteredRecord).length === 0) return; // No known columns after filtering - skip insert
     await this.client.execute(
       prepareStatement({
         tableName,
-        record,
+        record: filteredRecord,
       }),
     );
   }
@@ -155,7 +213,10 @@ export class LibSQLDB extends MastraBase {
     keys: Record<string, any>;
     data: Record<string, any>;
   }): Promise<void> {
-    await this.client.execute(prepareUpdateStatement({ tableName, updates: data, keys }));
+    // Filter out columns that don't exist in the actual database table
+    const filteredData = await this.filterRecordToKnownColumns(tableName, data);
+    if (Object.keys(filteredData).length === 0) return; // Nothing to update after filtering
+    await this.client.execute(prepareUpdateStatement({ tableName, updates: filteredData, keys }));
   }
 
   /**
@@ -181,7 +242,12 @@ export class LibSQLDB extends MastraBase {
     records: Record<string, any>[];
   }): Promise<void> {
     if (records.length === 0) return;
-    const batchStatements = records.map(r => prepareStatement({ tableName, record: r }));
+    // Filter out columns that don't exist in the actual database table
+    const filteredRecords = await Promise.all(records.map(r => this.filterRecordToKnownColumns(tableName, r)));
+    // Skip records that have no known columns after filtering
+    const nonEmptyRecords = filteredRecords.filter(r => Object.keys(r).length > 0);
+    if (nonEmptyRecords.length === 0) return;
+    const batchStatements = nonEmptyRecords.map(r => prepareStatement({ tableName, record: r }));
     await this.client.batch(batchStatements, 'write');
   }
 
@@ -228,7 +294,17 @@ export class LibSQLDB extends MastraBase {
   }): Promise<void> {
     if (updates.length === 0) return;
 
-    const batchStatements = updates.map(({ keys, data }) =>
+    // Filter out columns that don't exist in the actual database table
+    const filteredUpdates: Array<{ keys: Record<string, any>; data: Record<string, any> }> = [];
+    for (const { keys, data } of updates) {
+      const filteredData = await this.filterRecordToKnownColumns(tableName, data);
+      if (Object.keys(filteredData).length > 0) {
+        filteredUpdates.push({ keys, data: filteredData });
+      }
+    }
+    if (filteredUpdates.length === 0) return;
+
+    const batchStatements = filteredUpdates.map(({ keys, data }) =>
       prepareUpdateStatement({
         tableName,
         updates: data,
@@ -539,23 +615,43 @@ export class LibSQLDB extends MastraBase {
   async createTable({
     tableName,
     schema,
+    compositePrimaryKey,
   }: {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
+    compositePrimaryKey?: string[];
   }): Promise<void> {
     try {
       const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+
+      // Validate composite PK columns exist in schema
+      if (compositePrimaryKey) {
+        for (const col of compositePrimaryKey) {
+          if (!(col in schema)) {
+            throw new Error(`compositePrimaryKey column "${col}" does not exist in schema for table "${tableName}"`);
+          }
+        }
+      }
+
+      const compositePKSet = compositePrimaryKey ? new Set(compositePrimaryKey) : null;
 
       // Build column definitions
       const columnDefinitions = Object.entries(schema).map(([colName, colDef]) => {
         const type = this.getSqlType(colDef.type);
         const nullable = colDef.nullable === false ? 'NOT NULL' : '';
-        const primaryKey = colDef.primaryKey ? 'PRIMARY KEY' : '';
+        // Skip per-column PRIMARY KEY if column is part of composite PK
+        const primaryKey = colDef.primaryKey && !compositePKSet?.has(colName) ? 'PRIMARY KEY' : '';
         return `"${colName}" ${type} ${nullable} ${primaryKey}`.trim();
       });
 
       // Add table-level constraints
       const tableConstraints: string[] = [];
+
+      if (compositePrimaryKey) {
+        const pkCols = compositePrimaryKey.map(c => `"${c}"`).join(', ');
+        tableConstraints.push(`PRIMARY KEY (${pkCols})`);
+      }
+
       if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
         tableConstraints.push('UNIQUE (workflow_name, run_id)');
       }
@@ -588,6 +684,8 @@ export class LibSQLDB extends MastraBase {
         },
         error,
       );
+    } finally {
+      this.tableColumnsCache.delete(tableName);
     }
   }
 
@@ -939,6 +1037,9 @@ export class LibSQLDB extends MastraBase {
         },
         error,
       );
+    } finally {
+      // Invalidate cached columns after DDL completes so concurrent writers see the new schema
+      this.tableColumnsCache.delete(tableName);
     }
   }
 

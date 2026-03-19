@@ -7,14 +7,17 @@ import {
   useScorers,
   useLinkComponent,
   useIsCmsAvailable,
+  Header,
+  HeaderTitle,
+  MainContentLayout,
+  ScorersTable,
 } from '@mastra/playground-ui';
-import { Header, HeaderTitle, MainContentLayout, ScorersTable } from '@mastra/playground-ui';
 import { GaugeIcon, Plus } from 'lucide-react';
 import { Link } from 'react-router';
 
 export default function Scorers() {
   const { Link: FrameworkLink } = useLinkComponent();
-  const { data: scorers = {}, isLoading } = useScorers();
+  const { data: scorers = {}, isLoading, error } = useScorers();
   const { isCmsAvailable } = useIsCmsAvailable();
 
   return (
@@ -33,20 +36,18 @@ export default function Scorers() {
               <Icon>
                 <Plus />
               </Icon>
-              Create a scorer
+              Create Scorer
             </Button>
           )}
-          <Button variant="outline" as={Link} to="https://mastra.ai/en/docs/evals/overview" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
+          <Button as={Link} to="https://mastra.ai/en/docs/evals/overview" target="_blank" variant="ghost" size="md">
+            <DocsIcon />
             Scorers documentation
           </Button>
         </HeaderAction>
       </Header>
 
       <MainContentContent isCentered={!isLoading && Object.keys(scorers || {}).length === 0}>
-        <ScorersTable isLoading={isLoading} scorers={scorers} />
+        <ScorersTable isLoading={isLoading} scorers={scorers} error={error} />
       </MainContentContent>
     </MainContentLayout>
   );

@@ -18,7 +18,7 @@ export const developerAgent = new Agent({
   name: 'Developer Agent',
   description: 'An agent that helps with code reviews and API design.',
   instructions: `You are a helpful developer assistant.`,
-  model: 'anthropic/claude-opus-4-5',
+  model: 'openai/gpt-5.3-codex',
   memory: new Memory({
     vector: new LibSQLVector({
       id: 'developer-agent-vector',

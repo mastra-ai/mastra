@@ -1,7 +1,21 @@
 import { convertToModelMessages } from '@internal/ai-sdk-v5';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { IMastraLogger } from '../../../logger';
 import type { MastraDBMessage } from '../index';
 import { MessageList } from '../index';
+
+function createMockLogger(): IMastraLogger & { warn: ReturnType<typeof vi.fn> } {
+  return {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    trackException: vi.fn(),
+    getTransports: vi.fn().mockReturnValue(new Map()),
+    listLogs: vi.fn().mockResolvedValue({ logs: [], total: 0, page: 1, perPage: 10, hasMore: false }),
+    listLogsByRunId: vi.fn().mockResolvedValue({ logs: [], total: 0, page: 1, perPage: 10, hasMore: false }),
+  };
+}
 
 describe('MessageList - Gemini Compatibility', () => {
   describe('aiV5.prompt() - Gemini message ordering requirements', () => {
@@ -96,21 +110,22 @@ describe('MessageList - Gemini Compatibility', () => {
       expect(prompt.filter(m => m.content === '.').length).toBe(0);
     });
 
-    it('should throw error for empty message list', () => {
+    it('should pass through empty message list unchanged', () => {
       const list = new MessageList();
 
-      expect(() => list.get.all.aiV5.prompt()).toThrow(
-        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-      );
+      const prompt = list.get.all.aiV5.prompt();
+      expect(prompt).toHaveLength(0);
     });
 
-    it('should throw error for system-only message list', () => {
-      const list = new MessageList();
+    it('should pass through system-only message list unchanged with warning', () => {
+      const logger = createMockLogger();
+      const list = new MessageList({ logger });
       list.addSystem('You are a helpful assistant');
 
-      expect(() => list.get.all.aiV5.prompt()).toThrow(
-        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-      );
+      const prompt = list.get.all.aiV5.prompt();
+      expect(prompt).toHaveLength(1);
+      expect(prompt[0].role).toBe('system');
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No user or assistant messages'));
     });
   });
 
@@ -146,21 +161,22 @@ describe('MessageList - Gemini Compatibility', () => {
       expect(llmPrompt[2].role).toBe('assistant');
     });
 
-    it('should throw error for empty message list in llmPrompt', async () => {
+    it('should pass through empty message list unchanged in llmPrompt', async () => {
       const list = new MessageList();
 
-      await expect(list.get.all.aiV5.llmPrompt()).rejects.toThrow(
-        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-      );
+      const llmPrompt = await list.get.all.aiV5.llmPrompt();
+      expect(llmPrompt).toHaveLength(0);
     });
 
-    it('should throw error for system-only message list in llmPrompt', async () => {
-      const list = new MessageList();
+    it('should pass through system-only message list unchanged in llmPrompt', async () => {
+      const logger = createMockLogger();
+      const list = new MessageList({ logger });
       list.addSystem('You are a helpful assistant');
 
-      await expect(list.get.all.aiV5.llmPrompt()).rejects.toThrow(
-        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-      );
+      const llmPrompt = await list.get.all.aiV5.llmPrompt();
+      expect(llmPrompt).toHaveLength(1);
+      expect(llmPrompt[0].role).toBe('system');
+      expect(logger.warn).toHaveBeenCalled();
     });
   });
 
@@ -259,6 +275,91 @@ describe('MessageList - Gemini Compatibility', () => {
         const dataPartsCount = assistantMsg!.content.filter((p: any) => p.type?.startsWith('data-')).length;
         expect(dataPartsCount).toBe(0);
       }
+    });
+
+    it('should not include empty-content messages in aiV5.llmPrompt() when assistant has source-only parts', async () => {
+      const list = new MessageList();
+
+      list.add({ role: 'user', content: 'Find information' }, 'input');
+
+      const assistantWithOnlySource: MastraDBMessage = {
+        id: 'msg-only-source',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'source',
+              source: {
+                type: 'source',
+                sourceType: 'url',
+                id: 'source-1',
+                url: 'https://example.com/reference',
+                title: 'Reference',
+              },
+            } as any,
+          ],
+          content: '',
+        },
+      };
+
+      list.add(assistantWithOnlySource, 'response');
+      list.add({ role: 'user', content: 'Continue' }, 'input');
+
+      const llmPrompt = await list.get.all.aiV5.llmPrompt();
+
+      for (const msg of llmPrompt) {
+        if (msg.role !== 'system' && typeof msg.content !== 'string') {
+          expect(msg.content.length).toBeGreaterThan(0);
+        }
+      }
+    });
+
+    it('should keep assistant message in aiV5.llmPrompt() when parts include both source and text', async () => {
+      const list = new MessageList();
+
+      list.add({ role: 'user', content: 'Find information' }, 'input');
+
+      const assistantWithSourceAndText: MastraDBMessage = {
+        id: 'msg-source-and-text',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'source',
+              source: {
+                type: 'source',
+                sourceType: 'url',
+                id: 'source-2',
+                url: 'https://example.com/reference-2',
+                title: 'Reference 2',
+              },
+            } as any,
+            {
+              type: 'text',
+              text: 'Here is the summary.',
+            },
+          ],
+          content: 'Here is the summary.',
+        },
+      };
+
+      list.add(assistantWithSourceAndText, 'response');
+      list.add({ role: 'user', content: 'Continue' }, 'input');
+
+      const llmPrompt = await list.get.all.aiV5.llmPrompt();
+      const assistantMessages = llmPrompt.filter(m => m.role === 'assistant');
+
+      expect(assistantMessages.length).toBeGreaterThan(0);
+      const hasExpectedText = assistantMessages.some(
+        m =>
+          typeof m.content !== 'string' &&
+          m.content.some(part => part.type === 'text' && part.text === 'Here is the summary.'),
+      );
+      expect(hasExpectedText).toBe(true);
     });
 
     it('should preserve data-* parts in UI messages but filter from model messages', () => {
@@ -511,6 +612,56 @@ describe('MessageList - Gemini Compatibility', () => {
           expect(msg.content.length).toBeGreaterThan(0);
         }
       }
+    });
+  });
+
+  describe('Issue #13045 - Generate response in empty thread', () => {
+    it('should not throw when generating with system-only messages and warn about provider compatibility', () => {
+      const logger = createMockLogger();
+      const list = new MessageList({ logger });
+      list.addSystem('You are a helpful assistant.');
+
+      expect(() => list.get.all.aiV5.prompt()).not.toThrow();
+
+      const prompt = list.get.all.aiV5.prompt();
+      expect(prompt).toHaveLength(1);
+      expect(prompt[0].role).toBe('system');
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No user or assistant messages'));
+    });
+
+    it('should not throw when generating with system-only messages via llmPrompt', async () => {
+      const logger = createMockLogger();
+      const list = new MessageList({ logger });
+      list.addSystem('You are a helpful assistant.');
+
+      const llmPrompt = await list.get.all.aiV5.llmPrompt();
+      expect(llmPrompt).toHaveLength(1);
+      expect(llmPrompt[0].role).toBe('system');
+      expect(logger.warn).toHaveBeenCalled();
+    });
+
+    it('should not throw when generating with system-only messages via aiV4.prompt', () => {
+      const logger = createMockLogger();
+      const list = new MessageList({ logger });
+      list.addSystem('You are a helpful assistant.');
+
+      expect(() => list.get.all.aiV4.prompt()).not.toThrow();
+
+      const prompt = list.get.all.aiV4.prompt();
+      expect(prompt).toHaveLength(1);
+      expect(prompt[0].role).toBe('system');
+      expect(logger.warn).toHaveBeenCalled();
+    });
+
+    it('should not warn for completely empty message list', () => {
+      const logger = createMockLogger();
+      const list = new MessageList({ logger });
+
+      expect(() => list.get.all.aiV5.prompt()).not.toThrow();
+
+      const prompt = list.get.all.aiV5.prompt();
+      expect(prompt).toHaveLength(0);
+      expect(logger.warn).not.toHaveBeenCalled();
     });
   });
 

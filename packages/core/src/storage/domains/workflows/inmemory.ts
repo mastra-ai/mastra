@@ -19,6 +19,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     this.db = db;
   }
 
+  supportsConcurrentUpdates(): boolean {
+    return true;
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     this.db.workflows.clear();
   }

@@ -112,6 +112,16 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
     // This allows Memory and other consumers to call query without explicitly providing tableName.
     const resolvedTableName = tableName ?? indexName;
 
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('LANCE', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for Lance queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName: resolvedTableName },
+      });
+    }
+
     try {
       if (!this.lanceClient) {
         throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
@@ -119,10 +129,6 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
       if (!resolvedTableName) {
         throw new Error('tableName or indexName is required');
-      }
-
-      if (!queryVector) {
-        throw new Error('queryVector is required');
       }
     } catch (error) {
       throw new MastraError(

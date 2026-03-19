@@ -41,7 +41,10 @@ export class BaseResource {
           headers: {
             ...(options.body &&
             !(options.body instanceof FormData) &&
-            (options.method === 'POST' || options.method === 'PUT' || options.method === 'PATCH')
+            (options.method === 'POST' ||
+              options.method === 'PUT' ||
+              options.method === 'PATCH' ||
+              options.method === 'DELETE')
               ? { 'content-type': 'application/json' }
               : {}),
             ...headers,
@@ -78,6 +81,12 @@ export class BaseResource {
         return data as T;
       } catch (error) {
         lastError = error as Error;
+
+        // Don't retry 4xx client errors - they won't resolve with retries
+        const status = (error as Error & { status?: number }).status;
+        if (status !== undefined && status >= 400 && status < 500) {
+          throw error;
+        }
 
         if (attempt === retries) {
           break;

@@ -6,7 +6,7 @@ test.afterEach(async () => {
 });
 
 test('verifies a tool s behaviour for agent', async ({ page }) => {
-  await page.goto('/agents/weatherAgent/tools/simpleMcpTool');
+  await page.goto('/agents/weather-agent/tools/simpleMcpTool');
 
   await expect(page.locator('h2')).toHaveText('simpleMcpTool');
   await expect(page.locator('[data-language="json"]')).toHaveText('{}');

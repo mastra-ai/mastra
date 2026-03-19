@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { type SidebarState } from './main-sidebar-context';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { CircleAlertIcon } from 'lucide-react';
 
 export type NavLink = {
   name: string;
@@ -13,6 +14,7 @@ export type NavLink = {
   variant?: 'default' | 'featured';
   tooltipMsg?: string;
   isOnMastraPlatform: boolean;
+  isExperimental?: boolean;
 };
 
 export type MainSidebarNavLinkProps = {
@@ -56,9 +58,13 @@ export function MainSidebarNavLink({
           '[&>a]:justify-start': !isCollapsed,
           '[&_svg]:text-neutral3': isCollapsed,
           // Featured variant
-          '[&>a]:rounded-md [&>a]:my-2 [&>a]:bg-accent1/75 [&>a:hover]:bg-accent1/85 [&>a]:text-black [&>a:hover]:text-black':
+          '[&>a]:rounded-md [&>a]:my-2 [&>a]:bg-accent1Dark [&>a:hover]:bg-accent1Darker [&>a]:text-accent1 [&>a:hover]:text-accent1 [&>a]:border [&>a]:border-accent1/30':
             isFeatured,
-          '[&_svg]:text-black/75 [&>a:hover_svg]:text-black': isFeatured,
+          // Keep strong green CTA in dark mode
+          'dark:[&>a]:bg-accent1 dark:[&>a:hover]:bg-accent1/90 dark:[&>a]:text-black dark:[&>a:hover]:text-black dark:[&>a]:border-transparent':
+            isFeatured,
+          '[&_svg]:text-accent1 [&>a:hover_svg]:text-accent1 dark:[&_svg]:text-black/75 dark:[&>a:hover_svg]:text-black':
+            isFeatured,
         },
         className,
       )}
@@ -87,6 +93,16 @@ export function MainSidebarNavLink({
             <Link href={link.url} {...linkParams}>
               {link.icon && link.icon}
               {isCollapsed ? <VisuallyHidden>{link.name}</VisuallyHidden> : link.name} {children}
+              {link.isExperimental && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <CircleAlertIcon className="ml-auto stroke-accent5" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right" align="center" className="ml-4">
+                    Experimental Feature
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </Link>
           )}
         </>

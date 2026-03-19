@@ -11,17 +11,21 @@
  * const result = await formatAsTree(filesystem, '/', { maxDepth: 3 });
  * console.log(result.tree);
  * // .
- * // ├── src
- * // │   ├── index.ts
- * // │   └── utils
- * // │       └── helpers.ts
- * // └── package.json
+ * // src
+ * //   index.ts
+ * //   utils
+ * //     helpers.ts
+ * // package.json
  * console.log(result.summary);
  * // "2 directories, 3 files"
  * ```
  */
 
 import type { WorkspaceFilesystem, FileEntry } from '../filesystem';
+import type { IgnoreFilter } from '../gitignore';
+import { loadGitignore } from '../gitignore';
+import { createGlobMatcher } from '../glob';
+import type { GlobMatcher } from '../glob';
 
 // =============================================================================
 // Types
@@ -38,6 +42,12 @@ export interface TreeOptions {
   exclude?: string | string[];
   /** Filter by file extension (e.g., '.ts'). Similar to tree's -P flag. */
   extension?: string | string[];
+  /** Glob pattern(s) to filter files. Matches against paths relative to the listed directory. Directories always pass through so their contents can be checked. */
+  pattern?: string | string[];
+  /** Filter function that returns true if a relative path should be ignored (e.g., from .gitignore). */
+  ignoreFilter?: IgnoreFilter;
+  /** Respect .gitignore entries in the listed directory (default: true). */
+  respectGitignore?: boolean;
 }
 
 export interface TreeResult {
@@ -51,16 +61,9 @@ export interface TreeResult {
   fileCount: number;
   /** Whether output was truncated due to maxDepth */
   truncated: boolean;
+  /** Relative paths for compact output */
+  paths: string[];
 }
-
-// =============================================================================
-// Constants
-// =============================================================================
-
-const BRANCH = '├── ';
-const LAST_BRANCH = '└── ';
-const VERTICAL = '│   ';
-const SPACE = '    ';
 
 // =============================================================================
 // Tree Formatting
@@ -80,16 +83,39 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
   const dirsOnly = options?.dirsOnly ?? false;
   const exclude = options?.exclude;
   const extension = options?.extension;
+  const pattern = options?.pattern;
+  const respectGitignore = options?.respectGitignore ?? true;
+
+  // Use provided ignoreFilter, or load from .gitignore if respectGitignore is enabled.
+  // If the user explicitly targets an ignored path (e.g. "/dist"), skip filtering
+  // so they can still list there.
+  let ignoreFilter = options?.ignoreFilter;
+  if (!ignoreFilter && respectGitignore) {
+    const rawFilter = await loadGitignore(fs);
+    if (rawFilter) {
+      const normalizedPath = path.replace(/^\.\//, '').replace(/^\//, '').replace(/\/$/, '');
+      const targetIsIgnored = normalizedPath && rawFilter(normalizedPath + '/');
+      ignoreFilter = targetIsIgnored ? undefined : rawFilter;
+    }
+  }
+
+  // Compile glob matcher once before the walk (if pattern provided)
+  let globMatcher: GlobMatcher | undefined;
+  if (pattern) {
+    const patterns = Array.isArray(pattern) ? pattern : [pattern];
+    globMatcher = createGlobMatcher(patterns, { dot: showHidden });
+  }
 
   const lines: string[] = ['.'];
+  const paths: string[] = [];
   let dirCount = 0;
   let fileCount = 0;
   let truncated = false;
 
   /**
-   * Build tree recursively
+   * Build tree recursively using tab indentation
    */
-  async function buildTree(currentPath: string, prefix: string, depth: number): Promise<void> {
+  async function buildTree(currentPath: string, depth: number): Promise<void> {
     if (depth >= maxDepth) {
       truncated = true;
       return;
@@ -123,6 +149,16 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
       });
     }
 
+    // Filter by gitignore rules (paths must be relative to workspace root, not listing root)
+    if (ignoreFilter) {
+      filtered = filtered.filter(e => {
+        const relativePath = getRelativePath('', currentPath, e.name);
+        // Append trailing slash for directories so gitignore dir patterns match
+        const checkPath = e.type === 'directory' ? `${relativePath}/` : relativePath;
+        return !ignoreFilter!(checkPath);
+      });
+    }
+
     // Filter to directories only (like tree's -d flag)
     if (dirsOnly) {
       filtered = filtered.filter(e => e.type === 'directory');
@@ -141,24 +177,33 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
       });
     }
 
-    // Sort: directories first, then alphabetically (ASCII order to match native tree's strcmp)
+    // Filter by glob pattern (only affects files, directories always pass)
+    if (globMatcher && !dirsOnly) {
+      filtered = filtered.filter(e => {
+        if (e.type === 'directory') return true;
+        const relativePath = getRelativePath(path, currentPath, e.name);
+        return globMatcher!(relativePath);
+      });
+    }
+
+    // Sort: directories first, then alphabetically
     filtered.sort((a, b) => {
       if (a.type === 'directory' && b.type !== 'directory') return -1;
       if (a.type !== 'directory' && b.type === 'directory') return 1;
       return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
     });
 
+    const indent = '\t'.repeat(depth);
+
     for (let i = 0; i < filtered.length; i++) {
       const entry = filtered[i]!;
-      const isLast = i === filtered.length - 1;
-      const connector = isLast ? LAST_BRANCH : BRANCH;
-      const childPrefix = prefix + (isLast ? SPACE : VERTICAL);
 
       // Format entry name, including symlink target if present
       const displayName =
         entry.isSymlink && entry.symlinkTarget ? `${entry.name} -> ${entry.symlinkTarget}` : entry.name;
 
-      lines.push(prefix + connector + displayName);
+      lines.push(`${indent}${displayName}`);
+      paths.push(getRelativePath(path, currentPath, entry.name));
 
       if (entry.type === 'directory') {
         dirCount++;
@@ -166,7 +211,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
         // This also prevents infinite loops from circular symlinks
         if (!entry.isSymlink) {
           const childPath = joinPath(currentPath, entry.name);
-          await buildTree(childPath, childPrefix, depth + 1);
+          await buildTree(childPath, depth + 1);
         }
       } else {
         fileCount++;
@@ -174,7 +219,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
     }
   }
 
-  await buildTree(path, '', 0);
+  await buildTree(path, 0);
 
   // Build summary
   const dirPart = dirCount === 1 ? '1 directory' : `${dirCount} directories`;
@@ -190,6 +235,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
     dirCount,
     fileCount,
     truncated,
+    paths,
   };
 }
 
@@ -232,30 +278,29 @@ export function formatEntriesAsTree(entries: Array<{ name: string; type: 'file' 
   // Render tree
   const lines: string[] = ['.'];
 
-  function renderNode(node: TreeNode, prefix: string): void {
+  function renderNode(node: TreeNode, depth: number): void {
     const children = Array.from(node.children.values());
-    // Sort: directories first, then alphabetically (ASCII order to match native tree's strcmp)
+    // Sort: directories first, then alphabetically
     children.sort((a, b) => {
       if (a.type === 'directory' && b.type !== 'directory') return -1;
       if (a.type !== 'directory' && b.type === 'directory') return 1;
       return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
     });
 
+    const indent = '\t'.repeat(depth);
+
     for (let i = 0; i < children.length; i++) {
       const child = children[i]!;
-      const isLast = i === children.length - 1;
-      const connector = isLast ? LAST_BRANCH : BRANCH;
-      const childPrefix = prefix + (isLast ? SPACE : VERTICAL);
 
-      lines.push(prefix + connector + child.name);
+      lines.push(`${indent}${child.name}`);
 
       if (child.children.size > 0) {
-        renderNode(child, childPrefix);
+        renderNode(child, depth + 1);
       }
     }
   }
 
-  renderNode(root, '');
+  renderNode(root, 0);
   return lines.join('\n');
 }
 
@@ -263,11 +308,31 @@ export function formatEntriesAsTree(entries: Array<{ name: string; type: 'file' 
 // Helpers
 // =============================================================================
 
+function getRelativePath(rootPath: string, currentPath: string, entryName: string): string {
+  const isRootEquivalent = (p: string) => p === '/' || p === '' || p === '.';
+  const entryPath =
+    currentPath === rootPath || (isRootEquivalent(currentPath) && isRootEquivalent(rootPath))
+      ? entryName
+      : `${currentPath === '/' ? '' : currentPath}/${entryName}`;
+
+  if (isRootEquivalent(rootPath)) {
+    // Strip leading './' or '/' so callers always get a clean relative path
+    const cleaned = entryPath.replace(/^\.\//, '');
+    return cleaned.startsWith('/') ? cleaned.slice(1) : cleaned;
+  }
+
+  const relativePath = entryPath.startsWith(rootPath + '/') ? entryPath.slice(rootPath.length + 1) : entryPath;
+  return relativePath || entryPath;
+}
+
 /**
  * Join path segments, handling root paths correctly
  */
 function joinPath(base: string, name: string): string {
-  if (base === '/' || base === '') {
+  if (base === '' || base === './' || base === '.') {
+    return name;
+  }
+  if (base === '/') {
     return `/${name}`;
   }
   return `${base}/${name}`;

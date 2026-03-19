@@ -25,6 +25,7 @@ import type {
   CopyOptions,
 } from './filesystem';
 import { MastraFilesystem } from './mastra-filesystem';
+import type { MastraFilesystemOptions } from './mastra-filesystem';
 
 /**
  * Concrete implementation of MastraFilesystem for testing.
@@ -37,8 +38,8 @@ class TestFilesystem extends MastraFilesystem {
 
   private files = new Map<string, string | Buffer>();
 
-  constructor() {
-    super({ name: 'TestFilesystem' });
+  constructor(options?: MastraFilesystemOptions) {
+    super({ ...options, name: 'TestFilesystem' });
   }
 
   async init(): Promise<void> {
@@ -313,6 +314,108 @@ describe('MastraFilesystem Base Class', () => {
       // Re-init should work since _initPromise was cleared and status is not 'ready'
       await fs._init();
       expect(fs.status).toBe('ready');
+    });
+  });
+
+  describe('Lifecycle Callbacks', () => {
+    it('onInit fires after status becomes ready', async () => {
+      const onInit = vi.fn(({ filesystem }) => {
+        // Status should already be 'ready' when callback fires
+        expect(filesystem.status).toBe('ready');
+      });
+
+      const fs = new TestFilesystem({ onInit });
+
+      await fs._init();
+
+      expect(onInit).toHaveBeenCalledTimes(1);
+      expect(fs.status).toBe('ready');
+    });
+
+    it('onInit failure is non-fatal', async () => {
+      const onInit = vi.fn(() => {
+        throw new Error('callback boom');
+      });
+
+      const fs = new TestFilesystem({ onInit });
+
+      // Should NOT throw — callback error is swallowed
+      await fs._init();
+
+      expect(onInit).toHaveBeenCalledTimes(1);
+      expect(fs.status).toBe('ready');
+    });
+
+    it('onInit is not called when init() throws', async () => {
+      const onInit = vi.fn();
+      const fs = new TestFilesystem({ onInit });
+
+      // Override init to throw
+      (fs as any).init = async () => {
+        throw new Error('Init failed');
+      };
+
+      await expect(fs._init()).rejects.toThrow('Init failed');
+
+      expect(onInit).not.toHaveBeenCalled();
+      expect(fs.status).toBe('error');
+    });
+
+    it('onDestroy fires before destroy()', async () => {
+      const order: string[] = [];
+
+      const onDestroy = vi.fn(() => {
+        order.push('onDestroy');
+      });
+
+      const fs = new TestFilesystem({ onDestroy });
+
+      // Override destroy to track call order
+      (fs as any).destroy = async () => {
+        order.push('destroy');
+      };
+
+      await fs._init();
+      await fs._destroy();
+
+      expect(onDestroy).toHaveBeenCalledTimes(1);
+      expect(order).toEqual(['onDestroy', 'destroy']);
+      expect(fs.status).toBe('destroyed');
+    });
+
+    it('onDestroy receives filesystem instance', async () => {
+      const onDestroy = vi.fn();
+      const fs = new TestFilesystem({ onDestroy });
+
+      await fs._init();
+      await fs._destroy();
+
+      expect(onDestroy).toHaveBeenCalledWith({ filesystem: fs });
+    });
+
+    it('onDestroy failure propagates (marks status as error)', async () => {
+      const onDestroy = vi.fn(() => {
+        throw new Error('destroy callback boom');
+      });
+
+      const fs = new TestFilesystem({ onDestroy });
+
+      await fs._init();
+
+      await expect(fs._destroy()).rejects.toThrow('destroy callback boom');
+
+      expect(fs.status).toBe('error');
+    });
+
+    it('callbacks are not called when no hooks are provided', async () => {
+      const fs = new TestFilesystem();
+
+      // Should work fine with no callbacks
+      await fs._init();
+      expect(fs.status).toBe('ready');
+
+      await fs._destroy();
+      expect(fs.status).toBe('destroyed');
     });
   });
 });

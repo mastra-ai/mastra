@@ -1,0 +1,6 @@
+extends: existence
+message: "Avoid using 'button'. Instead of 'Select the **X** button', write 'Select **X**'."
+level: suggestion
+ignorecase: true
+tokens:
+  - 'button'

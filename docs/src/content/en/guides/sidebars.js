@@ -62,6 +62,18 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Concepts',
+      collapsed: false,
+      items: [
+        {
+          type: 'doc',
+          id: 'concepts/multi-agent-systems',
+          label: 'Multi-agent systems',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Agent Frameworks',
       collapsed: false,
       items: [
@@ -116,7 +128,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'deployment/cloudflare-deployer',
+          id: 'deployment/cloudflare',
           label: 'Cloudflare',
         },
         {
@@ -138,6 +150,91 @@ const sidebars = {
           type: 'doc',
           id: 'deployment/inngest',
           label: 'Inngest',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Tutorials',
+      collapsed: false,
+      items: [
+        {
+          type: 'category',
+          label: 'Fundamentals',
+          items: [
+            {
+              type: 'doc',
+              id: 'guide/chef-michel',
+              label: 'Agents: Chef Michel',
+            },
+            {
+              type: 'doc',
+              id: 'guide/stock-agent',
+              label: 'Tools: Stock Agent',
+            },
+            {
+              type: 'doc',
+              id: 'guide/web-search',
+              label: 'Tools: Web Search',
+            },
+            {
+              type: 'doc',
+              id: 'guide/ai-recruiter',
+              label: 'Workflows: AI Recruiter',
+            },
+            {
+              type: 'doc',
+              id: 'guide/research-assistant',
+              label: 'RAG: Research Assistant',
+            },
+            {
+              type: 'doc',
+              id: 'guide/notes-mcp-server',
+              label: 'MCP Server: Notes MCP Server',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Multi-agent systems',
+          items: [
+            {
+              type: 'doc',
+              id: 'guide/research-coordinator',
+              label: 'Supervisor Agents: Research Coordinator',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Workspaces',
+          items: [
+            {
+              type: 'doc',
+              id: 'guide/dev-assistant',
+              label: 'Workspace: Dev Assistant',
+            },
+            {
+              type: 'doc',
+              id: 'guide/code-review-bot',
+              label: 'Skills: Code Review Bot',
+            },
+            {
+              type: 'doc',
+              id: 'guide/docs-manager',
+              label: 'Filesystem: Docs Manager',
+            },
+          ],
+        },
+        {
+          type: 'doc',
+          id: 'guide/whatsapp-chat-bot',
+          label: 'WhatsApp Chat Bot',
+        },
+        {
+          type: 'doc',
+          id: 'guide/github-actions-pr-description',
+          label: 'GitHub Actions: PR Description',
         },
       ],
     },
@@ -249,70 +346,13 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'migrations/network-to-supervisor',
+          label: '.network() → Supervisor Agents',
+        },
+        {
+          type: 'doc',
           id: 'migrations/ai-sdk-v4-to-v5',
           label: 'AI SDK v4 → v5',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Guides',
-      collapsed: false,
-      items: [
-        {
-          type: 'doc',
-          id: 'guide/chef-michel',
-          label: 'Agents: Chef Michel',
-        },
-        {
-          type: 'doc',
-          id: 'guide/stock-agent',
-          label: 'Tools: Stock Agent',
-        },
-        {
-          type: 'doc',
-          id: 'guide/ai-recruiter',
-          label: 'Workflows: AI Recruiter',
-        },
-        {
-          type: 'doc',
-          id: 'guide/research-assistant',
-          label: 'RAG: Research Assistant',
-        },
-        {
-          type: 'doc',
-          id: 'guide/notes-mcp-server',
-          label: 'MCP Server: Notes MCP Server',
-        },
-        {
-          type: 'doc',
-          id: 'guide/web-search',
-          label: 'Tools: Web Search',
-        },
-        {
-          type: 'doc',
-          id: 'guide/whatsapp-chat-bot',
-          label: 'WhatsApp Chat Bot',
-        },
-        {
-          type: 'doc',
-          id: 'guide/github-actions-pr-description',
-          label: 'GitHub Actions: PR Description',
-        },
-        {
-          type: 'doc',
-          id: 'guide/code-review-bot',
-          label: 'Skills: Code Review Bot',
-        },
-        {
-          type: 'doc',
-          id: 'guide/docs-manager',
-          label: 'Filesystem: Docs Manager',
-        },
-        {
-          type: 'doc',
-          id: 'guide/dev-assistant',
-          label: 'Workspace: Dev Assistant',
         },
       ],
     },

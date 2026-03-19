@@ -17,9 +17,9 @@ import { S3Filesystem } from './index';
 
 // Mock the AWS SDK
 vi.mock('@aws-sdk/client-s3', () => ({
-  S3Client: vi.fn().mockImplementation(() => ({
-    send: vi.fn(),
-  })),
+  S3Client: vi.fn().mockImplementation(function () {
+    return { send: vi.fn() };
+  }),
   GetObjectCommand: vi.fn(),
   PutObjectCommand: vi.fn(),
   DeleteObjectCommand: vi.fn(),
@@ -27,6 +27,7 @@ vi.mock('@aws-sdk/client-s3', () => ({
   ListObjectsV2Command: vi.fn(),
   DeleteObjectsCommand: vi.fn(),
   HeadObjectCommand: vi.fn(),
+  HeadBucketCommand: vi.fn(),
 }));
 
 describe('S3Filesystem', () => {
@@ -224,6 +225,33 @@ describe('S3Filesystem', () => {
       expect(config.secretAccessKey).toBe('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
     });
 
+    it('includes sessionToken if set with credentials', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+        secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+        sessionToken: 'FwoGZXIvYXdzEBYaDH7EXAMPLE',
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.sessionToken).toBe('FwoGZXIvYXdzEBYaDH7EXAMPLE');
+    });
+
+    it('does not include sessionToken if not set', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+        secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.sessionToken).toBeUndefined();
+    });
+
     it('does not include credentials if not set', () => {
       const fs = new S3Filesystem({ bucket: 'test', region: 'us-east-1' });
 
@@ -403,19 +431,69 @@ describe('S3Filesystem', () => {
         secretAccessKey: 'test',
       });
 
-      const fsAny = fs as any;
+      // Subsequent .client accesses should return the cached instance
+      const client1 = fs.client;
+      const client2 = fs.client;
 
-      // Simulate first operation creating the client
-      const fakeClient = { send: vi.fn() };
-      fsAny._client = fakeClient;
-
-      // Subsequent getClient() calls should return the cached instance
-      const client1 = fsAny.getClient();
-      const client2 = fsAny.getClient();
-
-      expect(client1).toBe(fakeClient);
-      expect(client2).toBe(fakeClient);
       expect(client1).toBe(client2);
+    });
+
+    it('passes sessionToken in credentials when provided', async () => {
+      const { S3Client } = await import('@aws-sdk/client-s3');
+      const MockS3Client = vi.mocked(S3Client);
+      MockS3Client.mockClear();
+
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+        secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+        sessionToken: 'FwoGZXIvYXdzEBYaDH7EXAMPLE',
+      });
+
+      try {
+        await fs.readFile('test.txt');
+      } catch {
+        // Expected to fail (mock), but client should be created
+      }
+
+      expect(MockS3Client).toHaveBeenCalledWith(
+        expect.objectContaining({
+          credentials: {
+            accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+            secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+            sessionToken: 'FwoGZXIvYXdzEBYaDH7EXAMPLE',
+          },
+        }),
+      );
+    });
+
+    it('omits sessionToken from credentials when not provided', async () => {
+      const { S3Client } = await import('@aws-sdk/client-s3');
+      const MockS3Client = vi.mocked(S3Client);
+      MockS3Client.mockClear();
+
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+      });
+
+      try {
+        await fs.readFile('test.txt');
+      } catch {
+        // Expected to fail (mock), but client should be created
+      }
+
+      expect(MockS3Client).toHaveBeenCalledWith(
+        expect.objectContaining({
+          credentials: {
+            accessKeyId: 'key',
+            secretAccessKey: 'secret',
+          },
+        }),
+      );
     });
 
     it('uses anonymous credentials for public buckets', async () => {

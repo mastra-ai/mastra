@@ -29,6 +29,14 @@ const NameCell = ({ row, showSourceIcon }: { row: Row<AgentTableColumn>; showSou
         </Link>
       }
       description={extractPrompt(row.original.instructions)}
+      meta={
+        row.original.source === 'stored' ? (
+          <>
+            {row.original.activeVersionId && <Badge variant="success">Published</Badge>}
+            <Badge variant={row.original.hasDraft || !row.original.activeVersionId ? 'info' : 'default'}>Draft</Badge>
+          </>
+        ) : undefined
+      }
     />
   );
 };
@@ -110,7 +118,7 @@ const attachedEntitiesColumn: ColumnDef<AgentTableColumn> = {
                 >
                   Processors
                 </a>
-                <span className="text-icon3">
+                <span className="text-neutral3">
                   {[inputProcessorsCount > 0 && 'input', outputProcessorsCount > 0 && 'output']
                     .filter(Boolean)
                     .join(', ')}

@@ -25,11 +25,6 @@ import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
 
-/**
- * Config fields that live on version rows (from StoragePromptBlockSnapshotType).
- */
-const SNAPSHOT_FIELDS = ['name', 'description', 'content', 'rules'] as const;
-
 export class PromptBlocksLibSQL extends PromptBlocksStorage {
   #db: LibSQLDB;
   #client: Client;
@@ -44,6 +39,13 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_PROMPT_BLOCKS, schema: PROMPT_BLOCKS_SCHEMA });
     await this.#db.createTable({ tableName: TABLE_PROMPT_BLOCK_VERSIONS, schema: PROMPT_BLOCK_VERSIONS_SCHEMA });
+
+    // Add new columns for backwards compatibility with existing databases
+    await this.#db.alterTable({
+      tableName: TABLE_PROMPT_BLOCK_VERSIONS,
+      schema: PROMPT_BLOCK_VERSIONS_SCHEMA,
+      ifNotExists: ['requestContextSchema'],
+    });
 
     // Unique constraint on (blockId, versionNumber) to prevent duplicate versions from concurrent updates
     await this.#client.execute(
@@ -142,10 +144,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
         throw new Error(`Prompt block with id ${id} not found`);
       }
 
-      const { authorId, activeVersionId, metadata, status, ...configFields } = updates;
-
-      const configFieldNames = SNAPSHOT_FIELDS as readonly string[];
-      const hasConfigUpdate = configFieldNames.some(field => field in configFields);
+      const { authorId, activeVersionId, metadata, status } = updates;
 
       // Build update data for the block record
       const updateData: Record<string, unknown> = {
@@ -153,12 +152,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
       };
 
       if (authorId !== undefined) updateData.authorId = authorId;
-      if (activeVersionId !== undefined) {
-        updateData.activeVersionId = activeVersionId;
-        if (status === undefined) {
-          updateData.status = 'published';
-        }
-      }
+      if (activeVersionId !== undefined) updateData.activeVersionId = activeVersionId;
       if (status !== undefined) updateData.status = status;
       if (metadata !== undefined) {
         updateData.metadata = { ...existing.metadata, ...metadata };
@@ -169,42 +163,6 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
         keys: { id },
         data: updateData,
       });
-
-      // If config fields changed, create a new version
-      if (hasConfigUpdate) {
-        const latestVersion = await this.getLatestVersion(id);
-        if (!latestVersion) {
-          throw new Error(`No versions found for prompt block ${id}`);
-        }
-
-        const {
-          id: _versionId,
-          blockId: _blockId,
-          versionNumber: _versionNumber,
-          changedFields: _changedFields,
-          changeMessage: _changeMessage,
-          createdAt: _createdAt,
-          ...latestConfig
-        } = latestVersion;
-
-        const newConfig = { ...latestConfig, ...configFields };
-        const changedFields = configFieldNames.filter(
-          field =>
-            field in configFields &&
-            JSON.stringify(configFields[field as keyof typeof configFields]) !==
-              JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
-        );
-
-        const newVersionId = crypto.randomUUID();
-        await this.createVersion({
-          id: newVersionId,
-          blockId: id,
-          versionNumber: latestVersion.versionNumber + 1,
-          ...newConfig,
-          changedFields,
-          changeMessage: `Updated ${changedFields.join(', ')}`,
-        });
-      }
 
       // Fetch and return updated block
       const updated = await this.getById(id);
@@ -253,11 +211,16 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
 
   async list(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       const conditions: string[] = [];
       const queryParams: InValue[] = [];
+
+      if (status) {
+        conditions.push('status = ?');
+        queryParams.push(status);
+      }
 
       if (authorId !== undefined) {
         conditions.push('authorId = ?');
@@ -349,6 +312,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
           description: input.description ?? null,
           content: input.content,
           rules: input.rules ?? null,
+          requestContextSchema: input.requestContextSchema ?? null,
           changedFields: input.changedFields ?? null,
           changeMessage: input.changeMessage ?? null,
           createdAt: now.toISOString(),
@@ -596,6 +560,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
       description: (row.description as string) ?? undefined,
       content: row.content as string,
       rules: safeParseJSON(row.rules) as PromptBlockVersion['rules'],
+      requestContextSchema: safeParseJSON(row.requestContextSchema) as Record<string, unknown> | undefined,
       changedFields: safeParseJSON(row.changedFields) as string[] | undefined,
       changeMessage: (row.changeMessage as string) ?? undefined,
       createdAt: new Date(row.createdAt as string),

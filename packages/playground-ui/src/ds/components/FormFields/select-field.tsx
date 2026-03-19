@@ -1,18 +1,20 @@
 import { cn } from '@/lib/utils';
 import * as React from 'react';
 import { Select, SelectContent, SelectItem, SelectValue, SelectTrigger } from '@/ds/components/Select';
-import { formElementFocus, formElementRadius, type FormElementSize } from '@/ds/primitives/form-element';
+import { type FormElementSize } from '@/ds/primitives/form-element';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
 export type SelectFieldProps = Omit<React.SelectHTMLAttributes<HTMLSelectElement>, 'size'> & {
   name?: string;
   testId?: string;
   label?: React.ReactNode;
+  labelIsHidden?: boolean;
   required?: boolean;
   disabled?: boolean;
   value?: string;
   helpMsg?: string;
   errorMsg?: string;
-  options: { value: string; label: string; icon?: React.ReactNode }[];
+  options: { value: string; label: React.ReactNode; icon?: React.ReactNode; disabled?: boolean }[];
   placeholder?: string;
   onValueChange: (value: string) => void;
   size?: FormElementSize;
@@ -22,6 +24,7 @@ export function SelectField({
   name,
   value,
   label,
+  labelIsHidden = false,
   className,
   required,
   disabled,
@@ -29,8 +32,12 @@ export function SelectField({
   options,
   onValueChange,
   placeholder = 'Select an option',
-  size = 'lg',
+  size = 'default',
 }: SelectFieldProps) {
+  const LabelWrapper = ({ children }: { children: React.ReactNode }) => {
+    return labelIsHidden ? <VisuallyHidden>{children}</VisuallyHidden> : children;
+  };
+
   return (
     <div
       className={cn(
@@ -42,23 +49,19 @@ export function SelectField({
         className,
       )}
     >
-      {label && (
+      <LabelWrapper>
         <label className={cn('text-ui-sm text-neutral3 flex justify-between items-center shrink-0')}>
           {label}
           {required && <i className="text-neutral2">(required)</i>}
         </label>
-      )}
+      </LabelWrapper>
       <Select name={name} value={value} onValueChange={onValueChange} disabled={disabled}>
-        <SelectTrigger
-          id="select-dataset"
-          size={size}
-          className={cn('w-full border border-border1 min-w-20 gap-2', formElementRadius, formElementFocus)}
-        >
+        <SelectTrigger id={`select-${name}`} size={size} className="grid grid-cols-[1fr_auto] [&>span]:truncate w-full">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
           {options.map(option => (
-            <SelectItem key={option.label} value={option.value}>
+            <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
               <span className="whitespace-nowrap truncate flex items-center gap-2">
                 {option.icon}
                 {option.label}

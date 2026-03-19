@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { Agent, Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
@@ -239,17 +240,29 @@ describe('Scorer Definition CRUD (LibSQL)', () => {
       instructions: 'Original instructions',
     });
 
-    const updated = await editor.scorer.update({
-      id: 'updatable',
+    // Config changes require createVersion + update(activeVersionId)
+    const scorerStore = await storage.getStore('scorerDefinitions');
+    await scorerStore!.createVersion({
+      id: crypto.randomUUID(),
+      scorerDefinitionId: 'updatable',
+      versionNumber: 2,
       name: 'Updated Name',
+      type: 'llm-judge',
+      model: { provider: 'openai', name: 'gpt-4' },
       instructions: 'Updated instructions',
       scoreRange: { min: 1, max: 5 },
+      changedFields: ['name', 'instructions', 'scoreRange'],
     });
+    const latestVersion = await scorerStore!.getLatestVersion('updatable');
+    await scorerStore!.update({ id: 'updatable', activeVersionId: latestVersion!.id, status: 'published' });
+    editor.scorer.clearCache('updatable');
 
-    expect(updated.name).toBe('Updated Name');
-    expect(updated.instructions).toBe('Updated instructions');
-    expect(updated.scoreRange?.min).toBe(1);
-    expect(updated.scoreRange?.max).toBe(5);
+    const updated = await editor.scorer.getById('updatable');
+
+    expect(updated!.name).toBe('Updated Name');
+    expect(updated!.instructions).toBe('Updated instructions');
+    expect(updated!.scoreRange?.min).toBe(1);
+    expect(updated!.scoreRange?.max).toBe(5);
   });
 
   it('should delete a scorer definition', async () => {
@@ -831,15 +844,26 @@ describe('End-to-end scorer storage and execution flow', () => {
       scoreRange: { min: 0, max: 5 },
     });
 
-    // Update
-    const updated = await editor.scorer.update({
-      id: 'lifecycle-scorer',
+    // Update — config changes require createVersion + update(activeVersionId)
+    const scorerStore = await storage.getStore('scorerDefinitions');
+    await scorerStore!.createVersion({
+      id: crypto.randomUUID(),
+      scorerDefinitionId: 'lifecycle-scorer',
+      versionNumber: 2,
       name: 'Lifecycle Scorer v2',
+      type: 'llm-judge',
+      model: { provider: 'mock', name: modelId },
       instructions: 'Version 2: evaluate response quality more carefully.',
       scoreRange: { min: 0, max: 10 },
+      changedFields: ['name', 'instructions', 'scoreRange'],
     });
-    expect(updated.name).toBe('Lifecycle Scorer v2');
-    expect(updated.scoreRange?.max).toBe(10);
+    const latestVersion = await scorerStore!.getLatestVersion('lifecycle-scorer');
+    await scorerStore!.update({ id: 'lifecycle-scorer', activeVersionId: latestVersion!.id, status: 'published' });
+    editor.scorer.clearCache('lifecycle-scorer');
+
+    const updated = await editor.scorer.getById('lifecycle-scorer');
+    expect(updated!.name).toBe('Lifecycle Scorer v2');
+    expect(updated!.scoreRange?.max).toBe(10);
 
     // Retrieve latest version from DB
     const fetched = await editor.scorer.getById('lifecycle-scorer');
@@ -881,10 +905,22 @@ describe('End-to-end scorer storage and execution flow', () => {
     let list = await editor.scorer.list();
     expect(list.total).toBe(2);
 
-    await editor.scorer.update({
-      id: 'lifecycle-1',
+    // Config changes require createVersion + update(activeVersionId)
+    const scorerStore = await storage.getStore('scorerDefinitions');
+    await scorerStore!.createVersion({
+      id: crypto.randomUUID(),
+      scorerDefinitionId: 'lifecycle-1',
+      versionNumber: 2,
       name: 'Updated Lifecycle 1',
+      type: 'llm-judge',
+      model: { provider: 'mock', name: 'scorer-model' },
+      instructions: 'Test 1',
+      changedFields: ['name'],
     });
+    const latestVersion = await scorerStore!.getLatestVersion('lifecycle-1');
+    await scorerStore!.update({ id: 'lifecycle-1', activeVersionId: latestVersion!.id, status: 'published' });
+    editor.scorer.clearCache('lifecycle-1');
+
     const updatedDef = await editor.scorer.getById('lifecycle-1');
     expect(updatedDef?.name).toBe('Updated Lifecycle 1');
 
@@ -948,14 +984,22 @@ describe('End-to-end scorer storage and execution flow', () => {
     expect(resultV1.score).toBe(0.6);
     expect(resultV1.reason).toBe('Version 1 reason.');
 
-    // 4. Update the scorer definition (v2) — change model and instructions
-    await editor.scorer.update({
-      id: 'updatable-scorer',
+    // 4. Update the scorer definition (v2) — config changes require createVersion + update(activeVersionId)
+    const scorerStore = await storage.getStore('scorerDefinitions');
+    await scorerStore!.createVersion({
+      id: crypto.randomUUID(),
+      scorerDefinitionId: 'updatable-scorer',
+      versionNumber: 2,
       name: 'Updatable Scorer v2',
+      type: 'llm-judge',
       model: { provider: 'mock', name: modelIdV2 },
       instructions: 'Version 2: rate quality more strictly.',
       scoreRange: { min: 0, max: 1 },
+      changedFields: ['name', 'model', 'instructions'],
     });
+    const latestVersion = await scorerStore!.getLatestVersion('updatable-scorer');
+    await scorerStore!.update({ id: 'updatable-scorer', activeVersionId: latestVersion!.id, status: 'published' });
+    editor.scorer.clearCache('updatable-scorer');
 
     // 5. Clear the cached agent so re-fetch picks up new scorer
     editor.agent.clearCache('agent-with-updatable-scorer');

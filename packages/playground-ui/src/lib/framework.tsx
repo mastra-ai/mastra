@@ -32,6 +32,14 @@ type LinkComponentPaths = {
   cmsScorersCreateLink: () => string;
   cmsScorerEditLink: (scorerId: string) => string;
 
+  cmsAgentCreateLink: () => string;
+  cmsAgentEditLink: (agentId: string) => string;
+
+  promptBlockLink: (promptBlockId: string) => string;
+  promptBlocksLink: () => string;
+  cmsPromptBlockCreateLink: () => string;
+  cmsPromptBlockEditLink: (promptBlockId: string) => string;
+
   toolLink: (toolId: string) => string;
   skillLink: (skillName: string, workspaceId?: string) => string;
   workspacesLink: () => string;
@@ -43,6 +51,10 @@ type LinkComponentPaths = {
   mcpServerLink: (serverId: string) => string;
   mcpServerToolLink: (serverId: string, toolId: string) => string;
   workflowRunLink: (workflowId: string, runId: string) => string;
+
+  datasetLink: (datasetId: string) => string;
+  datasetItemLink: (datasetId: string, itemId: string) => string;
+  datasetExperimentLink: (datasetId: string, experimentId: string) => string;
 };
 
 const LinkComponentContext = createContext<{
@@ -67,6 +79,12 @@ const LinkComponentContext = createContext<{
     scorerLink: () => '',
     cmsScorersCreateLink: () => '',
     cmsScorerEditLink: () => '',
+    cmsAgentCreateLink: () => '',
+    cmsAgentEditLink: () => '',
+    promptBlockLink: () => '',
+    promptBlocksLink: () => '',
+    cmsPromptBlockCreateLink: () => '',
+    cmsPromptBlockEditLink: () => '',
     toolLink: () => '',
     skillLink: () => '',
     workspacesLink: () => '',
@@ -77,6 +95,9 @@ const LinkComponentContext = createContext<{
     mcpServerLink: () => '',
     mcpServerToolLink: () => '',
     workflowRunLink: () => '',
+    datasetLink: () => '',
+    datasetItemLink: () => '',
+    datasetExperimentLink: () => '',
   },
 });
 

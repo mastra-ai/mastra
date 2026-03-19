@@ -18,10 +18,10 @@ export const generateQuestionsFromTextTool = createTool({
   execute: async (inputData, context) => {
     const { extractedText, maxQuestions = 10 } = inputData;
 
-    console.log('❓ Generating questions from extracted text...');
+    console.log('Generating questions from extracted text...');
 
     if (!extractedText || extractedText.trim() === '') {
-      console.error('❌ No extracted text provided for question generation');
+      console.error('No extracted text provided for question generation');
       return {
         questions: [],
         questionCount: 0,
@@ -31,12 +31,12 @@ export const generateQuestionsFromTextTool = createTool({
 
     // Simple check for very large documents
     if (extractedText.length > MAX_TEXT_LENGTH) {
-      console.warn('⚠️ Content is very large. Consider using a smaller dataset to avoid token limits.');
-      console.warn(`⚠️ Using first ${MAX_TEXT_LENGTH} characters only...`);
+      console.warn('Content is very large. Consider using a smaller dataset to avoid token limits.');
+      console.warn(`Using first ${MAX_TEXT_LENGTH} characters only...`);
     }
 
     try {
-      const agent = context?.mastra?.getAgent('textQuestionAgent');
+      const agent = context?.mastra?.getAgentById('text-question-agent');
       if (!agent) {
         throw new Error('Question generator agent not found');
       }
@@ -62,7 +62,7 @@ ${extractedText.substring(0, MAX_TEXT_LENGTH)}`,
         // Parse the questions from the generated content
         const questions = parseQuestionsFromText(generatedContent, maxQuestions);
 
-        console.log(`✅ Question generation successful: ${questions.length} questions generated`);
+        console.log(`Question generation successful: ${questions.length} questions generated`);
 
         return {
           questions,
@@ -70,7 +70,7 @@ ${extractedText.substring(0, MAX_TEXT_LENGTH)}`,
           success: true,
         };
       } else {
-        console.warn('⚠️ Generated content too short for question parsing');
+        console.warn('Generated content too short for question parsing');
         return {
           questions: [],
           questionCount: 0,
@@ -79,11 +79,11 @@ ${extractedText.substring(0, MAX_TEXT_LENGTH)}`,
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('❌ Question generation failed:', errorMessage);
+      console.error('Question generation failed:', errorMessage);
 
       // Check if it's a token limit error
       if (errorMessage.includes('context length') || errorMessage.includes('token')) {
-        console.error('💡 Tip: Try using a smaller CSV file. Large datasets exceed the token limit.');
+        console.error('Tip: Try using a smaller CSV file. Large datasets exceed the token limit.');
       }
 
       return {

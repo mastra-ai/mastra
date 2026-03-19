@@ -49,7 +49,7 @@ export class EditorScorerNamespace extends CrudEditorNamespace<
       StorageResolvedScorerDefinitionType
     >
   > {
-    const storage = this.mastra!.getStorage();
+    const storage = this.mastra?.getStorage();
     if (!storage) throw new Error('Storage is not configured');
     const store = await storage.getStore('scorerDefinitions');
     if (!store) throw new Error('Scorer definitions storage domain is not available');

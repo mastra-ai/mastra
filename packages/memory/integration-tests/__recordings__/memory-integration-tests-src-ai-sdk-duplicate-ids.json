@@ -1,0 +1,1056 @@
+[
+  {
+    "hash": "da723d4e2d9de6ca",
+    "request": {
+      "url": "https://api.anthropic.com/v1/messages",
+      "method": "POST",
+      "body": {
+        "model": "claude-sonnet-4-5",
+        "max_tokens": 64000,
+        "system": [
+          {
+            "type": "text",
+            "text": "First say \"Let me check the weather\", then call the get_weather tool, then summarize what you found."
+          }
+        ],
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "What is the weather in Tokyo?"
+              }
+            ]
+          }
+        ],
+        "tools": [
+          {
+            "name": "get_weather",
+            "description": "Get the current weather",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "$schema": "http://json-schema.org/draft-07/schema#"
+            }
+          }
+        ],
+        "tool_choice": {
+          "type": "auto"
+        },
+        "stream": true
+      },
+      "timestamp": 1771518471191
+    },
+    "response": {
+      "status": 200,
+      "statusText": "OK",
+      "headers": {
+        "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
+        "anthropic-ratelimit-input-tokens-limit": "2000000",
+        "anthropic-ratelimit-input-tokens-remaining": "2000000",
+        "anthropic-ratelimit-input-tokens-reset": "2026-02-19T16:27:51Z",
+        "anthropic-ratelimit-output-tokens-limit": "400000",
+        "anthropic-ratelimit-output-tokens-remaining": "400000",
+        "anthropic-ratelimit-output-tokens-reset": "2026-02-19T16:27:51Z",
+        "anthropic-ratelimit-requests-limit": "20000",
+        "anthropic-ratelimit-requests-remaining": "19999",
+        "anthropic-ratelimit-requests-reset": "2026-02-19T16:27:51Z",
+        "anthropic-ratelimit-tokens-limit": "2400000",
+        "anthropic-ratelimit-tokens-remaining": "2400000",
+        "anthropic-ratelimit-tokens-reset": "2026-02-19T16:27:51Z",
+        "cache-control": "no-cache",
+        "cf-cache-status": "DYNAMIC",
+        "cf-ray": "9d07224dbf84ba82-BRU",
+        "connection": "keep-alive",
+        "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+        "content-type": "text/event-stream; charset=utf-8",
+        "date": "Thu, 19 Feb 2026 16:27:52 GMT",
+        "request-id": "req_011CYHk2APEaWwGoEEX1qngT",
+        "server": "cloudflare",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "x-envoy-upstream-service-time": "1339",
+        "x-robots-tag": "none"
+      },
+      "chunks": [
+        "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-5-20250929\",\"id\":\"msg_01NGdQQRYsx11YftNzrZWbjC\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":608,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"}}  }\n\n",
+        "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}          }\n\n",
+        "event: ping\ndata: {\"type\": \"ping\"}\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Let\"}            }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" me check the weather for\"}             }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" Tokyo.\"}        }\n\n",
+        "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0       }\n\n",
+        "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_01Gd3bNgGyXCjTbXD8KhPBSq\",\"name\":\"get_weather\",\"input\":{},\"caller\":{\"type\":\"direct\"}}          }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\"}           }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"city\\\"\"}             }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\": \\\"To\"}              }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"kyo\\\"}\"}    }\n\n",
+        "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1         }\n\n",
+        "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":608,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":62}    }\n\n",
+        "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      ],
+      "chunkTimings": [1, 0, 1, 0, 81, 57, 187, 3, 0, 229, 0, 0, 0, 20, 0],
+      "isStreaming": true
+    }
+  },
+  {
+    "hash": "e31f5c96d476987a",
+    "request": {
+      "url": "https://api.anthropic.com/v1/messages",
+      "method": "POST",
+      "body": {
+        "model": "claude-sonnet-4-5",
+        "max_tokens": 64000,
+        "system": [
+          {
+            "type": "text",
+            "text": "First say \"Let me check the weather\", then call the get_weather tool, then summarize what you found."
+          }
+        ],
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "What is the weather in Tokyo?"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Let me check the weather for Tokyo."
+              },
+              {
+                "type": "tool_use",
+                "id": "toolu_01Gd3bNgGyXCjTbXD8KhPBSq",
+                "name": "get_weather",
+                "input": {
+                  "city": "Tokyo"
+                }
+              }
+            ]
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "tool_result",
+                "tool_use_id": "toolu_01Gd3bNgGyXCjTbXD8KhPBSq",
+                "content": "{\"temperature\":72,\"condition\":\"sunny\"}"
+              }
+            ]
+          }
+        ],
+        "tools": [
+          {
+            "name": "get_weather",
+            "description": "Get the current weather",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "$schema": "http://json-schema.org/draft-07/schema#"
+            }
+          }
+        ],
+        "tool_choice": {
+          "type": "auto"
+        },
+        "stream": true
+      },
+      "timestamp": 1771518473353
+    },
+    "response": {
+      "status": 200,
+      "statusText": "OK",
+      "headers": {
+        "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
+        "anthropic-ratelimit-input-tokens-limit": "2000000",
+        "anthropic-ratelimit-input-tokens-remaining": "2000000",
+        "anthropic-ratelimit-input-tokens-reset": "2026-02-19T16:27:53Z",
+        "anthropic-ratelimit-output-tokens-limit": "400000",
+        "anthropic-ratelimit-output-tokens-remaining": "400000",
+        "anthropic-ratelimit-output-tokens-reset": "2026-02-19T16:27:53Z",
+        "anthropic-ratelimit-requests-limit": "20000",
+        "anthropic-ratelimit-requests-remaining": "19999",
+        "anthropic-ratelimit-requests-reset": "2026-02-19T16:27:53Z",
+        "anthropic-ratelimit-tokens-limit": "2400000",
+        "anthropic-ratelimit-tokens-remaining": "2400000",
+        "anthropic-ratelimit-tokens-reset": "2026-02-19T16:27:53Z",
+        "cache-control": "no-cache",
+        "cf-cache-status": "DYNAMIC",
+        "cf-ray": "9d07225b29c4ba69-BRU",
+        "connection": "keep-alive",
+        "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+        "content-type": "text/event-stream; charset=utf-8",
+        "date": "Thu, 19 Feb 2026 16:27:55 GMT",
+        "request-id": "req_011CYHk2KXu222gsMv45epse",
+        "server": "cloudflare",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "x-envoy-upstream-service-time": "2140",
+        "x-robots-tag": "none"
+      },
+      "chunks": [
+        "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-5-20250929\",\"id\":\"msg_01L8hzZoTgcQLNwHWBxLaGug\",\"type\":\"message\",\"role\":\"assistant\",\"conten",
+        "t\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":691,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":2,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"}}            }\n\n",
+        "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}     }\n\n",
+        "event: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"The current\"}               }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" weather in Tokyo is sunny\"}     }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" with a temperature of 72°F\"}    }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" (approximately\"}  }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" 22°C).\"}        }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" It\"}       }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"'s a beautiful\"}              }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" day there\"}         }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"!\"}             }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0    }\n\n",
+        "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":691,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":32}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"  }\n\n"
+      ],
+      "chunkTimings": [0, 0, 0, 0, 153, 0, 44, 61, 55, 62, 57, 42, 0],
+      "isStreaming": true
+    }
+  },
+  {
+    "hash": "da723d4e2d9de6ca",
+    "request": {
+      "url": "https://api.anthropic.com/v1/messages",
+      "method": "POST",
+      "body": {
+        "model": "claude-sonnet-4-5",
+        "max_tokens": 64000,
+        "system": [
+          {
+            "type": "text",
+            "text": "First say \"Let me check the weather\", then call the get_weather tool, then summarize what you found."
+          }
+        ],
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "What is the weather in Tokyo?"
+              }
+            ]
+          }
+        ],
+        "tools": [
+          {
+            "name": "get_weather",
+            "description": "Get the current weather",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "$schema": "http://json-schema.org/draft-07/schema#"
+            }
+          }
+        ],
+        "tool_choice": {
+          "type": "auto"
+        },
+        "stream": true
+      },
+      "timestamp": 1771518476164
+    },
+    "response": {
+      "status": 200,
+      "statusText": "OK",
+      "headers": {
+        "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
+        "anthropic-ratelimit-input-tokens-limit": "2000000",
+        "anthropic-ratelimit-input-tokens-remaining": "2000000",
+        "anthropic-ratelimit-input-tokens-reset": "2026-02-19T16:27:56Z",
+        "anthropic-ratelimit-output-tokens-limit": "400000",
+        "anthropic-ratelimit-output-tokens-remaining": "400000",
+        "anthropic-ratelimit-output-tokens-reset": "2026-02-19T16:27:56Z",
+        "anthropic-ratelimit-requests-limit": "20000",
+        "anthropic-ratelimit-requests-remaining": "19999",
+        "anthropic-ratelimit-requests-reset": "2026-02-19T16:27:56Z",
+        "anthropic-ratelimit-tokens-limit": "2400000",
+        "anthropic-ratelimit-tokens-remaining": "2400000",
+        "anthropic-ratelimit-tokens-reset": "2026-02-19T16:27:56Z",
+        "cache-control": "no-cache",
+        "cf-cache-status": "DYNAMIC",
+        "cf-ray": "9d07226c5d89ba82-BRU",
+        "connection": "keep-alive",
+        "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+        "content-type": "text/event-stream; charset=utf-8",
+        "date": "Thu, 19 Feb 2026 16:27:57 GMT",
+        "request-id": "req_011CYHk2XJ5WoXeQ8aEofLHz",
+        "server": "cloudflare",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "x-envoy-upstream-service-time": "1023",
+        "x-robots-tag": "none"
+      },
+      "chunks": [
+        "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-5-20250929\",\"id\":\"msg_01RNJ2vh78QAa9oexnixTtT4\",\"type\":\"message\",\"role\":\"assistant\",\"conten",
+        "t\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":608,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"}}   }\n\n",
+        "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}             }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Let\"}             }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" me check the weather for\"}         }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" you\"}   }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\".\"}             }\n\n",
+        "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0        }\n\n",
+        "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_014S4Y2Eqn7wTvS9btEHGtJY\",\"name\":\"get_weather\",\"input\":{},\"caller\":{\"type\":\"direct\"}}  }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\"}            }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"city\\\": \\\"Tokyo\"}       }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"}\"}             }\n\n",
+        "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1             }\n\n",
+        "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":608,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":62}          }\n\n",
+        "event: message_stop\ndata: {\"type\":\"message_stop\"             }\n\n"
+      ],
+      "chunkTimings": [0, 1, 0, 198, 12, 0, 208, 0, 8, 58, 161, 0, 21, 0],
+      "isStreaming": true
+    }
+  },
+  {
+    "hash": "de47da0d7ead7df0",
+    "request": {
+      "url": "https://api.anthropic.com/v1/messages",
+      "method": "POST",
+      "body": {
+        "model": "claude-sonnet-4-5",
+        "max_tokens": 64000,
+        "system": [
+          {
+            "type": "text",
+            "text": "First say \"Let me check the weather\", then call the get_weather tool, then summarize what you found."
+          }
+        ],
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "What is the weather in Tokyo?"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Let me check the weather for you."
+              },
+              {
+                "type": "tool_use",
+                "id": "toolu_014S4Y2Eqn7wTvS9btEHGtJY",
+                "name": "get_weather",
+                "input": {
+                  "city": "Tokyo"
+                },
+                "caller": {
+                  "type": "direct"
+                }
+              }
+            ]
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "tool_result",
+                "tool_use_id": "toolu_014S4Y2Eqn7wTvS9btEHGtJY",
+                "content": "{\"temperature\":72,\"condition\":\"sunny\"}"
+              }
+            ]
+          }
+        ],
+        "tools": [
+          {
+            "name": "get_weather",
+            "description": "Get the current weather",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "$schema": "http://json-schema.org/draft-07/schema#"
+            }
+          }
+        ],
+        "tool_choice": {
+          "type": "auto"
+        },
+        "stream": true
+      },
+      "timestamp": 1771518477986
+    },
+    "response": {
+      "status": 200,
+      "statusText": "OK",
+      "headers": {
+        "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
+        "anthropic-ratelimit-input-tokens-limit": "2000000",
+        "anthropic-ratelimit-input-tokens-remaining": "2000000",
+        "anthropic-ratelimit-input-tokens-reset": "2026-02-19T16:27:58Z",
+        "anthropic-ratelimit-output-tokens-limit": "400000",
+        "anthropic-ratelimit-output-tokens-remaining": "400000",
+        "anthropic-ratelimit-output-tokens-reset": "2026-02-19T16:27:58Z",
+        "anthropic-ratelimit-requests-limit": "20000",
+        "anthropic-ratelimit-requests-remaining": "19999",
+        "anthropic-ratelimit-requests-reset": "2026-02-19T16:27:58Z",
+        "anthropic-ratelimit-tokens-limit": "2400000",
+        "anthropic-ratelimit-tokens-remaining": "2400000",
+        "anthropic-ratelimit-tokens-reset": "2026-02-19T16:27:58Z",
+        "cache-control": "no-cache",
+        "cf-cache-status": "DYNAMIC",
+        "cf-ray": "9d072277b9b2ba69-BRU",
+        "connection": "keep-alive",
+        "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+        "content-type": "text/event-stream; charset=utf-8",
+        "date": "Thu, 19 Feb 2026 16:27:59 GMT",
+        "request-id": "req_011CYHk2f5Pmn1iFyg3VAui6",
+        "server": "cloudflare",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "x-envoy-upstream-service-time": "1063",
+        "x-robots-tag": "none"
+      },
+      "chunks": [
+        "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-5-20250929\",\"id\":\"msg_0141ZCNLXxpW3wbhwypVSUcj\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":691,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":6,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"}}               }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}           }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"The weather in Tokyo is currently\"} }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" sunny with a temperature of 72°\"} }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"F (\"}      }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"approximately\"}   }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" 22°C).\"}  }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" It\"}      }\n\n",
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"'s a nice day!\"}      }\n\n",
+        "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0     }\n\n",
+        "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":691,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":31}               }\n\n",
+        "event: message_stop\ndata: {\"type\":\"message_stop\"            }\n\n"
+      ],
+      "chunkTimings": [0, 68, 67, 14, 63, 124, 5, 28, 18, 1],
+      "isStreaming": true
+    }
+  },
+  {
+    "hash": "43e3f76fa253b147",
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "method": "POST",
+      "body": {
+        "model": "gpt-4o",
+        "input": [
+          {
+            "role": "system",
+            "content": "First say \"Let me check the weather\", then call the get_weather tool, then summarize what you found."
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "What is the weather in Tokyo?"
+              }
+            ]
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "get_weather",
+            "description": "Get the current weather",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "$schema": "http://json-schema.org/draft-07/schema#"
+            },
+            "strict": false
+          }
+        ],
+        "tool_choice": "auto",
+        "stream": true
+      },
+      "timestamp": 1771518479565
+    },
+    "response": {
+      "status": 200,
+      "statusText": "OK",
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cf-cache-status": "DYNAMIC",
+        "cf-ray": "9d072281e8191b57-BRU",
+        "connection": "keep-alive",
+        "content-type": "text/event-stream; charset=utf-8",
+        "date": "Thu, 19 Feb 2026 16:27:59 GMT",
+        "openai-organization": "mastra-qb2kpb",
+        "openai-processing-ms": "50",
+        "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+        "openai-version": "2020-10-01",
+        "server": "cloudflare",
+        "set-cookie": "__cf_bm=z1PKbToWCv5AUc0k.pDkmfidn7UA.Bas1jQtwpo_uRw-1771518479.6700568-1.0.1.1-sKMhLJpF7MamkNMRwSAr7WRwK9hbi.EKlM8Md.IQXKspqLqE0U7MjZ2v7emDy72Ji6IztYz4PgAdBpp_L5V9vnCkcFMljQvJ7FstGzGaRIuN1exGX1oVx.z5czwoz_de; HttpOnly; Secure; Path=/; Domain=api.openai.com; Expires=Thu, 19 Feb 2026 16:57:59 GMT",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "x-content-type-options": "nosniff",
+        "x-request-id": "req_a804b324198842fd9aae0c10275545e5"
+      },
+      "chunks": [
+        "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_091bb6c9200f829e0069973a0fc054819096cecb00fef90adf\",\"object\":\"response\",\"created_at\":1771518479,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the current weather\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+        "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_091bb6c9200f829e0069973a0fc054819096cecb00fef90adf\",\"object\":\"response\",\"created_at\":1771518479,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the current weather\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+        "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_091bb6c9200f829e0069973a1014048190b40ba8bab2ac2225\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+        "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_091bb6c9200f829e0069973a1014048190b40ba8bab2ac2225\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Let\",\"item_id\":\"msg_091bb6c9200f829e0069973a1014048190b40ba8bab2ac2225\",\"logprobs\":[],\"obfuscation\":\"wHpUwvnhQuyKF\",\"output_index\":0,\"sequence_number\":4}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" me\",\"item_id\":\"msg_091bb6c9200f829e0069973a1014048190b40ba8bab2ac2225\",\"logprobs\":[],\"obfuscation\":\"lbUp0OqkojyBY\",\"output_index\":0,\"sequence_number\":5}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" check\",\"item_id\":\"msg_091bb6c9200f829e0069973a1014048190b40ba8bab2ac2225\",\"logprobs\":[],\"obfuscation\":\"KQK4QVgsUj\",\"output_index\":0,\"sequence_number\":6}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_091bb6c9200f829e0069973a1014048190b40ba8bab2ac2225\",\"logprobs\":[],\"obfuscation\":\"kBmAzg1ShQ9U\",\"output_index\":0,\"sequence_number\":7}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" weather\",\"item_id\":\"msg_091bb6c9200f829e0069973a1014048190b40ba8bab2ac2225\",\"logprobs\":[],\"obfuscation\":\"R2QYGSmg\",\"output_index\":0,\"sequence_number\":8}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_091bb6c9200f829e0069973a1014048190b40ba8bab2ac2225\",\"logprobs\":[],\"obfuscation\":\"cAhZZcGHRVi6JsS\",\"output_index\":0,\"sequence_number\":9}\n\n",
+        "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_091bb6c9200f829e0069973a1014048190b40ba8bab2ac2225\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":10,\"text\":\"Let me check the weather.\"}\n\n",
+        "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_091bb6c9200f829e0069973a1014048190b40ba8bab2ac2225\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Let me check the weather.\"},\"sequence_number\":11}\n\n",
+        "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_091bb6c9200f829e0069973a1014048190b40ba8bab2ac2225\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Let me check the weather.\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":12}\n\n",
+        "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_091bb6c9200f829e0069973a107224819087d10486f06da3c5\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_E460vK2ZQyADa5QoJpaK3Qzd\",\"name\":\"get_weather\"},\"output_index\":1,\"sequence_number\":13}\n\n",
+        "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_091bb6c9200f829e0069973a107224819087d10486f06da3c5\",\"obfuscation\":\"zrV6Xs6m4Trpp0\",\"output_index\":1,\"sequence_number\":14}\n\n",
+        "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"city\",\"item_id\":\"fc_091bb6c9200f829e0069973a107224819087d10486f06da3c5\",\"obfuscation\":\"LRRs2PjKezDT\",\"output_index\":1,\"sequence_number\":15}\n\n",
+        "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_091bb6c9200f829e0069973a107224819087d10486f06da3c5\",\"obfuscation\":\"WBao1CyCElHft\",\"output_index\":1,\"sequence_number\":16}\n\n",
+        "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Tokyo\",\"item_id\":\"fc_091bb6c9200f829e0069973a107224819087d10486f06da3c5\",\"obfuscation\":\"QdN1bmKuH2v\",\"output_index\":1,\"sequence_number\":17}\n\n",
+        "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_091bb6c9200f829e0069973a107224819087d10486f06da3c5\",\"obfuscation\":\"g8WALYCTdFYEV4\",\"output_index\":1,\"sequence_number\":18}\n\n",
+        "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"city\\\":\\\"Tokyo\\\"}\",\"item_id\":\"fc_091bb6c9200f829e0069973a107224819087d10486f06da3c5\",\"output_index\":1,\"sequence_number\":19}\n\n",
+        "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_091bb6c9200f829e0069973a107224819087d10486f06da3c5\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"city\\\":\\\"Tokyo\\\"}\",\"call_id\":\"call_E460vK2ZQyADa5QoJpaK3Qzd\",\"name\":\"get_weather\"},\"output_index\":1,\"sequence_number\":20}\n\n",
+        "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_091bb6c9200f829e0069973a0fc054819096cecb00fef90adf\",\"object\":\"response\",\"created_at\":1771518479,\"status\":\"completed\",\"background\":false,\"completed_at\":1771518480,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[{\"id\":\"msg_091bb6c9200f829e0069973a1014048190b40ba8bab2ac2225\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Let me check the weather.\"}],\"role\":\"assistant\"},{\"id\":\"fc_091bb6c9200f829e0069973a107224819087d10486f06da3c5\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"city\\\":\\\"Tokyo\\\"}\",\"call_id\":\"call_E460vK2ZQyADa5QoJpaK3Qzd\",\"name\":\"get_weather\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the current weather\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"additionalProperties\":false},\"",
+        "strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":71,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":23,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":94},\"user\":null,\"metadata\":{}},\"sequence_number\":21}\n\n"
+      ],
+      "chunkTimings": [6, 3, 276, 0, 0, 9, 5, 0, 1, 2, 426, 0, 0, 0, 0, 0, 0, 0, 0, 5, 16, 88, 0],
+      "isStreaming": true
+    }
+  },
+  {
+    "hash": "69bfc25a875fdf18",
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "method": "POST",
+      "body": {
+        "model": "gpt-4o",
+        "input": [
+          {
+            "role": "system",
+            "content": "First say \"Let me check the weather\", then call the get_weather tool, then summarize what you found."
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "What is the weather in Tokyo?"
+              }
+            ]
+          },
+          {
+            "type": "item_reference",
+            "id": "msg_091bb6c9200f829e0069973a1014048190b40ba8bab2ac2225"
+          },
+          {
+            "type": "item_reference",
+            "id": "fc_091bb6c9200f829e0069973a107224819087d10486f06da3c5"
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "call_E460vK2ZQyADa5QoJpaK3Qzd",
+            "output": "{\"temperature\":72,\"condition\":\"sunny\"}"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "get_weather",
+            "description": "Get the current weather",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "$schema": "http://json-schema.org/draft-07/schema#"
+            },
+            "strict": false
+          }
+        ],
+        "tool_choice": "auto",
+        "stream": true
+      },
+      "timestamp": 1771518480682
+    },
+    "response": {
+      "status": 200,
+      "statusText": "OK",
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cf-cache-status": "DYNAMIC",
+        "cf-ray": "9d072288cfb8b72d-BRU",
+        "connection": "keep-alive",
+        "content-type": "text/event-stream; charset=utf-8",
+        "date": "Thu, 19 Feb 2026 16:28:00 GMT",
+        "openai-organization": "mastra-qb2kpb",
+        "openai-processing-ms": "70",
+        "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+        "openai-version": "2020-10-01",
+        "server": "cloudflare",
+        "set-cookie": "__cf_bm=c9O435od_D0YK5rU0Trl6Sidmgxb8pfS_jgPZtqpKbU-1771518480.764801-1.0.1.1-YVpWUqlotexjYhBDeukzpyoElwmrhhk.T6kXDTdZ5fthI23tXwVZ0lfZEJdipWHsRfH76wPeW3pmubzsGVT14jYq4n15mHbm7.AZfv65YsfEqAiHEx6OkPqv12QEIgio; HttpOnly; Secure; Path=/; Domain=api.openai.com; Expires=Thu, 19 Feb 2026 16:58:00 GMT",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "x-content-type-options": "nosniff",
+        "x-request-id": "req_2ac673a43e7e43e6a03ff967c9315a2b"
+      },
+      "chunks": [
+        "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_091bb6c9200f829e0069973a10d89481909fbf02c15f0f240f\",\"object\":\"response\",\"created_at\":1771518480,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the current weather\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+        "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_091bb6c9200f829e0069973a10d89481909fbf02c15f0f240f\",\"object\":\"response\",\"created_at\":1771518480,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the current weather\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+        "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_091bb6c9200f829e0069973a11328c81909616e503cea887fa\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+        "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_091bb6c9200f829e0069973a11328c81909616e503cea887fa\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"It's\",\"item_id\":\"msg_091bb6c9200f829e0069973a11328c81909616e503cea887fa\",\"logprobs\":[],\"obfuscation\":\"BTGnDaaWEpNZ\",\"output_index\":0,\"sequence_number\":4}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" currently\",\"item_id\":\"msg_091bb6c9200f829e0069973a11328c81909616e503cea887fa\",\"logprobs\":[],\"obfuscation\":\"CSlZTa\",\"output_index\":0,\"sequence_number\":5}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_091bb6c9200f829e0069973a11328c81909616e503cea887fa\",\"logprobs\":[],\"obfuscation\":\"gljBHbotAZfwgly\",\"output_index\":0,\"sequence_number\":6}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"72\",\"item_id\":\"msg_091bb6c9200f829e0069973a11328c81909616e503cea887fa\",\"logprobs\":[],\"obfuscation\":\"GyipzLfs2xcTAT\",\"output_index\":0,\"sequence_number\":7}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"°F\",\"item_id\":\"msg_091bb6c9200f829e0069973a11328c81909616e503cea887fa\",\"logprobs\":[],\"obfuscation\":\"GaXCkQQWCcsa2p\",\"output_index\":0,\"sequence_number\":8}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" and\",\"item_id\":\"msg_091bb6c9200f829e0069973a11328c81909616e503cea887fa\",\"logprobs\":[],\"obfuscation\":\"qIhgFaSzSvMK\",\"output_index\":0,\"sequence_number\":9}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" sunny\",\"item_id\":\"msg_091bb6c9200f829e0069973a11328c81909616e503cea887fa\",\"logprobs\":[],\"obfuscation\":\"aRdynUZ5B0\",\"output_index\":0,\"sequence_number\":10}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" in\",\"item_id\":\"msg_091bb6c9200f829e0069973a11328c81909616e503cea887fa\",\"logprobs\":[],\"obfuscation\":\"yvRPBX1gSx2PL\",\"output_index\":0,\"sequence_number\":11}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Tokyo\",\"item_id\":\"msg_091bb6c9200f829e0069973a11328c81909616e503cea887fa\",\"logprobs\":[],\"obfuscation\":\"hAPxFMulYb\",\"output_index\":0,\"sequence_number\":12}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_091bb6c9200f829e0069973a11328c81909616e503cea887fa\",\"logprobs\":[],\"obfuscation\":\"gkm9XKEziiW76tX\",\"output_index\":0,\"sequence_number\":13}\n\n",
+        "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_091bb6c9200f829e0069973a11328c81909616e503cea887fa\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":14,\"text\":\"It's currently 72°F and sunny in Tokyo.\"}\n\n",
+        "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_091bb6c9200f829e0069973a11328c81909616e503cea887fa\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"It's currently 72°F and sunny in Tokyo.\"},\"sequence_number\":15}\n\n",
+        "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_091bb6c9200f829e0069973a11328c81909616e503cea887fa\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"It's currently 72°F and sunny in Tokyo.\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":16}\n\n",
+        "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_091bb6c9200f829e0069973a10d89481909fbf02c15f0f240f\",\"object\":\"response\",\"created_at\":1771518480,\"status\":\"completed\",\"background\":false,\"completed_at\":1771518481,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[{\"id\":\"msg_091bb6c9200f829e0069973a11328c81909616e503cea887fa\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"It's currently 72°F and sunny in Tokyo.\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the current weather\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":112,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":12,\"output_tokens_details\":{\"reaso",
+        "ning_tokens\":0},\"total_tokens\":124},\"user\":null,\"metadata\":{}},\"sequence_number\":17}\n\n"
+      ],
+      "chunkTimings": [1, 0, 290, 0, 2, 0, 24, 0, 50, 0, 4, 1, 40, 17, 0, 7, 50, 0],
+      "isStreaming": true
+    }
+  },
+  {
+    "hash": "bb1bef9419c73c76",
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "method": "POST",
+      "body": {
+        "model": "gpt-4o",
+        "input": [
+          {
+            "role": "system",
+            "content": "First say \"Let me check the weather\", then call the get_weather tool, then summarize what you found."
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "What is the weather in Tokyo?"
+              }
+            ]
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "get_weather",
+            "description": "Get the current weather",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "$schema": "http://json-schema.org/draft-07/schema#"
+            }
+          }
+        ],
+        "tool_choice": "auto",
+        "stream": true
+      },
+      "timestamp": 1771518481440
+    },
+    "response": {
+      "status": 200,
+      "statusText": "OK",
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cf-cache-status": "DYNAMIC",
+        "cf-ray": "9d07228d48521b57-BRU",
+        "connection": "keep-alive",
+        "content-type": "text/event-stream; charset=utf-8",
+        "date": "Thu, 19 Feb 2026 16:28:01 GMT",
+        "openai-organization": "mastra-qb2kpb",
+        "openai-processing-ms": "68",
+        "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+        "openai-version": "2020-10-01",
+        "server": "cloudflare",
+        "set-cookie": "__cf_bm=ZHqlDPEbDy4afm.GjT6XsGBcPoXWpnElEqggL3jVn7I-1771518481.4889433-1.0.1.1-ekIjX_7UdLxv6gq7WKIG_vNKOxyvXD_5ZlDJDldXkNJum6B2EjHPQ6RA4FGyRHs.KrUJiKkSQ1iCNv5SGUmk7hWbuo5KII7oCTFO7kx.94cqQluwNNIZsJI2HuX2_Q49; HttpOnly; Secure; Path=/; Domain=api.openai.com; Expires=Thu, 19 Feb 2026 16:58:01 GMT",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "x-content-type-options": "nosniff",
+        "x-request-id": "req_d2f7daae9caf4299a3e0e008cdd70f97"
+      },
+      "chunks": [
+        "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_00a6d4fa02fec2d00069973a119238819583e5ec24c82db595\",\"object\":\"response\",\"created_at\":1771518481,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the current weather\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"additionalProperties\":false,\"required\":[\"city\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+        "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_00a6d4fa02fec2d00069973a119238819583e5ec24c82db595\",\"object\":\"response\",\"created_at\":1771518481,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the current weather\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"additionalProperties\":false,\"required\":[\"city\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+        "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_00a6d4fa02fec2d00069973a11e1a48195ab9c1f3b17acd005\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+        "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_00a6d4fa02fec2d00069973a11e1a48195ab9c1f3b17acd005\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Let\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a11e1a48195ab9c1f3b17acd005\",\"logprobs\":[],\"obfuscation\":\"MQEvUGhXqtHzQ\",\"output_index\":0,\"sequence_number\":4}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" me\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a11e1a48195ab9c1f3b17acd005\",\"logprobs\":[],\"obfuscation\":\"RlpUoo1qTAZGU\",\"output_index\":0,\"sequence_number\":5}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" check\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a11e1a48195ab9c1f3b17acd005\",\"logprobs\":[],\"obfuscation\":\"uq0ZDa4nZm\",\"output_index\":0,\"sequence_number\":6}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a11e1a48195ab9c1f3b17acd005\",\"logprobs\":[],\"obfuscation\":\"2GIUEiC6ppPy\",\"output_index\":0,\"sequence_number\":7}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" weather\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a11e1a48195ab9c1f3b17acd005\",\"logprobs\":[],\"obfuscation\":\"NJFF3Dy6\",\"output_index\":0,\"sequence_number\":8}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a11e1a48195ab9c1f3b17acd005\",\"logprobs\":[],\"obfuscation\":\"VCmBNU0TLROPcjJ\",\"output_index\":0,\"sequence_number\":9}\n\n",
+        "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_00a6d4fa02fec2d00069973a11e1a48195ab9c1f3b17acd005\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":10,\"text\":\"Let me check the weather.\"}\n\n",
+        "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_00a6d4fa02fec2d00069973a11e1a48195ab9c1f3b17acd005\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Let me check the weather.\"},\"sequence_number\":11}\n\n",
+        "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_00a6d4fa02fec2d00069973a11e1a48195ab9c1f3b17acd005\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Let me check the weather.\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":12}\n\n",
+        "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_00a6d4fa02fec2d00069973a12317081958a55d90683b81e3c\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_tnidvyj9a8pUI4YDeOnCRIvy\",\"name\":\"get_weather\"},\"output_index\":1,\"sequence_number\":13}\n\n",
+        "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_00a6d4fa02fec2d00069973a12317081958a55d90683b81e3c\",\"obfuscation\":\"EOsIxMCtCH6gcD\",\"output_index\":1,\"sequence_number\":14}\n\n",
+        "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"city\",\"item_id\":\"fc_00a6d4fa02fec2d00069973a12317081958a55d90683b81e3c\",\"obfuscation\":\"lVcFU7APKuoP\",\"output_index\":1,\"sequence_number\":15}\n\n",
+        "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_00a6d4fa02fec2d00069973a12317081958a55d90683b81e3c\",\"obfuscation\":\"sMuJ1Z4HOpmtB\",\"output_index\":1,\"sequence_number\":16}\n\n",
+        "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Tokyo\",\"item_id\":\"fc_00a6d4fa02fec2d00069973a12317081958a55d90683b81e3c\",\"obfuscation\":\"8iZnf2KdPWh\",\"output_index\":1,\"sequence_number\":17}\n\n",
+        "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_00a6d4fa02fec2d00069973a12317081958a55d90683b81e3c\",\"obfuscation\":\"7MTkMrTVdQHVfQ\",\"output_index\":1,\"sequence_number\":18}\n\n",
+        "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"city\\\":\\\"Tokyo\\\"}\",\"item_id\":\"fc_00a6d4fa02fec2d00069973a12317081958a55d90683b81e3c\",\"output_index\":1,\"sequence_number\":19}\n\n",
+        "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_00a6d4fa02fec2d00069973a12317081958a55d90683b81e3c\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"city\\\":\\\"Tokyo\\\"}\",\"call_id\":\"call_tnidvyj9a8pUI4YDeOnCRIvy\",\"name\":\"get_weather\"},\"output_index\":1,\"sequence_number\":20}\n\n",
+        "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_00a6d4fa02fec2d00069973a119238819583e5ec24c82db595\",\"object\":\"response\",\"created_at\":1771518481,\"status\":\"completed\",\"background\":false,\"completed_at\":1771518482,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[{\"id\":\"msg_00a6d4fa02fec2d00069973a11e1a48195ab9c1f3b17acd005\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Let me check the weather.\"}],\"role\":\"assistant\"},{\"id\":\"fc_00a6d4fa02fec2d00069973a12317081958a55d90683b81e3c\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"city\\\":\\\"Tokyo\\\"}\",\"call_id\":\"call_tnidvyj9a8pUI4YDeOnCRIvy\",\"name\":\"get_weather\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the current weather\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"additionalProperties\":false,\"required\":[\"city\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":71,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":23,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":94},\"user\":null,\"metadata\":{}},\"sequence_number\":21}\n\n"
+      ],
+      "chunkTimings": [7, 0, 243, 0, 3, 2, 2, 1, 3, 0, 300, 4, 0, 4, 0, 0, 2, 2, 1, 22, 0, 113],
+      "isStreaming": true
+    }
+  },
+  {
+    "hash": "3eabb37e7c45eee6",
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "method": "POST",
+      "body": {
+        "model": "gpt-4o",
+        "input": [
+          {
+            "role": "system",
+            "content": "First say \"Let me check the weather\", then call the get_weather tool, then summarize what you found."
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "What is the weather in Tokyo?"
+              }
+            ]
+          },
+          {
+            "type": "item_reference",
+            "id": "msg_00a6d4fa02fec2d00069973a11e1a48195ab9c1f3b17acd005"
+          },
+          {
+            "type": "item_reference",
+            "id": "fc_00a6d4fa02fec2d00069973a12317081958a55d90683b81e3c"
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "call_tnidvyj9a8pUI4YDeOnCRIvy",
+            "output": "{\"temperature\":72,\"condition\":\"sunny\"}"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "get_weather",
+            "description": "Get the current weather",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "$schema": "http://json-schema.org/draft-07/schema#"
+            }
+          }
+        ],
+        "tool_choice": "auto",
+        "stream": true
+      },
+      "timestamp": 1771518482382
+    },
+    "response": {
+      "status": 200,
+      "statusText": "OK",
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cf-cache-status": "DYNAMIC",
+        "cf-ray": "9d0722933cb8b72d-BRU",
+        "connection": "keep-alive",
+        "content-type": "text/event-stream; charset=utf-8",
+        "date": "Thu, 19 Feb 2026 16:28:02 GMT",
+        "openai-organization": "mastra-qb2kpb",
+        "openai-processing-ms": "132",
+        "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+        "openai-version": "2020-10-01",
+        "server": "cloudflare",
+        "set-cookie": "__cf_bm=qQJNl5S5QO9938hDse7AyuX3VWTN03aD0UOiuGvhDSY-1771518482.432178-1.0.1.1-wvNTKiYlVCnW4Zomb3tDyY7yzzyaauiS.UmAMmG22dsPtvKBslGxIUXG9QDCZ.j4rnvqFdXF1afcPUyWK8wWzoTIKVPqbHUbLWT4wvAHOfFnDwmI6gsm9hEo9Z97xtc5; HttpOnly; Secure; Path=/; Domain=api.openai.com; Expires=Thu, 19 Feb 2026 16:58:02 GMT",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "x-content-type-options": "nosniff",
+        "x-request-id": "req_6e1a62aff58b4a38bfa34f884a72fdcb"
+      },
+      "chunks": [
+        "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_00a6d4fa02fec2d00069973a1288d8819585ed9d5b55bf545a\",\"object\":\"response\",\"created_at\":1771518482,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the current weather\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"additionalProperties\":false,\"required\":[\"city\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+        "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_00a6d4fa02fec2d00069973a1288d8819585ed9d5b55bf545a\",\"object\":\"response\",\"created_at\":1771518482,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the current weather\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"additionalProperties\":false,\"required\":[\"city\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+        "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+        "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"The\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"logprobs\":[],\"obfuscation\":\"39JKIn9Sb39Tu\",\"output_index\":0,\"sequence_number\":4}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" weather\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"logprobs\":[],\"obfuscation\":\"O37my1hB\",\"output_index\":0,\"sequence_number\":5}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" in\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"logprobs\":[],\"obfuscation\":\"NFzt9mJuTvve5\",\"output_index\":0,\"sequence_number\":6}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Tokyo\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"logprobs\":[],\"obfuscation\":\"YqOXJ8KwgO\",\"output_index\":0,\"sequence_number\":7}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" is\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"logprobs\":[],\"obfuscation\":\"1S0eEAMKqlcBF\",\"output_index\":0,\"sequence_number\":8}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" currently\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"logprobs\":[],\"obfuscation\":\"soGF8O\",\"output_index\":0,\"sequence_number\":9}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" sunny\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"logprobs\":[],\"obfuscation\":\"7PJc26b5jw\",\"output_index\":0,\"sequence_number\":10}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" with\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"logprobs\":[],\"obfuscation\":\"Y0XtogzgcSM\",\"output_index\":0,\"sequence_number\":11}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" a\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"logprobs\":[],\"obfuscation\":\"i54AFy9i5w2RmX\",\"output_index\":0,\"sequence_number\":12}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" temperature\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"logprobs\":[],\"obfuscation\":\"BMK1\",\"output_index\":0,\"sequence_number\":13}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" of\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"logprobs\":[],\"obfuscation\":\"Qv8kHDX8TUJ7o\",\"output_index\":0,\"sequence_number\":14}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"logprobs\":[],\"obfuscation\":\"Ho1uS7xvhAZWQza\",\"output_index\":0,\"sequence_number\":15}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"72\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"logprobs\":[],\"obfuscation\":\"k300DyykEhrNKv\",\"output_index\":0,\"sequence_number\":16}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"°F\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"logprobs\":[],\"obfuscation\":\"MueKfS7svdlJ6q\",\"output_index\":0,\"sequence_number\":17}\n\n",
+        "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"logprobs\":[],\"obfuscation\":\"XOBLBo64giU1jbZ\",\"output_index\":0,\"sequence_number\":18}\n\n",
+        "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":19,\"text\":\"The weather in Tokyo is currently sunny with a temperature of 72°F.\"}\n\n",
+        "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The weather in Tokyo is currently sunny with a temperature of 72°F.\"},\"sequence_number\":20}\n\n",
+        "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The weather in Tokyo is currently sunny with a temperature of 72°F.\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":21}\n\n",
+        "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_00a6d4fa02fec2d00069973a1288d8819585ed9d5b55bf545a\",\"object\":\"response\",\"created_at\":1771518482,\"status\":\"completed\",\"background\":false,\"completed_at\":1771518483,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[{\"id\":\"msg_00a6d4fa02fec2d00069973a12e6588195918a8a82b912ebe1\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The weather in Tokyo is currently sunny with a temperature of 72°F.\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the current weather\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"additionalProperties\":false,\"required\":[\"city\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":112,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":17,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":129},\"user\":null,\"metadata\":{}},\"sequence_number\":22}\n\n"
+      ],
+      "chunkTimings": [5, 20, 227, 6, 0, 13, 7, 39, 47, 8, 115, 0, 0, 0, 0, 0, 0, 1, 4, 13, 3, 124],
+      "isStreaming": true
+    }
+  },
+  {
+    "hash": "c39614604a74e656",
+    "request": {
+      "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-latest:streamGenerateContent?alt=sse",
+      "method": "POST",
+      "body": {
+        "generationConfig": {},
+        "contents": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "What is the weather in Tokyo?"
+              }
+            ]
+          }
+        ],
+        "systemInstruction": {
+          "parts": [
+            {
+              "text": "First say \"Let me check the weather\", then call the get_weather tool, then summarize what you found."
+            }
+          ]
+        },
+        "tools": [
+          {
+            "functionDeclarations": [
+              {
+                "name": "get_weather",
+                "description": "Get the current weather",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "toolConfig": {
+          "functionCallingConfig": {
+            "mode": "AUTO"
+          }
+        }
+      },
+      "timestamp": 1771518543332
+    },
+    "response": {
+      "status": 503,
+      "statusText": "Service Unavailable",
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+        "content-length": "198",
+        "content-type": "text/event-stream",
+        "date": "Thu, 19 Feb 2026 16:29:04 GMT",
+        "server": "scaffolding on HTTPServer2",
+        "server-timing": "gfet4t7; dur=668",
+        "vary": "Origin, X-Origin, Referer",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "0"
+      },
+      "chunks": [
+        "{\n  \"error\": {\n    \"code\": 503,\n    \"message\": \"This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.\",\n    \"status\": \"UNAVAILABLE\"\n  }\n}\n"
+      ],
+      "chunkTimings": [0],
+      "isStreaming": true
+    }
+  },
+  {
+    "hash": "c39614604a74e656",
+    "request": {
+      "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-latest:streamGenerateContent?alt=sse",
+      "method": "POST",
+      "body": {
+        "generationConfig": {},
+        "contents": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "What is the weather in Tokyo?"
+              }
+            ]
+          }
+        ],
+        "systemInstruction": {
+          "parts": [
+            {
+              "text": "First say \"Let me check the weather\", then call the get_weather tool, then summarize what you found."
+            }
+          ]
+        },
+        "tools": [
+          {
+            "functionDeclarations": [
+              {
+                "name": "get_weather",
+                "description": "Get the current weather",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "toolConfig": {
+          "functionCallingConfig": {
+            "mode": "AUTO"
+          }
+        }
+      },
+      "timestamp": 1771518546162
+    },
+    "response": {
+      "status": 503,
+      "statusText": "Service Unavailable",
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+        "content-length": "198",
+        "content-type": "text/event-stream",
+        "date": "Thu, 19 Feb 2026 16:29:06 GMT",
+        "server": "scaffolding on HTTPServer2",
+        "server-timing": "gfet4t7; dur=456",
+        "vary": "Origin, X-Origin, Referer",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "0"
+      },
+      "chunks": [
+        "{\n  \"error\": {\n    \"code\": 503,\n    \"message\": \"This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.\",\n    \"status\": \"UNAVAILABLE\"\n  }\n}\n"
+      ],
+      "chunkTimings": [0],
+      "isStreaming": true
+    }
+  },
+  {
+    "hash": "c39614604a74e656",
+    "request": {
+      "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-latest:streamGenerateContent?alt=sse",
+      "method": "POST",
+      "body": {
+        "generationConfig": {},
+        "contents": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "What is the weather in Tokyo?"
+              }
+            ]
+          }
+        ],
+        "systemInstruction": {
+          "parts": [
+            {
+              "text": "First say \"Let me check the weather\", then call the get_weather tool, then summarize what you found."
+            }
+          ]
+        },
+        "tools": [
+          {
+            "functionDeclarations": [
+              {
+                "name": "get_weather",
+                "description": "Get the current weather",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "toolConfig": {
+          "functionCallingConfig": {
+            "mode": "AUTO"
+          }
+        }
+      },
+      "timestamp": 1771518550645
+    },
+    "response": {
+      "status": 503,
+      "statusText": "Service Unavailable",
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+        "content-length": "198",
+        "content-type": "text/event-stream",
+        "date": "Thu, 19 Feb 2026 16:29:11 GMT",
+        "server": "scaffolding on HTTPServer2",
+        "server-timing": "gfet4t7; dur=341",
+        "vary": "Origin, X-Origin, Referer",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "0"
+      },
+      "chunks": [
+        "{\n  \"error\": {\n    \"code\": 503,\n    \"message\": \"This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.\",\n    \"status\": \"UNAVAILABLE\"\n  }\n}\n"
+      ],
+      "chunkTimings": [0],
+      "isStreaming": true
+    }
+  }
+]

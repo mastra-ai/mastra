@@ -1,6 +1,7 @@
 import z from 'zod';
 
-import { paginationInfoSchema, createPagePaginationSchema } from './common';
+import { paginationInfoSchema, createPagePaginationSchema, statusQuerySchema } from './common';
+import { modelConfigSchema } from './stored-agents';
 
 // ============================================================================
 // Path Parameter Schemas
@@ -19,8 +20,15 @@ const storageOrderBySchema = z.object({
   direction: z.enum(['ASC', 'DESC']).optional(),
 });
 
+export { statusQuerySchema };
+
 export const listStoredScorersQuerySchema = createPagePaginationSchema(100).extend({
   orderBy: storageOrderBySchema.optional(),
+  status: z
+    .enum(['draft', 'published', 'archived'])
+    .optional()
+    .default('published')
+    .describe('Filter scorers by status (defaults to published)'),
   authorId: z.string().optional().describe('Filter scorers by author identifier'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Filter scorers by metadata key-value pairs'),
 });
@@ -33,14 +41,6 @@ const samplingConfigSchema = z.union([
   z.object({ type: z.literal('none') }),
   z.object({ type: z.literal('ratio'), rate: z.number().min(0).max(1) }),
 ]);
-
-const modelConfigSchema = z
-  .object({
-    provider: z.string().describe('Model provider (e.g., openai, anthropic)'),
-    name: z.string().describe('Model name (e.g., gpt-4o, claude-3-opus)'),
-  })
-  .passthrough()
-  .describe('Model configuration');
 
 const scorerTypeEnum = z
   .enum([

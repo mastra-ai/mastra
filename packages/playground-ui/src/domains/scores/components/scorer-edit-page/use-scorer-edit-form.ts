@@ -23,6 +23,10 @@ const scorerFormResolver: Resolver<ScorerFormValues> = async values => {
     errors['model.name'] = { type: 'required', message: 'Model is required' };
   }
 
+  if (!values.instructions || values.instructions.trim() === '') {
+    errors.instructions = { type: 'required', message: 'Instructions are required' };
+  }
+
   return {
     values: Object.keys(errors).length === 0 ? values : {},
     errors: Object.keys(errors).length > 0 ? errors : {},

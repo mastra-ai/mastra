@@ -233,6 +233,16 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
   }: QueryVectorParams<S3VectorsFilter>): Promise<QueryResult[]> {
     indexName = normalizeIndexName(indexName);
 
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('S3VECTORS', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for S3 Vectors queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     try {
       if (!Array.isArray(queryVector) || queryVector.length === 0) {
         throw new Error('queryVector must be a non-empty float32 array');
@@ -255,17 +265,17 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
 
       const vectors = (out.vectors ?? []).filter(v => !!v?.key);
 
-      // If includeVector is requested and some results lack data, fetch only the missing ones.
+      // Query results don't include vector data; fetch via GetVectors when requested.
       let dataMap: Record<string, number[] | undefined> | undefined;
       if (includeVector) {
-        const missingKeys = vectors.filter(v => !v.data?.float32 && v.key).map(v => v.key!) as string[];
+        const keys = vectors.filter(v => v.key).map(v => v.key!) as string[];
 
-        if (missingKeys.length > 0) {
+        if (keys.length > 0) {
           const got = await this.client.send(
             new GetVectorsCommand({
               ...this.bucketParams(),
               indexName,
-              keys: missingKeys,
+              keys,
               returnData: true,
               returnMetadata: false,
             }),
@@ -287,7 +297,7 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
         if (md !== undefined) result.metadata = md;
 
         if (includeVector) {
-          const vec = (v.data?.float32 as number[] | undefined) ?? dataMap?.[id];
+          const vec = dataMap?.[id];
           if (vec !== undefined) result.vector = vec;
         }
 

@@ -19,7 +19,7 @@ export const comboboxStyles = {
 
   /** Popup container */
   popup: cn(
-    'min-w-[var(--anchor-width)] w-max rounded-md bg-surface3 text-neutral5',
+    'min-w-[var(--anchor-width)] w-max max-w-[500px] rounded-md bg-surface3 text-neutral5',
     'shadow-elevated',
     'origin-[var(--transform-origin)]',
     'transition-[transform,scale,opacity] duration-150 ease-out',
@@ -79,13 +79,16 @@ export const comboboxStyles = {
   checkboxIcon: 'h-3 w-3 text-white',
 
   /** Option content wrapper */
-  optionContent: 'whitespace-nowrap flex items-center gap-2 w-full',
+  optionContent: 'flex items-center gap-2 w-full min-w-0',
 
   /** Option label/description wrapper */
-  optionText: 'flex flex-col gap-0.5',
+  optionText: 'flex flex-col gap-0.5 min-w-0',
+
+  /** Option label */
+  optionLabel: 'truncate',
 
   /** Option description */
-  optionDescription: 'text-xs text-neutral3',
+  optionDescription: 'text-xs text-neutral3 truncate',
 
   /** Option end slot */
   optionEnd: 'ml-auto',

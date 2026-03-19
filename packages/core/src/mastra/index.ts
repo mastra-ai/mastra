@@ -3,6 +3,7 @@ import type { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
+import { DatasetsManager } from '../datasets/manager.js';
 import type { MastraDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -16,8 +17,8 @@ import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
-import type { ObservabilityEntrypoint } from '../observability';
-import { NoOpObservability } from '../observability';
+import type { ObservabilityEntrypoint, LoggerContext, MetricsContext } from '../observability';
+import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
@@ -32,7 +33,7 @@ import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import type { Workspace } from '../workspace';
+import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 
 /**
@@ -173,6 +174,8 @@ export interface Config<
 
   /**
    * Custom ID generator function for creating unique identifiers.
+   * Receives optional context about what type of ID is being generated
+   * and where it's being requested from.
    * @default `crypto.randomUUID()`
    */
   idGenerator?: MastraIdGenerator;
@@ -229,7 +232,7 @@ export interface Config<
    * Agents inherit this workspace unless they have their own configured.
    * Skills are accessed via workspace.skills when skills is configured.
    */
-  workspace?: Workspace;
+  workspace?: AnyWorkspace;
 
   /**
    * Custom model router gateways for accessing LLM providers.
@@ -323,7 +326,7 @@ export class Mastra<
     new Map();
   #memory?: TMemory;
   #workspace?: Workspace;
-  #workspaces: Record<string, Workspace> = {};
+  #workspaces: Record<string, RegisteredWorkspace> = {};
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
@@ -345,9 +348,17 @@ export class Mastra<
   #promptBlocks: Record<string, StorageResolvedPromptBlockType> = {};
   // Editor instance for handling agent instantiation and configuration
   #editor?: IMastraEditor;
+  #datasets?: DatasetsManager;
 
   get pubsub() {
     return this.#pubsub;
+  }
+
+  get datasets(): DatasetsManager {
+    if (!this.#datasets) {
+      this.#datasets = new DatasetsManager(this);
+    }
+    return this.#datasets;
   }
 
   /**
@@ -356,10 +367,13 @@ export class Mastra<
    * @example
    * ```typescript
    * const mastra = new Mastra({
-   *   idGenerator: () => `custom-${Date.now()}`
+   *   idGenerator: context =>
+   *     context?.idType === 'message' && context.threadId
+   *       ? `msg-${context.threadId}-${Date.now()}`
+   *       : `custom-${Date.now()}`
    * });
    * const generator = mastra.getIdGenerator();
-   * console.log(generator?.()); // \"custom-1234567890\"
+   * console.log(generator?.({ idType: 'message', threadId: 'thread-123' })); // \"msg-thread-123-1234567890\"
    * ```
    */
   public getIdGenerator() {
@@ -447,18 +461,37 @@ export class Mastra<
    *
    * The ID generator function will be used by `generateId()` instead of the default
    * `crypto.randomUUID()`. This is useful for creating application-specific ID formats
-   * or integrating with existing ID generation systems.
+   * or integrating with existing ID generation systems. The function receives
+   * optional context about what is requesting the ID.
    *
    * @example
    * ```typescript
    * const mastra = new Mastra();
-   * mastra.setIdGenerator(() => `custom-${Date.now()}`);
-   * const id = mastra.generateId();
-   * console.log(id); // "custom-1234567890"
+   * mastra.setIdGenerator(context =>
+   *   context?.idType === 'run' && context.entityId
+   *     ? `run-${context.entityId}-${Date.now()}`
+   *     : `custom-${Date.now()}`
+   * );
+   * const id = mastra.generateId({ idType: 'run', entityId: 'agent-123' });
+   * console.log(id); // "run-agent-123-1234567890"
    * ```
    */
   public setIdGenerator(idGenerator: MastraIdGenerator) {
     this.#idGenerator = idGenerator;
+  }
+
+  /**
+   * Sets the server configuration for this Mastra instance.
+   *
+   * @param server - The server configuration object
+   *
+   * @example
+   * ```typescript
+   * mastra.setServer({ ...mastra.getServer(), auth: new MastraAuthWorkos() });
+   * ```
+   */
+  public setServer(server: ServerConfig): void {
+    this.#server = server;
   }
 
   /**
@@ -623,7 +656,7 @@ export class Mastra<
     if (config?.workspace) {
       this.#workspace = config.workspace;
       // Also register in the workspaces registry for direct lookup by ID
-      this.addWorkspace(config.workspace);
+      this.addWorkspace(config.workspace, undefined, { source: 'mastra' });
     }
 
     if (config?.scorers) {
@@ -893,7 +926,11 @@ export class Mastra<
       Promise.resolve(mastraAgent.getWorkspace?.())
         .then(workspace => {
           if (workspace) {
-            this.addWorkspace(workspace);
+            this.addWorkspace(workspace, undefined, {
+              source: 'agent',
+              agentId: mastraAgent.id ?? agentKey,
+              agentName: mastraAgent.name,
+            });
           }
         })
         .catch(err => {
@@ -1190,8 +1227,8 @@ export class Mastra<
    * ```
    */
   public getWorkspaceById(id: string): Workspace {
-    const workspace = this.#workspaces[id];
-    if (!workspace) {
+    const entry = this.#workspaces[id];
+    if (!entry) {
       const error = new MastraError({
         id: 'MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND',
         domain: ErrorDomain.MASTRA,
@@ -1206,7 +1243,7 @@ export class Mastra<
       this.#logger?.trackException(error);
       throw error;
     }
-    return workspace;
+    return entry.workspace;
   }
 
   /**
@@ -1215,12 +1252,12 @@ export class Mastra<
    * @example
    * ```typescript
    * const workspaces = mastra.listWorkspaces();
-   * for (const [id, workspace] of Object.entries(workspaces)) {
-   *   console.log(`Workspace ${id}: ${workspace.name}`);
+   * for (const [id, entry] of Object.entries(workspaces)) {
+   *   console.log(`Workspace ${id}: ${entry.workspace.name} (source: ${entry.source})`);
    * }
    * ```
    */
-  public listWorkspaces(): Record<string, Workspace> {
+  public listWorkspaces(): Record<string, RegisteredWorkspace> {
     return { ...this.#workspaces };
   }
 
@@ -1240,9 +1277,23 @@ export class Mastra<
    * mastra.addWorkspace(workspace);
    * ```
    */
-  public addWorkspace(workspace: Workspace, key?: string): void {
+  public addWorkspace(
+    workspace: AnyWorkspace,
+    key?: string,
+    metadata?: { source?: 'mastra' | 'agent'; agentId?: string; agentName?: string },
+  ): void {
     if (!workspace) {
       throw createUndefinedPrimitiveError('workspace', workspace, key);
+    }
+    const source = metadata?.source ?? (metadata?.agentId || metadata?.agentName ? 'agent' : 'mastra');
+    if (source === 'agent' && (!metadata?.agentId || !metadata?.agentName)) {
+      throw new MastraError({
+        id: 'MASTRA_ADD_WORKSPACE_MISSING_AGENT_METADATA',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Agent workspaces must include agentId and agentName.',
+        details: { status: 400, workspaceId: key || workspace.id },
+      });
     }
     const workspaceKey = key || workspace.id;
     if (this.#workspaces[workspaceKey]) {
@@ -1251,7 +1302,12 @@ export class Mastra<
       return;
     }
 
-    this.#workspaces[workspaceKey] = workspace;
+    this.#workspaces[workspaceKey] = {
+      workspace,
+      source,
+      ...(metadata?.agentId ? { agentId: metadata.agentId } : {}),
+      ...(metadata?.agentName ? { agentName: metadata.agentName } : {}),
+    };
   }
 
   /**
@@ -1263,7 +1319,7 @@ export class Mastra<
    * @example Getting and executing a workflow
    * ```typescript
    * import { createWorkflow, createStep } from '@mastra/core/workflows';
-   * import { z } from 'zod';
+   * import { z } from 'zod/v4';
    *
    * const processDataWorkflow = createWorkflow({
    *   name: 'process-data',
@@ -2454,6 +2510,26 @@ export class Mastra<
 
   get observability(): ObservabilityEntrypoint {
     return this.#observability;
+  }
+
+  /**
+   * Structured logging API for observability.
+   * Logs emitted via this API will not have trace correlation when used outside a span.
+   * Use for startup logs, background jobs, or other non-traced scenarios.
+   *
+   * Note: For the infrastructure logger (IMastraLogger), use getLogger() instead.
+   */
+  get loggerVNext(): LoggerContext {
+    return this.#observability.getDefaultInstance()?.getLoggerContext?.() ?? noOpLoggerContext;
+  }
+
+  /**
+   * Direct metrics API for use outside trace context.
+   * Metrics emitted via this API will not have auto-labels from spans.
+   * Use for background jobs, startup metrics, or other non-traced scenarios.
+   */
+  get metrics(): MetricsContext {
+    return this.#observability.getDefaultInstance()?.getMetricsContext?.() ?? noOpMetricsContext;
   }
 
   public getServerMiddleware() {

@@ -147,7 +147,7 @@ test.describe('Page Structure & Initial State', () => {
 
     await goToEditPage(page, scorerId);
 
-    const updateButton = page.getByRole('button', { name: 'Update scorer' });
+    const updateButton = page.getByRole('button', { name: 'Publish' });
     await expect(updateButton).toBeVisible();
     await expect(updateButton).toBeEnabled();
   });
@@ -170,8 +170,8 @@ test.describe('Page Structure & Initial State', () => {
 
     await expect(page.locator('#scorer-name')).toHaveValue(scorerName);
     await expect(page.locator('#scorer-description')).toHaveValue(description);
-    await expect(page.getByRole('combobox').nth(0)).toContainText('OpenAI');
-    await expect(page.getByRole('combobox').nth(1)).toContainText('gpt-4o-mini');
+    await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
+    await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
     await expect(page.getByPlaceholder('Min')).toHaveValue('1');
     await expect(page.getByPlaceholder('Max')).toHaveValue('5');
     await expect(page.locator('#sampling-ratio')).toBeChecked();
@@ -190,10 +190,10 @@ test.describe('Edit Persistence', () => {
     const updatedName = uniqueScorerName('Updated');
     await fillScorerFields(page, { name: updatedName });
 
-    await page.getByRole('button', { name: 'Update scorer' }).click();
+    await page.getByRole('button', { name: 'Publish' }).click();
 
     await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
-    await expect(page.getByText('Scorer updated successfully')).toBeVisible();
+    await expect(page.getByText('Scorer published')).toBeVisible();
   });
 
   test('persists all edited fields when returning to edit page', async ({ page }) => {
@@ -216,18 +216,18 @@ test.describe('Edit Persistence', () => {
       instructions: updatedInstructions,
     });
 
-    await page.getByRole('button', { name: 'Update scorer' }).click();
+    await page.getByRole('button', { name: 'Publish' }).click();
 
     await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
-    await expect(page.getByText('Scorer updated successfully')).toBeVisible();
+    await expect(page.getByText('Scorer published')).toBeVisible();
 
     // Navigate back to edit page
     await goToEditPage(page, scorerId);
 
     await expect(page.locator('#scorer-name')).toHaveValue(updatedName);
     await expect(page.locator('#scorer-description')).toHaveValue(updatedDescription);
-    await expect(page.getByRole('combobox').nth(0)).toContainText('OpenAI');
-    await expect(page.getByRole('combobox').nth(1)).toContainText('gpt-4o-mini');
+    await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
+    await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
     await expect(page.getByPlaceholder('Min')).toHaveValue('2');
     await expect(page.getByPlaceholder('Max')).toHaveValue('8');
     await expect(page.locator('#sampling-ratio')).toBeChecked();
@@ -251,7 +251,7 @@ test.describe('Edit Persistence', () => {
       scoreRangeMax: '20',
     });
 
-    await page.getByRole('button', { name: 'Update scorer' }).click();
+    await page.getByRole('button', { name: 'Publish' }).click();
 
     await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
 
@@ -264,8 +264,8 @@ test.describe('Edit Persistence', () => {
     // Unchanged fields should remain the same
     await expect(page.locator('#scorer-name')).toHaveValue(scorerName);
     await expect(page.getByPlaceholder('Min')).toHaveValue('0');
-    await expect(page.getByRole('combobox').nth(0)).toContainText('OpenAI');
-    await expect(page.getByRole('combobox').nth(1)).toContainText('gpt-4o-mini');
+    await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
+    await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
   });
 
   test('data persists after page reload on edit page', async ({ page }) => {
@@ -282,7 +282,7 @@ test.describe('Edit Persistence', () => {
       instructions: updatedInstructions,
     });
 
-    await page.getByRole('button', { name: 'Update scorer' }).click();
+    await page.getByRole('button', { name: 'Publish' }).click();
 
     await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
 
@@ -306,7 +306,7 @@ test.describe('Field-by-Field Update Verification', () => {
     const updatedName = uniqueScorerName('Name Updated');
     await fillScorerFields(page, { name: updatedName });
 
-    await page.getByRole('button', { name: 'Update scorer' }).click();
+    await page.getByRole('button', { name: 'Publish' }).click();
     await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
 
     await goToEditPage(page, scorerId);
@@ -322,7 +322,7 @@ test.describe('Field-by-Field Update Verification', () => {
 
     await fillScorerFields(page, { description: 'A newly added description' });
 
-    await page.getByRole('button', { name: 'Update scorer' }).click();
+    await page.getByRole('button', { name: 'Publish' }).click();
     await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
 
     await goToEditPage(page, scorerId);
@@ -337,7 +337,7 @@ test.describe('Field-by-Field Update Verification', () => {
 
     await fillScorerFields(page, { scoreRangeMin: '5', scoreRangeMax: '100' });
 
-    await page.getByRole('button', { name: 'Update scorer' }).click();
+    await page.getByRole('button', { name: 'Publish' }).click();
     await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
 
     await goToEditPage(page, scorerId);
@@ -353,7 +353,7 @@ test.describe('Field-by-Field Update Verification', () => {
 
     await fillScorerFields(page, { samplingType: 'ratio', samplingRate: '0.6' });
 
-    await page.getByRole('button', { name: 'Update scorer' }).click();
+    await page.getByRole('button', { name: 'Publish' }).click();
     await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
 
     await goToEditPage(page, scorerId);
@@ -372,7 +372,7 @@ test.describe('Field-by-Field Update Verification', () => {
 
     await fillScorerFields(page, { samplingType: 'none' });
 
-    await page.getByRole('button', { name: 'Update scorer' }).click();
+    await page.getByRole('button', { name: 'Publish' }).click();
     await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
 
     await goToEditPage(page, scorerId);
@@ -389,7 +389,7 @@ test.describe('Field-by-Field Update Verification', () => {
     const newInstructions = 'Brand new scoring instructions for this test.';
     await fillScorerFields(page, { instructions: newInstructions });
 
-    await page.getByRole('button', { name: 'Update scorer' }).click();
+    await page.getByRole('button', { name: 'Publish' }).click();
     await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
 
     await goToEditPage(page, scorerId);
@@ -407,7 +407,7 @@ test.describe('Validation on Edit', () => {
     const nameInput = page.locator('#scorer-name');
     await nameInput.clear();
 
-    await page.getByRole('button', { name: 'Update scorer' }).click();
+    await page.getByRole('button', { name: 'Publish' }).click();
 
     await expect(page.getByText('Name is required')).toBeVisible();
   });
@@ -421,7 +421,7 @@ test.describe('Validation on Edit', () => {
     const nameInput = page.locator('#scorer-name');
     await nameInput.clear();
 
-    await page.getByRole('button', { name: 'Update scorer' }).click();
+    await page.getByRole('button', { name: 'Publish' }).click();
 
     await expect(page.getByText('Please fill in all required fields')).toBeVisible();
   });
@@ -449,13 +449,13 @@ test.describe('Error Handling', () => {
 
     await fillScorerFields(page, { name: uniqueScorerName('Should Fail') });
 
-    await page.getByRole('button', { name: 'Update scorer' }).click();
+    await page.getByRole('button', { name: 'Publish' }).click();
 
-    await expect(page.getByText(/Failed to update scorer/i)).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/Failed to publish scorer/i)).toBeVisible({ timeout: 15000 });
 
     // Should stay on edit page with button still enabled
     await expect(page).toHaveURL(/\/cms\/scorers\/[a-z0-9-]+\/edit/);
-    await expect(page.getByRole('button', { name: 'Update scorer' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Publish' })).toBeEnabled();
   });
 
   test('stays on edit page when update fails and preserves form data', async ({ page }) => {
@@ -481,9 +481,9 @@ test.describe('Error Handling', () => {
     const updatedDescription = 'This description should not be lost';
     await fillScorerFields(page, { name: updatedName, description: updatedDescription });
 
-    await page.getByRole('button', { name: 'Update scorer' }).click();
+    await page.getByRole('button', { name: 'Publish' }).click();
 
-    await expect(page.getByText(/Failed to update scorer/i)).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/Failed to publish scorer/i)).toBeVisible({ timeout: 15000 });
 
     // Form data should still be present
     await expect(page.locator('#scorer-name')).toHaveValue(updatedName);
@@ -521,14 +521,14 @@ test.describe('Navigation & State', () => {
     await goToEditPage(page, scorerId);
     const firstUpdate = uniqueScorerName('First Update');
     await fillScorerFields(page, { name: firstUpdate });
-    await page.getByRole('button', { name: 'Update scorer' }).click();
+    await page.getByRole('button', { name: 'Publish' }).click();
     await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
 
     // Second edit: update again
     await goToEditPage(page, scorerId);
     const secondUpdate = uniqueScorerName('Second Update');
     await fillScorerFields(page, { name: secondUpdate });
-    await page.getByRole('button', { name: 'Update scorer' }).click();
+    await page.getByRole('button', { name: 'Publish' }).click();
     await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
 
     // Navigate back to edit - should show second update, not first

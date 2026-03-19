@@ -12,6 +12,8 @@ import {
   consumeSSEStream,
   createMultipartTestSuite,
 } from '@internal/server-adapter-test-utils';
+import { Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import express from 'express';
 import type { Application } from 'express';
@@ -82,8 +84,8 @@ describe('Express Server Adapter', () => {
           },
         };
 
-        // Add body for POST/PUT/PATCH
-        if (httpRequest.body && ['POST', 'PUT', 'PATCH'].includes(httpRequest.method)) {
+        // Add body for POST/PUT/PATCH/DELETE
+        if (httpRequest.body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpRequest.method)) {
           fetchOptions.body = JSON.stringify(httpRequest.body);
         }
 
@@ -99,7 +101,10 @@ describe('Express Server Adapter', () => {
         // Check if stream response
         const contentType = response.headers.get('content-type') || '';
         const transferEncoding = response.headers.get('transfer-encoding') || '';
-        const isStream = contentType.includes('text/plain') || transferEncoding === 'chunked';
+        const isStream =
+          contentType.includes('text/plain') ||
+          contentType.includes('text/event-stream') ||
+          transferEncoding === 'chunked';
 
         if (isStream && response.body) {
           // Return stream response
@@ -389,7 +394,7 @@ describe('Express Server Adapter', () => {
     });
   });
 
-  describe('Transfer-Encoding Header', () => {
+  describe('SSE Headers', () => {
     let context: AdapterTestContext;
     let server: Server | null = null;
 
@@ -406,15 +411,7 @@ describe('Express Server Adapter', () => {
       }
     });
 
-    it('should NOT explicitly set Transfer-Encoding header to avoid duplicates with Bun runtime', async () => {
-      // This test verifies the fix for https://github.com/mastra-ai/mastra/issues/11510
-      // When deploying with Bun, the runtime automatically adds Transfer-Encoding: chunked
-      // for ReadableStream responses. If Mastra also sets this header, it causes duplicate
-      // headers which breaks HTTP protocol compliance and causes 502 errors.
-      //
-      // The solution is to NOT explicitly set Transfer-Encoding header and let the runtime
-      // handle it automatically. This test verifies the streaming still works without
-      // explicitly setting the header.
+    it('should set Content-Type to text/event-stream for SSE streams', async () => {
       const app = express();
       app.use(express.json());
 
@@ -425,7 +422,7 @@ describe('Express Server Adapter', () => {
 
       const testRoute: ServerRoute<any, any, any> = {
         method: 'POST',
-        path: '/test/stream',
+        path: '/test/sse-headers',
         responseType: 'stream',
         streamFormat: 'sse',
         handler: async () => createStreamWithSensitiveData('v2'),
@@ -434,7 +431,6 @@ describe('Express Server Adapter', () => {
       app.use(adapter.createContextMiddleware());
       await adapter.registerRoute(app, testRoute, { prefix: '' });
 
-      // Start server
       server = await new Promise<Server>(resolve => {
         const s = app.listen(0, () => resolve(s));
       });
@@ -445,34 +441,86 @@ describe('Express Server Adapter', () => {
       }
       const port = address.port;
 
-      const response = await fetch(`http://localhost:${port}/test/stream`, {
+      const response = await fetch(`http://localhost:${port}/test/sse-headers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
 
       expect(response.status).toBe(200);
-      expect(response.ok).toBe(true);
 
-      // Verify streaming works correctly - Content-Type should be text/plain for streams
-      expect(response.headers.get('content-type')).toBe('text/plain');
+      // SSE streams MUST use text/event-stream Content-Type
+      // This signals to proxies, CDNs, and clients that the response should not be buffered
+      const contentType = response.headers.get('content-type');
+      expect(contentType).toBe('text/event-stream');
 
-      // In Node.js/Express, Transfer-Encoding: chunked is automatically added
-      // for streaming responses. The key is that we don't set it explicitly,
-      // so there's no duplicate header issue.
-      const transferEncoding = response.headers.get('transfer-encoding');
-      expect(transferEncoding).toBe('chunked');
+      // SSE streams should include Cache-Control: no-cache to prevent proxy buffering
+      const cacheControl = response.headers.get('cache-control');
+      expect(cacheControl).toBe('no-cache');
 
-      // Verify streaming data can be consumed correctly
-      const chunks = await consumeSSEStream(response.body);
-      expect(chunks.length).toBeGreaterThan(0);
+      // SSE streams should include Connection: keep-alive
+      const connection = response.headers.get('connection');
+      expect(connection).toBe('keep-alive');
 
-      // Verify we got the expected chunk types
-      const chunkTypes = chunks.map(c => c.type);
-      expect(chunkTypes).toContain('step-start');
-      expect(chunkTypes).toContain('text-delta');
-      expect(chunkTypes).toContain('step-finish');
-      expect(chunkTypes).toContain('finish');
+      // SSE streams should include X-Accel-Buffering: no for nginx reverse proxies
+      const xAccelBuffering = response.headers.get('x-accel-buffering');
+      expect(xAccelBuffering).toBe('no');
+
+      // Consume the stream to avoid hanging
+      await consumeSSEStream(response.body);
+    });
+
+    it('should keep Content-Type as text/plain for non-SSE streams', async () => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      // Use 'stream' format (not 'sse') — this should keep text/plain
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/plain-stream',
+        responseType: 'stream',
+        streamFormat: 'stream',
+        handler: async () => createStreamWithSensitiveData('v2'),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
+
+      const response = await fetch(`http://localhost:${port}/test/plain-stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+
+      // Non-SSE streams should keep text/plain
+      const contentType = response.headers.get('content-type');
+      expect(contentType).toBe('text/plain');
+
+      // Consume the stream to avoid hanging
+      const reader = response.body?.getReader();
+      if (reader) {
+        while (true) {
+          const { done } = await reader.read();
+          if (done) break;
+        }
+      }
     });
   });
 
@@ -645,5 +693,96 @@ describe('Express Server Adapter', () => {
     applyMiddleware: (app, middleware) => {
       app.use(middleware);
     },
+  });
+
+  describe('Custom API Routes (registerApiRoute)', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>((resolve, reject) => {
+          server!.close(err => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        server = null;
+      }
+    });
+
+    it('should register and respond to custom API routes added via registerApiRoute', async () => {
+      const customRoutes = [
+        registerApiRoute('/hello', {
+          method: 'GET',
+          handler: async c => {
+            return c.json({ message: 'Hello from custom route!' });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/hello`);
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ message: 'Hello from custom route!' });
+    });
+
+    it('should register custom API routes with POST method', async () => {
+      const customRoutes = [
+        registerApiRoute('/echo', {
+          method: 'POST',
+          handler: async c => {
+            const body = await c.req.json();
+            return c.json({ echo: body });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/echo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test: 'data' }),
+      });
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ echo: { test: 'data' } });
+    });
   });
 });

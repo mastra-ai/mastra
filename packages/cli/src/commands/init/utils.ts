@@ -42,7 +42,7 @@ export function areValidComponents(values: string[]): values is Component[] {
 }
 
 export const getModelIdentifier = (llmProvider: LLMProvider): ModelRouterModelId => {
-  let model: ModelRouterModelId = 'openai/gpt-4o';
+  let model: ModelRouterModelId = 'openai/gpt-5-mini';
 
   if (llmProvider === 'anthropic') {
     model = 'anthropic/claude-sonnet-4-5';
@@ -713,7 +713,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
             message: 'Enter your API key:',
             placeholder: 'sk-...',
             validate: value => {
-              if (value.length === 0) return 'API key cannot be empty';
+              if (!value || value.length === 0) return 'API key cannot be empty';
             },
           });
         }

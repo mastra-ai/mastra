@@ -21,6 +21,7 @@ export {
   createSandboxConfigTests,
   createSandboxLifecycleTests,
   createMountOperationsTests,
+  createProcessManagementTests,
   type SandboxTestConfig,
   type SandboxCapabilities,
   type SandboxTestDomains,

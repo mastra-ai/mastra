@@ -2,6 +2,18 @@ import type { StorageOrderBy, ThreadOrderBy, ThreadSortDirection } from '../type
 import { StorageDomain } from './base';
 
 // ============================================================================
+// Version Resolution Options
+// ============================================================================
+
+/**
+ * Options for resolving which version of an entity to use.
+ * Either pick by status (draft/published/archived) or by a specific version ID — not both.
+ */
+export type VersionResolutionOptions =
+  | { status?: 'draft' | 'published' | 'archived'; versionId?: never }
+  | { versionId: string; status?: never };
+
+// ============================================================================
 // Generic Version Types
 // ============================================================================
 
@@ -192,26 +204,34 @@ export abstract class VersionedStorageDomain<
   }
 
   /**
-   * Resolves an entity by merging its thin record with the active (or latest) version config.
+   * Resolves an entity by merging its thin record with the active or latest version config.
+   * - `{ status: 'draft' }` — resolve with the latest version.
+   * - `{ status: 'published' }` (default) — resolve with the active version, falling back to latest.
+   * - `{ versionId: '...' }` — resolve with a specific version by ID.
    */
-  async getByIdResolved(id: string): Promise<TResolved | null> {
+  async getByIdResolved(id: string, options?: VersionResolutionOptions): Promise<TResolved | null> {
     const entity = await this.getById(id);
 
     if (!entity) {
       return null;
     }
 
-    return this.resolveEntity(entity);
+    return this.resolveEntity(entity, options);
   }
 
   /**
    * Lists entities with version resolution.
+   * When `status` is `'draft'`, each entity is resolved with its latest version.
+   * When `status` is `'published'` (default), each entity is resolved with its active version.
    */
   async listResolved(args?: TListInput): Promise<TListResolvedOutput> {
     const result = await this.list(args);
 
+    const status = (args as Record<string, unknown> | undefined)?.status as string | undefined;
     const entities = (result as Record<string, unknown>)[this.listKey] as TEntity[];
-    const resolved = await Promise.all(entities.map(entity => this.resolveEntity(entity)));
+    const resolved = await Promise.all(
+      entities.map(entity => this.resolveEntity(entity, { status: status as 'draft' | 'published' | 'archived' })),
+    );
 
     return {
       ...result,
@@ -221,22 +241,35 @@ export abstract class VersionedStorageDomain<
 
   /**
    * Resolves a single entity by merging it with its active or latest version.
+   * - `{ versionId: '...' }` — resolve with a specific version by ID.
+   * - `{ status: 'published' }` (default) — use activeVersionId, fall back to latest.
+   * - `{ status: 'draft' }` — always use the latest version.
    */
-  protected async resolveEntity(entity: TEntity): Promise<TResolved> {
+  protected async resolveEntity(entity: TEntity, options?: VersionResolutionOptions): Promise<TResolved> {
+    const status = options?.status || 'published';
     let version: TVersion | null = null;
 
-    if (entity.activeVersionId) {
-      version = await this.getVersion(entity.activeVersionId);
+    if (options?.versionId) {
+      // Specific version resolution: fetch by exact version ID
+      version = await this.getVersion(options.versionId);
+    } else if (status === 'draft') {
+      // Draft resolution: always use the latest version (which may be ahead of activeVersionId)
+      version = await this.getLatestVersion(entity.id);
+    } else {
+      // Published/archived resolution: use activeVersionId, fall back to latest
+      if (entity.activeVersionId) {
+        version = await this.getVersion(entity.activeVersionId);
+
+        if (!version) {
+          this.logger?.warn?.(
+            `Entity ${entity.id} has activeVersionId ${entity.activeVersionId} but version not found. Falling back to latest version.`,
+          );
+        }
+      }
 
       if (!version) {
-        this.logger?.warn?.(
-          `Entity ${entity.id} has activeVersionId ${entity.activeVersionId} but version not found. Falling back to latest version.`,
-        );
+        version = await this.getLatestVersion(entity.id);
       }
-    }
-
-    if (!version) {
-      version = await this.getLatestVersion(entity.id);
     }
 
     if (version) {
@@ -244,6 +277,7 @@ export abstract class VersionedStorageDomain<
       return {
         ...entity,
         ...snapshotConfig,
+        resolvedVersionId: version.id,
       } as unknown as TResolved;
     }
 
