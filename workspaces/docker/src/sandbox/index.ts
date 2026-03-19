@@ -365,8 +365,8 @@ export class DockerSandbox extends MastraSandbox {
       } catch (error) {
         throw new SandboxError(
           `Failed to pull Docker image '${this._image}': ${error instanceof Error ? error.message : String(error)}`,
-          'IMAGE_PULL_FAILED',
-          { image: this._image },
+          'NOT_READY',
+          { image: this._image, reason: 'image_pull_failed' },
         );
       }
     }
