@@ -121,6 +121,31 @@
     "@mastra/s3": "0.3.0"
   },
   "changesets": [
-    "green-birds-knock"
+    "@mastra_deployer-14084-dependencies",
+    "@mastra_inngest-suppress-otel-polling",
+    "all-meals-sing",
+    "automated-provider-registry-20260318-063530",
+    "blue-garlics-create",
+    "calm-tips-poke",
+    "calm-trams-strive",
+    "clever-pugs-doubt",
+    "curvy-brooms-take",
+    "fair-garlics-relax",
+    "fix-langsmith-flush",
+    "fix-mcp-empty-output",
+    "fix-mcp-sighup-child-process-leak",
+    "fix-otel-context-propagation",
+    "fix-span-serialization-false-circular",
+    "fix-workflow-step-otel-context",
+    "fix-zod-v3-json-schema-target",
+    "forty-crews-drop",
+    "fresh-rabbits-tickle",
+    "green-birds-knock",
+    "polite-moons-tell",
+    "real-points-work",
+    "rich-adults-switch",
+    "server-public-host-protocol",
+    "soft-geese-hang",
+    "tired-chairs-add"
   ]
 }

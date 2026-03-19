@@ -341,7 +341,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     // Helper to render shell command with bordered box
     const renderBorderedShell = (status: string, outputLines: string[]) => {
       const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
-      const footerText = `${theme.bold(theme.fg('toolTitle', '$'))} ${theme.italic(theme.fg('toolArgs', command))}${cwdSuffix}${timeSuffix}${status}`;
+      const footerText = `${theme.bold(theme.fg('toolTitle', '$'))} ${theme.fg('toolArgs', command)}${cwdSuffix}${timeSuffix}${status}`;
 
       // Top border
       this.contentBox.addChild(new Text(border('╭──'), 0, 0));
@@ -955,7 +955,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     }
     const status = this.getStatusIndicator();
 
-    const queryDisplay = query ? ` ${theme.italic(theme.fg('toolArgs', `"${query}"`))}` : '';
+    const queryDisplay = query ? ` ${theme.fg('toolArgs', `"${query}"`)}` : '';
     const footerText = `${theme.bold(theme.fg('toolTitle', 'web_search'))}${queryDisplay}${status}`;
     const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
 
@@ -1233,7 +1233,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       currentLen += part.length + 2;
     }
 
-    return ' ' + theme.italic(theme.fg('toolArgs', parts.join(', ')));
+    return ' ' + theme.fg('toolArgs', parts.join(', '));
   }
 
   private getStatusIndicator(): string {

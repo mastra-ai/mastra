@@ -24,8 +24,29 @@ interface GoogleMetadata {
 }
 
 /**
+ * AI SDK aggregated input token details.
+ * Available on totalUsage in multi-step runs — properly summed across all steps.
+ */
+interface AISdkInputTokenDetails {
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+}
+
+/**
+ * Null-safe check: returns true if value is a number (including 0).
+ */
+function isDefined(value: unknown): value is number {
+  return value != null;
+}
+
+/**
  * Extracts and normalizes token usage from AI SDK response, including
  * provider-specific cache tokens from providerMetadata.
+ *
+ * Cache token extraction priority (highest to lowest):
+ * 1. AI SDK aggregated inputTokenDetails (properly summed across all steps in multi-step runs)
+ * 2. Provider-specific providerMetadata (accurate for single-step, last step only in multi-step)
+ * 3. usage.cachedInputTokens (OpenAI/OpenRouter direct field)
  *
  * Handles:
  * - OpenAI: cachedInputTokens in usage object
@@ -48,15 +69,28 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
   let inputTokens = usage.inputTokens;
   const outputTokens = usage.outputTokens;
 
+  // ===== AI SDK aggregated format (inputTokenDetails) =====
+  // In multi-step runs, providerMetadata only reflects the LAST step.
+  // AI SDK's inputTokenDetails is properly aggregated across all steps,
+  // so we prefer it as the primary source for cache tokens.
+  const aiSdkDetails = (usage as { inputTokenDetails?: AISdkInputTokenDetails }).inputTokenDetails;
+
+  if (isDefined(aiSdkDetails?.cacheReadTokens)) {
+    inputDetails.cacheRead = aiSdkDetails.cacheReadTokens;
+  }
+  if (isDefined(aiSdkDetails?.cacheWriteTokens)) {
+    inputDetails.cacheWrite = aiSdkDetails.cacheWriteTokens;
+  }
+
   // ===== OpenAI / OpenRouter =====
   // cachedInputTokens is already in the usage object
   // inputTokens INCLUDES cached tokens (no adjustment needed)
-  if (usage.cachedInputTokens) {
+  if (!isDefined(inputDetails.cacheRead) && isDefined(usage.cachedInputTokens)) {
     inputDetails.cacheRead = usage.cachedInputTokens;
   }
 
   // reasoningTokens from usage (OpenAI o1 models)
-  if (usage.reasoningTokens) {
+  if (isDefined(usage.reasoningTokens)) {
     outputDetails.reasoning = usage.reasoningTokens;
   }
 
@@ -66,34 +100,32 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
   const anthropic = providerMetadata?.anthropic as AnthropicMetadata | undefined;
 
   if (anthropic) {
-    if (anthropic.cacheReadInputTokens) {
+    if (!isDefined(inputDetails.cacheRead) && isDefined(anthropic.cacheReadInputTokens)) {
       inputDetails.cacheRead = anthropic.cacheReadInputTokens;
     }
-    if (anthropic.cacheCreationInputTokens) {
+    if (!isDefined(inputDetails.cacheWrite) && isDefined(anthropic.cacheCreationInputTokens)) {
       inputDetails.cacheWrite = anthropic.cacheCreationInputTokens;
     }
 
     // For Anthropic, adjust inputTokens to include cache tokens
     // Per Anthropic docs: "Total input tokens is the summation of input_tokens,
     // cache_creation_input_tokens, and cache_read_input_tokens"
-    if (anthropic.cacheReadInputTokens || anthropic.cacheCreationInputTokens) {
+    if (isDefined(inputDetails.cacheRead) || isDefined(inputDetails.cacheWrite)) {
       inputDetails.text = usage.inputTokens;
-      inputTokens =
-        (usage.inputTokens ?? 0) + (anthropic.cacheReadInputTokens ?? 0) + (anthropic.cacheCreationInputTokens ?? 0);
+      inputTokens = (usage.inputTokens ?? 0) + (inputDetails.cacheRead ?? 0) + (inputDetails.cacheWrite ?? 0);
     }
   }
 
   // ===== Google/Gemini =====
   // Cache tokens and thoughts are in providerMetadata.google.usageMetadata
-  // Available in @ai-sdk/google@1.2.23+
   const google = providerMetadata?.google as GoogleMetadata | undefined;
 
   if (google?.usageMetadata) {
-    if (google.usageMetadata.cachedContentTokenCount) {
+    if (!isDefined(inputDetails.cacheRead) && isDefined(google.usageMetadata.cachedContentTokenCount)) {
       inputDetails.cacheRead = google.usageMetadata.cachedContentTokenCount;
     }
     // Gemini "thoughts" are similar to reasoning tokens
-    if (google.usageMetadata.thoughtsTokenCount) {
+    if (isDefined(google.usageMetadata.thoughtsTokenCount)) {
       outputDetails.reasoning = google.usageMetadata.thoughtsTokenCount;
     }
   }
