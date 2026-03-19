@@ -15,7 +15,6 @@ import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasetExperiments } from '@/domains/datasets/hooks/use-dataset-experiments';
 
-
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -34,9 +33,11 @@ interface DatasetDetailViewProps {
 
 function formatTimestamp(date: string | Date) {
   const d = new Date(date);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+  return (
+    d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
     ', ' +
-    d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  );
 }
 
 function truncateValue(value: unknown, maxLength = 120): string {
@@ -90,18 +91,21 @@ export function DatasetDetailView({
     try {
       const hasRequestContext = Object.keys(mergedRequestContext).length > 0;
       // Use the dataset's own target if it's not an agent dataset
-      const expTargetType = (datasetTargetType === 'scorer' || datasetTargetType === 'workflow')
-        ? datasetTargetType
-        : 'agent';
+      const expTargetType =
+        datasetTargetType === 'scorer' || datasetTargetType === 'workflow' ? datasetTargetType : 'agent';
       // targetIds may come as a JSON string from some storage backends
       const parsedTargetIds = Array.isArray(datasetTargetIds)
         ? datasetTargetIds
         : typeof datasetTargetIds === 'string'
-          ? (() => { try { return JSON.parse(datasetTargetIds); } catch { return []; } })()
+          ? (() => {
+              try {
+                return JSON.parse(datasetTargetIds);
+              } catch {
+                return [];
+              }
+            })()
           : [];
-      const expTargetId = expTargetType !== 'agent' && parsedTargetIds[0]
-        ? parsedTargetIds[0]
-        : agentId;
+      const expTargetId = expTargetType !== 'agent' && parsedTargetIds[0] ? parsedTargetIds[0] : agentId;
       await triggerExperiment.mutateAsync({
         datasetId,
         targetType: expTargetType,
@@ -121,7 +125,16 @@ export function DatasetDetailView({
       isStartingRef.current = false;
       setIsRunning(false);
     }
-  }, [datasetId, activeScorers, agentId, datasetTargetType, datasetTargetIds, triggerExperiment, mergedRequestContext, queryClient]);
+  }, [
+    datasetId,
+    activeScorers,
+    agentId,
+    datasetTargetType,
+    datasetTargetIds,
+    triggerExperiment,
+    mergedRequestContext,
+    queryClient,
+  ]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -140,32 +153,36 @@ export function DatasetDetailView({
             {datasetTags.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1.5">
                 {datasetTags.map(tag => (
-                  <Chip key={tag} color={getTagColor(tag)} size="small">{tag}</Chip>
+                  <Chip key={tag} color={getTagColor(tag)} size="small">
+                    {tag}
+                  </Chip>
                 ))}
               </div>
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Button variant="ghost" size="sm" onClick={onGenerate}>
-              <Icon size="sm"><Sparkles /></Icon>
+              <Icon size="sm">
+                <Sparkles />
+              </Icon>
               Generate
             </Button>
-            <Button
-              variant="cta"
-              size="sm"
-              onClick={handleRunExperiment}
-              disabled={items.length === 0 || isRunning}
-            >
+            <Button variant="cta" size="sm" onClick={handleRunExperiment} disabled={items.length === 0 || isRunning}>
               {isRunning ? (
-                <><Spinner className="h-3 w-3" /> Running...</>
+                <>
+                  <Spinner className="h-3 w-3" /> Running...
+                </>
               ) : (
-                <><Icon size="sm"><Play /></Icon> Run Experiment</>
+                <>
+                  <Icon size="sm">
+                    <Play />
+                  </Icon>{' '}
+                  Run Experiment
+                </>
               )}
             </Button>
           </div>
         </div>
-
-
       </div>
 
       {/* Items + Past runs */}
@@ -185,8 +202,8 @@ export function DatasetDetailView({
                 Items ({items.length})
               </Txt>
             </button>
-            {!itemsCollapsed && (
-              items.length === 0 ? (
+            {!itemsCollapsed &&
+              (items.length === 0 ? (
                 <div className="px-4 py-6 text-center">
                   <Txt variant="ui-xs" className="text-neutral3">
                     No items yet. Use Generate to create test data.
@@ -194,7 +211,7 @@ export function DatasetDetailView({
                 </div>
               ) : (
                 <div className="divide-y divide-border1">
-                  {items.map((item) => {
+                  {items.map(item => {
                     const isExpanded = expandedItemId === item.id;
                     return (
                       <div key={item.id}>
@@ -212,12 +229,7 @@ export function DatasetDetailView({
                             </Txt>
                           </div>
                         </button>
-                        {isExpanded && (
-                          <ExpandedItemEditor
-                            datasetId={datasetId}
-                            item={item}
-                          />
-                        )}
+                        {isExpanded && <ExpandedItemEditor datasetId={datasetId} item={item} />}
                       </div>
                     );
                   })}
@@ -228,8 +240,7 @@ export function DatasetDetailView({
                     </div>
                   )}
                 </div>
-              )
-            )}
+              ))}
           </div>
 
           {/* Past runs section (collapsible) */}
@@ -242,15 +253,19 @@ export function DatasetDetailView({
               <Icon size="sm" className="text-neutral3">
                 {runsCollapsed ? <ChevronRight /> : <ChevronDown />}
               </Icon>
-              <Icon size="sm" className="text-neutral3"><Clock /></Icon>
+              <Icon size="sm" className="text-neutral3">
+                <Clock />
+              </Icon>
               <Txt variant="ui-xs" className="text-neutral3 font-semibold uppercase tracking-wider">
                 Past Runs ({datasetExperiments.length})
               </Txt>
             </button>
-            {!runsCollapsed && (
-              datasetExperiments.length === 0 ? (
+            {!runsCollapsed &&
+              (datasetExperiments.length === 0 ? (
                 <div className="px-4 py-4 text-center">
-                  <Txt variant="ui-xs" className="text-neutral3">No experiment runs yet</Txt>
+                  <Txt variant="ui-xs" className="text-neutral3">
+                    No experiment runs yet
+                  </Txt>
                 </div>
               ) : (
                 <div className="divide-y divide-border1">
@@ -270,12 +285,13 @@ export function DatasetDetailView({
                           {exp.succeededCount}/{exp.totalItems} passed
                         </Txt>
                       </div>
-                      <Icon size="sm" className="text-neutral3"><ChevronRight /></Icon>
+                      <Icon size="sm" className="text-neutral3">
+                        <ChevronRight />
+                      </Icon>
                     </button>
                   ))}
                 </div>
-              )
-            )}
+              ))}
           </div>
         </ScrollArea>
       </div>
@@ -356,7 +372,9 @@ function ExpandedItemEditor({
     return (
       <div className="px-4 pb-3 pl-10 space-y-2">
         <div>
-          <Txt variant="ui-xs" className="text-neutral3 font-medium">Input</Txt>
+          <Txt variant="ui-xs" className="text-neutral3 font-medium">
+            Input
+          </Txt>
           <Textarea
             value={inputValue}
             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInputValue(e.target.value)}
@@ -365,7 +383,9 @@ function ExpandedItemEditor({
           />
         </div>
         <div>
-          <Txt variant="ui-xs" className="text-neutral3 font-medium">Ground Truth</Txt>
+          <Txt variant="ui-xs" className="text-neutral3 font-medium">
+            Ground Truth
+          </Txt>
           <Textarea
             value={groundTruthValue}
             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setGroundTruthValue(e.target.value)}
@@ -376,11 +396,19 @@ function ExpandedItemEditor({
         </div>
         <div className="flex items-center gap-2 pt-1">
           <Button variant="cta" size="sm" onClick={handleSave} disabled={updateItem.isPending}>
-            {updateItem.isPending ? <Spinner className="h-3 w-3" /> : <Icon size="sm"><Save /></Icon>}
+            {updateItem.isPending ? (
+              <Spinner className="h-3 w-3" />
+            ) : (
+              <Icon size="sm">
+                <Save />
+              </Icon>
+            )}
             Save
           </Button>
           <Button variant="ghost" size="sm" onClick={cancelEditing}>
-            <Icon size="sm"><X /></Icon>
+            <Icon size="sm">
+              <X />
+            </Icon>
             Cancel
           </Button>
         </div>
@@ -391,14 +419,18 @@ function ExpandedItemEditor({
   return (
     <div className="px-4 pb-3 pl-10 space-y-2">
       <div>
-        <Txt variant="ui-xs" className="text-neutral3 font-medium">Input</Txt>
+        <Txt variant="ui-xs" className="text-neutral3 font-medium">
+          Input
+        </Txt>
         <pre className="text-xs text-neutral5 bg-surface1 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto mt-1">
           {formatValue(item.input)}
         </pre>
       </div>
       {item.groundTruth !== undefined && item.groundTruth !== null && (
         <div>
-          <Txt variant="ui-xs" className="text-neutral3 font-medium">Ground Truth</Txt>
+          <Txt variant="ui-xs" className="text-neutral3 font-medium">
+            Ground Truth
+          </Txt>
           <pre className="text-xs text-neutral5 bg-surface1 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto mt-1">
             {formatValue(item.groundTruth)}
           </pre>
@@ -406,13 +438,23 @@ function ExpandedItemEditor({
       )}
       <div className="flex items-center gap-2 pt-1">
         <Button variant="ghost" size="sm" onClick={startEditing}>
-          <Icon size="sm"><Pencil /></Icon>
+          <Icon size="sm">
+            <Pencil />
+          </Icon>
           Edit
         </Button>
         {isConfirmingDelete ? (
           <>
-            <Txt variant="ui-xs" className="text-negative1 font-medium">Delete this item?</Txt>
-            <Button variant="ghost" size="sm" onClick={handleDelete} disabled={deleteItem.isPending} className="text-negative1 hover:text-negative1">
+            <Txt variant="ui-xs" className="text-negative1 font-medium">
+              Delete this item?
+            </Txt>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDelete}
+              disabled={deleteItem.isPending}
+              className="text-negative1 hover:text-negative1"
+            >
               {deleteItem.isPending ? <Spinner className="h-3 w-3" /> : 'Yes'}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setIsConfirmingDelete(false)}>
@@ -420,14 +462,24 @@ function ExpandedItemEditor({
             </Button>
           </>
         ) : (
-          <Button variant="ghost" size="sm" onClick={() => setIsConfirmingDelete(true)} className="text-neutral2 hover:text-negative1">
-            <Icon size="sm"><Trash2 /></Icon>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsConfirmingDelete(true)}
+            className="text-neutral2 hover:text-negative1"
+          >
+            <Icon size="sm">
+              <Trash2 />
+            </Icon>
             Delete
           </Button>
         )}
         {item.source != null && (
           <Txt variant="ui-xs" className="text-neutral2">
-            Source: {typeof item.source === 'object' && item.source !== null && 'type' in item.source ? String((item.source as unknown as Record<string, unknown>).type) : 'manual'}
+            Source:{' '}
+            {typeof item.source === 'object' && item.source !== null && 'type' in item.source
+              ? String((item.source as unknown as Record<string, unknown>).type)
+              : 'manual'}
           </Txt>
         )}
       </div>
@@ -436,9 +488,13 @@ function ExpandedItemEditor({
 }
 
 function ExperimentStatusDot({ status }: { status: string }) {
-  const color = status === 'completed' ? 'bg-positive1'
-    : status === 'running' ? 'bg-warning1'
-    : status === 'failed' ? 'bg-negative1'
-    : 'bg-neutral3';
+  const color =
+    status === 'completed'
+      ? 'bg-positive1'
+      : status === 'running'
+        ? 'bg-warning1'
+        : status === 'failed'
+          ? 'bg-negative1'
+          : 'bg-neutral3';
   return <div className={cn('w-2 h-2 rounded-full shrink-0', color)} />;
 }

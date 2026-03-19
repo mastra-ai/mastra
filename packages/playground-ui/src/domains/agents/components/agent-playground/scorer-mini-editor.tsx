@@ -36,7 +36,14 @@ export interface ScorerMiniEditorProps {
   editScorerData?: Record<string, unknown>;
 }
 
-export function ScorerMiniEditor({ onBack, onSaved, initialItems, prefillTestItems, editScorerId, editScorerData }: ScorerMiniEditorProps) {
+export function ScorerMiniEditor({
+  onBack,
+  onSaved,
+  initialItems,
+  prefillTestItems,
+  editScorerId,
+  editScorerData,
+}: ScorerMiniEditorProps) {
   const isEditing = !!editScorerId;
   const client = useMastraClient();
 
@@ -97,7 +104,13 @@ export function ScorerMiniEditor({ onBack, onSaved, initialItems, prefillTestIte
             const ids = Array.isArray(ds.targetIds)
               ? ds.targetIds
               : typeof ds.targetIds === 'string'
-                ? (() => { try { return JSON.parse(ds.targetIds); } catch { return []; } })()
+                ? (() => {
+                    try {
+                      return JSON.parse(ds.targetIds);
+                    } catch {
+                      return [];
+                    }
+                  })()
                 : [];
             return ids.includes(editScorerId);
           });
@@ -145,7 +158,9 @@ export function ScorerMiniEditor({ onBack, onSaved, initialItems, prefillTestIte
   }, [editScorerId]);
 
   const { provider, model } = usePlaygroundModel();
-  const { createStoredScorer, updateStoredScorer } = useStoredScorerMutations(editScorerId || savedScorerId || undefined);
+  const { createStoredScorer, updateStoredScorer } = useStoredScorerMutations(
+    editScorerId || savedScorerId || undefined,
+  );
   const { form } = useAgentEditFormContext();
   const { createDataset, batchInsertItems, batchDeleteItems, triggerExperiment } = useDatasetMutations();
 
@@ -294,14 +309,36 @@ export function ScorerMiniEditor({ onBack, onSaved, initialItems, prefillTestIte
           onSaved?.(scorerId);
         }
 
-        toast.success(`Scorer saved${testItems.length > 0 ? ' with test dataset' : ''}. ${testItems.length > 0 ? 'Click "Run Test" to verify scoring.' : ''}`);
+        toast.success(
+          `Scorer saved${testItems.length > 0 ? ' with test dataset' : ''}. ${testItems.length > 0 ? 'Click "Run Test" to verify scoring.' : ''}`,
+        );
       }
     } catch (error) {
       toast.error(`Failed to save scorer: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSaving(false);
     }
-  }, [name, instructions, provider, model, scorerModel, scoreMin, scoreMax, testItems, scorerDatasetId, editScorerId, savedScorerId, createStoredScorer, updateStoredScorer, createDataset, batchInsertItems, batchDeleteItems, client, form, onSaved]);
+  }, [
+    name,
+    instructions,
+    provider,
+    model,
+    scorerModel,
+    scoreMin,
+    scoreMax,
+    testItems,
+    scorerDatasetId,
+    editScorerId,
+    savedScorerId,
+    createStoredScorer,
+    updateStoredScorer,
+    createDataset,
+    batchInsertItems,
+    batchDeleteItems,
+    client,
+    form,
+    onSaved,
+  ]);
 
   const handleRunTest = useCallback(async () => {
     if (!savedScorerId) {
@@ -359,270 +396,260 @@ export function ScorerMiniEditor({ onBack, onSaved, initialItems, prefillTestIte
             <Spinner className="mr-2" /> Loading scorer...
           </div>
         ) : (
-        <div className="p-4 space-y-6">
-          {/* Scorer Configuration */}
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Name</Label>
-              <Input
-                placeholder="e.g. Relevance Scorer"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                disabled={isEditing || !!savedScorerId}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Model</Label>
-              <Input
-                placeholder="e.g. openai/gpt-4o-mini"
-                value={scorerModel || (provider && model ? `${provider}/${model}` : '')}
-                onChange={e => setScorerModel(e.target.value)}
-              />
-              <Txt variant="ui-sm" className="text-icon3">
-                Format: provider/model (e.g. openai/gpt-4o-mini)
-              </Txt>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Instructions</Label>
-              <Textarea
-                placeholder="Describe what this scorer should evaluate. Be specific about what constitutes a good vs bad response..."
-                value={instructions}
-                onChange={e => setInstructions(e.target.value)}
-                rows={6}
-              />
-            </div>
-
-            <div className="flex gap-4">
-              <div className="space-y-2 flex-1">
-                <Label>Min Score</Label>
+          <div className="p-4 space-y-6">
+            {/* Scorer Configuration */}
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Name</Label>
                 <Input
-                  type="number"
-                  min={-1000}
-                  max={1000}
-                  step="any"
-                  value={scoreMin}
-                  onChange={e => setScoreMin(Number(e.target.value))}
+                  placeholder="e.g. Relevance Scorer"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  disabled={isEditing || !!savedScorerId}
                 />
               </div>
-              <div className="space-y-2 flex-1">
-                <Label>Max Score</Label>
+
+              <div className="space-y-2">
+                <Label>Model</Label>
                 <Input
-                  type="number"
-                  min={-1000}
-                  max={1000}
-                  step="any"
-                  value={scoreMax}
-                  onChange={e => setScoreMax(Number(e.target.value))}
+                  placeholder="e.g. openai/gpt-4o-mini"
+                  value={scorerModel || (provider && model ? `${provider}/${model}` : '')}
+                  onChange={e => setScorerModel(e.target.value)}
                 />
-              </div>
-            </div>
-          </div>
-
-          {/* Test Items */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <Txt variant="ui-md" className="font-medium">
-                  Test Items
-                </Txt>
-                <Txt variant="ui-sm" className="text-icon3 mt-0.5">
-                  Add known-good and known-bad examples to verify your scorer
-                </Txt>
-                {scorerDatasetId && (
-                  <Txt variant="ui-xs" className="text-icon3 mt-1">
-                    Linked dataset · {testItems.length} item{testItems.length !== 1 ? 's' : ''}
-                  </Txt>
-                )}
-              </div>
-              <Button variant="outline" size="sm" onClick={addTestItem}>
-                <Icon>
-                  <Plus />
-                </Icon>
-                Add Item
-              </Button>
-            </div>
-
-            {testItems.length === 0 && (
-              <div className="border border-dashed border-border1 rounded-lg p-6 text-center">
                 <Txt variant="ui-sm" className="text-icon3">
-                  No test items yet. Add items with expected scoring direction to verify your scorer works correctly.
+                  Format: provider/model (e.g. openai/gpt-4o-mini)
+                </Txt>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Instructions</Label>
+                <Textarea
+                  placeholder="Describe what this scorer should evaluate. Be specific about what constitutes a good vs bad response..."
+                  value={instructions}
+                  onChange={e => setInstructions(e.target.value)}
+                  rows={6}
+                />
+              </div>
+
+              <div className="flex gap-4">
+                <div className="space-y-2 flex-1">
+                  <Label>Min Score</Label>
+                  <Input
+                    type="number"
+                    min={-1000}
+                    max={1000}
+                    step="any"
+                    value={scoreMin}
+                    onChange={e => setScoreMin(Number(e.target.value))}
+                  />
+                </div>
+                <div className="space-y-2 flex-1">
+                  <Label>Max Score</Label>
+                  <Input
+                    type="number"
+                    min={-1000}
+                    max={1000}
+                    step="any"
+                    value={scoreMax}
+                    onChange={e => setScoreMax(Number(e.target.value))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Test Items */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Txt variant="ui-md" className="font-medium">
+                    Test Items
+                  </Txt>
+                  <Txt variant="ui-sm" className="text-icon3 mt-0.5">
+                    Add known-good and known-bad examples to verify your scorer
+                  </Txt>
+                  {scorerDatasetId && (
+                    <Txt variant="ui-xs" className="text-icon3 mt-1">
+                      Linked dataset · {testItems.length} item{testItems.length !== 1 ? 's' : ''}
+                    </Txt>
+                  )}
+                </div>
+                <Button variant="outline" size="sm" onClick={addTestItem}>
+                  <Icon>
+                    <Plus />
+                  </Icon>
+                  Add Item
+                </Button>
+              </div>
+
+              {testItems.length === 0 && (
+                <div className="border border-dashed border-border1 rounded-lg p-6 text-center">
+                  <Txt variant="ui-sm" className="text-icon3">
+                    No test items yet. Add items with expected scoring direction to verify your scorer works correctly.
+                  </Txt>
+                </div>
+              )}
+
+              {testItems.map((item, index) => {
+                // Find matching experiment result for this item
+                const matchingResult = experimentResults[index];
+                const resultScore = matchingResult?.output
+                  ? (matchingResult.output as { score?: number })?.score
+                  : null;
+                const resultReason = matchingResult?.output
+                  ? (matchingResult.output as { reason?: string })?.reason
+                  : null;
+                const resultError = matchingResult?.error;
+
+                const isCorrectDirection =
+                  resultScore !== null && resultScore !== undefined
+                    ? item.expectedDirection === 'high'
+                      ? resultScore >= (scoreMax - scoreMin) / 2 + scoreMin
+                      : resultScore < (scoreMax - scoreMin) / 2 + scoreMin
+                    : null;
+
+                return (
+                  <div
+                    key={index}
+                    className={cn(
+                      'border border-border1 rounded-lg p-3 space-y-3',
+                      isCorrectDirection === true && 'border-success/50 bg-success/5',
+                      isCorrectDirection === false && 'border-error/50 bg-error/5',
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Txt variant="ui-sm" className="font-medium">
+                          Item {index + 1}
+                        </Txt>
+                        {item.label && <Badge variant="default">{item.label}</Badge>}
+                        <button
+                          className={cn(
+                            'px-2 py-0.5 rounded text-xs font-medium transition-colors',
+                            item.expectedDirection === 'high' ? 'bg-success/20 text-success' : 'bg-error/20 text-error',
+                          )}
+                          onClick={() =>
+                            updateTestItem(
+                              index,
+                              'expectedDirection',
+                              item.expectedDirection === 'high' ? 'low' : 'high',
+                            )
+                          }
+                        >
+                          Should score {item.expectedDirection}
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isCorrectDirection !== null && (
+                          <Icon className={isCorrectDirection ? 'text-success' : 'text-error'}>
+                            {isCorrectDirection ? <CheckCircle2 /> : <XCircle />}
+                          </Icon>
+                        )}
+                        <Button variant="ghost" size="sm" onClick={() => removeTestItem(index)}>
+                          <Icon>
+                            <Trash2 />
+                          </Icon>
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Txt variant="ui-xs" className="text-icon3 font-medium">
+                          Input
+                        </Txt>
+                        <Textarea
+                          placeholder="The user's question/input..."
+                          value={typeof item.input === 'string' ? item.input : JSON.stringify(item.input, null, 2)}
+                          onChange={e => updateTestItem(index, 'input', e.target.value)}
+                          rows={3}
+                          className="text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Txt variant="ui-xs" className="text-icon3 font-medium">
+                          Output (agent response)
+                        </Txt>
+                        <Textarea
+                          placeholder="The agent's response..."
+                          value={typeof item.output === 'string' ? item.output : JSON.stringify(item.output, null, 2)}
+                          onChange={e => updateTestItem(index, 'output', e.target.value)}
+                          rows={3}
+                          className="text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Test result for this item */}
+                    {(resultScore !== null || resultError) && (
+                      <div className="flex items-center gap-3 pt-2 border-t border-border1">
+                        {resultError ? (
+                          <div className="flex items-center gap-1.5 text-error">
+                            <Icon size="sm">
+                              <AlertCircle />
+                            </Icon>
+                            <Txt variant="ui-xs">Error: {String(resultError)}</Txt>
+                          </div>
+                        ) : (
+                          <>
+                            <Txt variant="ui-sm" className="font-mono font-medium">
+                              Score: {resultScore?.toFixed(3)}
+                            </Txt>
+                            {resultReason && (
+                              <Txt variant="ui-xs" className="text-icon3 truncate flex-1">
+                                {resultReason}
+                              </Txt>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Summary of test results */}
+            {experimentResults.length > 0 && (
+              <div className="border border-border1 rounded-lg p-3">
+                <div className="flex items-center gap-3">
+                  <Txt variant="ui-sm" className="font-medium">
+                    Test Results:
+                  </Txt>
+                  {(() => {
+                    let correct = 0;
+                    let incorrect = 0;
+                    let errors = 0;
+                    experimentResults.forEach((result: { output: unknown; error: string | null }, i: number) => {
+                      const item = testItems[i];
+                      if (!item) return;
+                      if (result.error) {
+                        errors++;
+                        return;
+                      }
+                      const score = (result.output as { score?: number })?.score;
+                      if (score === null || score === undefined) return;
+                      const mid = (scoreMax - scoreMin) / 2 + scoreMin;
+                      const isCorrect = item.expectedDirection === 'high' ? score >= mid : score < mid;
+                      if (isCorrect) correct++;
+                      else incorrect++;
+                    });
+                    return (
+                      <>
+                        {correct > 0 && <Badge variant="success">{correct} correct</Badge>}
+                        {incorrect > 0 && <Badge variant="error">{incorrect} incorrect</Badge>}
+                        {errors > 0 && <Badge variant="default">{errors} errors</Badge>}
+                      </>
+                    );
+                  })()}
+                </div>
+                <Txt variant="ui-xs" className="text-icon3 mt-1">
+                  {experimentResults.length < testItems.length
+                    ? 'Still processing...'
+                    : 'All items scored. Tweak instructions and re-run to improve accuracy.'}
                 </Txt>
               </div>
             )}
-
-            {testItems.map((item, index) => {
-              // Find matching experiment result for this item
-              const matchingResult = experimentResults[index];
-              const resultScore = matchingResult?.output
-                ? (matchingResult.output as { score?: number })?.score
-                : null;
-              const resultReason = matchingResult?.output
-                ? (matchingResult.output as { reason?: string })?.reason
-                : null;
-              const resultError = matchingResult?.error;
-
-              const isCorrectDirection =
-                resultScore !== null && resultScore !== undefined
-                  ? item.expectedDirection === 'high'
-                    ? resultScore >= (scoreMax - scoreMin) / 2 + scoreMin
-                    : resultScore < (scoreMax - scoreMin) / 2 + scoreMin
-                  : null;
-
-              return (
-                <div
-                  key={index}
-                  className={cn(
-                    'border border-border1 rounded-lg p-3 space-y-3',
-                    isCorrectDirection === true && 'border-success/50 bg-success/5',
-                    isCorrectDirection === false && 'border-error/50 bg-error/5',
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Txt variant="ui-sm" className="font-medium">
-                        Item {index + 1}
-                      </Txt>
-                      {item.label && (
-                        <Badge variant="default">{item.label}</Badge>
-                      )}
-                      <button
-                        className={cn(
-                          'px-2 py-0.5 rounded text-xs font-medium transition-colors',
-                          item.expectedDirection === 'high'
-                            ? 'bg-success/20 text-success'
-                            : 'bg-error/20 text-error',
-                        )}
-                        onClick={() =>
-                          updateTestItem(
-                            index,
-                            'expectedDirection',
-                            item.expectedDirection === 'high' ? 'low' : 'high',
-                          )
-                        }
-                      >
-                        Should score {item.expectedDirection}
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {isCorrectDirection !== null && (
-                        <Icon className={isCorrectDirection ? 'text-success' : 'text-error'}>
-                          {isCorrectDirection ? <CheckCircle2 /> : <XCircle />}
-                        </Icon>
-                      )}
-                      <Button variant="ghost" size="sm" onClick={() => removeTestItem(index)}>
-                        <Icon>
-                          <Trash2 />
-                        </Icon>
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Txt variant="ui-xs" className="text-icon3 font-medium">
-                        Input
-                      </Txt>
-                      <Textarea
-                        placeholder="The user's question/input..."
-                        value={typeof item.input === 'string' ? item.input : JSON.stringify(item.input, null, 2)}
-                        onChange={e => updateTestItem(index, 'input', e.target.value)}
-                        rows={3}
-                        className="text-sm"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Txt variant="ui-xs" className="text-icon3 font-medium">
-                        Output (agent response)
-                      </Txt>
-                      <Textarea
-                        placeholder="The agent's response..."
-                        value={typeof item.output === 'string' ? item.output : JSON.stringify(item.output, null, 2)}
-                        onChange={e => updateTestItem(index, 'output', e.target.value)}
-                        rows={3}
-                        className="text-sm"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Test result for this item */}
-                  {(resultScore !== null || resultError) && (
-                    <div className="flex items-center gap-3 pt-2 border-t border-border1">
-                      {resultError ? (
-                        <div className="flex items-center gap-1.5 text-error">
-                          <Icon size="sm">
-                            <AlertCircle />
-                          </Icon>
-                          <Txt variant="ui-xs">Error: {String(resultError)}</Txt>
-                        </div>
-                      ) : (
-                        <>
-                          <Txt variant="ui-sm" className="font-mono font-medium">
-                            Score: {resultScore?.toFixed(3)}
-                          </Txt>
-                          {resultReason && (
-                            <Txt variant="ui-xs" className="text-icon3 truncate flex-1">
-                              {resultReason}
-                            </Txt>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
           </div>
-
-          {/* Summary of test results */}
-          {experimentResults.length > 0 && (
-            <div className="border border-border1 rounded-lg p-3">
-              <div className="flex items-center gap-3">
-                <Txt variant="ui-sm" className="font-medium">
-                  Test Results:
-                </Txt>
-                {(() => {
-                  let correct = 0;
-                  let incorrect = 0;
-                  let errors = 0;
-                  experimentResults.forEach((result: { output: unknown; error: string | null }, i: number) => {
-                    const item = testItems[i];
-                    if (!item) return;
-                    if (result.error) {
-                      errors++;
-                      return;
-                    }
-                    const score = (result.output as { score?: number })?.score;
-                    if (score === null || score === undefined) return;
-                    const mid = (scoreMax - scoreMin) / 2 + scoreMin;
-                    const isCorrect = item.expectedDirection === 'high' ? score >= mid : score < mid;
-                    if (isCorrect) correct++;
-                    else incorrect++;
-                  });
-                  return (
-                    <>
-                      {correct > 0 && (
-                        <Badge variant="success">{correct} correct</Badge>
-                      )}
-                      {incorrect > 0 && (
-                        <Badge variant="error">{incorrect} incorrect</Badge>
-                      )}
-                      {errors > 0 && (
-                        <Badge variant="default">{errors} errors</Badge>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
-              <Txt variant="ui-xs" className="text-icon3 mt-1">
-                {experimentResults.length < testItems.length
-                  ? 'Still processing...'
-                  : 'All items scored. Tweak instructions and re-run to improve accuracy.'}
-              </Txt>
-            </div>
-          )}
-        </div>
         )}
       </ScrollArea>
 
@@ -630,12 +657,7 @@ export function ScorerMiniEditor({ onBack, onSaved, initialItems, prefillTestIte
       <div className="flex items-center gap-2 px-4 py-3 border-t border-border1">
         {isEditing ? (
           <>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleSave}
-              disabled={isSaving || !instructions.trim()}
-            >
+            <Button variant="default" size="sm" onClick={handleSave} disabled={isSaving || !instructions.trim()}>
               {isSaving ? (
                 <Spinner className="mr-1.5" />
               ) : (
@@ -694,12 +716,7 @@ export function ScorerMiniEditor({ onBack, onSaved, initialItems, prefillTestIte
               )}
               Run Test
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSave}
-              disabled={isSaving}
-            >
+            <Button variant="outline" size="sm" onClick={handleSave} disabled={isSaving}>
               {isSaving ? <Spinner className="mr-1.5" /> : null}
               Update & Re-save
             </Button>

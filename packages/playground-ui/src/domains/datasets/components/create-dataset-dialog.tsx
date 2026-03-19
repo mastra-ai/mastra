@@ -18,7 +18,13 @@ export interface CreateDatasetDialogProps {
   targetIds?: string[];
 }
 
-export function CreateDatasetDialog({ open, onOpenChange, onSuccess, targetType, targetIds }: CreateDatasetDialogProps) {
+export function CreateDatasetDialog({
+  open,
+  onOpenChange,
+  onSuccess,
+  targetType,
+  targetIds,
+}: CreateDatasetDialogProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [inputSchema, setInputSchema] = useState<Record<string, unknown> | null>(null);

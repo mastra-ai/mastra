@@ -77,7 +77,6 @@ export function AgentPlaygroundDatasets({ agentId }: AgentPlaygroundDatasetsProp
                   version={dataset.version}
                   latestExperiment={latestExp}
                   onGenerate={() => setGenerateDatasetId(dataset.id)}
-                  
                 />
               );
             })
@@ -88,10 +87,7 @@ export function AgentPlaygroundDatasets({ agentId }: AgentPlaygroundDatasetsProp
       <CreateDatasetDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} />
 
       {generateDatasetId && (
-        <GenerateItemsDialog
-          datasetId={generateDatasetId}
-          onDismiss={() => setGenerateDatasetId(null)}
-        />
+        <GenerateItemsDialog datasetId={generateDatasetId} onDismiss={() => setGenerateDatasetId(null)} />
       )}
     </div>
   );
@@ -141,12 +137,7 @@ function DatasetCard({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          {latestExperiment && (
-            <ExperimentBadge
-              status={latestExperiment.status}
-              passRate={passRate}
-            />
-          )}
+          {latestExperiment && <ExperimentBadge status={latestExperiment.status} passRate={passRate} />}
           <Button variant="ghost" size="sm" onClick={onGenerate} title="Generate test data with AI">
             <Sparkles className="h-3.5 w-3.5" />
           </Button>
@@ -161,7 +152,9 @@ function ExperimentBadge({ status, passRate }: { status: string; passRate: numbe
     return (
       <div className="flex items-center gap-1 text-blue-400">
         <Loader2 className="h-3 w-3 animate-spin" />
-        <Txt variant="ui-xs" className="text-blue-400">Running</Txt>
+        <Txt variant="ui-xs" className="text-blue-400">
+          Running
+        </Txt>
       </div>
     );
   }
@@ -170,7 +163,9 @@ function ExperimentBadge({ status, passRate }: { status: string; passRate: numbe
     return (
       <div className="flex items-center gap-1 text-red-400">
         <XCircle className="h-3 w-3" />
-        <Txt variant="ui-xs" className="text-red-400">Failed</Txt>
+        <Txt variant="ui-xs" className="text-red-400">
+          Failed
+        </Txt>
       </div>
     );
   }
@@ -183,7 +178,9 @@ function ExperimentBadge({ status, passRate }: { status: string; passRate: numbe
   return (
     <div className={`flex items-center gap-1 ${color}`}>
       <StatusIcon className="h-3 w-3" />
-      <Txt variant="ui-xs" className={color}>{passRate}%</Txt>
+      <Txt variant="ui-xs" className={color}>
+        {passRate}%
+      </Txt>
     </div>
   );
 }

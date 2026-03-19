@@ -53,7 +53,14 @@ function TabLink({
   );
 }
 
-export function AgentPageTabs({ agentId, activeTab, showPlayground = false, showObservability = false, reviewBadge, rightSlot }: AgentPageTabsProps) {
+export function AgentPageTabs({
+  agentId,
+  activeTab,
+  showPlayground = false,
+  showObservability = false,
+  reviewBadge,
+  rightSlot,
+}: AgentPageTabsProps) {
   return (
     <div className="flex items-center border-b border-border1 px-4 bg-surface2">
       <TabLink

@@ -1,4 +1,14 @@
-import { CheckCircle, XCircle, Clock, Loader2, ChevronRight, ArrowLeft, ClipboardCheck, Award, ExternalLink } from 'lucide-react';
+import {
+  CheckCircle,
+  XCircle,
+  Clock,
+  Loader2,
+  ChevronRight,
+  ArrowLeft,
+  ClipboardCheck,
+  Award,
+  ExternalLink,
+} from 'lucide-react';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
@@ -62,8 +72,6 @@ function ExperimentStatusBadge({ status }: { status: string }) {
   }
 }
 
-
-
 function formatResultValue(value: unknown): string {
   if (value === null || value === undefined) return '-';
   if (typeof value === 'string') return value;
@@ -107,7 +115,15 @@ function parseOutput(output: unknown): ParsedOutput {
   };
 }
 
-function ResultOutputSection({ output, traceId, onViewTrace }: { output: unknown; traceId?: string | null; onViewTrace?: (traceId: string) => void }) {
+function ResultOutputSection({
+  output,
+  traceId,
+  onViewTrace,
+}: {
+  output: unknown;
+  traceId?: string | null;
+  onViewTrace?: (traceId: string) => void;
+}) {
   const parsed = parseOutput(output);
   const effectiveTraceId = traceId || parsed.traceId;
 
@@ -244,7 +260,19 @@ export function ExperimentResultsPanel({
 }: {
   experiment: AgentExperiment;
   onBack: () => void;
-  onSendToReview?: (items: Array<{ id: string; input: unknown; output: unknown; error: unknown; itemId: string; datasetId: string; scores?: Record<string, number>; experimentId?: string; traceId?: string }>) => void;
+  onSendToReview?: (
+    items: Array<{
+      id: string;
+      input: unknown;
+      output: unknown;
+      error: unknown;
+      itemId: string;
+      datasetId: string;
+      scores?: Record<string, number>;
+      experimentId?: string;
+      traceId?: string;
+    }>,
+  ) => void;
   onCreateScorer?: (items: Array<{ input: unknown; output: unknown }>) => void;
 }) {
   const client = useMastraClient();
@@ -411,12 +439,12 @@ export function ExperimentResultsPanel({
               const isChecked = selectedIds.has(result.id);
 
               return (
-                <div key={result.id} className={cn('border-b border-border1 px-4 py-3 space-y-2', isChecked && 'bg-surface3/50')}>
+                <div
+                  key={result.id}
+                  className={cn('border-b border-border1 px-4 py-3 space-y-2', isChecked && 'bg-surface3/50')}
+                >
                   <div className="flex items-center gap-2">
-                    <Checkbox
-                      checked={isChecked}
-                      onCheckedChange={() => toggleItem(result.id)}
-                    />
+                    <Checkbox checked={isChecked} onCheckedChange={() => toggleItem(result.id)} />
                     <Badge variant={hasError ? 'error' : 'success'}>{hasError ? 'Error' : 'Success'}</Badge>
                     <Txt variant="ui-xs" className="text-neutral2 font-mono">
                       {result.itemId.slice(0, 8)}
@@ -456,7 +484,11 @@ export function ExperimentResultsPanel({
                       </pre>
                     </div>
                   ) : (
-                    <ResultOutputSection output={result.output} traceId={result.traceId} onViewTrace={setViewingTraceId} />
+                    <ResultOutputSection
+                      output={result.output}
+                      traceId={result.traceId}
+                      onViewTrace={setViewingTraceId}
+                    />
                   )}
                 </div>
               );

@@ -248,12 +248,7 @@ export function GenerateItemsDialog({ datasetId, agentContext, onDismiss }: Gene
                     />
                   </div>
                   <div className="flex-1">
-                    <LLMModels
-                      llmId={localProvider}
-                      value={localModel}
-                      onValueChange={setLocalModel}
-                      size="sm"
-                    />
+                    <LLMModels llmId={localProvider} value={localModel} onValueChange={setLocalModel} size="sm" />
                   </div>
                 </div>
               </div>
@@ -310,10 +305,7 @@ export function GenerateItemsDialog({ datasetId, agentContext, onDismiss }: Gene
             <div className="flex flex-col flex-1 min-h-0 gap-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Checkbox
-                    checked={selectedIndices.size === generatedItems.length}
-                    onCheckedChange={toggleAll}
-                  />
+                  <Checkbox checked={selectedIndices.size === generatedItems.length} onCheckedChange={toggleAll} />
                   <Txt variant="ui-sm" className="text-neutral4">
                     {selectedIndices.size} of {generatedItems.length} selected
                   </Txt>
@@ -339,10 +331,7 @@ export function GenerateItemsDialog({ datasetId, agentContext, onDismiss }: Gene
                   {generatedItems.map((item, index) => (
                     <div key={index} className="border border-border1 rounded-lg">
                       <div className="flex items-center gap-2 px-3 py-2">
-                        <Checkbox
-                          checked={selectedIndices.has(index)}
-                          onCheckedChange={() => toggleIndex(index)}
-                        />
+                        <Checkbox checked={selectedIndices.has(index)} onCheckedChange={() => toggleIndex(index)} />
                         <button type="button" className="flex-1 text-left" onClick={() => toggleExpanded(index)}>
                           <Txt variant="ui-sm" className="text-neutral5 truncate">
                             Item {index + 1}: {formatItemPreview(item.input)}

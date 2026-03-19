@@ -31,9 +31,7 @@ export const useCompletedItems = (agentId: string) => {
                 experimentId: r.experimentId,
                 datasetId: exp.datasetId,
                 traceId: r.traceId ?? undefined,
-                scores: r.scores
-                  ? Object.fromEntries(r.scores.map(s => [s.scorerId, s.score ?? 0]))
-                  : {},
+                scores: r.scores ? Object.fromEntries(r.scores.map(s => [s.scorerId, s.score ?? 0])) : {},
                 tags: r.tags ?? [],
                 comment: '',
               }));

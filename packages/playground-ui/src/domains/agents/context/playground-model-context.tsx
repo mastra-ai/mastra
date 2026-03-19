@@ -15,7 +15,11 @@ interface PlaygroundModelProviderProps {
   defaultModel?: string;
 }
 
-export function PlaygroundModelProvider({ children, defaultProvider = '', defaultModel = '' }: PlaygroundModelProviderProps) {
+export function PlaygroundModelProvider({
+  children,
+  defaultProvider = '',
+  defaultModel = '',
+}: PlaygroundModelProviderProps) {
   const [provider, setProvider] = useState(defaultProvider);
   const [model, setModel] = useState(defaultModel);
 

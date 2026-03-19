@@ -33,7 +33,9 @@ export function ScorerDetailView({
   if (!scorerData) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Txt variant="ui-sm" className="text-neutral3">Scorer not found</Txt>
+        <Txt variant="ui-sm" className="text-neutral3">
+          Scorer not found
+        </Txt>
       </div>
     );
   }
@@ -67,7 +69,9 @@ export function ScorerDetailView({
           <div className="flex items-center gap-3 shrink-0">
             {!isCode && (
               <Button variant="ghost" size="sm" onClick={onEdit}>
-                <Icon size="sm"><Pencil /></Icon>
+                <Icon size="sm">
+                  <Pencil />
+                </Icon>
                 Edit
               </Button>
             )}
@@ -84,10 +88,7 @@ export function ScorerDetailView({
               When enabled, this scorer grades results for this agent
             </Txt>
           </div>
-          <Switch
-            checked={isAttached}
-            onCheckedChange={onToggleAttach}
-          />
+          <Switch checked={isAttached} onCheckedChange={onToggleAttach} />
         </div>
       </div>
 
@@ -101,7 +102,10 @@ export function ScorerDetailView({
             <DetailRow label="ID" value={scorerId} />
             <DetailRow label="Source" value={isCode ? 'Code' : 'Stored'} />
             {scorerData.agentIds && scorerData.agentIds.length > 0 && (
-              <DetailRow label="Used by agents" value={scorerData.agentNames?.join(', ') || scorerData.agentIds.join(', ')} />
+              <DetailRow
+                label="Used by agents"
+                value={scorerData.agentNames?.join(', ') || scorerData.agentIds.join(', ')}
+              />
             )}
           </div>
         </div>
@@ -118,7 +122,9 @@ export function ScorerDetailView({
                   onClick={() => onViewDataset?.(ds.id)}
                   className="w-full text-left px-3 py-2 rounded-md bg-surface3 hover:bg-surface4 transition-colors"
                 >
-                  <Txt variant="ui-xs" className="text-neutral5">{ds.name}</Txt>
+                  <Txt variant="ui-xs" className="text-neutral5">
+                    {ds.name}
+                  </Txt>
                 </button>
               ))}
             </div>
@@ -128,7 +134,8 @@ export function ScorerDetailView({
         {isCode && (
           <div className="p-3 bg-surface3 rounded-md">
             <Txt variant="ui-xs" className="text-neutral3">
-              This scorer is defined in code and cannot be edited in the UI. You can toggle whether it runs in experiments for this agent.
+              This scorer is defined in code and cannot be edited in the UI. You can toggle whether it runs in
+              experiments for this agent.
             </Txt>
           </div>
         )}
@@ -140,8 +147,12 @@ export function ScorerDetailView({
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start gap-2">
-      <Txt variant="ui-xs" className="text-neutral3 w-24 shrink-0">{label}</Txt>
-      <Txt variant="ui-xs" className="text-neutral5 break-all">{value}</Txt>
+      <Txt variant="ui-xs" className="text-neutral3 w-24 shrink-0">
+        {label}
+      </Txt>
+      <Txt variant="ui-xs" className="text-neutral5 break-all">
+        {value}
+      </Txt>
     </div>
   );
 }

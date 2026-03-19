@@ -1,5 +1,17 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { ThumbsUp, ThumbsDown, Trash2, Loader2, X, Plus, Tag, ChevronDown, Pencil, Check, CheckCircle } from 'lucide-react';
+import {
+  ThumbsUp,
+  ThumbsDown,
+  Trash2,
+  Loader2,
+  X,
+  Plus,
+  Tag,
+  ChevronDown,
+  Pencil,
+  Check,
+  CheckCircle,
+} from 'lucide-react';
 import { useMastraClient } from '@mastra/react';
 
 import { Txt } from '@/ds/components/Txt';
@@ -42,15 +54,7 @@ interface AgentPlaygroundReviewProps {
 }
 
 export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygroundReviewProps) {
-  const {
-    items,
-    setItemTags,
-    rateItem,
-    commentItem,
-    removeItem,
-    completeItem,
-    loadPersistedItems,
-  } = useReviewQueue();
+  const { items, setItemTags, rateItem, commentItem, removeItem, completeItem, loadPersistedItems } = useReviewQueue();
   const { data: persistedItems } = useReviewItems(agentId);
   const { data: completedItems, refetch: refetchCompleted } = useCompletedItems(agentId);
   const client = useMastraClient();
@@ -202,7 +206,9 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
     }
     const tagCount = allNewTags.size;
     const itemCount = accepted.length;
-    toast.success(`Applied ${tagCount} tag${tagCount !== 1 ? 's' : ''} to ${itemCount} item${itemCount !== 1 ? 's' : ''}`);
+    toast.success(
+      `Applied ${tagCount} tag${tagCount !== 1 ? 's' : ''} to ${itemCount} item${itemCount !== 1 ? 's' : ''}`,
+    );
     setShowProposalDialog(false);
     setProposedAssignments([]);
   }, [proposedAssignments, items, setItemTags, syncTagToDataset]);
@@ -319,16 +325,10 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                 </Button>
               </DropdownMenu.Trigger>
               <DropdownMenu.Content align="end">
-                <DropdownMenu.Item
-                  disabled={untaggedCount === 0}
-                  onSelect={() => openAnalyzeDialog('untagged')}
-                >
+                <DropdownMenu.Item disabled={untaggedCount === 0} onSelect={() => openAnalyzeDialog('untagged')}>
                   Analyze untagged ({untaggedCount})
                 </DropdownMenu.Item>
-                <DropdownMenu.Item
-                  disabled={selectedItemIds.size === 0}
-                  onSelect={() => openAnalyzeDialog('selected')}
-                >
+                <DropdownMenu.Item disabled={selectedItemIds.size === 0} onSelect={() => openAnalyzeDialog('selected')}>
                   Analyze selected ({selectedItemIds.size})
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
@@ -349,10 +349,15 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
               <div className="space-y-0.5">
                 <button
                   type="button"
-                  onClick={() => { setActiveTagFilter(null); setShowCompleted(false); }}
+                  onClick={() => {
+                    setActiveTagFilter(null);
+                    setShowCompleted(false);
+                  }}
                   className={cn(
                     'w-full text-left px-2 py-1 rounded-md text-xs transition-colors',
-                    !activeTagFilter && !showCompleted ? 'bg-accent1/10 text-accent1' : 'hover:bg-surface3 text-neutral4',
+                    !activeTagFilter && !showCompleted
+                      ? 'bg-accent1/10 text-accent1'
+                      : 'hover:bg-surface3 text-neutral4',
                   )}
                 >
                   All ({items.length})
@@ -361,10 +366,15 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                   <button
                     key={tag}
                     type="button"
-                    onClick={() => { setActiveTagFilter(activeTagFilter === tag ? null : tag); setShowCompleted(false); }}
+                    onClick={() => {
+                      setActiveTagFilter(activeTagFilter === tag ? null : tag);
+                      setShowCompleted(false);
+                    }}
                     className={cn(
                       'w-full text-left px-2 py-1 rounded-md text-xs transition-colors flex items-center justify-between',
-                      activeTagFilter === tag && !showCompleted ? 'bg-accent1/10 text-accent1' : 'hover:bg-surface3 text-neutral4',
+                      activeTagFilter === tag && !showCompleted
+                        ? 'bg-accent1/10 text-accent1'
+                        : 'hover:bg-surface3 text-neutral4',
                     )}
                   >
                     <span className="flex items-center gap-1.5">
@@ -378,10 +388,15 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                 ))}
                 <button
                   type="button"
-                  onClick={() => { setActiveTagFilter(activeTagFilter === '__untagged__' ? null : '__untagged__'); setShowCompleted(false); }}
+                  onClick={() => {
+                    setActiveTagFilter(activeTagFilter === '__untagged__' ? null : '__untagged__');
+                    setShowCompleted(false);
+                  }}
                   className={cn(
                     'w-full text-left px-2 py-1 rounded-md text-xs transition-colors',
-                    activeTagFilter === '__untagged__' && !showCompleted ? 'bg-accent1/10 text-accent1' : 'hover:bg-surface3 text-neutral4',
+                    activeTagFilter === '__untagged__' && !showCompleted
+                      ? 'bg-accent1/10 text-accent1'
+                      : 'hover:bg-surface3 text-neutral4',
                   )}
                 >
                   Untagged ({untaggedCount})
@@ -500,11 +515,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     Review Queue
                   </Txt>
                   {filteredItems.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={toggleSelectAll}
-                      className="text-xs text-accent1 hover:underline"
-                    >
+                    <button type="button" onClick={toggleSelectAll} className="text-xs text-accent1 hover:underline">
                       {selectedItemIds.size === filteredItems.length ? 'Deselect all' : 'Select all'}
                     </button>
                   )}
@@ -597,9 +608,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
       <Dialog open={showAnalyzeDialog} onOpenChange={setShowAnalyzeDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>
-              Analyze {analyzeMode === 'untagged' ? 'Untagged' : 'Selected'} Items
-            </DialogTitle>
+            <DialogTitle>Analyze {analyzeMode === 'untagged' ? 'Untagged' : 'Selected'} Items</DialogTitle>
           </DialogHeader>
           <DialogBody>
             <div className="space-y-4">
@@ -618,12 +627,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     />
                   </div>
                   <div className="flex-1">
-                    <LLMModels
-                      llmId={analyzeProvider}
-                      value={analyzeModel}
-                      onValueChange={setAnalyzeModel}
-                      size="sm"
-                    />
+                    <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} size="sm" />
                   </div>
                 </div>
               </div>
@@ -720,7 +724,10 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                             setProposedAssignments(prev =>
                               prev.map((p, i) =>
                                 i === idx
-                                  ? { ...p, tags: p.tags.map((t, ti) => (ti === tagIdx ? newTag.trim() : t)).filter(Boolean) }
+                                  ? {
+                                      ...p,
+                                      tags: p.tags.map((t, ti) => (ti === tagIdx ? newTag.trim() : t)).filter(Boolean),
+                                    }
                                   : p,
                               ),
                             );
@@ -1009,7 +1016,11 @@ function BulkTagPicker({
               <button type="button" onClick={() => onApplyTag(tag)} className="text-left flex-1 text-neutral4">
                 {tag}
               </button>
-              <button type="button" onClick={() => onRemoveTag(tag)} className="text-neutral2 hover:text-negative1 ml-2">
+              <button
+                type="button"
+                onClick={() => onRemoveTag(tag)}
+                className="text-neutral2 hover:text-negative1 ml-2"
+              >
                 <X className="w-3 h-3" />
               </button>
             </div>
@@ -1160,9 +1171,7 @@ function ReviewItemCard({
               {/* Mark complete — only enabled if item has tags or a comment */}
               <ButtonWithTooltip
                 tooltipContent={
-                  item.tags.length > 0 || item.comment
-                    ? 'Mark as complete'
-                    : 'Add a tag or comment before completing'
+                  item.tags.length > 0 || item.comment ? 'Mark as complete' : 'Add a tag or comment before completing'
                 }
                 variant="ghost"
                 size="sm"

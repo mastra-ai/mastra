@@ -114,40 +114,40 @@ export function AgentPlaygroundView({
   return (
     <div className="flex flex-col h-full overflow-hidden bg-surface2">
       <Group className="flex-1 min-h-0" defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
-          {/* Left panel - Version Bar + Configuration + Action Bar */}
-          <Panel id="playground-config" minSize={30} defaultSize={50} className="overflow-hidden">
-            <LeftPanel
-              agentId={agentId}
-              activeVersionId={activeVersionId}
-              selectedVersionId={selectedVersionId}
-              latestVersionId={latestVersionId}
-              onVersionSelect={onVersionSelect}
-              isDirty={isDirty}
-              isSavingDraft={isSavingDraft}
-              isPublishing={isPublishing}
-              hasDraft={hasDraft}
-              readOnly={readOnly}
-              onSaveDraft={onSaveDraft}
-              onPublish={onPublish}
-            />
-          </Panel>
+        {/* Left panel - Version Bar + Configuration + Action Bar */}
+        <Panel id="playground-config" minSize={30} defaultSize={50} className="overflow-hidden">
+          <LeftPanel
+            agentId={agentId}
+            activeVersionId={activeVersionId}
+            selectedVersionId={selectedVersionId}
+            latestVersionId={latestVersionId}
+            onVersionSelect={onVersionSelect}
+            isDirty={isDirty}
+            isSavingDraft={isSavingDraft}
+            isPublishing={isPublishing}
+            hasDraft={hasDraft}
+            readOnly={readOnly}
+            onSaveDraft={onSaveDraft}
+            onPublish={onPublish}
+          />
+        </Panel>
 
-          <PanelSeparator />
+        <PanelSeparator />
 
-          {/* Right panel - Test Chat */}
-          <Panel id="playground-chat" minSize={30} defaultSize={50} className="overflow-hidden">
-            <div className="flex flex-col h-full overflow-hidden bg-surface1">
-              <div className="flex-1 min-h-0">
-                <AgentPlaygroundTestChat
-                  agentId={agentId}
-                  agentName={agentName}
-                  modelVersion={modelVersion}
-                  hasMemory={hasMemory}
-                />
-              </div>
+        {/* Right panel - Test Chat */}
+        <Panel id="playground-chat" minSize={30} defaultSize={50} className="overflow-hidden">
+          <div className="flex flex-col h-full overflow-hidden bg-surface1">
+            <div className="flex-1 min-h-0">
+              <AgentPlaygroundTestChat
+                agentId={agentId}
+                agentName={agentName}
+                modelVersion={modelVersion}
+                hasMemory={hasMemory}
+              />
             </div>
-          </Panel>
-        </Group>
-      </div>
+          </div>
+        </Panel>
+      </Group>
+    </div>
   );
 }

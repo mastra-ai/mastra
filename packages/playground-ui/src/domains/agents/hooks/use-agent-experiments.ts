@@ -37,9 +37,10 @@ export const useAgentExperiments = (agentId: string, attachedScorerIds: string[]
           try {
             const response = await client.listDatasetExperiments(dataset.id);
             return response.experiments
-              .filter(exp =>
-                (exp.targetType === 'agent' && exp.targetId === agentId) ||
-                (exp.targetType === 'scorer' && scorerIdSet.has(exp.targetId))
+              .filter(
+                exp =>
+                  (exp.targetType === 'agent' && exp.targetId === agentId) ||
+                  (exp.targetType === 'scorer' && scorerIdSet.has(exp.targetId)),
               )
               .map(exp => ({
                 ...exp,
