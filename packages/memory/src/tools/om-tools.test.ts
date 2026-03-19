@@ -3,7 +3,7 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { Memory } from '../index';
-import { recallMessages, recallTool } from './om-tools';
+import { recallMessages, recallPart, recallTool } from './om-tools';
 
 describe('om-tools', () => {
   describe('recallMessages', () => {
@@ -196,12 +196,500 @@ describe('om-tools', () => {
       expect(result.messages).toContain('end="msg-4"');
     });
 
+    // ── Detail levels ───────────────────────────────────────────────
+
+    it('should default to low detail', async () => {
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-1',
+        limit: 2,
+      });
+
+      expect(result.detail).toBe('low');
+    });
+
+    it('should include part indices in output', async () => {
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-1',
+        limit: 2,
+      });
+
+      expect(result.messages).toContain('[p0]');
+    });
+
+    it('should include message IDs in output', async () => {
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-1',
+        limit: 2,
+      });
+
+      expect(result.messages).toContain('[msg-2]');
+      expect(result.messages).toContain('[msg-3]');
+    });
+
+    it('should truncate text in low detail mode', async () => {
+      // Create a message with long content
+      const longText = 'A'.repeat(200);
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-long',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: longText }] },
+            createdAt: new Date('2024-01-01T10:05:00Z'),
+          },
+        ],
+      });
+
+      const lowResult = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-5',
+        limit: 1,
+        detail: 'low',
+      });
+
+      expect(lowResult.messages).toContain('…');
+      expect(lowResult.messages).not.toContain(longText);
+
+      const highResult = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-5',
+        limit: 1,
+        detail: 'high',
+      });
+
+      expect(highResult.messages).toContain(longText);
+    });
+
+    it('should show tool names only in low detail, full args in high detail', async () => {
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-tool',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    toolCallId: 'tc-1',
+                    toolName: 'searchFiles',
+                    state: 'call',
+                    args: { query: 'test query', path: '/src' },
+                  },
+                },
+              ],
+            },
+            createdAt: new Date('2024-01-01T10:05:00Z'),
+          },
+        ],
+      });
+
+      const lowResult = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-5',
+        limit: 1,
+        detail: 'low',
+      });
+
+      expect(lowResult.messages).toContain('Tool Call: searchFiles');
+      // Low detail shouldn't include full JSON args
+      expect(lowResult.messages).not.toContain('"query": "test query"');
+
+      const highResult = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-5',
+        limit: 1,
+        detail: 'high',
+      });
+
+      expect(highResult.messages).toContain('Tool Call: searchFiles');
+      expect(highResult.messages).toContain('"query": "test query"');
+    });
+
+    // ── High-detail clamping ──────────────────────────────────────
+
+    it('should clamp high detail to 1 part and include continuation hints', async () => {
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-1',
+        page: 1,
+        limit: 10,
+        detail: 'high',
+      });
+
+      // Should only render 1 part from the first message
+      expect(result.count).toBe(1);
+      expect(result.detail).toBe('high');
+      // Should include the first message's content
+      expect(result.messages).toContain('Message 2');
+      // Should NOT include later messages inline
+      expect(result.messages).not.toContain('Message 4');
+      // Should include continuation hint pointing to the next message
+      expect(result.messages).toContain('High detail returns 1 part at a time');
+      expect(result.messages).toContain('next message');
+      expect(result.messages).toContain('msg-3');
+    });
+
+    it('should show next partIndex hint when message has multiple parts', async () => {
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-multi-part',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                { type: 'text', text: 'First part' },
+                { type: 'text', text: 'Second part' },
+              ],
+            },
+            createdAt: new Date('2024-01-01T10:05:00Z'),
+          },
+        ],
+      });
+
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-5',
+        limit: 5,
+        detail: 'high',
+      });
+
+      expect(result.messages).toContain('First part');
+      expect(result.messages).not.toContain('Second part');
+      expect(result.messages).toContain('partIndex=1');
+    });
+
+    // ── Pagination flags ────────────────────────────────────────────
+
+    it('should report hasNextPage when more messages exist forward', async () => {
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-1',
+        page: 1,
+        limit: 2,
+      });
+
+      // After msg-1 we have msg-2, msg-3, msg-4, msg-5 (4 messages), limit 2 → hasNextPage
+      expect(result.hasNextPage).toBe(true);
+      expect(result.hasPrevPage).toBe(false);
+    });
+
+    it('should report hasPrevPage when on a later page forward', async () => {
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-1',
+        page: 2,
+        limit: 2,
+      });
+
+      // Page 2 of 4 messages → has prev page, no next page
+      expect(result.hasNextPage).toBe(false);
+      expect(result.hasPrevPage).toBe(true);
+    });
+
+    it('should report hasNextPage=false when all messages fit', async () => {
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-1',
+        page: 1,
+        limit: 20,
+      });
+
+      expect(result.hasNextPage).toBe(false);
+      expect(result.hasPrevPage).toBe(false);
+    });
+
+    it('should report hasPrevPage for backward pagination', async () => {
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-5',
+        page: -1,
+        limit: 2,
+      });
+
+      // Before msg-5 we have msg-1, msg-2, msg-3, msg-4 (4 messages), limit 2 → hasPrevPage
+      expect(result.hasPrevPage).toBe(true);
+      expect(result.hasNextPage).toBe(false);
+    });
+
+    // ── Token limiting ──────────────────────────────────────────────
+
+    it('should report truncated=false when output fits token budget', async () => {
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-1',
+        limit: 2,
+      });
+
+      expect(result.truncated).toBe(false);
+      expect(result.tokenOffset).toBe(0);
+    });
+
+    it('should truncate and report tokenOffset when output exceeds token budget', async () => {
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-1',
+        limit: 20,
+        maxTokens: 5, // extremely small budget
+      });
+
+      expect(result.truncated).toBe(true);
+      expect(result.tokenOffset).toBeGreaterThan(0);
+    });
+
+    // ── Data-only messages ────────────────────────────────────────
+
+    it('should skip data-only messages in paged recall output', async () => {
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-data',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'data-om-buffering-start',
+                  data: { cycleId: 'test-cycle', operationType: 'observation' },
+                },
+              ],
+            },
+            createdAt: new Date('2024-01-01T10:02:30Z'),
+          },
+        ],
+      });
+
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-2',
+        page: 1,
+        limit: 5,
+      });
+
+      // msg-data is in the date range but has no visible content — should not appear
+      expect(result.messages).not.toContain('data-om-buffering-start');
+      expect(result.messages).not.toContain('msg-data');
+      // visible messages should still be present
+      expect(result.messages).toContain('Message 3');
+    });
+
+    // ── recallTool integration ──────────────────────────────────────
+
     it('should surface missing memory context errors from the tool', async () => {
       const tool = recallTool();
 
       await expect(tool.execute?.({ cursor: 'msg-2' }, { agent: { threadId, resourceId } } as any)).rejects.toThrow(
         'Memory instance is required for recall',
       );
+    });
+  });
+
+  describe('recallPart', () => {
+    let memory: Memory;
+    const threadId = 'thread-om-tools';
+    const resourceId = 'resource-om-tools';
+
+    beforeEach(async () => {
+      memory = new Memory({ storage: new InMemoryStore() });
+
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'OM part test thread',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+          updatedAt: new Date('2024-01-01T10:00:00Z'),
+        },
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-multi',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                { type: 'text', text: 'Here is the result:' },
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    toolCallId: 'tc-1',
+                    toolName: 'readFile',
+                    state: 'result',
+                    args: { path: '/src/index.ts' },
+                    result: 'export function main() { console.log("hello"); }',
+                  },
+                },
+                { type: 'text', text: 'As you can see, it exports a main function.' },
+              ],
+            },
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+          },
+        ],
+      });
+    });
+
+    it('should fetch a specific part by index', async () => {
+      const result = await recallPart({
+        memory: memory as any,
+        threadId,
+        cursor: 'msg-multi',
+        partIndex: 0,
+      });
+
+      expect(result.messageId).toBe('msg-multi');
+      expect(result.partIndex).toBe(0);
+      expect(result.type).toBe('text');
+      expect(result.text).toContain('Here is the result:');
+    });
+
+    it('should fetch a tool result part at high detail', async () => {
+      const result = await recallPart({
+        memory: memory as any,
+        threadId,
+        cursor: 'msg-multi',
+        partIndex: 1,
+      });
+
+      expect(result.type).toBe('tool-result');
+      expect(result.text).toContain('readFile');
+      expect(result.text).toContain('export function main()');
+    });
+
+    it('should throw for invalid part index', async () => {
+      await expect(
+        recallPart({
+          memory: memory as any,
+          threadId,
+          cursor: 'msg-multi',
+          partIndex: 99,
+        }),
+      ).rejects.toThrow('Part index 99 not found');
+    });
+
+    it('should throw when cursor is a range format', async () => {
+      await expect(
+        recallPart({
+          memory: memory as any,
+          threadId,
+          cursor: 'msg-1:msg-2',
+          partIndex: 0,
+        }),
+      ).rejects.toThrow('looks like a range');
+    });
+
+    it('should throw a helpful message for data-only messages', async () => {
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-data-only',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'data-om-buffering-start',
+                  data: { cycleId: 'test-cycle', operationType: 'observation' },
+                },
+              ],
+            },
+            createdAt: new Date('2024-01-01T10:01:00Z'),
+          },
+        ],
+      });
+
+      await expect(
+        recallPart({
+          memory: memory as any,
+          threadId,
+          cursor: 'msg-data-only',
+          partIndex: 0,
+        }),
+      ).rejects.toThrow('no visible content');
+    });
+
+    it('should reject cursors from a different thread', async () => {
+      await memory.saveThread({
+        thread: {
+          id: 'other-thread',
+          resourceId,
+          title: 'Other thread',
+          createdAt: new Date('2024-01-01T11:00:00Z'),
+          updatedAt: new Date('2024-01-01T11:00:00Z'),
+        },
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'other-msg',
+            threadId: 'other-thread',
+            resourceId,
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'wrong thread' }] },
+            createdAt: new Date('2024-01-01T11:00:00Z'),
+          },
+        ],
+      });
+
+      await expect(
+        recallPart({
+          memory: memory as any,
+          threadId,
+          cursor: 'other-msg',
+          partIndex: 0,
+        }),
+      ).rejects.toThrow('does not belong to the current thread');
     });
   });
 

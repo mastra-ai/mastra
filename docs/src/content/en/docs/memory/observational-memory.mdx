@@ -139,6 +139,7 @@ When thread-scoped `graph: true` is enabled, OM keeps each group's `_range` meta
 ```typescript
 const tools = memory.listTools()
 
+// Low-detail paged recall (default)
 await tools.recall?.execute?.(
   {
     cursor: 'message-id-2',
@@ -153,9 +154,46 @@ await tools.recall?.execute?.(
     },
   },
 )
+
+// High-detail recall with full tool args/results
+await tools.recall?.execute?.(
+  {
+    cursor: 'message-id-2',
+    page: 1,
+    limit: 5,
+    detail: 'high',
+  },
+  { memory, agent: { threadId: 'thread-id' } },
+)
+
+// Fetch a single part by index
+await tools.recall?.execute?.(
+  {
+    cursor: 'message-id-2',
+    partIndex: 1,
+  },
+  { memory, agent: { threadId: 'thread-id' } },
+)
 ```
 
-Positive `page` values move forward from the cursor, negative values move backward, and `page: 0` is treated as `page: 1`.
+#### Pagination
+
+Positive `page` values move forward from the cursor, negative values move backward, and `page: 0` is treated as `page: 1`. The result includes `hasNextPage` and `hasPrevPage` flags so the agent knows whether more pages exist in each direction.
+
+#### Detail levels
+
+The `detail` parameter controls how much content each part shows:
+
+- **`"low"`** (default) — truncated text and tool names only. Each part is labeled with a positional index (`[p0]`, `[p1]`, etc.) for targeted follow-up.
+- **`"high"`** — full message content including tool arguments and results, still subject to a token budget.
+
+#### Part index
+
+Use `partIndex` with a cursor to fetch a single part at full detail. This is useful when a low-detail recall shows a tool result at `[p1]` that you want to read in full — call `recall` again with `cursor: 'message-id', partIndex: 1` instead of loading every part.
+
+#### Token limiting
+
+Results are capped at a token budget. When the output exceeds it, the result includes `truncated: true` and a `tokenOffset` indicating how many tokens were cut. The agent can paginate or use `partIndex` to target specific content.
 
 `recall` is only available when `observationalMemory.graph` is enabled in thread scope, and it only returns messages from the current thread around the requested cursor.
 
