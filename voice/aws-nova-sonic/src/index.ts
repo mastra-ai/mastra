@@ -1455,6 +1455,10 @@ export class NovaSonicVoice extends MastraVoice<
 
   /**
    * Disconnects from the AWS Bedrock session and cleans up resources.
+   *
+   * Pushes a `sessionEnd` event to the queue before signalling close,
+   * then schedules client destruction on the next tick so the async
+   * iterator has a chance to yield the event to the SDK.
    */
   close(): void {
     if (this.state === 'disconnected') {
@@ -1470,7 +1474,18 @@ export class NovaSonicVoice extends MastraVoice<
       this.turnCompleteTimeout = undefined;
     }
 
-    // Signal close to the async iterable
+    // Push sessionEnd so the server can acknowledge the close before we
+    // tear down the HTTP/2 connection.  Signal the queue so the iterator
+    // yields this event on its next pull.
+    const eventQueue = this._eventQueue;
+    const signalQueue = this._signalQueue;
+    if (eventQueue && signalQueue) {
+      eventQueue.push({ event: { sessionEnd: {} } });
+      signalQueue();
+    }
+
+    // Signal close *after* the sessionEnd event has been enqueued so the
+    // iterator returns done:true only after yielding sessionEnd.
     const closeSignal = this._closeSignal;
     if (closeSignal) {
       closeSignal();
@@ -1488,15 +1503,18 @@ export class NovaSonicVoice extends MastraVoice<
     }
     this.speakerStreams.clear();
 
-    // Destroy the Bedrock client to release HTTP/2 sessions
-    if (this.client) {
-      if (typeof this.client.destroy === 'function') {
-        this.client.destroy();
-      }
-      this.client = undefined;
-    }
-
+    // Delay client destruction so the iterator has a chance to drain
+    // the sessionEnd event to the SDK before the HTTP/2 session is torn down.
+    const client = this.client;
+    this.client = undefined;
     this.stream = undefined;
+    if (client) {
+      setImmediate(() => {
+        if (typeof client.destroy === 'function') {
+          client.destroy();
+        }
+      });
+    }
 
     this.log('Disconnected from AWS Bedrock Nova 2 Sonic');
   }
@@ -1805,92 +1823,6 @@ export class NovaSonicVoice extends MastraVoice<
       // Don't reset state here - it will be reset when we receive contentEnd.type === 'AUDIO' from AWS
     } else {
       this.log('[endAudioInput] Cannot send contentEnd: audioContentStarted=' + this.audioContentStarted + ', audioContentName=' + this.audioContentName);
-    }
-  }
-
-  /**
-   * Start a prompt (send promptStart and system prompt if needed)
-   * This is called automatically before the first user input
-   */
-  private async startPrompt(): Promise<void> {
-    const promptName = this._promptName;
-    if (!promptName) {
-      throw new NovaSonicError(
-        ErrorCode.NOT_CONNECTED,
-        'Prompt name not initialized. Connection may not be fully established.',
-      );
-    }
-
-    // Determine voice ID - prioritize sessionConfig.voice, then this.speaker, then default to matthew
-    let voiceId = 'matthew'; // Default polyglot voice
-    if (this.sessionConfig?.voice) {
-      if (typeof this.sessionConfig.voice === 'string') {
-        voiceId = this.sessionConfig.voice;
-      } else if (this.sessionConfig.voice.name) {
-        voiceId = this.sessionConfig.voice.name;
-      }
-    } else if (this.speaker && this.speaker !== 'default') {
-      if (typeof this.speaker === 'string') {
-        voiceId = this.speaker;
-      } else {
-        // Type guard for object with name property
-        const speakerObj = this.speaker as { name?: string };
-        if (speakerObj && typeof speakerObj === 'object' && speakerObj.name) {
-          voiceId = speakerObj.name;
-        }
-      }
-    }
-    
-    // Send promptStart
-    await this.sendClientEvent({
-      promptStart: {
-        promptName,
-        textOutputConfiguration: {
-          mediaType: "text/plain",
-        },
-        audioOutputConfiguration: {
-          mediaType: "audio/lpcm",
-          sampleRateHertz: 24000,
-          sampleSizeBits: 16,
-          channelCount: 1,
-          voiceId: voiceId,
-          encoding: "base64",
-          audioType: "SPEECH",
-        },
-      },
-    });
-
-    // Send system prompt if instructions are provided
-    if (this.instructions) {
-      const contentName = randomUUID();
-      // Content start
-      await this.sendClientEvent({
-        contentStart: {
-          promptName,
-          contentName,
-          type: "TEXT",
-          interactive: false,
-          role: "SYSTEM",
-          textInputConfiguration: {
-            mediaType: "text/plain",
-          },
-        },
-      });
-      // Text input
-      await this.sendClientEvent({
-        textInput: {
-          promptName,
-          contentName,
-          content: this.instructions,
-        },
-      });
-      // Content end
-      await this.sendClientEvent({
-        contentEnd: {
-          promptName,
-          contentName,
-        },
-      });
     }
   }
 

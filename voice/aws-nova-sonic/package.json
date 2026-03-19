@@ -34,8 +34,7 @@
     "@aws-sdk/client-bedrock-runtime": "^3.993.0",
     "@aws-sdk/credential-provider-node": "^3.972.10",
     "@smithy/node-http-handler": "^4.0.0",
-    "@smithy/types": "^4.0.0",
-    "zod-to-json-schema": "^3.24.6"
+    "@smithy/types": "^4.0.0"
   },
   "devDependencies": {
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.69",
@@ -43,7 +42,6 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.13.17",
-    "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
