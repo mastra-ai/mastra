@@ -5,7 +5,9 @@ import type {
   LanguageModelV2Prompt,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider';
-import { wrapLanguageModel } from '@internal/ai-sdk-v5';
+import { wrapLanguageModel as wrapLanguageModelV5 } from '@internal/ai-sdk-v5';
+import type { LanguageModelV3, LanguageModelMiddleware as LanguageModelV3Middleware } from '@internal/ai-v6';
+import { wrapLanguageModel as wrapLanguageModelV6 } from '@internal/ai-v6';
 import { MessageList, TripWire, aiV5ModelMessageToV2PromptMessage } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
@@ -24,19 +26,6 @@ import { convertFullStreamChunkToMastra } from '@mastra/core/stream';
 import type { ChunkType } from '@mastra/core/stream';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { toAISDKFinishReason } from './helpers';
-
-/**
- * Structural type that accepts both LanguageModelV2 and LanguageModelV3.
- * A full union is not possible because the vendored AI SDK bundles its own
- * copy of @ai-sdk/provider\@2 types, creating conflicts with v3.
- */
-export interface AnyLanguageModel {
-  readonly specificationVersion: string;
-  readonly provider: string;
-  readonly modelId: string;
-  doGenerate: (...args: any[]) => any;
-  doStream: (...args: any[]) => any;
-}
 
 /**
  * Memory context for processors that need thread/resource info
@@ -171,7 +160,12 @@ export interface WithMastraOptions {
  * });
  * ```
  */
-export function withMastra(model: AnyLanguageModel, options: WithMastraOptions = {}): LanguageModelV2 {
+export function withMastra(model: LanguageModelV2, options?: WithMastraOptions): LanguageModelV2;
+export function withMastra(model: LanguageModelV3, options?: WithMastraOptions): LanguageModelV3;
+export function withMastra(
+  model: LanguageModelV2 | LanguageModelV3,
+  options: WithMastraOptions = {},
+): LanguageModelV2 | LanguageModelV3 {
   const { memory, inputProcessors = [], outputProcessors = [] } = options;
 
   // Build the list of processors
@@ -234,18 +228,29 @@ export function withMastra(model: AnyLanguageModel, options: WithMastraOptions =
     }
   }
 
-  return wrapLanguageModel({
-    model: model as LanguageModelV2,
-    middleware: createProcessorMiddleware({
-      inputProcessors: allInputProcessors,
-      outputProcessors: allOutputProcessors,
-      memory: memory
-        ? {
-            threadId: memory.threadId,
-            resourceId: memory.resourceId,
-          }
-        : undefined,
-    }),
+  const middleware = createProcessorMiddleware({
+    inputProcessors: allInputProcessors,
+    outputProcessors: allOutputProcessors,
+    memory: memory
+      ? {
+          threadId: memory.threadId,
+          resourceId: memory.resourceId,
+        }
+      : undefined,
+  });
+
+  if (model.specificationVersion === 'v3') {
+    return wrapLanguageModelV6({
+      model,
+      // withMastra supports v3 models at the wrapper level, while the
+      // lower-level processor middleware remains v2-oriented for now.
+      middleware: middleware as unknown as LanguageModelV3Middleware,
+    });
+  }
+
+  return wrapLanguageModelV5({
+    model,
+    middleware,
   });
 }
 
@@ -465,9 +470,6 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
   return {
     middlewareVersion: 'v2',
 
-    /**
-     * Transform params runs input processors (processInput)
-     */
     async transformParams({ params }) {
       // Create a real MessageList with memory context
       const messageList = new MessageList({
@@ -538,10 +540,6 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
         },
       };
     },
-
-    /**
-     * Wrap generate for non-streaming output processing
-     */
     async wrapGenerate({ doGenerate, params }) {
       // Check for tripwire from transformParams
       const processorState = params.providerOptions?.mastraProcessors as ProcessorMiddlewareState | undefined;
@@ -648,10 +646,6 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
         content: [{ type: 'text' as const, text: processedText }],
       };
     },
-
-    /**
-     * Wrap stream for streaming output processing
-     */
     async wrapStream({ doStream, params }) {
       // Check for tripwire from transformParams
       const processorState = params.providerOptions?.mastraProcessors as ProcessorMiddlewareState | undefined;
