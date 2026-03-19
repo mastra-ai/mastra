@@ -99,7 +99,6 @@ jobs:
         run: |
           pnpm vitest run \
             --project 'unit:*' --project 'typecheck:*' \
-            --changed origin/${{ steps.pr-info.outputs.base_ref }} \
             --reporter=blob \
             --reporter=verbose \
             --reporter=github-actions \
@@ -191,7 +190,6 @@ jobs:
         run: |
           pnpm vitest run \
             --project 'e2e:${{ matrix.project }}' \
-            --changed origin/${{ steps.pr-info.outputs.base_ref }} \
             --reporter=blob \
             --reporter=verbose \
             --reporter=github-actions \
