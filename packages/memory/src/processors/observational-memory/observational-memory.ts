@@ -199,7 +199,7 @@ export interface ObservationalMemoryConfig {
   storage: MemoryStorage;
 
   /**
-   * **Experimental.** Enable graph-mode observation group metadata.
+   * **Experimental.** Enable retrieval-mode observation group metadata.
    * When true, observation groups are treated as durable pointers to raw
    * message history and a `recall` tool is registered so the actor can
    * inspect raw messages behind a stored observation summary.
@@ -207,7 +207,7 @@ export interface ObservationalMemoryConfig {
    * @experimental
    * @default false
    */
-  graph?: boolean;
+  retrieval?: boolean;
 
   /**
    * Model for both Observer and Reflector agents.
@@ -307,7 +307,7 @@ interface ResolvedReflectionConfig {
  * Default configuration values matching the spec
  */
 export const OBSERVATIONAL_MEMORY_DEFAULTS = {
-  graph: false,
+  retrieval: false,
   observation: {
     model: 'google/gemini-2.5-flash',
     messageTokens: 30_000,
@@ -378,7 +378,7 @@ PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm goi
 
 MOST RECENT USER INPUT: Treat the most recent user message as the highest-priority signal for what to do next. Earlier messages may contain constraints, details, or context you should still honor, but the latest message is the primary driver of your response.`;
 
-export const OBSERVATION_GRAPH_INSTRUCTIONS = `## Recall — looking up source messages
+export const OBSERVATION_RETRIEVAL_INSTRUCTIONS = `## Recall — looking up source messages
 
 Your memory is comprised of observations which are sometimes wrapped in <observation-group> xml tags containing ranges like <observation-group range="startId:endId">. These ranges point back to the raw messages that each observation group was derived from. The original messages are still available — use the **recall** tool to retrieve them.
 
@@ -467,7 +467,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private storage: MemoryStorage;
   private tokenCounter: TokenCounter;
   private scope: 'resource' | 'thread';
-  private graph: boolean = false;
+  private retrieval: boolean = false;
   private observationConfig: ResolvedObservationConfig;
   private reflectionConfig: ResolvedReflectionConfig;
   private onDebugEvent?: (event: ObservationDebugEvent) => void;
@@ -871,7 +871,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
-    this.graph = this.scope === 'thread' && (config.graph ?? OBSERVATIONAL_MEMORY_DEFAULTS.graph);
+    this.retrieval = this.scope === 'thread' && (config.retrieval ?? OBSERVATIONAL_MEMORY_DEFAULTS.retrieval);
 
     // Resolve "default" to the default model
     const resolveModel = (m: typeof config.model) =>
@@ -1047,7 +1047,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   get config(): {
     scope: 'resource' | 'thread';
-    graph: boolean;
+    retrieval: boolean;
     observation: {
       messageTokens: number | ThresholdRange;
       previousObserverTokens: number | false | undefined;
@@ -1058,7 +1058,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   } {
     return {
       scope: this.scope,
-      graph: this.graph,
+      retrieval: this.retrieval,
       observation: {
         messageTokens: this.observationConfig.messageTokens,
         previousObserverTokens: this.observationConfig.previousObserverTokens,
@@ -1395,7 +1395,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           observation: this.observationConfig,
           reflection: this.reflectionConfig,
           scope: this.scope,
-          graph: this.graph,
+          retrieval: this.retrieval,
         },
         observedTimezone,
       });
@@ -2391,10 +2391,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     suggestedResponse?: string,
     unobservedContextBlocks?: string,
     currentDate?: Date,
-    graph = false,
+    retrieval = false,
   ): string[] {
-    // Optimize observations to save tokens unless graph mode needs durable group metadata preserved.
-    let optimized = graph
+    // Optimize observations to save tokens unless retrieval mode needs durable group metadata preserved.
+    let optimized = retrieval
       ? (renderObservationGroupsForReflection(observations) ?? observations)
       : optimizeObservationsForContext(observations);
 
@@ -2404,7 +2404,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     const messages = [
-      `${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${graph ? `\n\n${OBSERVATION_GRAPH_INSTRUCTIONS}` : ''}`,
+      `${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${OBSERVATION_RETRIEVAL_INSTRUCTIONS}` : ''}`,
     ];
 
     // Add unobserved context from other threads (resource scope only)
@@ -3113,7 +3113,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       suggestedResponse,
       unobservedContextBlocks,
       currentDate,
-      this.graph,
+      this.retrieval,
     );
 
     // Clear any existing observation system messages and re-add them with the
@@ -4070,7 +4070,7 @@ ${formattedMessages}
     // First strip any thread tags the Observer might have added
     const cleanObservations = this.stripThreadTags(observations);
     const groupedObservations =
-      this.graph && messageRange ? wrapInObservationGroup(cleanObservations, messageRange) : cleanObservations;
+      this.retrieval && messageRange ? wrapInObservationGroup(cleanObservations, messageRange) : cleanObservations;
     const obscuredId = await this.representThreadIDInContext(threadId);
     return `<thread id="${obscuredId}">\n${groupedObservations}\n</thread>`;
   }
@@ -4278,7 +4278,7 @@ ${formattedMessages}
 
       // Build new observations (use freshRecord if available)
       const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
-      const messageRange = this.graph ? buildMessageRange(messagesToObserve) : undefined;
+      const messageRange = this.retrieval ? buildMessageRange(messagesToObserve) : undefined;
       let newObservations: string;
       if (this.scope === 'resource') {
         // In resource scope: wrap with thread tag and replace/append
@@ -4292,7 +4292,9 @@ ${formattedMessages}
       } else {
         // In thread scope: append grouped observations with a message boundary delimiter for cache stability
         const groupedObservations =
-          this.graph && messageRange ? wrapInObservationGroup(result.observations, messageRange) : result.observations;
+          this.retrieval && messageRange
+            ? wrapInObservationGroup(result.observations, messageRange)
+            : result.observations;
         newObservations = existingObservations
           ? `${existingObservations}${ObservationalMemory.createMessageBoundary(lastObservedAt)}${groupedObservations}`
           : groupedObservations;
@@ -4744,13 +4746,15 @@ ${formattedMessages}
 
     // Get the new observations to buffer (just the new content, not merged)
     // The storage adapter will handle appending to existing buffered content
-    const messageRange = this.graph ? buildMessageRange(messagesToBuffer) : undefined;
+    const messageRange = this.retrieval ? buildMessageRange(messagesToBuffer) : undefined;
     let newObservations: string;
     if (this.scope === 'resource') {
       newObservations = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
     } else {
       newObservations =
-        this.graph && messageRange ? wrapInObservationGroup(result.observations, messageRange) : result.observations;
+        this.retrieval && messageRange
+          ? wrapInObservationGroup(result.observations, messageRange)
+          : result.observations;
     }
 
     const newTokenCount = this.tokenCounter.countObservations(newObservations);
@@ -5684,7 +5688,7 @@ ${formattedMessages}
         const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
 
         // Wrap with thread tag and append (in thread order for consistency)
-        const messageRange = this.graph ? buildMessageRange(threadMessages) : undefined;
+        const messageRange = this.retrieval ? buildMessageRange(threadMessages) : undefined;
         const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
         currentObservations = this.replaceOrAppendThreadSection(
           currentObservations,

@@ -694,14 +694,14 @@ describe('om-tools', () => {
   });
 
   describe('Memory.listTools', () => {
-    it('should register recall when observational memory graph mode is enabled for thread scope', () => {
+    it('should register recall when observational memory retrieval mode is enabled for thread scope', () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
         options: {
           observationalMemory: {
             model: 'test-model',
             scope: 'thread',
-            graph: true,
+            retrieval: true,
           },
         } as any,
       });
@@ -709,14 +709,14 @@ describe('om-tools', () => {
       expect(memory.listTools()).toHaveProperty('recall');
     });
 
-    it('should not register recall when graph mode is enabled for resource scope', () => {
+    it('should not register recall when retrieval mode is enabled for resource scope', () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
         options: {
           observationalMemory: {
             model: 'test-model',
             scope: 'resource',
-            graph: true,
+            retrieval: true,
           },
         } as any,
       });
@@ -724,13 +724,13 @@ describe('om-tools', () => {
       expect(memory.listTools()).not.toHaveProperty('recall');
     });
 
-    it('should not register recall when graph mode is disabled', () => {
+    it('should not register recall when retrieval mode is disabled', () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
         options: {
           observationalMemory: {
             model: 'test-model',
-            graph: false,
+            retrieval: false,
           },
         } as any,
       });

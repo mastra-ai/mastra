@@ -2076,10 +2076,10 @@ describe('ObservationalMemory Integration', () => {
   });
 
   describe('config', () => {
-    it('should expose graph mode when enabled', () => {
-      const graphOm = new ObservationalMemory({
+    it('should expose retrieval mode when enabled', () => {
+      const retrievalOm = new ObservationalMemory({
         storage,
-        graph: true,
+        retrieval: true,
         observation: {
           messageTokens: 500,
           model: 'test-model',
@@ -2090,9 +2090,9 @@ describe('ObservationalMemory Integration', () => {
         },
       });
 
-      expect(graphOm.config).toEqual({
+      expect(retrievalOm.config).toEqual({
         scope: 'thread',
-        graph: true,
+        retrieval: true,
         observation: {
           messageTokens: 500,
           previousObserverTokens: 2000,
@@ -2103,10 +2103,10 @@ describe('ObservationalMemory Integration', () => {
       });
     });
 
-    it('should preserve observation group ranges in actor context when graph mode is enabled', () => {
-      const graphOm = new ObservationalMemory({
+    it('should preserve observation group ranges in actor context when retrieval mode is enabled', () => {
+      const retrievalOm = new ObservationalMemory({
         storage,
-        graph: true,
+        retrieval: true,
         observation: {
           messageTokens: 500,
           model: 'test-model',
@@ -2117,7 +2117,7 @@ describe('ObservationalMemory Integration', () => {
         },
       });
 
-      const formatted = (graphOm as any).formatObservationsForContext(
+      const formatted = (retrievalOm as any).formatObservationsForContext(
         '<observation-group id="group-1" range="msg-1:msg-2">\n- 🔴 User prefers direct answers\n</observation-group>',
         undefined,
         undefined,
@@ -2132,8 +2132,8 @@ describe('ObservationalMemory Integration', () => {
       expect(formattedText).toContain('recall tool');
     });
 
-    it('should default graph mode to false', () => {
-      expect(om.config.graph).toBe(false);
+    it('should default retrieval mode to false', () => {
+      expect(om.config.retrieval).toBe(false);
     });
   });
 
@@ -3665,15 +3665,15 @@ describe('Thread Attribution Helpers', () => {
       expect(result).toBe(`<thread id="thread-123">\n${observations}\n</thread>`);
     });
 
-    it('should wrap observations in an observation group when a message range is provided and graph is enabled', async () => {
-      const graphOm = new ObservationalMemory({
+    it('should wrap observations in an observation group when a message range is provided and retrieval is enabled', async () => {
+      const retrievalOm = new ObservationalMemory({
         storage,
-        graph: true,
+        retrieval: true,
         observation: { messageTokens: 500, model: 'test-model' },
         reflection: { observationTokens: 1000, model: 'test-model' },
       });
       const observations = '- 🔴 User likes coffee';
-      const result = await (graphOm as any).wrapWithThreadTag('thread-123', observations, 'msg-1:msg-2');
+      const result = await (retrievalOm as any).wrapWithThreadTag('thread-123', observations, 'msg-1:msg-2');
 
       expect(result).toContain('<thread id="thread-123">');
       expect(result).toContain('<observation-group id="');
@@ -3683,7 +3683,7 @@ describe('Thread Attribution Helpers', () => {
       expect(result).toContain('</thread>');
     });
 
-    it('should NOT wrap in observation group when graph is disabled even if messageRange is provided', async () => {
+    it('should NOT wrap in observation group when retrieval is disabled even if messageRange is provided', async () => {
       const observations = '- 🔴 User likes coffee';
       const result = await (om as any).wrapWithThreadTag('thread-123', observations, 'msg-1:msg-2');
 
@@ -3917,7 +3917,7 @@ Ask about preferred brewing method
       unobservedMessages: messages,
     });
 
-    // Check stored observations have thread tag but no observation-group (graph is thread-only)
+    // Check stored observations have thread tag but no observation-group (retrieval is thread-only)
     const record = await storage.getObservationalMemory(null, 'resource-1');
     expect(record?.activeObservations).toContain('<thread id="thread-1">');
     expect(record?.activeObservations).toContain('</thread>');
@@ -4094,13 +4094,13 @@ Ask about preferred brewing method
 
     const om = new ObservationalMemory({
       storage,
-      graph: true,
+      retrieval: true,
       observation: {
         messageTokens: 100000,
         model: mockModel as any,
       },
       reflection: { observationTokens: 10000 },
-      scope: 'thread', // Thread scope with graph
+      scope: 'thread', // Thread scope with retrieval
     });
 
     // Initialize record

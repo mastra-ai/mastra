@@ -5,13 +5,13 @@ import { InMemoryStore } from '../storage';
 import { MockMemory } from './mock';
 
 describe('MastraMemory config serialization', () => {
-  it('should serialize observational memory graph config for thread scope', () => {
+  it('should serialize observational memory retrieval config for thread scope', () => {
     const memory = new MockMemory({
       storage: new InMemoryStore(),
       options: {
         observationalMemory: {
           scope: 'thread',
-          graph: true,
+          retrieval: true,
           observation: {
             messageTokens: 500,
             model: 'test-observer-model',
@@ -26,7 +26,7 @@ describe('MastraMemory config serialization', () => {
 
     expect(memory.getConfig().observationalMemory).toEqual({
       scope: 'thread',
-      graph: true,
+      retrieval: true,
       observation: {
         messageTokens: 500,
         model: 'test-observer-model',
@@ -48,13 +48,13 @@ describe('MastraMemory config serialization', () => {
     });
   });
 
-  it('should serialize graph config for resource scope without changing the requested config', () => {
+  it('should serialize retrieval config for resource scope without changing the requested config', () => {
     const memory = new MockMemory({
       storage: new InMemoryStore(),
       options: {
         observationalMemory: {
           scope: 'resource',
-          graph: true,
+          retrieval: true,
           model: 'test-model',
         },
       },
@@ -62,7 +62,7 @@ describe('MastraMemory config serialization', () => {
 
     expect(memory.getConfig().observationalMemory).toEqual({
       scope: 'resource',
-      graph: true,
+      retrieval: true,
       model: 'test-model',
       shareTokenBudget: undefined,
     });

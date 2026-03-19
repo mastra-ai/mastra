@@ -53,7 +53,7 @@ import {
  * Inlined here to avoid importing runtime exports that don't exist on older @mastra/core versions.
  */
 type NormalizedObservationalMemoryConfig = ObservationalMemoryOptions & {
-  graph?: boolean;
+  retrieval?: boolean;
 };
 
 function normalizeObservationalMemoryConfig(
@@ -1204,7 +1204,7 @@ Notes:
     }
 
     const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
-    if (omConfig?.graph && (omConfig.scope ?? 'thread') === 'thread') {
+    if (omConfig?.retrieval && (omConfig.scope ?? 'thread') === 'thread') {
       tools.recall = recallTool(mergedConfig);
     }
 
@@ -2013,7 +2013,7 @@ Notes:
     return new ObservationalMemory({
       storage: memoryStore,
       scope: omConfig.scope,
-      graph: omConfig.graph,
+      retrieval: omConfig.retrieval,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
       observation: omConfig.observation

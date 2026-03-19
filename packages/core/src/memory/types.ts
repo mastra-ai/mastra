@@ -737,7 +737,7 @@ export interface ObservationalMemoryOptions {
   shareTokenBudget?: boolean;
 
   /**
-   * **Experimental.** Enable graph-mode observation groups as durable pointers
+   * **Experimental.** Enable retrieval-mode observation groups as durable pointers
    * to raw message history. When enabled, observation groups keep `_range`
    * metadata visible in context and a `recall` tool is registered so the actor
    * can inspect raw messages behind a stored observation summary.
@@ -745,7 +745,7 @@ export interface ObservationalMemoryOptions {
    * @experimental
    * @default false
    */
-  graph?: boolean;
+  retrieval?: boolean;
 }
 
 /**
@@ -1154,10 +1154,10 @@ export type SerializedObservationalMemoryConfig = {
   shareTokenBudget?: boolean;
 
   /**
-   * **Experimental.** Enable graph-mode observation groups as durable pointers to raw message history.
+   * **Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history.
    * @experimental
    */
-  graph?: boolean;
+  retrieval?: boolean;
 
   /** Observation step configuration */
   observation?: SerializedObservationalMemoryObservationConfig;

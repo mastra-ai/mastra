@@ -3,9 +3,9 @@
 '@mastra/core': patch
 ---
 
-Added experimental graph-mode recall tooling for observational memory.
+Added experimental retrieval-mode recall tooling for observational memory.
 
-When `observationalMemory.graph` is enabled with `scope: 'thread'`, observation groups store colon-delimited message ranges (`startId:endId`) pointing back to the raw messages they were derived from. A `recall` tool is registered that lets agents retrieve those source messages via cursor-based pagination.
+When `observationalMemory.retrieval` is enabled with `scope: 'thread'`, observation groups store colon-delimited message ranges (`startId:endId`) pointing back to the raw messages they were derived from. A `recall` tool is registered that lets agents retrieve those source messages via cursor-based pagination.
 
 The recall tool supports:
 - **Detail levels**: `detail: 'low'` (default) returns truncated text with part indices; `detail: 'high'` returns full content clamped to one part per call with continuation hints
