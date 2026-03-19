@@ -14,6 +14,10 @@ inputs:
     description: 'Path to package.json for reading packageManager version (useful when checkout is not at workspace root)'
     required: false
     default: ''
+  cache-dependency-path:
+    description: 'Path to pnpm-lock.yaml for cache key (useful when checkout is not at workspace root)'
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -29,6 +33,7 @@ runs:
       with:
         node-version: 22.13.0
         cache: 'pnpm'
+        cache-dependency-path: ${{ inputs.cache-dependency-path || 'pnpm-lock.yaml' }}
         package-manager-cache: ${{ inputs.package-manager-cache == 'true' }}
 
     - name: Install dependencies

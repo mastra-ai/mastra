@@ -720,6 +720,57 @@ describe('Span', () => {
       expect(result.tracingContext).toBeUndefined();
     });
 
+    it('should preserve shared (non-circular) object references', () => {
+      // Simulate the tool-invocations scenario from issue #14262:
+      // toolInvocations[0] and parts[0].toolInvocation point to the SAME object.
+      const toolData = { args: { query: 'search term' }, result: { pages: [{ url: 'https://example.com' }] } };
+      const message = {
+        content: {
+          toolInvocations: [toolData],
+          parts: [{ type: 'tool-invocation', toolInvocation: toolData }],
+        },
+      };
+
+      const result = deepClean(message);
+
+      // Both locations should have the full data — no [Circular]
+      expect(result.content.toolInvocations[0].args.query).toBe('search term');
+      expect(result.content.toolInvocations[0].result.pages[0].url).toBe('https://example.com');
+      expect(result.content.parts[0].toolInvocation.args.query).toBe('search term');
+      expect(result.content.parts[0].toolInvocation.result.pages[0].url).toBe('https://example.com');
+    });
+
+    it('should still detect true circular references', () => {
+      const a: any = { name: 'a' };
+      const b: any = { name: 'b', parent: a };
+      a.child = b; // true cycle: a → b → a
+
+      const result = deepClean(a);
+      expect(result.name).toBe('a');
+      expect(result.child.name).toBe('b');
+      expect(result.child.parent).toBe('[Circular]');
+    });
+
+    it('should serialize nested objects within default depth limit', () => {
+      // 6-level deep object — comfortably within maxDepth=8
+      const payload: any = { level: 0 };
+      let current = payload;
+      for (let i = 1; i <= 6; i++) {
+        current.nested = { level: i, data: `value-${i}` };
+        current = current.nested;
+      }
+
+      const result = deepClean(payload);
+
+      let node = result;
+      for (let i = 0; i <= 5; i++) {
+        expect(node.level).toBe(i);
+        node = node.nested;
+      }
+      expect(node.level).toBe(6);
+      expect(node.data).toBe('value-6');
+    });
+
     it('should handle max depth', () => {
       const deepObj: any = { level: 0 };
       let current = deepObj;
@@ -738,6 +789,67 @@ describe('Span', () => {
         level: '[MaxDepth]',
         nested: '[MaxDepth]',
       });
+    });
+
+    it('should summarize composition-root JSON schemas instead of treating them as circular', () => {
+      const schema = {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        oneOf: [{ type: 'string' }, { type: 'number' }],
+      };
+
+      const result = deepClean(schema);
+
+      expect(result).toEqual({
+        oneOf: ['string', 'number'],
+      });
+    });
+
+    it('should not abort when array element getters throw', () => {
+      const items = ['safe'];
+      Object.defineProperty(items, 1, {
+        enumerable: true,
+        get() {
+          throw new Error('array getter failed');
+        },
+      });
+      items.length = 2;
+
+      const result = deepClean({ items });
+
+      expect(result.items).toEqual(['safe', '[array getter failed]']);
+    });
+
+    it('should return a safe placeholder when serializeForSpan access throws', () => {
+      const input = {
+        secret: 'should-not-leak',
+        get serializeForSpan() {
+          throw new Error('probe failed');
+        },
+      };
+
+      const result = deepClean(input);
+
+      expect(result).toBe('[serializeForSpan failed: probe failed]');
+    });
+
+    it('should fall back to guarded object traversal when JSON schema probes throw', () => {
+      const input: Record<string, unknown> = {
+        type: 'object',
+        properties: { safe: { type: 'string' } },
+      };
+
+      Object.defineProperty(input, '$schema', {
+        enumerable: true,
+        get() {
+          throw new Error('schema getter failed');
+        },
+      });
+
+      const result = deepClean(input);
+
+      expect(result.type).toBe('object');
+      expect(result.properties.safe.type).toBe('string');
+      expect(result.$schema).toBe('[schema getter failed]');
     });
   });
 

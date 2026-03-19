@@ -13,6 +13,17 @@ import { theme, mastra, tintHex, getTermWidth } from './theme.js';
 const getObserverColor = () => mastra.orange;
 const getReflectorColor = () => mastra.pink;
 
+/** Returns true if a thread title is generic/auto-generated and should not be displayed. */
+function isGenericTitle(title: string): boolean {
+  const lower = title.toLowerCase().trim();
+  return (
+    lower === 'new thread' ||
+    lower.startsWith('new thread') ||
+    lower.startsWith('clone of') ||
+    lower.startsWith('untitled')
+  );
+}
+
 /**
  * Update the status line at the bottom of the TUI.
  * Progressively reduces content to fit the terminal width.
@@ -89,18 +100,23 @@ export function updateStatusLine(state: TUIState): void {
   const tinyModelId = shortModelId.replace(/^claude-/, '').replace(/^(\w+)-(\d+)-(\d{1,2})$/, '$1 $2.$3');
 
   const homedir = process.env.HOME || process.env.USERPROFILE || '';
-  let displayPath = state.projectInfo.rootPath;
-  if (homedir && displayPath.startsWith(homedir)) {
+  // Use thread title if available and not generic, otherwise use project root path
+  const threadTitle =
+    state.currentThreadTitle && !isGenericTitle(state.currentThreadTitle) ? state.currentThreadTitle : null;
+  let displayPath = threadTitle || state.projectInfo.rootPath;
+  if (!threadTitle && homedir && displayPath.startsWith(homedir)) {
     displayPath = '~' + displayPath.slice(homedir.length);
   }
   const branch = state.projectInfo.gitBranch;
   const queuedCount = state.pendingQueuedActions.length + state.harness.getFollowUpCount();
   const queuedLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
   // Build progressively shorter directory strings for layout fallback
-  const dirFull = branch ? `${displayPath} (${branch})` : displayPath;
-  const dirBranchOnly = branch || null;
+  // Only show branch when not showing thread title (thread title takes priority)
+  const dirFull = !threadTitle && branch ? `${displayPath} (${branch})` : displayPath;
+  const dirBranchOnly = !threadTitle && branch ? branch : null;
   // Abbreviate long branches: keep first 12 + last 8 chars with ".." in between
-  const dirBranchShort = branch && branch.length > 24 ? branch.slice(0, 12) + '..' + branch.slice(-8) : dirBranchOnly;
+  const dirBranchShort =
+    !threadTitle && branch && branch.length > 24 ? branch.slice(0, 12) + '..' + branch.slice(-8) : dirBranchOnly;
 
   // --- Helper to style the model ID ---
   const modelTrail = tintBg ? chalk.hex(tintBg)('▌') : '';
@@ -225,8 +241,26 @@ export function updateStatusLine(state: TUIState): void {
         styled: theme.fg('warning', queuedLabel),
       });
     }
-    // Directory / branch (lowest priority on line 1)
-    const dirText = opts.dir !== undefined ? opts.dir : opts.showDir ? dirFull : null;
+    // Directory / branch / thread title (lowest priority on line 1)
+    let dirText = opts.dir !== undefined ? opts.dir : opts.showDir ? dirFull : null;
+
+    // Measure width of everything except dir to know how much space remains
+    const nonDirWidth =
+      useBadgeWidth + parts.reduce((sum, p, i) => sum + visibleWidth(p.plain) + (i > 0 ? SEP.length : 0), 0);
+
+    if (dirText) {
+      const availableForDir = termWidth - nonDirWidth - SEP.length - 1; // -1 buffer for ambiguous-width chars
+      const dirWidth = visibleWidth(dirText);
+      const MIN_TRUNCATED_DIR = 10; // don't show a tiny sliver
+      if (dirWidth > availableForDir && availableForDir >= MIN_TRUNCATED_DIR) {
+        // Truncate to fit the remaining space
+        dirText = dirText.slice(0, availableForDir - 1) + '…';
+      } else if (dirWidth > availableForDir) {
+        // Not enough room even for a truncated version — drop it
+        dirText = null;
+      }
+    }
+
     if (dirText) {
       parts.push({
         plain: dirText,

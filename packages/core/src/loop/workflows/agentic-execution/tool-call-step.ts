@@ -216,12 +216,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
       };
 
-      // If the tool was already executed by the provider, skip execution
+      // Provider-executed tools are handled entirely by the stream path
+      // (tool-call and tool-result chunks in llm-execution-step), so skip client execution.
       if (inputData.providerExecuted) {
-        return {
-          ...inputData,
-          result: inputData.output ?? { providerExecuted: true, toolName: inputData.toolName },
-        };
+        return inputData;
       }
 
       // Resolve the tool key for activeTools enforcement (may differ from toolName when matched by id)
