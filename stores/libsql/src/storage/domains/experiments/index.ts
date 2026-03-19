@@ -438,8 +438,13 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       }
 
       values.push(input.id);
+      let whereClause = `"id" = ?`;
+      if (input.experimentId) {
+        values.push(input.experimentId);
+        whereClause += ` AND "experimentId" = ?`;
+      }
       await this.#client.execute({
-        sql: `UPDATE ${TABLE_EXPERIMENT_RESULTS} SET ${setClauses.join(', ')} WHERE "id" = ?`,
+        sql: `UPDATE ${TABLE_EXPERIMENT_RESULTS} SET ${setClauses.join(', ')} WHERE ${whereClause}`,
         args: values,
       });
 

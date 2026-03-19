@@ -146,6 +146,9 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     if (!existing) {
       throw new Error(`Experiment result not found: ${input.id}`);
     }
+    if (input.experimentId && existing.experimentId !== input.experimentId) {
+      throw new Error(`Experiment result ${input.id} does not belong to experiment ${input.experimentId}`);
+    }
     const updated: ExperimentResult = {
       ...existing,
       status: input.status !== undefined ? input.status : existing.status,

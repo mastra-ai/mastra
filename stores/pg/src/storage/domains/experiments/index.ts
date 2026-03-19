@@ -476,8 +476,14 @@ export class ExperimentsPG extends ExperimentsStorage {
       }
 
       values.push(input.id);
+      let whereClause = `"id" = $${paramIndex}`;
+      if (input.experimentId) {
+        paramIndex++;
+        values.push(input.experimentId);
+        whereClause += ` AND "experimentId" = $${paramIndex}`;
+      }
       const row = await this.#db.client.oneOrNone(
-        `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE "id" = $${paramIndex} RETURNING *`,
+        `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE ${whereClause} RETURNING *`,
         values,
       );
 

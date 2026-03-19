@@ -629,7 +629,7 @@ export const UPDATE_EXPERIMENT_RESULT_ROUTE = createRoute({
   description: 'Updates the status and/or tags on an experiment result',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, resultId, ...params }) => {
+  handler: async ({ mastra, resultId, experimentId, ...params }) => {
     assertDatasetsAvailable();
     try {
       const storage = mastra.getStorage();
@@ -643,6 +643,7 @@ export const UPDATE_EXPERIMENT_RESULT_ROUTE = createRoute({
 
       const result = await experimentsStore.updateExperimentResult({
         id: resultId,
+        experimentId,
         status: params.status,
         tags: params.tags,
       });

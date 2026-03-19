@@ -2338,6 +2338,8 @@ export interface ExperimentResult {
 
 export interface UpdateExperimentResultInput {
   id: string;
+  /** When provided, the update will only succeed if the result belongs to this experiment */
+  experimentId?: string;
   status?: ExperimentResultStatus | null;
   tags?: string[] | null;
 }
