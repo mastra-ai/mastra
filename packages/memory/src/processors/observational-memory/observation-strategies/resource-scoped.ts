@@ -214,7 +214,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
 
     const batchResults = await Promise.all(
       batches.map(async batch => {
-        return this.om.callMultiThreadObserver(
+        return this.om.observer.callMultiThread(
           _existingObservations,
           batch.threadMap,
           batch.threadIds,

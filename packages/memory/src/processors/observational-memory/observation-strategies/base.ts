@@ -58,7 +58,7 @@ export abstract class ObservationStrategy {
       await this.emitEndMarkers(cycleId, processed);
 
       if (this.needsReflection) {
-        await this.om.maybeReflect({
+        await this.om.reflector.maybeReflect({
           record: { ...record, activeObservations: processed.observations },
           observationTokens: processed.observationTokens,
           threadId,

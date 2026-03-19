@@ -42,7 +42,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
   }
 
   async observe(existingObservations: string, messages: MastraDBMessage[]) {
-    return this.om.callObserver(existingObservations, messages, undefined, {
+    return this.om.observer.call(existingObservations, messages, undefined, {
       skipContinuationHints: true,
       requestContext: this.opts.requestContext,
     });

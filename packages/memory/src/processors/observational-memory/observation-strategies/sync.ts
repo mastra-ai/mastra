@@ -76,7 +76,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
   }
 
   async observe(existingObservations: string, messages: MastraDBMessage[]) {
-    const result = await this.om.callObserver(existingObservations, messages, this.opts.abortSignal, {
+    const result = await this.om.observer.call(existingObservations, messages, this.opts.abortSignal, {
       requestContext: this.opts.requestContext,
     });
     this.observerResult = result;

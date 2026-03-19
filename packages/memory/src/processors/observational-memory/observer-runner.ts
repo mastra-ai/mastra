@@ -1,0 +1,194 @@
+import { Agent } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
+import type { RequestContext } from '@mastra/core/request-context';
+
+import { omDebug } from './debug';
+import {
+  buildObserverSystemPrompt,
+  buildObserverTaskPrompt,
+  buildObserverHistoryMessage,
+  buildMultiThreadObserverTaskPrompt,
+  buildMultiThreadObserverHistoryMessage,
+  parseObserverOutput,
+  parseMultiThreadObserverOutput,
+} from './observer-agent';
+import type { ResolvedObservationConfig } from './types';
+
+/**
+ * Runs the Observer agent for extracting observations from messages.
+ * Handles single-thread and multi-thread modes, degenerate detection, and retry logic.
+ */
+export class ObserverRunner {
+  private observerAgent?: Agent;
+  private readonly observationConfig: ResolvedObservationConfig;
+  private readonly observedMessageIds: Set<string>;
+
+  constructor(opts: { observationConfig: ResolvedObservationConfig; observedMessageIds: Set<string> }) {
+    this.observationConfig = opts.observationConfig;
+    this.observedMessageIds = opts.observedMessageIds;
+  }
+
+  private getAgent(): Agent {
+    if (!this.observerAgent) {
+      this.observerAgent = new Agent({
+        id: 'observational-memory-observer',
+        name: 'Observer',
+        instructions: buildObserverSystemPrompt(false, this.observationConfig.instruction),
+        model: this.observationConfig.model,
+      });
+    }
+    return this.observerAgent;
+  }
+
+  private async withAbortCheck<T>(fn: () => Promise<T>, abortSignal?: AbortSignal): Promise<T> {
+    if (abortSignal?.aborted) {
+      throw new Error('The operation was aborted.');
+    }
+    const result = await fn();
+    if (abortSignal?.aborted) {
+      throw new Error('The operation was aborted.');
+    }
+    return result;
+  }
+
+  /**
+   * Call the Observer agent for a single thread.
+   */
+  async call(
+    existingObservations: string | undefined,
+    messagesToObserve: MastraDBMessage[],
+    abortSignal?: AbortSignal,
+    options?: { skipContinuationHints?: boolean; requestContext?: RequestContext },
+  ): Promise<{
+    observations: string;
+    currentTask?: string;
+    suggestedContinuation?: string;
+    usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+  }> {
+    const agent = this.getAgent();
+
+    const observerMessages = [
+      { role: 'user' as const, content: buildObserverTaskPrompt(existingObservations, options) },
+      buildObserverHistoryMessage(messagesToObserve),
+    ];
+
+    const doGenerate = async () => {
+      return this.withAbortCheck(async () => {
+        const streamResult = await agent.stream(observerMessages, {
+          modelSettings: { ...this.observationConfig.modelSettings },
+          providerOptions: this.observationConfig.providerOptions as any,
+          ...(abortSignal ? { abortSignal } : {}),
+          ...(options?.requestContext ? { requestContext: options.requestContext } : {}),
+        });
+        return streamResult.getFullOutput();
+      }, abortSignal);
+    };
+
+    let result = await doGenerate();
+    let parsed = parseObserverOutput(result.text);
+
+    if (parsed.degenerate) {
+      omDebug(`[OM:callObserver] degenerate repetition detected, retrying once`);
+      result = await doGenerate();
+      parsed = parseObserverOutput(result.text);
+      if (parsed.degenerate) {
+        omDebug(`[OM:callObserver] degenerate repetition on retry, failing`);
+        throw new Error('Observer produced degenerate output after retry');
+      }
+    }
+
+    const usage = result.totalUsage ?? result.usage;
+
+    return {
+      observations: parsed.observations,
+      currentTask: parsed.currentTask,
+      suggestedContinuation: parsed.suggestedContinuation,
+      usage: usage
+        ? { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens: usage.totalTokens }
+        : undefined,
+    };
+  }
+
+  /**
+   * Call the Observer agent for multiple threads in a single batched request.
+   */
+  async callMultiThread(
+    existingObservations: string | undefined,
+    messagesByThread: Map<string, MastraDBMessage[]>,
+    threadOrder: string[],
+    abortSignal?: AbortSignal,
+    requestContext?: RequestContext,
+  ): Promise<{
+    results: Map<string, { observations: string; currentTask?: string; suggestedContinuation?: string }>;
+    usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+  }> {
+    const agent = new Agent({
+      id: 'multi-thread-observer',
+      name: 'multi-thread-observer',
+      model: this.observationConfig.model,
+      instructions: buildObserverSystemPrompt(true, this.observationConfig.instruction),
+    });
+
+    const observerMessages = [
+      { role: 'user' as const, content: buildMultiThreadObserverTaskPrompt(existingObservations) },
+      buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder),
+    ];
+
+    // Mark all messages as observed
+    for (const msgs of messagesByThread.values()) {
+      for (const msg of msgs) {
+        this.observedMessageIds.add(msg.id);
+      }
+    }
+
+    const doGenerate = async () => {
+      return this.withAbortCheck(async () => {
+        const streamResult = await agent.stream(observerMessages, {
+          modelSettings: { ...this.observationConfig.modelSettings },
+          providerOptions: this.observationConfig.providerOptions as any,
+          ...(abortSignal ? { abortSignal } : {}),
+          ...(requestContext ? { requestContext } : {}),
+        });
+        return streamResult.getFullOutput();
+      }, abortSignal);
+    };
+
+    let result = await doGenerate();
+    let parsed = parseMultiThreadObserverOutput(result.text);
+
+    if (parsed.degenerate) {
+      omDebug(`[OM:callMultiThreadObserver] degenerate repetition detected, retrying once`);
+      result = await doGenerate();
+      parsed = parseMultiThreadObserverOutput(result.text);
+      if (parsed.degenerate) {
+        omDebug(`[OM:callMultiThreadObserver] degenerate repetition on retry, failing`);
+        throw new Error('Multi-thread observer produced degenerate output after retry');
+      }
+    }
+
+    const results = new Map<string, { observations: string; currentTask?: string; suggestedContinuation?: string }>();
+    for (const [threadId, threadResult] of parsed.threads) {
+      results.set(threadId, {
+        observations: threadResult.observations,
+        currentTask: threadResult.currentTask,
+        suggestedContinuation: threadResult.suggestedContinuation,
+      });
+    }
+
+    // Add empty results for threads that didn't get output
+    for (const threadId of threadOrder) {
+      if (!results.has(threadId)) {
+        results.set(threadId, { observations: '' });
+      }
+    }
+
+    const usage = result.totalUsage ?? result.usage;
+
+    return {
+      results,
+      usage: usage
+        ? { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens: usage.totalTokens }
+        : undefined,
+    };
+  }
+}
