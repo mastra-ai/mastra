@@ -41,6 +41,9 @@ function buildDefaultPrompt(agentContext?: AgentContext): string {
   } else {
     parts.push('Generate diverse test inputs for this agent.');
   }
+  if (agentContext?.instructions) {
+    parts.push(`Agent instructions: ${agentContext.instructions}`);
+  }
   if (agentContext?.tools?.length) {
     parts.push(`The agent has these tools: ${agentContext.tools.join(', ')}.`);
   }
