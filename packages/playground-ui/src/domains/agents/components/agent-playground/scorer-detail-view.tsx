@@ -116,17 +116,25 @@ export function ScorerDetailView({
               Datasets
             </Txt>
             <div className="space-y-1">
-              {linkedDatasets.map(ds => (
-                <button
-                  key={ds.id}
-                  onClick={() => onViewDataset?.(ds.id)}
-                  className="w-full text-left px-3 py-2 rounded-md bg-surface3 hover:bg-surface4 transition-colors"
-                >
-                  <Txt variant="ui-xs" className="text-neutral5">
-                    {ds.name}
-                  </Txt>
-                </button>
-              ))}
+              {linkedDatasets.map(ds =>
+                onViewDataset ? (
+                  <button
+                    key={ds.id}
+                    onClick={() => onViewDataset(ds.id)}
+                    className="w-full text-left px-3 py-2 rounded-md bg-surface3 hover:bg-surface4 transition-colors cursor-pointer"
+                  >
+                    <Txt variant="ui-xs" className="text-neutral5">
+                      {ds.name}
+                    </Txt>
+                  </button>
+                ) : (
+                  <div key={ds.id} className="px-3 py-2 rounded-md bg-surface3">
+                    <Txt variant="ui-xs" className="text-neutral5">
+                      {ds.name}
+                    </Txt>
+                  </div>
+                ),
+              )}
             </div>
           </div>
         )}
