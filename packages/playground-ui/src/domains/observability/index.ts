@@ -3,3 +3,4 @@ export * from './utils/group-traces-by-thread';
 export * from './types';
 export * from './components';
 export * from './context/tracing-settings-context';
+export * from './hooks/use-tags';

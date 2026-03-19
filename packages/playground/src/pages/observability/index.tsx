@@ -1,5 +1,5 @@
 import { EntityType } from '@mastra/core/observability';
-import type { EntityOptions } from '@mastra/playground-ui';
+import type { EntityOptions, MetadataFilter } from '@mastra/playground-ui';
 import {
   HeaderTitle,
   Header,
@@ -21,6 +21,7 @@ import {
   useAgents,
   useWorkflows,
   useScorers,
+  useTags,
   PermissionDenied,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
@@ -46,9 +47,14 @@ export default function Observability() {
   const [selectedDateTo, setSelectedDateTo] = useState<Date | undefined>(undefined);
   const [groupByThread, setGroupByThread] = useState<boolean>(false);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [errorOnly, setErrorOnly] = useState<boolean>(false);
+  const [metadataFilters, setMetadataFilters] = useState<MetadataFilter[]>([]);
   const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
   const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
   const { data: scorers = {}, isLoading: isLoadingScorers } = useScorers();
+  const { data: availableTags = [] } = useTags();
 
   const { data: Trace, isLoading: isLoadingTrace } = useTrace(selectedTraceId, { enabled: !!selectedTraceId });
 
@@ -56,6 +62,12 @@ export default function Observability() {
   const spanId = searchParams.get('spanId');
   const spanTab = searchParams.get('tab');
   const scoreId = searchParams.get('scoreId');
+
+  const metadataFilterObj = useMemo(() => {
+    const completed = metadataFilters.filter(f => f.key.trim() && f.value.trim());
+    if (completed.length === 0) return undefined;
+    return Object.fromEntries(completed.map(f => [f.key.trim(), f.value.trim()]));
+  }, [metadataFilters]);
 
   const {
     data: tracesData,
@@ -81,10 +93,30 @@ export default function Observability() {
           end: selectedDateTo,
         },
       }),
+      ...(selectedTags.length > 0 && { tags: selectedTags }),
+      ...(errorOnly && { status: 'error' }),
+      ...(metadataFilterObj && { metadata: metadataFilterObj }),
     },
   });
 
-  const traces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
+  const allTraces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
+
+  const traces = useMemo(() => {
+    if (!searchQuery.trim()) return allTraces;
+    const q = searchQuery.trim().toLowerCase();
+    return allTraces.filter(t => {
+      if (t.name?.toLowerCase().includes(q)) return true;
+      if (t.entityId?.toLowerCase().includes(q)) return true;
+      if (t.entityName?.toLowerCase().includes(q)) return true;
+      const meta = (t as any).metadata;
+      if (meta && typeof meta === 'object') {
+        for (const val of Object.values(meta)) {
+          if (String(val).toLowerCase().includes(q)) return true;
+        }
+      }
+      return false;
+    });
+  }, [allTraces, searchQuery]);
   const threadTitles = tracesData?.threadTitles ?? {};
 
   // Sync URL traceId to state
@@ -132,6 +164,10 @@ export default function Observability() {
     setSelectedDateFrom(undefined);
     setSelectedDateTo(undefined);
     setGroupByThread(false);
+    setSearchQuery('');
+    setSelectedTags([]);
+    setErrorOnly(false);
+    setMetadataFilters([]);
   };
 
   const handleDataChange = (value: Date | undefined, type: 'from' | 'to') => {
@@ -206,7 +242,14 @@ export default function Observability() {
     );
   }
 
-  const filtersApplied = selectedEntityOption?.value !== 'all' || selectedDateFrom || selectedDateTo;
+  const filtersApplied =
+    selectedEntityOption?.value !== 'all' ||
+    selectedDateFrom ||
+    selectedDateTo ||
+    searchQuery.trim() ||
+    selectedTags.length > 0 ||
+    errorOnly ||
+    metadataFilters.some(f => f.key.trim() && f.value.trim());
 
   const toNextTrace = getToNextEntryFn({
     entries: orderedTraceEntries,
@@ -263,6 +306,15 @@ export default function Observability() {
               isLoading={isTracesLoading || isLoadingAgents || isLoadingWorkflows}
               groupByThread={groupByThread}
               onGroupByThreadChange={setGroupByThread}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              selectedTags={selectedTags}
+              availableTags={availableTags}
+              onTagsChange={setSelectedTags}
+              errorOnly={errorOnly}
+              onErrorOnlyChange={setErrorOnly}
+              metadataFilters={metadataFilters}
+              onMetadataFiltersChange={setMetadataFilters}
             />
 
             {isTracesLoading ? (

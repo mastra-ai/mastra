@@ -286,7 +286,15 @@ export const GET_TAGS = createNewRoute(NEW_ROUTE_DEFS.GET_TAGS, {
   handler: async ({ mastra, ...params }) => {
     const args = getTagsArgsSchema.parse(pickParams(getTagsArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.getTags(args);
+    try {
+      return await observabilityStore.getTags(args);
+    } catch (error) {
+      // Some storage providers (e.g. LibSQL) don't support tag discovery
+      if (error instanceof Error && error.message.includes('does not support tag discovery')) {
+        return { tags: [] };
+      }
+      throw error;
+    }
   },
 });
 
