@@ -1,9 +1,11 @@
-import { MastraUIMessage, resolveToChildMessages } from '@mastra/react';
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
-import { AgentBadge, AgentMessage } from './agent-badge';
-import { useAgentMessages } from '@/hooks/use-agent-messages';
-import { ToolApprovalButtonsProps } from './tool-approval-buttons';
+import type { MastraUIMessage} from '@mastra/react';
+import { resolveToChildMessages } from '@mastra/react';
+import type { AgentMessage } from './agent-badge';
+import { AgentBadge } from './agent-badge';
 import { LoadingBadge } from './loading-badge';
+import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
+import { useAgentMessages } from '@/hooks/use-agent-messages';
 
 interface AgentBadgeWrapperProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   agentId: string;

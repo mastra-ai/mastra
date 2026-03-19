@@ -1,7 +1,7 @@
-import { cn } from '@/lib/utils';
 
 import { AgentCmsSidebar } from '../agent-cms-sidebar';
 import { AgentCmsBottomBar } from './agent-cms-bottom-bar';
+import { cn } from '@/lib/utils';
 
 interface AgentsCmsLayoutProps {
   children: React.ReactNode;

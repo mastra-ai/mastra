@@ -1,17 +1,17 @@
+import { FlaskConical, MessageSquare, Braces } from 'lucide-react';
 import { useState } from 'react';
 import { Panel, Group, useDefaultLayout } from 'react-resizable-panels';
-import { FlaskConical, MessageSquare, Braces } from 'lucide-react';
-
-import { PanelSeparator } from '@/lib/resize/separator';
-import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons/Icon';
-import { cn } from '@/lib/utils';
 
 import { AgentPlaygroundConfig } from './agent-playground-config';
 import { AgentPlaygroundEval } from './agent-playground-eval';
+import { AgentPlaygroundRequestContext } from './agent-playground-request-context';
 import { AgentPlaygroundTestChat } from './agent-playground-test-chat';
 import { AgentPlaygroundVersionBar } from './agent-playground-version-bar';
-import { AgentPlaygroundRequestContext } from './agent-playground-request-context';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
+import { PanelSeparator } from '@/lib/resize/separator';
+import { cn } from '@/lib/utils';
+
 
 type RightPanelTab = 'experiment' | 'test-chat' | 'request-context';
 

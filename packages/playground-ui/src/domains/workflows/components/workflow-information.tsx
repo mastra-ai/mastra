@@ -1,22 +1,22 @@
+import { CopyIcon, Cpu } from 'lucide-react';
 import { useState, useEffect, useContext, useMemo } from 'react';
 
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-
-import { CopyIcon, Cpu } from 'lucide-react';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { useWorkflow } from '@/hooks/use-workflows';
-import { EntityHeader } from '@/ds/components/EntityHeader';
-import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
-import { Badge } from '@/ds/components/Badge';
-import { WorkflowRunDetail } from '../runs/workflow-run-details';
-import { WorkflowTrigger } from '../workflow/workflow-trigger';
-import { toast } from '@/lib/toast';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
-import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
-import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
+import { WorkflowRunDetail } from '../runs/workflow-run-details';
+import { WorkflowTrigger } from '../workflow/workflow-trigger';
 import { WorkflowStepDetailContent } from './workflow-step-detail';
+import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
 import { RequestContextSchemaForm } from '@/domains/request-context';
+import { Badge } from '@/ds/components/Badge';
+import { EntityHeader } from '@/ds/components/EntityHeader';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+import { useWorkflow } from '@/hooks/use-workflows';
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
+import { toast } from '@/lib/toast';
+import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 
 export interface WorkflowInformationProps {
   workflowId: string;

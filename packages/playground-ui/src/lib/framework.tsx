@@ -1,9 +1,10 @@
-import {
+import type {
   AnchorHTMLAttributes,
+  ForwardRefExoticComponent,
+  RefAttributes} from 'react';
+import {
   createContext,
   forwardRef,
-  ForwardRefExoticComponent,
-  RefAttributes,
   useContext,
 } from 'react';
 

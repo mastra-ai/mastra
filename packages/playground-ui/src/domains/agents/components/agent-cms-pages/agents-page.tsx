@@ -1,20 +1,20 @@
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
+import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { useAgents } from '../../hooks/use-agents';
 import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
-import { AgentIcon } from '@/ds/icons';
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Section } from '@/ds/components/Section';
-import { SubSectionRoot } from '@/ds/components/Section/section-root';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
 import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
-import { Switch } from '@/ds/components/Switch';
-import { cn } from '@/lib/utils';
+import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Searchbar } from '@/ds/components/Searchbar';
-import { useAgents } from '../../hooks/use-agents';
+import { Section } from '@/ds/components/Section';
+import { SubSectionRoot } from '@/ds/components/Section/section-root';
+import { Switch } from '@/ds/components/Switch';
+import { AgentIcon } from '@/ds/icons';
 import type { RuleGroup } from '@/lib/rule-engine';
+import { cn } from '@/lib/utils';
 
-import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 
 export function AgentsPage() {
   const { form, readOnly, agentId: currentAgentId } = useAgentEditFormContext();

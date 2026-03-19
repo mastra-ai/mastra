@@ -1,10 +1,10 @@
-import { DatasetExperiment } from '@mastra/client-js';
+import type { DatasetExperiment } from '@mastra/client-js';
+import { Play } from 'lucide-react';
+import { Checkbox } from '@/ds/components/Checkbox';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { ItemList } from '@/ds/components/ItemList';
-import { Checkbox } from '@/ds/components/Checkbox';
-import { Play } from 'lucide-react';
-import { Chip, cn } from '@/index';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Chip, cn } from '@/index';
 
 const experimentsListColumns = [
   { name: 'experimentId', label: 'ID', size: '6rem' },

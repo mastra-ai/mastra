@@ -1,5 +1,5 @@
+import type { MCPToolType } from '@mastra/core/mcp';
 import { ToolIconMap } from '@/domains/tools/components/ToolIcon';
-import { MCPToolType } from '@mastra/core/mcp';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
 

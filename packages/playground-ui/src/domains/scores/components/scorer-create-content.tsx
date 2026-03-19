@@ -1,14 +1,14 @@
+import type { CreateStoredScorerParams } from '@mastra/client-js';
 import { useRef } from 'react';
 
-import type { CreateStoredScorerParams } from '@mastra/client-js';
 
-import { toast } from '@/lib/toast';
-import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
-
-import { ScorerEditSidebar } from './scorer-edit-page/scorer-edit-sidebar';
-import { ScorerEditMain } from './scorer-edit-page/scorer-edit-main';
-import { useScorerEditForm } from './scorer-edit-page/use-scorer-edit-form';
 import { useStoredScorerMutations } from '../hooks/use-stored-scorers';
+import { ScorerEditMain } from './scorer-edit-page/scorer-edit-main';
+import { ScorerEditSidebar } from './scorer-edit-page/scorer-edit-sidebar';
+import { useScorerEditForm } from './scorer-edit-page/use-scorer-edit-form';
+import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
+import { toast } from '@/lib/toast';
+
 
 interface ScorerCreateContentProps {
   onSuccess?: (scorer: { id: string }) => void;

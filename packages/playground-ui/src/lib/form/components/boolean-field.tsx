@@ -1,6 +1,6 @@
+import type { AutoFormFieldProps } from '@autoform/react';
 import React from 'react';
 import { Checkbox } from '@/ds/components/Checkbox';
-import { AutoFormFieldProps } from '@autoform/react';
 import { Txt } from '@/ds/components/Txt';
 
 export const BooleanField: React.FC<AutoFormFieldProps> = ({ field, label, id, inputProps, value }) => (

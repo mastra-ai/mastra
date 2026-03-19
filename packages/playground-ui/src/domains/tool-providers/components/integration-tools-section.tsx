@@ -1,15 +1,15 @@
-import { useState } from 'react';
 import { Plug } from 'lucide-react';
+import { useState } from 'react';
 
-import { Section } from '@/ds/components/Section';
-import { Entity, EntityContent, EntityName, EntityDescription } from '@/ds/components/Entity';
 
 import { useToolProviders } from '../hooks/use-tool-providers';
 import { ToolProviderDialog } from './tool-provider-dialog';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
+import { Badge } from '@/ds/components/Badge';
+import { Entity, EntityContent, EntityName, EntityDescription } from '@/ds/components/Entity';
+import { Section } from '@/ds/components/Section';
 import { SubSectionRoot } from '@/ds/components/Section/section-root';
 import { stringToColor } from '@/lib/colors';
-import { Badge } from '@/ds/components/Badge';
 
 interface Provider {
   id: string;

@@ -1,11 +1,12 @@
-import { GetAgentResponse, ReorderModelListParams, UpdateModelInModelListParams } from '@mastra/client-js';
-import { DragDropContext, Draggable, DropResult, Droppable } from '@hello-pangea/dnd';
+import type { DropResult} from '@hello-pangea/dnd';
+import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
+import type { GetAgentResponse, ReorderModelListParams, UpdateModelInModelListParams } from '@mastra/client-js';
+import { GripVertical } from 'lucide-react';
 import { useState } from 'react';
 import { AgentMetadataModelSwitcher } from './agent-metadata-model-switcher';
-import { Icon } from '@/ds/icons';
-import { GripVertical } from 'lucide-react';
 import { Switch } from '@/ds/components/Switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Icon } from '@/ds/icons';
 
 type AgentMetadataModelListType = NonNullable<GetAgentResponse['modelList']>;
 

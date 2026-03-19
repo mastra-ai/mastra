@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { SideDialog } from '@/ds/components/SideDialog';
-import { Button } from '@/ds/components/Button';
-
-import { ToolkitList } from './toolkit-list';
 import { ToolList } from './tool-list';
+import { ToolkitList } from './toolkit-list';
+import { Button } from '@/ds/components/Button';
+import { SideDialog } from '@/ds/components/SideDialog';
+
 
 interface ToolProviderDialogProps {
   provider: { id: string; name: string; description?: string } | null;

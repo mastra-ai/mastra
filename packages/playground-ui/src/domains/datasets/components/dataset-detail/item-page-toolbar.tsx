@@ -1,9 +1,9 @@
 'use client';
 
-import { Button } from '@/ds/components/Button';
 import { Pencil, Trash2, Copy, ChevronDownIcon, ArrowLeft } from 'lucide-react';
-import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { useState } from 'react';
+import { Button } from '@/ds/components/Button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface ItemPageToolbarProps {

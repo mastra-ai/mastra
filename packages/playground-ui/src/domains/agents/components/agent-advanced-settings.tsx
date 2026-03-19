@@ -1,18 +1,18 @@
-import { Icon } from '@/ds/icons/Icon';
-import { Txt } from '@/ds/components/Txt/Txt';
-import { useAgentSettings } from '@/domains/agents/context/agent-context';
-import { useEffect, useState } from 'react';
-import { Input } from '@/ds/components/Input';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { jsonLanguage } from '@codemirror/lang-json';
+import CodeMirror from '@uiw/react-codemirror';
 import { ChevronDown, Braces, CopyIcon, SaveIcon, CheckIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useAgentSettings } from '@/domains/agents/context/agent-context';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { Input } from '@/ds/components/Input';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt/Txt';
+import { Icon } from '@/ds/icons/Icon';
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { formatJSON, isValidJson } from '@/lib/formatting';
 import { cn } from '@/lib/utils';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 
-import CodeMirror from '@uiw/react-codemirror';
-import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
-import { jsonLanguage } from '@codemirror/lang-json';
 
 export const AgentAdvancedSettings = () => {
   const { settings, setSettings } = useAgentSettings();

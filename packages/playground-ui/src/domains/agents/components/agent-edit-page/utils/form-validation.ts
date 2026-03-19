@@ -1,7 +1,7 @@
-import { z } from 'zod';
 import { v4 as uuid } from '@lukeed/uuid';
-import type { JsonSchema } from '@/lib/json-schema';
 import type { RuleGroup, RuleGroupDepth1, RuleGroupDepth2 } from '@mastra/core/storage';
+import { z } from 'zod';
+import type { JsonSchema } from '@/lib/json-schema';
 
 export type InMemoryFileNode = {
   id: string;

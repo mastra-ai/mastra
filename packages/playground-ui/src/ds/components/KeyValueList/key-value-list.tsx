@@ -1,9 +1,9 @@
-import React from 'react';
 import * as HoverCard from '@radix-ui/react-hover-card';
-import { cn } from '@/lib/utils';
-import { useLinkComponent } from '@/lib/framework';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { ChevronRightIcon } from 'lucide-react';
+import React from 'react';
+import { useLinkComponent } from '@/lib/framework';
+import { cn } from '@/lib/utils';
 
 export type KeyValueListItemValue = {
   id: string;

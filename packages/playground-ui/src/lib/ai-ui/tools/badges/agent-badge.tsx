@@ -1,14 +1,15 @@
-import { AgentIcon } from '@/ds/icons';
-import { BadgeWrapper } from './badge-wrapper';
-import { ToolFallback } from '../tool-fallback';
-
+import type { MastraUIMessage } from '@mastra/react';
 import React from 'react';
+import Markdown from 'react-markdown';
+import { ToolFallback } from '../tool-fallback';
+import { BadgeWrapper } from './badge-wrapper';
+
 
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
-import Markdown from 'react-markdown';
-import { MastraUIMessage } from '@mastra/react';
-import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
+import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
+import { ToolApprovalButtons } from './tool-approval-buttons';
 import { CodeEditor } from '@/ds/components/CodeEditor';
+import { AgentIcon } from '@/ds/icons';
 
 type TextMessage = {
   type: 'text';

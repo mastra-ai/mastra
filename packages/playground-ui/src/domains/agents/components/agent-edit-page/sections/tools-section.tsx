@@ -1,14 +1,15 @@
-import { useMemo, useState } from 'react';
-import { Controller, Control, useWatch } from 'react-hook-form';
 import { ChevronRight } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import type { Control} from 'react-hook-form';
+import { Controller, useWatch } from 'react-hook-form';
 
-import { EntityAccordionItem } from '@/domains/cms';
-import { ToolsIcon } from '@/ds/icons';
-import { MultiCombobox } from '@/ds/components/Combobox';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
-import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import type { AgentFormValues, EntityConfig } from '../utils/form-validation';
+import { EntityAccordionItem } from '@/domains/cms';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
+import { useTools } from '@/domains/tools/hooks/use-all-tools';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
+import { MultiCombobox } from '@/ds/components/Combobox';
+import { ToolsIcon } from '@/ds/icons';
 
 interface ToolsSectionProps {
   control: Control<AgentFormValues>;

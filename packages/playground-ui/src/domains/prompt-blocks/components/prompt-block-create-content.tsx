@@ -1,12 +1,12 @@
 import type { CreateStoredPromptBlockParams } from '@mastra/client-js';
 
-import { toast } from '@/lib/toast';
-import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
-
-import { PromptBlockEditSidebar } from './prompt-block-edit-page/prompt-block-edit-sidebar';
-import { PromptBlockEditMain } from './prompt-block-edit-page/prompt-block-edit-main';
-import { usePromptBlockEditForm } from './prompt-block-edit-page/use-prompt-block-edit-form';
 import { useStoredPromptBlockMutations } from '../hooks/use-stored-prompt-blocks';
+import { PromptBlockEditMain } from './prompt-block-edit-page/prompt-block-edit-main';
+import { PromptBlockEditSidebar } from './prompt-block-edit-page/prompt-block-edit-sidebar';
+import { usePromptBlockEditForm } from './prompt-block-edit-page/use-prompt-block-edit-form';
+import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
+import { toast } from '@/lib/toast';
+
 
 interface PromptBlockCreateContentProps {
   onSuccess?: (block: { id: string }) => void;

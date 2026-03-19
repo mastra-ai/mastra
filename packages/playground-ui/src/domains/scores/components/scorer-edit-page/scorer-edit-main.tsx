@@ -1,9 +1,10 @@
-import { Controller, UseFormReturn } from 'react-hook-form';
-
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { SectionHeader } from '@/domains/cms';
+import type { UseFormReturn } from 'react-hook-form';
+import { Controller } from 'react-hook-form';
 
 import type { ScorerFormValues } from './utils/form-validation';
+import { SectionHeader } from '@/domains/cms';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+
 
 interface ScorerEditMainProps {
   form: UseFormReturn<ScorerFormValues>;

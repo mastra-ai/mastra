@@ -1,16 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import type { DatasetItem } from '@mastra/client-js';
-import { AlertDialog } from '@/ds/components/AlertDialog';
-import { useLinkComponent } from '@/lib/framework';
-import { toast } from '@/lib/toast';
+import { useState, useEffect } from 'react';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { ItemDetailToolbar } from '../dataset-detail/item-detail-toolbar';
-import { DatasetItemHeader } from '../dataset-detail/dataset-item-header';
 import { DatasetItemContent } from '../dataset-detail/dataset-item-content';
 import { EditModeContent } from '../dataset-detail/dataset-item-form';
+import { DatasetItemHeader } from '../dataset-detail/dataset-item-header';
+import { ItemDetailToolbar } from '../dataset-detail/item-detail-toolbar';
+import { AlertDialog } from '@/ds/components/AlertDialog';
 import { Column } from '@/ds/components/Columns';
+import { useLinkComponent } from '@/lib/framework';
+import { toast } from '@/lib/toast';
 
 /** Schema validation error from API */
 interface SchemaValidationError {

@@ -1,6 +1,6 @@
+import type { AuthenticatedUser, CurrentUser } from '../types';
 import { Avatar } from '@/ds/components/Avatar/Avatar';
 
-import type { AuthenticatedUser, CurrentUser } from '../types';
 
 export type UserAvatarProps = {
   user: AuthenticatedUser | CurrentUser;

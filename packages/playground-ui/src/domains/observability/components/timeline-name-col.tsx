@@ -1,8 +1,8 @@
-import { cn } from '@/lib/utils';
-import { type UISpan, type UISpanStyle } from '../types';
-import { TimelineStructureSign } from './timeline-structure-sign';
 import { FileIcon } from 'lucide-react';
+import type {UISpan, UISpanStyle} from '../types';
 import { SpanTypeIcon } from './span-type-icon';
+import { TimelineStructureSign } from './timeline-structure-sign';
+import { cn } from '@/lib/utils';
 
 type TimelineNameColProps = {
   span: UISpan;

@@ -1,9 +1,9 @@
-import { type ExperimentUISpan } from '../types';
 import { useEffect } from 'react';
-import { getExperimentSpanTypeUi } from './experiment-trace-shared';
+import type {ExperimentUISpan} from '../types';
 import { getSpanDescendantIds } from '../utils/get-span-descendant-ids';
-import { ExperimentTraceTimelineNameCol } from './experiment-trace-timeline-name-col';
+import { getExperimentSpanTypeUi } from './experiment-trace-shared';
 import { ExperimentTraceTimelineExpandCol } from './experiment-trace-timeline-expand-col';
+import { ExperimentTraceTimelineNameCol } from './experiment-trace-timeline-name-col';
 import { ExperimentTraceTimelineTimingCol } from './experiment-trace-timeline-timing-col';
 
 type ExperimentTraceTimelineSpanProps = {

@@ -1,5 +1,5 @@
+import type { Agent } from '@mastra/core/agent';
 import { useMastraClient } from '@mastra/react';
-import { Agent } from '@mastra/core/agent';
 import { useEffect, useRef, useState } from 'react';
 import { recordMicrophoneToFile } from '../utils/record-mic-to-file';
 import { usePlaygroundStore } from '@/store/playground-store';

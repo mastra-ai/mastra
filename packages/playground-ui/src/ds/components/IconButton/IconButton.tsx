@@ -1,8 +1,9 @@
 import React from 'react';
-import { cn } from '@/lib/utils';
-import { formElementSizes, formElementFocus, type FormElementSize } from '@/ds/primitives/form-element';
-import { Icon } from '@/ds/icons/Icon';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
+import { Icon } from '@/ds/icons/Icon';
+import { formElementSizes, formElementFocus  } from '@/ds/primitives/form-element';
+import type {FormElementSize} from '@/ds/primitives/form-element';
+import { cn } from '@/lib/utils';
 
 export interface IconButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
   children: React.ReactNode;

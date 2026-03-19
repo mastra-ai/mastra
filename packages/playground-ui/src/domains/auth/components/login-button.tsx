@@ -1,7 +1,7 @@
-import { Button } from '@/ds/components/Button/Button';
 
 import { useSSOLogin } from '../hooks';
 import type { LoginConfig, SSOConfig } from '../types';
+import { Button } from '@/ds/components/Button/Button';
 
 export type LoginButtonProps = {
   config: LoginConfig;

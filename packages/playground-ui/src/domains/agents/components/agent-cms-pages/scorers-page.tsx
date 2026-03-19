@@ -1,24 +1,24 @@
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
+import type { ScorerConfig } from '../../components/agent-edit-page/utils/form-validation';
+import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
-import { JudgeIcon } from '@/ds/icons';
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Label } from '@/ds/components/Label';
+import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
+import { useScorers } from '@/domains/scores/hooks/use-scorers';
+import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
 import { Input } from '@/ds/components/Input';
+import { Label } from '@/ds/components/Label';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Searchbar } from '@/ds/components/Searchbar';
 import { Section } from '@/ds/components/Section';
 import { SubSectionRoot } from '@/ds/components/Section/section-root';
-import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
-import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
 import { Switch } from '@/ds/components/Switch';
-import { cn } from '@/lib/utils';
-import { Searchbar } from '@/ds/components/Searchbar';
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
+import { JudgeIcon } from '@/ds/icons';
 import type { RuleGroup } from '@/lib/rule-engine';
-import type { ScorerConfig } from '../../components/agent-edit-page/utils/form-validation';
+import { cn } from '@/lib/utils';
 
-import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 
 export function ScorersPage() {
   const { form, readOnly } = useAgentEditFormContext();

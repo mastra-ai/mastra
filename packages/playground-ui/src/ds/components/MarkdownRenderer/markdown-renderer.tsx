@@ -1,12 +1,12 @@
 import React, { Suspense, useState, useEffect } from 'react';
 import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
+import { highlight } from '@/ds/components/CodeEditor';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { cn } from '@/lib/utils';
 
-import { highlight } from '@/ds/components/CodeEditor';
 
 export type MarkdownRendererProps = {
   children: string;

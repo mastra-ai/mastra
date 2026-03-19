@@ -1,7 +1,7 @@
-import { DatasetExperiment } from '@mastra/client-js';
+import type { DatasetExperiment } from '@mastra/client-js';
+import { CheckIcon, ClockIcon, TimerIcon, XIcon } from 'lucide-react';
 import { Badge } from '@/ds/components/Badge';
 import { cn } from '@/lib/utils';
-import { CheckIcon, ClockIcon, TimerIcon, XIcon } from 'lucide-react';
 
 export interface ExperimentStatsProps {
   experiment: DatasetExperiment;

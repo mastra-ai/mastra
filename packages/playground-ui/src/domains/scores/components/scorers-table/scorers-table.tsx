@@ -1,21 +1,22 @@
-import { GetScorerResponse } from '@mastra/client-js';
+import type { GetScorerResponse } from '@mastra/client-js';
+import type { ColumnDef} from '@tanstack/react-table';
+import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import React, { useMemo, useState } from 'react';
+import { columns } from './columns';
+import type { ScorerTableData } from './types';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
+import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
-import { is403ForbiddenError } from '@/lib/query-utils';
 import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { Icon } from '@/ds/icons/Icon';
-import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React, { useMemo, useState } from 'react';
 
-import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { columns } from './columns';
-import { ScorerTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
-import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
+import { is403ForbiddenError } from '@/lib/query-utils';
 
 export interface ScorersTableProps {
   scorers: Record<string, GetScorerResponse>;

@@ -7,7 +7,7 @@
  * This module provides helpers that work with both versions.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 type AnySchema = any;
 
 export function isV4(schema: AnySchema): boolean {

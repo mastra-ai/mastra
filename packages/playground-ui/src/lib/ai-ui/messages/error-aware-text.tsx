@@ -1,13 +1,13 @@
 import { useAssistantState } from '@assistant-ui/react';
+import type { MastraUIMessageMetadata } from '@mastra/react';
 import { AlertCircle, CheckCircleIcon, ChevronUpIcon } from 'lucide-react';
+import { useState } from 'react';
 import { MarkdownText } from './markdown-text';
 import { TripwireNotice } from './tripwire-notice';
-import { MastraUIMessageMetadata } from '@mastra/react';
 import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
-import { useState } from 'react';
+import { Badge } from '@/ds/components/Badge';
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/ds/components/Badge';
 
 export const ErrorAwareText = () => {
   const part = useAssistantState(({ part }) => part);

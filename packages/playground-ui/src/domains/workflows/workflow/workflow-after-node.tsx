@@ -1,15 +1,15 @@
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
+import { ChevronDown, Footprints } from 'lucide-react';
 import { useState } from 'react';
 
+import { BADGE_COLORS, BADGE_ICONS } from './workflow-node-badges';
+import { Badge } from '@/ds/components/Badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { ChevronDown, Footprints } from 'lucide-react';
-import { Badge } from '@/ds/components/Badge';
-import { Icon } from '@/ds/icons';
-import { BADGE_COLORS, BADGE_ICONS } from './workflow-node-badges';
 
 export type AfterNode = Node<
   {

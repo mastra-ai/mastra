@@ -1,22 +1,22 @@
-import { useContext, useMemo, useState } from 'react';
-import CodeMirror from '@uiw/react-codemirror';
 import { jsonLanguage } from '@codemirror/lang-json';
-import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
-import { WorkflowInputData } from './workflow-input-data';
+import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
+import CodeMirror from '@uiw/react-codemirror';
+import { Braces, ChevronDown, CopyIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
+import { useContext, useMemo, useState } from 'react';
+import { parse } from 'superjson';
+import { z } from 'zod';
 import { WorkflowRunContext } from '../context/workflow-run-context';
+import { WorkflowInputData } from './workflow-input-data';
+import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Braces, ChevronDown, CopyIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { formatJSON, isValidJson } from '@/lib/formatting';
-import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
-import { parse } from 'superjson';
 import { resolveSerializedZodOutput } from '@/lib/form/utils';
-import { z } from 'zod';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { formatJSON, isValidJson } from '@/lib/formatting';
 import { cn } from '@/lib/utils';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 
 const buttonClass = 'text-neutral3 hover:text-neutral6';
 

@@ -1,24 +1,27 @@
+import type {
+  ThreadMessageLike,
+  AppendMessage} from '@assistant-ui/react';
 import {
   useExternalStoreRuntime,
-  ThreadMessageLike,
-  AppendMessage,
   AssistantRuntimeProvider,
 } from '@assistant-ui/react';
-import { useState, useMemo, ReactNode, useRef, useEffect } from 'react';
+import type { UIMessageWithMetadata } from '@mastra/client-js';
+import { MastraClient } from '@mastra/client-js';
 import { RequestContext } from '@mastra/core/di';
-import { ChatProps } from '@/types';
-import { CoreUserMessage } from '@mastra/core/llm';
-import { fileToBase64 } from '@/lib/file/toBase64';
-import { toAssistantUIMessage, useMastraClient } from '@mastra/react';
-import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
-import { MastraClient, UIMessageWithMetadata } from '@mastra/client-js';
-import { useAdapters } from '@/lib/ai-ui/hooks/use-adapters';
-import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
-import { MastraUIMessage, useChat } from '@mastra/react';
+import type { CoreUserMessage } from '@mastra/core/llm';
+import type { MastraUIMessage} from '@mastra/react';
+import { toAssistantUIMessage, useMastraClient, useChat  } from '@mastra/react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useState, useMemo, useRef, useEffect } from 'react';
+import type { ReactNode} from 'react';
 import { ToolCallProvider } from './tool-call-provider';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
-import { useQueryClient } from '@tanstack/react-query';
+import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { useMemoryConfig } from '@/domains/memory/hooks';
+import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
+import { useAdapters } from '@/lib/ai-ui/hooks/use-adapters';
+import { fileToBase64 } from '@/lib/file/toBase64';
+import type { ChatProps } from '@/types';
 
 const handleFinishReason = (finishReason: string) => {
   switch (finishReason) {

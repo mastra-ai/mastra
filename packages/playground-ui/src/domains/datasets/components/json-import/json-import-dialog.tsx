@@ -1,6 +1,13 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
+import { useJSONParser  } from '../../hooks/use-json-parser';
+import type {ParsedJSON} from '../../hooks/use-json-parser';
+import { JSONPreviewTable } from './json-preview-table';
+import { JSONUploadStep } from './json-upload-step';
+import { JSONValidationSummary } from './json-validation-summary';
+import { Button } from '@/ds/components/Button';
 import {
   Dialog,
   DialogContent,
@@ -10,14 +17,8 @@ import {
   DialogBody,
   DialogFooter,
 } from '@/ds/components/Dialog';
-import { Button } from '@/ds/components/Button';
 import { Spinner } from '@/ds/components/Spinner';
 import { toast } from '@/lib/toast';
-import { useJSONParser, type ParsedJSON } from '../../hooks/use-json-parser';
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { JSONUploadStep } from './json-upload-step';
-import { JSONPreviewTable } from './json-preview-table';
-import { JSONValidationSummary } from './json-validation-summary';
 
 export interface JSONImportDialogProps {
   datasetId: string;

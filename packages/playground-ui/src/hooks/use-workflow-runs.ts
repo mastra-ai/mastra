@@ -1,8 +1,8 @@
+import type { WorkflowRuns } from '@mastra/core/storage';
 import { useMastraClient } from '@mastra/react';
-import { WorkflowRuns } from '@mastra/core/storage';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useInView } from './use-in-view';
 import { useEffect } from 'react';
+import { useInView } from './use-in-view';
 import { toast } from '@/lib/toast';
 
 export const PER_PAGE = 20;

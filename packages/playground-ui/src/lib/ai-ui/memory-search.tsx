@@ -1,10 +1,10 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import type { MemorySearchResult, MemorySearchResponse } from '@mastra/client-js';
 import { Search, X, ExternalLink } from 'lucide-react';
-import { Input } from '@/ds/components/Input';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Button } from '@/ds/components/Button/Button';
+import { Input } from '@/ds/components/Input';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
-import { MemorySearchResult, MemorySearchResponse } from '@mastra/client-js';
 
 // Simple relative time formatter
 const formatRelativeTime = (date: Date): string => {

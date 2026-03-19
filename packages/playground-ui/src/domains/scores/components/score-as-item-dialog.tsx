@@ -1,10 +1,10 @@
 'use client';
 
-import { CalculatorIcon } from 'lucide-react';
 import type { ScoreRowData } from '@mastra/core/evals';
+import { CalculatorIcon } from 'lucide-react';
+import { SaveAsDatasetItemDialog } from '@/domains/datasets/components/save-as-dataset-item-dialog';
 import type { SideDialogRootProps } from '@/ds/components/SideDialog';
 import { TextAndIcon, getShortId } from '@/ds/components/Text';
-import { SaveAsDatasetItemDialog } from '@/domains/datasets/components/save-as-dataset-item-dialog';
 
 type ScoreAsItemDialogProps = {
   score?: ScoreRowData;

@@ -1,11 +1,11 @@
-import { Button } from '@/ds/components/Button/Button';
+import type {GetScorerResponse} from '@mastra/client-js';
 import { InfoIcon } from 'lucide-react';
-import { useTriggerScorer } from '@/domains/scores/hooks/use-trigger-scorer';
-import { Notification } from '@/ds/components/Notification';
-import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
-import { TextAndIcon } from '@/ds/components/Text';
 import { useEffect, useState } from 'react';
-import { type GetScorerResponse } from '@mastra/client-js';
+import { useTriggerScorer } from '@/domains/scores/hooks/use-trigger-scorer';
+import { Button } from '@/ds/components/Button/Button';
+import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
+import { Notification } from '@/ds/components/Notification';
+import { TextAndIcon } from '@/ds/components/Text';
 
 export interface SpanScoringProps {
   traceId?: string;

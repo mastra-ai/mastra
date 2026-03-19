@@ -1,5 +1,6 @@
-import { SerializedStepFlowEntry } from '@mastra/core/workflows';
-import { createContext, useContext, useState, type ReactNode, useCallback } from 'react';
+import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
+import { createContext, useContext, useState,  useCallback } from 'react';
+import type {ReactNode} from 'react';
 
 export type StepDetailType = 'map-config' | 'nested-graph' | null;
 

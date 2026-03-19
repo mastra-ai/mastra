@@ -1,19 +1,20 @@
+import type { DatasetItem } from '@mastra/client-js';
+import { format } from 'date-fns/format';
+import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, Pencil, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { DatasetItem } from '@mastra/client-js';
-import { SideDialog, type SideDialogRootProps } from '@/ds/components/SideDialog';
-import { TextAndIcon, getShortId } from '@/ds/components/Text';
-import { KeyValueList } from '@/ds/components/KeyValueList';
-import { Sections } from '@/ds/components/Sections';
+import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
+import { AlertDialog } from '@/ds/components/AlertDialog';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
+import { KeyValueList } from '@/ds/components/KeyValueList';
 import { Label } from '@/ds/components/Label';
+import { Sections } from '@/ds/components/Sections';
+import { SideDialog  } from '@/ds/components/SideDialog';
+import type {SideDialogRootProps} from '@/ds/components/SideDialog';
+import { TextAndIcon, getShortId } from '@/ds/components/Text';
 import { Icon } from '@/ds/icons/Icon';
-import { AlertDialog } from '@/ds/components/AlertDialog';
 import { useLinkComponent } from '@/lib/framework';
 import { toast } from '@/lib/toast';
-import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, Pencil, Trash2 } from 'lucide-react';
-import { format } from 'date-fns/format';
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 
 export interface ItemDetailDialogProps {
   datasetId: string;

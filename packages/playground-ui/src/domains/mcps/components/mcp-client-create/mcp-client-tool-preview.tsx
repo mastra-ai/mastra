@@ -1,12 +1,12 @@
+import type { TryConnectMcpMutation } from '../../hooks/use-try-connect-mcp';
+import { Entity, EntityContent, EntityDescription, EntityIcon, EntityName } from '@/ds/components/Entity';
+import { Spinner } from '@/ds/components/Spinner';
+import { Switch } from '@/ds/components/Switch';
+import { Txt } from '@/ds/components/Txt';
 import { Icon, McpServerIcon } from '@/ds/icons';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
-import { Txt } from '@/ds/components/Txt';
-import { Spinner } from '@/ds/components/Spinner';
-import { Entity, EntityContent, EntityDescription, EntityIcon, EntityName } from '@/ds/components/Entity';
-import { Switch } from '@/ds/components/Switch';
 import { cn } from '@/lib/utils';
 
-import type { TryConnectMcpMutation } from '../../hooks/use-try-connect-mcp';
 
 interface MCPClientToolPreviewProps {
   serverType: 'stdio' | 'http';

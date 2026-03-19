@@ -1,6 +1,6 @@
-import { type ColumnType } from './types';
 import { EntryListEntries } from './entry-list-entries';
 import { EntryListEntry } from './entry-list-entry';
+import type {ColumnType} from './types';
 
 const widths = ['75%', '50%', '65%', '90%', '60%', '80%'];
 

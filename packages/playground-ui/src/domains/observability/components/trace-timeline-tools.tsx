@@ -1,12 +1,12 @@
-import { spanTypePrefixes, getSpanTypeUi } from './shared';
-import { SpanRecord } from '@mastra/core/storage';
-import { UISpanType } from '../types';
-import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
-import { useThrottledCallback } from 'use-debounce';
+import type { SpanRecord } from '@mastra/core/storage';
+import { XIcon, CircleDashedIcon } from 'lucide-react';
 import { Fragment, useEffect, useState } from 'react';
+import { useThrottledCallback } from 'use-debounce';
+import type { UISpanType } from '../types';
+import { spanTypePrefixes, getSpanTypeUi } from './shared';
 import { Button } from '@/ds/components/Button/Button';
 import { CombinedButtons } from '@/ds/components/CombinedButtons';
-import { XIcon, CircleDashedIcon } from 'lucide-react';
+import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 import { Icon } from '@/ds/icons/Icon';
 
 type TraceTimelineLegendProps = {

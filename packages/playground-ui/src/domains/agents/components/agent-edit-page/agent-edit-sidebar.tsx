@@ -1,23 +1,26 @@
-import { useCallback, useMemo, type RefObject } from 'react';
-import { Controller, type UseFormReturn, useWatch } from 'react-hook-form';
 import { Check, PlusIcon } from 'lucide-react';
+import { useCallback, useMemo  } from 'react';
+import type {RefObject} from 'react';
+import { Controller,  useWatch } from 'react-hook-form';
+import type {UseFormReturn} from 'react-hook-form';
 
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
-import { Button } from '@/ds/components/Button';
-import { Icon, AgentIcon, ToolsIcon, VariablesIcon } from '@/ds/icons';
-import { Spinner } from '@/ds/components/Spinner';
-import { Input } from '@/ds/components/Input';
-import { Textarea } from '@/ds/components/Textarea';
-import { Label } from '@/ds/components/Label';
+import { ToolsSection, WorkflowsSection, AgentsSection, ScorersSection, MemorySection } from './sections';
+import type { AgentFormValues } from './utils/form-validation';
 import { SectionHeader } from '@/domains/cms';
-import { JSONSchemaForm, type SchemaField, jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
+import { LLMProviders, LLMModels } from '@/domains/llm';
+import { Button } from '@/ds/components/Button';
+import { Input } from '@/ds/components/Input';
+import { JSONSchemaForm,  jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
+import type {SchemaField} from '@/ds/components/JSONSchemaForm';
+import { Label } from '@/ds/components/Label';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Spinner } from '@/ds/components/Spinner';
+import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
+import { Icon, AgentIcon, ToolsIcon, VariablesIcon } from '@/ds/icons';
+import { Textarea } from '@/ds/components/Textarea';
 import type { JsonSchema } from '@/lib/json-schema';
 
-import { LLMProviders, LLMModels } from '@/domains/llm';
 
-import type { AgentFormValues } from './utils/form-validation';
-import { ToolsSection, WorkflowsSection, AgentsSection, ScorersSection, MemorySection } from './sections';
 
 function RecursiveFieldRenderer({
   field,

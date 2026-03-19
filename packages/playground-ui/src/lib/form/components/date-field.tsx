@@ -1,13 +1,13 @@
-import { AutoFormFieldProps } from '@autoform/react';
+import type { AutoFormFieldProps } from '@autoform/react';
 import { format, isValid } from 'date-fns';
 import { CalendarIcon } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 
-import { cn } from '@/lib/utils';
 
 import { Button } from '@/ds/components/Button';
 import { DatePicker } from '@/ds/components/DateTimePicker';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
+import { cn } from '@/lib/utils';
 
 export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field, error, id }) => {
   const { key, ...props } = inputProps;

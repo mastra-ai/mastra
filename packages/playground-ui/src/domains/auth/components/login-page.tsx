@@ -1,13 +1,13 @@
 import { useState } from 'react';
+import { useSSOLogin } from '../hooks/use-auth-actions';
+import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
+import { useCredentialsLogin } from '../hooks/use-credentials-login';
+import { useCredentialsSignUp } from '../hooks/use-credentials-signup';
+import type { SSOConfig } from '../types';
 import { Button } from '@/ds/components/Button/Button';
 import { Input } from '@/ds/components/Input';
 import { LogoWithoutText } from '@/ds/components/Logo/MastraLogo';
 
-import { useCredentialsLogin } from '../hooks/use-credentials-login';
-import { useCredentialsSignUp } from '../hooks/use-credentials-signup';
-import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
-import { useSSOLogin } from '../hooks/use-auth-actions';
-import type { SSOConfig } from '../types';
 
 export type LoginPageProps = {
   /** URL to redirect to after successful login */

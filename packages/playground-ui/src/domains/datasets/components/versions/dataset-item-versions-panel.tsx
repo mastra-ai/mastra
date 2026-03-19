@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
 import { GitCompareIcon } from 'lucide-react';
+import { useState } from 'react';
+import { useDatasetItemVersions  } from '../../hooks/use-dataset-item-versions';
+import type {DatasetItemVersion} from '../../hooks/use-dataset-item-versions';
 import { Button, ButtonWithTooltip } from '@/ds/components/Button';
-import { ItemList } from '@/ds/components/ItemList';
-import { Checkbox } from '@/ds/components/Checkbox';
-import { useDatasetItemVersions, type DatasetItemVersion } from '../../hooks/use-dataset-item-versions';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Checkbox } from '@/ds/components/Checkbox';
 import { Column } from '@/ds/components/Columns';
+import { ItemList } from '@/ds/components/ItemList';
 
 export interface DatasetItemVersionsPanelProps {
   datasetId: string;

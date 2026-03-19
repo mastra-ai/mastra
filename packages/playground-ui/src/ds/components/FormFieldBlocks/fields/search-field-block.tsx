@@ -1,10 +1,10 @@
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { SearchIcon, XIcon } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Input } from '../../Input';
 import { Button } from '../../Button';
-import { transitions } from '@/ds/primitives/transitions';
+import { Input } from '../../Input';
 import { FieldBlock } from '../block/field-block';
+import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export type SearchFieldBlockProps = {
   name: string;

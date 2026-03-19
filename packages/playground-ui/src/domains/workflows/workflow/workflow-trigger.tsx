@@ -1,14 +1,4 @@
-import { Braces, Loader2 } from 'lucide-react';
-import { useState, useEffect, useContext } from 'react';
-import { toast } from '@/lib/toast';
 
-import { Button } from '@/ds/components/Button';
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
-import { Icon } from '@/ds/icons';
-import { Txt } from '@/ds/components/Txt';
-import { CodeEditor } from '@/ds/components/CodeEditor';
 import {
   Dialog,
   DialogTitle,
@@ -21,12 +11,23 @@ import { isObjectEmpty } from '@/lib/object';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 import type { GetWorkflowResponse } from '@mastra/client-js';
+import { Braces, Loader2 } from 'lucide-react';
+import { useState, useEffect, useContext } from 'react';
 import { WorkflowRunContext, WorkflowRunStreamResult } from '../context/workflow-run-context';
-import { useSuspendedSteps, useWorkflowSchemas, type SuspendedStep } from './use-workflow-trigger';
-import { WorkflowTriggerForm } from './workflow-trigger-form';
-import { WorkflowSuspendedSteps, type ResumeStepParams } from './workflow-suspended-steps';
+import { useSuspendedSteps, useWorkflowSchemas  } from './use-workflow-trigger';
+import type {SuspendedStep} from './use-workflow-trigger';
 import { WorkflowCancelButton } from './workflow-cancel-button';
 import { WorkflowStepsStatus } from './workflow-steps-status';
+import { WorkflowSuspendedSteps, type ResumeStepParams } from './workflow-suspended-steps';
+import { WorkflowTriggerForm } from './workflow-trigger-form';
+import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { Button } from '@/ds/components/Button';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons';
+import { toast } from '@/lib/toast';
 
 export interface WorkflowTriggerProps {
   workflowId: string;

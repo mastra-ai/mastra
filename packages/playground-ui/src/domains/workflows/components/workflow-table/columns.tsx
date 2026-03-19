@@ -1,10 +1,10 @@
+import type { ColumnDef } from '@tanstack/react-table';
+import { Footprints } from 'lucide-react';
+import type { WorkflowTableData } from './types';
 import { Badge } from '@/ds/components/Badge';
 import { Cell, EntryCell } from '@/ds/components/Table';
 
-import { ColumnDef } from '@tanstack/react-table';
 import { useLinkComponent } from '@/lib/framework';
-import { Footprints } from 'lucide-react';
-import { WorkflowTableData } from './types';
 
 export const columns: ColumnDef<WorkflowTableData>[] = [
   {

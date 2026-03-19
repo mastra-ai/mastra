@@ -1,13 +1,13 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
-import { TextAndIcon } from '@/ds/components/Text';
+import { format } from 'date-fns/format';
+import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon } from 'lucide-react';
 import { KeyValueList } from '@/ds/components/KeyValueList';
 import { Sections } from '@/ds/components/Sections';
 import { SideDialog } from '@/ds/components/SideDialog';
+import { TextAndIcon } from '@/ds/components/Text';
 import { useLinkComponent } from '@/lib/framework';
-import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon } from 'lucide-react';
-import { format } from 'date-fns/format';
 
 export interface DatasetItemPageProps {
   item: DatasetItem;

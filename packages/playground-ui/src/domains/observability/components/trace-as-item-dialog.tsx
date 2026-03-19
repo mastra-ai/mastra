@@ -1,10 +1,10 @@
 'use client';
 
-import { EyeIcon } from 'lucide-react';
 import type { SpanRecord } from '@mastra/core/storage';
+import { EyeIcon } from 'lucide-react';
+import { SaveAsDatasetItemDialog } from '@/domains/datasets/components/save-as-dataset-item-dialog';
 import type { SideDialogRootProps } from '@/ds/components/SideDialog';
 import { TextAndIcon, getShortId } from '@/ds/components/Text';
-import { SaveAsDatasetItemDialog } from '@/domains/datasets/components/save-as-dataset-item-dialog';
 
 type TraceAsItemDialogProps = {
   traceDetails?: SpanRecord;

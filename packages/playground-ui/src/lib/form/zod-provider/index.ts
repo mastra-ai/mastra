@@ -1,6 +1,4 @@
-import { FieldConfig, ParsedField, ParsedSchema, SchemaProvider, SchemaValidation } from '@autoform/core';
-import { inferFieldType } from './field-type-inference';
-import { getDefaultValues, getDefaultValueInZodStack } from './default-values';
+import type { FieldConfig, ParsedField, ParsedSchema, SchemaProvider, SchemaValidation } from '@autoform/core';
 import { removeEmptyValues } from '../utils';
 import {
   getDef,
@@ -13,8 +11,10 @@ import {
   getIntersection,
   isOptional,
 } from './compat';
+import { getDefaultValues, getDefaultValueInZodStack } from './default-values';
+import { inferFieldType } from './field-type-inference';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 type AnySchema = any;
 
 /**

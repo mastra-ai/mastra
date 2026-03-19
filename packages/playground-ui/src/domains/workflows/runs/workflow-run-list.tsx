@@ -1,18 +1,18 @@
-import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons';
-import { WorkflowRunStatus } from '@mastra/core/workflows';
-import { Check, CirclePause, CircleSlash, Clock, Plus, X } from 'lucide-react';
-import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
-import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from '@/ds/components/Threads';
-import { useLinkComponent } from '@/lib/framework';
+import type { WorkflowRunStatus } from '@mastra/core/workflows';
 import { formatDate } from 'date-fns';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { Badge } from '@/ds/components/Badge';
-import { Spinner } from '@/ds/components/Spinner';
-import { useInView } from '@/hooks';
-import { AlertDialog } from '@/ds/components/AlertDialog';
+import { Check, CirclePause, CircleSlash, Clock, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { AlertDialog } from '@/ds/components/AlertDialog';
+import { Badge } from '@/ds/components/Badge';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Spinner } from '@/ds/components/Spinner';
+import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from '@/ds/components/Threads';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons';
+import { useInView } from '@/hooks';
+import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface WorkflowRunListProps {
   workflowId: string;

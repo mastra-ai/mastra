@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
-import { UpdateModelParams, Provider } from '@mastra/client-js';
+import type { UpdateModelParams} from '@mastra/client-js';
+import { Provider } from '@mastra/client-js';
 import { TriangleAlert } from 'lucide-react';
-import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
+import { useState, useEffect } from 'react';
 import { useAgent } from '../hooks/use-agent';
 import { useUpdateAgentModel } from '../hooks/use-agents';
+import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
 
 export interface ComposerModelSwitcherProps {
   agentId: string;

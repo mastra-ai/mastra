@@ -1,22 +1,22 @@
+import type { AutoFormUIComponents } from '@autoform/react';
 import React, { useMemo } from 'react';
-import { AutoFormUIComponents } from '@autoform/react';
-import { AutoFormProps } from './types';
-import { Form } from './components/form';
-import { FieldWrapper } from './components/field-wrapper';
-import { ErrorMessage } from './components/error-message';
-import { SubmitButton } from './components/submit-button';
-import { StringField } from './components/string-field';
-import { NumberField } from './components/number-field';
+import { ArrayElementWrapper } from './components/array-element-wrapper';
+import { ArrayWrapper } from './components/array-wrapper';
 import { BooleanField } from './components/boolean-field';
 import { DateField } from './components/date-field';
+import { DiscriminatedUnionField } from './components/discriminated-union-field';
+import { ErrorMessage } from './components/error-message';
+import { FieldWrapper } from './components/field-wrapper';
+import { NumberField } from './components/number-field';
+import { StringField } from './components/string-field';
+import { SubmitButton } from './components/submit-button';
 import { SelectField } from './components/select-field';
 import { ObjectWrapper } from './components/object-wrapper';
-import { ArrayWrapper } from './components/array-wrapper';
-import { ArrayElementWrapper } from './components/array-element-wrapper';
 import { RecordField } from './components/record-field';
 import { UnionField } from './components/union-field';
-import { DiscriminatedUnionField } from './components/discriminated-union-field';
+import { Form } from './components/form';
 import { CustomAutoForm } from './custom-auto-form';
+import type { AutoFormProps } from './types';
 
 const ShadcnUIComponents: AutoFormUIComponents = {
   Form,

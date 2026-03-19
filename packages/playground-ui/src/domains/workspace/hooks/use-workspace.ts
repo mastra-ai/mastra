@@ -1,5 +1,6 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { isWorkspaceV1Supported, shouldRetryWorkspaceQuery, isWorkspaceNotSupportedError } from '../compatibility';
 import type {
   WorkspaceInfo,
   WorkspacesListResponse,
@@ -11,7 +12,6 @@ import type {
   SearchWorkspaceParams,
   SearchResponse,
 } from '../types';
-import { isWorkspaceV1Supported, shouldRetryWorkspaceQuery, isWorkspaceNotSupportedError } from '../compatibility';
 
 function getParentPath(path: string): string {
   return path.split('/').slice(0, -1).join('/') || (path.startsWith('/') ? '/' : '.');

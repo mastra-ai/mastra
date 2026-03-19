@@ -1,8 +1,8 @@
-import { cn } from '@/lib/utils';
-import { type ExperimentUISpan, type ExperimentUISpanStyle } from '../types';
-import { ExperimentTraceTimelineStructureSign } from './experiment-trace-timeline-structure-sign';
 import { FileIcon } from 'lucide-react';
+import type {ExperimentUISpan, ExperimentUISpanStyle} from '../types';
 import { ExperimentTraceSpanTypeIcon } from './experiment-trace-span-type-icon';
+import { ExperimentTraceTimelineStructureSign } from './experiment-trace-timeline-structure-sign';
+import { cn } from '@/lib/utils';
 
 type ExperimentTraceTimelineNameColProps = {
   span: ExperimentUISpan;

@@ -1,20 +1,21 @@
-import { ReactNode, useEffect, useState } from 'react';
+import { jsonLanguage } from '@codemirror/lang-json';
+import CodeMirror from '@uiw/react-codemirror';
+import { Braces, CopyIcon, ExternalLink } from 'lucide-react';
+import type { ReactNode} from 'react';
+import { useEffect, useState } from 'react';
+import { useRequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
-import { toast } from '@/lib/toast';
-import { Txt } from '@/ds/components/Txt';
-import { usePlaygroundStore } from '@/store/playground-store';
 import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
-import CodeMirror from '@uiw/react-codemirror';
-import { jsonLanguage } from '@codemirror/lang-json';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Braces, CopyIcon, ExternalLink } from 'lucide-react';
 import { formatJSON, isValidJson } from '@/lib/formatting';
 import { useLinkComponent } from '@/lib/framework';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select/select';
-import { useRequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
+import { toast } from '@/lib/toast';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export const RequestContext = () => {
   const { requestContext, setRequestContext } = usePlaygroundStore();

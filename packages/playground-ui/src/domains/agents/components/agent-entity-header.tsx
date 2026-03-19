@@ -1,16 +1,16 @@
-import { EntityHeader } from '@/ds/components/EntityHeader';
-import { Badge } from '@/ds/components/Badge';
 import { CopyIcon, Pencil, CopyPlus, Link2, Check } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { useAgent } from '../hooks/use-agent';
-import { useLinkComponent } from '@/lib/framework';
-import { Truncate } from '@/ds/components/Truncate';
-import { AgentSourceIcon } from './agent-source-icon';
-import { useIsCmsAvailable } from '@/domains/cms';
 import { useCloneAgent } from '../hooks/use-clone-agent';
+import { AgentSourceIcon } from './agent-source-icon';
 import { usePermissions } from '@/domains/auth';
+import { useIsCmsAvailable } from '@/domains/cms';
+import { Badge } from '@/ds/components/Badge';
+import { EntityHeader } from '@/ds/components/EntityHeader';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Truncate } from '@/ds/components/Truncate';
+import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface AgentEntityHeaderProps {
   agentId: string;

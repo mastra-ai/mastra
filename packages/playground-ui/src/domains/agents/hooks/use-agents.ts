@@ -1,8 +1,8 @@
-import { usePlaygroundStore } from '@/store/playground-store';
-import { ReorderModelListParams, UpdateModelInModelListParams, UpdateModelParams } from '@mastra/client-js';
+import type { ReorderModelListParams, UpdateModelInModelListParams, UpdateModelParams } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export const useAgents = () => {
   const client = useMastraClient();

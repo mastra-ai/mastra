@@ -1,21 +1,22 @@
-import { GetWorkflowResponse } from '@mastra/client-js';
+import type { GetWorkflowResponse } from '@mastra/client-js';
+import type { ColumnDef} from '@tanstack/react-table';
+import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import React, { useMemo, useState } from 'react';
+import { columns } from './columns';
+import type { WorkflowTableData } from './types';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
-import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
-import { is403ForbiddenError } from '@/lib/query-utils';
-
-import { Icon } from '@/ds/icons/Icon';
-import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React, { useMemo, useState } from 'react';
-
 import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { columns } from './columns';
-import { WorkflowTableData } from './types';
-import { WorkflowCoinIcon, WorkflowIcon } from '@/ds/icons';
-import { useLinkComponent } from '@/lib/framework';
 import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
+
+import { WorkflowCoinIcon, WorkflowIcon } from '@/ds/icons';
+import { Icon } from '@/ds/icons/Icon';
+
+import { useLinkComponent } from '@/lib/framework';
+import { is403ForbiddenError } from '@/lib/query-utils';
 
 export interface WorkflowTableProps {
   workflows: Record<string, GetWorkflowResponse>;

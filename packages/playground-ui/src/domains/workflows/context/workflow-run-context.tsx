@@ -1,12 +1,13 @@
-import { WorkflowRunState, WorkflowStreamResult } from '@mastra/core/workflows';
-import { createContext, useEffect, useMemo, useState, type Dispatch, type SetStateAction, type ReactNode } from 'react';
-import { convertWorkflowRunStateToStreamResult } from '../utils';
+import type { TimeTravelParams } from '@mastra/client-js';
+import type { WorkflowRunState, WorkflowStreamResult } from '@mastra/core/workflows';
 import { useCreateWorkflowRun, useCancelWorkflowRun, useStreamWorkflow } from '@mastra/react';
-import { WorkflowTriggerProps } from '../workflow/workflow-trigger';
-import { useWorkflow, useWorkflowRun } from '@/hooks';
-import { TimeTravelParams } from '@mastra/client-js';
+import { createContext, useEffect, useMemo, useState    } from 'react';
+import type {Dispatch, SetStateAction, ReactNode} from 'react';
+import { convertWorkflowRunStateToStreamResult } from '../utils';
+import type { WorkflowTriggerProps } from '../workflow/workflow-trigger';
 import { WorkflowStepDetailProvider } from './workflow-step-detail-context';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
+import { useWorkflow, useWorkflowRun } from '@/hooks';
 import { toast } from '@/lib/toast';
 
 export type WorkflowRunStreamResult = WorkflowStreamResult<any, any, any, any>;

@@ -1,13 +1,10 @@
 import { Check, ChevronDown, Clock, Info, MessageSquare, Save } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
 
-import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
-import { Spinner } from '@/ds/components/Spinner';
+import { useAgentVersions } from '../../hooks/use-agent-versions';
 import { Badge } from '@/ds/components/Badge';
-import { Txt } from '@/ds/components/Txt';
+import { Button } from '@/ds/components/Button';
 import { Combobox } from '@/ds/components/Combobox';
-import { Input } from '@/ds/components/Input';
 import {
   Dialog,
   DialogContent,
@@ -18,9 +15,12 @@ import {
   DialogFooter,
 } from '@/ds/components/Dialog';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { Input } from '@/ds/components/Input';
 import { Label } from '@/ds/components/Label';
 import { HoverPopover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
-import { useAgentVersions } from '../../hooks/use-agent-versions';
+import { Spinner } from '@/ds/components/Spinner';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
 
 interface AgentPlaygroundVersionBarProps {
   agentId: string;

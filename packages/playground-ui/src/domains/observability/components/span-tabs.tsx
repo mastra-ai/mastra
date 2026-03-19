@@ -1,20 +1,22 @@
+import type { GetScorerResponse } from '@mastra/client-js';
+import type { ListScoresResponse } from '@mastra/core/evals';
+import { EntityType } from '@mastra/core/observability';
+import type { SpanRecord } from '@mastra/core/storage';
+import { CircleGaugeIcon } from 'lucide-react';
+import { SpanDetails } from './span-details';
+import { TraceSpanUsage  } from './trace-span-usage';
+import type {TokenUsage} from './trace-span-usage';
 import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
+import type {
+  KeyValueListItemData} from '@/index';
 import {
   KeyValueList,
-  KeyValueListItemData,
   Section,
   Sections,
   SpanScoring,
   SpanScoreList,
   useLinkComponent,
 } from '@/index';
-import { TraceSpanUsage, type TokenUsage } from './trace-span-usage';
-import { SpanDetails } from './span-details';
-import { CircleGaugeIcon } from 'lucide-react';
-import type { ListScoresResponse } from '@mastra/core/evals';
-import type { GetScorerResponse } from '@mastra/client-js';
-import { SpanRecord } from '@mastra/core/storage';
-import { EntityType } from '@mastra/core/observability';
 
 type SpanTabsProps = {
   trace?: SpanRecord;

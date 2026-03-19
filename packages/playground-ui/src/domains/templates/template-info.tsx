@@ -1,7 +1,8 @@
+import { Link, PackageIcon, GitBranchIcon, InfoIcon } from 'lucide-react';
+import { KeyValueList  } from '@/ds/components/KeyValueList';
+import type {KeyValueListItemData} from '@/ds/components/KeyValueList';
 import { GithubIcon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
-import { Link, PackageIcon, GitBranchIcon, InfoIcon } from 'lucide-react';
-import { KeyValueList, type KeyValueListItemData } from '@/ds/components/KeyValueList';
 
 type TemplateInfoProps = {
   title?: string;

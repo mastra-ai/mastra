@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useCallback } from 'react';
-import { useForm, FormProvider, DefaultValues } from 'react-hook-form';
 import { parseSchema, getDefaultValues } from '@autoform/core';
-import { AutoFormProps, AutoFormProvider } from '@autoform/react';
+import type { AutoFormProps} from '@autoform/react';
+import { AutoFormProvider } from '@autoform/react';
+import { useEffect, useMemo, useCallback } from 'react';
+import type { DefaultValues } from 'react-hook-form';
+import { useForm, FormProvider } from 'react-hook-form';
 import { CustomAutoFormField } from './components/custom-auto-form-field';
 import { removeEmptyValues } from './utils';
 

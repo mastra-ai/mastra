@@ -1,11 +1,11 @@
-import { useMemo } from 'react';
 import { v4 as uuid } from '@lukeed/uuid';
+import { useMemo } from 'react';
 
-import { Txt } from '@/ds/components/Txt';
-import { AgentChat } from '../agent-chat';
 import { AgentSettingsProvider } from '../../context/agent-context';
-import { DatasetSaveProvider } from '@/lib/ai-ui/context/dataset-save-context';
+import { AgentChat } from '../agent-chat';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { Txt } from '@/ds/components/Txt';
+import { DatasetSaveProvider } from '@/lib/ai-ui/context/dataset-save-context';
 
 interface AgentPlaygroundTestChatProps {
   agentId: string;

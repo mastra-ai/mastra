@@ -8,7 +8,7 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { WorkflowGraphInner } from './workflow-graph-inner';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useContext } from 'react';
-import { GetWorkflowResponse } from '@mastra/client-js';
+import type { GetWorkflowResponse } from '@mastra/client-js';
 
 export interface WorkflowGraphProps {
   workflowId: string;

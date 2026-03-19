@@ -1,27 +1,27 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { Play, CheckCircle, XCircle, Clock, Loader2, ChevronDown, ChevronRight, ArrowLeft } from 'lucide-react';
 import { useState, useCallback, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 
+import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { useAgentExperiments } from '../../hooks/use-agent-experiments';
+import type { AgentExperiment } from '../../hooks/use-agent-experiments';
+import { DatasetCombobox } from '@/domains/datasets/components/dataset-combobox';
+import { ScorerSelector } from '@/domains/datasets/components/experiment-trigger/scorer-selector';
+import { useDatasetExperimentResults, useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { LLMProviders, LLMModels } from '@/domains/llm';
+import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
 import { Spinner } from '@/ds/components/Spinner';
 import { Label } from '@/ds/components/Label';
 import { Txt } from '@/ds/components/Txt';
-import { Badge } from '@/ds/components/Badge';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible/collapsible';
 import { CopyButton } from '@/ds/components/CopyButton/copy-button';
-import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
-import { DatasetCombobox } from '@/domains/datasets/components/dataset-combobox';
-import { ScorerSelector } from '@/domains/datasets/components/experiment-trigger/scorer-selector';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
-import { useDatasetExperimentResults, useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
-import { LLMProviders, LLMModels } from '@/domains/llm';
-import { useAgentExperiments } from '../../hooks/use-agent-experiments';
-import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-import type { AgentExperiment } from '../../hooks/use-agent-experiments';
+import { cn } from '@/lib/utils';
 
 interface AgentPlaygroundEvalProps {
   agentId: string;

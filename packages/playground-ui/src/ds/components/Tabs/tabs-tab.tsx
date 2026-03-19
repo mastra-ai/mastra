@@ -1,8 +1,7 @@
-import { cn } from '@/lib/utils';
 import * as RadixTabs from '@radix-ui/react-tabs';
 import { X } from 'lucide-react';
-import { transitions } from '@/ds/primitives/transitions';
-import { focusRing } from '@/ds/primitives/transitions';
+import { transitions, focusRing  } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export type TabProps = {
   children: React.ReactNode;

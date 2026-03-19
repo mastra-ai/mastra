@@ -1,20 +1,21 @@
+import type { ColumnDef} from '@tanstack/react-table';
+import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import { Cpu } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import type { ProcessorInfo } from '../../hooks/use-processors';
+import { columns } from './columns';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
-import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
-import { is403ForbiddenError } from '@/lib/query-utils';
-import { Icon } from '@/ds/icons/Icon';
-import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React, { useMemo, useState } from 'react';
-import { Cpu } from 'lucide-react';
-
 import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { columns } from './columns';
-import { useLinkComponent } from '@/lib/framework';
-import { TooltipProvider } from '@/ds/components/Tooltip';
 import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
-import type { ProcessorInfo } from '../../hooks/use-processors';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
+import { TooltipProvider } from '@/ds/components/Tooltip';
+import { Icon } from '@/ds/icons/Icon';
+import { is403ForbiddenError } from '@/lib/query-utils';
+
+import { useLinkComponent } from '@/lib/framework';
 
 export interface ProcessorTableProps {
   processors: Record<string, ProcessorInfo>;

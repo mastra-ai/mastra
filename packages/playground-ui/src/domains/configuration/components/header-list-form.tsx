@@ -1,10 +1,10 @@
-import { Button } from '@/ds/components/Button/Button';
-import { useId } from 'react';
 
 import { Plus, Trash } from 'lucide-react';
-import { Txt } from '@/ds/components/Txt/Txt';
+import { useId } from 'react';
 import { ButtonWithTooltip } from '@/ds/components/Button';
+import { Button } from '@/ds/components/Button/Button';
 import { TextFieldBlock } from '@/ds/components/FormFieldBlocks/fields/text-field-block';
+import { Txt } from '@/ds/components/Txt/Txt';
 
 export type HeaderListFormItem = {
   name: string;

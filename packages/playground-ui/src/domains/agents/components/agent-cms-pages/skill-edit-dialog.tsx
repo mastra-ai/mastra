@@ -1,16 +1,16 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { StoredSkillResponse } from '@mastra/client-js';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 
-import { SideDialog } from '@/ds/components/SideDialog/side-dialog';
-import { Input } from '@/ds/components/Input/input';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
-import { useWorkspaces } from '@/domains/workspace/hooks';
 
-import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
 import { useCreateSkill } from '../../hooks/use-create-skill';
+import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
 import { createInitialStructure, updateRootFolderName } from './skill-file-tree';
 import { SkillFolder } from './skill-folder';
+import { useWorkspaces } from '@/domains/workspace/hooks';
+import { Button } from '@/ds/components/Button';
+import { Input } from '@/ds/components/Input/input';
+import { SideDialog } from '@/ds/components/SideDialog/side-dialog';
+import { Txt } from '@/ds/components/Txt';
 
 export interface SkillEditDialogProps {
   isOpen: boolean;

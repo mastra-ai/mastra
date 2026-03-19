@@ -1,20 +1,21 @@
-import { useMemo, useState } from 'react';
-import { useWatch } from 'react-hook-form';
-import { LaptopMinimal, PlusIcon, XIcon } from 'lucide-react';
 
 import type { StoredMCPServerConfig } from '@mastra/client-js';
+import { LaptopMinimal, PlusIcon, XIcon } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useWatch } from 'react-hook-form';
 
-import { Icon, McpServerIcon } from '@/ds/icons';
-import { Button } from '@/ds/components/Button';
-import { Section } from '@/ds/components/Section';
-import { Entity, EntityContent, EntityDescription, EntityName } from '@/ds/components/Entity';
-import { SideDialog } from '@/ds/components/SideDialog';
 
+import { MCPClientCreateContent  } from '../mcp-client-create';
+import type {MCPClientFormValues} from '../mcp-client-create';
 import { useAgentEditFormContext } from '@/domains/agents/context/agent-edit-form-context';
-import { MCPClientCreateContent, type MCPClientFormValues } from '../mcp-client-create';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
+import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { Entity, EntityContent, EntityDescription, EntityName } from '@/ds/components/Entity';
+import { Section } from '@/ds/components/Section';
 import { SubSectionRoot } from '@/ds/components/Section/section-root';
+import { SideDialog } from '@/ds/components/SideDialog';
+import { Icon, McpServerIcon } from '@/ds/icons';
 import { stringToColor } from '@/lib/colors';
 
 function mcpClientToFormValues(mcpClient: {

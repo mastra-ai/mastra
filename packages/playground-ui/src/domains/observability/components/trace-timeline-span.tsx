@@ -1,9 +1,9 @@
-import { type UISpan } from '../types';
 import { useEffect, useState } from 'react';
-import { getSpanTypeUi } from './shared';
+import type {UISpan} from '../types';
 import { getSpanDescendantIds } from '../utils/get-descendant-ids';
-import { TimelineNameCol } from './timeline-name-col';
+import { getSpanTypeUi } from './shared';
 import { TimelineExpandCol } from './timeline-expand-col';
+import { TimelineNameCol } from './timeline-name-col';
 import { TimelineTimingCol } from './timeline-timing-col';
 
 type TraceTimelineSpanProps = {

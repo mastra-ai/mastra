@@ -1,4 +1,4 @@
-import { AttachmentAdapter, PendingAttachment, CompleteAttachment } from '@assistant-ui/react';
+import type { AttachmentAdapter, PendingAttachment, CompleteAttachment } from '@assistant-ui/react';
 
 export class PDFAttachmentAdapter implements AttachmentAdapter {
   public accept = 'application/pdf';

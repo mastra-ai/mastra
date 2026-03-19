@@ -1,18 +1,18 @@
-import { useState, useMemo } from 'react';
-import { FileJson, FormInput } from 'lucide-react';
-
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons/Icon';
-import { CopyButton } from '@/ds/components/CopyButton';
-import { DynamicForm } from '@/lib/form';
-import { resolveSerializedZodOutput } from '@/lib/form/utils';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
-import { cn } from '@/lib/utils';
+import { FileJson, FormInput } from 'lucide-react';
+import { useState, useMemo } from 'react';
+
+import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { RequestContext } from '../request-context';
 import { RequestContextSchemaForm } from '@/domains/request-context/components/request-context-schema-form';
 import { useSchemaRequestContext } from '@/domains/request-context/context/schema-request-context';
-import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { CopyButton } from '@/ds/components/CopyButton';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
+import { DynamicForm } from '@/lib/form';
+import { resolveSerializedZodOutput } from '@/lib/form/utils';
+import { cn } from '@/lib/utils';
 
 interface AgentPlaygroundRequestContextProps {
   requestContextSchema?: string;

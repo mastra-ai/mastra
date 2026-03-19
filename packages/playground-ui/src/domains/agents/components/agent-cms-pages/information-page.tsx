@@ -1,15 +1,15 @@
 import { Controller } from 'react-hook-form';
 
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Input } from '@/ds/components/Input';
-import { Textarea } from '@/ds/components/Textarea';
-import { Label } from '@/ds/components/Label';
-import { SectionHeader } from '@/domains/cms';
-import { LLMProviders, LLMModels } from '@/domains/llm';
-
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { SectionRoot, SubSectionRoot } from '@/ds/components/Section/section-root';
+import { SectionHeader } from '@/domains/cms';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
+import { LLMProviders, LLMModels } from '@/domains/llm';
+import { Input } from '@/ds/components/Input';
+import { Label } from '@/ds/components/Label';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { SectionRoot, SubSectionRoot } from '@/ds/components/Section/section-root';
+import { Textarea } from '@/ds/components/Textarea';
+
 
 export function InformationPage() {
   const { form, readOnly } = useAgentEditFormContext();

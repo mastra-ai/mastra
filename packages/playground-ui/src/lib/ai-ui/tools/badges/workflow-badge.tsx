@@ -1,22 +1,23 @@
-import { WorkflowIcon } from '@/ds/icons';
-import { GetWorkflowResponse } from '@mastra/client-js';
+import type { GetWorkflowResponse } from '@mastra/client-js';
 
+
+
+
+import type { MastraUIMessage } from '@mastra/react';
 import { useContext, useEffect } from 'react';
-
-import { WorkflowGraph, WorkflowRunContext, WorkflowRunProvider } from '@/domains/workflows';
-import { useLinkComponent } from '@/lib/framework';
-import { Button } from '@/ds/components/Button';
-
-import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
-
 import { BadgeWrapper } from './badge-wrapper';
-import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
-import { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-run-context';
-import { MastraUIMessage } from '@mastra/react';
 import { LoadingBadge } from './loading-badge';
-import { useWorkflow } from '@/hooks';
-import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
+import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
+import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
+import { ToolApprovalButtons } from './tool-approval-buttons';
+import { WorkflowGraph, WorkflowRunContext, WorkflowRunProvider } from '@/domains/workflows';
+import type { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-run-context';
+import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
+import { WorkflowIcon } from '@/ds/icons';
+import { useWorkflow } from '@/hooks';
+import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface WorkflowBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   workflowId: string;

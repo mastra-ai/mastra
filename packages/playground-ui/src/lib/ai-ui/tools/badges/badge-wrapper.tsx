@@ -1,9 +1,8 @@
+import { ChevronUpIcon } from 'lucide-react';
+import { useEffect, useState  } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
-import { ChevronUpIcon } from 'lucide-react';
-import { useEffect } from 'react';
-import { useState } from 'react';
 
 export interface BadgeWrapperProps {
   children?: React.ReactNode;

@@ -1,19 +1,21 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
+import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
-import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { forwardRef, type HTMLAttributes, useMemo } from 'react';
+import CodeMirror from '@uiw/react-codemirror';
+import type {ReactCodeMirrorRef} from '@uiw/react-codemirror';
+import { forwardRef,  useMemo } from 'react';
+import type {HTMLAttributes} from 'react';
+import { createVariableAutocomplete } from './variable-autocomplete-extension';
+import { variableHighlight } from './variable-highlight-extension';
+import { CopyButton } from '@/ds/components/CopyButton';
+import type { JsonSchema } from '@/lib/json-schema';
 import { cn } from '@/lib/utils';
 
-import type { Extension } from '@codemirror/state';
-import type { JsonSchema } from '@/lib/json-schema';
 
-import { CopyButton } from '@/ds/components/CopyButton';
-import { variableHighlight } from './variable-highlight-extension';
-import { createVariableAutocomplete } from './variable-autocomplete-extension';
 
 export type CodeEditorLanguage = 'json' | 'markdown';
 

@@ -1,20 +1,20 @@
 import { ChevronDown, ChevronRight, Wrench, Cpu, Eye, Pencil, PlusIcon, XIcon } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons/Icon';
-import { Badge } from '@/ds/components/Badge';
-import { Spinner } from '@/ds/components/Spinner';
-import { HoverPopover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
-import { cn } from '@/lib/utils';
-
-import { InstructionBlocksPage } from '../agent-cms-pages/instruction-blocks-page';
-import { ToolsPage } from '../agent-cms-pages/tools-page';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { useCompareAgentVersions } from '../../hooks/use-agent-versions';
 import { usePreviewInstructions } from '../../hooks/use-preview-instructions';
+import { InstructionBlocksPage } from '../agent-cms-pages/instruction-blocks-page';
+import { ToolsPage } from '../agent-cms-pages/tools-page';
+import { Badge } from '@/ds/components/Badge';
+import { HoverPopover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Spinner } from '@/ds/components/Spinner';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
 import type { JsonSchema } from '@/lib/json-schema';
+import { cn } from '@/lib/utils';
+
 
 // ---------------------------------------------------------------------------
 // Collapsible section

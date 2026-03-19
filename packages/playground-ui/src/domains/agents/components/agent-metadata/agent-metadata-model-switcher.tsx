@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
-import { Spinner } from '@/ds/components/Spinner';
+import type { UpdateModelParams} from '@mastra/client-js';
+import { Provider } from '@mastra/client-js';
 import { RotateCcw } from 'lucide-react';
-import { UpdateModelParams, Provider } from '@mastra/client-js';
+import { useState, useEffect } from 'react';
 import { useModelReset } from '../../context/model-reset-context';
+import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
 import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
 import { Button } from '@/ds/components/Button';
-import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
+import { Spinner } from '@/ds/components/Spinner';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;

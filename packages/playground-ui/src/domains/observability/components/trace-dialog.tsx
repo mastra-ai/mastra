@@ -1,10 +1,6 @@
-import { cn } from '@/lib/utils';
-import { SideDialog } from '@/ds/components/SideDialog';
-import { KeyValueList } from '@/ds/components/KeyValueList';
-import { TextAndIcon, getShortId } from '@/ds/components/Text';
-import { Section } from '@/ds/components/Section';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { Sections } from '@/ds/components/Sections';
+import type {GetScorerResponse} from '@mastra/client-js';
+import type { SpanRecord } from '@mastra/core/storage';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import {
   PanelLeftIcon,
   HashIcon,
@@ -16,21 +12,25 @@ import {
   SaveIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { TraceTimeline } from './trace-timeline';
-import { useLinkComponent } from '@/lib/framework';
-import { SpanRecord } from '@mastra/core/storage';
 import { getSpanInfo, useTraceInfo } from './helpers';
+import { TraceTimeline } from './trace-timeline';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { KeyValueList } from '@/ds/components/KeyValueList';
+import { SideDialog } from '@/ds/components/SideDialog';
+import { TextAndIcon, getShortId } from '@/ds/components/Text';
+import { Section } from '@/ds/components/Section';
+import { Sections } from '@/ds/components/Sections';
+import { Icon } from '@/ds/icons/Icon';
+import { useLinkComponent } from '@/lib/framework';
 import { SpanDialog } from './span-dialog';
 import { TraceAsItemDialog } from './trace-as-item-dialog';
 import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
-import { type UISpan, type UISpanState } from '../types';
+import type {UISpan, UISpanState} from '../types';
 import { TraceTimelineTools } from './trace-timeline-tools';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
 import { Button } from '@/ds/components/Button/Button';
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { SpanTabs } from './span-tabs';
-import { type GetScorerResponse } from '@mastra/client-js';
-import { Icon } from '@/ds/icons/Icon';
+import { cn } from '@/lib/utils';
 
 type TraceDialogProps = {
   traceSpans?: SpanRecord[];

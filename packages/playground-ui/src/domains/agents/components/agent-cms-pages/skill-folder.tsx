@@ -1,11 +1,11 @@
 import { useState, useCallback, useMemo } from 'react';
 
-import { Combobox } from '@/ds/components/Combobox/combobox';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { Txt } from '@/ds/components/Txt';
-
 import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
 import { SkillFileTree, updateNodeContent, isImageContent } from './skill-file-tree';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Combobox } from '@/ds/components/Combobox/combobox';
+import { Txt } from '@/ds/components/Txt';
+
 
 function findFileContent(nodes: InMemoryFileNode[], fileId: string): string | undefined {
   for (const node of nodes) {

@@ -1,8 +1,8 @@
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
+import clsx from 'clsx';
 import * as React from 'react';
 
-import clsx from 'clsx';
 
 const textareaVariants = cva(
   'flex w-full text-neutral6 rounded-lg border bg-transparent shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 resize-none',

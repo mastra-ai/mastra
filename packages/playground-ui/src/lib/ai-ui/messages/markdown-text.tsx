@@ -1,18 +1,20 @@
+import type {
+  CodeHeaderProps} from '@assistant-ui/react-markdown';
 import {
-  CodeHeaderProps,
   MarkdownTextPrimitive,
   unstable_memoizeMarkdownComponents as memoizeMarkdownComponents,
   useIsMarkdownCodeBlock,
 } from '@assistant-ui/react-markdown';
 import '@assistant-ui/react-markdown/styles/dot.css';
+import { makePrismLightSyntaxHighlighter } from '@assistant-ui/react-syntax-highlighter';
 import { CheckIcon, CopyIcon } from 'lucide-react';
-import { FC, ImgHTMLAttributes, memo, useEffect, useState } from 'react';
+import type { FC, ImgHTMLAttributes} from 'react';
+import { memo, useEffect, useState } from 'react';
+import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import remarkGfm from 'remark-gfm';
+import { useCopyToClipboard } from '../hooks/use-copy-to-clipboard';
 import { IconButton } from '@/ds/components/IconButton';
 import { cn } from '@/lib/utils';
-import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
-import { makePrismLightSyntaxHighlighter } from '@assistant-ui/react-syntax-highlighter';
-import { useCopyToClipboard } from '../hooks/use-copy-to-clipboard';
 
 const SyntaxHighlighter = makePrismLightSyntaxHighlighter({
   style: coldarkDark,

@@ -2,10 +2,11 @@ import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 
-import { cn } from '@/lib/utils';
-import { type FormElementSize } from '@/ds/primitives/form-element';
+import type { ButtonProps} from '../Button';
+import { buttonVariants } from '../Button';
+import type {FormElementSize} from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
-import { ButtonProps, buttonVariants } from '../Button';
+import { cn } from '@/lib/utils';
 
 const Select = SelectPrimitive.Root;
 

@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
+import { useDatasetMutations } from '../hooks/use-dataset-mutations';
+import { SchemaConfigSection } from './schema-config-section';
 import { Button } from '@/ds/components/Button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
 import { Input } from '@/ds/components/Input';
 import { Label } from '@/ds/components/Label';
 import { toast } from '@/lib/toast';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
-import { SchemaConfigSection } from './schema-config-section';
 
 export interface CreateDatasetDialogProps {
   open: boolean;

@@ -1,19 +1,20 @@
+import { ChevronDownIcon, FileText, PenLine, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
-import { ContentBlocks } from '@/ds/components/ContentBlocks';
-import { cn } from '@/lib/utils';
 
-import { AgentCMSBlock } from './agent-cms-block';
-import type { JsonSchema } from '@/lib/rule-engine';
 import {
   createInstructionBlock,
-  createRefInstructionBlock,
-  type InstructionBlock,
+  createRefInstructionBlock
+  
 } from '../agent-edit-page/utils/form-validation';
-import { ChevronDownIcon, FileText, PenLine, PlusIcon } from 'lucide-react';
-import { Icon } from '@/ds/icons';
-import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import type {InstructionBlock} from '../agent-edit-page/utils/form-validation';
+import { AgentCMSBlock } from './agent-cms-block';
 import { PromptBlockPickerDialog } from './prompt-block-picker-dialog';
 import { Button } from '@/ds/components/Button';
+import { ContentBlocks } from '@/ds/components/ContentBlocks';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { Icon } from '@/ds/icons';
+import type { JsonSchema } from '@/lib/rule-engine';
+import { cn } from '@/lib/utils';
 
 export interface AgentCMSBlocksProps {
   items: Array<InstructionBlock>;

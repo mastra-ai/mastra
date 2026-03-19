@@ -1,12 +1,13 @@
+import { Plus, PlusIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
-import { Plus, PlusIcon } from 'lucide-react';
-
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { JSONSchemaForm, type SchemaField, jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
-import type { JsonSchema } from '@/lib/json-schema';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { JSONSchemaForm,  jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
+import type {SchemaField} from '@/ds/components/JSONSchemaForm';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import type { JsonSchema } from '@/lib/json-schema';
+
 
 function RecursiveFieldRenderer({
   field,

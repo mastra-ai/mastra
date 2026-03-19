@@ -1,10 +1,11 @@
 import { CopyIcon, CheckIcon } from 'lucide-react';
 import { useState } from 'react';
 
+import type { ButtonProps } from '../Button';
+import { Button } from '../Button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Button, ButtonProps } from '../Button';
 
 export type CopyButtonProps = {
   content: string;
