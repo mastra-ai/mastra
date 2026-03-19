@@ -150,9 +150,9 @@ export class DockerSandbox extends MastraSandbox {
     this._privileged = options.privileged ?? false;
     this._workingDir = options.workingDir ?? '/workspace';
     this._labels = {
+      ...options.labels,
       'mastra.sandbox': 'true',
       'mastra.sandbox.id': this.id,
-      ...options.labels,
     };
     this._instructionsOverride = options.instructions;
     this._docker = new Docker(options.dockerOptions);
@@ -231,11 +231,12 @@ export class DockerSandbox extends MastraSandbox {
   }
 
   async stop(): Promise<void> {
-    if (!this._container) return;
+    const container = await this._resolveContainer();
+    if (!container) return;
 
-    this.logger.debug(`${LOG_PREFIX} Stopping container ${this._container.id}...`);
+    this.logger.debug(`${LOG_PREFIX} Stopping container ${container.id}...`);
     try {
-      await this._container.stop({ t: 10 });
+      await container.stop({ t: 10 });
     } catch (error: unknown) {
       // Container may already be stopped
       if (!isContainerNotRunningError(error)) {
@@ -247,11 +248,12 @@ export class DockerSandbox extends MastraSandbox {
   }
 
   async destroy(): Promise<void> {
-    if (!this._container) return;
+    const container = await this._resolveContainer();
+    if (!container) return;
 
-    this.logger.debug(`${LOG_PREFIX} Destroying container ${this._container.id}...`);
+    this.logger.debug(`${LOG_PREFIX} Destroying container ${container.id}...`);
     try {
-      await this._container.remove({ force: true, v: true });
+      await container.remove({ force: true, v: true });
     } catch (error: unknown) {
       // Container may already be removed
       if (!isContainerNotFoundError(error)) {
@@ -322,6 +324,19 @@ export class DockerSandbox extends MastraSandbox {
 
   private _generateId(): string {
     return `docker-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  /**
+   * Resolve the container reference, looking up by label if `_container` is unset.
+   * This ensures `stop()` and `destroy()` work even when the instance was created
+   * with an existing container's ID but `start()` was never called.
+   */
+  private async _resolveContainer(): Promise<Container | null> {
+    if (this._container) return this._container;
+    const existing = await this._findExistingContainer();
+    if (!existing) return null;
+    this._container = this._docker.getContainer(existing.Id);
+    return this._container;
   }
 
   /**
