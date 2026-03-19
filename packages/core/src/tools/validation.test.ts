@@ -1383,6 +1383,42 @@ describe('validateToolInput - Null Stripping for Optional Fields (GitHub #12362)
       level1: { level2: { required: 'present' } },
     });
   });
+
+  it('should strip null values even when the error message does not contain "null" (GitHub #14476)', () => {
+    // When a field is null but the schema expects a string, Zod may produce
+    // "Invalid input: expected string, received null" or just "Expected string, received null".
+    // But with some schemas/versions the word "null" may not appear in the message
+    // (e.g. "must be string"). The fix checks the actual input value instead of the message.
+    const schema = z.object({
+      name: z.string(),
+      title: z.string().optional(),
+    });
+
+    // LLM sends null for an optional string field — the error message for this
+    // may or may not contain "null" depending on the validator, but the value IS null.
+    const input = { name: 'Alice', title: null };
+
+    const result = validateToolInput(schema, input);
+
+    // The null at 'title' should be stripped regardless of what the error message says
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'Alice' });
+  });
+
+  it('should strip null values detected by value check when error says "null" (existing behavior preserved)', () => {
+    const schema = z.object({
+      id: z.number(),
+      description: z.string().optional(),
+    });
+
+    // null for optional field — standard Zod error will mention "null"
+    const input = { id: 42, description: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ id: 42 });
+  });
 });
 
 describe('validateToolInput - Absent Optional Fields in Nested Objects (GitHub #13518)', () => {
