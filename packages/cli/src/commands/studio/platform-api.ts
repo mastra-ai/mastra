@@ -87,7 +87,7 @@ export async function uploadDeploy(
     body: JSON.stringify({ envVars: meta?.envVars }),
   });
   if (!createResp.ok) {
-    const body: { detail?: string } = await createResp.json().catch(() => ({}));
+    const body = (await createResp.json().catch(() => ({}))) as { detail?: string };
     throwApiError('Deploy failed', createResp.status, body.detail);
   }
   const { deploy } = (await createResp.json()) as {
@@ -117,7 +117,7 @@ export async function uploadDeploy(
     headers: authHeaders(token, orgId),
   });
   if (!completeResp.ok) {
-    const body: { detail?: string } = await completeResp.json().catch(() => ({}));
+    const body = (await completeResp.json().catch(() => ({}))) as { detail?: string };
     throwApiError('Upload confirmation failed', completeResp.status, body.detail);
   }
 
