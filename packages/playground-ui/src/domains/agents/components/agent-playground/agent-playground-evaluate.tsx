@@ -146,6 +146,7 @@ export function AgentPlaygroundEvaluate({
         });
       } catch (e) {
         console.error('Failed to persist scorer change:', e);
+        toast.error('Failed to save scorer changes');
       }
     },
     [form, updateStoredAgent],
@@ -631,10 +632,14 @@ export function AgentPlaygroundEvaluate({
                       key={id}
                       type="button"
                       className="w-full text-left px-3 py-2 rounded hover:bg-surface4 transition-colors"
-                      onClick={() => {
-                        attachScorer(id, scorer);
-                        toast.success(`Attached "${scorer.scorer?.name || id}" to this agent`);
-                        setShowAttachScorerDialog(false);
+                      onClick={async () => {
+                        try {
+                          await attachScorer(id, scorer);
+                          toast.success(`Attached "${scorer.scorer?.name || id}" to this agent`);
+                          setShowAttachScorerDialog(false);
+                        } catch {
+                          toast.error(`Failed to attach "${scorer.scorer?.name || id}"`);
+                        }
                       }}
                     >
                       <Txt variant="ui-sm" className="font-medium">
