@@ -297,6 +297,7 @@ export interface ToolOptions extends Partial<ObservabilityContext> {
   tracingPolicy?: TracingPolicy;
   memory?: MastraMemory;
   agentName?: string;
+  agentId?: string;
   model?: MastraLanguageModel | MastraLegacyLanguageModel;
   /**
    * Optional async writer used to stream tool output chunks back to the caller. Tools should treat this as fire-and-forget I/O.
