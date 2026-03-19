@@ -1589,6 +1589,50 @@ _range: \`m3:m4\`_
 - 🟡 Needs help with auth flow`);
     });
 
+    it('should preserve ungrouped text in order when mixed with observation groups', () => {
+      const observations = `## Monday Jan 6
+
+- Legacy observation from before retrieval was enabled
+
+<observation-group id="group-a" range="m1:m2">
+- 🔴 User is building a React app
+</observation-group>
+
+## Tuesday Jan 7
+
+- Another legacy note added mid-stream
+
+<observation-group id="group-b" range="m3:m4">
+- 🟡 Needs help with auth flow
+</observation-group>
+
+- Final ungrouped note`;
+
+      const rendered = renderObservationGroupsForReflection(observations)!;
+
+      // Ungrouped text and groups must appear in original order
+      const mondayIdx = rendered.indexOf('## Monday Jan 6');
+      const groupAIdx = rendered.indexOf('## Group `group-a`');
+      const tuesdayIdx = rendered.indexOf('## Tuesday Jan 7');
+      const groupBIdx = rendered.indexOf('## Group `group-b`');
+      const finalIdx = rendered.indexOf('Final ungrouped note');
+
+      expect(mondayIdx).toBeGreaterThanOrEqual(0);
+      expect(groupAIdx).toBeGreaterThan(mondayIdx);
+      expect(tuesdayIdx).toBeGreaterThan(groupAIdx);
+      expect(groupBIdx).toBeGreaterThan(tuesdayIdx);
+      expect(finalIdx).toBeGreaterThan(groupBIdx);
+
+      // Legacy content preserved verbatim
+      expect(rendered).toContain('Legacy observation from before retrieval was enabled');
+      expect(rendered).toContain('Another legacy note added mid-stream');
+      expect(rendered).toContain('Final ungrouped note');
+
+      // Groups still rendered with metadata
+      expect(rendered).toContain('_range: `m1:m2`_');
+      expect(rendered).toContain('_range: `m3:m4`_');
+    });
+
     it('should derive merged group provenance from reflection edits', () => {
       const sourceObservations = `<observation-group id="group-a" range="m1:m2">
 - 🔴 User is building a React app

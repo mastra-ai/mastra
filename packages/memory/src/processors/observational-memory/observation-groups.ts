@@ -129,7 +129,16 @@ export function renderObservationGroupsForReflection(observations: string): stri
     return null;
   }
 
-  return groups.map(group => `## Group \`${group.id}\`\n_range: \`${group.range}\`_\n\n${group.content}`).join('\n\n');
+  // Walk the string positionally: keep ungrouped text in place, replace each
+  // <observation-group> tag with the rendered ## Group heading.
+  const groupsByContent = new Map(groups.map(g => [g.content.trim(), g]));
+  const result = observations.replace(OBSERVATION_GROUP_PATTERN, (_match, _attrs: string, content: string) => {
+    const group = groupsByContent.get(content.trim());
+    if (!group) return content.trim();
+    return `## Group \`${group.id}\`\n_range: \`${group.range}\`_\n\n${group.content}`;
+  });
+
+  return result.replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function getCanonicalGroupId(sectionHeading: string, fallbackIndex: number): string {
