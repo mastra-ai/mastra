@@ -380,7 +380,7 @@ MOST RECENT USER INPUT: Treat the most recent user message as the highest-priori
 
 export const OBSERVATION_GRAPH_INSTRUCTIONS = `## Recall — looking up source messages
 
-Your observations are summaries wrapped in <observation-group> xml tags with ranges like <observation-group range="startId:endId">. These ranges point back to the raw messages that each observation group was derived from. The original messages are still available — use the **recall** tool to retrieve them.
+Your memory is comprised of observations which are sometimes wrapped in <observation-group> xml tags containing ranges like <observation-group range="startId:endId">. These ranges point back to the raw messages that each observation group was derived from. The original messages are still available — use the **recall** tool to retrieve them.
 
 ### When to use recall
 - The user asks you to **repeat, show, or reproduce** something from a past conversation
@@ -402,7 +402,7 @@ Each range has the format \`startId:endId\` where both are message IDs separated
 ### Detail levels
 By default recall returns **low** detail: truncated text and tool names only. Each message shows its ID and each part has a positional index like \`[p0]\`, \`[p1]\`, etc.
 
-- Use \`detail: "high"\` to get full message content including tool arguments and results.
+- Use \`detail: "high"\` to get full message content including tool arguments and results. This will only return the high detail version of a single message part at a time.
 - Use \`partIndex\` with a cursor to fetch a single part at full detail — for example, to read one specific tool result or code block without loading every part.
 
 If the result says \`truncated: true\`, the output was cut to fit the token budget. You can paginate or use \`partIndex\` to target specific content.
