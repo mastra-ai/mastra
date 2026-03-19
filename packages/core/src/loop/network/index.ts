@@ -10,7 +10,7 @@ import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraLLMVNext } from '../../llm/model/model.loop';
 import { noopLogger } from '../../logger';
-import type { ObservabilityContext, TracingContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
 import { createObservabilityContext, resolveObservabilityContext } from '../../observability';
 import { ProcessorRunner } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
@@ -307,7 +307,7 @@ export async function prepareMemoryStep({
               resourceId: thread?.resourceId,
             },
           ] as MastraDBMessage[],
-          tracingContext: observabilityContext.tracingContext,
+          observabilityContext,
         }),
       );
     }
@@ -323,7 +323,7 @@ export async function prepareMemoryStep({
       promises.push(
         memory.saveMessages({
           messages: messagesToSave,
-          tracingContext: observabilityContext.tracingContext,
+          observabilityContext,
         }),
       );
     }
@@ -352,7 +352,7 @@ export async function prepareMemoryStep({
       const existingMessages = await memory.recall({
         threadId: thread.id,
         resourceId: thread.resourceId,
-        tracingContext: observabilityContext.tracingContext,
+        observabilityContext,
       });
       const existingUserMessages = existingMessages.messages.filter(m => m.role === 'user');
       const isFirstUserMessage = existingUserMessages.length === 0;
@@ -399,7 +399,7 @@ async function saveMessagesWithProcessors(
     | {
         saveMessages: (params: {
           messages: MastraDBMessage[];
-          tracingContext?: TracingContext;
+          observabilityContext?: Partial<ObservabilityContext>;
         }) => Promise<{ messages: MastraDBMessage[] }>;
       }
     | undefined,
@@ -415,7 +415,7 @@ async function saveMessagesWithProcessors(
   const resolved = resolveObservabilityContext(observabilityContext);
 
   if (!processorRunner || messages.length === 0) {
-    await memory.saveMessages({ messages, tracingContext: resolved.tracingContext });
+    await memory.saveMessages({ messages, observabilityContext: resolved });
     return;
   }
 
@@ -429,7 +429,7 @@ async function saveMessagesWithProcessors(
 
   // Get the processed messages and save them
   const processedMessages = messageList.get.response.db();
-  await memory.saveMessages({ messages: processedMessages, tracingContext: resolved.tracingContext });
+  await memory.saveMessages({ messages: processedMessages, observabilityContext: resolved });
 }
 
 async function saveFinalResultIfProvided({

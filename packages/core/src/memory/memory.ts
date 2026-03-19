@@ -5,7 +5,7 @@ import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model';
 import type { EmbeddingModelId, ModelRouterModelId } from '../llm/model';
 import type { Mastra } from '../mastra';
-import type { TracingContext } from '../observability';
+import type { ObservabilityContext } from '../observability';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -438,7 +438,7 @@ https://mastra.ai/en/docs/memory/overview`,
   abstract saveMessages(args: {
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
-    tracingContext?: TracingContext;
+    observabilityContext?: Partial<ObservabilityContext>;
   }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>;
 
   /**
@@ -453,7 +453,7 @@ https://mastra.ai/en/docs/memory/overview`,
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
-      tracingContext?: TracingContext;
+      observabilityContext?: Partial<ObservabilityContext>;
     },
   ): Promise<{
     messages: MastraDBMessage[];
@@ -578,13 +578,13 @@ https://mastra.ai/en/docs/memory/overview`,
     resourceId,
     workingMemory,
     memoryConfig,
-    tracingContext,
+    observabilityContext,
   }: {
     threadId: string;
     resourceId?: string;
     workingMemory: string;
     memoryConfig?: MemoryConfigInternal;
-    tracingContext?: TracingContext;
+    observabilityContext?: Partial<ObservabilityContext>;
   }): Promise<void>;
 
   /**
@@ -856,7 +856,10 @@ https://mastra.ai/en/docs/memory/overview`,
     return processors;
   }
 
-  abstract deleteMessages(messageIds: MessageDeleteInput, tracingContext?: TracingContext): Promise<void>;
+  abstract deleteMessages(
+    messageIds: MessageDeleteInput,
+    observabilityContext?: Partial<ObservabilityContext>,
+  ): Promise<void>;
 
   /**
    * Clones a thread with all its messages to a new thread
