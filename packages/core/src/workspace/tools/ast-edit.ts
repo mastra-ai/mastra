@@ -516,7 +516,10 @@ Pattern replace (for everything else):
     // Write back if modified
     const wasModified = modifiedContent !== content;
     if (wasModified) {
-      await filesystem.writeFile(path, modifiedContent, { overwrite: true });
+      await filesystem.writeFile(path, modifiedContent, {
+        overwrite: true,
+        expectedMtime: (context as any)?.__expectedMtime,
+      });
     }
 
     if (!wasModified) {
