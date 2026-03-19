@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.2.6-alpha.1
+
+### Patch Changes
+
+- Add support for `draft-2020-12` and `draft-04` JSON Schema targets in the Zod v3 adapter, and fix the `toJSONSchema` target mapping to properly translate all `zod-to-json-schema` target names (like `openApi3`) to standard-schema target names. Fixes "Unsupported JSON Schema target" errors when serializing tool schemas. ([#14471](https://github.com/mastra-ai/mastra/pull/14471))
+
 ## 1.2.6-alpha.0
 
 ### Patch Changes

@@ -1,5 +1,30 @@
 # @mastra/core
 
+## 1.15.0-alpha.1
+
+### Patch Changes
+
+- Added opt-in Observational Memory thread titles. ([#14436](https://github.com/mastra-ai/mastra/pull/14436))
+
+  When enabled, the Observer suggests a short thread title and updates it as the conversation topic changes. Harness consumers can detect these updates via the new `om_thread_title_updated` event.
+
+  **Example**
+
+  ```ts
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        observation: {
+          threadTitle: true,
+        },
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`cd7b568`](https://github.com/mastra-ai/mastra/commit/cd7b568fe427b1b4838abe744fa5367a47539db3)]:
+  - @mastra/schema-compat@1.2.6-alpha.1
+
 ## 1.15.0-alpha.0
 
 ### Minor Changes
