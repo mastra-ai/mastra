@@ -318,7 +318,7 @@ export type ProviderModelsMap = {
     'perplexity/sonar',
     'xai/grok-4-1-fast-non-reasoning',
   ];
-  readonly xiaomi: readonly ['mimo-v2-flash'];
+  readonly xiaomi: readonly ['mimo-v2-flash', 'mimo-v2-omni', 'mimo-v2-pro'];
   readonly synthetic: readonly [
     'hf:MiniMaxAI/MiniMax-M2',
     'hf:MiniMaxAI/MiniMax-M2.1',
@@ -514,6 +514,7 @@ export type ProviderModelsMap = {
     'minimax-m2',
     'minimax-m2.1',
     'minimax-m2.5',
+    'minimax-m2.7',
     'ministral-3:14b',
     'ministral-3:3b',
     'ministral-3:8b',
@@ -1241,6 +1242,7 @@ export type ProviderModelsMap = {
     'glm-4.6v-flash',
     'glm-4.7',
     'glm-5',
+    'glm-5-turbo',
   ];
   readonly deepseek: readonly ['deepseek-chat', 'deepseek-reasoner'];
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
@@ -1435,6 +1437,8 @@ export type ProviderModelsMap = {
     'x-ai/grok-4.20-multi-agent-beta',
     'x-ai/grok-code-fast-1',
     'xiaomi/mimo-v2-flash',
+    'xiaomi/mimo-v2-omni',
+    'xiaomi/mimo-v2-pro',
     'z-ai/glm-4.5',
     'z-ai/glm-4.5-air',
     'z-ai/glm-4.5-air:free',

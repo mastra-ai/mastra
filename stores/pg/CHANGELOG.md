@@ -1,5 +1,16 @@
 # @mastra/pg
 
+## 1.8.2-alpha.0
+
+### Patch Changes
+
+- Fixed PostgreSQL transaction query execution in `@mastra/pg`. ([#14483](https://github.com/mastra-ai/mastra/pull/14483))
+
+  Message save/delete operations now run transaction queries one at a time on the same client. This removes the pg deprecation warning in 8.19+ and prevents failures in pg 9.0.
+
+- Updated dependencies [[`d7f14c3`](https://github.com/mastra-ai/mastra/commit/d7f14c3285cd253ecdd5f58139b7b6cbdf3678b5)]:
+  - @mastra/core@1.15.0-alpha.3
+
 ## 1.8.1
 
 ### Patch Changes
