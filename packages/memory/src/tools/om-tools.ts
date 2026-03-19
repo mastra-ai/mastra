@@ -12,6 +12,13 @@ import {
 
 export type RecallDetail = 'low' | 'high';
 
+/** Returns true if a message has at least one non-data part with visible content. */
+function hasVisibleParts(msg: MastraDBMessage): boolean {
+  const parts = msg.content?.parts;
+  if (!parts || !Array.isArray(parts)) return false;
+  return parts.some((p: { type?: string }) => !p.type?.startsWith('data-'));
+}
+
 type RecallMemory = {
   getMemoryStore: () => Promise<{
     listMessagesById: (args: { messageIds: string[] }) => Promise<{ messages: MastraDBMessage[] }>;
@@ -98,7 +105,10 @@ const HIGH_DETAIL_TOOL_RESULT_TOKENS = 4000;
 const DEFAULT_MAX_RESULT_TOKENS = 8000;
 
 function formatTimestamp(date: Date): string {
-  return date.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, 'Z');
+  return date
+    .toISOString()
+    .replace('T', ' ')
+    .replace(/\.\d{3}Z$/, 'Z');
 }
 
 interface FormattedPart {
@@ -433,13 +443,26 @@ export async function recallMessages({
     },
   });
 
-  // For backward queries the DB returns DESC order — reverse to get chronological
-  const orderedMessages = isForward
-    ? result.messages
-    : [...result.messages].reverse();
+  // Filter out messages with only internal data-* parts so they don't consume page slots.
+  const visibleMessages = result.messages.filter(hasVisibleParts);
 
-  const hasMore = orderedMessages.length > skip + normalizedLimit;
-  const messages = orderedMessages.slice(skip, skip + normalizedLimit);
+  // Memory.recall() always returns messages sorted chronologically (ASC) via MessageList.
+  // For forward pagination: take from the start of the ASC array (oldest first after cursor).
+  // For backward pagination: take from the END of the ASC array (closest to cursor).
+  //   DESC query ensures the DB returns the N messages closest to cursor, but MessageList
+  //   re-sorts them to ASC. So we slice from the end to get the right page window.
+  const total = visibleMessages.length;
+  const hasMore = total > skip + normalizedLimit;
+  let messages: typeof visibleMessages;
+  if (isForward) {
+    messages = visibleMessages.slice(skip, skip + normalizedLimit);
+  } else {
+    // For backward: closest-to-cursor messages are at the end of the ASC-sorted array.
+    // Page -1 (skip=0): last `limit` items; page -2 (skip=limit): next `limit` from end; etc.
+    const endIdx = Math.max(total - skip, 0);
+    const startIdx = Math.max(endIdx - normalizedLimit, 0);
+    messages = visibleMessages.slice(startIdx, endIdx);
+  }
 
   // Compute pagination flags
   const hasNextPage = isForward ? hasMore : pageIndex > 0;
