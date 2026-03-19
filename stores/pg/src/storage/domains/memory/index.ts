@@ -1405,12 +1405,10 @@ export class MemoryPG extends MemoryStorage {
         await t.none(`DELETE FROM ${messageTableName} WHERE id IN (${placeholders})`, messageIds);
 
         if (threadIds.length > 0) {
-          // Update threads sequentially to avoid concurrent queries on the same pg client
-          for (const threadId of threadIds) {
-            await t.none(`UPDATE ${threadTableName} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id = $1`, [
-              threadId,
-            ]);
-          }
+          await t.none(
+            `UPDATE ${threadTableName} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id IN (${inPlaceholders(threadIds.length)})`,
+            threadIds,
+          );
         }
       });
     } catch (error) {
