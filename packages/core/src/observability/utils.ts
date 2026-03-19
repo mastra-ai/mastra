@@ -1,4 +1,4 @@
-import type { Span, SpanType, GetOrCreateSpanOptions, AnySpan } from './types';
+import type { Span, SpanType, GetOrCreateSpanOptions, AnySpan, AnyExportedSpan, CorrelationContext } from './types';
 
 /**
  * Creates or gets a child span from existing tracing context or starts a new trace.
@@ -128,4 +128,28 @@ export function getRootExportSpan(span?: AnySpan): AnySpan | undefined {
   }
 
   return rootExportSpan;
+}
+
+/** Extract correlation context from an exported span. */
+export function buildCorrelationContext(span: AnyExportedSpan): CorrelationContext {
+  const metadata = span.metadata ?? {};
+
+  return {
+    traceId: span.traceId,
+    spanId: span.id,
+    entityType: span.entityType,
+    entityId: span.entityId,
+    entityName: span.entityName,
+    userId: typeof metadata.userId === 'string' ? metadata.userId : undefined,
+    organizationId: typeof metadata.organizationId === 'string' ? metadata.organizationId : undefined,
+    resourceId: typeof metadata.resourceId === 'string' ? metadata.resourceId : undefined,
+    runId: typeof metadata.runId === 'string' ? metadata.runId : undefined,
+    sessionId: typeof metadata.sessionId === 'string' ? metadata.sessionId : undefined,
+    threadId: typeof metadata.threadId === 'string' ? metadata.threadId : undefined,
+    requestId: typeof metadata.requestId === 'string' ? metadata.requestId : undefined,
+    environment: typeof metadata.environment === 'string' ? metadata.environment : undefined,
+    source: typeof metadata.source === 'string' ? metadata.source : undefined,
+    serviceName: typeof metadata.serviceName === 'string' ? metadata.serviceName : undefined,
+    experimentId: typeof metadata.experimentId === 'string' ? metadata.experimentId : undefined,
+  };
 }

@@ -13,6 +13,7 @@ import type { RequestContext } from '../../request-context';
 import type { LanguageModelUsage, ProviderMetadata, StepStartPayload } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
 import type { CustomSamplerOptions, ObservabilityInstance } from './core';
+import type { CorrelationContext } from './core';
 import type { FeedbackInput } from './feedback';
 import type { ScoreInput } from './scores';
 
@@ -473,6 +474,9 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
 
   /** Find the closest parent span of a specific type by walking up the parent chain */
   findParent<T extends SpanType>(spanType: T): Span<T> | undefined;
+
+  /** Build the canonical correlation context for this span. */
+  getCorrelationContext(): CorrelationContext;
 
   /** Returns a lightweight span ready for export */
   exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> | undefined;

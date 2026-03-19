@@ -3,4 +3,13 @@
  */
 
 export { CardinalityFilter } from './cardinality';
-export { AutoExtractedMetrics } from './auto-extract';
+export { emitAutoExtractedMetrics, emitDurationMetrics, emitTokenMetrics } from './auto-extract';
+export { estimateCost, estimateMetricCost, getPricingMeterForMetric } from './estimator';
+export type {
+  CostEstimateResult,
+  CostEstimateStatus,
+  CostEstimator,
+  EstimatorInput,
+  MetricCostEstimatorInput,
+  PricingMeter,
+} from './estimator';

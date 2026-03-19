@@ -1,3 +1,5 @@
+import type { CorrelationContext } from './core';
+
 // ============================================================================
 // Log Level
 // ============================================================================
@@ -29,8 +31,7 @@ export interface LoggerContext {
  * Log data transported via the event bus.
  * Must be JSON-serializable (Date serializes via toJSON()).
  *
- * Context fields (runId, sessionId, userId, environment, etc.) are stored
- * in metadata, following the same pattern as tracing spans.
+ * Canonical correlation fields travel in `correlationContext`.
  */
 export interface ExportedLog {
   /** When the log was emitted */
@@ -45,20 +46,12 @@ export interface ExportedLog {
   /** Structured data associated with this log */
   data?: Record<string, unknown>;
 
-  /** Trace ID for correlation (from current span) */
-  traceId?: string;
-
-  /** Span ID for correlation (from current span) */
-  spanId?: string;
-
-  /** Optional tags for filtering/categorization */
-  tags?: string[];
+  /** Canonical correlation context for this log event */
+  correlationContext?: CorrelationContext;
 
   /**
    * User-defined metadata.
-   * Context fields are stored here: runId, sessionId, userId, environment,
-   * serviceName, organizationId, entityType, entityName, etc.
-   * This follows the same pattern as BaseSpan.metadata in tracing.ts.
+   * Canonical correlation fields should not be stored here.
    */
   metadata?: Record<string, unknown>;
 }
