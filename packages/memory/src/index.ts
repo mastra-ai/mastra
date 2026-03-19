@@ -22,7 +22,7 @@ import type {
   MemoryConfig,
 } from '@mastra/core/memory';
 import { SpanType, EntityType, getOrCreateSpan } from '@mastra/core/observability';
-import type { TracingContext } from '@mastra/core/observability';
+import type { ObservabilityContext } from '@mastra/core/observability';
 import type {
   InputProcessor,
   InputProcessorOrWorkflow,
@@ -212,10 +212,11 @@ export class Memory extends MastraMemory {
 
   private createMemorySpan(
     operationType: 'recall' | 'save' | 'delete' | 'update_working',
-    tracingContext?: TracingContext,
+    observabilityContext?: Partial<ObservabilityContext>,
     input?: any,
     attributes?: Record<string, any>,
   ) {
+    const tracingContext = observabilityContext?.tracingContext ?? observabilityContext?.tracing;
     if (!tracingContext) return undefined;
     return getOrCreateSpan({
       type: SpanType.MEMORY_OPERATION,
@@ -234,7 +235,7 @@ export class Memory extends MastraMemory {
       vectorSearchString?: string;
       includeSystemReminders?: boolean;
       threadId: string;
-      tracingContext?: TracingContext;
+      observabilityContext?: Partial<ObservabilityContext>;
     },
   ): Promise<{
     messages: MastraDBMessage[];
@@ -260,7 +261,7 @@ export class Memory extends MastraMemory {
 
     const span = this.createMemorySpan(
       'recall',
-      args.tracingContext,
+      args.observabilityContext,
       { threadId, resourceId, vectorSearchString },
       {
         semanticRecallEnabled,
@@ -622,13 +623,13 @@ export class Memory extends MastraMemory {
     resourceId,
     workingMemory,
     memoryConfig,
-    tracingContext,
+    observabilityContext,
   }: {
     threadId: string;
     resourceId?: string;
     workingMemory: string;
     memoryConfig?: MemoryConfigInternal;
-    tracingContext?: TracingContext;
+    observabilityContext?: Partial<ObservabilityContext>;
   }): Promise<void> {
     const config = this.getMergedThreadConfig(memoryConfig || {});
 
@@ -638,7 +639,7 @@ export class Memory extends MastraMemory {
 
     const span = this.createMemorySpan(
       'update_working',
-      tracingContext,
+      observabilityContext,
       { threadId, resourceId },
       {
         workingMemoryEnabled: true,
@@ -949,15 +950,15 @@ ${workingMemory}`;
   async saveMessages({
     messages,
     memoryConfig,
-    tracingContext,
+    observabilityContext,
   }: {
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
-    tracingContext?: TracingContext;
+    observabilityContext?: Partial<ObservabilityContext>;
   }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
     const span = this.createMemorySpan(
       'save',
-      tracingContext,
+      observabilityContext,
       { messageCount: messages.length },
       {
         messageCount: messages.length,
@@ -2084,7 +2085,10 @@ Notes:
    *   - Message objects with 'id' properties
    * @returns Promise that resolves when all messages are deleted
    */
-  public async deleteMessages(input: MessageDeleteInput, tracingContext?: TracingContext): Promise<void> {
+  public async deleteMessages(
+    input: MessageDeleteInput,
+    observabilityContext?: Partial<ObservabilityContext>,
+  ): Promise<void> {
     // Normalize input to messageIds before creating span to avoid leaking full message objects into traces
     let messageIds: string[];
 
@@ -2113,7 +2117,7 @@ Notes:
 
     const span = this.createMemorySpan(
       'delete',
-      tracingContext,
+      observabilityContext,
       { messageCount: messageIds.length },
       { messageCount: messageIds.length },
     );

@@ -2292,7 +2292,7 @@ describe('Memory', () => {
 
       const result = await memory.recall({
         threadId: 'thread-1',
-        tracingContext: { currentSpan: parentSpan as any },
+        observabilityContext: { tracingContext: { currentSpan: parentSpan as any } },
       });
 
       expect(parentSpan.createChildSpan).toHaveBeenCalledTimes(1);
@@ -2315,7 +2315,7 @@ describe('Memory', () => {
         memory.recall({
           threadId: 'nonexistent',
           resourceId: 'res-1',
-          tracingContext: { currentSpan: parentSpan as any },
+          observabilityContext: { tracingContext: { currentSpan: parentSpan as any } },
         }),
       ).rejects.toThrow();
 
@@ -2343,7 +2343,7 @@ describe('Memory', () => {
 
       await memory.saveMessages({
         messages,
-        tracingContext: { currentSpan: parentSpan as any },
+        observabilityContext: { tracingContext: { currentSpan: parentSpan as any } },
       });
 
       expect(parentSpan.createChildSpan).toHaveBeenCalledTimes(1);
@@ -2361,7 +2361,7 @@ describe('Memory', () => {
 
       await seedThread(memory, 'thread-del', 'resource-del');
 
-      await memory.deleteMessages(['msg-1'], { currentSpan: parentSpan as any });
+      await memory.deleteMessages(['msg-1'], { tracingContext: { currentSpan: parentSpan as any } });
 
       expect(parentSpan.createChildSpan).toHaveBeenCalledTimes(1);
       const spanArgs = parentSpan.createChildSpan.mock.calls[0][0];
@@ -2384,7 +2384,7 @@ describe('Memory', () => {
       await memory.updateWorkingMemory({
         threadId: 'thread-wm',
         workingMemory: 'updated memory content',
-        tracingContext: { currentSpan: parentSpan as any },
+        observabilityContext: { tracingContext: { currentSpan: parentSpan as any } },
       });
 
       expect(parentSpan.createChildSpan).toHaveBeenCalledTimes(1);
@@ -2403,7 +2403,7 @@ describe('Memory', () => {
         memory.updateWorkingMemory({
           threadId: 'thread-fail',
           workingMemory: 'data',
-          tracingContext: { currentSpan: parentSpan as any },
+          observabilityContext: { tracingContext: { currentSpan: parentSpan as any } },
         }),
       ).rejects.toThrow('Working memory is not enabled');
 
