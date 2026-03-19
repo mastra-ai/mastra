@@ -288,7 +288,7 @@ Schema-based working memory uses **merge semantics**, meaning the agent only nee
 ## Choosing between template and schema
 
 - Use a **template** (Markdown) if you want the agent to maintain memory as a free-form text block, such as a user profile or scratchpad. Templates use **replace semantics** — the agent must provide the complete memory content on each update.
-- Use a **schema** if you need structured, type-safe data that can be validated and programmatically accessed as JSON. Schemas use **merge semantics** — the agent only provides fields to update, and existing fields are preserved.
+- Use a **schema** if you need structured, type-safe data that can be validated and programmatically accessed as JSON. The `workingMemory.schema` field accepts any `PublicSchema`-compatible schema (including Zod v3, Zod v4, JSON Schema, or already-standard schemas). Schemas use **merge semantics** — the agent only provides fields to update, and existing fields are preserved.
 - Only one mode can be active at a time: setting both `template` and `schema` isn't supported.
 
 ## Example: Multi-step retention

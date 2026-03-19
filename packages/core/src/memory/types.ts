@@ -7,7 +7,7 @@ import type { EmbeddingModelId } from '../llm/model/index.js';
 import type { ModelRouterModelId } from '../llm/model/provider-registry.js';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { RequestContext } from '../request-context';
-import type { StandardSchemaWithJSON, PublicSchema } from '../schema';
+import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
@@ -190,11 +190,6 @@ type TemplateWorkingMemory = BaseWorkingMemory & {
 };
 
 type SchemaWorkingMemory = BaseWorkingMemory & {
-  schema: StandardSchemaWithJSON;
-  template?: never;
-};
-
-type PublicSchemaWorkingMemory = BaseWorkingMemory & {
   schema: PublicSchema;
   template?: never;
 };
@@ -204,7 +199,7 @@ type WorkingMemoryNone = BaseWorkingMemory & {
   schema?: never;
 };
 
-export type WorkingMemory = TemplateWorkingMemory | SchemaWorkingMemory | PublicSchemaWorkingMemory | WorkingMemoryNone;
+export type WorkingMemory = TemplateWorkingMemory | SchemaWorkingMemory | WorkingMemoryNone;
 
 /**
  * Vector index configuration for optimizing semantic recall performance.
@@ -552,6 +547,14 @@ export interface ObservationalMemoryObservationConfig {
    * ```
    */
   instruction?: string;
+
+  /**
+   * When enabled, the Observer suggests a short thread title based on the conversation.
+   * The title is updated on the thread whenever the Observer runs.
+   *
+   * @default false
+   */
+  threadTitle?: boolean;
 }
 
 /**
@@ -955,7 +958,7 @@ export type MemoryConfig = BaseMemoryConfig & {
    * }
    * ```
    */
-  workingMemory?: TemplateWorkingMemory | PublicSchemaWorkingMemory | WorkingMemoryNone;
+  workingMemory?: TemplateWorkingMemory | SchemaWorkingMemory | WorkingMemoryNone;
 };
 
 /**

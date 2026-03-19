@@ -169,7 +169,7 @@ export function formatObservationStatus(
   // Status is now shown in the mode badge, so just show the metrics
   const percent = Math.round(state.thresholdPercent);
   const pct = colorByPercent(`${percent}%`, percent);
-  const defaultStyler = (s: string) => chalk.bold.hex(mastra.specialGray)(s);
+  const defaultStyler = (s: string) => chalk.hex(mastra.specialGray)(s);
   const styleLabel = labelStyler ?? defaultStyler;
   if (compact === 'percentOnly') {
     return styleLabel('msg ') + pct;
@@ -203,7 +203,7 @@ export function formatReflectionStatus(
   // Status is now shown in the mode badge, so just show the metrics
   const percent = Math.round(state.reflectionThresholdPercent);
   const pct = colorByPercent(`${percent}%`, percent);
-  const defaultStyler = (s: string) => chalk.bold.hex(mastra.specialGray)(s);
+  const defaultStyler = (s: string) => chalk.hex(mastra.specialGray)(s);
   const styleLabel = labelStyler ?? defaultStyler;
   const label = styleLabel(compact === 'full' ? 'memory' : 'mem') + ' ';
   if (compact === 'percentOnly') {

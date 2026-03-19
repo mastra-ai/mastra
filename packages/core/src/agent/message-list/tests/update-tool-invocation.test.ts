@@ -375,4 +375,140 @@ describe('MessageList.updateToolInvocation', () => {
     const part = msg.content.parts[0] as any;
     expect(part.providerMetadata).toEqual({ mastra: { modelOutput: true } });
   });
+
+  it('should preserve providerExecuted from original call when result does not include it', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'tc-1',
+          toolName: 'web_search',
+          args: { query: 'test' },
+        },
+        providerExecuted: true,
+      } as any,
+    ]);
+    messageList.add(msg, 'response');
+
+    // Result does NOT include providerExecuted
+    messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc-1',
+        toolName: 'web_search',
+        args: {},
+        result: { data: 'search' },
+      },
+    });
+
+    const part = msg.content.parts[0] as any;
+    expect(part.toolInvocation.state).toBe('result');
+    expect(part.providerExecuted).toBe(true);
+  });
+
+  it('should preserve providerMetadata from original call when result does not include it', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'tc-1',
+          toolName: 'web_search',
+          args: { query: 'test' },
+        },
+        providerMetadata: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+      } as any,
+    ]);
+    messageList.add(msg, 'response');
+
+    // Result does NOT include providerMetadata
+    messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc-1',
+        toolName: 'web_search',
+        args: {},
+        result: { data: 'search' },
+      },
+    });
+
+    const part = msg.content.parts[0] as any;
+    expect(part.toolInvocation.state).toBe('result');
+    expect(part.providerMetadata).toEqual({ anthropic: { cacheControl: { type: 'ephemeral' } } });
+  });
+
+  it('should allow result to override providerExecuted from original call', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'tc-1',
+          toolName: 'web_search',
+          args: { query: 'test' },
+        },
+        providerExecuted: true,
+      } as any,
+    ]);
+    messageList.add(msg, 'response');
+
+    // Result explicitly sets providerExecuted to false
+    messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc-1',
+        toolName: 'web_search',
+        args: {},
+        result: { data: 'search' },
+      },
+      providerExecuted: false,
+    } as any);
+
+    const part = msg.content.parts[0] as any;
+    expect(part.providerExecuted).toBe(false);
+  });
+
+  it('should allow result to override providerMetadata from original call', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'tc-1',
+          toolName: 'web_search',
+          args: { query: 'test' },
+        },
+        providerMetadata: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+      } as any,
+    ]);
+    messageList.add(msg, 'response');
+
+    // Result provides different providerMetadata
+    messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc-1',
+        toolName: 'web_search',
+        args: {},
+        result: { data: 'search' },
+      },
+      providerMetadata: { mastra: { modelOutput: true } },
+    } as any);
+
+    const part = msg.content.parts[0] as any;
+    expect(part.providerMetadata).toEqual({ mastra: { modelOutput: true } });
+  });
 });

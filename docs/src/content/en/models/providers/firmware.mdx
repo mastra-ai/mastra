@@ -9,7 +9,7 @@ description: "Use Firmware models with Mastra. 24 models available."
 
 Access 24 Firmware models through Mastra's model router. Authentication is handled automatically using the `FIRMWARE_API_KEY` environment variable.
 
-Learn more in the [Firmware documentation](https://docs.firmware.ai).
+Learn more in the [Firmware documentation](https://docs.frogbot.ai).
 
 ```bash title=".env"
 FIRMWARE_API_KEY=your-api-key
@@ -37,7 +37,7 @@ for await (const chunk of stream) {
 
 :::info
 
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Firmware documentation](https://docs.firmware.ai) for details.
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Firmware documentation](https://docs.frogbot.ai) for details.
 
 :::
 
@@ -345,7 +345,7 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    url: "https://app.firmware.ai/api/v1",
+    url: "https://app.frogbot.ai/api/v1",
     id: "firmware/claude-haiku-4-5",
     apiKey: process.env.FIRMWARE_API_KEY,
     headers: {
