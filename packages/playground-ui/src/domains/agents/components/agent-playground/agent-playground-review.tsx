@@ -64,7 +64,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
 
   // Load persisted review items on mount / when data changes
   useEffect(() => {
-    if (persistedItems && persistedItems.length > 0) {
+    if (persistedItems) {
       loadPersistedItems(persistedItems);
     }
   }, [persistedItems, loadPersistedItems]);
