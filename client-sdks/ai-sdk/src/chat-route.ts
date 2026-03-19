@@ -1,15 +1,13 @@
 import {
   createUIMessageStream as createUIMessageStreamV5,
-  createUIMessageStreamResponse as createUIMessageStreamResponseV5
-  
+  createUIMessageStreamResponse as createUIMessageStreamResponseV5,
 } from '@internal/ai-sdk-v5';
-import type {UIMessageStreamOptions as UIMessageStreamOptionsV5} from '@internal/ai-sdk-v5';
+import type { UIMessageStreamOptions as UIMessageStreamOptionsV5 } from '@internal/ai-sdk-v5';
 import {
   createUIMessageStream as createUIMessageStreamV6,
-  createUIMessageStreamResponse as createUIMessageStreamResponseV6
-  
+  createUIMessageStreamResponse as createUIMessageStreamResponseV6,
 } from '@internal/ai-v6';
-import type {UIMessageStreamOptions as UIMessageStreamOptionsV6} from '@internal/ai-v6';
+import type { UIMessageStreamOptions as UIMessageStreamOptionsV6 } from '@internal/ai-v6';
 import type { AgentExecutionOptions, AgentExecutionOptionsBase } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -43,9 +41,11 @@ export type ChatStreamHandlerOptions<UI_MESSAGE extends SupportedUIMessage = Sup
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
-  messageMetadata?:
-    | UIMessageStreamOptionsV5<V5UIMessage>['messageMetadata']
-    | UIMessageStreamOptionsV6<V6UIMessage>['messageMetadata'];
+  messageMetadata?: UI_MESSAGE extends V6UIMessage
+    ? UIMessageStreamOptionsV6<UI_MESSAGE>['messageMetadata']
+    : UI_MESSAGE extends V5UIMessage
+      ? UIMessageStreamOptionsV5<UI_MESSAGE>['messageMetadata']
+      : never;
 };
 
 type ChatStreamHandlerOptionsV5<UI_MESSAGE extends V5UIMessage = V5UIMessage, OUTPUT = undefined> = Omit<
