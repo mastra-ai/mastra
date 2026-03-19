@@ -17,7 +17,7 @@ const hasCredentials = !!(process.env.MODAL_TOKEN_ID && process.env.MODAL_TOKEN_
 describe.skipIf(!hasCredentials)('ModalSandbox integration', () => {
   const sandbox = new ModalSandbox({
     id: `mastra-test-${Date.now().toString(36)}`,
-    image: 'ubuntu:22.04',
+    baseImage: 'ubuntu:22.04',
     timeoutMs: 300_000,
     env: { TEST_VAR: 'hello_from_mastra' },
   });
@@ -97,11 +97,9 @@ describe.skipIf(!hasCredentials)('ModalSandbox integration', () => {
 describe.skipIf(!hasCredentials)('ModalSandbox stop-and-resume', () => {
   const sandboxId = `mastra-resume-${Date.now().toString(36)}`;
 
-  // Use a generous idle timeout so the sandbox survives the stop/reconnect gap.
   const first = new ModalSandbox({
     id: sandboxId,
-    image: 'ubuntu:22.04',
-    idleTimeoutMs: 120_000, // 2 min idle — enough to survive this test
+    baseImage: 'ubuntu:22.04',
     timeoutMs: 300_000,
   });
 
@@ -114,36 +112,37 @@ describe.skipIf(!hasCredentials)('ModalSandbox stop-and-resume', () => {
     }
   }, 30_000);
 
-  it('reconnects to the same sandbox after stop()', async () => {
+  it('reconnects to the same image after stop()', async () => {
     // Start and write a sentinel file
     await first._start();
     expect(first.status).toBe('running');
     const firstId = first.modal.sandboxId;
+    const firstName = first.id;
 
-    const write = await first.processes.spawn('echo resume_marker > /tmp/marker.txt');
+    const sentinelContent = `I'm still here! ${Date.now()}`;
+    const write = await first.processes.spawn(`echo "${sentinelContent}" > /tmp/marker.txt`);
     await write.wait();
 
-    // Stop (detach) — sandbox keeps running on Modal
+    // Stop and snapshot the filesystem
     await first._stop();
     expect(first.status).toBe('stopped');
 
-    // Reconnect with a new local instance using the same logical id
-    const second = new ModalSandbox({
-      id: sandboxId,
-      image: 'ubuntu:22.04',
-      idleTimeoutMs: 120_000,
-      timeoutMs: 300_000,
-    });
-    await second._start();
-    expect(second.status).toBe('running');
+    // Reconnect to the same ModalSandbox instance
+    // A new underlying sandbox is created, but image and Id should be preserved
+    await first._start();
+    expect(first.status).toBe('running');
 
-    // Same underlying Modal sandbox — state is preserved
-    expect(second.modal.sandboxId).toBe(firstId);
+    // Name should not have changed
+    expect(first.id).toBe(firstName);
 
-    const read = await second.processes.spawn('cat /tmp/marker.txt');
+    // Underlying sandbox ID should have changed
+    expect(first.modal.sandboxId).not.toBe(firstId);
+
+    // Sentinel file should still be present despite being new sandbox instance
+    const read = await first.processes.spawn('cat /tmp/marker.txt');
     const result = await read.wait();
-    expect(result.stdout.trim()).toBe('resume_marker');
+    expect(result.stdout.trim()).toBe(sentinelContent);
 
-    await second._destroy();
+    await first._destroy();
   }, 120_000);
 });

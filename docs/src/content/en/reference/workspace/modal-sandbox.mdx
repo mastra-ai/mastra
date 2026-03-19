@@ -33,7 +33,7 @@ import { ModalSandbox } from '@mastra/modal'
 const workspace = new Workspace({
   sandbox: new ModalSandbox({
     id: 'dev-sandbox',
-    image: 'ubuntu:22.04',
+    baseImage: 'ubuntu:22.04',
     timeoutMs: 60_000,
   }),
 })
@@ -85,7 +85,7 @@ Get your credentials from the [Modal dashboard](https://modal.com/settings/token
     defaultValue: "'mastra'",
   },
   {
-    name: 'image',
+    name: 'baseImage',
     type: 'string',
     description: 'Docker image to use for the sandbox.',
     isOptional: true,
@@ -98,13 +98,6 @@ Get your credentials from the [Modal dashboard](https://modal.com/settings/token
       "Wall-clock max lifetime in milliseconds. The sandbox is terminated when this expires, regardless of activity. Modal's maximum is 24 hours (86_400_000).",
     isOptional: true,
     defaultValue: '300000 (5 minutes)',
-  },
-  {
-    name: 'idleTimeoutMs',
-    type: 'number',
-    description:
-      'Idle timeout in milliseconds. The sandbox is terminated after this many milliseconds with no active exec() calls. This is the primary lever for stop-and-resume workflows: set it long enough that the sandbox survives between stop() and start() cycles so that start() reconnects instead of creating a new one.',
-    isOptional: true,
   },
   {
     name: 'env',
@@ -165,7 +158,7 @@ Get your credentials from the [Modal dashboard](https://modal.com/settings/token
   {
     name: 'id',
     type: 'string',
-    description: 'Sandbox instance identifier (also the Modal sandbox name).',
+    description: 'Sandbox instance identifier.',
   },
   {
     name: 'name',
@@ -199,35 +192,22 @@ Get your credentials from the [Modal dashboard](https://modal.com/settings/token
 
 ## Sandbox lifecycle
 
-`ModalSandbox` uses Modal's named sandbox feature to support reconnection:
-
-- **`_start()`**: Reconnects to a running sandbox with the same `id` if one exists; creates a new one otherwise.
-- **`_stop()`**: Detaches locally — the sandbox keeps running on Modal and can be reconnected with a subsequent `_start()`.
-- **`_destroy()`**: Permanently terminates the sandbox; it cannot be reconnected.
-
-### Stop-and-resume
-
-Because `stop()` only detaches locally and leaves the Modal sandbox running, you can reconnect to the same container later — preserving its filesystem, installed packages, and any long-running processes. This pattern is useful for interactive development sessions or agents that pause between turns.
-
-For reliable stop-and-resume, set `idleTimeoutMs` to a value longer than the expected pause between sessions. Without it, Modal may terminate an idle sandbox before you reconnect.
+- **`_start()`**: Creates a new sandbox from the provided baseImage. On subsequent calls, attempts to reconnect to an existing running sandbox, or creates a sandbox using the latest snapshot.
+- **`_stop()`**: Snapshots the filesystem, then terminates the sandbox. Snapshot is kept in memory on the same instance for future starts.
+- **`_destroy()`**: Terminates the sandbox and discards any snapshot.
 
 ```typescript
-// Session 1 — start, do work, stop
 const sandbox = new ModalSandbox({
   id: 'dev-sandbox',
-  idleTimeoutMs: 600_000, // Keep alive for 10 min of idle time
+  baseImage: 'ubuntu:22.04',
+  timeoutMs: 300_000,
 })
+
 await sandbox._start()
-
-await sandbox.processes.spawn('npm install') // install deps once
-await sandbox._stop() // detach; sandbox keeps running on Modal
-
-// Session 2 — reconnects to the same container, deps already installed
-const same = new ModalSandbox({ id: 'dev-sandbox', idleTimeoutMs: 600_000 })
-await same._start() // fromName() succeeds — no cold start
+await sandbox.processes.spawn('npm install')
+await sandbox._stop()
+await sandbox._start()
 ```
-
-If the idle timeout expires between sessions, `start()` will transparently create a fresh sandbox.
 
 ## Background processes
 

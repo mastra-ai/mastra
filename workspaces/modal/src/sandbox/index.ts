@@ -4,7 +4,7 @@
 
 import type { MastraSandboxOptions, ProviderStatus, SandboxInfo } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
-import { ClientClosedError, ModalClient, NotFoundError } from 'modal';
+import { AlreadyExistsError, ClientClosedError, ModalClient, NotFoundError } from 'modal';
 import type { App, Image, Sandbox } from 'modal';
 import { ModalProcessManager } from './process-manager';
 
@@ -33,7 +33,7 @@ export interface ModalSandboxOptions extends Omit<MastraSandboxOptions, 'process
    *
    * @default 'ubuntu:22.04'
    */
-  image?: string;
+  baseImage?: string;
   /**
    * Wall-clock max lifetime in milliseconds. The sandbox is terminated when this expires,
    * regardless of activity. Modal's maximum is 24 hours (86_400_000).
@@ -41,21 +41,6 @@ export interface ModalSandboxOptions extends Omit<MastraSandboxOptions, 'process
    * @default 300_000 // 5 minutes
    */
   timeoutMs?: number;
-  /**
-   * Idle timeout in milliseconds. The sandbox is terminated after this many milliseconds
-   * with no active exec() calls. This is the primary knob for **stop-and-resume** workflows:
-   * set it long enough that the sandbox survives between `stop()` / `start()` cycles, so
-   * `start()` can reconnect to the still-running sandbox instead of creating a new one.
-   *
-   * Without this, a stopped sandbox may be reaped by Modal before you reconnect.
-   *
-   * @example
-   * ```typescript
-   * // Sandbox stays alive for 10 minutes of idle time, enabling reconnection.
-   * new ModalSandbox({ id: 'dev', idleTimeoutMs: 600_000 })
-   * ```
-   */
-  idleTimeoutMs?: number;
   /** Environment variables baked into the sandbox at create time. */
   env?: Record<string, string>;
   /** Default working directory inside the sandbox. */
@@ -81,7 +66,7 @@ export interface ModalSandboxOptions extends Omit<MastraSandboxOptions, 'process
  * import { ModalSandbox } from '@mastra/modal';
  *
  * const sandbox = new ModalSandbox({
- *   image: 'ubuntu:22.04',
+ *   baseImage: 'ubuntu:22.04',
  *   timeoutMs: 60_000,
  * });
  *
@@ -98,14 +83,14 @@ export class ModalSandbox extends MastraSandbox {
   declare readonly processes: ModalProcessManager;
 
   private _sb: Sandbox | null = null;
+  private _imageSnapshot: Image | null = null; // for stop-and-resume
   private _client: ModalClient | null = null;
   private _createdAt: Date | null = null;
   private _isRetrying = false;
 
   private readonly appName: string;
-  private readonly image: string;
+  private readonly baseImage: string;
   private readonly timeoutMs: number;
-  private readonly idleTimeoutMs?: number;
   private readonly env: Record<string, string>;
   private readonly workdir?: string;
   private readonly tokenId?: string;
@@ -121,9 +106,8 @@ export class ModalSandbox extends MastraSandbox {
 
     this.id = options.id ?? this._generateId();
     this.appName = options.appName ?? 'mastra';
-    this.image = options.image ?? 'ubuntu:22.04';
+    this.baseImage = options.baseImage ?? 'ubuntu:22.04';
     this.timeoutMs = options.timeoutMs ?? 300_000;
-    this.idleTimeoutMs = options.idleTimeoutMs;
     this.env = options.env ?? {};
     this.workdir = options.workdir;
     this.tokenId = options.tokenId;
@@ -149,66 +133,114 @@ export class ModalSandbox extends MastraSandbox {
 
   /** Reconnects to a running sandbox with this id if one exists, otherwise creates a new one. */
   async start(): Promise<void> {
-    if (this._sb) return;
-
+    if (this._sb) {
+      return;
+    }
+    
+    this.status = 'starting';
     const client = this._getClient();
 
     try {
+      // Try to connect to running sandbox if exists
+      // this is not expected in most cases, as stop-and-resume is implemented via snapshot and terminate
       this._sb = await client.sandboxes.fromName(this.appName, this.id);
       this._createdAt = new Date();
-      this.logger.debug(`${LOG_PREFIX} Reconnected to sandbox: ${this.id}`);
+      this.logger.debug(`${LOG_PREFIX} Reconnected to running sandbox: ${this.id}`);
       return;
     } catch (error) {
       if (!(error instanceof NotFoundError)) {
+        this.status = 'error';
         throw error;
       }
-      // NotFoundError means no sandbox with this name is running
+      // NotFoundError means no sandbox with this id is running
     }
 
     const app: App = await client.apps.fromName(this.appName, { createIfMissing: true });
-    const image: Image = client.images.fromRegistry(this.image);
 
-    this.logger.debug(`${LOG_PREFIX} Creating sandbox: ${this.id} (image: ${this.image})`);
+    // Try to reboot if snapshot from previous stop is available
+    if (this._imageSnapshot){
+      this.logger.debug(`${LOG_PREFIX} Rebooting from snapshot: ${this.id}`);
+      try {
+        this._sb = await client.sandboxes.create(app, this._imageSnapshot, {
+          name: this.id,
+          timeoutMs: this.timeoutMs,
+          env: Object.keys(this.env).length > 0 ? this.env : undefined,
+          workdir: this.workdir,
+        });
+        this._createdAt = new Date();
+        this.status = 'running';
+        this.logger.debug(`${LOG_PREFIX} Created new sandbox from snapshot: ${this._sb?.sandboxId}`);
+        return;
+      } catch (error) {
+        if (error instanceof AlreadyExistsError) {
+          // unexpected given we check for existence above
+          this.status = 'error';
+          throw error;
+        }
+        this.status = 'error';
+        throw error;
+      }
+    }
 
+    // Base case: first boot, create new sandbox from base image
+    const image: Image = client.images.fromRegistry(this.baseImage);
+    this.logger.debug(`${LOG_PREFIX} Creating sandbox: ${this.id} (baseImage: ${this.baseImage})`);
+    try {
     this._sb = await client.sandboxes.create(app, image, {
       name: this.id,
       timeoutMs: this.timeoutMs,
-      idleTimeoutMs: this.idleTimeoutMs,
       env: Object.keys(this.env).length > 0 ? this.env : undefined,
       workdir: this.workdir,
     });
-
-    this._createdAt = new Date();
-    this.logger.debug(`${LOG_PREFIX} Created sandbox: ${this._sb.sandboxId}`);
+      this._createdAt = new Date();
+      this.status = 'running';
+      this.logger.debug(`${LOG_PREFIX} Created sandbox: ${this._sb.sandboxId}`);
+    } catch (error) {
+      this.status = 'error';
+      throw error;
+    }
   }
 
   /**
-   * Detaches locally. The sandbox keeps running on Modal until it times out
-   * or is terminated — a subsequent start() will reconnect to it.
+   * Snapshot the sandbox filesystem before terminating it.
+   * Future starts will create net-new sandboxes from the snapshot.
    */
   async stop(): Promise<void> {
     if (this._sb) {
       try {
-        this._sb.detach();
-      } catch {
-        // detach() is synchronous and may throw if already detached
+        const startTime = Date.now();
+        this._imageSnapshot = await this._sb.snapshotFilesystem();
+        const snapshotTime = Date.now();
+        this.logger.debug(`${LOG_PREFIX} Snapshot created: ${this._imageSnapshot.imageId} in ${snapshotTime - startTime}ms`);
+        await this._sb.terminate({wait: true});
+        const terminateTime = Date.now();
+        this.logger.debug(`${LOG_PREFIX} Sandbox terminated: ${this._sb.sandboxId}`);
+        this._sb = null;
+        this.status = 'stopped';
+      } catch (error) {
+        this.status = 'error';
+        throw error;
       }
-      this._sb = null;
     }
   }
 
   /**
-   * Terminates the sandbox, ending its lifetime. Unlike stop(), the sandbox
-   * cannot be reconnected after this.
+   * Terminates the sandbox, ending its lifetime. Unlike stop(), no snapshot is preserved.
    */
   async destroy(): Promise<void> {
     if (this._sb) {
       try {
         await this._sb.terminate();
-      } catch {
-        // Best-effort: sandbox may already be terminated
+        this.logger.debug(`${LOG_PREFIX} Sandbox terminated: ${this._sb?.sandboxId}`);
+        this._sb = null;
+        this._imageSnapshot = null; // preserve no snapshot
+        this.status = 'destroyed';
+      } catch (error) {
+        this.status = 'error';
+        throw error;
       }
-      this._sb = null;
+    } else {
+      this.status = 'destroyed';
     }
   }
 
@@ -221,7 +253,7 @@ export class ModalSandbox extends MastraSandbox {
       createdAt: this._createdAt ?? new Date(),
       metadata: {
         appName: this.appName,
-        image: this.image,
+        image: this._imageSnapshot?.imageId ?? this.baseImage,
         timeoutMs: this.timeoutMs,
       },
     };
@@ -235,7 +267,7 @@ export class ModalSandbox extends MastraSandbox {
   }
 
   private _getDefaultInstructions(): string {
-    return `Modal cloud sandbox running ${this.image}. Use executeCommand() to run shell commands.`;
+    return `Modal cloud sandbox running ${this.baseImage}. Use executeCommand() to run shell commands.`;
   }
 
   // ---------------------------------------------------------------------------
@@ -282,7 +314,7 @@ export class ModalSandbox extends MastraSandbox {
     }
   }
 
-  // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
   // Internal Helpers
   // ---------------------------------------------------------------------------
 

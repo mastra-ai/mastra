@@ -2,4 +2,4 @@
 '@mastra/modal': minor
 ---
 
-Added `@mastra/modal` — a Modal cloud sandbox provider for Mastra workspaces, following the same pattern as `@mastra/e2b`, `@mastra/daytona`, and `@mastra/blaxel`.
+Added `@mastra/modal` — Modal cloud sandbox provider for Mastra workspaces, with pause and resume via filesystem snapshots. Same pattern as `@mastra/e2b`, `@mastra/daytona`, `@mastra/blaxel`.
