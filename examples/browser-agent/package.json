@@ -1,0 +1,25 @@
+{
+  "name": "examples-browser-agent",
+  "type": "module",
+  "private": true,
+  "description": "Example: Mastra agent with browser capability",
+  "version": "0.0.1",
+  "dependencies": {
+    "@ai-sdk/openai": "npm:@ai-sdk/openai@2.0.15",
+    "@mastra/core": "latest",
+    "@mastra/browser-agent-browser": "latest",
+    "@mastra/memory": "latest",
+    "zod": "^4.3.6"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/browser-agent-browser": "link:../../browser/agent-browser",
+      "@mastra/memory": "link:../../packages/memory"
+    }
+  },
+  "scripts": {
+    "start": "npx tsx src/index.ts"
+  },
+  "license": "Apache-2.0"
+}
