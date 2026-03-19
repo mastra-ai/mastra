@@ -41,6 +41,13 @@ curl http://localhost:4111/my-custom-route
 
 Each route's handler receives the Hono `Context`. Within the handler you can access the `Mastra` instance to fetch or call agents and workflows.
 
+:::note
+
+By default Mastra exposes routes under the `/api` prefix, so custom routes cannot use that prefix.
+If you need to use `/api` for your custom routes, you can change the Mastra API prefix to something else (e.g. `server: { apiPrefix: '/internal-api' }`) to free up `/api` for your routes. Just be sure to choose a prefix that doesn't conflict with your custom routes.
+
+:::
+
 ## Middleware
 
 To add route-specific middleware pass a `middleware` array when calling `registerApiRoute()`.

@@ -770,12 +770,37 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   }
 
   protected validateCustomApiRoutes(routes: ApiRoute[]): void {
-    const prefix = this.prefix ?? this.mastra.getServer()?.apiPrefix ?? '/api';
+    if (!this.prefix) {
+      // No prefix: Mastra routes live at root. Build a set of reserved first path segments
+      // from SERVER_ROUTES (e.g. "/agents", "/logs", "/memory") and reject any custom
+      // route whose first segment collides.
+      const reservedSegments = new Set(
+        SERVER_ROUTES.map(r => {
+          const segment = r.path.split('/').filter(Boolean)[0];
+          return segment ? `/${segment}` : '/';
+        }),
+      );
+
+      for (const route of routes) {
+        const firstSegment = route.path.split('/').filter(Boolean)[0];
+        const segment = firstSegment ? `/${firstSegment}` : '/';
+        if (reservedSegments.has(segment)) {
+          throw new MastraError({
+            id: 'MASTRA_SERVER_API_PATH_RESERVED',
+            text: `Custom route path "${route.path}" conflicts with the reserved internal Mastra API path "${segment}".`,
+            domain: ErrorDomain.MASTRA_SERVER,
+            category: ErrorCategory.USER,
+          });
+        }
+      }
+      return;
+    }
+
     for (const route of routes) {
-      if (route.path.startsWith(prefix + '/') || route.path === prefix) {
+      if (route.path.startsWith(this.prefix + '/') || route.path === this.prefix) {
         throw new MastraError({
           id: 'MASTRA_SERVER_API_PATH_RESERVED',
-          text: `Custom route path "${route.path}" starts with "${prefix}", which is reserved for internal Mastra API routes.`,
+          text: `Custom route path "${route.path}" starts with "${this.prefix}", which is reserved for internal Mastra API routes.`,
           domain: ErrorDomain.MASTRA_SERVER,
           category: ErrorCategory.USER,
         });

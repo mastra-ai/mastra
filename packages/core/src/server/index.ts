@@ -35,23 +35,23 @@ type CustomRouteVariables = {
   requestContext: RequestContext;
 };
 
-type RegisterApiRouteOptions = {
+type RegisterApiRouteOptions<P extends string> = {
   method: Methods;
   openapi?: DescribeRouteOptions;
   handler?: Handler<
     {
       Variables: CustomRouteVariables;
     },
-    string,
-    ParamsFromPath<string>
+    P,
+    ParamsFromPath<P>
   >;
   createHandler?: (c: Context) => Promise<
     Handler<
       {
         Variables: CustomRouteVariables;
       },
-      string,
-      ParamsFromPath<string>
+      P,
+      ParamsFromPath<P>
     >
   >;
   middleware?: MiddlewareHandler | MiddlewareHandler[];
@@ -61,8 +61,8 @@ type RegisterApiRouteOptions = {
   requiresAuth?: boolean;
 };
 
-function validateOptions(path: string, options: RegisterApiRouteOptions): asserts options is RegisterApiRouteOptions {
-  const opts = options as RegisterApiRouteOptions;
+function validateOptions<P extends string>(path: string, options: RegisterApiRouteOptions<P>): asserts options is RegisterApiRouteOptions<P> {
+  const opts = options as RegisterApiRouteOptions<P>;
 
   if (opts.method === undefined) {
     throw new MastraError({
@@ -92,7 +92,7 @@ function validateOptions(path: string, options: RegisterApiRouteOptions): assert
   }
 }
 
-export function registerApiRoute(path: string, options: RegisterApiRouteOptions): ApiRoute {
+export function registerApiRoute<P extends string>(path: string, options: RegisterApiRouteOptions<P>): ApiRoute {
   validateOptions(path, options);
 
   return {

@@ -14,6 +14,7 @@ import {
 } from '@internal/server-adapter-test-utils';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
+import type { ApiRoute } from '@mastra/core/server';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import Koa from 'koa';
 import bodyParser from 'koa-bodyparser';
@@ -646,6 +647,99 @@ describe('Koa Server Adapter', () => {
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data).toEqual({ echo: { test: 'data' } });
+    });
+  });
+
+  describe('Custom API Route Path Validation', () => {
+    it('should throw when a manually constructed route conflicts with the default /api prefix', async () => {
+      const routes: ApiRoute[] = [{ path: '/api/my-route', method: 'GET', handler: async c => c.json({}) }];
+      const mastra = new Mastra({});
+      const app = new Koa();
+      app.use(bodyParser());
+      const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
+
+      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(
+        /reserved for internal Mastra API routes/,
+      );
+    });
+
+    it('should throw when a manually constructed route conflicts with a custom prefix', async () => {
+      const routes: ApiRoute[] = [{ path: '/mastra/my-route', method: 'GET', handler: async c => c.json({}) }];
+      const mastra = new Mastra({});
+      const app = new Koa();
+      app.use(bodyParser());
+      const adapter = new MastraServer({ app, mastra, prefix: '/mastra', customApiRoutes: routes });
+
+      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(
+        /reserved for internal Mastra API routes/,
+      );
+    });
+
+    it('should throw when a manually constructed route path equals the prefix exactly', async () => {
+      const routes: ApiRoute[] = [{ path: '/api', method: 'GET', handler: async c => c.json({}) }];
+      const mastra = new Mastra({});
+      const app = new Koa();
+      app.use(bodyParser());
+      const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
+
+      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(
+        /reserved for internal Mastra API routes/,
+      );
+    });
+
+    it('should not throw for a path that shares a prefix string but is not a sub-path', async () => {
+      const routes = [
+        registerApiRoute('/api-custom', {
+          method: 'GET',
+          handler: async c => c.json({ ok: true }),
+        }),
+      ];
+      const mastra = new Mastra({});
+      const app = new Koa();
+      app.use(bodyParser());
+      const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
+
+      await expect(adapter.registerCustomApiRoutes()).resolves.not.toThrow();
+    });
+
+    it('should not throw for a valid route path with the default prefix', async () => {
+      const routes = [
+        registerApiRoute('/my-custom-route', {
+          method: 'GET',
+          handler: async c => c.json({ ok: true }),
+        }),
+      ];
+      const mastra = new Mastra({});
+      const app = new Koa();
+      app.use(bodyParser());
+      const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
+
+      await expect(adapter.registerCustomApiRoutes()).resolves.not.toThrow();
+    });
+
+    it('should throw when a no-prefix route conflicts with an internal Mastra route segment', async () => {
+      const routes: ApiRoute[] = [{ path: '/agents/my-route', method: 'GET', handler: async c => c.json({}) }];
+      const mastra = new Mastra({});
+      const app = new Koa();
+      app.use(bodyParser());
+      const adapter = new MastraServer({ app, mastra, prefix: '', customApiRoutes: routes });
+
+      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(/conflicts with the reserved internal Mastra API path/);
+    });
+
+    it('should not throw for a non-conflicting route when empty prefix is used', async () => {
+      const routes = [
+        registerApiRoute('/health', {
+          method: 'GET',
+          handler: async c => c.json({ ok: true }),
+        }),
+      ];
+      const mastra = new Mastra({});
+      const app = new Koa();
+      app.use(bodyParser());
+      const adapter = new MastraServer({ app, mastra, prefix: '', customApiRoutes: routes });
+
+      await expect(adapter.registerCustomApiRoutes()).resolves.not.toThrow();
     });
   });
 });
