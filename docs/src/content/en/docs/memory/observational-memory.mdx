@@ -114,7 +114,11 @@ OM now keeps durable observation-group boundaries in storage while giving the Re
 
 This two-representation model keeps provenance durable for graph-mode memory while making consolidation easier for the Reflector.
 
-### Graph mode
+### Graph mode (experimental)
+
+<Note>
+Graph mode is experimental. The API may change in future releases.
+</Note>
 
 Set `observationalMemory.graph: true` with `scope: 'thread'` to preserve observation groups as durable pointers to raw message history.
 

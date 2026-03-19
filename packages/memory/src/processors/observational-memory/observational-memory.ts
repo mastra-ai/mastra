@@ -199,9 +199,12 @@ export interface ObservationalMemoryConfig {
   storage: MemoryStorage;
 
   /**
-   * Enable graph-mode observation group metadata.
-   * When true, observation groups are treated as durable pointers to raw message history.
+   * **Experimental.** Enable graph-mode observation group metadata.
+   * When true, observation groups are treated as durable pointers to raw
+   * message history and a `recall` tool is registered so the actor can
+   * inspect raw messages behind a stored observation summary.
    *
+   * @experimental
    * @default false
    */
   graph?: boolean;

@@ -737,8 +737,12 @@ export interface ObservationalMemoryOptions {
   shareTokenBudget?: boolean;
 
   /**
-   * Enable graph-mode observation groups as durable pointers to raw message history.
+   * **Experimental.** Enable graph-mode observation groups as durable pointers
+   * to raw message history. When enabled, observation groups keep `_range`
+   * metadata visible in context and a `recall` tool is registered so the actor
+   * can inspect raw messages behind a stored observation summary.
    *
+   * @experimental
    * @default false
    */
   graph?: boolean;
@@ -1149,7 +1153,10 @@ export type SerializedObservationalMemoryConfig = {
   /** Share the token budget between messages and observations */
   shareTokenBudget?: boolean;
 
-  /** Enable graph-mode observation groups as durable pointers to raw message history */
+  /**
+   * **Experimental.** Enable graph-mode observation groups as durable pointers to raw message history.
+   * @experimental
+   */
   graph?: boolean;
 
   /** Observation step configuration */
