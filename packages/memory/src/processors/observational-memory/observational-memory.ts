@@ -114,6 +114,33 @@ import type {
 } from './types';
 
 /**
+ * Returns true when a message contains at least one part with visible user/assistant
+ * content (text, tool-invocation, reasoning, image, file).  Messages that only carry
+ * internal `data-*` parts (buffering markers, observation markers, etc.) return false.
+ */
+function messageHasVisibleContent(msg: MastraDBMessage): boolean {
+  const content = msg.content as { parts?: Array<{ type?: string }>; content?: string };
+  if (content?.parts && Array.isArray(content.parts)) {
+    return content.parts.some(p => {
+      const t = p?.type;
+      return t && !t.startsWith('data-') && t !== 'step-start';
+    });
+  }
+  if (content?.content) return true;
+  return false;
+}
+
+/**
+ * Build a messageRange string from the first and last messages that have visible
+ * content.  Falls back to the full array boundaries when every message is data-only.
+ */
+function buildMessageRange(messages: MastraDBMessage[]): string {
+  const first = messages.find(messageHasVisibleContent) ?? messages[0]!;
+  const last = [...messages].reverse().find(messageHasVisibleContent) ?? messages[messages.length - 1]!;
+  return `${first.id}:${last.id}`;
+}
+
+/**
  * Debug event emitted when observation-related events occur.
  * Useful for understanding what the Observer is doing.
  */
@@ -367,6 +394,15 @@ Each range has the format \`startId:endId\` where both are message IDs separated
 2. Call \`recall\` with that ID as the \`cursor\`.
 3. Use \`page: 1\` (or omit) to read forward from the cursor, \`page: -1\` to read backward.
 4. If the first page doesn't have what you need, increment the page number to keep paginating.
+5. Check \`hasNextPage\`/\`hasPrevPage\` in the result to know if more pages exist in each direction.
+
+### Detail levels
+By default recall returns **low** detail: truncated text and tool names only. Each message shows its ID and each part has a positional index like \`[p0]\`, \`[p1]\`, etc.
+
+- Use \`detail: "high"\` to get full message content including tool arguments and results.
+- Use \`partIndex\` with a cursor to fetch a single part at full detail — for example, to read one specific tool result or code block without loading every part.
+
+If the result says \`truncated: true\`, the output was cut to fit the token budget. You can paginate or use \`partIndex\` to target specific content.
 
 ### When recall is NOT needed
 - The user is asking for a high-level summary and your observations already cover it
@@ -4240,7 +4276,7 @@ ${formattedMessages}
 
       // Build new observations (use freshRecord if available)
       const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
-      const messageRange = `${messagesToObserve[0]!.id}:${messagesToObserve[messagesToObserve.length - 1]!.id}`;
+      const messageRange = buildMessageRange(messagesToObserve);
       let newObservations: string;
       if (this.scope === 'resource') {
         // In resource scope: wrap with thread tag and replace/append
@@ -4705,7 +4741,7 @@ ${formattedMessages}
 
     // Get the new observations to buffer (just the new content, not merged)
     // The storage adapter will handle appending to existing buffered content
-    const messageRange = `${messagesToBuffer[0]!.id}:${messagesToBuffer[messagesToBuffer.length - 1]!.id}`;
+    const messageRange = buildMessageRange(messagesToBuffer);
     let newObservations: string;
     if (this.scope === 'resource') {
       newObservations = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
@@ -5644,7 +5680,7 @@ ${formattedMessages}
         const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
 
         // Wrap with thread tag and append (in thread order for consistency)
-        const messageRange = `${threadMessages[0]!.id}:${threadMessages[threadMessages.length - 1]!.id}`;
+        const messageRange = buildMessageRange(threadMessages);
         const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
         currentObservations = this.replaceOrAppendThreadSection(
           currentObservations,
