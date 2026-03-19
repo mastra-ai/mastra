@@ -722,6 +722,7 @@ export type HarnessEvent =
       messagesActivated: number;
       generationCount: number;
     }
+  | { type: 'om_thread_title_updated'; cycleId: string; threadId: string; oldTitle?: string; newTitle: string }
   | { type: 'sandbox_access_request'; questionId: string; path: string; reason: string }
   | {
       type: 'ask_question';
@@ -821,7 +822,8 @@ export type HarnessMessageContent =
       error: string;
       tokensAttempted?: number;
       operationType?: 'observation' | 'reflection';
-    };
+    }
+  | { type: 'om_thread_title_updated'; threadId: string; oldTitle?: string; newTitle: string };
 
 // =============================================================================
 // Request Context

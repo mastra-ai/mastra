@@ -44,8 +44,8 @@ const { text } = await generateText({
   content={[
   {
     name: 'model',
-    type: 'LanguageModelV2',
-    description: "Any AI SDK language model (e.g., `openai('gpt-4o')`, `anthropic('claude-3-opus')`).",
+    type: 'LanguageModelV2 | LanguageModelV3',
+    description: "Any AI SDK v5 or v6 language model (e.g., `openai('gpt-4o')`, `anthropic('claude-3-opus')`).",
     isOptional: false,
   },
   {

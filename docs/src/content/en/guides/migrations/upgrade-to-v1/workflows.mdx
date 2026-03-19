@@ -278,11 +278,11 @@ npx @mastra/codemod@latest v1/workflow-stream-vnext .
 
 :::
 
-### `suspend` and `setState` aren't available in step condition functions parameters
+### `suspend()` and `setState()` aren't available in step condition functions parameters
 
-The `suspend` and `setState` functions aren't available in step condition functions parameters.
+The `suspend()` and `setState()` functions aren't available in step condition function parameters.
 
-To migrate, use the `suspend` function in the step execute function instead.
+To migrate, use the `suspend()` function in the step execute function instead.
 
 ```diff
 .dowhile(step, async ({ suspend, state, setState }) => {

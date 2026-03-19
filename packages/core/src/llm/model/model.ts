@@ -284,6 +284,7 @@ export class MastraLLMV1 extends MastraBase {
           reasoningText: result.reasoning,
           files: result.files,
           sources: result.sources,
+          toolCalls: result.toolCalls,
           warnings: result.warnings,
         },
         attributes: {
@@ -618,6 +619,7 @@ export class MastraLLMV1 extends MastraBase {
             reasoningText: props?.reasoning,
             files: props?.files,
             sources: props?.sources,
+            toolCalls: props?.toolCalls,
             warnings: props?.warnings,
           },
           attributes: {
