@@ -12,9 +12,9 @@ interface ReflectionObservationGroupSection {
   body: string;
 }
 
-const OBSERVATION_GROUP_PATTERN = /<observation-group\s+([^>]+)>([\s\S]*?)<\/observation-group>/g;
-const ATTRIBUTE_PATTERN = /(\w+(?:-\w+)*)="([^"]*)"/g;
-const REFLECTION_GROUP_SPLIT_PATTERN = /^##\s+/m;
+const OBSERVATION_GROUP_PATTERN = /<observation-group\s([^>]*)>([\s\S]*?)<\/observation-group>/g;
+const ATTRIBUTE_PATTERN = /([\w][\w-]*)="([^"]*)"/g;
+const REFLECTION_GROUP_SPLIT_PATTERN = /^##\s+Group\s+/m;
 
 function parseObservationGroupAttributes(attributeString: string): Record<string, string> {
   const attributes: Record<string, string> = {};
@@ -36,7 +36,7 @@ function parseReflectionObservationGroupSections(content: string): ReflectionObs
   }
 
   return normalizedContent
-    .split(/^##\s+/m)
+    .split(REFLECTION_GROUP_SPLIT_PATTERN)
     .map(section => section.trim())
     .filter(Boolean)
     .map(section => {
@@ -56,7 +56,7 @@ function stripReflectionGroupMetadata(body: string): string {
 }
 
 export function generateAnchorId(): string {
-  return randomBytes(2).toString('hex');
+  return randomBytes(8).toString('hex');
 }
 
 export function wrapInObservationGroup(
@@ -113,7 +113,14 @@ export function stripObservationGroups(observations: string): string {
 }
 
 export function combineObservationGroupRanges(groups: ObservationGroup[]): string {
-  return Array.from(new Set(groups.map(group => group.range).filter(Boolean))).join(',');
+  return Array.from(
+    new Set(
+      groups
+        .flatMap(group => group.range.split(','))
+        .map(range => range.trim())
+        .filter(Boolean),
+    ),
+  ).join(',');
 }
 
 export function renderObservationGroupsForReflection(observations: string): string | null {

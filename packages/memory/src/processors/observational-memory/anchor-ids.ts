@@ -86,5 +86,5 @@ export function stripEphemeralAnchorIds(observations: string): string {
     return observations;
   }
 
-  return observations.replace(/(^|\n)(\s*)\[(O\d+(?:-N\d+)?)\]\s*/g, '$1$2');
+  return observations.replace(/(^|\n)([^\S\n]*)\[(O\d+(?:-N\d+)?)\][^\S\n]*/g, '$1$2');
 }
