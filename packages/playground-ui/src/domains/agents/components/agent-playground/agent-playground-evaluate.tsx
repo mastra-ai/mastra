@@ -113,12 +113,12 @@ export function AgentPlaygroundEvaluate({
   };
   // Show only datasets explicitly attached to this agent
   const datasets = allDatasets.filter(ds => {
-    const ids = parseTargetIds((ds as any).targetIds);
+    const ids = parseTargetIds(ds.targetIds);
     return ids.includes(agentId);
   });
   // Datasets that are not attached to this agent (for "Attach Existing" dialog)
   const unattachedDatasets = allDatasets.filter(ds => {
-    const ids = parseTargetIds((ds as any).targetIds);
+    const ids = parseTargetIds(ds.targetIds);
     return !ids.includes(agentId);
   });
 
@@ -440,9 +440,9 @@ export function AgentPlaygroundEvaluate({
                 datasetId={view.id}
                 datasetName={viewDs?.name || ''}
                 datasetDescription={viewDs?.description || undefined}
-                datasetTags={(viewDs as any)?.tags ?? []}
-                datasetTargetType={(viewDs as any)?.targetType}
-                datasetTargetIds={(viewDs as any)?.targetIds}
+                datasetTags={viewDs?.tags ?? []}
+                datasetTargetType={viewDs?.targetType}
+                datasetTargetIds={viewDs?.targetIds}
                 activeScorers={Object.keys(agentScorers)}
                 onGenerate={() => setGenerateDatasetId(view.id)}
                 onViewExperiment={(experimentId: string) =>
@@ -461,7 +461,7 @@ export function AgentPlaygroundEvaluate({
             const scorerLinkedDatasets = allDatasets
               .filter(
                 ds =>
-                  (ds.targetType === 'scorer' && parseTargetIds((ds as any).targetIds).includes(view.id)) ||
+                  (ds.targetType === 'scorer' && parseTargetIds(ds.targetIds).includes(view.id)) ||
                   (legacyDatasetId && ds.id === legacyDatasetId),
               )
               .map(ds => ({ id: ds.id, name: ds.name }));
@@ -563,7 +563,7 @@ export function AgentPlaygroundEvaluate({
                       className="w-full text-left px-3 py-2 rounded hover:bg-surface4 transition-colors"
                       onClick={async () => {
                         try {
-                          const existingIds = parseTargetIds((ds as any).targetIds);
+                          const existingIds = parseTargetIds(ds.targetIds);
                           await updateDataset.mutateAsync({
                             datasetId: ds.id,
                             targetType: ds.targetType || 'agent',
@@ -787,7 +787,7 @@ function ExperimentBadge({ experiment }: { experiment: AgentExperiment }) {
   );
 }
 
-function filteredScorers(entries: [string, any][], search: string) {
+function filteredScorers(entries: [string, { scorer?: { name?: string } }][], search: string) {
   if (!search) return entries;
   const q = search.toLowerCase();
   return entries.filter(([id, s]) => {
