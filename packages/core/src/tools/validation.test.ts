@@ -1495,6 +1495,83 @@ describe('validateToolInput - Absent Optional Fields in Nested Objects (GitHub #
   });
 });
 
+describe('validateToolInput - Value-Based Null Detection (GitHub #14476)', () => {
+  // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/14476
+  // The null detection in Step 5 should check the actual value at the failing path
+  // rather than relying on error message string matching (e.g., checking for 'null'
+  // in the message). This ensures null values are detected even when validators
+  // return messages like "must be string" or "must be object".
+
+  it('should detect null values even when error message does not contain "null"', () => {
+    const schema = z.object({
+      name: z.string(),
+      description: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+    });
+
+    // LLM sends null for optional fields
+    const input = { name: 'test', description: null, tags: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'test' });
+  });
+
+  it('should handle null in nested optional fields with non-null error messages', () => {
+    const schema = z.object({
+      config: z.object({
+        timeout: z.number().optional(),
+        retries: z.number().optional(),
+        label: z.string().optional(),
+      }),
+    });
+
+    const input = {
+      config: {
+        timeout: null,
+        retries: null,
+        label: null,
+      },
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ config: {} });
+  });
+
+  it('should still preserve null for .nullable() fields', () => {
+    const schema = z.object({
+      name: z.string(),
+      deletedAt: z.string().nullable(),
+      note: z.string().optional(),
+    });
+
+    const input = { name: 'test', deletedAt: null, note: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'test', deletedAt: null });
+  });
+
+  it('should not misidentify non-null values at failing paths as null-related', () => {
+    const schema = z.object({
+      count: z.number(),
+      name: z.string(),
+    });
+
+    // Invalid types but not null - these should NOT be treated as null-related
+    const input = { count: 'not-a-number', name: 123 };
+
+    const result = validateToolInput(schema, input);
+
+    // Should still fail validation (can't fix by stripping)
+    expect(result.error).toBeDefined();
+  });
+});
+
 describe('validateToolInput - Undefined to Null Conversion (GitHub #11457)', () => {
   // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/11457
   // When schemas are processed through OpenAI compat layers, .optional() is converted
