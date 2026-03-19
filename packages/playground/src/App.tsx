@@ -26,7 +26,6 @@ import {
   PlaygroundConfigGuard,
   PlaygroundQueryClient,
   StudioConfigProvider,
-  TooltipProvider,
   useStudioConfig,
 } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
@@ -298,11 +297,7 @@ function App() {
   }
 
   if (!baseUrl) {
-    return (
-      <TooltipProvider delayDuration={0}>
-        <PlaygroundConfigGuard />
-      </TooltipProvider>
-    );
+    return <PlaygroundConfigGuard />;
   }
 
   const router = createBrowserRouter(routes, { basename: studioBasePath });
