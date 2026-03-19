@@ -3,6 +3,7 @@ title: "Middleware | Server"
 description: "Apply custom middleware functions to intercept requests."
 packages:
   - "@mastra/core"
+  - "@mastra/server"
 ---
 
 # Middleware
@@ -116,6 +117,7 @@ Mastra provides reserved context keys that, when set by middleware, take precede
 ```typescript
 import { Mastra } from '@mastra/core'
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context'
+import { getAuthenticatedUser } from '@mastra/server/auth'
 
 export const mastra = new Mastra({
   server: {
@@ -129,8 +131,12 @@ export const mastra = new Mastra({
       {
         path: '/api/*',
         handler: async (c, next) => {
+          const user = await getAuthenticatedUser<{ id: string }>({
+            mastra: c.get('mastra'),
+            token: c.req.header('Authorization'),
+            request: c.req.raw,
+          })
           const requestContext = c.get('requestContext')
-          const user = requestContext.get('user')
 
           if (!user) {
             return c.json({ error: 'Unauthorized' }, 401)
@@ -147,6 +153,8 @@ export const mastra = new Mastra({
   },
 })
 ```
+
+`server.middleware` runs before Mastra's per-route auth checks. When middleware needs the authenticated user, call `getAuthenticatedUser()` to resolve it from the configured auth provider without changing the default route auth flow.
 
 With this middleware, the server automatically:
 
