@@ -229,5 +229,36 @@ describe('extractUsageMetrics', () => {
       expect(result.inputTokens).toBe(100);
       expect(result.inputDetails).toBeUndefined();
     });
+
+    it('should use inputTokenDetails.cacheReadTokens as fallback when providerMetadata has no cache data', () => {
+      const usage = {
+        inputTokens: 500,
+        outputTokens: 100,
+        inputTokenDetails: {
+          cacheReadTokens: 300,
+          cacheWriteTokens: 50,
+        },
+      } as LanguageModelUsage;
+
+      const result = extractUsageMetrics(usage);
+
+      expect(result.inputDetails?.cacheRead).toBe(300);
+      expect(result.inputDetails?.cacheWrite).toBe(50);
+    });
+
+    it('should prefer usage.cachedInputTokens over inputTokenDetails when both present', () => {
+      const usage = {
+        inputTokens: 500,
+        outputTokens: 100,
+        cachedInputTokens: 200,
+        inputTokenDetails: {
+          cacheReadTokens: 300,
+        },
+      } as LanguageModelUsage;
+
+      const result = extractUsageMetrics(usage);
+
+      expect(result.inputDetails?.cacheRead).toBe(200);
+    });
   });
 });
