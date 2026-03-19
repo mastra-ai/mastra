@@ -9,6 +9,7 @@ import type {
   DatasetItem,
   DatasetItemRow,
   DatasetVersion,
+  TargetType,
   UpdateExperimentResultInput,
 } from '../storage/types.js';
 import { runExperiment } from './experiment/index.js';
@@ -122,7 +123,7 @@ export class Dataset {
     groundTruthSchema?: unknown;
     requestContextSchema?: Record<string, unknown> | null;
     tags?: string[] | null;
-    targetType?: string | null;
+    targetType?: TargetType | null;
     targetIds?: string[] | null;
   }): Promise<DatasetRecord> {
     const store = await this.#getDatasetsStore();

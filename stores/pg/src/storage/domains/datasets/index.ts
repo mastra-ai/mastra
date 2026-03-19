@@ -35,6 +35,7 @@ import type {
   BatchInsertItemsInput,
   BatchDeleteItemsInput,
   CreateIndexOptions,
+  TargetType,
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
@@ -168,7 +169,7 @@ export class DatasetsPG extends DatasetsStorage {
       groundTruthSchema: row.groundTruthSchema ? safelyParseJSON(row.groundTruthSchema) : undefined,
       requestContextSchema: row.requestContextSchema ? safelyParseJSON(row.requestContextSchema) : undefined,
       tags: row.tags ? safelyParseJSON(row.tags) : undefined,
-      targetType: row.targetType || null,
+      targetType: (row.targetType as TargetType) || null,
       targetIds: row.targetIds || null,
       version: row.version as number,
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
@@ -236,7 +237,7 @@ export class DatasetsPG extends DatasetsStorage {
           groundTruthSchema: input.groundTruthSchema ?? null,
           requestContextSchema: input.requestContextSchema ?? null,
           targetType: input.targetType ?? null,
-          targetIds: input.targetIds ? JSON.stringify(input.targetIds) : null,
+          targetIds: input.targetIds !== undefined ? JSON.stringify(input.targetIds) : null,
           version: 0,
           createdAt: nowIso,
           updatedAt: nowIso,

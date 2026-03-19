@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { resolveModelConfig } from '@mastra/core/llm';
+import type { TargetType } from '@mastra/core/storage';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
@@ -154,7 +155,7 @@ export const CREATE_DATASET_ROUTE = createRoute({
         inputSchema?: Record<string, unknown> | null;
         groundTruthSchema?: Record<string, unknown> | null;
         requestContextSchema?: Record<string, unknown> | null;
-        targetType?: string;
+        targetType?: TargetType;
         targetIds?: string[];
       };
       const ds = await mastra.datasets.create({
@@ -234,7 +235,7 @@ export const UPDATE_DATASET_ROUTE = createRoute({
         groundTruthSchema?: Record<string, unknown> | null;
         requestContextSchema?: Record<string, unknown> | null;
         tags?: string[];
-        targetType?: string;
+        targetType?: TargetType;
         targetIds?: string[];
       };
       const ds = await mastra.datasets.get({ id: datasetId });
@@ -1050,10 +1051,12 @@ export const CLUSTER_FAILURES_ROUTE = createRoute({
 
       const itemSummaries = items.map((item, i) => {
         const parts = [`Item ${i + 1} (id: ${item.id}):`];
-        if (item.input) parts.push(`  Input: ${JSON.stringify(item.input)}`);
-        if (item.output) parts.push(`  Output: ${JSON.stringify(item.output)}`);
-        if (item.error) parts.push(`  Error: ${item.error}`);
-        if (item.scores) {
+        if (item.input !== undefined && item.input !== null) parts.push(`  Input: ${JSON.stringify(item.input)}`);
+        if (item.output !== undefined && item.output !== null) parts.push(`  Output: ${JSON.stringify(item.output)}`);
+        if (item.error !== undefined && item.error !== null) {
+          parts.push(`  Error: ${typeof item.error === 'string' ? item.error : JSON.stringify(item.error)}`);
+        }
+        if (item.scores !== undefined && item.scores !== null) {
           parts.push(`  Scores: ${JSON.stringify(item.scores)}`);
         }
         if (item.existingTags && item.existingTags.length > 0) {

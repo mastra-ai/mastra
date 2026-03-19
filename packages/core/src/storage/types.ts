@@ -2150,7 +2150,7 @@ export interface DatasetRecord {
   groundTruthSchema?: Record<string, unknown>;
   requestContextSchema?: Record<string, unknown>;
   tags?: string[] | null;
-  targetType?: string | null;
+  targetType?: TargetType | null;
   targetIds?: string[] | null;
   version: number;
   createdAt: Date;
@@ -2206,7 +2206,7 @@ export interface CreateDatasetInput {
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
   requestContextSchema?: Record<string, unknown> | null;
-  targetType?: string;
+  targetType?: TargetType;
   targetIds?: string[];
 }
 
@@ -2219,7 +2219,7 @@ export interface UpdateDatasetInput {
   groundTruthSchema?: Record<string, unknown> | null;
   requestContextSchema?: Record<string, unknown> | null;
   tags?: string[] | null;
-  targetType?: string | null;
+  targetType?: TargetType | null;
   targetIds?: string[] | null;
 }
 
