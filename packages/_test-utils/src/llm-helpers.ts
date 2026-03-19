@@ -5,6 +5,9 @@
  * These helpers reduce boilerplate across test files.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+
 /**
  * Model configuration type from @mastra/core/llm
  * Re-declared here to avoid circular dependencies
@@ -215,13 +218,24 @@ export interface ProviderApiKeys {
  * @param mode - Current LLM test mode
  * @param providers - Which provider keys to set (default: all)
  */
+
+// Consolidated mapping of providers to their possible environment variable names.
+// Some providers (like Google) have multiple possible env var names.
+const PROVIDER_ENV_VARS: Record<keyof ProviderApiKeys, readonly string[]> = {
+  openai: ['OPENAI_API_KEY'],
+  anthropic: ['ANTHROPIC_API_KEY'],
+  google: ['GOOGLE_GENERATIVE_AI_API_KEY', 'GOOGLE_API_KEY'],
+  openrouter: ['OPENROUTER_API_KEY'],
+};
+
 export function setupDummyApiKeys(
   mode: string,
   providers: (keyof ProviderApiKeys)[] = ['openai', 'anthropic', 'google', 'openrouter'],
 ): void {
   // Set dummy keys for modes that may replay recordings.
-  // In auto mode, we may replay so dummy keys are needed as fallback.
-  // Only skip for live, record, and update modes which always need real keys.
+  // - replay: strict replay mode, recordings are required
+  // - auto: replay if recording exists, otherwise record/hit API
+  // For live, record, and update modes, real keys are always required.
   if (mode === 'live' || mode === 'record' || mode === 'update') return;
 
   const dummyKeys: ProviderApiKeys = {
@@ -231,17 +245,11 @@ export function setupDummyApiKeys(
     openrouter: 'sk-or-dummy-for-replay-mode',
   };
 
-  const envVars: Record<keyof ProviderApiKeys, string> = {
-    openai: 'OPENAI_API_KEY',
-    anthropic: 'ANTHROPIC_API_KEY',
-    google: 'GOOGLE_API_KEY',
-    openrouter: 'OPENROUTER_API_KEY',
-  };
-
   for (const provider of providers) {
-    const envVar = envVars[provider];
-    if (!process.env[envVar]) {
-      process.env[envVar] = dummyKeys[provider];
+    for (const envVar of PROVIDER_ENV_VARS[provider]) {
+      if (!process.env[envVar]) {
+        process.env[envVar] = dummyKeys[provider];
+      }
     }
   }
 }
@@ -259,11 +267,119 @@ export function setupDummyApiKeys(
  * ```
  */
 export function hasApiKey(provider: keyof ProviderApiKeys): boolean {
-  const envVars: Record<keyof ProviderApiKeys, string> = {
-    openai: 'OPENAI_API_KEY',
-    anthropic: 'ANTHROPIC_API_KEY',
-    google: 'GOOGLE_API_KEY',
-    openrouter: 'OPENROUTER_API_KEY',
-  };
-  return !!process.env[envVars[provider]];
+  return PROVIDER_ENV_VARS[provider].some(name => !!process.env[name]?.trim());
+}
+
+/**
+ * Check if a real (non-dummy) API key is available for a provider.
+ * Returns false if the key is a dummy key set by setupDummyApiKeys.
+ */
+export function hasRealApiKey(provider: keyof ProviderApiKeys): boolean {
+  for (const envVar of PROVIDER_ENV_VARS[provider]) {
+    const key = process.env[envVar]?.trim();
+    if (key && !key.includes('-dummy-') && !key.includes('dummy-')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Map providers to their API URL domains
+const PROVIDER_URL_PATTERNS: Record<keyof ProviderApiKeys, string[]> = {
+  openai: ['api.openai.com'],
+  anthropic: ['api.anthropic.com'],
+  google: ['generativelanguage.googleapis.com'],
+  openrouter: ['openrouter.ai'],
+};
+
+/**
+ * Check if non-empty recordings exist for a test file.
+ *
+ * Recording files are JSON arrays. An empty recording is `[]` (3 bytes).
+ * This function checks if the recording file exists AND has content.
+ *
+ * @param recordingName - The recording name (typically derived from test file path)
+ * @param recordingsDir - Optional recordings directory (defaults to `__recordings__` in cwd)
+ * @param provider - Optional provider to check for (if specified, only counts recordings for that provider)
+ * @returns true if recordings exist and are non-empty (optionally for the specified provider)
+ */
+export function hasNonEmptyRecordings(
+  recordingName: string,
+  recordingsDir?: string,
+  provider?: keyof ProviderApiKeys,
+): boolean {
+  const dir = recordingsDir || path.join(process.cwd(), '__recordings__');
+  const recordingPath = path.join(dir, `${recordingName}.json`);
+
+  if (!fs.existsSync(recordingPath)) return false;
+
+  try {
+    const content = fs.readFileSync(recordingPath, 'utf-8');
+    const parsed = JSON.parse(content);
+
+    // Handle both formats:
+    // - Legacy: plain array of recordings
+    // - Current: { meta, recordings: [...] }
+    const recordings = Array.isArray(parsed) ? parsed : parsed?.recordings;
+    if (!Array.isArray(recordings) || recordings.length === 0) return false;
+
+    // If no provider specified, just check if any recordings exist
+    if (!provider) return true;
+
+    // Check if any recordings match the provider's URL patterns
+    const patterns = PROVIDER_URL_PATTERNS[provider];
+    return recordings.some(
+      (entry: { request?: { url?: string } }) =>
+        entry.request?.url && patterns.some(pattern => entry.request!.url!.includes(pattern)),
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Determine if an LLM test should be skipped.
+ *
+ * Skip logic:
+ * - If real API key exists: never skip
+ * - In `replay` mode: never skip (recordings are required, let it fail if missing)
+ * - In `auto` mode: skip only if no recordings exist (no key + no recordings = can't run)
+ * - In `live`/`record`/`update` modes: skip if no real API key
+ *
+ * @param mode - Current LLM test mode from getLLMTestMode()
+ * @param provider - Which provider's API key to check
+ * @param recordingName - Optional recording name to check for existing recordings (for auto mode)
+ * @returns true if the test should be skipped
+ *
+ * @example
+ * ```typescript
+ * import { getLLMTestMode } from '@internal/llm-recorder';
+ * import { shouldSkipLLMTest } from '@internal/test-utils';
+ *
+ * const MODE = getLLMTestMode();
+ *
+ * // Without recording check (skips in auto mode without real key)
+ * const skipLLM = shouldSkipLLMTest(MODE, 'openai');
+ *
+ * // With recording check (allows auto mode to run if recordings exist)
+ * const skipLLM = shouldSkipLLMTest(MODE, 'openai', 'my-test-recording');
+ *
+ * describe.skipIf(skipLLM)('LLM Tests', () => { ... });
+ * ```
+ */
+export function shouldSkipLLMTest(mode: string, provider: keyof ProviderApiKeys, recordingName?: string): boolean {
+  // If we have a real API key, never skip
+  if (hasRealApiKey(provider)) return false;
+
+  // In explicit replay mode, don't skip - let it fail if no recording
+  if (mode === 'replay') return false;
+
+  // In auto mode, check if recordings exist for this provider
+  if (mode === 'auto' && recordingName) {
+    // If recordings exist for this provider, don't skip - the recorder will replay them
+    if (hasNonEmptyRecordings(recordingName, undefined, provider)) return false;
+  }
+
+  // For all other cases (live, record, update, or auto without recordings), skip
+  return true;
 }

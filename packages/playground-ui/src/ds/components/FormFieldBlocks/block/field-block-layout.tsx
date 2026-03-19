@@ -14,8 +14,6 @@ export function FieldBlockLayout({
   layout = 'vertical',
   labelColumnWidth,
 }: FieldBlockLayoutProps) {
-  console.log({ labelColumnWidth, layout });
-
   return (
     <div
       className={cn(

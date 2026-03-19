@@ -1005,7 +1005,7 @@ function createStepFromProcessor<TProcessorId extends string>(
             if (part && (part as ChunkType).type.startsWith('data-') && !processor.processDataParts) {
               return { ...passThrough, part };
             }
-            if (processor.processOutputStream) {
+            if (processor.processOutputStream && part) {
               // Manage per-processor span lifecycle across stream chunks
               // Use unique key to store span on shared state object
               const spanKey = `__outputStreamSpan_${processor.id}`;

@@ -1,5 +1,44 @@
 # mastracode
 
+## 0.9.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`888c512`](https://github.com/mastra-ai/mastra/commit/888c5121e370289713d560a99bce58814e2fbb69), [`d7f14c3`](https://github.com/mastra-ai/mastra/commit/d7f14c3285cd253ecdd5f58139b7b6cbdf3678b5)]:
+  - @mastra/pg@1.8.2-alpha.0
+  - @mastra/core@1.15.0-alpha.3
+
+## 0.9.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8)]:
+  - @mastra/core@1.15.0-alpha.2
+
+## 0.9.1-alpha.1
+
+### Patch Changes
+
+- Fixed mastracode to forward harness thread and resource headers to model providers. ([#14433](https://github.com/mastra-ai/mastra/pull/14433))
+
+- Removed italic styling from tool arguments (shell commands, web search queries, and generic tool args) for improved readability in the terminal. ([#14472](https://github.com/mastra-ai/mastra/pull/14472))
+
+- Added thread title support to Mastra Code. ([#14436](https://github.com/mastra-ai/mastra/pull/14436))
+  - Show live thread title update markers in the chat history.
+  - Display non-generic thread titles in the status bar and thread picker.
+  - Auto-truncate long titles to fit available terminal width.
+
+- Fixed inline text questions so long answers wrap inside the question box instead of crashing the terminal render. ([#14479](https://github.com/mastra-ai/mastra/pull/14479))
+
+- Improved `/threads` so it opens quickly with batched lazy preview loading, reuses cached previews across the active TUI session, and refreshes cached previews whenever a thread's `updatedAt` changes. ([#14428](https://github.com/mastra-ai/mastra/pull/14428))
+
+- Improved the Mastra Code TUI with clearer user history styling and a smoother active prompt animation. ([#14423](https://github.com/mastra-ai/mastra/pull/14423))
+
+- Updated dependencies [[`681ee1c`](https://github.com/mastra-ai/mastra/commit/681ee1c811359efd1b8bebc4bce35b9bb7b14bec), [`aa664b2`](https://github.com/mastra-ai/mastra/commit/aa664b218c15d397598c71194a8603b5b5a691bb)]:
+  - @mastra/core@1.15.0-alpha.1
+  - @mastra/memory@1.9.0-alpha.1
+  - @mastra/mcp@1.3.1-alpha.0
+
 ## 0.9.1-alpha.0
 
 ### Patch Changes
