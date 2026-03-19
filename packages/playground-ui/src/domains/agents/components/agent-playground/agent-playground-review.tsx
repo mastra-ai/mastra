@@ -158,7 +158,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
           id: item.id,
           input: item.input,
           output: item.output,
-          error: typeof item.error === 'string' ? item.error : undefined,
+          error: typeof item.error === 'string' ? item.error : item.error ? JSON.stringify(item.error) : undefined,
           scores: item.scores,
           existingTags: item.tags.length > 0 ? item.tags : undefined,
         })),
