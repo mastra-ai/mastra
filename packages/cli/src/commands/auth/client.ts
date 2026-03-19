@@ -7,11 +7,16 @@ export const MASTRA_PLATFORM_API_URL = process.env.MASTRA_PLATFORM_API_URL || 'h
 export const SESSION_EXPIRED_MESSAGE = 'Session expired. Run: mastra auth login';
 
 /**
- * Throw a standardized error for API failures, with special handling for 401.
+ * Throw a standardized error for API failures.
+ * - 401: "Session expired" (authentication failed)
+ * - Other: Show the server's error detail or fall back to status code
  */
-export function throwApiError(message: string, status: number): never {
+export function throwApiError(message: string, status: number, detail?: string): never {
   if (status === 401) {
     throw new Error(SESSION_EXPIRED_MESSAGE);
+  }
+  if (detail) {
+    throw new Error(detail);
   }
   throw new Error(`${message}: ${status}`);
 }

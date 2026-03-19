@@ -24,7 +24,7 @@ export async function fetchProjects(token: string, orgId: string): Promise<Proje
   const { data, error, response } = await client.GET('/v1/studio/projects');
 
   if (error) {
-    throwApiError('Failed to fetch projects', response.status);
+    throwApiError('Failed to fetch projects', response.status, error.detail);
   }
 
   return data.projects;
@@ -37,7 +37,7 @@ export async function createProject(token: string, orgId: string, name: string):
   });
 
   if (error) {
-    throwApiError(`Failed to create project — ${error.error}`, response.status);
+    throwApiError('Failed to create project', response.status, error.detail);
   }
 
   return data.project;
@@ -59,7 +59,7 @@ export async function fetchDeployStatus(deployId: string, token: string, orgId?:
   });
 
   if (error) {
-    throwApiError('Failed to fetch deploy status', response.status);
+    throwApiError('Failed to fetch deploy status', response.status, error.detail);
   }
 
   return data.deploy;
@@ -87,7 +87,8 @@ export async function uploadDeploy(
     body: JSON.stringify({ envVars: meta?.envVars }),
   });
   if (!createResp.ok) {
-    throwApiError('Deploy failed', createResp.status);
+    const body: { detail?: string } = await createResp.json().catch(() => ({}));
+    throwApiError('Deploy failed', createResp.status, body.detail);
   }
   const { deploy } = (await createResp.json()) as {
     deploy: { id: string; status: string; uploadUrl: string };
@@ -116,7 +117,8 @@ export async function uploadDeploy(
     headers: authHeaders(token, orgId),
   });
   if (!completeResp.ok) {
-    throwApiError('Upload confirmation failed', completeResp.status);
+    const body: { detail?: string } = await completeResp.json().catch(() => ({}));
+    throwApiError('Upload confirmation failed', completeResp.status, body.detail);
   }
 
   return deploy;
@@ -194,7 +196,7 @@ export async function pollDeploy(
 
           continue;
         }
-        throwApiError('Poll failed', response.status);
+        throwApiError('Poll failed', response.status, error.detail);
       }
 
       const { deploy } = data;

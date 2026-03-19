@@ -11,7 +11,7 @@ async function getLogs(deployId: string, tail: string | undefined, token: string
   });
 
   if (error) {
-    throw new Error(`Failed to fetch logs: ${error.error}`);
+    throw new Error(`Failed to fetch logs: ${error.detail}`);
   }
 
   if (data.logs) {

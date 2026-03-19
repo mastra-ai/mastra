@@ -48,15 +48,19 @@ describe('fetchProjects', () => {
     expect(mockGET).toHaveBeenCalledWith('/v1/studio/projects');
   });
 
-  it('throws on error response', async () => {
-    mockGET.mockResolvedValue({ data: undefined, error: { error: 'forbidden' }, response: { status: 403 } });
+  it('throws on error response with detail message', async () => {
+    mockGET.mockResolvedValue({
+      data: undefined,
+      error: { detail: 'Not a member of the specified organization' },
+      response: { status: 403 },
+    });
 
     const { fetchProjects } = await import('./platform-api.js');
-    await expect(fetchProjects('tok', 'org-1')).rejects.toThrow('Failed to fetch projects: 403');
+    await expect(fetchProjects('tok', 'org-1')).rejects.toThrow('Not a member of the specified organization');
   });
 
   it('throws session expired message on 401', async () => {
-    mockGET.mockResolvedValue({ data: undefined, error: { error: 'unauthorized' }, response: { status: 401 } });
+    mockGET.mockResolvedValue({ data: undefined, error: { detail: 'Invalid token' }, response: { status: 401 } });
 
     const { fetchProjects } = await import('./platform-api.js');
     await expect(fetchProjects('tok', 'org-1')).rejects.toThrow('Session expired. Run: mastra auth login');
@@ -76,10 +80,14 @@ describe('createProject', () => {
   });
 
   it('throws on error response', async () => {
-    mockPOST.mockResolvedValue({ data: undefined, error: { error: 'conflict' }, response: { status: 409 } });
+    mockPOST.mockResolvedValue({
+      data: undefined,
+      error: { detail: 'Project name already exists' },
+      response: { status: 409 },
+    });
 
     const { createProject } = await import('./platform-api.js');
-    await expect(createProject('tok', 'org-1', 'Dup')).rejects.toThrow('Failed to create project — conflict: 409');
+    await expect(createProject('tok', 'org-1', 'Dup')).rejects.toThrow('Project name already exists');
   });
 });
 
@@ -160,12 +168,12 @@ describe('uploadDeploy', () => {
         ok: false,
         status: 500,
         statusText: 'Internal Server Error',
-        text: () => Promise.resolve('server error'),
+        json: () => Promise.resolve({ detail: 'Internal server error' }),
       }),
     );
 
     const { uploadDeploy } = await import('./platform-api.js');
-    await expect(uploadDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip'))).rejects.toThrow('Deploy failed: 500');
+    await expect(uploadDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip'))).rejects.toThrow('Internal server error');
   });
 
   it('throws when artifact upload fails', async () => {

@@ -12,7 +12,7 @@ export async function fetchOrgs(token: string): Promise<Org[]> {
   const { data, error, response } = await client.GET('/v1/auth/orgs');
 
   if (error) {
-    throwApiError('Failed to fetch orgs', response.status);
+    throwApiError('Failed to fetch orgs', response.status, error.detail);
   }
 
   return data.organizations;

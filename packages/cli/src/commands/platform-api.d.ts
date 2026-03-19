@@ -44,7 +44,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/v1/auth/me': {
+  '/v1/auth/verify': {
     parameters: {
       query?: never;
       header?: never;
@@ -52,12 +52,32 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * Get current user
-     * @description Return the current session user, organization, role, and permissions.
+     * Verify CLI token
+     * @description Verify a CLI access token (WorkOS JWT) and return user info and organization.
      */
-    get: operations['getV1AuthMe'];
+    get: operations['getV1AuthVerify'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/auth/refresh-token': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Refresh access token
+     * @description Exchange a WorkOS refresh token for a new access token (CLI flow).
+     */
+    post: operations['postV1AuthRefreshToken'];
     delete?: never;
     options?: never;
     head?: never;
@@ -76,6 +96,26 @@ export interface paths {
      * @description Refresh the sealed session cookie using WorkOS refresh token.
      */
     get: operations['getV1AuthRefresh'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/auth/me': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get current user
+     * @description Return the current session user, organization, role, and permissions.
+     */
+    get: operations['getV1AuthMe'];
     put?: never;
     post?: never;
     delete?: never;
@@ -142,46 +182,6 @@ export interface paths {
      * @description Clear session cookie and return optional WorkOS logout URL.
      */
     post: operations['postV1AuthLogout'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/v1/auth/verify': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Verify CLI token
-     * @description Verify a CLI access token (WorkOS JWT) and return user info and organization.
-     */
-    get: operations['getV1AuthVerify'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/v1/auth/refresh-token': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Refresh access token
-     * @description Exchange a WorkOS refresh token for a new access token (CLI flow).
-     */
-    post: operations['postV1AuthRefreshToken'];
     delete?: never;
     options?: never;
     head?: never;
@@ -285,7 +285,7 @@ export interface paths {
     };
     /**
      * Get usage activity
-     * @description Aggregated usage metrics for a project. Supports multiple granularities (1m, 5m, 15m, 1h, daily, weekly, monthly) and optional group-by dimensions (model, provider, source, api_key_id, etc.).
+     * @description Aggregated usage metrics for a project. Supports multiple granularities (1m, 5m, 15m, 1h, daily, weekly, monthly) and optional group-by dimensions (model, provider, source_category, api_key_id).
      */
     get: operations['getV1GatewayProjectsByIdUsageActivity'];
     put?: never;
@@ -308,6 +308,46 @@ export interface paths {
      * @description Per-request log entries for a project. Supports filtering by model, provider, source, and API key. Paginated with limit/offset (max 200 per page, default 50).
      */
     get: operations['getV1GatewayProjectsByIdUsageLogs'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/gateway/projects/{id}/usage/logs/facets': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get log facet counts
+     * @description Returns distinct values and counts for filterable fields, respecting all active filters except the field being faceted.
+     */
+    get: operations['getV1GatewayProjectsByIdUsageLogsFacets'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/gateway/projects/{id}/usage/logs/{requestId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get a single request log with messages
+     * @description Returns the full request log entry enriched with API key info, plus any associated messages fetched via message_ids.
+     */
+    get: operations['getV1GatewayProjectsByIdUsageLogsByRequestId'];
     put?: never;
     post?: never;
     delete?: never;
@@ -354,7 +394,11 @@ export interface paths {
     get: operations['getV1StudioProjectsById'];
     put?: never;
     post?: never;
-    delete?: never;
+    /**
+     * Delete project
+     * @description Soft-delete a project and all its deploys
+     */
+    delete: operations['deleteV1StudioProjectsById'];
     options?: never;
     head?: never;
     patch?: never;
@@ -513,7 +557,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -524,7 +576,171 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+    };
+  };
+  getV1AuthVerify: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Token valid */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            user: {
+              id: string;
+              email: string;
+              firstName: string | null;
+              lastName: string | null;
+            };
+            organizationId: string;
+          };
+        };
+      };
+      /** @description Invalid or missing token */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+      /** @description Not a member of the organization */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+    };
+  };
+  postV1AuthRefreshToken: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': {
+          refreshToken: string;
+        };
+      };
+    };
+    responses: {
+      /** @description New tokens */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            accessToken: string;
+            refreshToken: string;
+          };
+        };
+      };
+      /** @description Refresh failed */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+    };
+  };
+  getV1AuthRefresh: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Session refreshed */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            /** @constant */
+            ok: true;
+          };
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -566,41 +782,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
-          };
-        };
-      };
-    };
-  };
-  getV1AuthRefresh: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Session refreshed */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': {
-            /** @constant */
-            ok: true;
-          };
-        };
-      };
-      /** @description Not authenticated */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -638,7 +828,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -682,7 +880,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -723,7 +929,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -748,96 +962,6 @@ export interface operations {
             /** @constant */
             ok: true;
             logoutUrl?: string;
-          };
-        };
-      };
-    };
-  };
-  getV1AuthVerify: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Token valid */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': {
-            user: {
-              id: string;
-              email: string;
-              firstName: string | null;
-              lastName: string | null;
-            };
-            organizationId: string;
-          };
-        };
-      };
-      /** @description Invalid or missing token */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': {
-            error: string;
-          };
-        };
-      };
-      /** @description Not a member of the organization */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': {
-            error: string;
-          };
-        };
-      };
-    };
-  };
-  postV1AuthRefreshToken: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': {
-          refreshToken: string;
-        };
-      };
-    };
-    responses: {
-      /** @description New tokens */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': {
-            accessToken: string;
-            refreshToken: string;
-          };
-        };
-      };
-      /** @description Refresh failed */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': {
-            error: string;
           };
         };
       };
@@ -880,7 +1004,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -891,7 +1023,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -930,7 +1070,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -941,7 +1089,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -989,7 +1145,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -1000,7 +1164,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -1036,7 +1208,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -1047,7 +1227,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -1083,7 +1271,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -1094,7 +1290,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -1146,7 +1350,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -1157,7 +1369,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -1199,6 +1419,8 @@ export interface operations {
                   uncached_tokens: number;
                   cache_hit_rate: number;
                   cost_usd: number;
+                  error_rate: number;
+                  avg_cost_per_request: number;
                 }
               | {
                   request_count: number;
@@ -1211,6 +1433,8 @@ export interface operations {
                   uncached_tokens: number;
                   cache_hit_rate: number;
                   cost_usd: number;
+                  error_rate: number;
+                  avg_cost_per_request: number;
                   timestamp: string;
                   model?: string;
                   provider?: string;
@@ -1236,6 +1460,7 @@ export interface operations {
             title: string;
             status: number;
             detail?: string;
+            instance?: string;
             errors?: {
               field: string;
               message: string;
@@ -1254,6 +1479,7 @@ export interface operations {
             title: string;
             status: number;
             detail?: string;
+            instance?: string;
             errors?: {
               field: string;
               message: string;
@@ -1306,8 +1532,11 @@ export interface operations {
               error: string | null;
               generation_id: string | null;
               thread_id: string | null;
+              resource_id: string | null;
+              message_ids: string[];
               timestamp: string;
             }[];
+            has_more: boolean;
           };
         };
       };
@@ -1322,6 +1551,7 @@ export interface operations {
             title: string;
             status: number;
             detail?: string;
+            instance?: string;
             errors?: {
               field: string;
               message: string;
@@ -1340,6 +1570,177 @@ export interface operations {
             title: string;
             status: number;
             detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+    };
+  };
+  getV1GatewayProjectsByIdUsageLogsFacets: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Facet counts per field */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            status_code: {
+              value: string;
+              count: number;
+            }[];
+            model: {
+              value: string;
+              count: number;
+            }[];
+            provider: {
+              value: string;
+              count: number;
+            }[];
+            source: {
+              value: string;
+              count: number;
+            }[];
+            source_category: {
+              value: string;
+              count: number;
+            }[];
+            has_error: {
+              value: string;
+              count: number;
+            }[];
+            endpoint: {
+              value: string;
+              count: number;
+            }[];
+            is_stream: {
+              value: string;
+              count: number;
+            }[];
+          };
+        };
+      };
+      /** @description Invalid query parameters */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+      /** @description Project not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+    };
+  };
+  getV1GatewayProjectsByIdUsageLogsByRequestId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+        requestId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Log detail with messages */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            log: {
+              request_id: string;
+              api_key_id: string | null;
+              api_key_label: string | null;
+              api_key_prefix: string | null;
+              model: string;
+              provider: string;
+              source: string;
+              source_category: string;
+              endpoint: string;
+              status_code: number;
+              prompt_tokens: number;
+              completion_tokens: number;
+              total_tokens: number;
+              cached_tokens: number;
+              cache_write_tokens: number;
+              cost_usd: number;
+              latency_ms: number;
+              is_stream: boolean;
+              error: string | null;
+              generation_id: string | null;
+              thread_id: string | null;
+              resource_id: string | null;
+              message_ids: string[];
+              timestamp: string;
+            };
+            messages: {
+              id: string;
+              threadId: string;
+              role: string;
+              content: unknown;
+              type: string;
+              createdAt: string;
+            }[];
+          };
+        };
+      };
+      /** @description Project or log not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
             errors?: {
               field: string;
               message: string;
@@ -1385,7 +1786,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -1433,7 +1842,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -1488,7 +1905,59 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+    };
+  };
+  deleteV1StudioProjectsById: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Project deleted */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            /** @constant */
+            ok: true;
+          };
+        };
+      };
+      /** @description Project not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -1530,7 +1999,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -1566,7 +2043,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -1611,7 +2096,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -1649,7 +2142,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
@@ -1682,7 +2183,15 @@ export interface operations {
         };
         content: {
           'application/json': {
-            error: string;
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
           };
         };
       };
