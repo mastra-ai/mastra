@@ -2018,6 +2018,7 @@ Notes:
             blockAfter: omConfig.observation.blockAfter,
             previousObserverTokens: omConfig.observation.previousObserverTokens,
             instruction: omConfig.observation.instruction,
+            threadTitle: omConfig.observation.threadTitle,
           }
         : undefined,
       reflection: omConfig.reflection
@@ -2040,3 +2041,6 @@ export { SemanticRecall, WorkingMemory, MessageHistory } from '@mastra/core/proc
 
 // Re-export clone-related types for convenience
 export type { StorageCloneThreadInput, StorageCloneThreadOutput, ThreadCloneMetadata } from '@mastra/core/storage';
+
+// Observational Memory utilities
+export { getObservationsAsOf } from './processors/observational-memory';

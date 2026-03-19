@@ -388,6 +388,15 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             // Failed marker
             state.chatContainer.addChild(new OMMarkerComponent(content));
           }
+        } else if (content.type === 'om_thread_title_updated') {
+          // Render thread title update marker in history
+          state.chatContainer.addChild(
+            new OMMarkerComponent({
+              type: 'om_thread_title_updated',
+              newTitle: content.newTitle,
+              oldTitle: content.oldTitle,
+            }),
+          );
         }
         // Skip tool_result - it's handled with tool_call above
       }
