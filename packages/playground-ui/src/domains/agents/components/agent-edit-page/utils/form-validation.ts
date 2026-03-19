@@ -193,14 +193,6 @@ const inMemoryFileNodeSchema: z.ZodType<InMemoryFileNode> = z.lazy(() =>
   }),
 );
 
-const skillFormValueSchema = z.object({
-  localId: z.string(),
-  name: z.string().min(1, 'Skill name is required'),
-  description: z.string(),
-  workspaceId: z.string().min(1, 'Workspace is required'),
-  files: z.array(inMemoryFileNodeSchema),
-});
-
 export const agentFormSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name must be 100 characters or less'),
   description: z.string().max(500, 'Description must be 500 characters or less').optional(),

@@ -12,7 +12,7 @@ import {
   SaveIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import type {UISpan, UISpanState} from '../types';
+import type {UISpan} from '../types';
 import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
 import { getSpanInfo, useTraceInfo } from './helpers';
 import { SpanDialog } from './span-dialog';
@@ -67,7 +67,7 @@ export function TraceDialog({
   scorers,
   isLoadingScorers,
 }: TraceDialogProps) {
-  const { Link, navigate } = useLinkComponent();
+  const { navigate } = useLinkComponent();
 
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(Boolean(initialSpanId));
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(initialSpanId);
@@ -269,7 +269,7 @@ export function TraceDialog({
             {traceDetails && (
               <Sections>
                 <div className="grid xl:grid-cols-[3fr_2fr] gap-4 items-start">
-                  <KeyValueList data={traceInfo} LinkComponent={Link} />
+                  <KeyValueList data={traceInfo} />
                   <div className="bg-surface3 p-6 rounded-lg grid gap-4">
                     <h4 className="text-ui-lg">
                       <TextAndIcon>

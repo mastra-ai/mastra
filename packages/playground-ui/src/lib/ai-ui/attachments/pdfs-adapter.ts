@@ -46,7 +46,7 @@ export class PDFAttachmentAdapter implements AttachmentAdapter {
     };
   }
 
-  async remove(attachment: PendingAttachment): Promise<void> {
+  async remove(): Promise<void> {
     // Cleanup if needed
   }
 
@@ -61,7 +61,7 @@ export class PDFAttachmentAdapter implements AttachmentAdapter {
   }
 
   // Optional: Extract text from PDF using a library like pdf.js
-  private async extractTextFromPDF(file: File): Promise<string> {
+  private async extractTextFromPDF(): Promise<string> {
     // Implementation would use pdf.js or similar
     // This is a placeholder
     return 'Extracted PDF text content';

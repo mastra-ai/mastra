@@ -43,7 +43,7 @@ export const useSpeechRecognition = ({
         } else {
           setAgent(null);
         }
-      } catch (error) {
+      } catch {
         setAgent(null);
       }
     };

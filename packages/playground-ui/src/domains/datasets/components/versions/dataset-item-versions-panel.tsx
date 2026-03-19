@@ -113,7 +113,7 @@ export function DatasetItemVersionsPanel({
 
           <ItemList.Scroller>
             <ItemList.Items>
-              {versions?.map((item, index) => {
+              {versions?.map((item) => {
                 const versionKey = String(item.datasetVersion);
                 const versionDate = typeof item.updatedAt === 'string' ? new Date(item.updatedAt) : item.updatedAt;
 

@@ -10,7 +10,6 @@ import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Column } from '@/ds/components/Columns';
 import { ItemList } from '@/ds/components/ItemList';
-import { cn } from '@/lib/utils';
 
 export interface DatasetVersionsPanelProps {
   datasetId: string;

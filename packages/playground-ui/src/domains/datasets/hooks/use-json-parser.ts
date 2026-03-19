@@ -30,7 +30,7 @@ export function useJSONParser() {
       let data: unknown;
       try {
         data = JSON.parse(text);
-      } catch (parseErr) {
+      } catch {
         throw new Error('Invalid JSON format. Please check your file syntax.');
       }
 

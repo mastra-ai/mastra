@@ -9,7 +9,6 @@ import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
 import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
-import { Icon } from '@/ds/icons/Icon';
 
 import { useLinkComponent } from '@/lib/framework';
 

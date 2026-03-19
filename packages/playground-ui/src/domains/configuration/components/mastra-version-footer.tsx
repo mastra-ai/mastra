@@ -43,8 +43,6 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
     deprecatedCount,
   } = usePackageUpdates(installedPackages);
 
-  const hasUpdates = outdatedCount > 0 || deprecatedCount > 0;
-
   const [packageManager, setPackageManager] = useState<PackageManager>('pnpm');
 
   // Don't render anything when the sidebar is collapsed

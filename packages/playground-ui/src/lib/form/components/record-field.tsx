@@ -11,8 +11,8 @@ interface KeyValuePair {
   value: string;
 }
 
-export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field, error, id }) => {
-  const { key, onChange, ...props } = inputProps;
+export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field }) => {
+  const { onChange } = inputProps;
   const [pairs, setPairs] = React.useState<KeyValuePair[]>(() =>
     Object.entries(field.default || {}).map(([key, val]) => ({
       id: key || uuid(),

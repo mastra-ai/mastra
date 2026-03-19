@@ -39,7 +39,7 @@ export const isValidJson = (str: string) => {
 
     // Additionally check if the parsed result is an object
     return !!obj && typeof obj === 'object';
-  } catch (e) {
+  } catch {
     // If parsing throws an error, it's not valid JSON
     return false;
   }

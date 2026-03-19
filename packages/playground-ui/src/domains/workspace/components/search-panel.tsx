@@ -1,6 +1,6 @@
 import { Search, Loader2, Sparkles, FileText, Zap, FolderOpen } from 'lucide-react';
 import { useState } from 'react';
-import type { SearchResult, SearchResponse, SkillSearchResult, SearchSkillsResponse } from '../types';
+import type { SearchResult, SearchResponse, SkillSearchResult } from '../types';
 import { Button } from '@/ds/components/Button';
 import { Input } from '@/ds/components/Input';
 import { SkillIcon } from '@/ds/icons/SkillIcon';

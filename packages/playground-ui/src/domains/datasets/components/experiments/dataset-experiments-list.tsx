@@ -4,7 +4,7 @@ import { Checkbox } from '@/ds/components/Checkbox';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { ItemList } from '@/ds/components/ItemList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Chip, cn } from '@/index';
+import { Chip } from '@/index';
 
 const experimentsListColumns = [
   { name: 'experimentId', label: 'ID', size: '6rem' },
@@ -14,31 +14,6 @@ const experimentsListColumns = [
   { name: 'counts', label: 'Counts', size: '7rem' },
   { name: 'date', label: 'Created', size: '10rem' },
 ];
-
-/**
- * Truncate experiment ID to first 8 characters or until the first dash
- */
-function truncateExperimentId(id: string): string {
-  const dashIndex = id.indexOf('-');
-  if (dashIndex > 0 && dashIndex <= 8) {
-    return id.slice(0, dashIndex);
-  }
-  return id.slice(0, 8);
-}
-
-/**
- * Format a date for display
- */
-function formatDate(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 export interface DatasetExperimentsListProps {
   experiments: DatasetExperiment[];

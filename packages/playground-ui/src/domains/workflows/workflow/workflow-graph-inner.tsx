@@ -1,7 +1,7 @@
+import type { GetWorkflowResponse } from '@mastra/client-js';
 import type { NodeProps } from '@xyflow/react';
 import { ReactFlow, Background, useNodesState, useEdgesState, BackgroundVariant } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import type { GetWorkflowResponse } from '@mastra/client-js';
 
 import { useMemo } from 'react';
 import { useCurrentRun } from '../context/use-current-run';

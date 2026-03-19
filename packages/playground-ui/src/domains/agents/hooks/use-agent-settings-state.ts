@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import type { AgentSettingsType as AgentSettings} from '@/types';
-import { ModelSettings } from '@/types';
 
 export interface AgentSettingsStateProps {
   agentId: string;
@@ -37,7 +36,7 @@ export function useAgentSettingsState({ agentId, defaultSettings: defaultSetting
         },
       };
       setSettingsState(mergedSettings);
-    } catch (e) {
+    } catch {
       // ignore
     }
   }, [LOCAL_STORAGE_KEY, defaultSettingsProp]);

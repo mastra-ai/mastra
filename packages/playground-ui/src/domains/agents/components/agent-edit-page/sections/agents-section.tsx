@@ -9,7 +9,7 @@ import { EntityAccordionItem } from '@/domains/cms';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
 import { MultiCombobox } from '@/ds/components/Combobox';
-import { AgentIcon, Icon } from '@/ds/icons';
+import { AgentIcon } from '@/ds/icons';
 
 interface AgentsSectionProps {
   control: Control<AgentFormValues>;

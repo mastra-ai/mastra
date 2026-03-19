@@ -16,7 +16,6 @@ import type { JsonSchema } from '@/lib/json-schema';
 import { cn } from '@/lib/utils';
 
 
-
 export type CodeEditorLanguage = 'json' | 'markdown';
 
 export const useCodemirrorTheme = (): Extension => {
@@ -118,8 +117,6 @@ export type CodeEditorProps = {
   highlightVariables?: boolean;
   language?: CodeEditorLanguage;
   placeholder?: string;
-  /** Enable word wrapping instead of horizontal scrolling */
-  wordWrap?: boolean;
   /** JSON Schema to enable variable autocomplete for {{variable}} placeholders (markdown only) */
   schema?: JsonSchema;
   autoFocus?: boolean;
@@ -136,7 +133,6 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       language = 'json',
       highlightVariables = false,
       placeholder,
-      wordWrap = false,
       schema,
       autoFocus,
       ...props

@@ -1,4 +1,4 @@
-import { ArrowDownIcon, ArrowUpIcon, EqualIcon } from 'lucide-react';
+import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
 import { Chip } from '@/index';
 import { cn } from '@/lib/utils';
 

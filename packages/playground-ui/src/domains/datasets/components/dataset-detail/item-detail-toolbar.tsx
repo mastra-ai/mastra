@@ -1,6 +1,6 @@
 'use client';
 
-import { Pencil, Trash2, Copy, ChevronDownIcon, XIcon, History, EllipsisVerticalIcon } from 'lucide-react';
+import { Pencil, Trash2, XIcon, History, EllipsisVerticalIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Column } from '@/ds/components/Columns';

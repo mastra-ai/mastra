@@ -3,7 +3,7 @@ import { buildZodFieldConfig } from '@autoform/react';
 import { z } from 'zod';
 import type { FieldTypes } from './auto-form';
 
-// @ts-expect-error
+// @ts-expect-error - TODO
 export const fieldConfig: FieldConfig = buildZodFieldConfig<
   FieldTypes,
   {

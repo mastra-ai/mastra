@@ -14,8 +14,6 @@ import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Switch } from '@/ds/components/Switch';
 import { MemoryIcon } from '@/ds/icons';
-import { Icon } from '@/ds/icons/Icon';
-
 
 export function MemoryPage() {
   const { form, readOnly } = useAgentEditFormContext();

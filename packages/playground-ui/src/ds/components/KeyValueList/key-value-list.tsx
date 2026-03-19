@@ -23,13 +23,12 @@ export type KeyValueListItemData = {
 type Value = React.ReactNode | KeyValueListItemValue[];
 export type KeyValueListProps = {
   data: KeyValueListItemData[];
-  LinkComponent: React.ComponentType;
   labelsAreHidden?: boolean;
   className?: string;
   isLoading?: boolean;
 };
 
-export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, isLoading }: KeyValueListProps) {
+export function KeyValueList({ data, className, labelsAreHidden, isLoading }: KeyValueListProps) {
   const { Link } = useLinkComponent();
   const LabelWrapper = ({ children }: { children: React.ReactNode }) => {
     return labelsAreHidden ? <VisuallyHidden>{children}</VisuallyHidden> : children;

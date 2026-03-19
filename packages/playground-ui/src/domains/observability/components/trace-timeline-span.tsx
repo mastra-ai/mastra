@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import type {UISpan} from '../types';
 import { getSpanDescendantIds } from '../utils/get-descendant-ids';
 import { getSpanTypeUi } from './shared';

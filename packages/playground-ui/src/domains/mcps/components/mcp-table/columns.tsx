@@ -42,6 +42,7 @@ export const columns: ColumnDef<MCPTableColumn>[] = [
     accessorKey: 'attachedTools',
     cell: ({ row }) => {
       const mcpServer = row.original;
+      // eslint-disable-next-line react-hooks/rules-of-hooks
       const { data: tools, isLoading } = useMCPServerTools(mcpServer);
 
       if (isLoading)

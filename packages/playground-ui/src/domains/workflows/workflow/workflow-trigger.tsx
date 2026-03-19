@@ -6,7 +6,6 @@ import { useState, useEffect, useContext } from 'react';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useSuspendedSteps, useWorkflowSchemas  } from './use-workflow-trigger';
-import type {SuspendedStep} from './use-workflow-trigger';
 import { WorkflowCancelButton } from './workflow-cancel-button';
 import { WorkflowStepsStatus } from './workflow-steps-status';
 import { WorkflowSuspendedSteps  } from './workflow-suspended-steps';
@@ -126,7 +125,7 @@ export function WorkflowTrigger({
       const inputData = hasStateSchema ? dataInputData : data;
 
       streamWorkflow({ workflowId, runId: run.runId, inputData, initialState, requestContext });
-    } catch (err) {
+    } catch {
       toast.error('Error executing workflow');
     }
   };

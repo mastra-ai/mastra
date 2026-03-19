@@ -8,11 +8,10 @@ import { cn } from '@/lib/utils';
 type TemplateInstallationProps = {
   name: string;
   streamResult?: any;
-  runId?: string;
   workflowInfo?: any;
 };
 
-export function TemplateInstallation({ name, streamResult, runId, workflowInfo }: TemplateInstallationProps) {
+export function TemplateInstallation({ name, streamResult, workflowInfo }: TemplateInstallationProps) {
   const phase = streamResult?.phase || 'initializing';
   const workflowState = streamResult?.payload?.workflowState;
   const currentStep = streamResult?.payload?.currentStep;

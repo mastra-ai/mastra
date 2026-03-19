@@ -96,7 +96,7 @@ export const AgentBadge = ({
 
         try {
           result = typeof message.toolOutput === 'string' ? JSON.parse(message.toolOutput) : message.toolOutput;
-        } catch (error) {
+        } catch {
           result = message.toolOutput;
         }
 

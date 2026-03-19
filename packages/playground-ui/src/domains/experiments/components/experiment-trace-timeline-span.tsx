@@ -4,7 +4,6 @@ import { getSpanDescendantIds } from '../utils/get-span-descendant-ids';
 import { getExperimentSpanTypeUi } from './experiment-trace-shared';
 import { ExperimentTraceTimelineExpandCol } from './experiment-trace-timeline-expand-col';
 import { ExperimentTraceTimelineNameCol } from './experiment-trace-timeline-name-col';
-import { ExperimentTraceTimelineTimingCol } from './experiment-trace-timeline-timing-col';
 
 type ExperimentTraceTimelineSpanProps = {
   span: ExperimentUISpan;
@@ -30,7 +29,7 @@ export function ExperimentTraceTimelineSpan({
   isLastChild,
   overallLatency,
   overallStartTime,
-  overallEndTime,
+  overallEndTime: _overallEndTime,
   fadedTypes,
   searchPhrase,
   featuredSpanIds,

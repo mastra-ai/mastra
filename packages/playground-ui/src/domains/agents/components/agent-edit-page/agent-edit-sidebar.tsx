@@ -82,7 +82,6 @@ interface AgentEditSidebarProps {
   formRef?: RefObject<HTMLFormElement | null>;
   mode?: 'create' | 'edit';
   readOnly?: boolean;
-  hideSubAgentCreate?: boolean;
 }
 
 export function AgentEditSidebar({
@@ -93,7 +92,6 @@ export function AgentEditSidebar({
   formRef,
   mode = 'create',
   readOnly = false,
-  hideSubAgentCreate,
 }: AgentEditSidebarProps) {
   const {
     register,

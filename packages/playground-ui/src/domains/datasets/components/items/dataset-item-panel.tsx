@@ -37,25 +37,6 @@ function parseValidationError(error: unknown): SchemaValidationError | null {
   return null;
 }
 
-/** Displays field-level validation errors */
-function ValidationErrors({ field, errors }: { field: string; errors: Array<{ path: string; message: string }> }) {
-  if (!errors.length) return null;
-
-  return (
-    <div className="mt-2 space-y-1">
-      {errors.map((err, idx) => (
-        <p key={idx} className="text-xs text-destructive">
-          <code className="bg-destructive/10 px-1 rounded">
-            {field}
-            {err.path !== '/' ? err.path : ''}
-          </code>
-          : {err.message}
-        </p>
-      ))}
-    </div>
-  );
-}
-
 export interface DatasetItemPanelProps {
   datasetId: string;
   item: DatasetItem;

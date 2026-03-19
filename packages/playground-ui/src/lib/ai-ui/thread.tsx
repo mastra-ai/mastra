@@ -3,14 +3,10 @@ import type {
 import {
   ComposerPrimitive,
   ThreadPrimitive,
-  ToolCallMessagePartComponent,
   useComposerRuntime,
 } from '@assistant-ui/react';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
-
-
 import { useEffect, useRef, useState } from 'react';
-
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { ComposerAttachments } from './attachments/attachment';
 import { BracketOverlay } from './components/bracket-overlay';
@@ -106,7 +102,7 @@ interface ComposerProps {
   hideModelSwitcher?: boolean;
 }
 
-const Composer = ({ hasMemory, agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
+const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { canExecute } = usePermissions();

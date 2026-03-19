@@ -10,7 +10,6 @@ import { Spinner } from '@/ds/components/Spinner';
 import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from '@/ds/components/Threads';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
-import { useInView } from '@/hooks';
 import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -35,7 +34,7 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
       await deleteRun({ runId });
       setDeleteRunId(null);
       navigate(paths.workflowLink(workflowId));
-    } catch (_error) {
+    } catch {
       setDeleteRunId(null);
     }
   };

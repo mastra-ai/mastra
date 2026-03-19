@@ -1,4 +1,4 @@
-import { Link, PackageIcon, GitBranchIcon, InfoIcon } from 'lucide-react';
+import { PackageIcon, GitBranchIcon, InfoIcon } from 'lucide-react';
 import { KeyValueList  } from '@/ds/components/KeyValueList';
 import type {KeyValueListItemData} from '@/ds/components/KeyValueList';
 import { GithubIcon } from '@/ds/icons';
@@ -7,7 +7,6 @@ import { cn } from '@/lib/utils';
 type TemplateInfoProps = {
   title?: string;
   description?: string;
-  imageURL?: string;
   githubUrl?: string;
   infoData?: KeyValueListItemData[];
   isLoading?: boolean;
@@ -17,7 +16,6 @@ type TemplateInfoProps = {
 export function TemplateInfo({
   title,
   description,
-  imageURL,
   githubUrl,
   isLoading,
   infoData,
@@ -95,7 +93,7 @@ export function TemplateInfo({
           )}
         </div>
 
-        {infoData && <KeyValueList data={infoData} LinkComponent={Link} labelsAreHidden={true} isLoading={isLoading} />}
+        {infoData && <KeyValueList data={infoData} labelsAreHidden={true} isLoading={isLoading} />}
       </div>
     </>
   );

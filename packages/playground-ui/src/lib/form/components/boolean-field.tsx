@@ -3,7 +3,7 @@ import React from 'react';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Txt } from '@/ds/components/Txt';
 
-export const BooleanField: React.FC<AutoFormFieldProps> = ({ field, label, id, inputProps, value }) => (
+export const BooleanField: React.FC<AutoFormFieldProps> = ({ field, label, id, inputProps }) => (
   <div className="flex items-center space-x-2">
     <Checkbox
       id={id}

@@ -1,7 +1,7 @@
+import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import type { NodeProps } from '@xyflow/react';
 import { ReactFlow, Background, useNodesState, useEdgesState, BackgroundVariant } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useCurrentRun } from '../context/use-current-run';

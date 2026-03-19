@@ -1,4 +1,4 @@
-import { Panel, useDefaultLayout, Group, PanelImperativeHandle } from 'react-resizable-panels';
+import { Panel, useDefaultLayout, Group } from 'react-resizable-panels';
 import { getMainContentContentClassName } from '@/ds/components/MainContent';
 import { CollapsiblePanel } from '@/lib/resize/collapsible-panel';
 import { PanelSeparator } from '@/lib/resize/separator';

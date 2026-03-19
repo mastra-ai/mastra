@@ -1,5 +1,4 @@
 import type { UpdateModelParams} from '@mastra/client-js';
-import { Provider } from '@mastra/client-js';
 import { TriangleAlert } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAgent } from '../hooks/use-agent';

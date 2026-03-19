@@ -1,5 +1,4 @@
 import type { CompareExperimentsResponse } from '@mastra/client-js';
-import { Ban, BanIcon } from 'lucide-react';
 import { ScoreDelta } from './score-delta';
 import { Column } from '@/ds/components/Columns';
 import { ItemList } from '@/ds/components/ItemList';

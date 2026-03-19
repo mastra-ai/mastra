@@ -97,7 +97,7 @@ export const ErrorAwareText = () => {
 
     // For regular text, use the normal MarkdownText component
     return <MarkdownText />;
-  } catch (error) {
+  } catch {
     // Fallback to displaying the raw text if something goes wrong
     return (
       <div className="flex items-start gap-3 p-4 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50">

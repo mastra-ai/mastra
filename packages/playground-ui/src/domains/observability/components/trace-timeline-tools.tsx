@@ -69,7 +69,7 @@ export function TraceTimelineTools({
         />
       </div>
       <CombinedButtons>
-        {usedSpanTypes.map((item, idx) => {
+        {usedSpanTypes.map((item) => {
           const spanUI = getSpanTypeUi(item);
           const isFaded = fadedTypes?.includes(item);
 

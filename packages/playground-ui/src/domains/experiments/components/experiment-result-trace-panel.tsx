@@ -1,6 +1,6 @@
 'use client';
 
-import { EyeIcon, ListTreeIcon, XIcon  } from 'lucide-react';
+import { EyeIcon, XIcon  } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useExperimentTrace } from '../hooks/use-experiment-trace';
 import { formatTraceSpans } from '../utils/format-trace-spans';
@@ -9,7 +9,6 @@ import { ExperimentTraceTimelineTools } from './experiment-trace-timeline-tools'
 import { Button } from '@/ds/components/Button';
 import { Column } from '@/ds/components/Columns/column';
 import { MainHeader } from '@/ds/components/MainHeader';
-import { Section } from '@/ds/components/Section';
 import { getShortId } from '@/ds/components/Text';
 
 export type ExperimentResultTracePanelProps = {

@@ -11,6 +11,7 @@ export const columns: ColumnDef<WorkflowTableData>[] = [
     id: 'name',
     header: 'Name',
     cell: ({ row }) => {
+      // eslint-disable-next-line react-hooks/rules-of-hooks
       const { Link, paths } = useLinkComponent();
       const workflow = row.original;
 

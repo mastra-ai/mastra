@@ -7,7 +7,6 @@ import { CustomZodProvider } from './zod-provider';
 import { getShape, getIntersection } from './zod-provider/compat';
 import { Button } from '@/ds/components/Button';
 import { Label } from '@/ds/components/Label';
-import { Icon } from '@/ds/icons';
 
 interface DynamicFormProps {
   schema: any;

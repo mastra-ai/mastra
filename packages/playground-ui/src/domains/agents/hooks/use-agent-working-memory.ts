@@ -70,7 +70,7 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
       if (workingMemoryFormat === 'json') {
         try {
           JSON.parse(newMemory);
-        } catch (e) {
+        } catch {
           throw new Error('Invalid JSON working memory');
         }
       }

@@ -8,7 +8,7 @@ import { useAgent } from '../../hooks/use-agent';
 import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
 import { extractPrompt } from '../../utils/extractPrompt';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
-import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
+import { AgentMetadataModelList } from './agent-metadata-model-list';
 import { AgentMetadataSection } from './agent-metadata-section';
 import { AgentMetadataWrapper } from './agent-metadata-wrapper';
 import { useMemory } from '@/domains/memory/hooks';
