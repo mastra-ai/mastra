@@ -1,3 +1,4 @@
+import { v4 as uuid } from '@lukeed/uuid';
 import {
   AgentChat,
   AgentSettingsProvider,
@@ -11,10 +12,9 @@ import {
   ActivatedSkillsProvider,
   SchemaRequestContextProvider,
   MainContentLayout,
-  type AgentSettingsType,
 } from '@mastra/playground-ui';
+import type { AgentSettingsType } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
-import { v4 as uuid } from '@lukeed/uuid';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { SessionHeader } from '@/components/session-header';
@@ -42,7 +42,7 @@ function AgentSession() {
     if (!hasMemory) return;
     if (threadId) return;
 
-    navigate(`/agents/${agentId}/session/new`);
+    void navigate(`/agents/${agentId}/session/new`);
   }, [hasMemory, threadId, agentId, navigate]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
@@ -91,7 +91,7 @@ function AgentSession() {
     await refreshThreads();
 
     if (isNewThread) {
-      navigate(`/agents/${agentId}/session/${newThreadId}`);
+      void navigate(`/agents/${agentId}/session/${newThreadId}`);
     }
   };
 
