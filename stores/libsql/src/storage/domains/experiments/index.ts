@@ -376,7 +376,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           retryCount: input.retryCount,
           traceId: input.traceId ?? null,
           status: input.status ?? null,
-          tags: input.tags ? JSON.stringify(input.tags) : null,
+          tags: input.tags !== undefined && input.tags !== null ? JSON.stringify(input.tags) : null,
           createdAt: nowIso,
         },
       });
@@ -443,10 +443,19 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         values.push(input.experimentId);
         whereClause += ` AND "experimentId" = ?`;
       }
-      await this.#client.execute({
+      const updateResult = await this.#client.execute({
         sql: `UPDATE ${TABLE_EXPERIMENT_RESULTS} SET ${setClauses.join(', ')} WHERE ${whereClause}`,
         args: values,
       });
+
+      if (updateResult.rowsAffected === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { resultId: input.id, ...(input.experimentId ? { experimentId: input.experimentId } : {}) },
+        });
+      }
 
       const result = await this.getExperimentResultById({ id: input.id });
       if (!result) {
