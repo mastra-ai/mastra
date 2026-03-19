@@ -46,17 +46,15 @@ export class SyncObservationStrategy extends ObservationStrategy {
     if (bufferActivation && bufferActivation < 1 && messages.length >= 1) {
       const newestMsg = messages[messages.length - 1];
       if (newestMsg?.content?.parts?.length) {
-        // Seal the newest message's parts for buffering boundary tracking
-        for (const part of newestMsg.content.parts) {
-          if (part && typeof part === 'object' && !('metadata' in part)) {
-            (part as any).metadata = {};
-          }
-          if (part && typeof part === 'object' && 'metadata' in part) {
-            const meta = part.metadata as Record<string, unknown>;
-            if (!meta.mastra) meta.mastra = {};
-            (meta.mastra as Record<string, unknown>).sealed = true;
-          }
+        // Set message-level sealed flag (same pattern as OM.sealMessagesForBuffering on main)
+        if (!newestMsg.content.metadata) {
+          newestMsg.content.metadata = {};
         }
+        const metadata = newestMsg.content.metadata as { mastra?: { sealed?: boolean } };
+        if (!metadata.mastra) {
+          metadata.mastra = {};
+        }
+        metadata.mastra.sealed = true;
         omDebug(
           `[OM:sync-obs] sealed newest message (${newestMsg.role}, ${newestMsg.content.parts.length} parts) for ratio-aware observation`,
         );
