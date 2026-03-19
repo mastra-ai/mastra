@@ -454,11 +454,11 @@ export class ExperimentsPG extends ExperimentsStorage {
       let paramIndex = 1;
 
       if (input.status !== undefined) {
-        setClauses.push(`"status" = ${paramIndex++}`);
+        setClauses.push(`"status" = $${paramIndex++}`);
         values.push(input.status);
       }
       if (input.tags !== undefined) {
-        setClauses.push(`"tags" = ${paramIndex++}`);
+        setClauses.push(`"tags" = $${paramIndex++}`);
         values.push(JSON.stringify(input.tags));
       }
 
@@ -477,7 +477,7 @@ export class ExperimentsPG extends ExperimentsStorage {
 
       values.push(input.id);
       const row = await this.#db.client.oneOrNone(
-        `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE "id" = ${paramIndex} RETURNING *`,
+        `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE "id" = $${paramIndex} RETURNING *`,
         values,
       );
 

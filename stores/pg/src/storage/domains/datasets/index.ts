@@ -325,19 +325,19 @@ export class DatasetsPG extends DatasetsStorage {
         values.push(args.groundTruthSchema === null ? null : JSON.stringify(args.groundTruthSchema));
       }
       if (args.requestContextSchema !== undefined) {
-        setClauses.push(`"requestContextSchema" = ${paramIndex++}`);
+        setClauses.push(`"requestContextSchema" = $${paramIndex++}`);
         values.push(args.requestContextSchema === null ? null : JSON.stringify(args.requestContextSchema));
       }
       if (args.tags !== undefined) {
-        setClauses.push(`"tags" = ${paramIndex++}`);
+        setClauses.push(`"tags" = $${paramIndex++}`);
         values.push(args.tags === null ? null : JSON.stringify(args.tags));
       }
       if (args.targetType !== undefined) {
-        setClauses.push(`"targetType" = ${paramIndex++}`);
+        setClauses.push(`"targetType" = $${paramIndex++}`);
         values.push(args.targetType);
       }
       if (args.targetIds !== undefined) {
-        setClauses.push(`"targetIds" = ${paramIndex++}`);
+        setClauses.push(`"targetIds" = $${paramIndex++}`);
         values.push(args.targetIds === null ? null : JSON.stringify(args.targetIds));
       }
 
