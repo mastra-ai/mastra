@@ -106,10 +106,10 @@ The result is a three-tier system:
 ### Graph mode (experimental)
 
 <Note>
-Graph mode is experimental. The API may change in future releases.
+  Graph mode is experimental. The API may change in future releases.
 </Note>
 
-Set `observationalMemory.graph: true` with `scope: 'thread'` to preserve observation groups as durable pointers to raw message history.
+Normal OM compresses messages into observations, which is great for staying on task — but the original wording is gone. Graph mode fixes this by keeping each observation group linked to the raw messages that produced it. When the agent needs exact wording, tool output, or chronology that the summary compressed away, it can call a `recall` tool to page through the source messages.
 
 ```typescript
 const memory = new Memory({
@@ -123,72 +123,15 @@ const memory = new Memory({
 })
 ```
 
-Graph mode is only active for thread-scoped observational memory. If you set `graph: true` with `scope: 'resource'`, OM keeps resource-scoped memory behavior but skips graph-mode context and does not register the `recall` tool.
+With graph mode enabled, OM:
 
-Graph mode lets the actor inspect the raw messages behind a stored observation group.
+- Stores a `range` (e.g. `startId:endId`) on each observation group pointing to the messages it was derived from
+- Keeps range metadata visible in the agent's context so the agent knows which observations map to which messages
+- Registers a `recall` tool the agent can call to page through the raw messages behind any range
 
-When thread-scoped `graph: true` is enabled, OM keeps each group's `_range` metadata visible in the actor context and registers a `recall` tool. Ranges use the format `startId:endId` with a colon delimiter. The actor extracts either the start or end message ID from the range and passes it as the cursor, along with pagination arguments, when it needs exact wording, tool outputs, or chronology that the observation summary compressed away.
+Graph mode is only active for thread-scoped OM. Setting `graph: true` with `scope: 'resource'` has no effect — OM keeps resource-scoped behavior but skips graph-mode context and does not register the `recall` tool.
 
-```typescript
-const tools = memory.listTools()
-
-// Low-detail paged recall (default)
-await tools.recall?.execute?.(
-  {
-    cursor: 'message-id-2',
-    page: 1,
-    limit: 20,
-  },
-  {
-    memory,
-    agent: {
-      threadId: 'thread-id',
-      resourceId: 'resource-id',
-    },
-  },
-)
-
-// High-detail recall with full tool args/results
-await tools.recall?.execute?.(
-  {
-    cursor: 'message-id-2',
-    page: 1,
-    limit: 5,
-    detail: 'high',
-  },
-  { memory, agent: { threadId: 'thread-id' } },
-)
-
-// Fetch a single part by index
-await tools.recall?.execute?.(
-  {
-    cursor: 'message-id-2',
-    partIndex: 1,
-  },
-  { memory, agent: { threadId: 'thread-id' } },
-)
-```
-
-#### Pagination
-
-Positive `page` values move forward from the cursor, negative values move backward, and `page: 0` is treated as `page: 1`. The result includes `hasNextPage` and `hasPrevPage` flags so the agent knows whether more pages exist in each direction.
-
-#### Detail levels
-
-The `detail` parameter controls how much content each part shows:
-
-- **`"low"`** (default) — truncated text and tool names only. Each part is labeled with a positional index (`[p0]`, `[p1]`, etc.) for targeted follow-up.
-- **`"high"`** — full message content including tool arguments and results, still subject to a token budget.
-
-#### Part index
-
-Use `partIndex` with a cursor to fetch a single part at full detail. This is useful when a low-detail recall shows a tool result at `[p1]` that you want to read in full — call `recall` again with `cursor: 'message-id', partIndex: 1` instead of loading every part.
-
-#### Token limiting
-
-Results are capped at a token budget. When the output exceeds it, the result includes `truncated: true` and a `tokenOffset` indicating how many tokens were cut. The agent can paginate or use `partIndex` to target specific content.
-
-`recall` is only available when `observationalMemory.graph` is enabled in thread scope, and it only returns messages from the current thread around the requested cursor.
+See the [recall tool reference](/reference/memory/observational-memory#recall-tool) for the full API (detail levels, part indexing, pagination, and token limiting).
 
 ## Models
 
