@@ -62,6 +62,18 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Concepts',
+      collapsed: false,
+      items: [
+        {
+          type: 'doc',
+          id: 'concepts/multi-agent-systems',
+          label: 'Multi-agent systems',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Agent Frameworks',
       collapsed: false,
       items: [
@@ -138,18 +150,6 @@ const sidebars = {
           type: 'doc',
           id: 'deployment/inngest',
           label: 'Inngest',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Concepts',
-      collapsed: false,
-      items: [
-        {
-          type: 'doc',
-          id: 'concepts/multi-agent-systems',
-          label: 'Multi-agent systems',
         },
       ],
     },
