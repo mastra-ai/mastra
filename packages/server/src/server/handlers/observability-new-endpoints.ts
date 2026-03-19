@@ -44,7 +44,7 @@ import { coreFeatures } from '@mastra/core/features';
 import type { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
-import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
+import { createRoute, pickParams } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 import { getObservabilityStore, NEW_ROUTE_DEFS } from './observability-shared';
 import type { RouteDetails } from './observability-shared';
@@ -96,9 +96,7 @@ function createNewRoute<
 // ============================================================================
 
 export const LIST_LOGS = createNewRoute(NEW_ROUTE_DEFS.LIST_LOGS, {
-  queryParamSchema: wrapSchemaForQueryParams(
-    logsFilterSchema.extend(paginationArgsSchema.shape).extend(logsOrderBySchema.shape).partial(),
-  ),
+  queryParamSchema: logsFilterSchema.extend(paginationArgsSchema.shape).extend(logsOrderBySchema.shape).partial(),
   responseSchema: listLogsResponseSchema,
   handler: async ({ mastra, ...params }) => {
     const filters = pickParams(logsFilterSchema, params);
@@ -115,9 +113,7 @@ export const LIST_LOGS = createNewRoute(NEW_ROUTE_DEFS.LIST_LOGS, {
 // ============================================================================
 
 export const LIST_SCORES = createNewRoute(NEW_ROUTE_DEFS.LIST_SCORES, {
-  queryParamSchema: wrapSchemaForQueryParams(
-    scoresFilterSchema.extend(paginationArgsSchema.shape).extend(scoresOrderBySchema.shape).partial(),
-  ),
+  queryParamSchema: scoresFilterSchema.extend(paginationArgsSchema.shape).extend(scoresOrderBySchema.shape).partial(),
   responseSchema: obsListScoresResponseSchema,
   handler: async ({ mastra, ...params }) => {
     const filters = pickParams(scoresFilterSchema, params);
@@ -144,9 +140,10 @@ export const CREATE_SCORE = createNewRoute(NEW_ROUTE_DEFS.CREATE_SCORE, {
 // ============================================================================
 
 export const LIST_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.LIST_FEEDBACK, {
-  queryParamSchema: wrapSchemaForQueryParams(
-    feedbackFilterSchema.extend(paginationArgsSchema.shape).extend(feedbackOrderBySchema.shape).partial(),
-  ),
+  queryParamSchema: feedbackFilterSchema
+    .extend(paginationArgsSchema.shape)
+    .extend(feedbackOrderBySchema.shape)
+    .partial(),
   responseSchema: listFeedbackResponseSchema,
   handler: async ({ mastra, ...params }) => {
     const filters = pickParams(feedbackFilterSchema, params);
@@ -217,7 +214,7 @@ export const GET_METRIC_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_P
 // ============================================================================
 
 export const GET_METRIC_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_NAMES, {
-  queryParamSchema: wrapSchemaForQueryParams(getMetricNamesArgsSchema.partial()),
+  queryParamSchema: getMetricNamesArgsSchema.partial(),
   responseSchema: getMetricNamesResponseSchema,
   handler: async ({ mastra, ...params }) => {
     const args = getMetricNamesArgsSchema.parse(pickParams(getMetricNamesArgsSchema, params));
@@ -227,7 +224,7 @@ export const GET_METRIC_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_NAMES, 
 });
 
 export const GET_METRIC_LABEL_KEYS = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_LABEL_KEYS, {
-  queryParamSchema: wrapSchemaForQueryParams(getMetricLabelKeysArgsSchema),
+  queryParamSchema: getMetricLabelKeysArgsSchema,
   responseSchema: getMetricLabelKeysResponseSchema,
   handler: async ({ mastra, ...params }) => {
     const args = getMetricLabelKeysArgsSchema.parse(pickParams(getMetricLabelKeysArgsSchema, params));
@@ -237,7 +234,7 @@ export const GET_METRIC_LABEL_KEYS = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_LA
 });
 
 export const GET_METRIC_LABEL_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_LABEL_VALUES, {
-  queryParamSchema: wrapSchemaForQueryParams(getMetricLabelValuesArgsSchema),
+  queryParamSchema: getMetricLabelValuesArgsSchema,
   responseSchema: getMetricLabelValuesResponseSchema,
   handler: async ({ mastra, ...params }) => {
     const args = getMetricLabelValuesArgsSchema.parse(pickParams(getMetricLabelValuesArgsSchema, params));
@@ -255,7 +252,7 @@ export const GET_ENTITY_TYPES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_TYPES, 
 });
 
 export const GET_ENTITY_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_NAMES, {
-  queryParamSchema: wrapSchemaForQueryParams(getEntityNamesArgsSchema.partial()),
+  queryParamSchema: getEntityNamesArgsSchema.partial(),
   responseSchema: getEntityNamesResponseSchema,
   handler: async ({ mastra, ...params }) => {
     const args = getEntityNamesArgsSchema.parse(pickParams(getEntityNamesArgsSchema, params));
@@ -281,7 +278,7 @@ export const GET_ENVIRONMENTS = createNewRoute(NEW_ROUTE_DEFS.GET_ENVIRONMENTS, 
 });
 
 export const GET_TAGS = createNewRoute(NEW_ROUTE_DEFS.GET_TAGS, {
-  queryParamSchema: wrapSchemaForQueryParams(getTagsArgsSchema.partial()),
+  queryParamSchema: getTagsArgsSchema.partial(),
   responseSchema: getTagsResponseSchema,
   handler: async ({ mastra, ...params }) => {
     const args = getTagsArgsSchema.parse(pickParams(getTagsArgsSchema, params));

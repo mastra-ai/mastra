@@ -14,9 +14,9 @@ import {
   getTraceResponseSchema,
   dateRangeSchema,
 } from '@mastra/core/storage';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
-import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
+import { createRoute, pickParams } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 import { getObservabilityStore, getStorage } from './observability-shared';
 
@@ -97,13 +97,11 @@ export const LIST_TRACES_ROUTE = createRoute({
   method: 'GET',
   path: '/observability/traces',
   responseType: 'json',
-  queryParamSchema: wrapSchemaForQueryParams(
-    tracesFilterSchema
-      .extend(paginationArgsSchema.shape)
-      .extend(tracesOrderBySchema.shape)
-      .extend(legacyQueryParamsSchema.shape) // Accept legacy params for backward compatibility
-      .partial(),
-  ),
+  queryParamSchema: tracesFilterSchema
+    .extend(paginationArgsSchema.shape)
+    .extend(tracesOrderBySchema.shape)
+    .extend(legacyQueryParamsSchema.shape) // Accept legacy params for backward compatibility
+    .partial(),
   responseSchema: listTracesResponseSchema,
   summary: 'List traces',
   description: 'Returns a paginated list of traces with optional filtering and sorting',
@@ -202,7 +200,7 @@ export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
   responseType: 'json',
   pathParamSchema: spanIdsSchema,
   // List endpoints accept optional query params; use partial() to allow empty queries.
-  queryParamSchema: wrapSchemaForQueryParams(paginationArgsSchema.partial()),
+  queryParamSchema: paginationArgsSchema.partial(),
   responseSchema: listScoresResponseSchema,
   summary: 'List scores by span',
   description: 'Returns all scores for a specific span within a trace',
