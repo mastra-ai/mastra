@@ -610,14 +610,19 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
     };
   }
 
-  // V2 format - already flat
-  const v2Usage = usage as LanguageModelV2Usage;
+  // V2 format - already flat, or AI SDK format with inputTokenDetails
+  const v2Usage = usage as LanguageModelV2Usage & {
+    cachedInputTokens?: number;
+    inputTokenDetails?: { cacheReadTokens?: number; cacheWriteTokens?: number };
+  };
+  const cachedInputTokens =
+    v2Usage.cachedInputTokens ?? v2Usage.inputTokenDetails?.cacheReadTokens;
   return {
     inputTokens: v2Usage.inputTokens,
     outputTokens: v2Usage.outputTokens,
     totalTokens: v2Usage.totalTokens ?? (v2Usage.inputTokens ?? 0) + (v2Usage.outputTokens ?? 0),
     reasoningTokens: (v2Usage as { reasoningTokens?: number }).reasoningTokens,
-    cachedInputTokens: (v2Usage as { cachedInputTokens?: number }).cachedInputTokens,
+    cachedInputTokens,
     raw: usage,
   };
 }
