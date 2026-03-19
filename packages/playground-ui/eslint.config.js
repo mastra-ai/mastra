@@ -7,7 +7,7 @@ const config = await createConfig();
 
 /** @type {import("eslint").Linter.Config[]} */
 export default [
-  { ignores: ['e2e/**'] },
+  { ignores: ['**/*.stories.tsx'] },
   ...config,
   {
     plugins: {

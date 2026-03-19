@@ -54,7 +54,7 @@
     "build": "tsc && vite build",
     "dev": "vite build --watch",
     "test": "vitest",
-    "lint": "eslint --no-warn-ignored .",
+    "lint": "eslint ./src",
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006 --no-open",
