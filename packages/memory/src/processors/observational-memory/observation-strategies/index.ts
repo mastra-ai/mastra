@@ -28,7 +28,7 @@ ObservationStrategy.create = ((om: ObservationalMemory, opts: ObservationRunOpts
     reflector: om.reflector,
     observedMessageIds: om.observedMessageIds,
     obscureThreadIds: om.getObscureThreadIds(),
-    emitDebugEvent: (e) => om.emitDebugEvent(e),
+    emitDebugEvent: e => om.emitDebugEvent(e),
   };
 
   if (opts.cycleId) return new AsyncBufferObservationStrategy(deps, opts);

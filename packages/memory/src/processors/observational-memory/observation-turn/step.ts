@@ -5,8 +5,8 @@ import { omDebug } from '../debug';
 import { filterObservedMessages } from '../message-utils';
 import { resolveRetentionFloor } from '../thresholds';
 
-import type { StepContext } from './types';
 import type { ObservationTurn } from './turn';
+import type { StepContext } from './types';
 
 /**
  * Represents a single step in the agentic loop within an observation turn.
@@ -194,9 +194,8 @@ export class ObservationStep {
     // ── Filter observed messages ──────────────────────────────
     if (!didThresholdCleanup) {
       const fallbackCursor = this.turn.record.threadId
-        ? getThreadOMMetadata(
-            (await om.getStorage().getThreadById({ threadId: this.turn.record.threadId }))?.metadata,
-          )?.lastObservedMessageCursor
+        ? getThreadOMMetadata((await om.getStorage().getThreadById({ threadId: this.turn.record.threadId }))?.metadata)
+            ?.lastObservedMessageCursor
         : undefined;
 
       filterObservedMessages({

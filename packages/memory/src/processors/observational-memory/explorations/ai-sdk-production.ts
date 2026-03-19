@@ -233,7 +233,9 @@ async function main() {
         // Fresh re-check — state may have changed while waiting for buffering
         const freshStatus = await om.getStatus({ threadId, messages: messageList.get.all.db() });
         if (!freshStatus.shouldObserve) {
-          stepLog.push(`step ${stepNum}: noop-after-wait (pending ${freshStatus.pendingTokens}/${freshStatus.threshold})`);
+          stepLog.push(
+            `step ${stepNum}: noop-after-wait (pending ${freshStatus.pendingTokens}/${freshStatus.threshold})`,
+          );
         } else {
           // Try activation first
           if (freshStatus.canActivate) {

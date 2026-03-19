@@ -1,4 +1,4 @@
-import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import type { MessageList } from '@mastra/core/agent';
 import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';

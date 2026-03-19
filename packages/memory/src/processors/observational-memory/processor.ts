@@ -5,8 +5,8 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { omDebug } from './debug';
-import type { ObservationalMemory } from './observational-memory';
 import type { ObservationTurn } from './observation-turn/index';
+import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import type { TokenCounterModelContext } from './token-counter';
 

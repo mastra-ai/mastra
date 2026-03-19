@@ -9,17 +9,15 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
+import { BufferingCoordinator } from './buffering-coordinator';
 import {
   OBSERVATIONAL_MEMORY_DEFAULTS,
   OBSERVATION_CONTEXT_PROMPT,
   OBSERVATION_CONTEXT_INSTRUCTIONS,
 } from './constants';
-import { BufferingCoordinator } from './buffering-coordinator';
 import { addRelativeTimeToObservations } from './date-utils';
 import { omDebug, omError } from './debug';
-import {
-  createBufferingStartMarker,
-} from './markers';
+import { createBufferingStartMarker } from './markers';
 import {
   findLastCompletedObservationBoundary,
   getUnobservedParts,
@@ -366,7 +364,7 @@ export class ObservationalMemory {
       storage: this.storage,
       scope: this.scope,
       buffering: this.buffering,
-      emitDebugEvent: (e) => this.emitDebugEvent(e),
+      emitDebugEvent: e => this.emitDebugEvent(e),
       persistMarkerToStorage: (m, t, r) => this.persistMarkerToStorage(m, t, r),
       persistMarkerToMessage: (m, ml, t, r) => this.persistMarkerToMessage(m, ml, t, r),
     });
@@ -612,7 +610,6 @@ export class ObservationalMemory {
     const threshold = calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
     return pendingTokens >= threshold;
   }
-
 
   /**
    * Get thread/resource IDs for storage lookup
@@ -968,7 +965,6 @@ export class ObservationalMemory {
     return result;
   }
 
-
   /**
    * Format observations for injection into context.
    * Applies token optimization before presenting to the Actor.
@@ -1200,7 +1196,6 @@ ${formattedMessages}
     }
     return threadId;
   }
-
 
   /**
    * Get the maximum createdAt timestamp from a list of messages.
@@ -1508,7 +1503,6 @@ ${formattedMessages}
     BufferingCoordinator.lastBufferedAtTime.set(bufferKey, cursor);
   }
 
-
   // ════════════════════════════════════════════════════════════════════════════
   // HIGH-LEVEL API — semantic operations for programmatic use
   // ════════════════════════════════════════════════════════════════════════════
@@ -1533,7 +1527,13 @@ ${formattedMessages}
     if (!this.buffering.isAsyncObservationEnabled()) return false;
 
     const lockKey = this.buffering.getLockKey(opts.threadId, opts.resourceId);
-    const shouldTrigger = this.buffering.shouldTriggerAsyncObservation(opts.pendingTokens, lockKey, opts.record, this.storage, opts.threshold);
+    const shouldTrigger = this.buffering.shouldTriggerAsyncObservation(
+      opts.pendingTokens,
+      lockKey,
+      opts.record,
+      this.storage,
+      opts.threshold,
+    );
 
     if (shouldTrigger) {
       void this.startAsyncBufferedObservation(
@@ -2058,7 +2058,13 @@ ${formattedMessages}
     let shouldBuffer = false;
     if (asyncObservationEnabled && pendingTokens < threshold) {
       const lockKey = this.buffering.getLockKey(threadId, resourceId);
-      shouldBuffer = this.buffering.shouldTriggerAsyncObservation(pendingTokens, lockKey, record, this.storage, threshold);
+      shouldBuffer = this.buffering.shouldTriggerAsyncObservation(
+        pendingTokens,
+        lockKey,
+        record,
+        this.storage,
+        threshold,
+      );
     }
 
     // Should observe?
@@ -2766,11 +2772,7 @@ ${formattedMessages}
    * await turn.end();
    * ```
    */
-  beginTurn(opts: {
-    threadId: string;
-    resourceId?: string;
-    messageList: MessageList;
-  }): ObservationTurn {
+  beginTurn(opts: { threadId: string; resourceId?: string; messageList: MessageList }): ObservationTurn {
     return new ObservationTurn(this, opts.threadId, opts.resourceId, opts.messageList);
   }
 }

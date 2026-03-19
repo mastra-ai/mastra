@@ -125,8 +125,10 @@ async function main() {
   const messageList = new MessageList({ threadId });
   const turn = om.beginTurn({ threadId, messageList });
   const ctx = await turn.start({
-    getContext: (opts) => memory.getContext(opts),
-    persistMessages: async (msgs) => { await memory.saveMessages({ messages: msgs }); },
+    getContext: opts => memory.getContext(opts),
+    persistMessages: async msgs => {
+      await memory.saveMessages({ messages: msgs });
+    },
   });
 
   // Add the user's new message
