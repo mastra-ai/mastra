@@ -182,8 +182,11 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
             const agentTools = await agent.listTools({ requestContext });
             tool = Object.values(agentTools || {}).find((t: any) => t.id === toolId);
             if (tool) break;
-          } catch {
-            // continue to next agent
+          } catch (err: any) {
+            // log non-trivial errors but continue to next agent
+            if (err?.message && !err.message.toLowerCase().includes('not found')) {
+              console.warn(`[EXECUTE_TOOL_ROUTE] Error listing tools for agent: ${err.message}`);
+            }
           }
         }
       }
