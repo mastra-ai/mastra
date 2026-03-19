@@ -1,10 +1,8 @@
+import { createError, scrollInputSchema, scrollOutputSchema } from '@mastra/core/browser';
+import type { BrowserToolError, ScrollOutput } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 
 import type { BrowserManagerLike } from '../browser-types.js';
-import { createError } from '../errors.js';
-import type { BrowserToolError } from '../errors.js';
-import { scrollInputSchema, scrollOutputSchema } from '../types.js';
-import type { ScrollOutput } from '../types.js';
 
 /**
  * Creates a scroll tool that scrolls the page viewport or an element.

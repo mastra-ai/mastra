@@ -1,10 +1,10 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { screenshotInputSchema, screenshotOutputSchema } from '@mastra/core/browser';
+import type { ScreenshotOutput } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 
 import type { BrowserManagerLike } from '../browser-types.js';
-import { screenshotInputSchema, screenshotOutputSchema } from '../types.js';
-import type { ScreenshotOutput } from '../types.js';
 
 /**
  * Maximum dimension (width or height) before emitting a warning.
@@ -30,6 +30,16 @@ export function createScreenshotTool(getBrowser: () => Promise<BrowserManagerLik
     description: 'Capture a screenshot of the current page or a specific element.',
     inputSchema: screenshotInputSchema,
     outputSchema: screenshotOutputSchema,
+    toModelOutput(output: ScreenshotOutput) {
+      if (!output.success || !output.base64) return undefined;
+      return {
+        type: 'content' as const,
+        value: [
+          { type: 'text' as const, text: output.message },
+          { type: 'media' as const, data: output.base64, mediaType: output.mimeType },
+        ],
+      };
+    },
     execute: async (input): Promise<ScreenshotOutput> => {
       const browser = await getBrowser();
       const page = browser.getPage();
@@ -132,6 +142,7 @@ export function createScreenshotTool(getBrowser: () => Promise<BrowserManagerLik
         return {
           success: true,
           message,
+          base64: buffer.toString('base64'),
           path: filePath,
           publicPath: `/screenshots/${filename}`,
           mimeType,

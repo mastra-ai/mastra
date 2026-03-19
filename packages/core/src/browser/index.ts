@@ -1,5 +1,59 @@
 import type { ToolsInput } from '../agent/types';
 
+// ============================================================================
+// Error handling
+// ============================================================================
+
+export { createError } from './errors';
+export type { ErrorCode, BrowserToolError } from './errors';
+
+// ============================================================================
+// Tool schemas & types
+// ============================================================================
+
+export {
+  navigateInputSchema,
+  navigateOutputSchema,
+  snapshotInputSchema,
+  snapshotOutputSchema,
+  clickInputSchema,
+  clickOutputSchema,
+  typeInputSchema,
+  typeOutputSchema,
+  scrollInputSchema,
+  scrollOutputSchema,
+  selectInputSchema,
+  selectOutputSchema,
+  screenshotInputSchema,
+  screenshotOutputSchema,
+  closeInputSchema,
+  closeOutputSchema,
+} from './schemas';
+
+export type {
+  NavigateInput,
+  NavigateOutput,
+  SnapshotInput,
+  SnapshotOutput,
+  ClickInput,
+  ClickOutput,
+  TypeInput,
+  TypeOutput,
+  ScrollInput,
+  ScrollOutput,
+  SelectInput,
+  SelectOutput,
+  ScreenshotInput,
+  ScreenshotOutput,
+  CloseInput,
+  CloseOutput,
+  BaseBrowserConfig,
+} from './schemas';
+
+// ============================================================================
+// Structural interfaces (for Agent.browser integration)
+// ============================================================================
+
 /** Options for screencast streaming */
 export interface ScreencastOptionsLike {
   format?: 'jpeg' | 'png';
