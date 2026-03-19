@@ -218,7 +218,7 @@ const sandbox = new ModalSandbox({ id: 'dev-sandbox' })
 await sandbox._start()
 
 // Spawn a background process
-const handle = await sandbox.processes.spawn('node server.js', {
+const handle = await sandbox.processes.spawn('node script.js', {
   env: { PORT: '3000' },
   onStdout: data => console.log(data),
 })

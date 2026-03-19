@@ -201,11 +201,15 @@ export class ModalSandbox extends MastraSandbox {
     try {
       await this._sb.terminate({ wait: true });
       this.logger.debug(`${LOG_PREFIX} Sandbox terminated: ${this._sb.sandboxId}`);
-    } catch {
+      this._sb = null;
+    } catch (error) {
       // Best-effort: sandbox may already be dead
+      if (this.isSandboxDeadError(error)) {
+        this._sb = null;
+      } else {
+        throw error;
+      }
     }
-
-    this._sb = null;
   }
 
   /** Terminates the sandbox, ending its lifetime. Unlike stop(), no snapshot is preserved. */
