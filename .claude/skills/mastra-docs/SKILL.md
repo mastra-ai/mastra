@@ -7,6 +7,10 @@ description: Documentation guidelines for Mastra. This skill should be used when
 
 Instructions and styleguides for writing and maintaining Mastra documentation. This skill should be used whenever creating or updating documentation for Mastra to ensure consistency, clarity, and quality across all docs.
 
+## Path convention
+
+`@docs/` references in this skill map to the `docs/` directory in the workspace root. For example, `@docs/styleguides/STYLEGUIDE.md` resolves to `docs/styleguides/STYLEGUIDE.md`. Always use the `view` tool with the workspace path, do not use `skill_read` for these files.
+
 ## Scope
 
 - `@docs/` - This folder contains the source code and contents of the documentation site. All documentation for Mastra should be created and maintained here.

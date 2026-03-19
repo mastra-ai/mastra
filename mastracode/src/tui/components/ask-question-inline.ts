@@ -179,9 +179,15 @@ class AskQuestionBorderedBox {
     } else if (this.answered && this.selectedValue != null) {
       // Free-text input answered
       const icon = this.answerIsNegative ? theme.fg('error', '✗') : theme.fg('success', '✓');
-      const label = theme.fg('text', this.selectedValue!);
-      const line = `${icon}  ${label}`;
-      addLine(line, visibleWidth(line));
+      const iconPrefix = `${icon}  `;
+      const continuationPrefix = '   ';
+      const wrappedAnswer = wrapTextWithAnsi(this.selectedValue!, Math.max(1, innerWidth - visibleWidth(iconPrefix)));
+
+      wrappedAnswer.forEach((line, index) => {
+        const prefix = index === 0 ? iconPrefix : continuationPrefix;
+        const content = `${prefix}${theme.fg('text', line)}`;
+        addLine(content, visibleWidth(prefix) + visibleWidth(line));
+      });
     } else if (this.answered && this.cancelled) {
       // Free-text cancelled
       const cancelLine = `${theme.fg('error', '✗')}  ${theme.fg('dim', '(cancelled)')}`;

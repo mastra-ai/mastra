@@ -684,7 +684,8 @@ export type ProviderModelsMap = {
     'gpt-5.4-nano',
     'gpt-5.4-pro',
     'kimi-k2.5',
-    'mimo-v2-flash-free',
+    'mimo-v2-omni-free',
+    'mimo-v2-pro-free',
     'minimax-m2.5',
     'minimax-m2.5-free',
     'nemotron-3-super-free',
@@ -1319,6 +1320,7 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2',
     'minimax/minimax-m2.1',
     'minimax/minimax-m2.5',
+    'minimax/minimax-m2.7',
     'mistralai/codestral-2508',
     'mistralai/devstral-2512',
     'mistralai/devstral-2512:free',
@@ -1656,7 +1658,7 @@ export type ProviderModelsMap = {
     'glm-5',
     'glm-5-turbo',
   ];
-  readonly 'opencode-go': readonly ['glm-5', 'kimi-k2.5', 'minimax-m2.5'];
+  readonly 'opencode-go': readonly ['glm-5', 'kimi-k2.5', 'minimax-m2.5', 'minimax-m2.7'];
   readonly drun: readonly ['public/deepseek-r1', 'public/deepseek-v3', 'public/minimax-m25'];
   readonly firmware: readonly [
     'claude-haiku-4-5',
@@ -2040,6 +2042,8 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2.1-lightning',
     'minimax/minimax-m2.5',
     'minimax/minimax-m2.5-highspeed',
+    'minimax/minimax-m2.7',
+    'minimax/minimax-m2.7-highspeed',
     'mistral/codestral',
     'mistral/codestral-embed',
     'mistral/devstral-2',
