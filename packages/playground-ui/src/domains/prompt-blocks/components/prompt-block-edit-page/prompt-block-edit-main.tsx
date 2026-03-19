@@ -45,7 +45,6 @@ export function PromptBlockEditMain({ form }: PromptBlockEditMainProps) {
               language="markdown"
               showCopyButton={false}
               placeholder="Enter prompt block content..."
-              wordWrap
               highlightVariables
               schema={schema}
               className="flex-1 min-h-[200px]"

@@ -156,7 +156,6 @@ export function ScoreDialog({
                     ]
                   : []),
               ]}
-              LinkComponent={Link}
             />
 
             <SideDialog.CodeSection

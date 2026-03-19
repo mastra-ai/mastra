@@ -26,7 +26,6 @@ export function ScorerEditMain({ form }: ScorerEditMainProps) {
               language="markdown"
               showCopyButton={false}
               placeholder="Enter scorer instructions..."
-              wordWrap
               className="flex-1 min-h-[200px]"
             />
           </div>
