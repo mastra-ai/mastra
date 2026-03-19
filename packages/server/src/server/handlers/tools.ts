@@ -120,7 +120,10 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
       if (!tool) {
         try {
           tool = mastra.getToolById(toolId);
-        } catch {
+        } catch (err: any) {
+          if (err?.message && !err.message.toLowerCase().includes('not found')) {
+            throw err;
+          }
           // tool not found in global registry, continue to agent fallback
         }
       }
@@ -163,7 +166,10 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
       if (!tool) {
         try {
           tool = mastra.getToolById(toolId);
-        } catch {
+        } catch (err: any) {
+          if (err?.message && !err.message.toLowerCase().includes('not found')) {
+            throw err;
+          }
           // tool not found in global registry, continue to agent fallback
         }
       }

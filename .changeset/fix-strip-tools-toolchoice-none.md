@@ -2,6 +2,4 @@
 "@mastra/core": patch
 ---
 
-fix(core): strip tools array when toolChoice is 'none' to prevent Gemini structured output errors
-
-When toolChoice === 'none', prepareToolsAndToolChoice() now returns tools: undefined instead of serializing the full tools array. This prevents providers like Gemini from rejecting requests that combine tools + structured output (response_format: json_schema).
+Agents using structured output no longer fail when workflow tools are present. Setting toolChoice to 'none' now correctly prevents tools from being sent to the provider, fixing errors from providers like Gemini that reject structured output requests when tools are included.

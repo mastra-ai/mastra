@@ -1,6 +1,5 @@
 ---
 "@mastra/server": patch
-"@mastra/core": patch
 ---
 
-Fix EXECUTE_TOOL_ROUTE to find dynamically-resolved agent tools via toolsResolver fallback
+Tools registered via agent toolsResolvers can now be executed through the tool execution endpoint. Previously, dynamically-resolved tools were not discoverable and would return 404.
