@@ -3665,9 +3665,15 @@ describe('Thread Attribution Helpers', () => {
       expect(result).toBe(`<thread id="thread-123">\n${observations}\n</thread>`);
     });
 
-    it('should wrap observations in an observation group when a message range is provided', async () => {
+    it('should wrap observations in an observation group when a message range is provided and graph is enabled', async () => {
+      const graphOm = new ObservationalMemory({
+        storage,
+        graph: true,
+        observation: { messageTokens: 500, model: 'test-model' },
+        reflection: { observationTokens: 1000, model: 'test-model' },
+      });
       const observations = '- 🔴 User likes coffee';
-      const result = await (om as any).wrapWithThreadTag('thread-123', observations, 'msg-1:msg-2');
+      const result = await (graphOm as any).wrapWithThreadTag('thread-123', observations, 'msg-1:msg-2');
 
       expect(result).toContain('<thread id="thread-123">');
       expect(result).toContain('<observation-group id="');
@@ -3675,6 +3681,14 @@ describe('Thread Attribution Helpers', () => {
       expect(result).toContain(observations);
       expect(result).toContain('</observation-group>');
       expect(result).toContain('</thread>');
+    });
+
+    it('should NOT wrap in observation group when graph is disabled even if messageRange is provided', async () => {
+      const observations = '- 🔴 User likes coffee';
+      const result = await (om as any).wrapWithThreadTag('thread-123', observations, 'msg-1:msg-2');
+
+      expect(result).toBe(`<thread id="thread-123">\n${observations}\n</thread>`);
+      expect(result).not.toContain('<observation-group');
     });
   });
 
@@ -3903,12 +3917,11 @@ Ask about preferred brewing method
       unobservedMessages: messages,
     });
 
-    // Check stored observations have thread tag and durable observation-group boundary
+    // Check stored observations have thread tag but no observation-group (graph is thread-only)
     const record = await storage.getObservationalMemory(null, 'resource-1');
     expect(record?.activeObservations).toContain('<thread id="thread-1">');
     expect(record?.activeObservations).toContain('</thread>');
-    expect(record?.activeObservations).toContain('<observation-group id="');
-    expect(record?.activeObservations).toContain('range="msg-1:msg-2"');
+    expect(record?.activeObservations).not.toContain('<observation-group');
     expect(record?.activeObservations).toContain('User mentioned they like coffee');
   });
 
@@ -4081,12 +4094,13 @@ Ask about preferred brewing method
 
     const om = new ObservationalMemory({
       storage,
+      graph: true,
       observation: {
         messageTokens: 100000,
         model: mockModel as any,
       },
       reflection: { observationTokens: 10000 },
-      scope: 'thread', // Thread scope
+      scope: 'thread', // Thread scope with graph
     });
 
     // Initialize record

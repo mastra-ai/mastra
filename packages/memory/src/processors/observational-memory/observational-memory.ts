@@ -4069,9 +4069,8 @@ ${formattedMessages}
   private async wrapWithThreadTag(threadId: string, observations: string, messageRange?: string): Promise<string> {
     // First strip any thread tags the Observer might have added
     const cleanObservations = this.stripThreadTags(observations);
-    const groupedObservations = messageRange
-      ? wrapInObservationGroup(cleanObservations, messageRange)
-      : cleanObservations;
+    const groupedObservations =
+      this.graph && messageRange ? wrapInObservationGroup(cleanObservations, messageRange) : cleanObservations;
     const obscuredId = await this.representThreadIDInContext(threadId);
     return `<thread id="${obscuredId}">\n${groupedObservations}\n</thread>`;
   }
@@ -4279,7 +4278,7 @@ ${formattedMessages}
 
       // Build new observations (use freshRecord if available)
       const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
-      const messageRange = buildMessageRange(messagesToObserve);
+      const messageRange = this.graph ? buildMessageRange(messagesToObserve) : undefined;
       let newObservations: string;
       if (this.scope === 'resource') {
         // In resource scope: wrap with thread tag and replace/append
@@ -4292,7 +4291,8 @@ ${formattedMessages}
         );
       } else {
         // In thread scope: append grouped observations with a message boundary delimiter for cache stability
-        const groupedObservations = wrapInObservationGroup(result.observations, messageRange);
+        const groupedObservations =
+          this.graph && messageRange ? wrapInObservationGroup(result.observations, messageRange) : result.observations;
         newObservations = existingObservations
           ? `${existingObservations}${ObservationalMemory.createMessageBoundary(lastObservedAt)}${groupedObservations}`
           : groupedObservations;
@@ -4744,12 +4744,13 @@ ${formattedMessages}
 
     // Get the new observations to buffer (just the new content, not merged)
     // The storage adapter will handle appending to existing buffered content
-    const messageRange = buildMessageRange(messagesToBuffer);
+    const messageRange = this.graph ? buildMessageRange(messagesToBuffer) : undefined;
     let newObservations: string;
     if (this.scope === 'resource') {
       newObservations = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
     } else {
-      newObservations = wrapInObservationGroup(result.observations, messageRange);
+      newObservations =
+        this.graph && messageRange ? wrapInObservationGroup(result.observations, messageRange) : result.observations;
     }
 
     const newTokenCount = this.tokenCounter.countObservations(newObservations);
@@ -5683,7 +5684,7 @@ ${formattedMessages}
         const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
 
         // Wrap with thread tag and append (in thread order for consistency)
-        const messageRange = buildMessageRange(threadMessages);
+        const messageRange = this.graph ? buildMessageRange(threadMessages) : undefined;
         const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
         currentObservations = this.replaceOrAppendThreadSection(
           currentObservations,
