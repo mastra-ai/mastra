@@ -1,11 +1,11 @@
 import { z } from 'zod';
 
 /**
- * Configuration options for the BrowserToolset constructor.
+ * Configuration options for the Browser constructor.
  *
  * Controls browser launch behavior and global timeout settings.
  */
-export interface BrowserToolsetConfig {
+export interface BrowserConfig {
   /**
    * Whether to run the browser in headless mode (no visible UI).
    * @default true

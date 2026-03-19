@@ -1,8 +1,8 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { BrowserToolset } from '@mastra/browser-agent-browser';
+import { Browser } from '@mastra/agent-browser';
 
-export const browserToolset = new BrowserToolset({
+export const browserToolset = new Browser({
   headless: true,
   timeout: 15_000,
 });

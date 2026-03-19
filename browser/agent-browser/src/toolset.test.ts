@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BrowserManagerLike } from './browser-types.js';
-import { BrowserToolset } from './toolset.js';
+import { Browser } from './toolset.js';
 
 // Mock the dynamic import of agent-browser so we never launch a real browser
 const mockManager: BrowserManagerLike = {
@@ -39,12 +39,12 @@ vi.mock('agent-browser/dist/browser.js', () => ({
   },
 }));
 
-describe('BrowserToolset', () => {
-  let toolset: BrowserToolset;
+describe('Browser', () => {
+  let toolset: Browser;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    toolset = new BrowserToolset();
+    toolset = new Browser();
   });
 
   afterEach(async () => {
@@ -78,7 +78,7 @@ describe('BrowserToolset', () => {
     });
 
     it('accepts custom config', () => {
-      const custom = new BrowserToolset({ headless: false, timeout: 5000 });
+      const custom = new Browser({ headless: false, timeout: 5000 });
       expect(custom.isBrowserRunning()).toBe(false);
     });
   });

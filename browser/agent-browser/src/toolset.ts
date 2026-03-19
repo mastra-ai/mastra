@@ -12,10 +12,10 @@ import { createScrollTool } from './tools/scroll.js';
 import { createSelectTool } from './tools/select.js';
 import { createSnapshotTool } from './tools/snapshot.js';
 import { createTypeTool } from './tools/type.js';
-import type { BrowserToolsetConfig } from './types.js';
+import type { BrowserConfig } from './types.js';
 
 /**
- * BrowserToolset provides browser automation tools for Mastra agents.
+ * Browser provides browser automation tools for Mastra agents.
  *
  * Implements the BrowserToolsetLike interface from @mastra/core so it can be
  * registered as `browser` on an agent. The browser is initialized lazily on
@@ -23,16 +23,16 @@ import type { BrowserToolsetConfig } from './types.js';
  *
  * @example
  * ```typescript
- * import { BrowserToolset } from '@mastra/browser-agent-browser';
+ * import { Browser } from '@mastra/agent-browser';
  *
- * const browser = new BrowserToolset({ headless: true });
+ * const browser = new Browser({ headless: true });
  * const agent = new Agent({
  *   browser,
  *   // ...
  * });
  * ```
  */
-export class BrowserToolset {
+export class Browser {
   readonly name = 'agent-browser';
 
   /** The browser manager instance, lazily initialized */
@@ -44,13 +44,13 @@ export class BrowserToolset {
   /** Callbacks to invoke when browser becomes ready */
   private onBrowserReadyCallbacks = new Set<() => void>();
 
-  /** Configuration for the browser toolset */
-  private config: Required<BrowserToolsetConfig>;
+  /** Configuration for the browser */
+  private config: Required<BrowserConfig>;
 
   /** Tools record for the agent */
   readonly tools: Record<string, ToolAction<any, any, any, any>>;
 
-  constructor(config: BrowserToolsetConfig = {}) {
+  constructor(config: BrowserConfig = {}) {
     this.config = {
       headless: config.headless ?? true,
       timeout: config.timeout ?? 10_000,
@@ -108,7 +108,7 @@ export class BrowserToolset {
         try {
           callback();
         } catch (error) {
-          console.warn('[BrowserToolset] onBrowserReady callback error:', error);
+          console.warn('[Browser] onBrowserReady callback error:', error);
         }
       }
 
@@ -199,7 +199,7 @@ export class BrowserToolset {
         await this.browserManager.close();
       } catch (error) {
         // Log but don't throw - cleanup should be best-effort
-        console.warn('[BrowserToolset] Error closing browser:', error);
+        console.warn('[Browser] Error closing browser:', error);
       } finally {
         this.browserManager = null;
       }

@@ -1,5 +1,5 @@
 /**
- * Integration tests for BrowserToolset with a real browser.
+ * Integration tests for Browser with a real browser.
  *
  * These tests launch a headless Chromium via agent-browser and exercise
  * actual browser tools against a local data: URI or public test page.
@@ -8,7 +8,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { BrowserToolset } from './toolset.js';
+import { Browser } from './toolset.js';
 
 // Check if we can actually launch a browser
 let canLaunchBrowser = true;
@@ -22,11 +22,11 @@ try {
   canLaunchBrowser = false;
 }
 
-describe.skipIf(!canLaunchBrowser)('BrowserToolset integration', () => {
-  let toolset: BrowserToolset;
+describe.skipIf(!canLaunchBrowser)('Browser integration', () => {
+  let toolset: Browser;
 
   beforeAll(() => {
-    toolset = new BrowserToolset({ headless: true, timeout: 15_000 });
+    toolset = new Browser({ headless: true, timeout: 15_000 });
   });
 
   afterAll(async () => {

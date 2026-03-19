@@ -1,5 +1,8 @@
 // Main exports
-export { BrowserToolset } from './toolset.js';
+export { Browser } from './toolset.js';
+
+/** @deprecated Use `Browser` instead */
+export { Browser as BrowserToolset } from './toolset.js';
 
 // Error handling exports
 export { createError } from './errors.js';
@@ -7,7 +10,9 @@ export type { BrowserToolError, ErrorCode } from './errors.js';
 
 // Type exports
 export type {
-  BrowserToolsetConfig,
+  BrowserConfig,
+  /** @deprecated Use `BrowserConfig` instead */
+  BrowserConfig as BrowserToolsetConfig,
   NavigateInput,
   NavigateOutput,
   SnapshotInput,

@@ -7,19 +7,22 @@
   "dependencies": {
     "@ai-sdk/openai": "npm:@ai-sdk/openai@2.0.15",
     "@mastra/core": "latest",
-    "@mastra/browser-agent-browser": "latest",
+    "@mastra/agent-browser": "latest",
     "@mastra/memory": "latest",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "mastra": "latest"
   },
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../packages/core",
-      "@mastra/browser-agent-browser": "link:../../browser/agent-browser",
-      "@mastra/memory": "link:../../packages/memory"
+      "@mastra/agent-browser": "link:../../browser/agent-browser",
+      "@mastra/memory": "link:../../packages/memory",
+      "mastra": "link:../../packages/cli"
     }
   },
   "scripts": {
-    "start": "npx tsx src/index.ts"
+    "start": "npx tsx src/index.ts",
+    "mastra:dev": "mastra dev"
   },
   "license": "Apache-2.0"
 }

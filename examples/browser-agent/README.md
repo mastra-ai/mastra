@@ -24,7 +24,7 @@ npx tsx src/index.ts "Go to https://example.com and describe the page"
 
 ## How it works
 
-The agent uses `@mastra/browser-agent-browser` which wraps [agent-browser](https://github.com/vercel-labs/agent-browser) (Vercel's headless browser library). The browser tools are automatically merged into the agent's tool set via the `browser` property on the agent config.
+The agent uses `@mastra/agent-browser` which wraps [agent-browser](https://github.com/vercel-labs/agent-browser) (Vercel's headless browser library). The browser tools are automatically merged into the agent's tool set via the `browser` property on the agent config.
 
 Available browser tools:
 - `browser_navigate` — go to a URL
