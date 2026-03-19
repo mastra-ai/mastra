@@ -2018,6 +2018,7 @@ Notes:
             blockAfter: omConfig.observation.blockAfter,
             previousObserverTokens: omConfig.observation.previousObserverTokens,
             instruction: omConfig.observation.instruction,
+            threadTitle: omConfig.observation.threadTitle,
           }
         : undefined,
       reflection: omConfig.reflection
