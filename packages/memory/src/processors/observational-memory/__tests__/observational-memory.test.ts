@@ -4,6 +4,7 @@ import { coreFeatures } from '@mastra/core/features';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
+import { BufferingCoordinator } from '../buffering-coordinator';
 import {
   filterObservedMessages,
   getBufferedChunks,
@@ -865,7 +866,7 @@ describe('Observer Agent Helpers', () => {
         reflection: { observationTokens: 1000 },
       });
 
-      (om as any).observerAgent = {
+      (om.observer as any).observerAgent = {
         stream: async (prompt: any) => {
           capturedPrompt = prompt;
           return {
@@ -898,7 +899,7 @@ describe('Observer Agent Helpers', () => {
         ],
       };
 
-      await (om as any).callObserver(undefined, [message]);
+      await om.observer.call(undefined, [message]);
 
       expect(Array.isArray(capturedPrompt)).toBe(true);
       expect(capturedPrompt).toHaveLength(2);
@@ -2920,7 +2921,7 @@ Ask about favorite vegetarian dishes
       scope: 'thread',
     });
 
-    (om as any).observerAgent = {
+    (om.observer as any).observerAgent = {
       stream: async (prompt: any) => {
         capturedPrompt = prompt;
         return {
@@ -2947,7 +2948,7 @@ Ask about favorite vegetarian dishes
       ],
     };
 
-    await (om as any).callObserver(undefined, [attachmentMessage]);
+    await om.observer.call(undefined, [attachmentMessage]);
 
     const historyMessage = capturedPrompt.find(
       (msg: any) =>
@@ -3516,8 +3517,8 @@ describe('Locking Behavior', () => {
 
     // Try to reflect — stale isReflecting should be detected and cleared,
     // because no operation is registered in this process's activeOps registry
-    await (om as any).maybeReflect({
-      record: { ...record, isReflecting: true },
+    await om.reflector.maybeReflect({
+      record: { ...record!, isReflecting: true },
       observationTokens: 500, // Token count exceeds threshold
     });
 
@@ -3676,7 +3677,7 @@ describe('Reflection with Thread Attribution', () => {
     // Trigger reflection via maybeReflect (called internally)
     const record = await storage.getObservationalMemory(null, 'resource-1');
     // @ts-expect-error - accessing private method for testing
-    await om.maybeReflect({ record: record!, observationTokens: 500 });
+    await om.reflector.maybeReflect({ record: record!, observationTokens: 500 });
 
     // Get all records for this resource
     const allRecords = await storage.getObservationalMemoryHistory(null, 'resource-1');
@@ -3765,7 +3766,7 @@ describe('Reflection with Thread Attribution', () => {
     // Trigger reflection
     const record = await storage.getObservationalMemory(null, 'resource-1');
     // @ts-expect-error - accessing private method for testing
-    await om.maybeReflect({ record: record!, observationTokens: 500 });
+    await om.reflector.maybeReflect({ record: record!, observationTokens: 500 });
 
     // Get the new reflection record
     const allRecords = await storage.getObservationalMemoryHistory(null, 'resource-1');
@@ -3836,7 +3837,7 @@ describe('Reflection with Thread Attribution', () => {
 
     // Trigger reflection
     // @ts-expect-error - accessing private method for testing
-    await om.maybeReflect({ record: recordBeforeReflection!, observationTokens: 500 });
+    await om.reflector.maybeReflect({ record: recordBeforeReflection!, observationTokens: 500 });
 
     // Get the new reflection record
     const allRecords = await storage.getObservationalMemoryHistory(null, 'resource-1');
@@ -4900,8 +4901,8 @@ describe('Async Buffering Config Validation', () => {
       observation: { messageTokens: 50000, bufferTokens: false },
       reflection: { observationTokens: 20000 },
     });
-    expect(om.isAsyncObservationEnabled()).toBe(false);
-    expect(om.isAsyncReflectionEnabled()).toBe(false);
+    expect(om.buffering.isAsyncObservationEnabled()).toBe(false);
+    expect(om.buffering.isAsyncReflectionEnabled()).toBe(false);
   });
 
   it('should throw if bufferActivation is zero', () => {
@@ -5100,8 +5101,8 @@ describe('Async Buffering Defaults & Disabling', () => {
       reflection: { observationTokens: 20000 },
     });
 
-    expect((om as any).isAsyncObservationEnabled()).toBe(true);
-    expect((om as any).isAsyncReflectionEnabled()).toBe(true);
+    expect(om.buffering.isAsyncObservationEnabled()).toBe(true);
+    expect(om.buffering.isAsyncReflectionEnabled()).toBe(true);
   });
 
   it('should apply correct default values for async buffering', () => {
@@ -5137,8 +5138,8 @@ describe('Async Buffering Defaults & Disabling', () => {
       reflection: { observationTokens: 20000 },
     });
 
-    expect((om as any).isAsyncObservationEnabled()).toBe(false);
-    expect((om as any).isAsyncReflectionEnabled()).toBe(false);
+    expect(om.buffering.isAsyncObservationEnabled()).toBe(false);
+    expect(om.buffering.isAsyncReflectionEnabled()).toBe(false);
 
     const obsConfig = (om as any).observationConfig;
     const reflConfig = (om as any).reflectionConfig;
@@ -5159,8 +5160,8 @@ describe('Async Buffering Defaults & Disabling', () => {
       reflection: { observationTokens: 20000 },
     });
 
-    expect((om as any).isAsyncObservationEnabled()).toBe(false);
-    expect((om as any).isAsyncReflectionEnabled()).toBe(false);
+    expect(om.buffering.isAsyncObservationEnabled()).toBe(false);
+    expect(om.buffering.isAsyncReflectionEnabled()).toBe(false);
   });
 
   it('should throw when resource scope has explicit async config', () => {
@@ -5433,7 +5434,7 @@ describe('Async Buffering Processor Logic', () => {
         reflection: { observationTokens: 20000 },
       });
 
-      expect((om as any).shouldTriggerAsyncObservation(10000, 'thread:test', mockRecord)).toBe(false);
+      expect(om.buffering.shouldTriggerAsyncObservation(10000, 'thread:test', mockRecord)).toBe(false);
     });
 
     it('should return true when crossing a bufferTokens interval boundary', () => {
@@ -5450,10 +5451,10 @@ describe('Async Buffering Processor Logic', () => {
       });
 
       // At 5000 tokens, interval = 0, lastBoundary = 0 → no trigger
-      expect((om as any).shouldTriggerAsyncObservation(5000, 'thread:test', mockRecord)).toBe(false);
+      expect(om.buffering.shouldTriggerAsyncObservation(5000, 'thread:test', mockRecord)).toBe(false);
 
       // At 10000 tokens, interval = 1, lastBoundary = 0 → trigger
-      expect((om as any).shouldTriggerAsyncObservation(10000, 'thread:test', mockRecord)).toBe(true);
+      expect(om.buffering.shouldTriggerAsyncObservation(10000, 'thread:test', mockRecord)).toBe(true);
     });
 
     it('should treat stale isBufferingObservation flag as cleared (no active op in process)', () => {
@@ -5471,7 +5472,7 @@ describe('Async Buffering Processor Logic', () => {
 
       // isBufferingObservation=true but no op registered in this process → stale, should allow trigger
       const bufferingRecord = { isBufferingObservation: true, lastBufferedAtTokens: 0 } as any;
-      expect((om as any).shouldTriggerAsyncObservation(10000, 'thread:test', bufferingRecord)).toBe(true);
+      expect(om.buffering.shouldTriggerAsyncObservation(10000, 'thread:test', bufferingRecord)).toBe(true);
     });
 
     it('should not re-trigger for the same interval using record.lastBufferedAtTokens', () => {
@@ -5490,16 +5491,16 @@ describe('Async Buffering Processor Logic', () => {
       const lockKey = 'thread:test';
 
       // Simulate first trigger at 10000 — record shows lastBufferedAtTokens=0
-      expect((om as any).shouldTriggerAsyncObservation(10000, lockKey, mockRecord)).toBe(true);
+      expect(om.buffering.shouldTriggerAsyncObservation(10000, lockKey, mockRecord)).toBe(true);
 
       // Simulate that buffering completed and persisted lastBufferedAtTokens=10000
       const afterBufferRecord = { isBufferingObservation: false, lastBufferedAtTokens: 10000 } as any;
 
       // Same interval should not re-trigger (using DB state, not in-memory)
-      expect((om as any).shouldTriggerAsyncObservation(12000, lockKey, afterBufferRecord)).toBe(false);
+      expect(om.buffering.shouldTriggerAsyncObservation(12000, lockKey, afterBufferRecord)).toBe(false);
 
       // Next interval boundary should trigger
-      expect((om as any).shouldTriggerAsyncObservation(20000, lockKey, afterBufferRecord)).toBe(true);
+      expect(om.buffering.shouldTriggerAsyncObservation(20000, lockKey, afterBufferRecord)).toBe(true);
     });
 
     it('should not re-trigger for the same interval after lastBufferedBoundary is set (in-memory fallback)', () => {
@@ -5516,19 +5517,19 @@ describe('Async Buffering Processor Logic', () => {
       });
 
       const lockKey = 'thread:test';
-      const bufferKey = (om as any).getObservationBufferKey(lockKey);
+      const bufferKey = om.buffering.getObservationBufferKey(lockKey);
 
       // Simulate first trigger at 10000
-      expect((om as any).shouldTriggerAsyncObservation(10000, lockKey, mockRecord)).toBe(true);
+      expect(om.buffering.shouldTriggerAsyncObservation(10000, lockKey, mockRecord)).toBe(true);
 
       // Simulate that startAsyncBufferedObservation updated lastBufferedBoundary (in-memory)
-      (ObservationalMemory as any).lastBufferedBoundary.set(bufferKey, 10000);
+      BufferingCoordinator.lastBufferedBoundary.set(bufferKey, 10000);
 
       // Same interval should not re-trigger
-      expect((om as any).shouldTriggerAsyncObservation(12000, lockKey, mockRecord)).toBe(false);
+      expect(om.buffering.shouldTriggerAsyncObservation(12000, lockKey, mockRecord)).toBe(false);
 
       // Next interval boundary should trigger
-      expect((om as any).shouldTriggerAsyncObservation(20000, lockKey, mockRecord)).toBe(true);
+      expect(om.buffering.shouldTriggerAsyncObservation(20000, lockKey, mockRecord)).toBe(true);
     });
 
     it('should halve the buffer interval when within ~1 bufferTokens of the threshold', () => {
@@ -5549,26 +5550,26 @@ describe('Async Buffering Processor Logic', () => {
 
       // Well below ramp point (35600): normal 4000 interval
       // At 3000 tokens, interval = floor(3000/4000) = 0, last = 0 → no trigger
-      expect((om as any).shouldTriggerAsyncObservation(3000, lockKey, mockRecord, 40000)).toBe(false);
+      expect(om.buffering.shouldTriggerAsyncObservation(3000, lockKey, mockRecord, undefined, 40000)).toBe(false);
       // At 4000 tokens, interval = floor(4000/4000) = 1, last = 0 → trigger
-      expect((om as any).shouldTriggerAsyncObservation(4000, lockKey, mockRecord, 40000)).toBe(true);
+      expect(om.buffering.shouldTriggerAsyncObservation(4000, lockKey, mockRecord, undefined, 40000)).toBe(true);
 
       // Still below ramp point: normal 4000 interval
       const recordAt32k = { isBufferingObservation: false, lastBufferedAtTokens: 32000 } as any;
       // At 35000 tokens (below rampPoint 35600), interval = floor(35000/4000) = 8, last = floor(32000/4000) = 8 → no trigger
-      expect((om as any).shouldTriggerAsyncObservation(35000, lockKey, recordAt32k, 40000)).toBe(false);
+      expect(om.buffering.shouldTriggerAsyncObservation(35000, lockKey, recordAt32k, undefined, 40000)).toBe(false);
 
       // Above ramp point (35600): halved 2000 interval
       // At 36000 tokens, halved interval = 2000
       // interval = floor(36000/2000) = 18, last = floor(32000/2000) = 16 → trigger
-      expect((om as any).shouldTriggerAsyncObservation(36000, lockKey, recordAt32k, 40000)).toBe(true);
+      expect(om.buffering.shouldTriggerAsyncObservation(36000, lockKey, recordAt32k, undefined, 40000)).toBe(true);
 
       // Simulate buffering at 36000
       const recordAt36k = { isBufferingObservation: false, lastBufferedAtTokens: 36000 } as any;
       // At 37000 tokens, interval = floor(37000/2000) = 18, last = floor(36000/2000) = 18 → no trigger
-      expect((om as any).shouldTriggerAsyncObservation(37000, lockKey, recordAt36k, 40000)).toBe(false);
+      expect(om.buffering.shouldTriggerAsyncObservation(37000, lockKey, recordAt36k, undefined, 40000)).toBe(false);
       // At 38000 tokens, interval = floor(38000/2000) = 19, last = 18 → trigger
-      expect((om as any).shouldTriggerAsyncObservation(38000, lockKey, recordAt36k, 40000)).toBe(true);
+      expect(om.buffering.shouldTriggerAsyncObservation(38000, lockKey, recordAt36k, undefined, 40000)).toBe(true);
     });
 
     it('should not halve interval when no threshold is provided', () => {
@@ -5589,9 +5590,9 @@ describe('Async Buffering Processor Logic', () => {
 
       // Without threshold, even near messageTokens limit, the normal 4000 interval is used
       // At 31000 tokens, interval = floor(31000/4000) = 7, last = floor(28000/4000) = 7 → no trigger
-      expect((om as any).shouldTriggerAsyncObservation(31000, lockKey, recordAt28k)).toBe(false);
+      expect(om.buffering.shouldTriggerAsyncObservation(31000, lockKey, recordAt28k)).toBe(false);
       // At 32000 tokens, interval = floor(32000/4000) = 8, last = 7 → trigger
-      expect((om as any).shouldTriggerAsyncObservation(32000, lockKey, recordAt28k)).toBe(true);
+      expect(om.buffering.shouldTriggerAsyncObservation(32000, lockKey, recordAt28k)).toBe(true);
     });
   });
 
@@ -5608,7 +5609,7 @@ describe('Async Buffering Processor Logic', () => {
         reflection: { observationTokens: 20000 },
       });
 
-      expect((om as any).isAsyncBufferingInProgress('obs:thread:test')).toBe(false);
+      expect(om.buffering.isAsyncBufferingInProgress('obs:thread:test')).toBe(false);
     });
 
     it('should return true when an operation is tracked', () => {
@@ -5620,8 +5621,8 @@ describe('Async Buffering Processor Logic', () => {
         reflection: { observationTokens: 20000 },
       });
 
-      (ObservationalMemory as any).asyncBufferingOps.set('obs:thread:test', Promise.resolve());
-      expect((om as any).isAsyncBufferingInProgress('obs:thread:test')).toBe(true);
+      BufferingCoordinator.asyncBufferingOps.set('obs:thread:test', Promise.resolve());
+      expect(om.buffering.isAsyncBufferingInProgress('obs:thread:test')).toBe(true);
     });
   });
 
@@ -6040,10 +6041,10 @@ describe('Async Buffering Processor Logic', () => {
       });
 
       const lockKey = 'thread:thread-1';
-      const bufferKey = (om as any).getObservationBufferKey(lockKey);
+      const bufferKey = om.buffering.getObservationBufferKey(lockKey);
 
       // Simulate that buffering set a boundary
-      (ObservationalMemory as any).lastBufferedBoundary.set(bufferKey, 15000);
+      BufferingCoordinator.lastBufferedBoundary.set(bufferKey, 15000);
 
       const updatedRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
       await (om as any).tryActivateBufferedObservations(updatedRecord!, lockKey, 50000);
@@ -6051,7 +6052,7 @@ describe('Async Buffering Processor Logic', () => {
       // After activation, the boundary should NOT be cleared by tryActivateBufferedObservations.
       // Callers are responsible for setting it to the post-activation context size.
       // tryActivateBufferedObservations preserves the existing boundary.
-      expect((ObservationalMemory as any).lastBufferedBoundary.has(bufferKey)).toBe(true);
+      expect(BufferingCoordinator.lastBufferedBoundary.has(bufferKey)).toBe(true);
     });
   });
 });
@@ -6082,10 +6083,10 @@ describe('Full Async Buffering Flow', () => {
     const { RequestContext } = await import('@mastra/core/di');
 
     // Clear static maps to avoid cross-test pollution
-    (ObservationalMemory as any).asyncBufferingOps.clear();
-    (ObservationalMemory as any).lastBufferedBoundary.clear();
-    (ObservationalMemory as any).lastBufferedAtTime.clear();
-    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
 
     const storage = createInMemoryStorage();
     const threadId = 'flow-thread';
@@ -6230,7 +6231,7 @@ describe('Full Async Buffering Flow', () => {
     async function waitForAsyncOps(timeoutMs = 5000) {
       const start = Date.now();
       while (Date.now() - start < timeoutMs) {
-        const ops = (ObservationalMemory as any).asyncBufferingOps as Map<string, Promise<void>>;
+        const ops = BufferingCoordinator.asyncBufferingOps as Map<string, Promise<void>>;
         if (ops.size === 0) return;
         await Promise.allSettled([...ops.values()]);
         // Small delay to let finally blocks clean up
@@ -7323,7 +7324,7 @@ describe('Full Async Buffering Flow', () => {
       // The logic that was in shouldTriggerAsyncReflection is now inlined in maybeReflect.
       const record = await storage.getObservationalMemory(threadId, resourceId);
       // @ts-expect-error - accessing private method for testing
-      await om.maybeReflect({ record: record!, observationTokens: 60, threadId });
+      await om.reflector.maybeReflect({ record: record!, observationTokens: 60, threadId });
       // If async reflection was incorrectly triggered, startAsyncBufferedReflection would
       // have been called. Since bufferedReflection exists, it should be skipped.
       // Verify that the reflector model was NOT called (reflectorCallCount stays at 0)
@@ -8412,8 +8413,8 @@ describe('Full Async Buffering Flow', () => {
 
     // Verify lastBufferedBoundary is set (not deleted)
     const lockKey = `thread:${threadId}`;
-    const bufferKey = (om as any).getObservationBufferKey(lockKey);
-    const boundaryAfterActivation = (ObservationalMemory as any).lastBufferedBoundary.get(bufferKey);
+    const bufferKey = om.buffering.getObservationBufferKey(lockKey);
+    const boundaryAfterActivation = BufferingCoordinator.lastBufferedBoundary.get(bufferKey);
     expect(boundaryAfterActivation).toBeDefined();
     expect(boundaryAfterActivation).toBeGreaterThan(0);
 
@@ -8496,10 +8497,10 @@ describe('Per-step save deduplication', () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
-    (ObservationalMemory as any).asyncBufferingOps.clear();
-    (ObservationalMemory as any).lastBufferedBoundary.clear();
-    (ObservationalMemory as any).lastBufferedAtTime.clear();
-    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
 
     const storage = createInMemoryStorage();
     const threadId = 'dedup-thread';
@@ -8601,7 +8602,7 @@ describe('Per-step save deduplication', () => {
     async function waitForAsyncOps(timeoutMs = 5000) {
       const start = Date.now();
       while (Date.now() - start < timeoutMs) {
-        const ops = (ObservationalMemory as any).asyncBufferingOps as Map<string, Promise<void>>;
+        const ops = BufferingCoordinator.asyncBufferingOps as Map<string, Promise<void>>;
         if (ops.size === 0) return;
         await Promise.allSettled([...ops.values()]);
         await new Promise(r => setTimeout(r, 50));
@@ -9677,10 +9678,10 @@ describe('Processor behavioral regressions', () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
-    (ObservationalMemory as any).asyncBufferingOps.clear();
-    (ObservationalMemory as any).lastBufferedBoundary.clear();
-    (ObservationalMemory as any).lastBufferedAtTime.clear();
-    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
 
     const storage = createInMemoryStorage();
     const threadId = 'observed-filter-thread';
@@ -9787,10 +9788,10 @@ describe('Processor behavioral regressions', () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
-    (ObservationalMemory as any).asyncBufferingOps.clear();
-    (ObservationalMemory as any).lastBufferedBoundary.clear();
-    (ObservationalMemory as any).lastBufferedAtTime.clear();
-    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
 
     const storage = createInMemoryStorage();
     const threadId = 'sanitize-test-thread';
@@ -9978,10 +9979,10 @@ describe('Processor behavioral regressions', () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
-    (ObservationalMemory as any).asyncBufferingOps.clear();
-    (ObservationalMemory as any).lastBufferedBoundary.clear();
-    (ObservationalMemory as any).lastBufferedAtTime.clear();
-    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
 
     const storage = createInMemoryStorage();
     const threadId = 'step0-boundary-thread';
@@ -10079,10 +10080,10 @@ describe('Processor behavioral regressions', () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
-    (ObservationalMemory as any).asyncBufferingOps.clear();
-    (ObservationalMemory as any).lastBufferedBoundary.clear();
-    (ObservationalMemory as any).lastBufferedAtTime.clear();
-    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
 
     const storage = createInMemoryStorage();
     const resourceId = 'resource-refresh-test';
@@ -10224,10 +10225,10 @@ describe('Processor behavioral regressions', () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
-    (ObservationalMemory as any).asyncBufferingOps.clear();
-    (ObservationalMemory as any).lastBufferedBoundary.clear();
-    (ObservationalMemory as any).lastBufferedAtTime.clear();
-    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
 
     const storage = createInMemoryStorage();
     const threadId = 'abort-mapping-thread';

@@ -1,13 +1,43 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
+import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import type { MessageHistory } from '@mastra/core/processors';
 import type { MemoryStorage } from '@mastra/core/storage';
+import xxhash from 'xxhash-wasm';
 
-import { omError } from '../debug';
-import type { ObservationalMemory } from '../observational-memory';
+import { omDebug, omError } from '../debug';
+import { stripThreadTags } from '../message-utils';
+import type { ObserverRunner } from '../observer-runner';
+import type { ReflectorRunner } from '../reflector-runner';
 import { getMaxThreshold } from '../thresholds';
 import type { TokenCounter } from '../token-counter';
-import type { ObservationMarkerConfig, ResolvedObservationConfig, ResolvedReflectionConfig } from '../types';
+import type {
+  ObservationDebugEvent,
+  ObservationMarkerConfig,
+  ResolvedObservationConfig,
+  ResolvedReflectionConfig,
+} from '../types';
 
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
+
+/** Module-level xxhash singleton — loaded once, shared across all strategy instances. */
+const hasherPromise = xxhash();
+
+/**
+ * Dependencies injected into observation strategies.
+ * Built by the factory in index.ts from the ObservationalMemory instance.
+ */
+export interface StrategyDeps {
+  storage: MemoryStorage;
+  messageHistory: MessageHistory;
+  tokenCounter: TokenCounter;
+  observationConfig: ResolvedObservationConfig;
+  reflectionConfig: ResolvedReflectionConfig;
+  scope: 'thread' | 'resource';
+  observer: ObserverRunner;
+  reflector: ReflectorRunner;
+  observedMessageIds: Set<string>;
+  obscureThreadIds: boolean;
+  emitDebugEvent: (event: ObservationDebugEvent) => void;
+}
 
 /**
  * Abstract base class for observation strategies.
@@ -18,23 +48,25 @@ import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from '.
  */
 export abstract class ObservationStrategy {
   protected readonly storage: MemoryStorage;
+  protected readonly messageHistory: MessageHistory;
   protected readonly tokenCounter: TokenCounter;
   protected readonly observationConfig: ResolvedObservationConfig;
   protected readonly reflectionConfig: ResolvedReflectionConfig;
   protected readonly scope: 'thread' | 'resource';
 
   /** Select the right strategy based on scope and mode. Wired up by index.ts. */
-  static create: (om: ObservationalMemory, opts: ObservationRunOpts) => ObservationStrategy;
+  static create: (om: unknown, opts: ObservationRunOpts) => ObservationStrategy;
 
   constructor(
-    protected readonly om: ObservationalMemory,
+    protected readonly deps: StrategyDeps,
     protected readonly opts: ObservationRunOpts,
   ) {
-    this.storage = om.getStorage();
-    this.tokenCounter = om.getTokenCounter();
-    this.observationConfig = om.getObservationConfig();
-    this.reflectionConfig = om.getReflectionConfig();
-    this.scope = om.scope;
+    this.storage = deps.storage;
+    this.messageHistory = deps.messageHistory;
+    this.tokenCounter = deps.tokenCounter;
+    this.observationConfig = deps.observationConfig;
+    this.reflectionConfig = deps.reflectionConfig;
+    this.scope = deps.scope;
   }
 
   /** Run the full observation lifecycle. */
@@ -58,7 +90,7 @@ export abstract class ObservationStrategy {
       await this.emitEndMarkers(cycleId, processed);
 
       if (this.needsReflection) {
-        await this.om.maybeReflect({
+        await this.deps.reflector.maybeReflect({
           record: { ...record, activeObservations: processed.observations },
           observationTokens: processed.observationTokens,
           threadId,
@@ -106,6 +138,40 @@ export abstract class ObservationStrategy {
       }
     }
     return maxTime > 0 ? new Date(maxTime) : new Date();
+  }
+
+  // ── Observation formatting ──────────────────────────────────
+
+  /**
+   * Wrap observations in a thread attribution tag.
+   * In resource scope, thread IDs can be obscured via xxhash.
+   */
+  protected async wrapWithThreadTag(threadId: string, observations: string): Promise<string> {
+    const cleanObservations = stripThreadTags(observations);
+    let displayId = threadId;
+    if (this.deps.obscureThreadIds) {
+      const hasher = await hasherPromise;
+      displayId = hasher.h32ToString(threadId);
+    }
+    return `<thread id="${displayId}">\n${cleanObservations}\n</thread>`;
+  }
+
+  /**
+   * Wrap raw observations — in resource scope, wraps with thread tag and merges;
+   * in thread scope, simply appends.
+   */
+  protected wrapObservations(
+    rawObservations: string,
+    existingObservations: string,
+    threadId: string,
+  ): Promise<string> | string {
+    if (this.scope === 'resource') {
+      return (async () => {
+        const threadSection = await this.wrapWithThreadTag(threadId, rawObservations);
+        return this.replaceOrAppendThreadSection(existingObservations, threadId, threadSection);
+      })();
+    }
+    return existingObservations ? `${existingObservations}\n\n${rawObservations}` : rawObservations;
   }
 
   protected replaceOrAppendThreadSection(
@@ -164,6 +230,83 @@ export abstract class ObservationStrategy {
     }
 
     return `${existingObservations}\n\n${newThreadSection}`;
+  }
+
+  // ── Marker persistence ──────────────────────────────────────
+
+  /**
+   * Persist a marker to the last assistant message in storage.
+   * Fetches messages directly from the DB so it works even when
+   * no MessageList is available (e.g. async buffering ops).
+   */
+  protected async persistMarkerToStorage(
+    marker: { type: string; data: unknown },
+    threadId: string,
+    resourceId?: string,
+  ): Promise<void> {
+    try {
+      const result = await this.storage.listMessages({
+        threadId,
+        perPage: 20,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      });
+      const messages = result?.messages ?? [];
+      for (const msg of messages) {
+        if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
+          const markerData = marker.data as { cycleId?: string } | undefined;
+          const alreadyPresent =
+            markerData?.cycleId &&
+            msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
+          if (!alreadyPresent) {
+            msg.content.parts.push(marker as any);
+          }
+          await this.messageHistory.persistMessages({
+            messages: [msg],
+            threadId,
+            resourceId,
+          });
+          return;
+        }
+      }
+    } catch (e) {
+      omDebug(`[OM:persistMarkerToStorage] failed to save marker to DB: ${e}`);
+    }
+  }
+
+  /**
+   * Persist a marker part on the last assistant message in a MessageList
+   * AND save the updated message to the DB.
+   */
+  protected async persistMarkerToMessage(
+    marker: { type: string; data: unknown },
+    messageList: MessageList | undefined,
+    threadId: string,
+    resourceId?: string,
+  ): Promise<void> {
+    if (!messageList) return;
+    const allMsgs = messageList.get.all.db();
+    for (let i = allMsgs.length - 1; i >= 0; i--) {
+      const msg = allMsgs[i];
+      if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
+        const markerData = marker.data as { cycleId?: string } | undefined;
+        const alreadyPresent =
+          markerData?.cycleId &&
+          msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
+        if (!alreadyPresent) {
+          msg.content.parts.push(marker as any);
+        }
+        try {
+          await this.messageHistory.persistMessages({
+            messages: [msg],
+            threadId,
+            resourceId,
+          });
+        } catch (e) {
+          omDebug(`[OM:persistMarker] failed to save marker to DB: ${e}`);
+        }
+        return;
+      }
+    }
   }
 
   // ── Abstract phase methods ──────────────────────────────────

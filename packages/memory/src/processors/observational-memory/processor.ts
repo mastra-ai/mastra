@@ -1,14 +1,13 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
-import { getThreadOMMetadata, parseMemoryRequestContext } from '@mastra/core/memory';
+import { parseMemoryRequestContext } from '@mastra/core/memory';
 import type { Processor, ProcessInputStepArgs, ProcessOutputResultArgs } from '@mastra/core/processors';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { omDebug } from './debug';
-import { filterObservedMessages } from './message-utils';
+import type { ObservationTurn } from './observation-turn/index';
 import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
-import { resolveRetentionFloor } from './thresholds';
 import type { TokenCounterModelContext } from './token-counter';
 
 /** Subset of Memory that the processor needs — avoids circular imports. */
@@ -30,12 +29,12 @@ export interface MemoryContextProvider {
  *
  * This class owns the agent-lifecycle orchestration — it decides *when* to
  * load history, check thresholds, trigger observation/reflection, inject
- * observations into context, and save messages. All the *how* — the actual
- * memory operations — is delegated to the ObservationalMemory engine via
- * high-level semantic methods.
+ * observations into context, and save messages. The actual OM operations
+ * are delegated to the Turn/Step handles which compose OM primitives.
  *
- * The processor never accesses engine internals (storage, tokenCounter, config,
- * static maps). It calls only public engine methods designed for external use.
+ * Processor-specific concerns (repro capture, progress emission, token
+ * persistence, continuation message) stay here — they're not part of the
+ * Turn/Step abstraction.
  */
 export class ObservationalMemoryProcessor implements Processor<'observational-memory'> {
   readonly id = 'observational-memory' as const;
@@ -47,180 +46,18 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
   /** Memory instance for loading context. */
   private readonly memory: MemoryContextProvider;
 
+  /** Active turn — created on first processInputStep, ended on processOutputResult. */
+  private turn?: ObservationTurn;
+
   constructor(engine: ObservationalMemory, memory: MemoryContextProvider) {
     this.engine = engine;
     this.memory = memory;
   }
 
-  private async runThresholdObservation(opts: {
-    threadId: string;
-    resourceId?: string;
-    messageList: MessageList;
-    abortSignal?: AbortSignal;
-    requestContext?: any;
-    abort?: ProcessInputStepArgs['abort'];
-  }): Promise<{
-    succeeded: boolean;
-    record: ObservationalMemoryRecord;
-    activatedMessageIds?: string[];
-  }> {
-    const { threadId, resourceId, messageList, abortSignal, requestContext, abort } = opts;
-
-    try {
-      // Wait for any in-flight buffering to settle before making decisions
-      await this.engine.waitForBuffering(threadId, resourceId);
-
-      // Re-check status with fresh state after buffering completes
-      const freshStatus = await this.engine.getStatus({
-        threadId,
-        resourceId,
-        messages: messageList.get.all.db(),
-      });
-
-      if (!freshStatus.shouldObserve) {
-        omDebug(`[OM:runThresholdObservation] fresh status says no observe needed, bailing`);
-        return { succeeded: false, record: freshStatus.record };
-      }
-
-      // Try activation first if buffered chunks exist
-      if (freshStatus.canActivate) {
-        const activation = await this.engine.activate({
-          threadId,
-          resourceId,
-          messages: messageList.get.all.db(),
-        });
-
-        if (activation.activated) {
-          omDebug(
-            `[OM:runThresholdObservation] activation succeeded, activatedMessageIds=${activation.activatedMessageIds?.length}`,
-          );
-
-          // Check if reflection is needed after activation
-          const postActivationStatus = await this.engine.getStatus({
-            threadId,
-            resourceId,
-            messages: messageList.get.all.db(),
-          });
-          if (postActivationStatus.shouldReflect) {
-            await this.engine.reflect(threadId, resourceId);
-          }
-
-          return {
-            succeeded: true,
-            record: activation.record,
-            activatedMessageIds: activation.activatedMessageIds,
-          };
-        }
-      }
-
-      // Activation didn't happen or wasn't enough — check blockAfter
-      const config = this.engine.getObservationConfig();
-      if (config.bufferTokens) {
-        const blockAfter = config.blockAfter;
-        if (!blockAfter || freshStatus.pendingTokens < blockAfter) {
-          omDebug(
-            `[OM:runThresholdObservation] below blockAfter (${freshStatus.pendingTokens} < ${blockAfter ?? 'unset'}), deferring to async`,
-          );
-          return { succeeded: false, record: freshStatus.record };
-        }
-        omDebug(
-          `[OM:runThresholdObservation] blockAfter exceeded (${freshStatus.pendingTokens} >= ${blockAfter}), falling through to sync`,
-        );
-      }
-
-      // Sync observation via the public observe() method
-      const obsResult = await this.engine.observe({
-        threadId,
-        resourceId,
-        messages: messageList.get.all.db(),
-        requestContext,
-      });
-
-      const record = obsResult.record;
-      return { succeeded: obsResult.observed, record, activatedMessageIds: undefined };
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      const abortMessage = abortSignal?.aborted
-        ? 'Agent execution was aborted'
-        : `Encountered error during memory observation: ${err.message}`;
-
-      if (typeof abort === 'function') {
-        abort(abortMessage);
-      }
-
-      throw err;
-    }
-  }
-
-  private async applyThresholdObservationSuccess(opts: {
-    obsResult: { succeeded: boolean; record: ObservationalMemoryRecord; activatedMessageIds?: string[] };
-    threshold: number;
-    asyncObservationEnabled: boolean;
-    threadId: string;
-    resourceId?: string;
-    messageList: MessageList;
-    reproCaptureDetails: Record<string, unknown>;
-  }): Promise<ObservationalMemoryRecord> {
-    const { obsResult, threshold, asyncObservationEnabled, threadId, resourceId, messageList, reproCaptureDetails } =
-      opts;
-
-    const observedIds = obsResult.activatedMessageIds ?? obsResult.record.observedMessageIds ?? [];
-
-    const minRemaining = resolveRetentionFloor(this.engine.getObservationConfig().bufferActivation ?? 1, threshold);
-
-    reproCaptureDetails.thresholdCleanup = {
-      observationSucceeded: true,
-      observedIdsCount: observedIds.length,
-      observedIds: observedIds.map((id: string) => id.slice(0, 8)),
-      minRemaining,
-      updatedRecordObservedIds: obsResult.record.observedMessageIds?.length ?? 0,
-    };
-
-    omDebug(`[OM:cleanup] observedIds=${observedIds.length}, minRemaining=${minRemaining}`);
-
-    await this.engine.cleanupMessages({
-      threadId,
-      resourceId,
-      messages: messageList,
-      observedMessageIds: observedIds,
-      retentionFloor: minRemaining,
-    });
-
-    if (asyncObservationEnabled) {
-      await this.engine.resetBufferingState({
-        threadId,
-        resourceId,
-        recordId: obsResult.record.id,
-        activatedMessageIds: obsResult.activatedMessageIds,
-      });
-    }
-
-    return obsResult.record;
-  }
-
-  /**
-   * Filter out already-observed messages from the in-memory context.
-   * Resolves the cursor fallback from thread metadata, then delegates to the
-   * pure filterObservedMessages utility.
-   */
-  private async filterObservedMessagesFromContext(opts: {
-    messageList: MessageList;
-    record?: ObservationalMemoryRecord;
-    useMarkerBoundaryPruning?: boolean;
-  }): Promise<void> {
-    const { record } = opts;
-    const fallbackCursor = record?.threadId
-      ? getThreadOMMetadata((await this.engine.getStorage().getThreadById({ threadId: record.threadId }))?.metadata)
-          ?.lastObservedMessageCursor
-      : undefined;
-
-    filterObservedMessages({ ...opts, fallbackCursor });
-  }
-
   // ─── Processor lifecycle hooks ──────────────────────────────────────────
 
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, requestContext, stepNumber, state: _state, writer, abortSignal, abort, model } = args;
+    const { messageList, requestContext, stepNumber, state: _state, writer, model, abortSignal, abort } = args;
     const state = _state ?? ({} as Record<string, unknown>);
 
     omDebug(
@@ -241,290 +78,117 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     state.__omActorModelContext = actorModelContext;
 
     return this.engine.getTokenCounter().runWithModelContext(actorModelContext, async () => {
-      let record = await this.engine.getOrCreateRecord(threadId, resourceId);
+      // Repro capture setup
       const reproCaptureEnabled = isOmReproCaptureEnabled();
-      const preRecordSnapshot = reproCaptureEnabled ? (safeCaptureJson(record) as ObservationalMemoryRecord) : null;
+      const preRecordSnapshot = reproCaptureEnabled
+        ? (safeCaptureJson(await this.engine.getOrCreateRecord(threadId, resourceId)) as ObservationalMemoryRecord)
+        : null;
       const preMessagesSnapshot = reproCaptureEnabled
         ? (safeCaptureJson(messageList.get.all.db()) as MastraDBMessage[])
         : null;
       const preSerializedMessageList = reproCaptureEnabled
         ? (safeCaptureJson(messageList.serialize()) as ReturnType<MessageList['serialize']>)
         : null;
-      const reproCaptureDetails: Record<string, unknown> = {
-        step0Activation: null,
-        thresholdCleanup: null,
-        thresholdReached: false,
-      };
-      omDebug(
-        `[OM:step] processInputStep step=${stepNumber}: recordId=${record.id}, genCount=${record.generationCount}, obsTokens=${record.observationTokenCount}`,
-      );
 
-      // ════════════════════════════════════════════════════════════════════════
-      // STEP 1: LOAD CONTEXT (messages + system message + continuation)
-      // ════════════════════════════════════════════════════════════════════════
-      if (!state.initialSetupDone) {
-        state.initialSetupDone = true;
-
-        const ctx = await this.memory.getContext({ threadId, resourceId });
-
-        // Add historical messages to the MessageList, filtering out system messages
-        for (const msg of ctx.messages) {
-          if (msg.role !== 'system') {
-            messageList.add(msg, 'memory');
-          }
+      // ── Create turn on first step (or when state is reset) ──
+      if (!this.turn || !state.__omTurn) {
+        // End previous turn if state was reset mid-flow
+        if (this.turn && !state.__omTurn) {
+          await this.turn.end().catch(() => {});
         }
-
-        // Store context data for use in later steps
-        state.__omContext = ctx;
+        this.turn = this.engine.beginTurn({ threadId, resourceId, messageList });
+        this.turn.writer = writer;
+        this.turn.requestContext = requestContext;
+        await this.turn.start(this.memory);
+        state.__omTurn = true;
       }
 
-      const cachedContext = state.__omContext as Awaited<ReturnType<MemoryContextProvider['getContext']>> | undefined;
-      let otherThreadsContext = cachedContext?.otherThreadsContext;
-
-      // In resource scope, refresh cross-thread context on every step so
-      // threshold checks and injected system context stay current.
-      if (this.engine.scope === 'resource' && resourceId) {
-        otherThreadsContext = await this.engine.getOtherThreadsContext(resourceId, threadId);
-        if (cachedContext) {
-          cachedContext.otherThreadsContext = otherThreadsContext;
-        }
-      }
-
-      // ════════════════════════════════════════════════════════════════════════
-      // STEP 1c: ACTIVATE BUFFERED OBSERVATIONS (step 0 only)
-      // ════════════════════════════════════════════════════════════════════════
-      if (stepNumber === 0 && !readOnly) {
-        const step0Messages = messageList.get.all.db();
-        const activation = await this.engine.activate({
-          threadId,
-          resourceId,
-          checkThreshold: true,
-          messages: step0Messages,
-        });
-
-        reproCaptureDetails.step0Activation = activation.activated
-          ? { attempted: true, success: true, activatedMessageIds: activation.activatedMessageIds }
-          : null;
-
-        if (activation.activated) {
-          // Remove activated messages from context
-          if (activation.activatedMessageIds?.length) {
-            messageList.removeByIds(activation.activatedMessageIds);
+      // ── Run step preparation (activation, threshold, observation, filtering) ──
+      if (!readOnly) {
+        const step = this.turn.step(stepNumber);
+        let ctx;
+        try {
+          ctx = await step.prepare();
+        } catch (error) {
+          // Map observation errors through abort (processor-specific concern)
+          const err = error instanceof Error ? error : new Error(String(error));
+          const abortMessage = abortSignal?.aborted
+            ? 'Agent execution was aborted'
+            : `Encountered error during memory observation: ${err.message}`;
+          if (typeof abort === 'function') {
+            abort(abortMessage);
           }
+          throw err;
+        }
 
-          // Reset buffering state after activation
-          await this.engine.resetBufferingState({
+        // Inject system message + continuation
+        if (ctx.systemMessage) {
+          messageList.clearSystemMessages('observational-memory');
+          messageList.addSystem(ctx.systemMessage, 'observational-memory');
+
+          const contMsg = this.turn.context.continuation ?? {
+            id: 'om-continuation',
+            role: 'user' as const,
+            createdAt: new Date(0),
+            content: {
+              format: 2 as const,
+              parts: [
+                { type: 'text' as const, text: `<system-reminder>${OBSERVATION_CONTINUATION_HINT}</system-reminder>` },
+              ],
+            },
             threadId,
             resourceId,
-            recordId: activation.record.id,
-          });
-
-          record = activation.record;
+          };
+          messageList.add(contMsg, 'memory');
         }
 
-        // Check if reflection is needed (whether or not activation happened)
-        const reflectStatus = await this.engine.getStatus({
-          threadId,
-          resourceId,
-          messages: messageList.get.all.db(),
-        });
-        if (reflectStatus.shouldReflect) {
-          await this.engine.reflect(threadId, resourceId);
-          record = await this.engine.getOrCreateRecord(threadId, resourceId);
-        }
-      }
-
-      // ════════════════════════════════════════════════════════════════════════
-      // STEP 2: THRESHOLD CHECKING & OBSERVATION
-      // ════════════════════════════════════════════════════════════════════════
-      let didThresholdCleanup = false;
-      let threshold = 0;
-      let effectiveObservationTokensThreshold = 0;
-      let totalPendingTokens = 0;
-
-      if (!readOnly) {
-        const allMessages = messageList.get.all.db();
-        const status = await this.engine.getStatus({
-          threadId,
-          resourceId,
-          messages: allMessages,
-        });
-
-        record = status.record;
-        totalPendingTokens = status.pendingTokens;
-        threshold = status.threshold;
-        effectiveObservationTokensThreshold = status.effectiveObservationTokensThreshold;
-
-        omDebug(
-          `[OM:step] step=${stepNumber}: totalPending=${totalPendingTokens}, unbuffered=${status.unbufferedPendingTokens}, threshold=${threshold}`,
-        );
-
-        // Trigger buffering if we've crossed an interval boundary
-        if (status.shouldBuffer) {
-          const unobservedMessages = this.engine.getUnobservedMessages(allMessages, status.record);
-
-          // Fire-and-forget — buffer() does cursor filtering, then calls beforeBuffer to seal
-          void this.engine
-            .buffer({
-              threadId,
-              resourceId,
-              messages: unobservedMessages,
-              pendingTokens: totalPendingTokens,
-              record: status.record,
-              writer,
-              requestContext,
-              // Seals messages in the live MessageList and persists to storage before
-              // the observer runs. The sealed flag on each message prevents
-              // saveIncrementalMessages from re-persisting them.
-              beforeBuffer: async (candidates: MastraDBMessage[]) => {
-                this.engine.sealMessagesForBuffering(candidates);
-                await this.memory.persistMessages(candidates);
-              },
-            })
-            .catch(err => {
-              omDebug(`[OM:buffer] fire-and-forget buffer failed: ${err?.message}`);
-            });
-        }
-
-        if (stepNumber > 0) {
-          // Per-step save: drain new messages, persist (skipping sealed), re-add as memory
-          const newInput = messageList.clear.input.db();
-          const newOutput = messageList.clear.response.db();
-          const messagesToSave = [...newInput, ...newOutput];
-          if (messagesToSave.length > 0) {
-            await this.engine.persistMessages(messagesToSave, threadId, resourceId);
-            for (const msg of messagesToSave) {
-              messageList.add(msg, 'memory');
-            }
-          }
-
-          if (status.shouldObserve) {
-            reproCaptureDetails.thresholdReached = true;
-            omDebug(
-              `[OM:threshold] step=${stepNumber}: totalPending=${totalPendingTokens} >= threshold=${threshold}, triggering observation`,
-            );
-
-            const obsResult = await this.runThresholdObservation({
-              threadId,
-              resourceId,
-              messageList,
-              abortSignal,
-              requestContext,
-              abort,
-            });
-
-            if (obsResult.succeeded) {
-              didThresholdCleanup = true;
-              record = await this.applyThresholdObservationSuccess({
-                obsResult,
-                threshold,
-                asyncObservationEnabled: status.asyncObservationEnabled,
-                threadId,
-                resourceId,
-                messageList,
-                reproCaptureDetails,
-              });
-            }
-          }
-        }
-      }
-
-      // ════════════════════════════════════════════════════════════════════════
-      // STEP 3: INJECT OBSERVATIONS & FILTER ALREADY-OBSERVED MESSAGES
-      // ════════════════════════════════════════════════════════════════════════
-
-      // Build fresh system message from the current record (may have changed during Step 2)
-      const rawCurrentDate = requestContext?.get('currentDate');
-      const currentDate =
-        rawCurrentDate instanceof Date
-          ? rawCurrentDate
-          : typeof rawCurrentDate === 'string'
-            ? new Date(rawCurrentDate)
-            : new Date();
-      const observationSystemMessage = await this.engine.buildContextSystemMessage({
-        threadId,
-        resourceId,
-        record,
-        unobservedContextBlocks: otherThreadsContext,
-        currentDate,
-      });
-
-      if (observationSystemMessage) {
-        messageList.clearSystemMessages('observational-memory');
-        messageList.addSystem(observationSystemMessage, 'observational-memory');
-
-        // Add continuation reminder from cached context, or build inline
-        const contMsg = cachedContext?.continuationMessage ?? {
-          id: 'om-continuation',
-          role: 'user' as const,
-          createdAt: new Date(0),
-          content: {
-            format: 2 as const,
-            parts: [
-              { type: 'text' as const, text: `<system-reminder>${OBSERVATION_CONTINUATION_HINT}</system-reminder>` },
-            ],
-          },
-          threadId,
-          resourceId,
-        };
-        messageList.add(contMsg, 'memory');
-      }
-
-      if (!didThresholdCleanup) {
-        await this.filterObservedMessagesFromContext({
-          messageList,
+        // ── Progress emission (processor-specific) ──────────
+        const record = this.turn.record;
+        await this.engine.emitProgress({
           record,
-          useMarkerBoundaryPruning: stepNumber === 0,
-        });
-      }
-
-      // ════════════════════════════════════════════════════════════════════════
-      // STEP 4: EMIT PROGRESS & PERSIST TOKENS
-      // ════════════════════════════════════════════════════════════════════════
-
-      await this.engine.emitProgress({
-        record,
-        stepNumber,
-        pendingTokens: totalPendingTokens,
-        threshold,
-        effectiveObservationTokensThreshold,
-        currentObservationTokens: record.observationTokenCount ?? 0,
-        writer,
-        threadId,
-        resourceId,
-      });
-
-      // Count remaining context tokens and persist
-      const freshRecord = await this.engine.getOrCreateRecord(threadId, resourceId);
-      const allDbMsgs = messageList.get.all.db();
-      const tokenCounter = this.engine.getTokenCounter();
-      const contextTokens = await tokenCounter.countMessagesAsync(allDbMsgs);
-      const otherThreadTokens = otherThreadsContext ? tokenCounter.countString(otherThreadsContext) : 0;
-      const finalTotalPending = contextTokens + otherThreadTokens;
-
-      await this.engine
-        .getStorage()
-        .setPendingMessageTokens(freshRecord.id, finalTotalPending)
-        .catch(() => {});
-
-      // Repro capture
-      if (reproCaptureEnabled) {
-        writeProcessInputStepReproCapture({
+          stepNumber,
+          pendingTokens: ctx.status.pendingTokens,
+          threshold: ctx.status.threshold,
+          effectiveObservationTokensThreshold: 0,
+          currentObservationTokens: record.observationTokenCount ?? 0,
+          writer,
           threadId,
           resourceId,
-          stepNumber,
-          args,
-          preRecord: preRecordSnapshot!,
-          postRecord: safeCaptureJson(freshRecord) as ObservationalMemoryRecord,
-          preMessages: preMessagesSnapshot!,
-          preBufferedChunks: [],
-          preContextTokenCount: 0,
-          preSerializedMessageList: preSerializedMessageList!,
-          postBufferedChunks: [],
-          postContextTokenCount: finalTotalPending,
-          messageList,
-          details: reproCaptureDetails,
         });
+
+        // ── Token persistence (processor-specific) ──────────
+        const freshRecord = await this.engine.getOrCreateRecord(threadId, resourceId);
+        const allDbMsgs = messageList.get.all.db();
+        const tokenCounter = this.engine.getTokenCounter();
+        const contextTokens = await tokenCounter.countMessagesAsync(allDbMsgs);
+        const otherThreadsContext = this.turn.context.otherThreadsContext;
+        const otherThreadTokens = otherThreadsContext ? tokenCounter.countString(otherThreadsContext) : 0;
+        const finalTotalPending = contextTokens + otherThreadTokens;
+
+        await this.engine
+          .getStorage()
+          .setPendingMessageTokens(freshRecord.id, finalTotalPending)
+          .catch(() => {});
+
+        // ── Repro capture (processor-specific) ──────────────
+        if (reproCaptureEnabled) {
+          writeProcessInputStepReproCapture({
+            threadId,
+            resourceId,
+            stepNumber,
+            args,
+            preRecord: preRecordSnapshot!,
+            postRecord: safeCaptureJson(freshRecord) as ObservationalMemoryRecord,
+            preMessages: preMessagesSnapshot!,
+            preBufferedChunks: [],
+            preContextTokenCount: 0,
+            preSerializedMessageList: preSerializedMessageList!,
+            postBufferedChunks: [],
+            postContextTokenCount: finalTotalPending,
+            messageList,
+            details: {},
+          });
+        }
       }
 
       return messageList;
@@ -538,20 +202,16 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     const context = this.engine.getThreadContext(requestContext, messageList);
     if (!context) return messageList;
 
-    const { threadId, resourceId } = context;
-
     return this.engine
       .getTokenCounter()
       .runWithModelContext(state.__omActorModelContext as TokenCounterModelContext | undefined, async () => {
         const memoryContext = parseMemoryRequestContext(requestContext);
         if (memoryContext?.memoryConfig?.readOnly) return messageList;
 
-        // Save any remaining unsaved messages (final save at end of turn)
-        const newInput = messageList.get.input.db();
-        const newOutput = messageList.get.response.db();
-        const messagesToSave = [...newInput, ...newOutput];
-        if (messagesToSave.length > 0) {
-          await this.engine.persistMessages(messagesToSave, threadId, resourceId);
+        // End the turn — saves unsaved messages, awaits buffering
+        if (this.turn) {
+          await this.turn.end();
+          this.turn = undefined;
         }
 
         return messageList;

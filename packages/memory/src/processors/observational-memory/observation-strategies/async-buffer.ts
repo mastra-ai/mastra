@@ -3,17 +3,17 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { omDebug } from '../debug';
 import { createBufferingEndMarker, createBufferingFailedMarker } from '../markers';
 import { getBufferedChunks, combineObservationsForBuffering } from '../message-utils';
-import type { ObservationalMemory } from '../observational-memory';
 
 import { ObservationStrategy } from './base';
+import type { StrategyDeps } from './base';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
 
 export class AsyncBufferObservationStrategy extends ObservationStrategy {
   private readonly startedAt: string;
   private readonly cycleId: string;
 
-  constructor(om: ObservationalMemory, opts: ObservationRunOpts) {
-    super(om, opts);
+  constructor(deps: StrategyDeps, opts: ObservationRunOpts) {
+    super(deps, opts);
     this.cycleId = opts.cycleId!;
     this.startedAt = opts.startedAt ?? new Date().toISOString();
   }
@@ -42,7 +42,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
   }
 
   async observe(existingObservations: string, messages: MastraDBMessage[]) {
-    return this.om.callObserver(existingObservations, messages, undefined, {
+    return this.deps.observer.call(existingObservations, messages, undefined, {
       skipContinuationHints: true,
       requestContext: this.opts.requestContext,
     });
@@ -64,7 +64,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
 
     let newObservations: string;
     if (this.scope === 'resource') {
-      newObservations = await this.om.wrapWithThreadTag(threadId, output.observations);
+      newObservations = await this.wrapWithThreadTag(threadId, output.observations);
     } else {
       newObservations = output.observations;
     }
@@ -127,7 +127,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       observations: processed.observations,
     });
     void this.opts.writer.custom(endMarker).catch(() => {});
-    await this.om.persistMarkerToStorage(endMarker, threadId, record.resourceId ?? undefined);
+    await this.persistMarkerToStorage(endMarker, threadId, record.resourceId ?? undefined);
   }
 
   async emitFailedMarkers(_cycleId: string, error: unknown) {
@@ -145,6 +145,6 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       threadId,
     });
     void this.opts.writer.custom(failedMarker).catch(() => {});
-    await this.om.persistMarkerToStorage(failedMarker, threadId, record.resourceId ?? undefined);
+    await this.persistMarkerToStorage(failedMarker, threadId, record.resourceId ?? undefined);
   }
 }

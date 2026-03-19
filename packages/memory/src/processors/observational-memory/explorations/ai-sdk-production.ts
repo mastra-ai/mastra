@@ -6,6 +6,7 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { z } from 'zod';
 
 import { Memory } from '../../../index';
+import { BufferingCoordinator } from '../buffering-coordinator';
 import { ObservationalMemory } from '../observational-memory';
 import { seedThreadAndEnsureObservations } from './seed-phase';
 
@@ -227,12 +228,14 @@ async function main() {
         // Same observe flow as processor's runThresholdObservation:
         // wait → re-check → activate → blockAfter → observe → cleanup
 
-        await ObservationalMemory.awaitBuffering(threadId, undefined, 'thread');
+        await BufferingCoordinator.awaitBuffering(threadId, undefined, 'thread');
 
         // Fresh re-check — state may have changed while waiting for buffering
         const freshStatus = await om.getStatus({ threadId, messages: messageList.get.all.db() });
         if (!freshStatus.shouldObserve) {
-          stepLog.push(`step ${stepNum}: noop-after-wait (pending ${freshStatus.pendingTokens}/${freshStatus.threshold})`);
+          stepLog.push(
+            `step ${stepNum}: noop-after-wait (pending ${freshStatus.pendingTokens}/${freshStatus.threshold})`,
+          );
         } else {
           // Try activation first
           if (freshStatus.canActivate) {

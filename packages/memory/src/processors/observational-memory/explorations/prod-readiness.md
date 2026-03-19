@@ -14,13 +14,13 @@ The most severe issue is **data loss in resource-scoped OM** — concurrent obse
 
 There are 5 static Maps on the `ObservationalMemory` class, shared across all instances within a single Node.js process but invisible to other replicas:
 
-| Static Map | Purpose | Horizontal Scaling Problem |
-|---|---|---|
-| `asyncBufferingOps` | Tracks in-flight async buffering Promises | Replica B can't await Replica A's in-flight operation. May activate incomplete buffered content. |
-| `lastBufferedBoundary` | Token boundary where buffering was last triggered | Replica B doesn't know the boundary, re-triggers buffering for the same messages, creating duplicate buffered chunks in storage. |
-| `lastBufferedAtTime` | Timestamp cursor for which messages have been buffered | Same — Replica B re-buffers already-buffered messages. |
-| `sealedMessageIds` | Message IDs sealed during async buffering (protected from mutation) | Replica B doesn't know which messages are sealed. `saveMessagesWithSealedIdTracking` may redundantly re-save sealed messages. |
-| `reflectionBufferCycleIds` | CycleId for in-flight buffered reflections | Minor — affects UI marker display only. |
+| Static Map                 | Purpose                                                             | Horizontal Scaling Problem                                                                                                       |
+| -------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `asyncBufferingOps`        | Tracks in-flight async buffering Promises                           | Replica B can't await Replica A's in-flight operation. May activate incomplete buffered content.                                 |
+| `lastBufferedBoundary`     | Token boundary where buffering was last triggered                   | Replica B doesn't know the boundary, re-triggers buffering for the same messages, creating duplicate buffered chunks in storage. |
+| `lastBufferedAtTime`       | Timestamp cursor for which messages have been buffered              | Same — Replica B re-buffers already-buffered messages.                                                                           |
+| `sealedMessageIds`         | Message IDs sealed during async buffering (protected from mutation) | Replica B doesn't know which messages are sealed. `saveMessagesWithSealedIdTracking` may redundantly re-save sealed messages.    |
+| `reflectionBufferCycleIds` | CycleId for in-flight buffered reflections                          | Minor — affects UI marker display only.                                                                                          |
 
 On serverless cold start or process recycle, all 5 maps start empty. Any in-flight work from the previous invocation is invisible to the new process.
 
@@ -56,12 +56,12 @@ This is the most critical class of problems. The pattern throughout the codebase
 
 ### Affected Operations
 
-| Storage Method | Fields Overwritten | Risk |
-|---|---|---|
-| `updateActiveObservations` | `activeObservations`, `observationTokenCount`, `lastObservedAt`, `observedMessageIds` | Last-write-wins clobbers observations |
-| `swapBufferedToActive` | Merges buffered chunks into active observations | Two replicas may activate the same chunks, creating duplicates |
-| `createReflectionGeneration` | Creates a new generation, increments `generationCount` | Two replicas may create duplicate generations |
-| `updateThread` (metadata) | `suggestedResponse`, `currentTask`, `lastObservedMessageCursor` | Last-write-wins clobbers continuation hints |
+| Storage Method               | Fields Overwritten                                                                    | Risk                                                           |
+| ---------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `updateActiveObservations`   | `activeObservations`, `observationTokenCount`, `lastObservedAt`, `observedMessageIds` | Last-write-wins clobbers observations                          |
+| `swapBufferedToActive`       | Merges buffered chunks into active observations                                       | Two replicas may activate the same chunks, creating duplicates |
+| `createReflectionGeneration` | Creates a new generation, increments `generationCount`                                | Two replicas may create duplicate generations                  |
+| `updateThread` (metadata)    | `suggestedResponse`, `currentTask`, `lastObservedMessageCursor`                       | Last-write-wins clobbers continuation hints                    |
 
 ---
 
@@ -141,17 +141,17 @@ Two concurrent observations for the same thread will clobber each other's `sugge
 
 ## Severity Summary
 
-| Issue | Severity | Impact |
-|---|---|---|
-| Resource-scoped observation RMW (observations lost) | **Critical** | Actual data loss — observations from one thread overwrite another's |
-| Thread-scoped observation RMW (observations overwritten) | **Critical** | Data loss on concurrent requests for the same thread |
-| TOCTOU on reflection/observation flags | **High** | Duplicate LLM calls, wasted tokens, duplicate generations |
-| Static maps lost on cold start / process recycle | **High** | Incomplete activations, duplicate buffering, lost async work |
-| Fire-and-forget operations lost on crash | **High** | Lost background work, stale DB flags |
-| Thread metadata RMW | **Medium** | Stale continuation hints (`suggestedResponse`, `currentTask`) |
-| Sealed IDs lost across replicas | **Medium** | Redundant message writes (not data loss, but wasted work) |
-| Instance mutex single-process only | **Medium** | Enables all RMW races above |
-| Marker streaming gaps | **Low** | Incomplete UI feedback for observation progress |
+| Issue                                                    | Severity     | Impact                                                              |
+| -------------------------------------------------------- | ------------ | ------------------------------------------------------------------- |
+| Resource-scoped observation RMW (observations lost)      | **Critical** | Actual data loss — observations from one thread overwrite another's |
+| Thread-scoped observation RMW (observations overwritten) | **Critical** | Data loss on concurrent requests for the same thread                |
+| TOCTOU on reflection/observation flags                   | **High**     | Duplicate LLM calls, wasted tokens, duplicate generations           |
+| Static maps lost on cold start / process recycle         | **High**     | Incomplete activations, duplicate buffering, lost async work        |
+| Fire-and-forget operations lost on crash                 | **High**     | Lost background work, stale DB flags                                |
+| Thread metadata RMW                                      | **Medium**   | Stale continuation hints (`suggestedResponse`, `currentTask`)       |
+| Sealed IDs lost across replicas                          | **Medium**   | Redundant message writes (not data loss, but wasted work)           |
+| Instance mutex single-process only                       | **Medium**   | Enables all RMW races above                                         |
+| Marker streaming gaps                                    | **Low**      | Incomplete UI feedback for observation progress                     |
 
 ---
 

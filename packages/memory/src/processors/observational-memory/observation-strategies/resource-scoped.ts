@@ -4,10 +4,10 @@ import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
 import { createObservationEndMarker, createObservationFailedMarker, createObservationStartMarker } from '../markers';
 import { getLastObservedMessageCursor, sortThreadsByOldestMessage } from '../message-utils';
-import type { ObservationalMemory } from '../observational-memory';
 import { getMaxThreshold } from '../thresholds';
 
 import { ObservationStrategy } from './base';
+import type { StrategyDeps } from './base';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
 
 export class ResourceScopedObservationStrategy extends ObservationStrategy {
@@ -30,8 +30,8 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     result: { observations: string; currentTask?: string; suggestedContinuation?: string };
   }> = [];
 
-  constructor(om: ObservationalMemory, opts: ObservationRunOpts) {
-    super(om, opts);
+  constructor(deps: StrategyDeps, opts: ObservationRunOpts) {
+    super(deps, opts);
     this.resourceId = opts.resourceId!;
   }
 
@@ -84,7 +84,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     }
 
     for (const [tid, msgs] of this.messagesByThread) {
-      const filtered = msgs.filter(m => !this.om.observedMessageIds.has(m.id));
+      const filtered = msgs.filter(m => !this.deps.observedMessageIds.has(m.id));
       if (filtered.length > 0) {
         this.messagesByThread.set(tid, filtered);
       } else {
@@ -137,7 +137,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       }
     }
 
-    this.om.emitDebugEvent({
+    this.deps.emitDebugEvent({
       type: 'observation_triggered',
       timestamp: new Date(),
       threadId: this.threadOrder.join(','),
@@ -214,7 +214,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
 
     const batchResults = await Promise.all(
       batches.map(async batch => {
-        return this.om.callMultiThreadObserver(
+        return this.deps.observer.callMultiThread(
           _existingObservations,
           batch.threadMap,
           batch.threadIds,
@@ -264,7 +264,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
 
       cycleObservationTokens += this.tokenCounter.countObservations(result.observations);
 
-      const threadSection = await this.om.wrapWithThreadTag(threadId, result.observations);
+      const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
       currentObservations = this.replaceOrAppendThreadSection(currentObservations, threadId, threadSection);
 
       const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
@@ -277,7 +277,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       });
 
       const isFirstThread = this.observationResults.indexOf(obsResult) === 0;
-      this.om.emitDebugEvent({
+      this.deps.emitDebugEvent({
         type: 'observation_complete',
         timestamp: new Date(),
         threadId,

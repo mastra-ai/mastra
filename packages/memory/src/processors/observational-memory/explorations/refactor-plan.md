@@ -11,21 +11,25 @@ Ensure the AI SDK demo is thorough enough to be a real reference implementation.
 ## Completed
 
 ### Cleanup seam
+
 - `cleanupMessages()` is now the shared cleanup primitive
 - Both processor and AI SDK demo use it
 
 ### Observe seam
+
 - Removed `observeWithActivation()` from OM
 - Processor now composes: `waitForBuffering` → `getStatus` → `activate` → `observe` → `reflect`
 - Removed `tryStep0Activation()` — processor calls `activate({ checkThreshold })` + `resetBufferingState` + reflect check
 - Removed `maybeStep0Reflect()` — processor calls `getStatus().shouldReflect` + `reflect()`
 
 ### Dead code removal
+
 - Removed `tryActivateBufferedObservations`, `maybeAsyncReflect`, `shouldTriggerAsyncReflection`
 - Removed `refreshBufferedChunkMessageTokens`, `hasUnobservedParts`, `injectObservationsIntoMessages`, `loadHistory`
 - Cleaned up dead imports
 
 ### Status API unification
+
 - Unified `getObservationStatus` into `getStatus` (single method with all fields)
 - Moved stale boundary reset into `activate()`
 
@@ -105,19 +109,19 @@ Ensure the AI SDK demo is thorough enough to be a real reference implementation.
 
 ### Key Differences
 
-| # | Difference | Processor | AI SDK Demo | Category |
-|---|-----------|-----------|-------------|----------|
-| 1 | Buffer sealing (`beforeBuffer` callback) | Yes | No | Processor lifecycle |
-| 2 | Incremental message save | Yes (`saveIncrementalMessages`) | No (saves at end) | Processor lifecycle |
-| 3 | Fresh re-check after wait | Yes (`getStatus` after wait) | No (uses original status) | **Demo gap** |
-| 4 | blockAfter gate | Yes (defer when below blockAfter) | No (always observes) | **Demo gap** |
-| 5 | Cleanup after observation | Yes (`cleanupMessages` + `resetBufferingState`) | Only in prepareStep | **Demo gap** |
-| 6 | removeByIds after activation | Yes | No | **Demo gap** |
-| 7 | resetBufferingState after activation | Yes | No | **Demo gap** |
-| 8 | Reflection check after activation | Yes (`shouldReflect` → `reflect()`) | No | **Demo gap** |
-| 9 | System msg injection + continuation hint | Inline in processInputStep | Via prepareStep return | Structural |
-| 10 | Progress emission + token persistence | Yes (`emitProgress`, `savePendingTokens`) | No | Processor-specific |
-| 11 | `finalize()` at end | No (handles inline) | Yes | Demo-specific |
+| #   | Difference                               | Processor                                       | AI SDK Demo               | Category            |
+| --- | ---------------------------------------- | ----------------------------------------------- | ------------------------- | ------------------- |
+| 1   | Buffer sealing (`beforeBuffer` callback) | Yes                                             | No                        | Processor lifecycle |
+| 2   | Incremental message save                 | Yes (`saveIncrementalMessages`)                 | No (saves at end)         | Processor lifecycle |
+| 3   | Fresh re-check after wait                | Yes (`getStatus` after wait)                    | No (uses original status) | **Demo gap**        |
+| 4   | blockAfter gate                          | Yes (defer when below blockAfter)               | No (always observes)      | **Demo gap**        |
+| 5   | Cleanup after observation                | Yes (`cleanupMessages` + `resetBufferingState`) | Only in prepareStep       | **Demo gap**        |
+| 6   | removeByIds after activation             | Yes                                             | No                        | **Demo gap**        |
+| 7   | resetBufferingState after activation     | Yes                                             | No                        | **Demo gap**        |
+| 8   | Reflection check after activation        | Yes (`shouldReflect` → `reflect()`)             | No                        | **Demo gap**        |
+| 9   | System msg injection + continuation hint | Inline in processInputStep                      | Via prepareStep return    | Structural          |
+| 10  | Progress emission + token persistence    | Yes (`emitProgress`, `savePendingTokens`)       | No                        | Processor-specific  |
+| 11  | `finalize()` at end                      | No (handles inline)                             | Yes                       | Demo-specific       |
 
 ---
 
@@ -128,6 +132,7 @@ Ensure the AI SDK demo is thorough enough to be a real reference implementation.
 Make the production demo a real reference implementation. 5 changes, all using existing public primitives:
 
 **onStepFinish observe path:**
+
 ```
 CURRENT:                              TARGET:
   awaitBuffering()                      awaitBuffering()
@@ -143,6 +148,7 @@ CURRENT:                              TARGET:
 ```
 
 **prepareStep activation path:**
+
 ```
 CURRENT:                              TARGET:
   if canActivate:                       if canActivate:
@@ -160,16 +166,16 @@ CURRENT:                              TARGET:
 These methods are only called by the processor (not by AI SDK demo or internal OM code).
 Moving them shrinks OM's public surface to just the shared primitives.
 
-| Method | Current Location | Move To | Why |
-|--------|-----------------|---------|-----|
-| `saveIncrementalMessages` | OM | processor or MemoryContextProvider | Message persistence lifecycle |
-| `saveFinalMessages` | OM | processor or MemoryContextProvider | Message persistence lifecycle |
-| `emitProgress` | OM | processor | UI streaming markers |
-| `savePendingTokens` | OM | processor | Token state tracking |
-| `getSealedIds` | OM | processor | Sealed ID tracking |
-| `countMessageTokensAsync` | OM | processor | Only used for token persistence step |
-| `countStringTokens` | OM | processor | Only used for token persistence step |
-| `filterObservedMessages` | OM | processor | Demo uses `cleanupMessages` instead |
+| Method                    | Current Location | Move To                            | Why                                  |
+| ------------------------- | ---------------- | ---------------------------------- | ------------------------------------ |
+| `saveIncrementalMessages` | OM               | processor or MemoryContextProvider | Message persistence lifecycle        |
+| `saveFinalMessages`       | OM               | processor or MemoryContextProvider | Message persistence lifecycle        |
+| `emitProgress`            | OM               | processor                          | UI streaming markers                 |
+| `savePendingTokens`       | OM               | processor                          | Token state tracking                 |
+| `getSealedIds`            | OM               | processor                          | Sealed ID tracking                   |
+| `countMessageTokensAsync` | OM               | processor                          | Only used for token persistence step |
+| `countStringTokens`       | OM               | processor                          | Only used for token persistence step |
+| `filterObservedMessages`  | OM               | processor                          | Demo uses `cleanupMessages` instead  |
 
 **Note:** `sealMessagesForBuffering` has internal OM callers (in `buffer()` and `doAsyncBufferedObservation`) and stays on OM.
 
@@ -216,15 +222,16 @@ Moving them shrinks OM's public surface to just the shared primitives.
 
 Both do marker-boundary pruning + observed-ID removal. Key differences:
 
-| Aspect | filterObservedMessages | cleanupMessages |
-|--------|----------------------|-----------------|
-| When | Step 0 context filtering | Post-observation cleanup |
-| Retention floor | No | Yes |
-| Message saving | No | Yes (sealed ID tracking) |
-| Cursor fallback | Yes (thread metadata) | No |
-| Used by | Processor only | Both processor + demo |
+| Aspect          | filterObservedMessages   | cleanupMessages          |
+| --------------- | ------------------------ | ------------------------ |
+| When            | Step 0 context filtering | Post-observation cleanup |
+| Retention floor | No                       | Yes                      |
+| Message saving  | No                       | Yes (sealed ID tracking) |
+| Cursor fallback | Yes (thread metadata)    | No                       |
+| Used by         | Processor only           | Both processor + demo    |
 
 Could potentially:
+
 - Unify into one method with options
 - Or make `filterObservedMessages` processor-private after Phase 2
 
@@ -252,6 +259,7 @@ getStatus()
 ```
 
 The processor adds on top:
+
 - `beforeBuffer` sealing callback
 - `saveIncrementalMessages` / `saveFinalMessages`
 - `emitProgress` / `savePendingTokens`

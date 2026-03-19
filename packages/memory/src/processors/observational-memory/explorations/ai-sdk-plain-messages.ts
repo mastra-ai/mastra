@@ -273,7 +273,9 @@ async function main() {
   printSnapshot('AFTER (all steps complete)', afterStatus, afterRecord);
 
   console.log('\n=== DELTA ===');
-  console.log(`- observation token delta: ${(afterRecord?.observationTokenCount ?? 0) - (beforeRecord?.observationTokenCount ?? 0)}`);
+  console.log(
+    `- observation token delta: ${(afterRecord?.observationTokenCount ?? 0) - (beforeRecord?.observationTokenCount ?? 0)}`,
+  );
   console.log(`- final pending: ${afterStatus.pendingTokens}/${afterStatus.threshold}`);
 }
 
