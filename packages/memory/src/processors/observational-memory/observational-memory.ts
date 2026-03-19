@@ -407,6 +407,12 @@ By default recall returns **low** detail: truncated text and tool names only. Ea
 
 If the result says \`truncated: true\`, the output was cut to fit the token budget. You can paginate or use \`partIndex\` to target specific content.
 
+### Following up on truncated parts
+Low-detail results may include truncation hints like:
+\`[truncated — call recall cursor="..." partIndex=N detail="high" for full content]\`
+
+**When you see these hints and need the full content, make the exact call described in the hint.** This is the normal workflow: first recall at low detail to scan, then drill into specific parts at high detail. Do not stop at the low-detail result if the user asked for exact content.
+
 ### When recall is NOT needed
 - The user is asking for a high-level summary and your observations already cover it
 - The question is about general preferences or facts that don't require source text

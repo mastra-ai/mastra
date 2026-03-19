@@ -99,10 +99,11 @@ async function resolveCursorMessage(
 
 // ── Per-part formatting ─────────────────────────────────────────────
 
-const LOW_DETAIL_TEXT_LIMIT = 120;
-const LOW_DETAIL_TOOL_RESULT_TOKENS = 60;
+const LOW_DETAIL_PART_TOKENS = 30;
+const AUTO_EXPAND_TEXT_TOKENS = 100;
+const AUTO_EXPAND_TOOL_TOKENS = 20;
 const HIGH_DETAIL_TOOL_RESULT_TOKENS = 4000;
-const DEFAULT_MAX_RESULT_TOKENS = 8000;
+const DEFAULT_MAX_RESULT_TOKENS = 2000;
 
 function formatTimestamp(date: Date): string {
   return date
@@ -117,29 +118,44 @@ interface FormattedPart {
   role: string;
   type: string;
   text: string;
+  /** Full untruncated text — used for auto-expand when token budget allows */
+  fullText: string;
 }
 
-function truncateText(text: string, maxChars: number, hint?: string): string {
-  if (text.length <= maxChars) return text;
-  const suffix = hint ? `… [truncated — ${hint}]` : '…';
-  return text.slice(0, maxChars) + suffix;
+function truncateByTokens(text: string, maxTokens: number, hint?: string): { text: string; wasTruncated: boolean } {
+  if (estimateTokenCount(text) <= maxTokens) return { text, wasTruncated: false };
+  // Truncate content to maxTokens, then append hint outside the budget
+  const truncated = truncateStringByTokens(text, maxTokens);
+  const suffix = hint ? ` [${hint} for more]` : '';
+  return { text: truncated + suffix, wasTruncated: true };
+}
+
+function lowDetailPartLimit(type: string): number {
+  if (type === 'text') return AUTO_EXPAND_TEXT_TOKENS;
+  if (type === 'tool-result' || type === 'tool-call') return AUTO_EXPAND_TOOL_TOKENS;
+  return LOW_DETAIL_PART_TOKENS;
+}
+
+function makePart(
+  msg: MastraDBMessage,
+  partIndex: number,
+  type: string,
+  fullText: string,
+  detail: RecallDetail,
+): FormattedPart {
+  if (detail === 'high') {
+    return { messageId: msg.id, partIndex, role: msg.role, type, text: fullText, fullText };
+  }
+  const hint = `recall cursor="${msg.id}" partIndex=${partIndex} detail="high"`;
+  const { text } = truncateByTokens(fullText, lowDetailPartLimit(type), hint);
+  return { messageId: msg.id, partIndex, role: msg.role, type, text, fullText };
 }
 
 function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): FormattedPart[] {
-  const role = msg.role;
   const parts: FormattedPart[] = [];
 
   if (typeof msg.content === 'string') {
-    parts.push({
-      messageId: msg.id,
-      partIndex: 0,
-      role,
-      type: 'text',
-      text:
-        detail === 'low'
-          ? truncateText(msg.content, LOW_DETAIL_TEXT_LIMIT, `recall cursor="${msg.id}" partIndex=0 detail="high"`)
-          : msg.content,
-    });
+    parts.push(makePart(msg, 0, 'text', msg.content, detail));
     return parts;
   }
 
@@ -150,16 +166,7 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
 
       if (partType === 'text') {
         const text = (part as { text: string }).text;
-        parts.push({
-          messageId: msg.id,
-          partIndex: i,
-          role,
-          type: 'text',
-          text:
-            detail === 'low'
-              ? truncateText(text, LOW_DETAIL_TEXT_LIMIT, `recall cursor="${msg.id}" partIndex=${i} detail="high"`)
-              : text,
-        });
+        parts.push(makePart(msg, i, 'text', text, detail));
       } else if (partType === 'tool-invocation') {
         const inv = (part as any).toolInvocation;
         if (inv.state === 'result') {
@@ -167,111 +174,40 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
             part as { providerMetadata?: Record<string, any> },
             inv.result,
           );
-          if (detail === 'low') {
-            const resultStr = formatToolResultForObserver(resultValue, { maxTokens: LOW_DETAIL_TOOL_RESULT_TOKENS });
-            parts.push({
-              messageId: msg.id,
-              partIndex: i,
-              role,
-              type: 'tool-result',
-              text: `[Tool Result: ${inv.toolName}] ${truncateText(resultStr, LOW_DETAIL_TEXT_LIMIT, `recall cursor="${msg.id}" partIndex=${i} detail="high"`)}`,
-            });
-          } else {
-            const resultStr = formatToolResultForObserver(resultValue, { maxTokens: HIGH_DETAIL_TOOL_RESULT_TOKENS });
-            parts.push({
-              messageId: msg.id,
-              partIndex: i,
-              role,
-              type: 'tool-result',
-              text: `[Tool Result: ${inv.toolName}]\n${resultStr}`,
-            });
-          }
+          // Serialize at high-detail budget — makePart handles per-part truncation with hint
+          const resultStr = formatToolResultForObserver(resultValue, { maxTokens: HIGH_DETAIL_TOOL_RESULT_TOKENS });
+          const fullText = `[Tool Result: ${inv.toolName}]\n${resultStr}`;
+          parts.push(makePart(msg, i, 'tool-result', fullText, detail));
         } else {
-          if (detail === 'low') {
-            parts.push({
-              messageId: msg.id,
-              partIndex: i,
-              role,
-              type: 'tool-call',
-              text: `[Tool Call: ${inv.toolName}]`,
-            });
-          } else {
-            const argsStr = JSON.stringify(inv.args, null, 2);
-            parts.push({
-              messageId: msg.id,
-              partIndex: i,
-              role,
-              type: 'tool-call',
-              text: `[Tool Call: ${inv.toolName}]\n${argsStr}`,
-            });
-          }
+          const argsStr = detail === 'low' ? '' : `\n${JSON.stringify(inv.args, null, 2)}`;
+          const fullText = `[Tool Call: ${inv.toolName}]${argsStr}`;
+          parts.push({ messageId: msg.id, partIndex: i, role: msg.role, type: 'tool-call', text: fullText, fullText });
         }
       } else if (partType === 'reasoning') {
         const reasoning = (part as { reasoning?: string }).reasoning;
         if (reasoning) {
-          parts.push({
-            messageId: msg.id,
-            partIndex: i,
-            role,
-            type: 'reasoning',
-            text:
-              detail === 'low'
-                ? truncateText(
-                    reasoning,
-                    LOW_DETAIL_TEXT_LIMIT,
-                    `recall cursor="${msg.id}" partIndex=${i} detail="high"`,
-                  )
-                : reasoning,
-          });
+          parts.push(makePart(msg, i, 'reasoning', reasoning, detail));
         }
       } else if (partType === 'image' || partType === 'file') {
         const filename = (part as any).filename;
         const label = filename ? `: ${filename}` : '';
-        parts.push({
-          messageId: msg.id,
-          partIndex: i,
-          role,
-          type: partType,
-          text: `[${partType === 'image' ? 'Image' : 'File'}${label}]`,
-        });
+        const fullText = `[${partType === 'image' ? 'Image' : 'File'}${label}]`;
+        parts.push({ messageId: msg.id, partIndex: i, role: msg.role, type: partType, text: fullText, fullText });
       } else if (partType?.startsWith('data-')) {
         // skip data parts — these are internal OM markers (buffering, observation, etc.)
       } else if (partType) {
-        // unknown part type — include a placeholder so the part isn't silently lost
-        parts.push({
-          messageId: msg.id,
-          partIndex: i,
-          role,
-          type: partType,
-          text: `[${partType}]`,
-        });
+        const fullText = `[${partType}]`;
+        parts.push({ messageId: msg.id, partIndex: i, role: msg.role, type: partType, text: fullText, fullText });
       }
     }
   } else if (msg.content?.content) {
-    parts.push({
-      messageId: msg.id,
-      partIndex: 0,
-      role,
-      type: 'text',
-      text:
-        detail === 'low'
-          ? truncateText(
-              msg.content.content,
-              LOW_DETAIL_TEXT_LIMIT,
-              `recall cursor="${msg.id}" partIndex=0 detail="high"`,
-            )
-          : msg.content.content,
-    });
+    parts.push(makePart(msg, 0, 'text', msg.content.content, detail));
   }
 
   return parts;
 }
 
-function renderFormattedParts(
-  parts: FormattedPart[],
-  timestamps: Map<string, Date>,
-  options: { detail: RecallDetail; maxTokens: number },
-): { text: string; truncated: boolean; tokenOffset: number } {
+function buildRenderedText(parts: FormattedPart[], timestamps: Map<string, Date>): string {
   let currentMessageId = '';
   const lines: string[] = [];
 
@@ -285,23 +221,95 @@ function renderFormattedParts(
     }
 
     const indexLabel = `[p${part.partIndex}]`;
-    if (options.detail === 'low') {
-      lines.push(`  ${indexLabel} ${part.text}`);
+    lines.push(`  ${indexLabel} ${part.text}`);
+  }
+
+  return lines.join('\n');
+}
+
+const MAX_EXPAND_USER_TEXT_TOKENS = 200;
+const MAX_EXPAND_OTHER_TOKENS = 50;
+
+function expandLimit(part: FormattedPart): number {
+  if (part.role === 'user' && part.type === 'text') return MAX_EXPAND_USER_TEXT_TOKENS;
+  return MAX_EXPAND_OTHER_TOKENS;
+}
+
+function expandPriority(part: FormattedPart): number {
+  // Lower number = higher priority for expansion
+  if (part.role === 'user' && part.type === 'text') return 0;
+  if (part.type === 'text' || part.type === 'reasoning') return 1;
+  if (part.type === 'tool-result') return 2;
+  if (part.type === 'tool-call') return 3;
+  return 4;
+}
+
+function renderFormattedParts(
+  parts: FormattedPart[],
+  timestamps: Map<string, Date>,
+  options: { detail: RecallDetail; maxTokens: number },
+): { text: string; truncated: boolean; tokenOffset: number } {
+  // Step 1: render with per-part truncated text
+  const text = buildRenderedText(parts, timestamps);
+  let totalTokens = estimateTokenCount(text);
+
+  if (totalTokens > options.maxTokens) {
+    // Already over budget even with truncated text — hard-truncate
+    const truncated = truncateStringByTokens(text, options.maxTokens);
+    return { text: truncated, truncated: true, tokenOffset: totalTokens - options.maxTokens };
+  }
+
+  // Step 2: we're under budget — try expanding truncated parts with leftover room.
+  // Find parts where text !== fullText (i.e., they were truncated).
+  const truncatedIndices = parts
+    .map((p, i) => ({ part: p, index: i }))
+    .filter(({ part }) => part.text !== part.fullText)
+    .sort((a, b) => expandPriority(a.part) - expandPriority(b.part));
+
+  if (truncatedIndices.length === 0) {
+    return { text, truncated: false, tokenOffset: 0 };
+  }
+
+  let remaining = options.maxTokens - totalTokens;
+
+  for (const { part, index } of truncatedIndices) {
+    if (remaining <= 0) break;
+
+    const maxTokens = expandLimit(part);
+    const fullTokens = estimateTokenCount(part.fullText);
+    const currentTokens = estimateTokenCount(part.text);
+    // Cap at the expand limit for this part type
+    const targetTokens = Math.min(fullTokens, maxTokens);
+    const delta = targetTokens - currentTokens;
+
+    if (delta <= 0) continue; // already at or above expand limit
+
+    if (delta <= remaining && targetTokens >= fullTokens) {
+      // Full text fits within both expand limit and remaining budget
+      parts[index] = { ...part, text: part.fullText };
+      remaining -= delta;
     } else {
-      lines.push(`  ${indexLabel} ${part.text}`);
+      // Partial expand — cap at expand limit or remaining budget, whichever is smaller
+      const expandedLimit = Math.min(currentTokens + remaining, maxTokens);
+      const hint = `recall cursor="${part.messageId}" partIndex=${part.partIndex} detail="high"`;
+      const { text: expanded } = truncateByTokens(part.fullText, expandedLimit, hint);
+      const expandedDelta = estimateTokenCount(expanded) - currentTokens;
+      parts[index] = { ...part, text: expanded };
+      remaining -= expandedDelta;
     }
   }
 
-  const fullText = lines.join('\n');
-  const totalTokens = estimateTokenCount(fullText);
+  // Step 3: re-render with expanded parts
+  const expanded = buildRenderedText(parts, timestamps);
+  const expandedTokens = estimateTokenCount(expanded);
 
-  if (totalTokens <= options.maxTokens) {
-    return { text: fullText, truncated: false, tokenOffset: 0 };
+  if (expandedTokens <= options.maxTokens) {
+    return { text: expanded, truncated: false, tokenOffset: 0 };
   }
 
-  // Truncate to fit token budget
-  const truncated = truncateStringByTokens(fullText, options.maxTokens);
-  return { text: truncated, truncated: true, tokenOffset: totalTokens - options.maxTokens };
+  // Safety net: if token estimates drifted, hard-truncate
+  const hardTruncated = truncateStringByTokens(expanded, options.maxTokens);
+  return { text: hardTruncated, truncated: true, tokenOffset: expandedTokens - options.maxTokens };
 }
 
 // ── Single-part fetch ────────────────────────────────────────────────

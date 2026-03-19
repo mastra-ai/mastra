@@ -235,8 +235,8 @@ describe('om-tools', () => {
       expect(result.messages).toContain('[msg-3]');
     });
 
-    it('should truncate text in low detail mode', async () => {
-      // Create a message with long content
+    it('should auto-expand low detail when full text fits in token budget', async () => {
+      // 200 chars ≈ 50 tokens — well under default 8000 budget
       const longText = 'A'.repeat(200);
       await memory.saveMessages({
         messages: [
@@ -251,7 +251,7 @@ describe('om-tools', () => {
         ],
       });
 
-      const lowResult = await recallMessages({
+      const result = await recallMessages({
         memory: memory as any,
         threadId,
         resourceId,
@@ -260,20 +260,75 @@ describe('om-tools', () => {
         detail: 'low',
       });
 
-      expect(lowResult.messages).toContain('… [truncated');
-      expect(lowResult.messages).toContain('detail="high"');
-      expect(lowResult.messages).not.toContain(longText);
+      // Full text returned because it fits in budget — no truncation hint needed
+      expect(result.messages).toContain(longText);
+      expect(result.truncated).toBe(false);
+    });
 
-      const highResult = await recallMessages({
+    it('should truncate in low detail when text exceeds budget after expansion', async () => {
+      // Text big enough that even after expansion it can't fully fit in a tight budget
+      const longText =
+        'The quick brown fox jumps over the lazy dog and then some more words to fill up tokens. '.repeat(30);
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-long',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: longText }] },
+            createdAt: new Date('2024-01-01T10:05:00Z'),
+          },
+        ],
+      });
+
+      // Budget smaller than the full text (~570 tokens) so expansion can't fully restore it
+      const result = await recallMessages({
         memory: memory as any,
         threadId,
         resourceId,
         cursor: 'msg-5',
         limit: 1,
-        detail: 'high',
+        detail: 'low',
+        maxTokens: 200,
       });
 
-      expect(highResult.messages).toContain(longText);
+      // Part gets partially expanded but still truncated with hint
+      expect(result.messages).toContain('[truncated');
+      expect(result.messages).not.toContain(longText);
+    });
+
+    it('should auto-expand truncated parts when budget allows', async () => {
+      // Moderate text that exceeds per-part limit (500 tokens) but fits in total budget (2000)
+      const moderateText =
+        'The quick brown fox jumps over the lazy dog and then some more words to fill up tokens. '.repeat(30);
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-moderate',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: moderateText }] },
+            createdAt: new Date('2024-01-01T10:05:00Z'),
+          },
+        ],
+      });
+
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-5',
+        limit: 1,
+        detail: 'low',
+      });
+
+      // Text (~570 tokens) exceeds 200-token user text expand cap — still truncated but expanded beyond initial 100
+      expect(result.messages).toContain('for more]');
+      // Should have more content than the initial 100-token per-part limit
+      const partMatch = result.messages.match(/\[p0\] ([\s\S]*?)(\n\.\.\.|$)/);
+      expect(partMatch).toBeTruthy();
     });
 
     it('should show tool names only in low detail, full args in high detail', async () => {
