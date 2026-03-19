@@ -547,6 +547,14 @@ export interface ObservationalMemoryObservationConfig {
    * ```
    */
   instruction?: string;
+
+  /**
+   * When enabled, the Observer suggests a short thread title based on the conversation.
+   * The title is updated on the thread whenever the Observer runs.
+   *
+   * @default false
+   */
+  threadTitle?: boolean;
 }
 
 /**

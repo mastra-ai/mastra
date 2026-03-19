@@ -1,18 +1,18 @@
 ---
-title: "Observational memory | Memory"
+title: "Observational Memory | Memory"
 description: "Learn how Observational Memory keeps your agent's context window small while preserving long-term memory across conversations."
 packages:
   - "@mastra/core"
   - "@mastra/memory"
 ---
 
-# Observational memory
+# Observational Memory
 
 **Added in:** `@mastra/memory@1.1.0`
 
 Observational Memory (OM) is Mastra's memory system for long-context agentic memory. Two background agents — an **Observer** and a **Reflector** — watch your agent's conversations and maintain a dense observation log that replaces raw message history as it grows.
 
-## Quick start
+## Quickstart
 
 Enable `observationalMemory` in the memory options when creating your agent:
 
@@ -88,6 +88,8 @@ Date: 2026-01-15
 ```
 
 The compression is typically 5–40×. The Observer also tracks a **current task** and **suggested response** so the agent picks up where it left off.
+
+If you enable `observation.threadTitle`, the Observer can also suggest a short thread title when the conversation topic meaningfully changes. Thread title generation is opt-in and updates the thread metadata, so apps like Mastra Code can show the latest title in thread lists and status UI.
 
 Example: an agent using Playwright MCP might see 50,000+ tokens per page snapshot. With OM, the Observer watches the interaction and creates a few hundred tokens of observations about what was on the page and what actions were taken. The agent stays on task without carrying every raw snapshot.
 

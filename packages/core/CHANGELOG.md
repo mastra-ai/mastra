@@ -1,5 +1,66 @@
 # @mastra/core
 
+## 1.15.0-alpha.3
+
+### Minor Changes
+
+- Added filesystem-level optimistic concurrency for file writes. When `expectedMtime` is provided in `WriteOptions`, the write will be rejected with a `StaleFileError` if the file was modified externally since it was last read. This provides defense-in-depth against external modifications (e.g., LSP-based editors) that occur between the tool-level mtime check and the actual write. ([#14354](https://github.com/mastra-ai/mastra/pull/14354))
+
+  **New `expectedMtime` option on `WriteOptions`**
+
+  Any caller of `filesystem.writeFile()` can now opt into optimistic concurrency:
+
+  ```ts
+  // Read a file and capture its mtime
+  const stat = await filesystem.stat('config.json');
+  const content = await filesystem.readFile('config.json');
+
+  // Later, write with mtime guard — fails if file changed externally
+  await filesystem.writeFile('config.json', newContent, {
+    overwrite: true,
+    expectedMtime: stat.modifiedAt,
+  });
+  ```
+
+  If the file was modified between the read and write, a `StaleFileError` is thrown instead of silently overwriting.
+
+  **Automatic mtime pass-through for workspace tools**
+
+  When `requireReadBeforeWrite` is enabled, the `edit_file`, `write_file`, and `ast_edit` tools now automatically pass the recorded mtime through to the filesystem layer, providing a second line of defense beyond the existing tool-level read tracker check.
+
+## 1.15.0-alpha.2
+
+### Patch Changes
+
+- Fixed deserializeRequestContext to return an actual RequestContext instance instead of a Map, preventing crashes during Inngest durable execution replay with observability enabled. ([#14442](https://github.com/mastra-ai/mastra/pull/14442))
+
+- Fixed generation span output to include tool call data, enabling PostHog's LLM Analytics Tools tab to extract and display tool usage ([#14383](https://github.com/mastra-ai/mastra/pull/14383))
+
+## 1.15.0-alpha.1
+
+### Patch Changes
+
+- Added opt-in Observational Memory thread titles. ([#14436](https://github.com/mastra-ai/mastra/pull/14436))
+
+  When enabled, the Observer suggests a short thread title and updates it as the conversation topic changes. Harness consumers can detect these updates via the new `om_thread_title_updated` event.
+
+  **Example**
+
+  ```ts
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        observation: {
+          threadTitle: true,
+        },
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`cd7b568`](https://github.com/mastra-ai/mastra/commit/cd7b568fe427b1b4838abe744fa5367a47539db3)]:
+  - @mastra/schema-compat@1.2.6-alpha.1
+
 ## 1.15.0-alpha.0
 
 ### Minor Changes
