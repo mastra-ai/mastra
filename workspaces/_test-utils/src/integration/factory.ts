@@ -4,6 +4,8 @@
  * Creates tests that verify filesystem and sandbox work together.
  */
 
+import { join } from 'node:path';
+
 import { CompositeFilesystem } from '@mastra/core/workspace';
 import type { Workspace } from '@mastra/core/workspace';
 import { describe, beforeAll, beforeEach, afterAll } from 'vitest';
@@ -15,6 +17,15 @@ import { createCrossMountApiTests } from './scenarios/cross-mount-api';
 import { createCrossMountCopyTests } from './scenarios/cross-mount-copy';
 import { createFileSyncTests } from './scenarios/file-sync';
 import { createLargeFileHandlingTests } from './scenarios/large-file-handling';
+import { createLspCrossFileTests } from './scenarios/lsp-cross-file';
+import { createLspDiagnosticsTests } from './scenarios/lsp-diagnostics';
+import { createLspEslintTests } from './scenarios/lsp-eslint';
+import { createLspExternalProjectTests } from './scenarios/lsp-external-project';
+import { createLspGoTests } from './scenarios/lsp-go';
+import { createLspLargeFileTests } from './scenarios/lsp-large-file';
+import { createLspPerFileRootTests } from './scenarios/lsp-per-file-root';
+import { createLspPythonTests } from './scenarios/lsp-python';
+import { createLspRustTests } from './scenarios/lsp-rust';
 import { createMountIsolationTests } from './scenarios/mount-isolation';
 import { createMountRoutingTests } from './scenarios/mount-routing';
 import { createMultiMountTests } from './scenarios/multi-mount';
@@ -89,6 +100,19 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
       if (workspace.filesystem instanceof CompositeFilesystem) {
         const firstMount = workspace.filesystem.mountPaths[0]!;
         currentTestPath = `${firstMount}${basePath}`;
+      } else if (workspace.filesystem && 'basePath' in workspace.filesystem) {
+        // Filesystem has a basePath (e.g. LocalFilesystem) — use it so that
+        // both the filesystem API and sandbox commands reference the same
+        // absolute path on disk.  Without this, the generated path (e.g.
+        // /int-test-xxx) would be treated as a host-root path by the sandbox
+        // while the filesystem resolves it relative to basePath.
+        const fsBasePath = (workspace.filesystem as { basePath?: unknown }).basePath;
+        if (typeof fsBasePath === 'string' && fsBasePath.length > 0) {
+          const relativeBasePath = basePath.replace(/^[/\\]+/, '');
+          currentTestPath = join(fsBasePath, relativeBasePath);
+        } else {
+          currentTestPath = basePath;
+        }
       } else {
         currentTestPath = basePath;
       }
@@ -130,6 +154,43 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
 
     if (testScenarios.writeReadConsistency === true) {
       createWriteReadConsistencyTests(getContext);
+    }
+
+    // LSP scenarios (require sandbox with process manager + LSP deps)
+    if (testScenarios.lspDiagnostics === true) {
+      createLspDiagnosticsTests(getContext);
+    }
+
+    if (testScenarios.lspPerFileRoot === true) {
+      createLspPerFileRootTests(getContext);
+    }
+
+    if (testScenarios.lspLargeFile === true) {
+      createLspLargeFileTests(getContext);
+    }
+
+    if (testScenarios.lspPython === true) {
+      createLspPythonTests(getContext);
+    }
+
+    if (testScenarios.lspCrossFile === true) {
+      createLspCrossFileTests(getContext);
+    }
+
+    if (testScenarios.lspExternalProject === true) {
+      createLspExternalProjectTests(getContext);
+    }
+
+    if (testScenarios.lspGo === true) {
+      createLspGoTests(getContext);
+    }
+
+    if (testScenarios.lspRust === true) {
+      createLspRustTests(getContext);
+    }
+
+    if (testScenarios.lspEslint === true) {
+      createLspEslintTests(getContext);
     }
 
     // Composite-specific scenarios (require CompositeFilesystem with 2+ mounts)

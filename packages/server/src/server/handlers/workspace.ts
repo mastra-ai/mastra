@@ -99,13 +99,32 @@ function isFilesystemNotFoundError(error: unknown): boolean {
 }
 
 /**
+ * Check if an error is a workspace filesystem permission error.
+ * Handles Node.js EACCES and workspace PermissionError.
+ */
+function isFilesystemPermissionError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  if ('code' in error && error.code === 'EACCES') return true;
+
+  if ('name' in error && error.name === 'PermissionError') return true;
+
+  return false;
+}
+
+/**
  * Workspace-specific error handler.
- * Converts filesystem not-found errors to 404, then falls back to generic handler.
+ * Converts filesystem errors to appropriate HTTP status codes,
+ * then falls back to generic handler.
  */
 function handleWorkspaceError(error: unknown, defaultMessage: string): never {
   if (isFilesystemNotFoundError(error)) {
     const message = error instanceof Error ? error.message : 'Not found';
     throw new HTTPException(404, { message });
+  }
+  if (isFilesystemPermissionError(error)) {
+    const message = error instanceof Error ? error.message : 'Permission denied';
+    throw new HTTPException(403, { message });
   }
   return handleError(error, defaultMessage);
 }
@@ -252,12 +271,21 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
       // Dynamic workspaces get lazily registered during agent execution (stream/generate).
       if (typeof mastra.listWorkspaces === 'function') {
         const registeredWorkspaces = mastra.listWorkspaces();
-        for (const [, ws] of Object.entries(registeredWorkspaces) as [string, Workspace][]) {
+
+        for (const [, entry] of Object.entries(registeredWorkspaces)) {
+          // Newer @mastra/core returns { workspace, source, agentId?, agentName? }.
+          // Older versions return a bare Workspace object — detect via duck-typing.
+          const ws: Workspace = (entry as any).workspace ?? entry;
+          const source: 'mastra' | 'agent' = (entry as any).source ?? 'mastra';
+          const agentId: string | undefined = (entry as any).agentId;
+          const agentName: string | undefined = (entry as any).agentName;
+
           workspaces.push({
             id: ws.id,
             name: ws.name,
             status: ws.status,
-            source: 'mastra',
+            source,
+            ...(source === 'agent' && agentId ? { agentId, ...(agentName != null ? { agentName } : {}) } : {}),
             capabilities: {
               hasFilesystem: !!ws.filesystem,
               hasSandbox: !!ws.sandbox,
@@ -1038,7 +1066,12 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
       // Decode the reference path (it may be URL encoded)
       const decodedPath = decodeURIComponent(referencePath);
 
-      const content = await skills.getReference(skillName, decodedPath);
+      // Prevent path traversal via the reference path parameter
+      assertSafeFilePath(decodedPath);
+
+      // getReference expects a path relative to skill.path, so prepend 'references/'
+      // since the URL path already contains the literal /references/ segment
+      const content = await skills.getReference(skillName, `references/${decodedPath}`);
       if (content === null) {
         throw new HTTPException(404, { message: `Reference "${decodedPath}" not found in skill "${skillName}"` });
       }

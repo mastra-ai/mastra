@@ -1,6 +1,6 @@
-import { ThreadMessageLike, type MessageStatus, type DataMessagePart } from '@assistant-ui/react';
-import { type ExtendedMastraUIMessage, type MastraUIMessage } from '../types';
-import { type ReadonlyJSONObject } from '@mastra/core/stream';
+import type { ThreadMessageLike, MessageStatus } from '@assistant-ui/react';
+import type { ReadonlyJSONObject } from '@mastra/core/stream';
+import type { ExtendedMastraUIMessage, MastraUIMessage } from '../types';
 
 type ContentPart = { metadata?: Record<string, unknown> } & (Exclude<
   ThreadMessageLike['content'],

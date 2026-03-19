@@ -23,7 +23,7 @@ export const ObjectWrapper: React.FC<ObjectWrapperProps> = ({ label, children })
           </Txt>
         )}
 
-        <Button onClick={() => setIsOpen(!isOpen)} type="button" className="ml-auto">
+        <Button onClick={() => setIsOpen(!isOpen)} type="button" className="ml-auto px-1" size="sm">
           <Icon size="sm">
             <ChevronDownIcon className={cn('transition-all', isOpen ? 'rotate-180' : 'rotate-0')} />
           </Icon>

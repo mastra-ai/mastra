@@ -5,6 +5,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { categorizeFileData, createDataUri, parseDataUri } from '../prompt/image-utils';
 import type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart, MessageSource } from '../state/types';
 import type { AIV5Type } from '../types';
+import { sanitizeToolName } from '../utils/tool-name';
 
 /**
  * Filter out empty text parts from message parts array.
@@ -41,7 +42,7 @@ function getToolName(type: string | { type: string }): string {
 
   // Ensure type is a string
   if (typeof type !== 'string') {
-    return 'unknown';
+    return sanitizeToolName(type);
   }
 
   if (type === 'dynamic-tool') {
@@ -50,11 +51,11 @@ function getToolName(type: string | { type: string }): string {
 
   // Extract tool name from "tool-${toolName}" format
   if (type.startsWith('tool-')) {
-    return type.slice('tool-'.length); // Remove "tool-" prefix
+    return sanitizeToolName(type.slice('tool-'.length)); // Remove "tool-" prefix
   }
 
   // Fallback for unexpected formats
-  return type;
+  return sanitizeToolName(type);
 }
 
 export interface AIV5AdapterContext {
@@ -150,6 +151,7 @@ export class AIV5Adapter {
               output: inv.result,
               state: 'output-available',
               callProviderMetadata: part.providerMetadata,
+              providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
             } satisfies AIV5Type.ToolUIPart);
           } else {
             parts.push({
@@ -158,6 +160,7 @@ export class AIV5Adapter {
               input: inv.args,
               state: 'input-available',
               callProviderMetadata: part.providerMetadata,
+              providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
             } satisfies AIV5Type.ToolUIPart);
           }
           continue;
@@ -426,6 +429,7 @@ export class AIV5Adapter {
             mimeType: p.mediaType,
             data: p.url || '',
             providerMetadata: p.providerMetadata,
+            ...((p as { filename?: string }).filename ? { filename: (p as { filename?: string }).filename } : {}),
           };
         }
 
@@ -565,7 +569,7 @@ export class AIV5Adapter {
           type: 'tool-invocation' as const,
           toolInvocation: {
             toolCallId: toolCallPart.toolCallId,
-            toolName: toolCallPart.toolName,
+            toolName: sanitizeToolName(toolCallPart.toolName),
             args: toolCallPart.input,
             state: 'call',
           },
@@ -576,7 +580,7 @@ export class AIV5Adapter {
         mastraDBParts.push(toolInvocationPart);
         toolInvocations.push({
           toolCallId: toolCallPart.toolCallId,
-          toolName: toolCallPart.toolName,
+          toolName: sanitizeToolName(toolCallPart.toolName),
           args: toolCallPart.input,
           state: 'call',
         });
@@ -605,7 +609,7 @@ export class AIV5Adapter {
           const call: any = {
             state: 'call',
             toolCallId: toolResultPart.toolCallId,
-            toolName: toolResultPart.toolName || 'unknown',
+            toolName: sanitizeToolName(toolResultPart.toolName),
             args: {},
           };
           updateMatchingCallInvocationResult(toolResultPart, call);
@@ -619,7 +623,7 @@ export class AIV5Adapter {
             type: 'tool-invocation' as const,
             toolInvocation: {
               toolCallId: toolResultPart.toolCallId,
-              toolName: toolResultPart.toolName || 'unknown',
+              toolName: sanitizeToolName(toolResultPart.toolName),
               args: {},
               state: 'call',
             },
@@ -668,6 +672,9 @@ export class AIV5Adapter {
         };
         if (part.providerOptions) {
           v2FilePart.providerMetadata = part.providerOptions;
+        }
+        if ((filePart as { filename?: string }).filename) {
+          (v2FilePart as Record<string, unknown>).filename = (filePart as { filename?: string }).filename;
         }
         mastraDBParts.push(v2FilePart);
         experimental_attachments.push({

@@ -4,6 +4,7 @@ export * from './domains/agents/index';
 export * from './domains/llm/index';
 export * from './domains/processors/index';
 export * from './domains/scores/index';
+export * from './domains/prompt-blocks/index';
 export * from './domains/tools/index';
 export * from './domains/workflows/index';
 export * from './domains/templates/index';
@@ -21,6 +22,7 @@ export * from './ds/components/Button/index';
 export * from './ds/components/CodeEditor/index';
 export * from './ds/components/EmptyState/index';
 export * from './ds/components/Entity/index';
+export * from './ds/components/PermissionDenied';
 export * from './ds/components/Header/index';
 export * from './ds/components/Logo/index';
 export * from './ds/components/Table/index';
@@ -54,7 +56,6 @@ export * from './ds/components/Truncate';
 
 // DS Components - Migrated Containers
 export * from './ds/components/ButtonsGroup';
-export * from './ds/components/ListAndDetails';
 export * from './ds/components/MainContent';
 export * from './ds/components/MainHeader';
 export * from './ds/components/Sections';
@@ -80,10 +81,12 @@ export * from './ds/components/ContentBlocks';
 export * from './lib/rule-engine';
 
 // DS Components - New
-export * from './ds/components/ListAndDetails';
 export * from './ds/components/Columns';
+export * from './ds/components/CodeDiff';
 export * from './ds/components/ItemList';
 export * from './ds/components/Notice';
+export * from './ds/components/Chip';
+export * from './ds/components/Tree';
 
 // Form utilities (AutoForm)
 export * from './lib/form';
@@ -95,6 +98,7 @@ export * from './ds/icons/index';
 export * from './domains/voice/hooks/use-speech-recognition';
 export * from './hooks';
 export * from './lib/tanstack-query';
+export * from './lib/query-utils';
 export * from './domains/memory/hooks';
 export * from './store/playground-store';
 export * from './lib/framework';
@@ -111,6 +115,7 @@ export * from './domains/configuration/index';
 export * from './domains/workspace/index';
 export * from './domains/request-context/index';
 export * from './lib/mastra-platform';
+export * from './domains/auth/index';
 export * from './domains/cms/index';
 export * from './lib/experimental-features';
 export * from './lib/command';

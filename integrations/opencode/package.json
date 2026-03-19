@@ -1,6 +1,6 @@
 {
   "name": "@mastra/opencode",
-  "version": "0.0.2",
+  "version": "0.0.15-alpha.3",
   "description": "OpenCode plugin for Mastra Observational Memory",
   "type": "module",
   "main": "./dist/index.js",
@@ -47,9 +47,9 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@mastra/memory": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@mastra/libsql": "workspace:*"
+    "@mastra/libsql": "workspace:*",
+    "@mastra/memory": "workspace:*"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": "*"
@@ -57,8 +57,8 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@opencode-ai/plugin": "*",
-    "@opencode-ai/sdk": "*",
+    "@opencode-ai/plugin": "^1.2.27",
+    "@opencode-ai/sdk": "^1.2.27",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

@@ -23,6 +23,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import type { Processor, ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
+import { getZodDef, getZodTypeName } from '@mastra/core/utils';
 vi.mock('@mastra/core/vector');
 
 vi.mock('zod', async importOriginal => {
@@ -461,9 +462,19 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     listTools: vi.fn().mockResolvedValue({ data: [], total: 0, page: 0, perPage: 20, hasMore: false }),
     getToolSchema: vi.fn().mockResolvedValue({ name: 'test-tool-slug', inputSchema: {}, outputSchema: {} }),
   };
+  const mockProcessorProvider = {
+    info: { id: 'test-provider', name: 'Test Processor Provider', description: 'A test processor provider' },
+    configSchema: z.object({}),
+    availablePhases: ['processInput'] as const,
+    createProcessor: vi.fn(),
+  };
   vi.spyOn(mastra, 'getEditor').mockReturnValue({
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions preview'),
+      clearCache: vi.fn(),
+    },
+    mcp: {
+      clearCache: vi.fn(),
     },
     agent: {
       list: vi.fn().mockResolvedValue({ agents: [] }),
@@ -486,6 +497,10 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     getToolProvider: vi
       .fn()
       .mockImplementation((id: string) => (id === 'test-provider' ? mockToolProvider : undefined)),
+    getProcessorProviders: vi.fn().mockReturnValue({ 'test-provider': mockProcessorProvider }),
+    getProcessorProvider: vi
+      .fn()
+      .mockImplementation((id: string) => (id === 'test-provider' ? mockProcessorProvider : undefined)),
   } as any);
 
   await mockWorkflowRun(workflow);
@@ -555,7 +570,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     // Add test stored scorer for stored scorers routes
     const scorers = await storage.getStore('scorerDefinitions');
     if (scorers) {
-      await scorers.create({
+      const storedScorer = await scorers.create({
         scorerDefinition: {
           id: 'test-stored-scorer',
           name: 'Test Stored Scorer',
@@ -816,7 +831,7 @@ Follow these instructions for the test skill.
   const workspace = new Workspace({
     id: 'test-workspace',
     filesystem,
-    skills: ['/skills'],
+    skills: ['skills'],
     bm25: true, // Enable BM25 search for index/unindex operations
   });
 
@@ -931,37 +946,45 @@ export function createTestWorkflow(
 function schemaExpectsDate(schema: any, path: string[] = []): boolean {
   if (!schema) return false;
 
+  let typeName = getZodTypeName(schema);
+  let def = getZodDef(schema);
+
   // Unwrap effects, optional, nullable, default to get to the base type
   while (
-    schema._def?.typeName === 'ZodEffects' ||
-    schema._def?.typeName === 'ZodOptional' ||
-    schema._def?.typeName === 'ZodNullable' ||
-    schema._def?.typeName === 'ZodDefault'
+    typeName === 'ZodEffects' ||
+    typeName === 'ZodOptional' ||
+    typeName === 'ZodNullable' ||
+    typeName === 'ZodDefault'
   ) {
-    if (schema._def.typeName === 'ZodEffects') {
+    if (typeName === 'ZodEffects') {
       schema = schema._def.schema;
-    } else if (schema._def.typeName === 'ZodOptional' || schema._def.typeName === 'ZodNullable') {
-      schema = schema._def.innerType;
-    } else if (schema._def.typeName === 'ZodDefault') {
-      schema = schema._def.innerType;
+    } else if (typeName === 'ZodOptional' || typeName === 'ZodNullable') {
+      schema = def.innerType;
+    } else if (typeName === 'ZodDefault') {
+      schema = def.innerType;
     }
+    typeName = getZodTypeName(schema);
+    def = getZodDef(schema);
   }
+
+  typeName = getZodTypeName(schema);
+  def = getZodDef(schema);
 
   // If we have a path, navigate to that field
   if (path.length > 0) {
-    if (schema._def?.typeName === 'ZodObject') {
-      const shape = schema._def.shape();
+    if (typeName === 'ZodObject') {
+      const shape = typeof def.shape === 'function' ? def.shape() : def.shape;
       const fieldSchema = shape[path[0]];
       return schemaExpectsDate(fieldSchema, path.slice(1));
-    } else if (schema._def?.typeName === 'ZodArray') {
+    } else if (typeName === 'ZodArray') {
       // For arrays, check the element type (ignore the array index in path)
-      return schemaExpectsDate(schema._def.type, path.slice(1));
+      return schemaExpectsDate(def.element, path.slice(1));
     }
     return false;
   }
 
   // Check if this is a Date type
-  return schema._def?.typeName === 'ZodDate';
+  return typeName === 'ZodDate';
 }
 
 export function parseDatesInResponse(data: any, schema?: any, currentPath: string[] = []): any {
@@ -1096,22 +1119,22 @@ function getRouteSpecificPathDefaults(route: ServerRoute): {
     routePath.includes('/fs/delete') ||
     routePath.includes('/fs/stat')
   ) {
-    return { query: { path: '/test-file.txt' }, body: { path: '/test-file.txt' } };
+    return { query: { path: 'test-file.txt' }, body: { path: 'test-file.txt' } };
   }
 
   // Directory operations need directory paths
   if (routePath.includes('/fs/list')) {
-    return { query: { path: '/' } };
+    return { query: { path: '.' } };
   }
 
   // mkdir needs a new path to create
   if (routePath.includes('/fs/mkdir')) {
-    return { body: { path: '/new-test-dir' } };
+    return { body: { path: 'new-test-dir' } };
   }
 
   // Index/unindex operations
   if (routePath.includes('/workspace/index') || routePath.includes('/workspace/unindex')) {
-    return { query: { path: '/test-file.txt' }, body: { path: '/test-file.txt' } };
+    return { query: { path: 'test-file.txt' }, body: { path: 'test-file.txt' } };
   }
 
   return {};

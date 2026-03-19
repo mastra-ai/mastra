@@ -73,7 +73,10 @@ export interface ObservationConfig {
 
   /**
    * Model settings for the Observer agent.
-   * @default { temperature: 0.3, maxOutputTokens: 100_000 }
+   * @default { temperature: 0.3 }
+   *
+   * Note: `maxOutputTokens: 100_000` is only applied by default when using
+   * the built-in default model selection.
    */
   modelSettings?: ModelSettings;
 
@@ -111,12 +114,21 @@ export interface ObservationConfig {
   bufferTokens?: number | false;
 
   /**
-   * Ratio (0-1) of buffered observations to activate when threshold is reached.
-   * Setting this below 1 keeps some observations in reserve for continuity.
+   * Controls how many raw message tokens to retain after activation.
+   *
+   * - **Ratio (0 < value <= 1):** fraction of `messageTokens` to activate.
+   *   The retention floor is `messageTokens * (1 - ratio)`.
+   *   e.g. `0.8` with `messageTokens: 30000` → retain ~6000 tokens.
+   *
+   * - **Absolute (value >= 1000):** exact number of message tokens to retain.
+   *   e.g. `3000` → always aim to keep ~3000 tokens of raw message history.
+   *   Must be less than `messageTokens`.
+   *
+   * Values between 1 and 1000 are invalid.
    *
    * Requires `bufferTokens` to also be set.
    *
-   * @default 0.8 (activate 80% of buffered observations, keeping 20% in reserve)
+   * @default 0.8 (retain ~20% of messageTokens as raw messages)
    */
   bufferActivation?: number;
 
@@ -136,10 +148,27 @@ export interface ObservationConfig {
   blockAfter?: number;
 
   /**
+   * Optional token budget for observer context.
+   * When set, "Previous Observations" is tail-truncated to preserve the most recent entries,
+   * and pending buffered reflections replace the raw observations they summarized.
+   * Set to `0` for full truncation (omit previous observations entirely), or `false` to disable.
+   */
+  previousObserverTokens?: number | false;
+
+  /**
    * Custom instructions to append to the Observer's system prompt.
    * Use this to customize observation behavior for specific use cases.
    */
   instruction?: string;
+
+  /**
+   * Whether the Observer should suggest thread titles.
+   * When enabled, the Observer will analyze conversation context and
+   * suggest a short, descriptive title for the thread.
+   *
+   * @default false
+   */
+  threadTitle?: boolean;
 }
 
 /**
@@ -168,7 +197,10 @@ export interface ReflectionConfig {
 
   /**
    * Model settings for the Reflector agent.
-   * @default { temperature: 0, maxOutputTokens: 100_000 }
+   * @default { temperature: 0 }
+   *
+   * Note: `maxOutputTokens: 100_000` is only applied by default when using
+   * the built-in default model selection.
    */
   modelSettings?: ModelSettings;
 
@@ -231,6 +263,9 @@ export interface ReflectorResult {
 
   /** Suggested continuation for the Actor */
   suggestedContinuation?: string;
+
+  /** True if the output was detected as degenerate (repetition loop) and should be discarded/retried */
+  degenerate?: boolean;
 }
 
 /**
@@ -584,13 +619,37 @@ export interface DataOmActivationPart {
 }
 
 /**
+ * Marker emitted when thread title is updated by the observer.
+ */
+export interface DataOmThreadUpdatePart {
+  type: 'data-om-thread-update';
+  data: {
+    /** Unique ID for this observation cycle - shared with observation markers */
+    cycleId: string;
+
+    /** The thread ID that was updated */
+    threadId: string;
+
+    /** The previous thread title (undefined if thread had no title) */
+    oldTitle?: string;
+
+    /** The new thread title */
+    newTitle: string;
+
+    /** When this update occurred */
+    timestamp: string;
+  };
+}
+
+/**
  * Union of all observation marker types.
  */
 export type DataOmObservationPart =
   | DataOmObservationStartPart
   | DataOmObservationEndPart
   | DataOmObservationFailedPart
-  | DataOmStatusPart;
+  | DataOmStatusPart
+  | DataOmThreadUpdatePart;
 
 /**
  * Union of all OM data parts (observation, buffering, status, activation).

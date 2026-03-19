@@ -1,4 +1,4 @@
-import { DatasetExperimentResult } from '@mastra/client-js';
+import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
 import { ItemList } from '@/ds/components/ItemList';
 
 export type ExperimentResultsListProps = {
@@ -7,11 +7,15 @@ export type ExperimentResultsListProps = {
   featuredResultId: string | null;
   onResultClick: (resultId: string) => void;
   columns: { name: string; label: string; size: string }[];
+  scoresByItemId?: Record<string, ClientScoreRowData[]>;
+  scorerIds?: string[];
+  setEndOfListElement?: (element: HTMLDivElement | null) => void;
+  isFetchingNextPage?: boolean;
+  hasNextPage?: boolean;
 };
 
 /**
  * List component for experiment results - controlled by parent for selection state.
- * Used by ExperimentResultsListAndDetails.
  */
 export function ExperimentResultsList({
   results,
@@ -19,6 +23,11 @@ export function ExperimentResultsList({
   featuredResultId,
   onResultClick,
   columns,
+  scoresByItemId,
+  scorerIds,
+  setEndOfListElement,
+  isFetchingNextPage,
+  hasNextPage,
 }: ExperimentResultsListProps) {
   if (isLoading) {
     return <ExperimentResultsListSkeleton columns={columns} />;
@@ -44,26 +53,42 @@ export function ExperimentResultsList({
             const isSelected = result.id === featuredResultId;
 
             return (
-              <ItemList.Row key={result.id} isSelected={isSelected}>
+              <ItemList.Row key={result.id}>
                 <ItemList.RowButton
-                  entry={entry}
-                  isSelected={isSelected}
+                  item={entry}
+                  isFeatured={isSelected}
                   columns={columns}
                   onClick={() => onResultClick(result.id)}
                 >
-                  <ItemList.TextCell>{result.itemId.slice(0, 8)}</ItemList.TextCell>
-                  {columns.some(col => col.name === 'input') && (
-                    <ItemList.TextCell>{truncate(formatValue(result.input), 200)}</ItemList.TextCell>
-                  )}
-                  {columns.some(col => col.name === 'output') && (
-                    <ItemList.TextCell>{truncate(formatValue(result.output), 200)}</ItemList.TextCell>
-                  )}
+                  <ItemList.IdCell id={result.itemId} />
                   <ItemList.StatusCell status={hasError ? 'error' : 'success'} />
+
+                  {columns.some(col => col.name === 'input') && (
+                    <ItemList.TextCell className="font-mono">
+                      {truncate(formatValue(result.input), 200)}
+                    </ItemList.TextCell>
+                  )}
+                  {scorerIds?.map(scorerId => {
+                    const scores = scoresByItemId?.[result.itemId];
+                    const score = scores?.find(s => s.scorerId === scorerId);
+                    return (
+                      <ItemList.TextCell key={scorerId} className="font-mono text-center">
+                        {score != null ? score.score.toFixed(3) : '-'}
+                      </ItemList.TextCell>
+                    );
+                  })}
                 </ItemList.RowButton>
               </ItemList.Row>
             );
           })}
         </ItemList.Items>
+        <ItemList.NextPageLoading
+          setEndOfListElement={setEndOfListElement}
+          isLoading={isFetchingNextPage}
+          hasMore={hasNextPage}
+          loadingText="Loading more results..."
+          noMoreDataText="All results loaded"
+        />
       </ItemList.Scroller>
     </ItemList>
   );

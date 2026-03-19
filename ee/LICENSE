@@ -1,0 +1,35 @@
+Mastra Enterprise Edition (EE) License
+
+Copyright (c) 2025 Kepler Software, Inc.
+
+With regard to the Mastra Software:
+
+This software and associated documentation files (the "Software") may only be
+used in production if you (and any entity that you represent) have agreed to,
+and are in compliance with, the Mastra Terms of Service, available at
+https://mastra.ai/terms (the "Terms"), or other agreements governing the use
+of the Software, as mutually agreed by you and Kepler Software, Inc. ("Kepler"),
+and otherwise have a valid Mastra Enterprise License for the correct number of
+user seats. Subject to the foregoing sentence, you are free to modify this
+Software and publish patches to the Software. You agree that Kepler and/or its
+licensors (as applicable) retain all right, title, and interest in and to all
+such modifications. You are not granted any other rights beyond what is
+expressly stated herein. Subject to the foregoing, it is forbidden to copy,
+merge, publish, distribute, sublicense, and/or sell the Software.
+
+For purposes of the foregoing, "production" means any use of the Software
+beyond development and testing on your own systems. "Development and testing"
+includes running the Software locally or in a staging environment for the
+purpose of evaluating, developing, or testing modifications to the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+For all third-party components incorporated into the Mastra Software, those
+components are licensed under the original license provided by the owner of
+the applicable component.

@@ -7,12 +7,15 @@ import type {
   BlobStoreProvider,
 } from '@mastra/core/editor';
 import type { IMastraLogger as Logger } from '@mastra/core/logger';
+import { BUILT_IN_PROCESSOR_PROVIDERS } from '@mastra/core/processor-provider';
+import type { ProcessorProvider } from '@mastra/core/processor-provider';
 import type { BlobStore } from '@mastra/core/storage';
 import type { ToolProvider } from '@mastra/core/tool-provider';
 
 import {
   EditorAgentNamespace,
   EditorMCPNamespace,
+  EditorMCPServerNamespace,
   EditorPromptNamespace,
   EditorScorerNamespace,
   EditorWorkspaceNamespace,
@@ -30,6 +33,7 @@ export {
   CrudEditorNamespace,
   EditorAgentNamespace,
   EditorMCPNamespace,
+  EditorMCPServerNamespace,
   EditorPromptNamespace,
   EditorScorerNamespace,
   EditorWorkspaceNamespace,
@@ -45,6 +49,7 @@ export class MastraEditor implements IMastraEditor {
   __logger?: Logger;
 
   private __toolProviders: Record<string, ToolProvider>;
+  private __processorProviders: Record<string, ProcessorProvider>;
 
   /**
    * @internal — exposed for namespace classes to hydrate stored workspace configs.
@@ -70,6 +75,7 @@ export class MastraEditor implements IMastraEditor {
 
   public readonly agent: EditorAgentNamespace;
   public readonly mcp: EditorMCPNamespace;
+  public readonly mcpServer: EditorMCPServerNamespace;
   public readonly prompt: EditorPromptNamespace;
   public readonly scorer: EditorScorerNamespace;
   public readonly workspace: EditorWorkspaceNamespace;
@@ -78,6 +84,7 @@ export class MastraEditor implements IMastraEditor {
   constructor(config?: MastraEditorConfig) {
     this.__logger = config?.logger;
     this.__toolProviders = config?.toolProviders ?? {};
+    this.__processorProviders = { ...BUILT_IN_PROCESSOR_PROVIDERS, ...config?.processorProviders };
 
     // Built-in providers are always registered first, then merged with user-provided ones
     this.__filesystems = new Map<string, FilesystemProvider>();
@@ -101,6 +108,7 @@ export class MastraEditor implements IMastraEditor {
 
     this.agent = new EditorAgentNamespace(this);
     this.mcp = new EditorMCPNamespace(this);
+    this.mcpServer = new EditorMCPServerNamespace(this);
     this.prompt = new EditorPromptNamespace(this);
     this.scorer = new EditorScorerNamespace(this);
     this.workspace = new EditorWorkspaceNamespace(this);
@@ -128,6 +136,15 @@ export class MastraEditor implements IMastraEditor {
     return this.__toolProviders;
   }
 
+  /** Get a processor provider by ID */
+  getProcessorProvider(id: string): ProcessorProvider | undefined {
+    return this.__processorProviders[id];
+  }
+
+  /** List all registered processor providers */
+  getProcessorProviders(): Record<string, ProcessorProvider> {
+    return this.__processorProviders;
+  }
   /** List all registered filesystem providers */
   getFilesystemProviders(): FilesystemProvider[] {
     return Array.from(this.__filesystems.values());

@@ -534,12 +534,11 @@ describe('MessageList V5 Support', () => {
         });
       });
 
-      it('prompt() should throw error for empty message list', () => {
+      it('prompt() should pass through empty message list unchanged', () => {
         const list = new MessageList({ threadId, resourceId });
 
-        expect(() => list.get.all.aiV5.prompt()).toThrow(
-          'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-        );
+        const prompt = list.get.all.aiV5.prompt();
+        expect(prompt).toHaveLength(0);
       });
 
       it('prompt() should ensure proper message ordering for Gemini compatibility', () => {
@@ -1128,16 +1127,15 @@ describe('MessageList V5 Support', () => {
   });
 
   describe('Edge Cases', () => {
-    it('should throw error for empty message list with prompt methods', () => {
+    it('should pass through empty message list unchanged with prompt methods', () => {
       const list = new MessageList({ threadId, resourceId });
 
-      // Both v4 and v5 should throw error for empty list
-      expect(() => list.get.all.aiV4.prompt()).toThrow(
-        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-      );
-      expect(() => list.get.all.aiV5.prompt()).toThrow(
-        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-      );
+      // Both v4 and v5 should pass through empty list
+      const v4Prompt = list.get.all.aiV4.prompt();
+      expect(v4Prompt).toHaveLength(0);
+
+      const v5Prompt = list.get.all.aiV5.prompt();
+      expect(v5Prompt).toHaveLength(0);
     });
 
     it('should throw error for system messages with wrong role', () => {

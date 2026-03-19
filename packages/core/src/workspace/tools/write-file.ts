@@ -1,8 +1,8 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { WorkspaceReadOnlyError } from '../errors';
-import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
+import { emitWorkspaceMetadata, getEditDiagnosticsText, requireFilesystem } from './helpers';
 
 export const writeFileTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
@@ -13,16 +13,21 @@ export const writeFileTool = createTool({
     overwrite: z.boolean().optional().default(true).describe('Whether to overwrite the file if it already exists'),
   }),
   execute: async ({ path, content, overwrite }, context) => {
-    const { filesystem } = requireFilesystem(context);
+    const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
 
     if (filesystem.readOnly) {
       throw new WorkspaceReadOnlyError('write_file');
     }
 
-    await filesystem.writeFile(path, content, { overwrite });
+    await filesystem.writeFile(path, content, {
+      overwrite,
+      expectedMtime: (context as any)?.__expectedMtime,
+    });
 
     const size = Buffer.byteLength(content, 'utf-8');
-    return `Wrote ${size} bytes to ${path}`;
+    let output = `Wrote ${size} bytes to ${path}`;
+    output += await getEditDiagnosticsText(workspace, path, content);
+    return output;
   },
 });

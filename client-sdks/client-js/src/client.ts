@@ -1,7 +1,48 @@
 import type { ListScoresResponse } from '@mastra/core/evals';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { PaginationInfo, TraceRecord, ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
+import type {
+  PaginationInfo,
+  TraceRecord,
+  ListTracesArgs,
+  ListTracesResponse,
+  // Logs
+  ListLogsArgs,
+  ListLogsResponse,
+  // Scores (observability)
+  ListScoresArgs,
+  ListScoresResponse as ListScoresResponseNew,
+  CreateScoreBody,
+  CreateScoreResponse,
+  // Feedback
+  ListFeedbackArgs,
+  ListFeedbackResponse,
+  CreateFeedbackBody,
+  CreateFeedbackResponse,
+  // Metrics OLAP
+  GetMetricAggregateArgs,
+  GetMetricAggregateResponse,
+  GetMetricBreakdownArgs,
+  GetMetricBreakdownResponse,
+  GetMetricTimeSeriesArgs,
+  GetMetricTimeSeriesResponse,
+  GetMetricPercentilesArgs,
+  GetMetricPercentilesResponse,
+  // Discovery
+  GetMetricNamesArgs,
+  GetMetricNamesResponse,
+  GetMetricLabelKeysArgs,
+  GetMetricLabelKeysResponse,
+  GetMetricLabelValuesArgs,
+  GetMetricLabelValuesResponse,
+  GetEntityTypesResponse,
+  GetEntityNamesArgs,
+  GetEntityNamesResponse,
+  GetServiceNamesResponse,
+  GetEnvironmentsResponse,
+  GetTagsArgs,
+  GetTagsResponse,
+} from '@mastra/core/storage';
 import type { WorkflowInfo } from '@mastra/core/workflows';
 import {
   Agent,
@@ -16,9 +57,12 @@ import {
   AgentBuilder,
   Observability,
   StoredAgent,
+  StoredPromptBlock,
   StoredMCPClient,
   StoredScorer,
+  StoredSkill,
   ToolProvider,
+  ProcessorProvider,
   Workspace,
 } from './resources';
 import type {
@@ -58,6 +102,10 @@ import type {
   ListStoredAgentsResponse,
   CreateStoredAgentParams,
   StoredAgentResponse,
+  ListStoredPromptBlocksParams,
+  ListStoredPromptBlocksResponse,
+  CreateStoredPromptBlockParams,
+  StoredPromptBlockResponse,
   ListStoredScorersParams,
   ListStoredScorersResponse,
   CreateStoredScorerParams,
@@ -66,6 +114,10 @@ import type {
   ListStoredMCPClientsResponse,
   CreateStoredMCPClientParams,
   StoredMCPClientResponse,
+  ListStoredSkillsParams,
+  ListStoredSkillsResponse,
+  CreateStoredSkillParams,
+  StoredSkillResponse,
   GetSystemPackagesResponse,
   ListScoresResponse as ListScoresResponseOld,
   GetObservationalMemoryParams,
@@ -92,6 +144,7 @@ import type {
   DatasetItemVersionResponse,
   DatasetVersionResponse,
   ListToolProvidersResponse,
+  GetProcessorProvidersResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -798,6 +851,7 @@ export class MastraClient extends BaseResource {
     });
   }
 
+  /** Retrieves a specific trace by ID. */
   getTrace(traceId: string): Promise<TraceRecord> {
     return this.observability.getTrace(traceId);
   }
@@ -829,11 +883,117 @@ export class MastraClient extends BaseResource {
     return this.observability.listScoresBySpan(params);
   }
 
+  /** Scores one or more traces using a specified scorer (fire-and-forget). */
   score(params: {
     scorerName: string;
     targets: Array<{ traceId: string; spanId?: string }>;
   }): Promise<{ status: string; message: string }> {
     return this.observability.score(params);
+  }
+
+  // --------------------------------------------------------------------------
+  // Logs
+  // --------------------------------------------------------------------------
+
+  /** Retrieves a paginated list of observability logs. */
+  listLogsVNext(params: ListLogsArgs = {}): Promise<ListLogsResponse> {
+    return this.observability.listLogs(params);
+  }
+
+  // --------------------------------------------------------------------------
+  // Scores
+  // --------------------------------------------------------------------------
+
+  /** Retrieves a paginated list of observability scores. */
+  listScores(params: ListScoresArgs = {}): Promise<ListScoresResponseNew> {
+    return this.observability.listScores(params);
+  }
+
+  /** Creates a single score record in the observability store. */
+  createScore(params: CreateScoreBody): Promise<CreateScoreResponse> {
+    return this.observability.createScore(params);
+  }
+
+  // --------------------------------------------------------------------------
+  // Feedback
+  // --------------------------------------------------------------------------
+
+  /** Retrieves a paginated list of feedback records. */
+  listFeedback(params: ListFeedbackArgs = {}): Promise<ListFeedbackResponse> {
+    return this.observability.listFeedback(params);
+  }
+
+  /** Creates a single feedback record in the observability store. */
+  createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
+    return this.observability.createFeedback(params);
+  }
+
+  // --------------------------------------------------------------------------
+  // Metrics
+  // --------------------------------------------------------------------------
+
+  /** Returns an aggregated metric value with optional period-over-period comparison. */
+  getMetricAggregate(params: GetMetricAggregateArgs): Promise<GetMetricAggregateResponse> {
+    return this.observability.getMetricAggregate(params);
+  }
+
+  /** Returns metric values grouped by specified dimensions. */
+  getMetricBreakdown(params: GetMetricBreakdownArgs): Promise<GetMetricBreakdownResponse> {
+    return this.observability.getMetricBreakdown(params);
+  }
+
+  /** Returns metric values bucketed by time interval with optional grouping. */
+  getMetricTimeSeries(params: GetMetricTimeSeriesArgs): Promise<GetMetricTimeSeriesResponse> {
+    return this.observability.getMetricTimeSeries(params);
+  }
+
+  /** Returns percentile values for a metric bucketed by time interval. */
+  getMetricPercentiles(params: GetMetricPercentilesArgs): Promise<GetMetricPercentilesResponse> {
+    return this.observability.getMetricPercentiles(params);
+  }
+
+  // --------------------------------------------------------------------------
+  // Discovery
+  // --------------------------------------------------------------------------
+
+  /** Returns distinct metric names with optional prefix filtering. */
+  getMetricNames(params: GetMetricNamesArgs = {}): Promise<GetMetricNamesResponse> {
+    return this.observability.getMetricNames(params);
+  }
+
+  /** Returns distinct label keys for a given metric. */
+  getMetricLabelKeys(params: GetMetricLabelKeysArgs): Promise<GetMetricLabelKeysResponse> {
+    return this.observability.getMetricLabelKeys(params);
+  }
+
+  /** Returns distinct values for a given metric label key. */
+  getMetricLabelValues(params: GetMetricLabelValuesArgs): Promise<GetMetricLabelValuesResponse> {
+    return this.observability.getMetricLabelValues(params);
+  }
+
+  /** Returns distinct entity types from observability data. */
+  getEntityTypes(): Promise<GetEntityTypesResponse> {
+    return this.observability.getEntityTypes();
+  }
+
+  /** Returns distinct entity names with optional type filtering. */
+  getEntityNames(params: GetEntityNamesArgs = {}): Promise<GetEntityNamesResponse> {
+    return this.observability.getEntityNames(params);
+  }
+
+  /** Returns distinct service names from observability data. */
+  getServiceNames(): Promise<GetServiceNamesResponse> {
+    return this.observability.getServiceNames();
+  }
+
+  /** Returns distinct environments from observability data. */
+  getEnvironments(): Promise<GetEnvironmentsResponse> {
+    return this.observability.getEnvironments();
+  }
+
+  /** Returns distinct tags with optional entity type filtering. */
+  getTags(params: GetTagsArgs = {}): Promise<GetTagsResponse> {
+    return this.observability.getTags(params);
   }
 
   // ============================================================================
@@ -892,6 +1052,67 @@ export class MastraClient extends BaseResource {
    */
   public getStoredAgent(storedAgentId: string): StoredAgent {
     return new StoredAgent(this.options, storedAgentId);
+  }
+
+  // ============================================================================
+  // Stored Prompt Blocks
+  // ============================================================================
+
+  /**
+   * Lists all stored prompt blocks with optional pagination
+   * @param params - Optional pagination and ordering parameters
+   * @returns Promise containing paginated list of stored prompt blocks
+   */
+  public listStoredPromptBlocks(params?: ListStoredPromptBlocksParams): Promise<ListStoredPromptBlocksResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.status) {
+      searchParams.set('status', params.status);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/prompt-blocks${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a new stored prompt block
+   * @param params - Prompt block configuration including name, content, rules, etc.
+   * @returns Promise containing the created stored prompt block
+   */
+  public createStoredPromptBlock(params: CreateStoredPromptBlockParams): Promise<StoredPromptBlockResponse> {
+    return this.request('/stored/prompt-blocks', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a stored prompt block instance by ID for further operations (details, update, delete)
+   * @param storedPromptBlockId - ID of the stored prompt block to retrieve
+   * @returns StoredPromptBlock instance
+   */
+  public getStoredPromptBlock(storedPromptBlockId: string): StoredPromptBlock {
+    return new StoredPromptBlock(this.options, storedPromptBlockId);
   }
 
   // ============================================================================
@@ -1011,6 +1232,64 @@ export class MastraClient extends BaseResource {
   }
 
   // ============================================================================
+  // Stored Skills
+  // ============================================================================
+
+  /**
+   * Lists all stored skills with optional pagination
+   * @param params - Optional pagination and ordering parameters
+   * @returns Promise containing paginated list of stored skills
+   */
+  public listStoredSkills(params?: ListStoredSkillsParams): Promise<ListStoredSkillsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/skills${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a new stored skill
+   * @param params - Skill configuration
+   * @returns Promise containing the created stored skill
+   */
+  public createStoredSkill(params: CreateStoredSkillParams): Promise<StoredSkillResponse> {
+    return this.request('/stored/skills', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a stored skill instance by ID for further operations (details, update, delete)
+   * @param storedSkillId - ID of the stored skill
+   * @returns StoredSkill instance
+   */
+  public getStoredSkill(storedSkillId: string): StoredSkill {
+    return new StoredSkill(this.options, storedSkillId);
+  }
+
+  // ============================================================================
   // Tool Providers
   // ============================================================================
 
@@ -1029,6 +1308,27 @@ export class MastraClient extends BaseResource {
    */
   public getToolProvider(providerId: string): ToolProvider {
     return new ToolProvider(this.options, providerId);
+  }
+
+  // ============================================================================
+  // Processor Providers
+  // ============================================================================
+
+  /**
+   * Lists all registered processor providers
+   * @returns Promise containing list of processor provider info
+   */
+  public getProcessorProviders(): Promise<GetProcessorProvidersResponse> {
+    return this.request('/processor-providers');
+  }
+
+  /**
+   * Gets a processor provider instance by ID for further operations
+   * @param providerId - ID of the processor provider
+   * @returns ProcessorProvider instance
+   */
+  public getProcessorProvider(providerId: string): ProcessorProvider {
+    return new ProcessorProvider(this.options, providerId);
   }
 
   // ============================================================================

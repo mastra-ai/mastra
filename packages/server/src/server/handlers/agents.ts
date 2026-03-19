@@ -2,7 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import type { AgentModelManagerConfig } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
-import type { SystemMessage } from '@mastra/core/llm';
+import type { ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -11,6 +11,8 @@ import type {
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
+import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
+import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
 
 import { z } from 'zod';
@@ -21,6 +23,7 @@ import { HTTPException } from '../http-exception';
 import {
   agentIdPathParams,
   agentSkillPathParams,
+  agentVersionQuerySchema,
   listAgentsResponseSchema,
   serializedAgentSchema,
   agentExecutionBodySchema,
@@ -43,7 +46,6 @@ import {
 } from '../schemas/agents';
 import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
 import { getAgentSkillResponseSchema } from '../schemas/workspace';
-import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
@@ -63,14 +65,20 @@ import {
  * Handles provider IDs with suffixes (e.g., "openai.chat" -> "openai").
  * Also handles custom gateway providers that are stored with gateway prefix (e.g., "acme/acme-openai").
  * @param providerId - The provider identifier (may include a suffix like ".chat" or be from a custom gateway)
+ * @param customProviders - Optional record of custom gateway providers to check
  * @returns true if all required environment variables are set, false otherwise
  */
-export function isProviderConnected(providerId: string): boolean {
+export function isProviderConnected(providerId: string, customProviders?: Record<string, ProviderConfig>): boolean {
   // Clean provider ID (e.g., "openai.chat" -> "openai")
   const cleanId = providerId.includes('.') ? providerId.split('.')[0]! : providerId;
 
-  // First, try direct lookup
-  let provider = PROVIDER_REGISTRY[cleanId as keyof typeof PROVIDER_REGISTRY];
+  // First, try direct lookup in static registry
+  let provider: ProviderConfig | undefined = PROVIDER_REGISTRY[cleanId as keyof typeof PROVIDER_REGISTRY];
+
+  // If not found, check custom providers
+  if (!provider && customProviders) {
+    provider = customProviders[cleanId];
+  }
 
   // If not found and doesn't contain a slash, check if it exists with a gateway prefix
   // This handles custom gateway providers stored as "gateway/provider" in the registry
@@ -85,6 +93,16 @@ export function isProviderConnected(providerId: string): boolean {
 
     if (matchingKey) {
       provider = PROVIDER_REGISTRY[matchingKey as keyof typeof PROVIDER_REGISTRY];
+    }
+
+    if (!provider && customProviders) {
+      const customMatchingKey = Object.keys(customProviders).find(key => {
+        const parts = key.split('/');
+        return parts.length === 2 && parts[1] === cleanId;
+      });
+      if (customMatchingKey) {
+        provider = customProviders[customMatchingKey];
+      }
     }
   }
 
@@ -120,6 +138,21 @@ interface SerializedToolInput {
   inputSchema?: { jsonSchema?: unknown } | unknown;
   outputSchema?: { jsonSchema?: unknown } | unknown;
   requestContextSchema?: { jsonSchema?: unknown } | unknown;
+}
+
+function resolveLazySchema(schema: unknown): unknown {
+  if (typeof schema === 'function') {
+    return resolveLazySchema(schema());
+  }
+  return schema;
+}
+
+function schemaToJsonSchema(schema: PublicSchema<unknown> | undefined) {
+  if (!schema) {
+    return undefined;
+  }
+
+  return standardSchemaToJSONSchema(toStandardSchema(schema), { target: 'draft-2020-12' });
 }
 
 export interface SerializedWorkflow {
@@ -182,53 +215,25 @@ export async function getSerializedAgentTools(
     // Only process schemas if not in partial mode
     if (!partial) {
       try {
-        if (tool.inputSchema) {
-          if (tool.inputSchema && typeof tool.inputSchema === 'object' && 'jsonSchema' in tool.inputSchema) {
-            inputSchemaForReturn = stringify(tool.inputSchema.jsonSchema);
-          } else if (typeof tool.inputSchema === 'function') {
-            const inputSchema = tool.inputSchema();
-            if (inputSchema && inputSchema.jsonSchema) {
-              inputSchemaForReturn = stringify(inputSchema.jsonSchema);
-            }
-          } else if (tool.inputSchema) {
-            inputSchemaForReturn = stringify(
-              zodToJsonSchema(tool.inputSchema as Parameters<typeof zodToJsonSchema>[0]),
-            );
-          }
+        const inputSchema = schemaToJsonSchema(
+          resolveLazySchema(tool.inputSchema) as PublicSchema<unknown> | undefined,
+        );
+        if (inputSchema !== undefined) {
+          inputSchemaForReturn = stringify(inputSchema);
         }
 
-        if (tool.outputSchema) {
-          if (tool.outputSchema && typeof tool.outputSchema === 'object' && 'jsonSchema' in tool.outputSchema) {
-            outputSchemaForReturn = stringify(tool.outputSchema.jsonSchema);
-          } else if (typeof tool.outputSchema === 'function') {
-            const outputSchema = tool.outputSchema();
-            if (outputSchema && outputSchema.jsonSchema) {
-              outputSchemaForReturn = stringify(outputSchema.jsonSchema);
-            }
-          } else if (tool.outputSchema) {
-            outputSchemaForReturn = stringify(
-              zodToJsonSchema(tool.outputSchema as Parameters<typeof zodToJsonSchema>[0]),
-            );
-          }
+        const outputSchema = schemaToJsonSchema(
+          resolveLazySchema(tool.outputSchema) as PublicSchema<unknown> | undefined,
+        );
+        if (outputSchema !== undefined) {
+          outputSchemaForReturn = stringify(outputSchema);
         }
 
-        if (tool.requestContextSchema) {
-          if (
-            tool.requestContextSchema &&
-            typeof tool.requestContextSchema === 'object' &&
-            'jsonSchema' in tool.requestContextSchema
-          ) {
-            requestContextSchemaForReturn = stringify(tool.requestContextSchema.jsonSchema);
-          } else if (typeof tool.requestContextSchema === 'function') {
-            const requestContextSchema = (tool.requestContextSchema as () => { jsonSchema?: unknown })();
-            if (requestContextSchema && requestContextSchema.jsonSchema) {
-              requestContextSchemaForReturn = stringify(requestContextSchema.jsonSchema);
-            }
-          } else if (tool.requestContextSchema) {
-            requestContextSchemaForReturn = stringify(
-              zodToJsonSchema(tool.requestContextSchema as Parameters<typeof zodToJsonSchema>[0]),
-            );
-          }
+        const requestContextSchema = schemaToJsonSchema(
+          resolveLazySchema(tool.requestContextSchema) as PublicSchema<unknown> | undefined,
+        );
+        if (requestContextSchema !== undefined) {
+          requestContextSchemaForReturn = stringify(requestContextSchema);
         }
       } catch (error) {
         console.error(`Error getting serialized tool`, {
@@ -289,8 +294,11 @@ export async function getSerializedSkillsFromAgent(
 
 /**
  * Get the list of available workspace tools for an agent.
- * Returns tool names based on workspace configuration (filesystem, sandbox, search)
- * and respects per-tool enabled settings.
+ *
+ * Tries to use core's `createWorkspaceTools` for an accurate tool list that
+ * respects runtime availability (e.g. `@ast-grep/napi` for ast_edit).
+ * Falls back to inlined config-based logic for older core versions that don't
+ * export `createWorkspaceTools`.
  */
 export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: RequestContext): Promise<string[]> {
   try {
@@ -299,6 +307,18 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
       return [];
     }
 
+    // Try core's createWorkspaceTools — it checks runtime dep availability
+    try {
+      const mod = await import('@mastra/core/workspace');
+      if (typeof mod.createWorkspaceTools === 'function') {
+        return Object.keys(mod.createWorkspaceTools(workspace));
+      }
+    } catch {
+      // Older core version without workspace module — fall through
+    }
+
+    // Fallback: inlined logic for older core versions.
+    // Does not include AST_EDIT — only available via createWorkspaceTools above.
     const tools: string[] = [];
     const isReadOnly = workspace.filesystem?.readOnly ?? false;
     const toolsConfig = workspace.getToolsConfig();
@@ -528,7 +548,15 @@ async function formatAgentList({
   };
 }
 
-export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context['mastra']; agentId: string }) {
+export async function getAgentFromSystem({
+  mastra,
+  agentId,
+  versionOptions,
+}: {
+  mastra: Context['mastra'];
+  agentId: string;
+  versionOptions?: { status?: 'draft' | 'published' } | { versionId: string };
+}) {
   const logger = mastra.getLogger();
 
   if (!agentId) {
@@ -559,6 +587,18 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
           logger.debug('Error getting agent from agent', error);
         }
       }
+    }
+  }
+
+  // If a code-defined agent was found, apply stored config overrides (if any)
+  if (agent && mastra.getEditor) {
+    try {
+      const editorAgent = mastra.getEditor()?.agent;
+      if (editorAgent) {
+        agent = await editorAgent.applyStoredOverrides(agent, versionOptions);
+      }
+    } catch (error) {
+      logger.debug('Error applying stored overrides to code agent', error);
     }
   }
 
@@ -748,16 +788,26 @@ export const LIST_AGENTS_ROUTE = createRoute({
   description: 'Returns a list of all available agents in the system (both code-defined and stored)',
   tags: ['Agents'],
   requiresAuth: true,
+  requiresPermission: 'agents:read',
   handler: async ({ mastra, requestContext, partial }) => {
     try {
       const codeAgents = mastra.listAgents();
 
       const isPartial = partial === 'true';
 
-      // Serialize code-defined agents
+      // Apply stored config overrides to code-defined agents before serializing
+      const editor = mastra.getEditor?.();
       const serializedCodeAgentsMap = await Promise.all(
         Object.entries(codeAgents).map(async ([id, agent]) => {
-          return formatAgentList({ id, mastra, agent, requestContext, partial: isPartial });
+          let mergedAgent = agent;
+          if (editor) {
+            try {
+              mergedAgent = await editor.agent.applyStoredOverrides(agent);
+            } catch {
+              // If overrides fail, use the original code agent
+            }
+          }
+          return formatAgentList({ id, mastra, agent: mergedAgent, requestContext, partial: isPartial });
         }),
       );
 
@@ -825,14 +875,18 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   path: '/agents/:agentId',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
+  queryParamSchema: agentVersionQuerySchema,
   responseSchema: serializedAgentSchema,
   summary: 'Get agent by ID',
-  description: 'Returns details for a specific agent including configuration, tools, and memory settings',
+  description:
+    'Returns details for a specific agent including configuration, tools, and memory settings. Use query params to control which stored config version is used for overrides: ?status=draft (latest, default), ?status=published (active version), or ?versionId=<id> (specific version). Use either status or versionId, not both.',
   tags: ['Agents'],
   requiresAuth: true,
-  handler: async ({ agentId, mastra, requestContext }) => {
+  requiresPermission: 'agents:read',
+  handler: async ({ agentId, mastra, requestContext, status, versionId }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
+      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions });
       const isStudio = false; // TODO: Get from context if needed
       const result = await formatAgent({
         mastra,
@@ -892,10 +946,7 @@ export const CLONE_AGENT_ROUTE = createRoute({
   },
 });
 
-export const GENERATE_AGENT_ROUTE: ServerRoute<
-  z.infer<typeof agentIdPathParams> & z.infer<typeof agentExecutionBodySchema>,
-  unknown
-> = createRoute({
+export const GENERATE_AGENT_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/generate',
   responseType: 'json',
@@ -906,6 +957,7 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
   description: 'Executes an agent with the provided messages and returns the complete response',
   tags: ['Agents'],
   requiresAuth: true,
+  requiresPermission: 'agents:execute',
   handler: async ({ agentId, mastra, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -954,12 +1006,18 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
         };
       }
 
-      const result = await agent.generate<unknown>(messages, {
-        ...rest,
+      const { structuredOutput, ...restOptions } = rest;
+
+      const options = {
+        ...restOptions,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
-      });
+      };
+
+      const result = structuredOutput
+        ? await agent.generate(messages, { ...options, structuredOutput })
+        : await agent.generate(messages, options);
 
       return result;
     } catch (error) {
@@ -1074,20 +1132,16 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
         threadId: effectiveThreadId ?? '',
       });
 
+      // Note: Do NOT set Transfer-Encoding header explicitly in the headers option.
+      // Runtimes automatically add this header for streaming responses,
+      // and setting it explicitly causes duplicate headers which break HTTP protocol.
       const streamResponse = rest.output
-        ? streamResult.toTextStreamResponse({
-            headers: {
-              'Transfer-Encoding': 'chunked',
-            },
-          })
+        ? streamResult.toTextStreamResponse()
         : streamResult.toDataStreamResponse({
             sendUsage: true,
             sendReasoning: true,
             getErrorMessage: (error: any) => {
               return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
-            },
-            headers: {
-              'Transfer-Encoding': 'chunked',
             },
           });
 
@@ -1107,18 +1161,40 @@ export const GET_PROVIDERS_ROUTE = createRoute({
   description: 'Returns a list of all configured AI model providers',
   tags: ['Agents'],
   requiresAuth: true,
-  handler: async () => {
+  handler: async ({ mastra }) => {
     try {
-      const providers = Object.entries(PROVIDER_REGISTRY).map(([id, provider]) => {
+      const allProviders: Record<string, ProviderConfig> = {};
+
+      for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
+        allProviders[id] = provider;
+      }
+
+      if (mastra) {
+        const customGateways = mastra.listGateways();
+        if (customGateways) {
+          for (const gateway of Object.values(customGateways)) {
+            try {
+              const customProviders = await gateway.fetchProviders();
+              for (const [providerId, config] of Object.entries(customProviders)) {
+                allProviders[providerId] = config;
+              }
+            } catch (error) {
+              console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
+            }
+          }
+        }
+      }
+
+      const providers = Object.entries(allProviders).map(([id, provider]) => {
         return {
           id,
           name: provider.name,
           label: (provider as any).label || provider.name,
           description: (provider as any).description || '',
           envVar: provider.apiKeyEnvVar,
-          connected: isProviderConnected(id),
+          connected: isProviderConnected(id, allProviders),
           docUrl: provider.docUrl,
-          models: [...provider.models], // Convert readonly array to regular array
+          models: [...provider.models],
         };
       });
       return { providers };
@@ -1128,10 +1204,7 @@ export const GET_PROVIDERS_ROUTE = createRoute({
   },
 });
 
-export const GENERATE_AGENT_VNEXT_ROUTE: ServerRoute<
-  z.infer<typeof agentIdPathParams> & z.infer<typeof agentExecutionBodySchema>,
-  unknown
-> = createRoute({
+export const GENERATE_AGENT_VNEXT_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/generate/vnext',
   responseType: 'json',
@@ -1157,6 +1230,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   description: 'Executes an agent with the provided messages and streams the response in real-time',
   tags: ['Agents'],
   requiresAuth: true,
+  requiresPermission: 'agents:execute',
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -1204,12 +1278,18 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         };
       }
 
-      const streamResult = await agent.stream<unknown>(messages, {
-        ...rest,
+      const { structuredOutput, ...restOptions } = rest;
+
+      const options = {
+        ...restOptions,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
-      });
+      };
+
+      const streamResult = structuredOutput
+        ? await agent.stream(messages, { ...options, structuredOutput })
+        : await agent.stream(messages, options);
 
       return streamResult.fullStream;
     } catch (error) {

@@ -47,7 +47,7 @@ export class SandboxNotAvailableError extends WorkspaceError {
 }
 
 export class SandboxFeatureNotSupportedError extends WorkspaceError {
-  constructor(feature: 'executeCommand' | 'installPackage') {
+  constructor(feature: 'executeCommand' | 'installPackage' | 'processes') {
     super(`Sandbox does not support ${feature}`, 'FEATURE_NOT_SUPPORTED');
     this.name = 'SandboxFeatureNotSupportedError';
   }
@@ -149,6 +149,21 @@ export class FileReadRequiredError extends FilesystemError {
   constructor(path: string, reason: string) {
     super(reason, 'EREAD_REQUIRED', path);
     this.name = 'FileReadRequiredError';
+  }
+}
+
+export class StaleFileError extends FilesystemError {
+  constructor(
+    path: string,
+    public readonly expectedMtime: Date,
+    public readonly actualMtime: Date,
+  ) {
+    super(
+      `File was modified externally: ${path} (expected mtime ${expectedMtime.toISOString()}, actual ${actualMtime.toISOString()})`,
+      'ESTALE',
+      path,
+    );
+    this.name = 'StaleFileError';
   }
 }
 

@@ -32,111 +32,90 @@ For production, you'll also need:
 ## Deploy
 
 <Steps>
+  <StepItem>
+    Connect to your EC2 instance and clone your repository:
 
-<StepItem>
+    <Tabs>
+      <TabItem value="public" label="Public Repository">
+        ```bash
+        git clone https://github.com/<your-username>/<your-repository>.git
+        ```
+      </TabItem>
 
-Connect to your EC2 instance and clone your repository:
+      <TabItem value="private" label="Private Repository">
+        ```bash
+        git clone git@github.com:<your-username>/<your-repository>.git
+        ```
+      </TabItem>
+    </Tabs>
 
-<Tabs>
-  <TabItem value="public" label="Public Repository">
+    Navigate to the repository directory:
 
-```bash
-git clone https://github.com/<your-username>/<your-repository>.git
-```
+    ```bash
+    cd "<your-repository>"
+    ```
+  </StepItem>
 
-  </TabItem>
+  <StepItem>
+    Install dependencies:
 
-  <TabItem value="private" label="Private Repository">
+    ```bash npm2yarn
+    npm install
+    ```
+  </StepItem>
 
-```bash
-git clone git@github.com:<your-username>/<your-repository>.git
-```
+  <StepItem>
+    Create a `.env` file and add your environment variables:
 
-  </TabItem>
-</Tabs>
+    ```bash
+    touch .env
+    ```
 
-Navigate to the repository directory:
+    Remember to set your environment variables needed to run your application (e.g. your model provider API key):
 
-```bash
-cd "<your-repository>"
-```
+    ```bash
+    OPENAI_API_KEY=<your-openai-api-key>
+    # Add other required environment variables
+    ```
+  </StepItem>
 
-</StepItem>
+  <StepItem>
+    Build the application:
 
-<StepItem>
+    ```bash npm2yarn
+    npm run build
+    ```
+  </StepItem>
 
-Install dependencies:
+  <StepItem>
+    Run the application:
 
-```bash npm2yarn
-npm install
-```
+    ```bash
+    node --env-file=".env" .mastra/output/index.mjs
+    ```
 
-</StepItem>
+    This is a basic example. In production, use a process manager like [PM2](https://pm2.keymetrics.io/) or [systemd](https://systemd.io/) to keep your application running and handle restarts.
 
-<StepItem>
+    :::warning
+    Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
+    :::
+  </StepItem>
 
-Create a `.env` file and add your environment variables:
+  <StepItem>
+    Your Mastra server is now running on port 4111, but it's only accessible locally.
 
-```bash
-touch .env
-```
+    You can open port 4111 in your EC2 security group for direct access, or configure a reverse proxy (such as nginx) to listen on ports 80 and 443 and forward requests to `http://localhost:4111`.
 
-Remember to set your environment variables needed to run your application (e.g. your model provider API key):
+    In production, you should use a reverse proxy so you can configure HTTPS. HTTPS encrypts traffic and is required for most webhook integrations and external services your agents interact with.
+  </StepItem>
 
-```bash
-OPENAI_API_KEY=<your-openai-api-key>
-# Add other required environment variables
-```
+  <StepItem>
+    Verify your deployment at `https://<your-ec2-address>/api/agents`, which should return a JSON list of your agents.
+  </StepItem>
 
-</StepItem>
-
-<StepItem>
-
-Build the application:
-
-```bash npm2yarn
-npm run build
-```
-
-</StepItem>
-
-<StepItem>
-
-Run the application:
-
-```bash
-node --env-file=".env" .mastra/output/index.mjs
-```
-
-This is a basic example. In production, use a process manager like [PM2](https://pm2.keymetrics.io/) or [systemd](https://systemd.io/) to keep your application running and handle restarts.
-
-:::warning
-Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
-:::
-</StepItem>
-
-<StepItem>
-
-Your Mastra server is now running on port 4111, but it's only accessible locally.
-
-You can open port 4111 in your EC2 security group for direct access, or configure a reverse proxy (such as nginx) to listen on ports 80 and 443 and forward requests to `http://localhost:4111`. 
-
-In production, you should use a reverse proxy so you can configure HTTPS. HTTPS encrypts traffic and is required for most webhook integrations and external services your agents interact with.
-
-</StepItem>
-
-<StepItem>
-
-Verify your deployment at `https://<your-ec2-address>/api/agents`, which should return a JSON list of your agents.
-
-</StepItem>
-
-<StepItem>
-
-You can now call your Mastra endpoints over HTTP.
-
-</StepItem>
-
+  <StepItem>
+    You can now call your Mastra endpoints over HTTP.
+  </StepItem>
 </Steps>
 
 ## Next steps

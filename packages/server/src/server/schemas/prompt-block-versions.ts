@@ -42,6 +42,10 @@ export const promptBlockVersionSchema = z.object({
   description: z.string().optional().describe('Purpose description'),
   content: z.string().describe('Template content with {{variable}} interpolation'),
   rules: ruleGroupSchema.optional().describe('Rules for conditional inclusion'),
+  requestContextSchema: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('JSON Schema defining available variables for {{variableName}} interpolation and conditions'),
   // Version metadata
   changedFields: z.array(z.string()).optional().describe('Array of field names that changed from the previous version'),
   changeMessage: z.string().optional().describe('Optional message describing the changes'),

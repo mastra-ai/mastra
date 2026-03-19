@@ -1,5 +1,7 @@
 import { DuckDBInstance } from '@duckdb/node-api';
 import type { DuckDBValue } from '@duckdb/node-api';
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector, validateUpsertInput, validateTopK } from '@mastra/core/vector';
 import type {
   IndexStats,
@@ -190,6 +192,16 @@ export class DuckDBVector extends MastraVector<DuckDBVectorFilter> {
     await this.initialize();
 
     const { indexName, queryVector, topK = 10, filter, includeVector = false } = params;
+
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('DUCKDB', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for DuckDB queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
 
     // Validate topK parameter
     validateTopK('DUCKDB', topK);

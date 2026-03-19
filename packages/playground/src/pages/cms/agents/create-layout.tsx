@@ -1,5 +1,3 @@
-import { Outlet, useLocation } from 'react-router';
-
 import {
   useLinkComponent,
   useAgentCmsForm,
@@ -14,6 +12,7 @@ import {
   Spinner,
 } from '@mastra/playground-ui';
 import { Check } from 'lucide-react';
+import { Outlet, useLocation } from 'react-router';
 
 function CreateLayoutWrapper() {
   const { navigate, paths } = useLinkComponent();

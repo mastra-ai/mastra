@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.0.1",
+  "version": "0.9.1-alpha.3",
   "description": "",
   "type": "module",
   "files": [
@@ -18,6 +18,9 @@
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "mastracode": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "import": {
@@ -27,6 +30,16 @@
       "require": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
+      }
+    },
+    "./tui": {
+      "import": {
+        "types": "./dist/tui/index.d.ts",
+        "default": "./dist/tui.js"
+      },
+      "require": {
+        "types": "./dist/tui/index.d.ts",
+        "default": "./dist/tui.cjs"
       }
     },
     "./package.json": "./package.json"
@@ -52,6 +65,7 @@
     "@mastra/libsql": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
+    "@mastra/pg": "workspace:*",
     "@tavily/core": "latest",
     "ai": "latest",
     "chalk": "latest",
@@ -59,29 +73,27 @@
     "execa": "^9.6.1",
     "fastest-levenshtein": "latest",
     "js-tiktoken": "^1.0.21",
-    "js-yaml": "latest",
-    "strip-ansi": "^7.1.2",
+    "js-yaml": "^3.14.2",
+    "partial-json": "^0.1.7",
+    "strip-ansi": "^7.2.0",
     "tree-kill": "latest",
     "vscode-jsonrpc": "latest",
-    "vscode-languageserver-protocol": "latest"
-  },
-  "peerDependencies": {
-    "zod": "^3.25.0 || ^4.0.0"
+    "vscode-languageserver-protocol": "latest",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "22.19.7",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.37.0",
-    "typescript-eslint": "^8.51.0",
+    "eslint": "^9.39.4",
     "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
     "typescript": "catalog:",
-    "vitest": "catalog:",
-    "tsx": "^4.19.4",
-    "zod": "catalog:"
+    "typescript-eslint": "^8.57.0",
+    "vitest": "catalog:"
   },
   "engines": {
     "node": ">=22.13.0"

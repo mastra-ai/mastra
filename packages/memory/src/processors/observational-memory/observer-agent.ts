@@ -1,68 +1,19 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
+import type { CoreMessage } from '@mastra/core/llm';
 
-/**
- * Check which prompt variant to use (for A/B testing)
- */
-const USE_CONDENSED_PROMPT =
-  process.env.OM_USE_CONDENSED_PROMPT === '1' || process.env.OM_USE_CONDENSED_PROMPT === 'true';
+import {
+  DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS,
+  formatToolResultForObserver,
+  resolveToolResultValue,
+} from './tool-result-helpers';
 
-/**
- * Condensed V3 extraction instructions - principle-based, relies on model's common sense.
- * ~45 lines vs ~200 lines in current prompt.
- * Enable with OM_USE_CONDENSED_PROMPT=1
- */
-const CONDENSED_OBSERVER_EXTRACTION_INSTRUCTIONS = `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
-
-CORE PRINCIPLES:
-
-1. BE SPECIFIC - Vague observations are useless. Capture details that distinguish and identify.
-2. ANCHOR IN TIME - Note when things happened and when they were said.
-3. TRACK STATE CHANGES - When information updates or supersedes previous info, make it explicit.
-4. USE COMMON SENSE - If it would help the assistant remember later, observe it.
-
-ASSERTIONS VS QUESTIONS:
-- User TELLS you something → 🔴 "User stated [fact]"
-- User ASKS something → 🟡 "User asked [question]"
-- User assertions are authoritative. They are the source of truth about their own life.
-
-TEMPORAL ANCHORING:
-- Always include message time at the start: (14:30) User stated...
-- Add estimated date at the END only for relative time references:
-  "User will visit parents this weekend. (meaning Jan 18-19)"
-- Don't add end dates for present-moment statements or vague terms like "recently"
-- Split multi-event statements into separate observations, each with its own date
-
-DETAILS TO ALWAYS PRESERVE:
-- Names, handles, usernames, titles (@username, "Dr. Smith")
-- Numbers, counts, quantities (4 items, 3 sessions, 27th in list)
-- Measurements, percentages, statistics (5kg, 20% improvement, 85% accuracy)
-- Sequences and orderings (steps 1-5, chord progression, lucky numbers)
-- Prices, dates, times, durations ($50, March 15, 2 hours)
-- Locations and distinguishing attributes (near X, based in Y, specializes in Z)
-- User's specific role (presenter, volunteer, organizer - not just "attended")
-- Exact phrasing when unusual ("movement session" for exercise)
-- Verbatim text being collaborated on (code, formatted text, ASCII art)
-
-WHEN ASSISTANT PROVIDES LISTS/RECOMMENDATIONS:
-Don't just say "Assistant recommended 5 hotels." Capture what distinguishes each:
-"Assistant recommended: Hotel A (near station), Hotel B (pet-friendly), Hotel C (has pool)..."
-
-STATE CHANGES:
-When user updates information, note what changed:
-"User will use the new method (replacing the old approach)"
-
-WHO/WHAT/WHERE/WHEN:
-Capture all dimensions. Not just "User went on a trip" but who with, where, when, and what happened.
-
-Don't repeat observations that have already been captured in previous sessions.
-
-REMEMBER: These observations are your ENTIRE memory. Any detail you fail to observe is permanently forgotten. Use common sense - if something seems like it might be important to remember, it probably is. When in doubt, observe it.`;
+type ObserverFormatOptions = { maxPartLength?: number; maxToolResultTokens?: number };
 
 /**
  * The core extraction instructions for the Observer.
  * This is exported so the Reflector can understand how observations were created.
  */
-const CURRENT_OBSERVER_EXTRACTION_INSTRUCTIONS = `CRITICAL: DISTINGUISH USER ASSERTIONS FROM QUESTIONS
+export const OBSERVER_EXTRACTION_INSTRUCTIONS = `CRITICAL: DISTINGUISH USER ASSERTIONS FROM QUESTIONS
 
 When the user TELLS you something about themselves, mark it as an assertion:
 - "I have two kids" → 🔴 (14:30) User stated has two kids
@@ -70,8 +21,8 @@ When the user TELLS you something about themselves, mark it as an assertion:
 - "I graduated in 2019" → 🔴 (14:32) User stated graduated in 2019
 
 When the user ASKS about something, mark it as a question/request:
-- "Can you help me with X?" → 🟡 (15:00) User asked help with X
-- "What's the best way to do Y?" → 🟡 (15:01) User asked best way to do Y
+- "Can you help me with X?" → 🔴 (15:00) User asked help with X
+- "What's the best way to do Y?" → 🔴 (15:01) User asked best way to do Y
 
 Distinguish between QUESTIONS and STATEMENTS OF INTENT:
 - "Can you recommend..." → Question (extract as "User asked...")
@@ -253,18 +204,63 @@ CONVERSATION CONTEXT:
 - When who/what/where/when is mentioned, note that in the observation. Example: if the user received went on a trip with someone, observe who that someone was, where the trip was, when it happened, and what happened, not just that the user went on the trip.
 - For any described entity (like a person, place, thing, etc), preserve the attributes that would help identify or describe the specific entity later: location ("near X"), specialty ("focuses on Y"), unique feature ("has Z"), relationship ("owned by W"), or other details. The entity's name is important, but so are any additional details that distinguish it. If there are a list of entities, preserve these details for each of them.
 
+USER MESSAGE CAPTURE:
+- Short and medium-length user messages should be captured nearly verbatim in your own words.
+- For very long user messages, summarize but quote key phrases that carry specific intent or meaning.
+- This is critical for continuity: when the conversation window shrinks, the observations are the only record of what the user said.
+
+AVOIDING REPETITIVE OBSERVATIONS:
+- Do NOT repeat the same observation across multiple turns if there is no new information.
+- When the agent performs repeated similar actions (e.g., browsing files, running the same tool type multiple times), group them into a single parent observation with sub-bullets for each new result.
+
+Example — BAD (repetitive):
+* 🟡 (14:30) Agent used view tool on src/auth.ts
+* 🟡 (14:31) Agent used view tool on src/users.ts
+* 🟡 (14:32) Agent used view tool on src/routes.ts
+
+Example — GOOD (grouped):
+* 🟡 (14:30) Agent browsed source files for auth flow
+  * -> viewed src/auth.ts — found token validation logic
+  * -> viewed src/users.ts — found user lookup by email
+  * -> viewed src/routes.ts — found middleware chain
+
+Only add a new observation for a repeated action if the NEW result changes the picture.
+
 ACTIONABLE INSIGHTS:
 - What worked well in explanations
 - What needs follow-up or clarification
-- User's stated goals or next steps (note if the user tells you not to do a next step, or asks for something specific, other next steps besides the users request should be marked as "waiting for user", unless the user explicitly says to continue all next steps)`;
+- User's stated goals or next steps (note if the user tells you not to do a next step, or asks for something specific, other next steps besides the users request should be marked as "waiting for user", unless the user explicitly says to continue all next steps)
 
-/**
- * Select which extraction instructions to use based on environment variable.
- * Set OM_USE_CONDENSED_PROMPT=1 to use the new condensed V3 prompt.
- */
-export const OBSERVER_EXTRACTION_INSTRUCTIONS = USE_CONDENSED_PROMPT
-  ? CONDENSED_OBSERVER_EXTRACTION_INSTRUCTIONS
-  : CURRENT_OBSERVER_EXTRACTION_INSTRUCTIONS;
+COMPLETION TRACKING:
+Completion observations are not just summaries. They are explicit memory signals to the assistant that a task, question, or subtask has been resolved.
+Without clear completion markers, the assistant may forget that work is already finished and may repeat, reopen, or continue an already-completed task.
+
+Use ✅ to answer: "What exactly is now done?"
+Choose completion observations that help the assistant know what is finished and should not be reworked unless new information appears.
+
+Use ✅ when:
+- The user explicitly confirms something worked or was answered ("thanks, that fixed it", "got it", "perfect")
+- The assistant provided a definitive, complete answer to a factual question and the user moved on
+- A multi-step task reached its stated goal
+- The user acknowledged receipt of requested information
+- A concrete subtask, fix, deliverable, or implementation step became complete during ongoing work
+
+Do NOT use ✅ when:
+- The assistant merely responded — the user might follow up with corrections
+- The topic is paused but not resolved ("I'll try that later")
+- The user's reaction is ambiguous
+
+FORMAT:
+As a sub-bullet under the related observation group:
+* 🔴 (14:30) User asked how to configure auth middleware
+  * -> Agent explained JWT setup with code example
+  * ✅ User confirmed auth is working
+
+Or as a standalone observation when closing out a broader task:
+* ✅ (14:45) Auth configuration task completed — user confirmed middleware is working
+
+Completion observations should be terse but specific about WHAT was completed.
+Prefer concrete resolved outcomes over abstract workflow status so the assistant remembers what is already done.`;
 
 /**
  * The output format instructions for the Observer.
@@ -272,75 +268,45 @@ export const OBSERVER_EXTRACTION_INSTRUCTIONS = USE_CONDENSED_PROMPT
  */
 
 /**
- * Condensed output format with realistic examples that model desired patterns.
- */
-const CONDENSED_OBSERVER_OUTPUT_FORMAT = `Use priority levels:
-- 🔴 High: explicit user facts, preferences, goals achieved, critical context
-- 🟡 Medium: project details, learned information, tool results
-- 🟢 Low: minor details, uncertain observations
-
-Group observations by date, then list each with 24-hour time.
-Group related observations (like tool sequences) by indenting.
-
-<observations>
-Date: Dec 4, 2025
-* 🔴 (09:15) User stated they have 3 kids: Emma (12), Jake (9), and Lily (5)
-* 🔴 (09:16) User's anniversary is March 15
-* 🟡 (09:20) User asked how to optimize database queries
-* 🟡 (10:30) User working on auth refactor - targeting 50% latency reduction
-* 🟡 (10:45) Assistant recommended hotels: Grand Plaza (downtown, $180/night), Seaside Inn (near beach, pet-friendly), Mountain Lodge (has pool, free breakfast)
-* 🔴 (11:00) User's friend @maria_dev recommended using Redis for caching
-* 🟡 (11:15) User attended the tech conference as a speaker (presented on microservices)
-* 🔴 (11:30) User will visit parents this weekend (meaning Dec 7-8, 2025)
-* 🟡 (14:00) Agent debugging auth issue
-  * -> ran git status, found 3 modified files
-  * -> viewed auth.ts:45-60, found missing null check
-  * -> applied fix, tests now pass
-* 🟡 (14:30) Assistant provided dataset stats: 7,342 samples, 89.6% accuracy, 23ms inference time
-* 🔴 (15:00) User's lucky numbers from fortune cookie: 7, 14, 23, 38, 42, 49
-
-Date: Dec 5, 2025
-* 🔴 (09:00) User switched from Python to TypeScript for the project (no longer using Python)
-* 🟡 (09:30) User bought running shoes for $120 at SportMart (downtown location)
-* 🔴 (10:00) User prefers morning meetings, not afternoon (updating previous preference)
-* 🟡 (10:30) User went to Italy with their sister last summer (meaning July 2025), visited Rome and Florence for 2 weeks
-* 🔴 (10:45) User's dentist appointment is next Tuesday (meaning Dec 10, 2025)
-* 🟢 (11:00) User mentioned they might try the new coffee shop
-</observations>
-
-<current-task>
-Primary: Implementing OAuth2 flow for the auth refactor
-Secondary: Waiting for user to confirm database schema changes
-</current-task>
-
-<suggested-response>
-The OAuth2 implementation is ready for testing. Would you like me to walk through the flow?
-</suggested-response>`;
-
-/**
  * Base output format for Observer (without patterns section)
  */
-export const OBSERVER_OUTPUT_FORMAT_BASE = `Use priority levels:
-- 🔴 High: explicit user facts, preferences, goals achieved, critical context
+export const OBSERVER_OUTPUT_FORMAT_BASE = buildObserverOutputFormat();
+
+export function buildObserverOutputFormat(includeThreadTitle: boolean = false): string {
+  const threadTitleSection = includeThreadTitle
+    ? `
+<thread-title>
+A short, noun-phrase title for this conversation (2-5 words). Examples:
+- "Auth bug fix" — not "Fixing the auth bug"
+- "Dark mode toggle" — not "User wants dark mode toggle added"
+- "Deployment pipeline setup" — not "Setting up deployment pipeline for project"
+Only update when the topic meaningfully changes.
+</thread-title>`
+    : '';
+
+  return `Use priority levels:
+- 🔴 High: explicit user facts, preferences, unresolved goals, critical context
 - 🟡 Medium: project details, learned information, tool results
 - 🟢 Low: minor details, uncertain observations
+- ✅ Completed: concrete task finished, question answered, issue resolved, goal achieved, or subtask completed in a way that helps the assistant know it is done
 
 Group related observations (like tool sequences) by indenting:
-* 🟡 (14:33) Agent debugging auth issue
+* 🔴 (14:33) Agent debugging auth issue
   * -> ran git status, found 3 modified files
   * -> viewed auth.ts:45-60, found missing null check
   * -> applied fix, tests now pass
+  * ✅ Tests passing, auth issue resolved
 
 Group observations by date, then list each with 24-hour time.
 
 <observations>
 Date: Dec 4, 2025
 * 🔴 (14:30) User prefers direct answers
-* 🟡 (14:31) Working on feature X
-* 🟢 (14:32) User might prefer dark mode
+* 🔴 (14:31) Working on feature X
+* 🟡 (14:32) User might prefer dark mode
 
 Date: Dec 5, 2025
-* 🟡 (09:15) Continued work on feature X
+* 🔴 (09:15) Continued work on feature X
 </observations>
 
 <current-task>
@@ -356,49 +322,53 @@ Hint for the agent's immediate next message. Examples:
 - "I've updated the navigation model. Let me walk you through the changes..."
 - "The assistant should wait for the user to respond before continuing."
 - Call the view tool on src/example.ts to continue debugging.
-</suggested-response>`;
-
-/**
- * Condensed guidelines - no GOOD/BAD examples, no arbitrary limits
- */
-const CONDENSED_OBSERVER_GUIDELINES = `- Be specific: "User prefers short answers without lengthy explanations" not "User stated a preference"
-- Use terse language - dense sentences without unnecessary words
-- Don't repeat observations that have already been captured
-- When the agent calls tools, observe what was called, why, and what was learned
-- Include line numbers when observing code files
-- If the agent provides a detailed response, observe the key points so it could be repeated
-- Start each observation with a priority emoji (🔴, 🟡, 🟢)
-- Observe WHAT happened and WHAT it means, not HOW well it was done
-- If the user provides detailed messages or code snippets, observe all important details`;
+</suggested-response>${threadTitleSection}`;
+}
 
 /**
  * The guidelines for the Observer.
  * This is exported so the Reflector can reference them.
  */
-export const OBSERVER_GUIDELINES = USE_CONDENSED_PROMPT
-  ? CONDENSED_OBSERVER_GUIDELINES
-  : `- Be specific enough for the assistant to act on
+export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to act on
 - Good: "User prefers short, direct answers without lengthy explanations"
 - Bad: "User stated a preference" (too vague)
 - Add 1 to 5 observations per exchange
-- Use terse language to save tokens. Sentences should be dense without unnecessary words.
-- Do not add repetitive observations that have already been observed.
-- If the agent calls tools, observe what was called, why, and what was learned.
-- When observing files with line numbers, include the line number if useful.
-- If the agent provides a detailed response, observe the contents so it could be repeated.
-- Make sure you start each observation with a priority emoji (🔴, 🟡, 🟢)
-- Observe WHAT the agent did and WHAT it means, not HOW well it did it.
-- If the user provides detailed messages or code snippets, observe all important details.`;
+- Use terse language to save tokens. Sentences should be dense without unnecessary words
+- Do not add repetitive observations that have already been observed. Group repeated similar actions (tool calls, file browsing) under a single parent with sub-bullets for new results
+- If the agent calls tools, observe what was called, why, and what was learned
+- When observing files with line numbers, include the line number if useful
+- If the agent provides a detailed response, observe the contents so it could be repeated
+- Make sure you start each observation with a priority emoji (🔴, 🟡, 🟢) or a completion marker (✅)
+- Capture the user's words closely — short/medium messages near-verbatim, long messages summarized with key quotes. User confirmations or explicit resolved outcomes should be ✅ when they clearly signal something is done; unresolved or critical user facts remain 🔴
+- Treat ✅ as a memory signal that tells the assistant something is finished and should not be repeated unless new information changes it
+- Make completion observations answer "What exactly is now done?"
+- Prefer concrete resolved outcomes over meta-level workflow or bookkeeping updates
+- When multiple concrete things were completed, capture the concrete completed work rather than collapsing it into a vague progress summary
+- Observe WHAT the agent did and WHAT it means
+- If the user provides detailed messages or code snippets, observe all important details`;
 
 /**
  * Build the complete observer system prompt.
  * @param multiThread - Whether this is for multi-thread batched observation (default: false)
  * @param instruction - Optional custom instructions to append to the prompt
  */
-export function buildObserverSystemPrompt(multiThread: boolean = false, instruction?: string): string {
-  // Use condensed output format when condensed prompt is enabled
-  // Otherwise, use the base output format
-  const outputFormat = USE_CONDENSED_PROMPT ? CONDENSED_OBSERVER_OUTPUT_FORMAT : OBSERVER_OUTPUT_FORMAT_BASE;
+export function buildObserverSystemPrompt(
+  multiThread: boolean = false,
+  instruction?: string,
+  includeThreadTitle: boolean = false,
+): string {
+  const outputFormat = buildObserverOutputFormat(includeThreadTitle);
+  const multiThreadTitleInstruction = includeThreadTitle
+    ? ` Each thread's observations, current-task, suggested-response, and thread-title should be nested inside a <thread id="..."> block within <observations>.`
+    : ` Each thread's observations, current-task, and suggested-response should be nested inside a <thread id="..."> block within <observations>.`;
+  const multiThreadTitleExample = includeThreadTitle
+    ? `
+<thread-title>Feature X implementation</thread-title>`
+    : '';
+  const multiThreadSecondTitleExample = includeThreadTitle
+    ? `
+<thread-title>Deployment setup</thread-title>`
+    : '';
 
   if (multiThread) {
     return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
@@ -414,13 +384,19 @@ Process each thread separately and output observations for each thread.
 
 === OUTPUT FORMAT ===
 
-Your output MUST use XML tags to structure the response. Each thread's observations, current-task, and suggested-response should be nested inside a <thread id="..."> block within <observations>.
+Your output MUST use XML tags to structure the response.${multiThreadTitleInstruction}
+
+Use this observation format inside each thread block:
+
+${outputFormat}
+
+For multi-thread output, wrap each thread's observations like this:
 
 <observations>
 <thread id="thread_id_1">
 Date: Dec 4, 2025
 * 🔴 (14:30) User prefers direct answers
-* 🟡 (14:31) Working on feature X
+* 🔴 (14:31) Working on feature X
 
 <current-task>
 What the agent is currently working on in this thread
@@ -428,12 +404,12 @@ What the agent is currently working on in this thread
 
 <suggested-response>
 Hint for the agent's next message in this thread
-</suggested-response>
+</suggested-response>${multiThreadTitleExample}
 </thread>
 
 <thread id="thread_id_2">
 Date: Dec 5, 2025
-* 🟡 (09:15) User asked about deployment
+* 🔴 (09:15) User asked about deployment
 
 <current-task>
 Current task for this thread
@@ -441,14 +417,9 @@ Current task for this thread
 
 <suggested-response>
 Suggested response for this thread
-</suggested-response>
+</suggested-response>${multiThreadSecondTitleExample}
 </thread>
 </observations>
-
-Use priority levels:
-- 🔴 High: explicit user facts, preferences, goals achieved, critical context
-- 🟡 Medium: project details, learned information, tool results
-- 🟢 Low: minor details, uncertain observations
 
 === GUIDELINES ===
 
@@ -508,67 +479,293 @@ export interface ObserverResult {
   /** Suggested continuation message for the Actor */
   suggestedContinuation?: string;
 
+  /** The suggested thread title (short/concise, for thread metadata) */
+  threadTitle?: string;
+
   /** Raw output from the model (for debugging) */
   rawOutput?: string;
+
+  /** True if the output was detected as degenerate (repetition loop) and should be discarded/retried */
+  degenerate?: boolean;
 }
 
 /**
  * Format messages for the Observer's input.
  * Includes timestamps for temporal context.
  */
-export function formatMessagesForObserver(messages: MastraDBMessage[], options?: { maxPartLength?: number }): string {
-  const maxLen = options?.maxPartLength;
+type ObserverAttachmentPart =
+  | {
+      type: 'image';
+      image: unknown;
+      mimeType?: string;
+      filename?: string;
+      providerOptions?: unknown;
+      providerMetadata?: unknown;
+      experimental_providerMetadata?: unknown;
+    }
+  | {
+      type: 'file';
+      data: unknown;
+      mimeType?: string;
+      filename?: string;
+      providerOptions?: unknown;
+      providerMetadata?: unknown;
+      experimental_providerMetadata?: unknown;
+    };
 
-  return messages
-    .map(msg => {
-      const timestamp = msg.createdAt
-        ? new Date(msg.createdAt).toLocaleString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true,
-          })
-        : '';
+type ObserverInputAttachmentPart =
+  | {
+      type: 'image';
+      image: unknown;
+      mimeType?: string;
+      providerOptions?: unknown;
+      providerMetadata?: unknown;
+      experimental_providerMetadata?: unknown;
+    }
+  | {
+      type: 'file';
+      data: unknown;
+      mimeType?: string;
+      filename?: string;
+      providerOptions?: unknown;
+      providerMetadata?: unknown;
+      experimental_providerMetadata?: unknown;
+    };
 
-      const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
-      const timestampStr = timestamp ? ` (${timestamp})` : '';
+interface ObserverFormattedMessage {
+  text: string;
+  attachments: ObserverInputAttachmentPart[];
+}
 
-      // Extract text content from the message
-      // IMPORTANT: Check parts FIRST since it contains the full message (including tool calls)
-      // The content.content string is just the text portion
-      let content = '';
-      if (typeof msg.content === 'string') {
-        content = maybeTruncate(msg.content, maxLen);
-      } else if (msg.content?.parts && Array.isArray(msg.content.parts) && msg.content.parts.length > 0) {
-        // Use parts array - this includes tool invocations and results
-        content = msg.content.parts
-          .map(part => {
-            if (part.type === 'text') return maybeTruncate(part.text, maxLen);
-            if (part.type === 'tool-invocation') {
-              const inv = part.toolInvocation;
-              if (inv.state === 'result') {
-                const resultStr = JSON.stringify(inv.result, null, 2);
-                return `[Tool Result: ${inv.toolName}]\n${maybeTruncate(resultStr, maxLen)}`;
-              }
-              const argsStr = JSON.stringify(inv.args, null, 2);
-              return `[Tool Call: ${inv.toolName}]\n${maybeTruncate(argsStr, maxLen)}`;
-            }
-            // Skip all data-* parts (observation markers, activation markers, buffering markers, etc.)
-            if (part.type?.startsWith('data-')) return '';
-            return '';
-          })
-          .filter(Boolean)
-          .join('\n');
-      } else if (msg.content?.content) {
-        // Fallback to text string if no parts
-        content = maybeTruncate(msg.content.content, maxLen);
+interface ObserverAttachmentCounter {
+  nextImageId: number;
+  nextFileId: number;
+}
+
+const OBSERVER_IMAGE_FILE_EXTENSIONS = new Set([
+  'png',
+  'jpg',
+  'jpeg',
+  'webp',
+  'gif',
+  'bmp',
+  'tiff',
+  'tif',
+  'heic',
+  'heif',
+  'avif',
+]);
+
+function formatObserverTimestamp(createdAt: MastraDBMessage['createdAt']): string {
+  return createdAt
+    ? new Date(createdAt).toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      })
+    : '';
+}
+
+function getObserverPathExtension(value: string): string | undefined {
+  const normalized = value.split('#', 1)[0]?.split('?', 1)[0] ?? value;
+  const match = normalized.match(/\.([a-z0-9]+)$/i);
+  return match?.[1]?.toLowerCase();
+}
+
+function hasObserverImageFilenameExtension(filename: unknown): boolean {
+  return typeof filename === 'string' && OBSERVER_IMAGE_FILE_EXTENSIONS.has(getObserverPathExtension(filename) ?? '');
+}
+
+function isImageLikeObserverFilePart(part: ObserverAttachmentPart): boolean {
+  if (part.type !== 'file') {
+    return false;
+  }
+
+  if (typeof part.mimeType === 'string' && part.mimeType.toLowerCase().startsWith('image/')) {
+    return true;
+  }
+
+  if (typeof part.data === 'string' && part.data.startsWith('data:image/')) {
+    return true;
+  }
+
+  if (part.data instanceof URL && hasObserverImageFilenameExtension(part.data.pathname)) {
+    return true;
+  }
+
+  if (typeof part.data === 'string') {
+    try {
+      const url = new URL(part.data);
+      if ((url.protocol === 'http:' || url.protocol === 'https:') && hasObserverImageFilenameExtension(url.pathname)) {
+        return true;
       }
+    } catch {
+      // ignore invalid URL string
+    }
+  }
 
-      return `**${role}${timestampStr}:**\n${content}`;
-    })
+  return hasObserverImageFilenameExtension(part.filename);
+}
+
+function toObserverInputAttachmentPart(part: ObserverAttachmentPart): ObserverInputAttachmentPart {
+  if (part.type === 'image') {
+    return {
+      type: 'image',
+      image: part.image,
+      mimeType: part.mimeType,
+      providerOptions: part.providerOptions,
+      providerMetadata: part.providerMetadata,
+      experimental_providerMetadata: part.experimental_providerMetadata,
+    };
+  }
+
+  if (isImageLikeObserverFilePart(part)) {
+    return {
+      type: 'image',
+      image: part.data,
+      mimeType: part.mimeType,
+      providerOptions: part.providerOptions,
+      providerMetadata: part.providerMetadata,
+      experimental_providerMetadata: part.experimental_providerMetadata,
+    };
+  }
+
+  return {
+    type: 'file',
+    data: part.data,
+    mimeType: part.mimeType,
+    filename: part.filename,
+    providerOptions: part.providerOptions,
+    providerMetadata: part.providerMetadata,
+    experimental_providerMetadata: part.experimental_providerMetadata,
+  };
+}
+
+function resolveObserverAttachmentLabel(part: ObserverAttachmentPart): string | undefined {
+  if (part.filename?.trim()) {
+    return part.filename.trim();
+  }
+
+  const asset = part.type === 'image' ? part.image : part.data;
+  if (typeof asset !== 'string' || asset.startsWith('data:')) {
+    return part.mimeType;
+  }
+
+  try {
+    const url = new URL(asset);
+    const basename = url.pathname.split('/').filter(Boolean).pop();
+    return basename ? decodeURIComponent(basename) : part.mimeType;
+  } catch {
+    return part.mimeType;
+  }
+}
+
+function formatObserverAttachmentPlaceholder(part: ObserverAttachmentPart, counter: ObserverAttachmentCounter): string {
+  const attachmentType = part.type === 'image' || isImageLikeObserverFilePart(part) ? 'Image' : 'File';
+  const attachmentId = attachmentType === 'Image' ? counter.nextImageId++ : counter.nextFileId++;
+  const label = resolveObserverAttachmentLabel(part);
+  return label ? `[${attachmentType} #${attachmentId}: ${label}]` : `[${attachmentType} #${attachmentId}]`;
+}
+
+function formatObserverMessage(
+  msg: MastraDBMessage,
+  counter: ObserverAttachmentCounter,
+  options?: ObserverFormatOptions,
+): ObserverFormattedMessage {
+  const maxLen = options?.maxPartLength;
+  const maxToolResultTokens = options?.maxToolResultTokens ?? DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS;
+  const timestamp = formatObserverTimestamp(msg.createdAt);
+  const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
+  const timestampStr = timestamp ? ` (${timestamp})` : '';
+  const attachments: ObserverInputAttachmentPart[] = [];
+
+  let content = '';
+  if (typeof msg.content === 'string') {
+    content = maybeTruncate(msg.content, maxLen);
+  } else if (msg.content?.parts && Array.isArray(msg.content.parts) && msg.content.parts.length > 0) {
+    content = msg.content.parts
+      .map(part => {
+        if (part.type === 'text') return maybeTruncate(part.text, maxLen);
+        if (part.type === 'tool-invocation') {
+          const inv = part.toolInvocation;
+          if (inv.state === 'result') {
+            const { value: resultForObserver } = resolveToolResultValue(
+              part as { providerMetadata?: Record<string, any> },
+              inv.result,
+            );
+            const resultStr = formatToolResultForObserver(resultForObserver, { maxTokens: maxToolResultTokens });
+            return `[Tool Result: ${inv.toolName}]\n${maybeTruncate(resultStr, maxLen)}`;
+          }
+          const argsStr = JSON.stringify(inv.args, null, 2);
+          return `[Tool Call: ${inv.toolName}]\n${maybeTruncate(argsStr, maxLen)}`;
+        }
+
+        const partType = (part as { type?: string }).type;
+        if (partType === 'reasoning') {
+          // Include reasoning content only when it's not obscured/encrypted
+          const reasoning = (part as { reasoning?: string }).reasoning;
+          if (reasoning) return maybeTruncate(reasoning, maxLen);
+          return '';
+        }
+        if (partType === 'image' || partType === 'file') {
+          const attachment = part as ObserverAttachmentPart;
+          const inputAttachment = toObserverInputAttachmentPart(attachment);
+          if (inputAttachment) {
+            attachments.push(inputAttachment);
+          }
+          return formatObserverAttachmentPlaceholder(attachment, counter);
+        }
+        if (partType?.startsWith('data-')) return '';
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  } else if (msg.content?.content) {
+    content = maybeTruncate(msg.content.content, maxLen);
+  }
+
+  // Skip messages that produced no visible content (e.g. only data-* or encrypted reasoning parts)
+  if (!content && attachments.length === 0) {
+    return { text: '', attachments };
+  }
+
+  return {
+    text: `**${role}${timestampStr}:**\n${content}`,
+    attachments,
+  };
+}
+
+export function formatMessagesForObserver(messages: MastraDBMessage[], options?: ObserverFormatOptions): string {
+  const counter = { nextImageId: 1, nextFileId: 1 };
+  return messages
+    .map(msg => formatObserverMessage(msg, counter, options).text)
+    .filter(Boolean)
     .join('\n\n---\n\n');
+}
+
+export function buildObserverHistoryMessage(messages: MastraDBMessage[], options?: ObserverFormatOptions): CoreMessage {
+  const counter = { nextImageId: 1, nextFileId: 1 };
+  const content: any[] = [{ type: 'text', text: '## New Message History to Observe\n\n' }];
+
+  let visibleCount = 0;
+  messages.forEach(message => {
+    const formatted = formatObserverMessage(message, counter, options);
+    if (!formatted.text && formatted.attachments.length === 0) return;
+    if (visibleCount > 0) {
+      content.push({ type: 'text', text: '\n\n---\n\n' });
+    }
+    content.push({ type: 'text', text: formatted.text });
+    content.push(...formatted.attachments);
+    visibleCount++;
+  });
+
+  return {
+    role: 'user',
+    content,
+  } as CoreMessage;
 }
 
 /** Truncate a string to maxLen characters, appending a note if truncated. */
@@ -586,6 +783,7 @@ function maybeTruncate(str: string, maxLen?: number): string {
 export function formatMultiThreadMessagesForObserver(
   messagesByThread: Map<string, MastraDBMessage[]>,
   threadOrder: string[],
+  options?: ObserverFormatOptions,
 ): string {
   const sections: string[] = [];
 
@@ -593,11 +791,131 @@ export function formatMultiThreadMessagesForObserver(
     const messages = messagesByThread.get(threadId);
     if (!messages || messages.length === 0) continue;
 
-    const formattedMessages = formatMessagesForObserver(messages);
+    const formattedMessages = formatMessagesForObserver(messages, options);
     sections.push(`<thread id="${threadId}">\n${formattedMessages}\n</thread>`);
   }
 
   return sections.join('\n\n');
+}
+
+export function buildMultiThreadObserverHistoryMessage(
+  messagesByThread: Map<string, MastraDBMessage[]>,
+  threadOrder: string[],
+  options?: ObserverFormatOptions,
+): CoreMessage {
+  const counter = { nextImageId: 1, nextFileId: 1 };
+  const content: any[] = [
+    {
+      type: 'text',
+      text: `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n`,
+    },
+  ];
+
+  threadOrder.forEach((threadId, threadIndex) => {
+    const messages = messagesByThread.get(threadId);
+    if (!messages || messages.length === 0) return;
+
+    const threadContent: any[] = [];
+    let visibleCount = 0;
+    messages.forEach(message => {
+      const formatted = formatObserverMessage(message, counter, options);
+      if (!formatted.text && formatted.attachments.length === 0) return;
+      if (visibleCount > 0) {
+        threadContent.push({ type: 'text', text: '\n\n---\n\n' });
+      }
+      threadContent.push({ type: 'text', text: formatted.text });
+      threadContent.push(...formatted.attachments);
+      visibleCount++;
+    });
+
+    if (visibleCount === 0) return;
+
+    content.push({ type: 'text', text: `<thread id="${threadId}">\n` });
+    content.push(...threadContent);
+    content.push({ type: 'text', text: '\n</thread>' });
+    if (threadIndex < threadOrder.length - 1) {
+      content.push({ type: 'text', text: '\n\n' });
+    }
+  });
+
+  return {
+    role: 'user',
+    content,
+  } as CoreMessage;
+}
+
+export function buildMultiThreadObserverTaskPrompt(
+  existingObservations: string | undefined,
+  threadOrder?: string[],
+  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
+  wasTruncated?: boolean,
+  includeThreadTitle?: boolean,
+): string {
+  let prompt = '';
+
+  if (existingObservations) {
+    prompt += `## Previous Observations\n\n${existingObservations}\n\n---\n\n`;
+    prompt +=
+      'Do not repeat these existing observations. Your new observations will be appended to the existing observations.\n\n';
+  }
+
+  const hasTruncatedObservations = wasTruncated ?? false;
+  const threadMetadataLines = threadOrder
+    ?.map(threadId => {
+      const metadata = priorMetadataByThread?.get(threadId);
+      const hasRelevantMetadata =
+        metadata?.currentTask || metadata?.suggestedResponse || (includeThreadTitle && metadata?.threadTitle);
+      if (!hasRelevantMetadata) {
+        return '';
+      }
+
+      const lines = [`- thread ${threadId}`];
+      if (metadata.currentTask) {
+        lines.push(`  - prior current-task: ${metadata.currentTask}`);
+      }
+      if (metadata.suggestedResponse) {
+        lines.push(`  - prior suggested-response: ${metadata.suggestedResponse}`);
+      }
+      if (includeThreadTitle && metadata.threadTitle) {
+        lines.push(`  - prior thread-title: ${metadata.threadTitle}`);
+      }
+      return lines.join('\n');
+    })
+    .filter(Boolean)
+    .join('\n');
+
+  if (threadMetadataLines) {
+    prompt += `## Prior Thread Metadata\n\n${threadMetadataLines}\n\n`;
+    if (hasTruncatedObservations) {
+      prompt += `Previous observations were truncated for context budget reasons.\n`;
+      prompt += `The main agent still has full memory context outside this observer window.\n`;
+    }
+    const titleHint = includeThreadTitle ? ', and thread-title' : '';
+    prompt += `Use each thread's prior current-task, suggested-response${titleHint} as continuity hints, then update them based on that thread's new messages.\n\n---\n\n`;
+  }
+
+  prompt += `## Your Task\n\n`;
+  const titleInstruction = includeThreadTitle ? ', and thread-title' : '';
+  prompt += `Extract new observations from each thread. Output your observations grouped by thread using <thread id="..."> tags inside your <observations> block. Each thread block should contain that thread's observations, current-task, suggested-response${titleInstruction}.\n\n`;
+  prompt += `Example output format:\n`;
+  prompt += `<observations>\n`;
+  prompt += `<thread id="thread1">\n`;
+  prompt += `Date: Dec 4, 2025\n`;
+  prompt += `* 🔴 (14:30) User prefers direct answers\n`;
+  prompt += `<current-task>Working on feature X</current-task>\n`;
+  prompt += `<suggested-response>Continue with the implementation</suggested-response>\n`;
+  if (includeThreadTitle) prompt += `<thread-title>Feature X implementation</thread-title>\n`;
+  prompt += `</thread>\n`;
+  prompt += `<thread id="thread2">\n`;
+  prompt += `Date: Dec 5, 2025\n`;
+  prompt += `* 🔴 (09:15) User asked about deployment\n`;
+  prompt += `<current-task>Discussing deployment options</current-task>\n`;
+  prompt += `<suggested-response>Explain the deployment process</suggested-response>\n`;
+  if (includeThreadTitle) prompt += `<thread-title>Deployment setup</thread-title>\n`;
+  prompt += `</thread>\n`;
+  prompt += `</observations>`;
+
+  return prompt;
 }
 
 /**
@@ -607,38 +925,13 @@ export function buildMultiThreadObserverPrompt(
   existingObservations: string | undefined,
   messagesByThread: Map<string, MastraDBMessage[]>,
   threadOrder: string[],
+  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
+  wasTruncated?: boolean,
+  options?: ObserverFormatOptions,
+  includeThreadTitle?: boolean,
 ): string {
-  const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder);
-
-  let prompt = '';
-
-  if (existingObservations) {
-    prompt += `## Previous Observations\n\n${existingObservations}\n\n---\n\n`;
-    prompt +=
-      'Do not repeat these existing observations. Your new observations will be appended to the existing observations.\n\n';
-  }
-
-  prompt += `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n`;
-
-  prompt += `## Your Task\n\n`;
-  prompt += `Extract new observations from each thread. Output your observations grouped by thread using <thread id="..."> tags inside your <observations> block. Each thread block should contain that thread's observations, current-task, and suggested-response.\n\n`;
-  prompt += `Example output format:\n`;
-  prompt += `<observations>\n`;
-  prompt += `<thread id="thread1">\n`;
-  prompt += `Date: Dec 4, 2025\n`;
-  prompt += `* 🔴 (14:30) User prefers direct answers\n`;
-  prompt += `<current-task>Working on feature X</current-task>\n`;
-  prompt += `<suggested-response>Continue with the implementation</suggested-response>\n`;
-  prompt += `</thread>\n`;
-  prompt += `<thread id="thread2">\n`;
-  prompt += `Date: Dec 5, 2025\n`;
-  prompt += `* 🟡 (09:15) User asked about deployment\n`;
-  prompt += `<current-task>Discussing deployment options</current-task>\n`;
-  prompt += `<suggested-response>Explain the deployment process</suggested-response>\n`;
-  prompt += `</thread>\n`;
-  prompt += `</observations>`;
-
-  return prompt;
+  const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder, options);
+  return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(existingObservations, threadOrder, priorMetadataByThread, wasTruncated, includeThreadTitle)}`;
 }
 
 /**
@@ -649,6 +942,8 @@ export interface MultiThreadObserverResult {
   threads: Map<string, ObserverResult>;
   /** Raw output from the model (for debugging) */
   rawOutput: string;
+  /** True if the output was detected as degenerate (repetition loop) and should be discarded/retried */
+  degenerate?: boolean;
 }
 
 /**
@@ -656,6 +951,11 @@ export interface MultiThreadObserverResult {
  */
 export function parseMultiThreadObserverOutput(output: string): MultiThreadObserverResult {
   const threads = new Map<string, ObserverResult>();
+
+  // Check for degenerate repetition on the whole output
+  if (detectDegenerateRepetition(output)) {
+    return { threads, rawOutput: output, degenerate: true };
+  }
 
   // Extract the <observations> block first
   const observationsMatch = output.match(/^[ \t]*<observations>([\s\S]*?)^[ \t]*<\/observations>/im);
@@ -690,13 +990,22 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
       observations = observations.replace(/<suggested-response>[\s\S]*?<\/suggested-response>/i, '');
     }
 
-    // Clean up observations
-    observations = observations.trim();
+    // Extract and remove thread-title
+    let threadTitle: string | undefined;
+    const threadTitleMatch = threadContent.match(/<thread-title>([\s\S]*?)<\/thread-title>/i);
+    if (threadTitleMatch?.[1]) {
+      threadTitle = threadTitleMatch[1].trim();
+      observations = observations.replace(/<thread-title>[\s\S]*?<\/thread-title>/i, '');
+    }
+
+    // Clean up observations and apply line truncation
+    observations = sanitizeObservationLines(observations.trim());
 
     threads.set(threadId, {
       observations,
       currentTask,
       suggestedContinuation,
+      threadTitle,
       rawOutput: threadContent,
     });
   }
@@ -710,17 +1019,17 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
   };
 }
 
-/**
- * Build the full prompt for the Observer agent.
- * Includes emphasis on the most recent user message for priority handling.
- */
-export function buildObserverPrompt(
+export function buildObserverTaskPrompt(
   existingObservations: string | undefined,
-  messagesToObserve: MastraDBMessage[],
-  options?: { skipContinuationHints?: boolean },
+  options?: {
+    skipContinuationHints?: boolean;
+    priorCurrentTask?: string;
+    priorSuggestedResponse?: string;
+    priorThreadTitle?: string;
+    wasTruncated?: boolean;
+    includeThreadTitle?: boolean;
+  },
 ): string {
-  const formattedMessages = formatMessagesForObserver(messagesToObserve);
-
   let prompt = '';
 
   if (existingObservations) {
@@ -729,16 +1038,61 @@ export function buildObserverPrompt(
       'Do not repeat these existing observations. Your new observations will be appended to the existing observations.\n\n';
   }
 
-  prompt += `## New Message History to Observe\n\n${formattedMessages}\n\n---\n\n`;
+  const hasTruncatedObservations = options?.wasTruncated ?? false;
+  const priorMetadataLines: string[] = [];
+  if (options?.priorCurrentTask) {
+    priorMetadataLines.push(`- prior current-task: ${options.priorCurrentTask}`);
+  }
+  if (options?.priorSuggestedResponse) {
+    priorMetadataLines.push(`- prior suggested-response: ${options.priorSuggestedResponse}`);
+  }
+  if (options?.includeThreadTitle && options?.priorThreadTitle) {
+    priorMetadataLines.push(`- prior thread-title: ${options.priorThreadTitle}`);
+  }
+
+  if (priorMetadataLines.length > 0) {
+    prompt += `## Prior Thread Metadata\n\n${priorMetadataLines.join('\n')}\n\n`;
+    if (hasTruncatedObservations) {
+      prompt += `Previous observations were truncated for context budget reasons.\n`;
+      prompt += `The main agent still has full memory context outside this observer window.\n`;
+    }
+    const titleHint = options?.includeThreadTitle ? ', and thread-title' : '';
+    prompt += `Use the prior current-task, suggested-response${titleHint} as continuity hints, then update them based on the new messages.\n\n---\n\n`;
+  }
 
   prompt += `## Your Task\n\n`;
   prompt += `Extract new observations from the message history above. Do not repeat observations that are already in the previous observations. Add your new observations in the format specified in your instructions.`;
 
+  // Add thread title guidance (independent of continuation hints)
+  if (options?.includeThreadTitle) {
+    prompt += `\n\nAlso output a <thread-title> — a short noun-phrase label for this conversation (2-5 words). Write it like a file name or PR title: "Auth bug fix", "Memory config refactor", "RAG pipeline setup". Avoid verbs/sentences ("Fixing the auth bug"), filler ("Working on stuff"), and generic labels ("Code review"). Only change it from the prior title if the topic meaningfully shifted.`;
+  }
+
   if (options?.skipContinuationHints) {
-    prompt += `\n\nIMPORTANT: Do NOT include <current-task> or <suggested-response> sections in your output. Only output <observations>.`;
+    prompt += `\n\nIMPORTANT: Do NOT include <current-task> or <suggested-response> sections in your output. Only output <observations>${options?.includeThreadTitle ? ' and <thread-title>' : ''}.`;
   }
 
   return prompt;
+}
+
+/**
+ * Build the full prompt for the Observer agent.
+ * Includes emphasis on the most recent user message for priority handling.
+ */
+export function buildObserverPrompt(
+  existingObservations: string | undefined,
+  messagesToObserve: MastraDBMessage[],
+  options?: {
+    skipContinuationHints?: boolean;
+    priorCurrentTask?: string;
+    priorSuggestedResponse?: string;
+    priorThreadTitle?: string;
+    wasTruncated?: boolean;
+    includeThreadTitle?: boolean;
+  },
+): string {
+  const formattedMessages = formatMessagesForObserver(messagesToObserve);
+  return `## New Message History to Observe\n\n${formattedMessages}\n\n---\n\n${buildObserverTaskPrompt(existingObservations, options)}`;
 }
 
 /**
@@ -746,16 +1100,26 @@ export function buildObserverPrompt(
  * Uses XML tag parsing for structured extraction.
  */
 export function parseObserverOutput(output: string): ObserverResult {
+  // Check for degenerate repetition before parsing (operates on raw output)
+  if (detectDegenerateRepetition(output)) {
+    return {
+      observations: '',
+      rawOutput: output,
+      degenerate: true,
+    };
+  }
+
   const parsed = parseMemorySectionXml(output);
 
   // Return observations WITHOUT current-task/suggested-response tags
   // Those are stored separately in thread metadata and injected dynamically
-  const observations = parsed.observations || '';
+  const observations = sanitizeObservationLines(parsed.observations || '');
 
   return {
     observations,
     currentTask: parsed.currentTask || undefined,
     suggestedContinuation: parsed.suggestedResponse || undefined,
+    threadTitle: parsed.threadTitle || undefined,
     rawOutput: output,
   };
 }
@@ -767,6 +1131,7 @@ interface ParsedMemorySection {
   observations: string;
   currentTask: string;
   suggestedResponse: string;
+  threadTitle: string;
 }
 
 /**
@@ -778,6 +1143,7 @@ export function parseMemorySectionXml(content: string): ParsedMemorySection {
     observations: '',
     currentTask: '',
     suggestedResponse: '',
+    threadTitle: '',
   };
 
   // Extract <observations> content (supports multiple blocks)
@@ -810,6 +1176,14 @@ export function parseMemorySectionXml(content: string): ParsedMemorySection {
     result.suggestedResponse = suggestedResponseMatch[1].trim();
   }
 
+  // Extract <thread-title> content (first match only)
+  // Opening tag must be at the start of a line; closing tag can be on the same line
+  // (titles are short, so LLMs typically output them on a single line)
+  const threadTitleMatch = content.match(/^[ \t]*<thread-title>([\s\S]*?)<\/thread-title>/im);
+  if (threadTitleMatch?.[1]) {
+    result.threadTitle = threadTitleMatch[1].trim();
+  }
+
   return result;
 }
 
@@ -830,6 +1204,71 @@ function extractListItemsOnly(content: string): string {
   }
 
   return listLines.join('\n').trim();
+}
+
+/**
+ * Maximum length (in characters) for a single observation line.
+ * Lines exceeding this are truncated with an ellipsis marker.
+ * This guards against LLM degeneration that produces enormous single-line outputs.
+ */
+const MAX_OBSERVATION_LINE_CHARS = 10_000;
+
+/**
+ * Truncate individual observation lines that exceed the maximum length.
+ */
+export function sanitizeObservationLines(observations: string): string {
+  if (!observations) return observations;
+  const lines = observations.split('\n');
+  let changed = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i]!.length > MAX_OBSERVATION_LINE_CHARS) {
+      lines[i] = lines[i]!.slice(0, MAX_OBSERVATION_LINE_CHARS) + ' … [truncated]';
+      changed = true;
+    }
+  }
+  return changed ? lines.join('\n') : observations;
+}
+
+/**
+ * Detect degenerate repetition in observer/reflector output.
+ * Returns true if the text contains suspicious levels of repeated content,
+ * which indicates an LLM repeat-penalty bug (e.g., Gemini Flash looping).
+ *
+ * Strategy: sample sequential chunks of the text and check if a high
+ * proportion are near-identical to previous chunks.
+ */
+export function detectDegenerateRepetition(text: string): boolean {
+  if (!text || text.length < 2000) return false;
+
+  // Strategy 1: Check for repeated long substrings by sampling fixed-size windows.
+  // If the same ~200-char window appears many times, it's degenerate.
+  const windowSize = 200;
+  const step = Math.max(1, Math.floor(text.length / 50)); // sample ~50 windows
+  const seen = new Map<string, number>();
+  let duplicateWindows = 0;
+  let totalWindows = 0;
+
+  for (let i = 0; i + windowSize <= text.length; i += step) {
+    const window = text.slice(i, i + windowSize);
+    totalWindows++;
+    const count = (seen.get(window) ?? 0) + 1;
+    seen.set(window, count);
+    if (count > 1) duplicateWindows++;
+  }
+
+  // If more than 40% of sampled windows are duplicates, it's degenerate
+  if (totalWindows > 5 && duplicateWindows / totalWindows > 0.4) {
+    return true;
+  }
+
+  // Strategy 2: Check for extremely long lines (a single line with 50k+ chars
+  // is almost certainly degenerate enumeration)
+  const lines = text.split('\n');
+  for (const line of lines) {
+    if (line.length > 50_000) return true;
+  }
+
+  return false;
 }
 
 /**

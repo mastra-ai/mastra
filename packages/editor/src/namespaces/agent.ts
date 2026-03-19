@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
+import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core';
 import { Workspace, CompositeVersionedSkillSource } from '@mastra/core/workspace';
 import type { SkillSource, VersionedSkillEntry } from '@mastra/core/workspace';
@@ -30,17 +31,28 @@ import type {
   StorageDefaultOptions,
   StorageModelConfig,
   AgentInstructionBlock,
+  StoredProcessorGraph,
   StorageWorkspaceRef,
 } from '@mastra/core/storage';
 
 import { RequestContext } from '@mastra/core/request-context';
-import type { Processor, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '@mastra/core/processors';
 
 import { evaluateRuleGroup } from '../rule-evaluator';
 import { resolveInstructionBlocks } from '../instruction-builder';
+import { hydrateProcessorGraph, selectFirstMatchingGraph } from '../processor-graph-hydrator';
 import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
 import { EditorMCPNamespace } from './mcp';
+
+/**
+ * Stores original code-defined agent field values before stored overrides are applied,
+ * so they can be restored if the stored config is later removed.
+ * Only instructions and tools are tracked — these are the only fields that
+ * `applyStoredOverrides` mutates.
+ */
+type AgentOverridableFields = Pick<ReturnType<Agent['__getOverridableFields']>, 'instructions' | 'tools'>;
+
+const codeDefaults = new WeakMap<Agent, AgentOverridableFields>();
 
 export class EditorAgentNamespace extends CrudEditorNamespace<
   StorageCreateAgentInput,
@@ -109,7 +121,17 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
   }
 
   protected override onCacheEvict(id: string): void {
-    this.mastra?.removeAgent(id);
+    // Only remove stored agents from the Mastra registry.
+    // Code-defined agents must survive cache eviction because they live
+    // in code and may only have a stored config overlay.
+    try {
+      const existing = this.mastra?.getAgentById(id);
+      if (existing?.source === 'stored') {
+        this.mastra?.removeAgent(id);
+      }
+    } catch {
+      // Agent not found in registry — nothing to remove
+    }
   }
 
   /**
@@ -143,6 +165,157 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         this.onCacheEvict(agentId);
       }
     }
+  }
+
+  /**
+   * Apply stored configuration overrides to a code-defined agent.
+   *
+   * When a stored config exists for the given agent's ID, the following fields
+   * from the stored config override the code agent's values (if explicitly set):
+   * - `instructions` — system prompt
+   * - `tools` — tool selection with description overrides (merged on top of code tools)
+   *
+   * Fields that are absent or undefined in the stored config are left untouched.
+   * Model, workspace, memory, and other code-defined fields are never overridden —
+   * they may contain SDK instances or dynamic functions that cannot be safely serialized.
+   * Returns the (possibly mutated) agent.
+   */
+  async applyStoredOverrides(
+    agent: Agent,
+    options?: { status?: 'draft' | 'published' } | { versionId: string },
+  ): Promise<Agent> {
+    let storedConfig: StorageResolvedAgentType | null = null;
+    try {
+      this.ensureRegistered();
+      const adapter = await this.getStorageAdapter();
+      const resolvedOptions: { versionId: string } | { status: 'draft' | 'published' | 'archived' } =
+        options && 'versionId' in options
+          ? { versionId: options.versionId }
+          : { status: (options as { status?: 'draft' | 'published' } | undefined)?.status ?? 'draft' };
+      storedConfig = await adapter.getByIdResolved(agent.id, resolvedOptions);
+    } catch {
+      // Editor not registered, storage not available, or agent not found — restore and return unchanged
+      this.restoreCodeDefaults(agent);
+      return agent;
+    }
+
+    if (!storedConfig) {
+      // No stored config — restore code defaults if previously overridden
+      this.restoreCodeDefaults(agent);
+      return agent;
+    }
+
+    // Save the original code-defined values before first override,
+    // then restore to a clean state before re-applying (so updated stored configs work correctly)
+    this.saveCodeDefaults(agent);
+    this.restoreCodeDefaults(agent);
+    this.saveCodeDefaults(agent);
+
+    this.logger?.debug(`[applyStoredOverrides] Applying stored overrides to code agent "${agent.id}"`);
+
+    // --- Instructions ---
+    if (storedConfig.instructions !== undefined && storedConfig.instructions !== null) {
+      const resolved = this.resolveStoredInstructions(storedConfig.instructions);
+      if (resolved !== undefined) {
+        agent.__updateInstructions(resolved);
+      }
+    }
+
+    // --- Tools (merge: stored tools override code tools, code tools not in stored config are preserved) ---
+    const hasStoredTools = storedConfig.tools != null;
+    const hasStoredMCPClients = storedConfig.mcpClients != null;
+    const hasStoredIntegrationTools = storedConfig.integrationTools != null;
+
+    if (hasStoredTools || hasStoredMCPClients || hasStoredIntegrationTools) {
+      const hasConditionalTools = this.isConditionalVariants(storedConfig.tools);
+      const hasConditionalMCPClients =
+        storedConfig.mcpClients != null && this.isConditionalVariants(storedConfig.mcpClients);
+      const hasConditionalIntegrationTools =
+        storedConfig.integrationTools != null && this.isConditionalVariants(storedConfig.integrationTools);
+      const isDynamicTools = hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools;
+
+      if (isDynamicTools) {
+        // Wrap in a dynamic function that merges at request time
+        const originalTools = agent.listTools.bind(agent);
+        const toolsFn = async ({ requestContext }: { requestContext: RequestContext }): Promise<ToolsInput> => {
+          const codeTools = await originalTools({ requestContext });
+          const ctx = requestContext.toJSON();
+
+          const resolvedToolsConfig = hasConditionalTools
+            ? this.accumulateObjectVariants(
+                storedConfig!.tools as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
+                ctx,
+              )
+            : (storedConfig!.tools as Record<string, StorageToolConfig> | undefined);
+          const registryTools = this.resolveStoredTools(resolvedToolsConfig);
+
+          const resolvedMCPClientsConfig = hasConditionalMCPClients
+            ? this.accumulateObjectVariants(
+                storedConfig!.mcpClients as StorageConditionalVariant<Record<string, StorageMCPClientToolsConfig>>[],
+                ctx,
+              )
+            : (storedConfig!.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined);
+          const mcpTools = await this.resolveStoredMCPTools(resolvedMCPClientsConfig);
+
+          const resolvedIntegrationToolsConfig = hasConditionalIntegrationTools
+            ? this.accumulateObjectVariants(
+                storedConfig!.integrationTools as StorageConditionalVariant<
+                  Record<string, StorageMCPClientToolsConfig>
+                >[],
+                ctx,
+              )
+            : (storedConfig!.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined);
+          const integrationTools = await this.resolveStoredIntegrationTools(resolvedIntegrationToolsConfig, ctx);
+
+          return { ...codeTools, ...registryTools, ...mcpTools, ...integrationTools };
+        };
+        agent.__setTools(toolsFn);
+      } else {
+        // Static tools — resolve once and merge
+        const codeTools = await agent.listTools();
+        const registryTools = this.resolveStoredTools(
+          storedConfig.tools as Record<string, StorageToolConfig> | undefined,
+        );
+        const mcpTools = await this.resolveStoredMCPTools(
+          storedConfig.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined,
+        );
+        const integrationTools = await this.resolveStoredIntegrationTools(
+          storedConfig.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined,
+        );
+        agent.__setTools({ ...codeTools, ...registryTools, ...mcpTools, ...integrationTools });
+      }
+    }
+
+    return agent;
+  }
+
+  /**
+   * Save the agent's current field values to the module-level WeakMap
+   * so they can be restored if the stored config is later removed.
+   * Only saves on the first call (guards against overwriting originals with overridden values).
+   *
+   * Only instructions and tools are saved — these are the only fields
+   * that `applyStoredOverrides` mutates.
+   */
+  private saveCodeDefaults(agent: Agent): void {
+    if (codeDefaults.has(agent)) return;
+    const fields = agent.__getOverridableFields();
+    codeDefaults.set(agent, {
+      instructions: fields.instructions,
+      tools: fields.tools,
+    });
+  }
+
+  /**
+   * Restore the agent's original code-defined field values from the WeakMap.
+   * Clears the saved snapshot afterward.
+   */
+  private restoreCodeDefaults(agent: Agent): void {
+    const saved = codeDefaults.get(agent);
+    if (!saved) return;
+    agent.__updateInstructions(saved.instructions);
+    agent.__setTools(saved.tools);
+    codeDefaults.delete(agent);
   }
 
   // ============================================================================
@@ -348,29 +521,32 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         }
       : await this.resolveStoredScorers(storedAgent.scorers as Record<string, StorageScorerConfig> | undefined);
 
-    // Input processors (array): accumulate by concatenating all matching variants
+    // Input processors (graph): first-match from conditional variants, then hydrate
+    const processorProviders = this.editor.getProcessorProviders();
+    const hydrationCtx = { providers: processorProviders, mastra: this.mastra, logger: this.logger };
+
     const inputProcessors = hasConditionalInputProcessors
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateArrayVariants(
-            storedAgent.inputProcessors as StorageConditionalVariant<string[]>[],
+          const graph = selectFirstMatchingGraph(
+            storedAgent.inputProcessors as StorageConditionalVariant<StoredProcessorGraph>[],
             ctx,
           );
-          return this.resolveStoredInputProcessors(resolved);
+          return hydrateProcessorGraph(graph, 'input', hydrationCtx);
         }
-      : this.resolveStoredInputProcessors(storedAgent.inputProcessors as string[] | undefined);
+      : hydrateProcessorGraph(storedAgent.inputProcessors as StoredProcessorGraph | undefined, 'input', hydrationCtx);
 
-    // Output processors (array): accumulate by concatenating all matching variants
+    // Output processors (graph): first-match from conditional variants, then hydrate
     const outputProcessors = hasConditionalOutputProcessors
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateArrayVariants(
-            storedAgent.outputProcessors as StorageConditionalVariant<string[]>[],
+          const graph = selectFirstMatchingGraph(
+            storedAgent.outputProcessors as StorageConditionalVariant<StoredProcessorGraph>[],
             ctx,
           );
-          return this.resolveStoredOutputProcessors(resolved);
+          return hydrateProcessorGraph(graph, 'output', hydrationCtx);
         }
-      : this.resolveStoredOutputProcessors(storedAgent.outputProcessors as string[] | undefined);
+      : hydrateProcessorGraph(storedAgent.outputProcessors as StoredProcessorGraph | undefined, 'output', hydrationCtx);
 
     // Model (object): accumulate by merging config from all matching variants
     let model: string | (({ requestContext }: { requestContext: RequestContext }) => string);
@@ -510,7 +686,20 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       ...(skillsFormat && { skillsFormat }),
     } as any);
 
-    this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
+    // Only register in Mastra if no code-defined agent with this ID already exists.
+    // When a stored config is an override for a code agent, adding it would create a
+    // duplicate entry under a different key (agent.id vs config key), causing the list
+    // endpoint to show the agent as "stored" instead of "code".
+    const existingCodeAgent = (() => {
+      try {
+        return this.mastra?.getAgentById(storedAgent.id);
+      } catch {
+        return undefined;
+      }
+    })();
+    if (!existingCodeAgent || existingCodeAgent.source !== 'code') {
+      this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
+    }
     this.logger?.debug(`[createAgentFromStoredConfig] Successfully created agent "${storedAgent.id}"`);
 
     return agent;
@@ -916,50 +1105,6 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     return Object.keys(resolvedScorers).length > 0 ? resolvedScorers : undefined;
   }
 
-  private findProcessor(processorKey: string): Processor<any> | undefined {
-    if (!this.mastra) return undefined;
-
-    try {
-      return this.mastra.getProcessor(processorKey);
-    } catch {
-      try {
-        return this.mastra.getProcessorById(processorKey);
-      } catch {
-        this.logger?.warn(`Processor "${processorKey}" referenced in stored agent but not registered in Mastra`);
-        return undefined;
-      }
-    }
-  }
-
-  private resolveStoredInputProcessors(storedProcessors?: string[]): InputProcessorOrWorkflow[] | undefined {
-    if (!storedProcessors || storedProcessors.length === 0) return undefined;
-
-    const resolved: InputProcessorOrWorkflow[] = [];
-    for (const key of storedProcessors) {
-      const processor = this.findProcessor(key);
-      if (processor && (processor.processInput || processor.processInputStep)) {
-        resolved.push(processor as InputProcessorOrWorkflow);
-      }
-    }
-    return resolved.length > 0 ? resolved : undefined;
-  }
-
-  private resolveStoredOutputProcessors(storedProcessors?: string[]): OutputProcessorOrWorkflow[] | undefined {
-    if (!storedProcessors || storedProcessors.length === 0) return undefined;
-
-    const resolved: OutputProcessorOrWorkflow[] = [];
-    for (const key of storedProcessors) {
-      const processor = this.findProcessor(key);
-      if (
-        processor &&
-        (processor.processOutputStream || processor.processOutputResult || processor.processOutputStep)
-      ) {
-        resolved.push(processor as OutputProcessorOrWorkflow);
-      }
-    }
-    return resolved.length > 0 ? resolved : undefined;
-  }
-
   // ============================================================================
   // Clone
   // ============================================================================
@@ -1035,10 +1180,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const memory = await agent.getMemory({ requestContext });
     const memoryConfig = memory?.getConfig();
 
-    // 7. Extract input/output processor IDs
-    const { inputProcessorIds, outputProcessorIds } = await agent.getConfiguredProcessorIds(requestContext);
-    const inputProcessorKeys = inputProcessorIds.length > 0 ? inputProcessorIds : undefined;
-    const outputProcessorKeys = outputProcessorIds.length > 0 ? outputProcessorIds : undefined;
+    // 7. Processors from code-defined agents cannot be automatically serialized
+    // to a StoredProcessorGraph (requires provider ID + config). Processors must
+    // be configured via the editor UI after cloning.
 
     // 8. Extract scorer keys with sampling config
     let storedScorers: Record<string, StorageScorerConfig> | undefined;
@@ -1081,8 +1225,6 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       workflows: workflowKeys.length > 0 ? Object.fromEntries(workflowKeys.map(key => [key, {}])) : undefined,
       agents: agentKeys.length > 0 ? Object.fromEntries(agentKeys.map(key => [key, {}])) : undefined,
       memory: memoryConfig,
-      inputProcessors: inputProcessorKeys,
-      outputProcessors: outputProcessorKeys,
       scorers: storedScorers,
       defaultOptions: storageDefaultOptions,
       metadata: options.metadata,

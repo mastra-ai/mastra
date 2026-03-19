@@ -25,8 +25,8 @@ const DEFAULT_CONFIG: ValidationConfig = {
     'models/',
     'docs/build-with-ai/skills.mdx',
   ],
-  // Allow for @mastra/* packages + mastra + create-mastra
-  packagePattern: /^(@mastra\/[\w-]+|mastra|create-mastra)$/,
+  // Allow for @mastra/* packages + mastra + create-mastra + mastracode
+  packagePattern: /^(@mastra\/[\w-]+|mastra|create-mastra|mastracode)$/,
   concurrency: 50,
 }
 

@@ -1,9 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router';
-import { useMastraClient } from '@mastra/react';
-import { useQueryClient } from '@tanstack/react-query';
-import { GaugeIcon } from 'lucide-react';
-
+import type { UpdateStoredScorerParams } from '@mastra/client-js';
 import {
   toast,
   useLinkComponent,
@@ -27,10 +22,13 @@ import {
   Alert,
   AlertTitle,
   AlertDescription,
-  type ScorerFormValues,
 } from '@mastra/playground-ui';
-
-import type { UpdateStoredScorerParams } from '@mastra/client-js';
+import type { ScorerFormValues } from '@mastra/playground-ui';
+import { useMastraClient } from '@mastra/react';
+import { useQueryClient } from '@tanstack/react-query';
+import { GaugeIcon } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useParams, useSearchParams } from 'react-router';
 
 type StoredScorerData = NonNullable<ReturnType<typeof useStoredScorer>['data']>;
 
@@ -139,10 +137,10 @@ function CmsScorersEditForm({ scorer, scorerId, selectedVersionId }: CmsScorersE
         await client.getStoredScorer(scorerId).activateVersion(latestVersion.id);
       }
 
-      queryClient.invalidateQueries({ queryKey: ['scorers'] });
-      queryClient.invalidateQueries({ queryKey: ['stored-scorers'] });
+      void queryClient.invalidateQueries({ queryKey: ['scorers'] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-scorers'] });
       toast.success('Scorer published');
-      navigate(paths.scorerLink(scorerId));
+      void navigate(paths.scorerLink(scorerId));
     } catch (error) {
       toast.error(`Failed to publish scorer: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {

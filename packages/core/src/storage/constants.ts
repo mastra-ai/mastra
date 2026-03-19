@@ -1,4 +1,4 @@
-import { spanRecordSchema } from './domains/observability/types';
+import { spanRecordSchema } from './domains/observability';
 import { buildStorageSchema } from './types';
 import type { StorageColumn, StorageTableConfig } from './types';
 
@@ -18,6 +18,8 @@ export const TABLE_SCORER_DEFINITIONS = 'mastra_scorer_definitions';
 export const TABLE_SCORER_DEFINITION_VERSIONS = 'mastra_scorer_definition_versions';
 export const TABLE_MCP_CLIENTS = 'mastra_mcp_clients';
 export const TABLE_MCP_CLIENT_VERSIONS = 'mastra_mcp_client_versions';
+export const TABLE_MCP_SERVERS = 'mastra_mcp_servers';
+export const TABLE_MCP_SERVER_VERSIONS = 'mastra_mcp_server_versions';
 export const TABLE_WORKSPACES = 'mastra_workspaces';
 export const TABLE_WORKSPACE_VERSIONS = 'mastra_workspace_versions';
 export const TABLE_SKILLS = 'mastra_skills';
@@ -33,6 +35,7 @@ export const TABLE_DATASET_VERSIONS = 'mastra_dataset_versions';
 export const TABLE_EXPERIMENTS = 'mastra_experiments';
 export const TABLE_EXPERIMENT_RESULTS = 'mastra_experiment_results';
 
+/** Union of all core table name constants. */
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
   | typeof TABLE_MESSAGES
@@ -49,6 +52,8 @@ export type TABLE_NAMES =
   | typeof TABLE_SCORER_DEFINITION_VERSIONS
   | typeof TABLE_MCP_CLIENTS
   | typeof TABLE_MCP_CLIENT_VERSIONS
+  | typeof TABLE_MCP_SERVERS
+  | typeof TABLE_MCP_SERVER_VERSIONS
   | typeof TABLE_WORKSPACES
   | typeof TABLE_WORKSPACE_VERSIONS
   | typeof TABLE_SKILLS
@@ -182,6 +187,7 @@ export const PROMPT_BLOCK_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   description: { type: 'text', nullable: true },
   content: { type: 'text', nullable: false },
   rules: { type: 'jsonb', nullable: true },
+  requestContextSchema: { type: 'jsonb', nullable: true },
   changedFields: { type: 'jsonb', nullable: true },
   changeMessage: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
@@ -231,6 +237,36 @@ export const MCP_CLIENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   name: { type: 'text', nullable: false },
   description: { type: 'text', nullable: true },
   servers: { type: 'jsonb', nullable: false },
+  changedFields: { type: 'jsonb', nullable: true },
+  changeMessage: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
+export const MCP_SERVERS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  status: { type: 'text', nullable: false }, // 'draft', 'published', or 'archived'
+  activeVersionId: { type: 'text', nullable: true }, // FK to mcp_server_versions.id
+  authorId: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const MCP_SERVER_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  mcpServerId: { type: 'text', nullable: false },
+  versionNumber: { type: 'integer', nullable: false },
+  name: { type: 'text', nullable: false },
+  version: { type: 'text', nullable: false },
+  description: { type: 'text', nullable: true },
+  instructions: { type: 'text', nullable: true },
+  repository: { type: 'jsonb', nullable: true },
+  releaseDate: { type: 'text', nullable: true },
+  isLatest: { type: 'boolean', nullable: true },
+  packageCanonical: { type: 'text', nullable: true },
+  tools: { type: 'jsonb', nullable: true },
+  agents: { type: 'jsonb', nullable: true },
+  workflows: { type: 'jsonb', nullable: true },
   changedFields: { type: 'jsonb', nullable: true },
   changeMessage: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
@@ -335,6 +371,7 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
   isBufferingReflection: { type: 'boolean', nullable: false },
   lastBufferedAtTokens: { type: 'integer', nullable: false },
   lastBufferedAtTime: { type: 'timestamp', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -347,6 +384,7 @@ export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
   metadata: { type: 'jsonb', nullable: true },
   inputSchema: { type: 'jsonb', nullable: true },
   groundTruthSchema: { type: 'jsonb', nullable: true },
+  requestContextSchema: { type: 'jsonb', nullable: true },
   version: { type: 'integer', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
@@ -360,6 +398,7 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   isDeleted: { type: 'boolean', nullable: false },
   input: { type: 'jsonb', nullable: false },
   groundTruth: { type: 'jsonb', nullable: true },
+  requestContext: { type: 'jsonb', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
@@ -481,6 +520,8 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_SCORER_DEFINITION_VERSIONS]: SCORER_DEFINITION_VERSIONS_SCHEMA,
   [TABLE_MCP_CLIENTS]: MCP_CLIENTS_SCHEMA,
   [TABLE_MCP_CLIENT_VERSIONS]: MCP_CLIENT_VERSIONS_SCHEMA,
+  [TABLE_MCP_SERVERS]: MCP_SERVERS_SCHEMA,
+  [TABLE_MCP_SERVER_VERSIONS]: MCP_SERVER_VERSIONS_SCHEMA,
   [TABLE_WORKSPACES]: WORKSPACES_SCHEMA,
   [TABLE_WORKSPACE_VERSIONS]: WORKSPACE_VERSIONS_SCHEMA,
   [TABLE_SKILLS]: SKILLS_SCHEMA,

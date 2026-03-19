@@ -23,9 +23,12 @@ export const WORKSPACE_TOOLS = {
     FILE_STAT: `${WORKSPACE_TOOLS_PREFIX}_file_stat` as const,
     MKDIR: `${WORKSPACE_TOOLS_PREFIX}_mkdir` as const,
     GREP: `${WORKSPACE_TOOLS_PREFIX}_grep` as const,
+    AST_EDIT: `${WORKSPACE_TOOLS_PREFIX}_ast_edit` as const,
   },
   SANDBOX: {
     EXECUTE_COMMAND: `${WORKSPACE_TOOLS_PREFIX}_execute_command` as const,
+    GET_PROCESS_OUTPUT: `${WORKSPACE_TOOLS_PREFIX}_get_process_output` as const,
+    KILL_PROCESS: `${WORKSPACE_TOOLS_PREFIX}_kill_process` as const,
   },
   SEARCH: {
     SEARCH: `${WORKSPACE_TOOLS_PREFIX}_search` as const,

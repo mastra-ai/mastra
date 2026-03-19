@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@/ds/components/Button';
-import { Pencil, Trash2, Copy, ChevronDownIcon, XIcon, History } from 'lucide-react';
+import { Pencil, Trash2, Copy, ChevronDownIcon, XIcon, History, EllipsisVerticalIcon } from 'lucide-react';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { useLinkComponent } from '@/lib/framework';
 import { Column } from '@/ds/components/Columns';
@@ -41,39 +41,32 @@ export function ItemDetailToolbar({
       <ButtonsGroup>
         {!isEditing && (
           <>
-            <Button variant="standard" size="default" href={`/datasets/${datasetId}/items/${itemId}`} as={Link}>
+            <Button href={`/datasets/${datasetId}/items/${itemId}`} as={Link}>
               <History />
-              History
+              Versions
             </Button>
 
-            <ButtonsGroup spacing="close">
-              <Button variant="standard" size="default" onClick={onEdit}>
-                <Pencil />
-                Edit
-              </Button>
-
-              <DropdownMenu>
-                <DropdownMenu.Trigger asChild>
-                  <Button variant="standard" size="default" aria-label="Actions menu">
-                    <ChevronDownIcon />
-                  </Button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content align="end" className="w-48">
-                  <DropdownMenu.Item onSelect={onDelete} className="text-red-500 focus:text-red-400">
-                    <Trash2 />
-                    <span>Delete Item</span>
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item disabled>
-                    <Copy />
-                    <span>Duplicate Item (Coming Soon)</span>
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu>
-            </ButtonsGroup>
+            <DropdownMenu>
+              <DropdownMenu.Trigger asChild>
+                <Button aria-label="Actions menu">
+                  <EllipsisVerticalIcon />
+                </Button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content align="end" className="w-48">
+                <DropdownMenu.Item onSelect={onEdit}>
+                  <Pencil />
+                  Edit
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={onDelete} className="text-red-500 focus:text-red-400">
+                  <Trash2 />
+                  Delete Item
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu>
           </>
         )}
 
-        <Button variant="standard" size="default" onClick={onClose} aria-label="Close detail panel">
+        <Button onClick={onClose} aria-label="Close detail panel">
           <XIcon />
         </Button>
       </ButtonsGroup>

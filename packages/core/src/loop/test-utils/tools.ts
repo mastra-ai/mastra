@@ -1,13 +1,8 @@
 import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { dynamicTool, jsonSchema, stepCountIs } from '@internal/ai-sdk-v5';
-import {
-  convertArrayToReadableStream,
-  convertReadableStreamToArray,
-  mockValues,
-  mockId,
-} from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, mockValues, mockId } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
-import z from 'zod';
+import z from 'zod/v4';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { loop } from '../loop';
 import { createMessageListWithUserMessage, createTestModels, defaultSettings, testUsage } from './utils';
@@ -299,8 +294,6 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       it('should include dynamic tool call and result content', async () => {
         await result.consumeStream();
 
-        console.log(JSON.stringify(result.content, null, 2));
-
         expect(result.content).toMatchInlineSnapshot(`
           [
             {
@@ -334,8 +327,6 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
       it('should include dynamic tool call and result in the full stream', async () => {
         const fullStream = await convertAsyncIterableToArray(result.fullStream as any);
-
-        console.log(JSON.stringify(fullStream, null, 2));
 
         expect(fullStream).toMatchInlineSnapshot(`
             [
@@ -792,31 +783,68 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
     let result: MastraModelOutput<unknown>;
 
     beforeEach(async () => {
+      let responseCount = 0;
       result = await loopFn({
         methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
-        models: createTestModels({
-          stream: convertArrayToReadableStream([
-            {
-              type: 'response-metadata',
-              id: 'id-0',
-              modelId: 'mock-model-id',
-              timestamp: new Date(0),
-            },
-            {
-              type: 'tool-call',
-              toolCallId: 'call-1',
-              toolName: 'tool1',
-              input: `{ "value": "value" }`,
-            },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: testUsage,
-            },
-          ]),
-        }),
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockLanguageModelV2({
+              doStream: async () => {
+                switch (responseCount++) {
+                  case 0:
+                    return {
+                      warnings: [],
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-0',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        },
+                        {
+                          type: 'tool-call',
+                          toolCallId: 'call-1',
+                          toolName: 'tool1',
+                          input: `{ "value": "value" }`,
+                        },
+                        {
+                          type: 'finish',
+                          finishReason: 'tool-calls',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  case 1:
+                    return {
+                      warnings: [],
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-1',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        },
+                        { type: 'text-start', id: 'text-1' },
+                        { type: 'text-delta', id: 'text-1', delta: 'I see the tool failed, let me help.' },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  default:
+                    throw new Error(`Unexpected response count: ${responseCount}`);
+                }
+              },
+            }),
+          },
+        ],
         tools: {
           tool1: {
             inputSchema: z.object({ value: z.string() }),
@@ -825,6 +853,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
             },
           },
         },
+        stopWhen: stepCountIs(3),
         ...defaultSettings(),
       });
     });
@@ -918,6 +947,148 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       // Verify we also get the text response
       const textChunks = chunks.filter((c: any) => c.type === 'text-delta');
       expect(textChunks.length).toBeGreaterThan(0);
+    });
+
+    it('should persist provider-executed tool calls in stream order with results', async () => {
+      const messageList = createMessageListWithUserMessage();
+      const result = loopFn({
+        methodType: 'stream',
+        runId,
+        messageList,
+        models: createTestModels({
+          stream: convertArrayToReadableStream([
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'claude-code-model',
+              timestamp: new Date(0),
+            },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Before the tool. ' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'web_search',
+              input: JSON.stringify({ query: 'mastra tools' }),
+              providerExecuted: true,
+            },
+            {
+              type: 'tool-result',
+              toolCallId: 'call-1',
+              toolName: 'web_search',
+              result: {
+                results: [{ url: 'https://example.com', title: 'Example' }],
+              },
+              providerExecuted: true,
+            },
+            { type: 'text-start', id: 'text-2' },
+            { type: 'text-delta', id: 'text-2', delta: 'After the tool.' },
+            { type: 'text-end', id: 'text-2' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: testUsage,
+            },
+          ]),
+        }),
+        tools: {},
+        ...defaultSettings(),
+      });
+
+      await result.consumeStream();
+
+      const responseMessages = messageList.get.response.db();
+      const assistantMsg = responseMessages.find(
+        msg => msg.role === 'assistant' && msg.content.parts.some(p => p.type === 'tool-invocation'),
+      );
+      expect(assistantMsg).toBeDefined();
+      expect(assistantMsg?.content.metadata).toEqual({ modelId: 'claude-code-model' });
+
+      const parts = assistantMsg!.content.parts;
+      expect(parts.map(part => part.type)).toEqual(['text', 'tool-invocation', 'step-start', 'text']);
+
+      const toolPart = parts.find(part => part.type === 'tool-invocation') as
+        | { toolInvocation: { state: string; result?: unknown } }
+        | undefined;
+      expect(toolPart?.toolInvocation.state).toBe('result');
+      expect(toolPart?.toolInvocation.result).toEqual({
+        results: [{ url: 'https://example.com', title: 'Example' }],
+      });
+    });
+
+    it('should complete stream when PTC sends only tool-input streaming (no explicit tool-call chunk)', async () => {
+      // Regression: PTC from code execution sends tool-input-start/delta/end only;
+      // without synthesizing a tool-call the stream would freeze.
+      const result = loopFn({
+        methodType: 'stream',
+        runId,
+        messageList: createMessageListWithUserMessage(),
+        models: createTestModels({
+          stream: convertArrayToReadableStream([
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'claude-code-model',
+              timestamp: new Date(0),
+            },
+            {
+              type: 'tool-input-start',
+              id: 'call-1',
+              toolName: 'str_replace_editor',
+              providerExecuted: true,
+            },
+            {
+              type: 'tool-input-delta',
+              id: 'call-1',
+              delta: '{"command":"view","path":"/src/app.ts"}',
+            },
+            {
+              type: 'tool-input-end',
+              id: 'call-1',
+            },
+            {
+              type: 'tool-result',
+              toolCallId: 'call-1',
+              toolName: 'str_replace_editor',
+              result: {
+                content: '// app.ts content',
+                line_count: 1,
+              },
+              providerExecuted: true,
+            },
+            {
+              type: 'text-delta',
+              id: 'text-1',
+              delta: 'Done.',
+            },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: testUsage,
+            },
+          ]),
+        }),
+        tools: {},
+        ...defaultSettings(),
+      });
+
+      const stream = result.fullStream;
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      const toolResultChunk = chunks.find((c: any) => c.type === 'tool-result');
+      expect(toolResultChunk).toBeDefined();
+      expect((toolResultChunk as any)?.payload?.result).toEqual({
+        content: '// app.ts content',
+        line_count: 1,
+      });
+      expect((toolResultChunk as any)?.payload?.providerExecuted).toBe(true);
+
+      const textChunks = chunks.filter((c: any) => c.type === 'text-delta');
+      expect(textChunks.length).toBeGreaterThan(0);
+
+      const finishChunk = chunks.find((c: any) => c.type === 'finish');
+      expect(finishChunk).toBeDefined();
     });
   });
 
@@ -1046,6 +1217,177 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
         type: 'text',
         value: `Weather in Seattle: 72F, sunny`,
       });
+    });
+  });
+
+  describe('stopWhen receives toolResults', () => {
+    it('should populate toolResults on steps passed to stopWhen', async () => {
+      const messageList = createMessageListWithUserMessage();
+      const stopWhenSteps: any[][] = [];
+
+      let responseCount = 0;
+      const result = await loopFn({
+        methodType: 'stream',
+        runId,
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockLanguageModelV2({
+              doStream: async () => {
+                switch (responseCount++) {
+                  case 0:
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-0',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        },
+                        {
+                          type: 'tool-call',
+                          toolCallId: 'call-1',
+                          toolName: 'test-tool',
+                          input: '{"value":"hello"}',
+                        },
+                        {
+                          type: 'finish',
+                          finishReason: 'tool-calls',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  case 1:
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-1',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        },
+                        { type: 'text-start', id: 'text-1' },
+                        { type: 'text-delta', id: 'text-1', delta: 'Done.' },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  default:
+                    throw new Error(`Unexpected response count: ${responseCount}`);
+                }
+              },
+            }),
+          },
+        ],
+        tools: {
+          'test-tool': {
+            inputSchema: z.object({ value: z.string() }),
+            execute: async ({ value }: { value: string }) => ({ echoed: value }),
+          },
+        },
+        messageList,
+        stopWhen: ({ steps }: { steps: any[] }) => {
+          stopWhenSteps.push([...steps]);
+          return false;
+        },
+        ...defaultSettings(),
+      });
+
+      await result.consumeStream();
+
+      // stopWhen should have been called (once per continued step)
+      expect(stopWhenSteps.length).toBeGreaterThanOrEqual(1);
+
+      // First call: step has tool-call + tool-result content, toolResults should be populated
+      const firstCallStep = stopWhenSteps[0]![0]!;
+      const contentToolResults = firstCallStep.content.filter((p: any) => p.type === 'tool-result');
+      expect(contentToolResults.length).toBe(1);
+      expect(firstCallStep.toolResults.length).toBe(contentToolResults.length);
+      expect(firstCallStep.toolResults[0].toolName).toBe('test-tool');
+    });
+  });
+
+  describe('message part ordering should match stream order', () => {
+    it('should persist tool-invocation parts between text parts when stream is text → tool-call → text', async () => {
+      // Simulates a provider-executed tool (e.g. web_search) that arrives between two
+      // text segments. The persisted message parts must reflect the actual stream order,
+      // not batch all tool calls at the end.
+      const messageList = createMessageListWithUserMessage();
+      const result = loopFn({
+        methodType: 'stream',
+        runId,
+        messageList,
+        models: createTestModels({
+          stream: convertArrayToReadableStream([
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            // First text segment
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Before the search.' },
+            { type: 'text-end', id: 'text-1' },
+            // Provider-executed tool call + result
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'web_search',
+              input: '{ "query": "test" }',
+              providerExecuted: true,
+            },
+            {
+              type: 'tool-result',
+              toolCallId: 'call-1',
+              toolName: 'web_search',
+              result: { url: 'https://example.com', title: 'Example' },
+              providerExecuted: true,
+            },
+            // Second text segment
+            { type: 'text-start', id: 'text-2' },
+            { type: 'text-delta', id: 'text-2', delta: 'After the search.' },
+            { type: 'text-end', id: 'text-2' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: testUsage,
+            },
+          ]),
+        }),
+        tools: {
+          web_search: {
+            type: 'provider-defined',
+            id: 'test.web_search',
+            name: 'web_search',
+            inputSchema: z.object({ query: z.string() }),
+            outputSchema: z.object({ url: z.string(), title: z.string() }),
+            args: {},
+          },
+        },
+        ...defaultSettings(),
+      });
+
+      await result.consumeStream();
+
+      // Get the persisted assistant message parts
+      const assistantMessages = messageList.get.all.db().filter(m => m.role === 'assistant');
+      const parts = assistantMessages.flatMap(m => (m.content as any).parts ?? []);
+
+      // Extract the types in order
+      const partTypes = parts.map((p: any) =>
+        p.type === 'tool-invocation' ? `tool:${p.toolInvocation.toolName}` : p.type,
+      );
+
+      // The tool invocation must appear between the two text parts, not at the end.
+      // A 'step-start' part may appear when the provider tool result triggers a new loop step.
+      const meaningful = partTypes.filter((t: string) => t !== 'step-start');
+      expect(meaningful).toEqual(['text', 'tool:web_search', 'text']);
     });
   });
 }

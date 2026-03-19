@@ -11,9 +11,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // In-memory store to simulate S3 bucket contents
 let mockBucket: Map<string, { Body: string; Metadata: Record<string, string>; ContentType: string }>;
 let mockSendFn: ReturnType<typeof vi.fn>;
+let lastS3ClientConfig: any;
 
 vi.mock('@aws-sdk/client-s3', () => {
-  function MockS3Client() {
+  function MockS3Client(config: any) {
+    lastS3ClientConfig = config;
     // @ts-expect-error - Mocking S3Client
     this.send = (...args: any[]) => mockSendFn(...args);
   }
@@ -61,6 +63,7 @@ function createStore(opts?: { prefix?: string }) {
 describe('S3BlobStore', () => {
   beforeEach(() => {
     mockBucket = new Map();
+    lastS3ClientConfig = undefined;
 
     mockSendFn = vi.fn().mockImplementation((cmd: any) => {
       const type = cmd._type;
@@ -336,6 +339,39 @@ describe('S3BlobStore', () => {
 
       expect(mockBucket.size).toBe(1);
       expect(mockBucket.has('other/file.txt')).toBe(true);
+    });
+  });
+
+  describe('sessionToken', () => {
+    it('should pass sessionToken to S3Client credentials when provided', async () => {
+      const store = new S3BlobStore({
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'test-key',
+        secretAccessKey: 'test-secret',
+        sessionToken: 'FwoGZXIvYXdzEBYaDH7EXAMPLE',
+      });
+
+      await store.init();
+      await store.has('trigger-client-creation');
+
+      expect(lastS3ClientConfig.credentials).toEqual({
+        accessKeyId: 'test-key',
+        secretAccessKey: 'test-secret',
+        sessionToken: 'FwoGZXIvYXdzEBYaDH7EXAMPLE',
+      });
+    });
+
+    it('should not include sessionToken in S3Client credentials when not provided', async () => {
+      const store = createStore();
+
+      await store.init();
+      await store.has('trigger-client-creation');
+
+      expect(lastS3ClientConfig.credentials).toEqual({
+        accessKeyId: 'test-key',
+        secretAccessKey: 'test-secret',
+      });
     });
   });
 

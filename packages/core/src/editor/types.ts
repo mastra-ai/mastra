@@ -2,6 +2,8 @@ import type { Agent } from '../agent';
 import type { MastraScorer } from '../evals';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { MCPServerBase } from '../mcp';
+import type { ProcessorProvider } from '../processor-provider';
 import type { RequestContext } from '../request-context';
 import type { BlobStore } from '../storage/domains/blobs/base';
 import type {
@@ -36,6 +38,11 @@ import type {
   StorageListWorkspacesOutput,
   StorageResolvedWorkspaceType,
   StorageListWorkspacesResolvedOutput,
+  StorageCreateMCPServerInput,
+  StorageUpdateMCPServerInput,
+  StorageListMCPServersInput,
+  StorageListMCPServersOutput,
+  StorageListMCPServersResolvedOutput,
   StorageCreateSkillInput,
   StorageUpdateSkillInput,
   StorageListSkillsInput,
@@ -115,6 +122,8 @@ export interface MastraEditorConfig {
   logger?: IMastraLogger;
   /** Tool providers for integration tools (e.g., Composio) */
   toolProviders?: Record<string, ToolProvider>;
+  /** Processor providers for configurable processors (e.g., moderation, token limiter) */
+  processorProviders?: Record<string, ProcessorProvider>;
   /**
    * Additional filesystem providers beyond the built-in ones.
    * Built-in providers (local) are always available.
@@ -170,6 +179,10 @@ export interface IEditorAgentNamespace {
       requestContext?: RequestContext;
     },
   ): Promise<StorageResolvedAgentType>;
+  applyStoredOverrides(
+    agent: Agent,
+    options?: { status?: 'draft' | 'published' } | { versionId: string },
+  ): Promise<Agent>;
 }
 
 // ============================================================================
@@ -213,6 +226,20 @@ export interface IEditorMCPNamespace {
   delete(id: string): Promise<void>;
   list(args?: StorageListMCPClientsInput): Promise<StorageListMCPClientsOutput>;
   listResolved(args?: StorageListMCPClientsInput): Promise<StorageListMCPClientsResolvedOutput>;
+  clearCache(id?: string): void;
+}
+
+// ============================================================================
+// MCP Server Namespace Interface
+// ============================================================================
+
+export interface IEditorMCPServerNamespace {
+  create(input: StorageCreateMCPServerInput): Promise<MCPServerBase>;
+  getById(id: string, options?: GetByIdOptions): Promise<MCPServerBase | null>;
+  update(input: StorageUpdateMCPServerInput): Promise<MCPServerBase>;
+  delete(id: string): Promise<void>;
+  list(args?: StorageListMCPServersInput): Promise<StorageListMCPServersOutput>;
+  listResolved(args?: StorageListMCPServersInput): Promise<StorageListMCPServersResolvedOutput>;
   clearCache(id?: string): void;
 }
 
@@ -265,6 +292,9 @@ export interface IMastraEditor {
   /** MCP config management namespace */
   readonly mcp: IEditorMCPNamespace;
 
+  /** MCP server management namespace */
+  readonly mcpServer: IEditorMCPServerNamespace;
+
   /** Prompt block management namespace */
   readonly prompt: IEditorPromptNamespace;
 
@@ -281,4 +311,9 @@ export interface IMastraEditor {
   getToolProvider(id: string): ToolProvider | undefined;
   /** List all registered tool providers */
   getToolProviders(): Record<string, ToolProvider>;
+
+  /** Get a processor provider by ID */
+  getProcessorProvider(id: string): ProcessorProvider | undefined;
+  /** List all registered processor providers */
+  getProcessorProviders(): Record<string, ProcessorProvider>;
 }

@@ -1,8 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import {
+  isV5PlusModel,
+  agentGenerate as baseAgentGenerate,
+  setupDummyApiKeys,
+  shouldSkipLLMTest,
+} from '@internal/test-utils';
+import type { MastraModelConfig as TestUtilsModelConfig } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import type { MastraDBMessage } from '@mastra/core/memory';
@@ -11,8 +19,25 @@ import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import type { JSONSchema7 } from 'json-schema';
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, beforeAll } from 'vitest';
 import { z } from 'zod';
+
+const MODE = getLLMTestMode();
+// Set dummy API keys for replay/auto modes. These keys contain '-dummy-' so
+// hasRealApiKey() will correctly identify them as dummy keys. The dummy keys
+// satisfy provider validation while MSW intercepts the actual HTTP calls.
+setupDummyApiKeys(MODE, ['openai']);
+
+// Local wrapper to handle Agent type compatibility
+// (Agent has complex generic types that don't play well with the shared helper)
+async function agentGenerate(
+  agent: Agent,
+  message: string | unknown[],
+  options: { threadId?: string; resourceId?: string; [key: string]: unknown },
+  model: MastraModelConfig,
+): Promise<any> {
+  return baseAgentGenerate(agent as any, message, options, model as TestUtilsModelConfig);
+}
 
 const resourceId = 'test-resource';
 let messageCounter = 0;
@@ -46,7 +71,7 @@ function getTextContent(message: any): string {
 
 // Test helpers
 const createTestThread = (title: string, metadata = {}) => ({
-  id: randomUUID(),
+  id: 'b8f55d05-8b0b-447c-9d49-28e35cdd5db6',
   title,
   resourceId,
   metadata,
@@ -85,30 +110,20 @@ function getErrorDetails(error: any): string | undefined {
   return JSON.stringify(error);
 }
 
-// Helper to check if model is v5+ (string or specificationVersion v2/v3)
-function isV5PlusModel(model: MastraModelConfig): boolean {
-  return (
-    typeof model === 'string' || ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-  );
-}
-
-// Helper to generate with the appropriate API
-async function agentGenerate(agent: Agent, message: string | any[], options: any, model: MastraModelConfig) {
-  if (isV5PlusModel(model)) {
-    // Transform deprecated threadId/resourceId to memory format for v5+
-    const { threadId, resourceId, ...rest } = options;
-    const transformedOptions = {
-      ...rest,
-      ...(threadId || resourceId ? { memory: { thread: threadId, resource: resourceId } } : {}),
-    };
-    return agent.generate(message, transformedOptions);
-  } else {
-    return agent.generateLegacy(message, options);
-  }
-}
-
-export function getWorkingMemoryTests(model: MastraModelConfig) {
+export function getWorkingMemoryTests(
+  model: MastraModelConfig,
+  options?: {
+    /** Recording name for LLM replay (e.g., 'memory-integration-tests-src-working-memory') */
+    recordingName?: string;
+  },
+) {
   const modelName = typeof model === 'string' ? model : (model as any).modelId || (model as any).id || 'sdk-model';
+  const skipLLM = shouldSkipLLMTest(MODE, 'openai', options?.recordingName);
+
+  // Use it.skipIf for individual LLM tests instead of skipping the whole suite
+  // to preserve local-only test coverage (getSystemMessage, saveMessages, etc.)
+  const itLLM = it.skipIf(skipLLM);
+
   describe(`Working Memory Tests (${modelName})`, () => {
     let memory: Memory;
     let thread: any;
@@ -116,9 +131,10 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
     let vector: LibSQLVector;
 
     describe('Working Memory Test with Template', () => {
+      let dbPath: string;
       beforeEach(async () => {
         // Create a new unique database file in the temp directory for each test
-        const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'test.db');
+        dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'test.db');
 
         storage = new LibSQLStore({
           id: 'working-memory-template-storage',
@@ -165,37 +181,44 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         await storage.client.close();
         // @ts-expect-error - accessing client for cleanup
         await vector.turso.close();
+
+        try {
+          await rm(dirname(dbPath), { force: true, recursive: true });
+        } catch {}
       });
 
-      it('should handle LLM responses with working memory using OpenAI (test that the working memory prompt works)', async () => {
-        const agent = new Agent({
-          id: 'memory-test-agent',
-          name: 'Memory Test Agent',
-          instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
-          model,
-          memory,
-        });
+      itLLM(
+        'should handle LLM responses with working memory using OpenAI (test that the working memory prompt works)',
+        async () => {
+          const agent = new Agent({
+            id: 'memory-test-agent',
+            name: 'Memory Test Agent',
+            instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
+            model,
+            memory,
+          });
 
-        await agentGenerate(
-          agent,
-          'Hi, my name is Tyler and I live in San Francisco',
-          {
-            threadId: thread.id,
-            resourceId,
-          },
-          model,
-        );
+          await agentGenerate(
+            agent,
+            'Hi, my name is Tyler and I live in San Francisco',
+            {
+              threadId: thread.id,
+              resourceId,
+            },
+            model,
+          );
 
-        // Get working memory
-        const workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
-        expect(workingMemory).not.toBeNull();
-        if (workingMemory) {
-          // Check for specific Markdown format
-          expect(workingMemory).toContain('# User Information');
-          expect(workingMemory).toContain('**First Name**: Tyler');
-          expect(workingMemory).toContain('**Location**: San Francisco');
-        }
-      });
+          // Get working memory
+          const workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
+          expect(workingMemory).not.toBeNull();
+          if (workingMemory) {
+            // Check for specific Markdown format
+            expect(workingMemory).toContain('# User Information');
+            expect(workingMemory).toContain('**First Name**: Tyler');
+            expect(workingMemory).toContain('**Location**: San Francisco');
+          }
+        },
+      );
 
       it('should initialize with default working memory template', async () => {
         const systemInstruction = await memory.getSystemMessage({ threadId: thread.id, resourceId });
@@ -296,7 +319,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         expect(updatedThread?.metadata?.workingMemory).toBeUndefined();
       });
 
-      it('should handle LLM responses with working memory using tool calls', async () => {
+      itLLM('should handle LLM responses with working memory using tool calls', async () => {
         const agent = new Agent({
           id: 'memory-test-agent',
           name: 'Memory Test Agent',
@@ -327,106 +350,109 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         }
       });
 
-      it("shouldn't pollute context with working memory tool call args, only the system instruction working memory should exist", async () => {
-        const agent = new Agent({
-          id: 'memory-test-agent',
-          name: 'Memory Test Agent',
-          instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
-          model,
-          memory,
-        });
+      itLLM(
+        "shouldn't pollute context with working memory tool call args, only the system instruction working memory should exist",
+        async () => {
+          const agent = new Agent({
+            id: 'memory-test-agent',
+            name: 'Memory Test Agent',
+            instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
+            model,
+            memory,
+          });
 
-        const thread = await memory.createThread(createTestThread(`Tool call working memory context pollution test`));
+          const thread = await memory.createThread(createTestThread(`Tool call working memory context pollution test`));
 
-        await agentGenerate(
-          agent,
-          'Hi, my name is Tyler and I live in a submarine under the sea',
-          {
+          await agentGenerate(
+            agent,
+            'Hi, my name is Tyler and I live in a submarine under the sea',
+            {
+              threadId: thread.id,
+              resourceId,
+            },
+            model,
+          );
+
+          let workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
+          expect(workingMemory).not.toBeNull();
+          if (workingMemory) {
+            expect(workingMemory).toContain('# User Information');
+            expect(workingMemory).toContain('**First Name**: Tyler');
+            expect(workingMemory?.toLowerCase()).toContain('**location**:');
+            expect(workingMemory?.toLowerCase()).toContain('submarine under the sea');
+          }
+
+          await agentGenerate(
+            agent,
+            'I changed my name to Jim',
+            {
+              threadId: thread.id,
+              resourceId,
+            },
+            model,
+          );
+
+          workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
+          expect(workingMemory).not.toBeNull();
+          if (workingMemory) {
+            expect(workingMemory).toContain('# User Information');
+            expect(workingMemory).toContain('**First Name**: Jim');
+            expect(workingMemory?.toLowerCase()).toContain('**location**:');
+            expect(workingMemory?.toLowerCase()).toContain('submarine under the sea');
+          }
+
+          await agentGenerate(
+            agent,
+            'I moved to Vancouver Island',
+            {
+              threadId: thread.id,
+              resourceId,
+            },
+            model,
+          );
+
+          workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
+          expect(workingMemory).not.toBeNull();
+          if (workingMemory) {
+            expect(workingMemory).toContain('# User Information');
+            expect(workingMemory).toContain('**First Name**: Jim');
+            expect(workingMemory).toContain('**Location**: Vancouver Island');
+          }
+
+          const history = await memory.recall({
             threadId: thread.id,
             resourceId,
-          },
-          model,
-        );
+            perPage: 20,
+          });
 
-        let workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
-        expect(workingMemory).not.toBeNull();
-        if (workingMemory) {
-          expect(workingMemory).toContain('# User Information');
-          expect(workingMemory).toContain('**First Name**: Tyler');
-          expect(workingMemory?.toLowerCase()).toContain('**location**:');
-          expect(workingMemory?.toLowerCase()).toContain('submarine under the sea');
-        }
+          const memoryArgs: string[] = [];
 
-        await agentGenerate(
-          agent,
-          'I changed my name to Jim',
-          {
-            threadId: thread.id,
-            resourceId,
-          },
-          model,
-        );
-
-        workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
-        expect(workingMemory).not.toBeNull();
-        if (workingMemory) {
-          expect(workingMemory).toContain('# User Information');
-          expect(workingMemory).toContain('**First Name**: Jim');
-          expect(workingMemory?.toLowerCase()).toContain('**location**:');
-          expect(workingMemory?.toLowerCase()).toContain('submarine under the sea');
-        }
-
-        await agentGenerate(
-          agent,
-          'I moved to Vancouver Island',
-          {
-            threadId: thread.id,
-            resourceId,
-          },
-          model,
-        );
-
-        workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
-        expect(workingMemory).not.toBeNull();
-        if (workingMemory) {
-          expect(workingMemory).toContain('# User Information');
-          expect(workingMemory).toContain('**First Name**: Jim');
-          expect(workingMemory).toContain('**Location**: Vancouver Island');
-        }
-
-        const history = await memory.recall({
-          threadId: thread.id,
-          resourceId,
-          perPage: 20,
-        });
-
-        const memoryArgs: string[] = [];
-
-        for (const message of history.messages) {
-          if (message.role === `assistant`) {
-            for (const part of message.content.parts) {
-              if (part.type === 'tool-invocation' && part.toolInvocation?.toolName === `updateWorkingMemory`) {
-                memoryArgs.push(part.toolInvocation.args.memory);
+          for (const message of history.messages) {
+            if (message.role === `assistant`) {
+              for (const part of message.content.parts) {
+                if (part.type === 'tool-invocation' && part.toolInvocation?.toolName === `updateWorkingMemory`) {
+                  memoryArgs.push(part.toolInvocation.args.memory);
+                }
               }
             }
           }
-        }
 
-        expect(memoryArgs).not.toContain(`Tyler`);
-        expect(memoryArgs).not.toContain('submarine under the sea');
-        expect(memoryArgs).not.toContain('Jim');
-        expect(memoryArgs).not.toContain('Vancouver Island');
-        expect(memoryArgs).toEqual([]);
+          expect(memoryArgs).not.toContain(`Tyler`);
+          expect(memoryArgs).not.toContain('submarine under the sea');
+          expect(memoryArgs).not.toContain('Jim');
+          expect(memoryArgs).not.toContain('Vancouver Island');
+          expect(memoryArgs).toEqual([]);
 
-        workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
-        expect(workingMemory).not.toBeNull();
-        if (workingMemory) {
-          // Format-specific assertion that checks for Markdown format
-          expect(workingMemory).toContain('# User Information');
-          expect(workingMemory).toContain('**First Name**: Jim');
-          expect(workingMemory).toContain('**Location**: Vancouver Island');
-        }
-      });
+          workingMemory = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
+          expect(workingMemory).not.toBeNull();
+          if (workingMemory) {
+            // Format-specific assertion that checks for Markdown format
+            expect(workingMemory).toContain('# User Information');
+            expect(workingMemory).toContain('**First Name**: Jim');
+            expect(workingMemory).toContain('**Location**: Vancouver Island');
+          }
+        },
+      );
 
       it('should remove tool-call/tool-result messages with toolName "updateWorkingMemory"', async () => {
         const threadId = thread.id;
@@ -590,7 +616,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         });
       });
 
-      it('should remember information from working memory in subsequent calls', async () => {
+      itLLM('should remember information from working memory in subsequent calls', async () => {
         const thread = await memory.saveThread({
           thread: createTestThread('Remembering Test'),
         });
@@ -707,7 +733,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
           await vector.turso.close();
         });
 
-        it('should accept valid working memory updates matching the schema', async () => {
+        itLLM('should accept valid working memory updates matching the schema', async () => {
           const validMemory = { city: 'Austin', temperature: 85 };
           await agentGenerate(
             agent,
@@ -725,7 +751,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
           expect(extractUserData(wmObj)).toMatchObject(validMemory);
         });
 
-        it('should recall the most recent valid schema-based working memory', async () => {
+        itLLM('should recall the most recent valid schema-based working memory', { retry: 2 }, async () => {
           const second = { city: 'Denver', temperature: 75 };
           await agentGenerate(
             agent,
@@ -933,7 +959,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         expect(template?.content).toContain('string');
       });
 
-      it('should accept valid working memory updates matching the JSONSchema7', async () => {
+      itLLM('should accept valid working memory updates matching the JSONSchema7', async () => {
         await agentGenerate(
           agent,
           'Hi, my name is John Doe, I am 30 years old and I live in Boston. I prefer dark theme and want notifications enabled.',
@@ -954,7 +980,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         expect(userData.city).toBe('Boston');
       });
 
-      it('should handle required and optional fields correctly with JSONSchema7', async () => {
+      itLLM('should handle required and optional fields correctly with JSONSchema7', async () => {
         // Test with only required fields
         const _res = await agentGenerate(
           agent,
@@ -978,7 +1004,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         // Age is not required, so it might not be set
       });
 
-      it('should update working memory progressively with JSONSchema7', async () => {
+      itLLM('should update working memory progressively with JSONSchema7', async () => {
         // First message with partial info
         await agentGenerate(
           agent,
@@ -1019,7 +1045,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         expect(userData.age).toBe(25);
       });
 
-      it('should persist working memory across multiple interactions with JSONSchema7', async () => {
+      itLLM('should persist working memory across multiple interactions with JSONSchema7', async () => {
         // Set initial data
         await agentGenerate(
           agent,
@@ -1586,45 +1612,43 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
       });
 
       describe('Standard Working Memory Tool - Thread Scope', () => {
-        let memory: Memory;
-
-        beforeEach(() => {
-          memory = new Memory({
-            options: {
-              workingMemory: {
-                enabled: true,
-                scope: 'thread',
+        runWorkingMemoryNetworkTests(
+          () =>
+            new Memory({
+              options: {
+                workingMemory: {
+                  enabled: true,
+                  scope: 'thread',
+                },
+                lastMessages: 10,
               },
-              lastMessages: 10,
-            },
-            storage,
-            vector,
-            embedder: fastembed,
-          });
-        });
-
-        runWorkingMemoryNetworkTests(() => memory, model);
+              storage,
+              vector,
+              embedder: fastembed,
+            }),
+          model,
+          itLLM,
+        );
       });
 
       describe('Standard Working Memory Tool - Resource Scope', () => {
-        let memory: Memory;
-
-        beforeEach(() => {
-          memory = new Memory({
-            options: {
-              workingMemory: {
-                enabled: true,
-                scope: 'resource',
+        runWorkingMemoryNetworkTests(
+          () =>
+            new Memory({
+              options: {
+                workingMemory: {
+                  enabled: true,
+                  scope: 'resource',
+                },
+                lastMessages: 10,
               },
-              lastMessages: 10,
-            },
-            storage,
-            vector,
-            embedder: fastembed,
-          });
-        });
-
-        runWorkingMemoryNetworkTests(() => memory, model);
+              storage,
+              vector,
+              embedder: fastembed,
+            }),
+          model,
+          itLLM,
+        );
       });
     });
   });
@@ -1634,23 +1658,28 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
  * Shared test suite for agent network with working memory.
  * Can be run with any memory configuration (thread/resource scope, standard/vnext).
  */
-function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraModelConfig) {
-  // Create a math agent that can do calculations
-  const mathAgent = new Agent({
-    id: 'math-agent',
-    name: 'math-agent',
-    instructions: 'You are a helpful math assistant.',
-    model,
-  });
+function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraModelConfig, itLLM: typeof it = it) {
+  let mathAgent: Agent;
+  let getWeather: Tool;
 
-  // Create a weather tool
-  const getWeather = createTool({
-    id: 'get-weather',
-    description: 'Get current weather for a city',
-    inputSchema: z.object({ city: z.string() }),
-    execute: async inputData => {
-      return { city: inputData.city, temp: 68, condition: 'partly cloudy' };
-    },
+  beforeAll(() => {
+    // Create a math agent that can do calculations
+    mathAgent = new Agent({
+      id: 'math-agent',
+      name: 'math-agent',
+      instructions: 'You are a helpful math assistant.',
+      model,
+    });
+
+    // Create a weather tool
+    getWeather = createTool({
+      id: 'get-weather',
+      description: 'Get current weather for a city',
+      inputSchema: z.object({ city: z.string() }),
+      execute: async inputData => {
+        return { city: inputData.city, temp: 68, condition: 'partly cloudy' };
+      },
+    });
   });
 
   // Helper functions to reduce code duplication
@@ -1700,42 +1729,46 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
       .join('');
   }
 
-  it('should call memory tool directly and end loop when only memory update needed', async () => {
-    const memory = getMemory();
-    const networkAgent = new Agent({
-      id: 'network-orchestrator',
-      name: 'network-orchestrator',
-      instructions: 'You help users and can remember things when they ask you to.',
-      model,
-      memory,
-    });
+  itLLM(
+    'should call memory tool directly and end loop when only memory update needed',
+    { retry: 3, timeout: 120000 },
+    async () => {
+      const memory = getMemory();
+      const networkAgent = new Agent({
+        id: 'network-orchestrator',
+        name: 'network-orchestrator',
+        instructions: 'You help users and can remember things when they ask you to.',
+        model,
+        memory,
+      });
 
-    const threadId = randomUUID();
+      const threadId = randomUUID();
 
-    const result = await networkAgent.network('My email is test@example.com', {
-      memory: { thread: threadId, resource: resourceId },
-      maxSteps: 3,
-    });
+      const result = await networkAgent.network('My email is test@example.com', {
+        memory: { thread: threadId, resource: resourceId },
+        maxSteps: 3,
+      });
 
-    const chunks = await collectChunksAndCheckExecution(result);
+      const chunks = await collectChunksAndCheckExecution(result);
 
-    // 1. Working memory was updated
-    const workingMemory = await memory.getWorkingMemory({ threadId, resourceId });
-    expect(workingMemory).toBeTruthy();
-    expect(workingMemory).toContain('test@example.com');
+      // 1. Working memory was updated
+      const workingMemory = await memory.getWorkingMemory({ threadId, resourceId });
+      expect(workingMemory).toBeTruthy();
+      expect(workingMemory).toContain('test@example.com');
 
-    // 2. Loop ended after memory update (no tool execution chunks, only routing + done)
-    const stepTypes = chunks.map(c => c.type);
-    expect(stepTypes).not.toContain('tool-call');
+      // 2. Loop ended after memory update (no tool execution chunks, only routing + done)
+      const stepTypes = chunks.map(c => c.type);
+      expect(stepTypes).not.toContain('tool-call');
 
-    const routingDecisions = chunks.filter(c => c.type === 'routing-agent-end');
-    const memoryToolRoutes = routingDecisions.filter(c => c.payload?.primitiveId === 'updateWorkingMemory').length;
-    expect(memoryToolRoutes).toBe(1);
+      const routingDecisions = chunks.filter(c => c.type === 'routing-agent-end');
+      const memoryToolRoutes = routingDecisions.filter(c => c.payload?.primitiveId === 'updateWorkingMemory').length;
+      expect(memoryToolRoutes).toBe(1);
 
-    expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
-  });
+      expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
+    },
+  );
 
-  it('should call memory tool first, then query agent', async () => {
+  itLLM('should call memory tool first, then query agent', { retry: 3, timeout: 120000 }, async () => {
     const memory = getMemory();
 
     const networkAgent = new Agent({
@@ -1747,7 +1780,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
       memory,
     });
 
-    const threadId = randomUUID();
+    const threadId = '68f55d05-8b0b-447c-9d49-28e35cdd5db6';
 
     const result = await networkAgent.network(
       'Remember that my favorite number is 42, then calculate what 42 multiplied by 3 is',
@@ -1785,7 +1818,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 
-  it('should query agent first, then call memory tool', async () => {
+  itLLM('should query agent first, then call memory tool', { retry: 3, timeout: 120000 }, async () => {
     const memory = getMemory();
 
     const networkAgent = new Agent({
@@ -1797,7 +1830,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
       memory,
     });
 
-    const threadId = randomUUID();
+    const threadId = '58f55d05-8b0b-447c-9d49-28e35cdd5db6';
 
     const result = await networkAgent.network('Calculate 15 times 4, then remember the result', {
       memory: { thread: threadId, resource: resourceId },
@@ -1832,7 +1865,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 
-  it('should call memory tool first, then execute user-defined tool', async () => {
+  itLLM('should call memory tool first, then execute user-defined tool', { retry: 3, timeout: 120000 }, async () => {
     const memory = getMemory();
     const networkAgent = new Agent({
       id: 'network-orchestrator',
@@ -1843,7 +1876,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
       memory,
     });
 
-    const threadId = randomUUID();
+    const threadId = '78f55d05-8b0b-447c-9d49-28e35cdd5db6';
 
     const result = await networkAgent.network(
       'Remember that I live in San Francisco, then get me the weather for my city',
@@ -1880,7 +1913,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 
-  it('should execute user-defined tool first, then call memory tool', async () => {
+  itLLM('should execute user-defined tool first, then call memory tool', { retry: 3, timeout: 120000 }, async () => {
     const memory = getMemory();
     const networkAgent = new Agent({
       id: 'network-orchestrator',
@@ -1891,7 +1924,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
       memory,
     });
 
-    const threadId = randomUUID();
+    const threadId = '88f55d05-8b0b-447c-9d49-28e35cdd5db6';
 
     const result = await networkAgent.network('Get the weather for Boston, then remember that is where I live', {
       memory: { thread: threadId, resource: resourceId },
@@ -1926,7 +1959,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 
-  it('should handle multiple memory updates in single network call', async () => {
+  itLLM('should handle multiple memory updates in single network call', { retry: 3, timeout: 120000 }, async () => {
     const memory = getMemory();
 
     const networkAgent = new Agent({
@@ -1937,7 +1970,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
       memory,
     });
 
-    const threadId = randomUUID();
+    const threadId = '98f55d05-8b0b-447c-9d49-28e35cdd5db6';
 
     // Single request with multiple pieces of information to remember
     const result = await networkAgent.network('My name is Alice and I work as a software engineer', {
@@ -1960,62 +1993,66 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
     expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
   });
 
-  it('should handle complex multi-step workflow with memory, agents, and tools', async () => {
-    const memory = getMemory();
+  itLLM(
+    'should handle complex multi-step workflow with memory, agents, and tools',
+    { retry: 3, timeout: 120000 },
+    async () => {
+      const memory = getMemory();
 
-    const networkAgent = new Agent({
-      id: 'network-orchestrator',
-      name: 'network-orchestrator',
-      instructions: 'You help users with various tasks efficiently. Complete all parts of multi-step requests.',
-      model,
-      agents: { mathAgent },
-      tools: { getWeather },
-      memory,
-    });
+      const networkAgent = new Agent({
+        id: 'network-orchestrator',
+        name: 'network-orchestrator',
+        instructions: 'You help users with various tasks efficiently. Complete all parts of multi-step requests.',
+        agents: { mathAgent },
+        tools: { getWeather },
+        model,
+        memory,
+      });
 
-    const threadId = randomUUID();
+      const threadId = 'a8f55d05-8b0b-447c-9d49-28e35cdd5db6';
 
-    // Complex multi-step task with memory in the middle
-    const result = await networkAgent.network(
-      'Calculate what 15 times 4 is, then remember that my name is Bob and I live in Seattle, then tell me the weather in Seattle.',
-      {
-        memory: { thread: threadId, resource: resourceId },
-        maxSteps: 5,
-      },
-    );
+      // Complex multi-step task with memory in the middle
+      const result = await networkAgent.network(
+        'Calculate what 15 times 4 is, then remember that my name is Bob and I live in Seattle, then tell me the weather in Seattle.',
+        {
+          memory: { thread: threadId, resource: resourceId },
+          maxSteps: 5,
+        },
+      );
 
-    const chunks = await collectChunksAndCheckExecution(result);
+      const chunks = await collectChunksAndCheckExecution(result);
 
-    // 1. Memory should be saved
-    const workingMemory = await memory.getWorkingMemory({ threadId, resourceId });
-    expect(workingMemory).toBeTruthy();
-    expect(workingMemory).toContain('Bob');
-    expect(workingMemory?.toLowerCase()).toContain('seattle');
+      // 1. Memory should be saved
+      const workingMemory = await memory.getWorkingMemory({ threadId, resourceId });
+      expect(workingMemory).toBeTruthy();
+      expect(workingMemory).toContain('Bob');
+      expect(workingMemory?.toLowerCase()).toContain('seattle');
 
-    // 2. Should have completed calculation (60)
-    const fullText = extractFullText(chunks);
-    expect(fullText).toContain('60');
+      // 2. Should have completed calculation (60)
+      const fullText = extractFullText(chunks);
+      expect(fullText).toContain('60');
 
-    // 3. Should have called weather tool
-    const stepTypes = chunks.map(c => c.type);
-    expect(stepTypes).toContain('tool-execution-start');
-    expect(stepTypes).toContain('tool-execution-end');
+      // 3. Should have called weather tool
+      const stepTypes = chunks.map(c => c.type);
+      expect(stepTypes).toContain('tool-execution-start');
+      expect(stepTypes).toContain('tool-execution-end');
 
-    // Verify weather info is in response
-    expect(fullText.toLowerCase()).toMatch(/weather|cloudy|68/);
+      // Verify weather info is in response
+      expect(fullText.toLowerCase()).toMatch(/weather|cloudy|68/);
 
-    // 4. Should have called multiple primitive types (memory, agent, tool)
-    const routingDecisions = chunks.filter(c => c.type === 'routing-agent-end');
-    const primitiveTypes = routingDecisions.map(d => d.payload?.primitiveType);
+      // 4. Should have called multiple primitive types (memory, agent, tool)
+      const routingDecisions = chunks.filter(c => c.type === 'routing-agent-end');
+      const primitiveTypes = routingDecisions.map(d => d.payload?.primitiveType);
 
-    expect(primitiveTypes).toContain('tool'); // Both memory and weather are tools
-    expect(primitiveTypes).toContain('agent'); // Math agent
+      expect(primitiveTypes).toContain('tool'); // Both memory and weather are tools
+      expect(primitiveTypes).toContain('agent'); // Math agent
 
-    expect(routingDecisions.length).toBeLessThan(8);
+      expect(routingDecisions.length).toBeLessThan(8);
 
-    const memoryToolRoutes = routingDecisions.filter(c => c.payload?.primitiveId === 'updateWorkingMemory').length;
-    expect(memoryToolRoutes).toBe(1);
+      const memoryToolRoutes = routingDecisions.filter(c => c.payload?.primitiveId === 'updateWorkingMemory').length;
+      expect(memoryToolRoutes).toBe(1);
 
-    expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
-  }, 120000);
+      expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
+    },
+  );
 }

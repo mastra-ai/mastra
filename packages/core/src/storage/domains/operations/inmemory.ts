@@ -28,6 +28,8 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_scorer_definition_versions: new Map(),
       mastra_mcp_clients: new Map(),
       mastra_mcp_client_versions: new Map(),
+      mastra_mcp_servers: new Map(),
+      mastra_mcp_server_versions: new Map(),
       mastra_workspaces: new Map(),
       mastra_workspace_versions: new Map(),
       mastra_skills: new Map(),

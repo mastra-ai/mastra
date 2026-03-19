@@ -9,6 +9,7 @@ import type { GenericMutationCtx as MutationCtx } from 'convex/server';
 import { mutationGeneric } from 'convex/server';
 
 import type { StorageRequest, StorageResponse } from '../storage/types';
+import { findBestIndex } from './index-map';
 
 // Vector-specific table names (not in @mastra/core)
 const TABLE_VECTOR_INDEXES = 'mastra_vector_indexes';
@@ -160,6 +161,22 @@ async function handleTypedOperation(
           docs = await ctx.db
             .query(convexTable)
             .withIndex('by_workflow_run', (q: any) => q.eq('workflow_name', hint.workflowName).eq('run_id', hint.runId))
+            .take(maxDocs);
+        } else {
+          docs = await ctx.db.query(convexTable).take(maxDocs);
+        }
+      } else if (request.filters && request.filters.length > 0) {
+        const match = findBestIndex(convexTable, request.filters);
+        if (match) {
+          docs = await ctx.db
+            .query(convexTable)
+            .withIndex(match.indexName, (q: any) => {
+              let builder = q;
+              for (const filter of match.indexedFilters) {
+                builder = builder.eq(filter.field, filter.value);
+              }
+              return builder;
+            })
             .take(maxDocs);
         } else {
           docs = await ctx.db.query(convexTable).take(maxDocs);

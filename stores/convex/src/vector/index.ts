@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   CreateIndexParams,
@@ -134,6 +136,16 @@ export class ConvexVector extends MastraVector<VectorFilter> {
     includeVector = false,
     filter,
   }: QueryVectorParams<VectorFilter>): Promise<QueryResult[]> {
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('CONVEX', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for Convex queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     const vectors = await this.callStorage<VectorRecord[]>({
       op: 'queryTable',
       tableName: this.vectorTable(indexName),

@@ -1,5 +1,9 @@
+import type { ClientScoreRowData } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useInView } from '@/hooks/use-in-view';
+import type { ExperimentStatus } from '@mastra/core/storage';
 
 export interface DatasetExperimentsFilters {
   status?: string;
@@ -54,57 +58,93 @@ export const useDatasetExperiment = (datasetId: string, experimentId: string) =>
   });
 };
 
+const RESULTS_PER_PAGE = 100;
+
 interface UseDatasetExperimentResultsParams {
   datasetId: string;
   experimentId: string;
-  pagination?: { page?: number; perPage?: number };
-  experimentStatus?: string;
+  experimentStatus?: ExperimentStatus;
 }
 
 /**
- * Hook to list results for a dataset experiment with optional pagination
- * Polls every 2 seconds while experiment status is 'pending' or 'running'
+ * Hook to list results for a dataset experiment with infinite scroll pagination.
+ * Polls every 2 seconds while experiment status is 'pending' or 'running'.
  */
 export const useDatasetExperimentResults = ({
   datasetId,
   experimentId,
-  pagination,
   experimentStatus,
 }: UseDatasetExperimentResultsParams) => {
   const client = useMastraClient();
-  return useQuery({
-    queryKey: ['dataset-experiment-results', datasetId, experimentId, pagination],
-    queryFn: () => client.listDatasetExperimentResults(datasetId, experimentId, pagination),
+  const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
+
+  const query = useInfiniteQuery({
+    queryKey: ['dataset-experiment-results', datasetId, experimentId, experimentStatus],
+    queryFn: async ({ pageParam }) => {
+      return client.listDatasetExperimentResults(datasetId, experimentId, {
+        page: pageParam,
+        perPage: RESULTS_PER_PAGE,
+      });
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, _, lastPageParam) => {
+      if (!lastPage?.results?.length) {
+        return undefined;
+      }
+      const totalFetched = (lastPageParam + 1) * RESULTS_PER_PAGE;
+      const total = lastPage?.pagination?.total ?? 0;
+      if (totalFetched >= total) {
+        return undefined;
+      }
+      return lastPageParam + 1;
+    },
     enabled: Boolean(datasetId) && Boolean(experimentId),
     refetchInterval: experimentStatus === 'running' || experimentStatus === 'pending' ? 2000 : false,
+    select: data => {
+      return data.pages.flatMap(page => page?.results ?? []);
+    },
   });
+
+  useEffect(() => {
+    if (isEndOfListInView && query.hasNextPage && !query.isFetchingNextPage) {
+      query.fetchNextPage();
+    }
+  }, [isEndOfListInView, query.hasNextPage, query.isFetchingNextPage]);
+
+  return { ...query, setEndOfListElement };
 };
 
 /**
- * Hook to fetch scores for an experiment, transformed to Record<itemId, ScoreData[]>
- * ScoreData matches ResultsTable expectation: { id, scorerId, score, reason? }
+ * Hook to fetch all scores for an experiment, transformed to Record<entityId, ClientScoreRowData[]>
+ * Paginates through all pages to ensure no scores are silently dropped.
  */
-export const useScoresByExperimentId = (experimentId: string) => {
+export const useScoresByExperimentId = (experimentId: string, experimentStatus?: ExperimentStatus) => {
   const client = useMastraClient();
   return useQuery({
-    queryKey: ['dataset-experiment-scores', experimentId],
+    queryKey: ['dataset-experiment-scores', experimentId, experimentStatus],
     queryFn: async () => {
-      const response = await client.listScoresByRunId({ runId: experimentId });
-      // Transform flat array to Record<entityId, ScoreData[]>
-      const grouped: Record<string, Array<{ id: string; scorerId: string; score: number; reason?: string }>> = {};
-      for (const row of response.scores) {
+      const allScores: ClientScoreRowData[] = [];
+      let page = 0;
+      const perPage = 100;
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const response = await client.listScoresByRunId({ runId: experimentId, page, perPage });
+        allScores.push(...response.scores);
+        if (!response.pagination.hasMore) break;
+        page++;
+      }
+
+      const grouped: Record<string, ClientScoreRowData[]> = {};
+      for (const row of allScores) {
         if (!grouped[row.entityId]) {
           grouped[row.entityId] = [];
         }
-        grouped[row.entityId].push({
-          id: row.id,
-          scorerId: row.scorerId,
-          score: row.score,
-          reason: row.reason ?? undefined,
-        });
+        grouped[row.entityId].push(row);
       }
       return grouped;
     },
     enabled: Boolean(experimentId),
+    refetchInterval: experimentStatus === 'running' || experimentStatus === 'pending' ? 2000 : false,
   });
 };

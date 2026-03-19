@@ -13,8 +13,9 @@ import type {
   SpanOutputProcessor,
   ConfigSelector,
   SerializationOptions,
+  CardinalityConfig,
 } from '@mastra/core/observability';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 // ============================================================================
 // Sampling Strategy Types
@@ -80,6 +81,12 @@ export interface ObservabilityInstanceConfig {
    * Use these to customize truncation limits for large payloads.
    */
   serializationOptions?: SerializationOptions;
+  /**
+   * Cardinality protection settings for metrics.
+   * Controls which labels are blocked and whether UUID-like values are filtered.
+   * Applied to all metrics (auto-extracted and user-defined).
+   */
+  cardinality?: CardinalityConfig;
 }
 
 /**
@@ -120,7 +127,7 @@ export const samplingStrategySchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal(SamplingStrategyType.CUSTOM),
-    sampler: z.function().args(z.any().optional()).returns(z.boolean()),
+    sampler: z.function({ input: z.tuple([z.any().optional()]), output: z.boolean() }),
   }),
 ]);
 
@@ -152,6 +159,7 @@ export const observabilityInstanceConfigSchema = z
     includeInternalSpans: z.boolean().optional(),
     requestContextKeys: z.array(z.string()).optional(),
     serializationOptions: serializationOptionsSchema,
+    cardinality: z.any().optional(),
   })
   .refine(
     data => {

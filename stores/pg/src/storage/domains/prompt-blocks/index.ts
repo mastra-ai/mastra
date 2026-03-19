@@ -27,7 +27,7 @@ import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../..
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
 
-const SNAPSHOT_FIELDS = ['name', 'description', 'content', 'rules'] as const;
+const SNAPSHOT_FIELDS = ['name', 'description', 'content', 'rules', 'requestContextSchema'] as const;
 
 export class PromptBlocksPG extends PromptBlocksStorage {
   #db: PgDB;
@@ -113,6 +113,11 @@ export class PromptBlocksPG extends PromptBlocksStorage {
     await this.#db.createTable({
       tableName: TABLE_PROMPT_BLOCK_VERSIONS,
       schema: TABLE_SCHEMAS[TABLE_PROMPT_BLOCK_VERSIONS],
+    });
+    await this.#db.alterTable({
+      tableName: TABLE_PROMPT_BLOCK_VERSIONS,
+      schema: TABLE_SCHEMAS[TABLE_PROMPT_BLOCK_VERSIONS],
+      ifNotExists: ['requestContextSchema'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -337,7 +342,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
   }
 
   async list(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -363,8 +368,10 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       const queryParams: any[] = [];
       let paramIdx = 1;
 
-      conditions.push(`status = $${paramIdx++}`);
-      queryParams.push(status);
+      if (status) {
+        conditions.push(`status = $${paramIdx++}`);
+        queryParams.push(status);
+      }
 
       if (authorId !== undefined) {
         conditions.push(`"authorId" = $${paramIdx++}`);
@@ -376,7 +383,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         queryParams.push(JSON.stringify(metadata));
       }
 
-      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Get total count
       const countResult = await this.#db.client.one(
@@ -439,10 +446,10 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
           id, "blockId", "versionNumber",
-          name, description, content, rules,
+          name, description, content, rules, "requestContextSchema",
           "changedFields", "changeMessage",
           "createdAt", "createdAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
         [
           input.id,
           input.blockId,
@@ -451,6 +458,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
           input.description ?? null,
           input.content,
           input.rules ? JSON.stringify(input.rules) : null,
+          input.requestContextSchema ? JSON.stringify(input.requestContextSchema) : null,
           input.changedFields ? JSON.stringify(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,
@@ -750,6 +758,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       description: row.description as string | undefined,
       content: row.content as string,
       rules: this.parseJson(row.rules, 'rules'),
+      requestContextSchema: this.parseJson(row.requestContextSchema, 'requestContextSchema'),
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: new Date(row.createdAtZ || row.createdAt),

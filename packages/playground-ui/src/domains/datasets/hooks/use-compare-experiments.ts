@@ -1,6 +1,6 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import type { CompareExperimentsParams } from '@mastra/client-js';
+import type { CompareExperimentsParams, CompareExperimentsResponse } from '@mastra/client-js';
 
 type CompareExperimentsOptions = Omit<CompareExperimentsParams, 'datasetId' | 'experimentIdA' | 'experimentIdB'>;
 
@@ -18,7 +18,7 @@ export const useCompareExperiments = (
   options?: CompareExperimentsOptions,
 ) => {
   const client = useMastraClient();
-  return useQuery({
+  return useQuery<CompareExperimentsResponse>({
     queryKey: ['compare-experiments', datasetId, experimentIdA, experimentIdB, options],
     queryFn: () => client.compareExperiments({ datasetId, experimentIdA, experimentIdB, ...options }),
     enabled: Boolean(datasetId) && Boolean(experimentIdA) && Boolean(experimentIdB),

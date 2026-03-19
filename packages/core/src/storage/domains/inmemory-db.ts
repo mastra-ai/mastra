@@ -3,6 +3,7 @@ import type { StorageThreadType } from '../../memory/types';
 import type {
   StorageAgentType,
   StorageMCPClientType,
+  StorageMCPServerType,
   StorageMessageType,
   StoragePromptBlockType,
   StorageResourceType,
@@ -19,7 +20,12 @@ import type {
 } from '../types';
 import type { AgentVersion } from './agents';
 import type { MCPClientVersion } from './mcp-clients';
+import type { MCPServerVersion } from './mcp-servers';
 import type { TraceEntry } from './observability';
+import type { FeedbackRecord } from './observability/feedback';
+import type { LogRecord } from './observability/logs';
+import type { MetricRecord } from './observability/metrics';
+import type { ScoreRecord } from './observability/scores';
 import type { PromptBlockVersion } from './prompt-blocks';
 import type { ScorerDefinitionVersion } from './scorer-definitions';
 import type { SkillVersion } from './skills';
@@ -39,6 +45,10 @@ export class InMemoryDB {
   readonly workflows = new Map<string, StorageWorkflowRun>();
   readonly scores = new Map<string, ScoreRowData>();
   readonly traces = new Map<string, TraceEntry>();
+  readonly metricRecords: MetricRecord[] = [];
+  readonly logRecords: LogRecord[] = [];
+  readonly scoreRecords: ScoreRecord[] = [];
+  readonly feedbackRecords: FeedbackRecord[] = [];
   readonly agents = new Map<string, StorageAgentType>();
   readonly agentVersions = new Map<string, AgentVersion>();
   readonly promptBlocks = new Map<string, StoragePromptBlockType>();
@@ -47,6 +57,8 @@ export class InMemoryDB {
   readonly scorerDefinitionVersions = new Map<string, ScorerDefinitionVersion>();
   readonly mcpClients = new Map<string, StorageMCPClientType>();
   readonly mcpClientVersions = new Map<string, MCPClientVersion>();
+  readonly mcpServers = new Map<string, StorageMCPServerType>();
+  readonly mcpServerVersions = new Map<string, MCPServerVersion>();
   readonly workspaces = new Map<string, StorageWorkspaceType>();
   readonly workspaceVersions = new Map<string, WorkspaceVersion>();
   readonly skills = new Map<string, StorageSkillType>();
@@ -74,6 +86,10 @@ export class InMemoryDB {
     this.workflows.clear();
     this.scores.clear();
     this.traces.clear();
+    this.metricRecords.length = 0;
+    this.logRecords.length = 0;
+    this.scoreRecords.length = 0;
+    this.feedbackRecords.length = 0;
     this.agents.clear();
     this.agentVersions.clear();
     this.promptBlocks.clear();
@@ -82,6 +98,8 @@ export class InMemoryDB {
     this.scorerDefinitionVersions.clear();
     this.mcpClients.clear();
     this.mcpClientVersions.clear();
+    this.mcpServers.clear();
+    this.mcpServerVersions.clear();
     this.workspaces.clear();
     this.workspaceVersions.clear();
     this.skills.clear();

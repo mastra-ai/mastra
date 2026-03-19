@@ -40,7 +40,8 @@ export const ErrorAwareText = () => {
     );
   }
 
-  if (metadata?.mode === 'network' && metadata?.completionResult) {
+  const taskCompleteResult = metadata?.completionResult;
+  if (taskCompleteResult) {
     return (
       <div className="mb-2 space-y-2">
         <button onClick={() => setCollapsedCompletionCheck(s => !s)} className="flex items-center gap-2">
@@ -53,7 +54,7 @@ export const ErrorAwareText = () => {
         </button>
         {!collapsedCompletionCheck && (
           <Alert variant="info">
-            <AlertTitle as="h5">{metadata.completionResult?.passed ? 'Complete' : 'Not Complete'}</AlertTitle>
+            <AlertTitle as="h5">{taskCompleteResult?.passed ? 'Complete' : 'Not Complete'}</AlertTitle>
             <MarkdownText />
           </Alert>
         )}

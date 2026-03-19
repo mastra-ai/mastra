@@ -11,10 +11,11 @@
  * 2. RAW STORAGE - Direct query to the database (listMessages)
  * 3. RECALL - The processed recall output from Memory
  *
- * Tests run with both OpenAI and Anthropic models to ensure provider-agnostic behavior.
+ * Tests run with OpenAI models.
  */
 
-import { randomUUID } from 'node:crypto';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { setupDummyApiKeys, shouldSkipLLMTest } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
@@ -24,8 +25,17 @@ import { Memory } from '@mastra/memory';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+const MODE = getLLMTestMode();
+
 type MessagePart = MastraMessageContentV2['parts'][number];
 type OrderEntry = { type: string; content?: string };
+
+// Map env vars to provider keys for shouldSkipLLMTest
+const ENV_TO_PROVIDER: Record<string, 'openai' | 'anthropic' | 'google'> = {
+  OPENAI_API_KEY: 'openai',
+  ANTHROPIC_API_KEY: 'anthropic',
+  GOOGLE_GENERATIVE_AI_API_KEY: 'google',
+};
 
 // Model configurations for testing
 interface ModelConfig {
@@ -187,12 +197,25 @@ function createResearchTools() {
   return { search: searchTool, create_document: createDocTool };
 }
 
-export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
+export function getMessageOrderingTests(
+  config: MessageOrderingTestConfig,
+  options?: {
+    /** Recording name for LLM replay (e.g., 'memory-integration-tests-src-message-ordering') */
+    recordingName?: string;
+  },
+) {
   const { version, models } = config;
+
+  // Setup dummy keys for all providers used in this test suite
+  const providers = [...new Set(models.map(m => ENV_TO_PROVIDER[m.envVar]).filter(Boolean))];
+  setupDummyApiKeys(MODE, providers);
 
   // Run tests for each model configuration
   for (const modelConfig of models) {
-    describe(`Message Ordering with ${modelConfig.name} (${version}) (Issue #9909)`, () => {
+    const provider = ENV_TO_PROVIDER[modelConfig.envVar];
+    const skipLLM = shouldSkipLLMTest(MODE, provider, options?.recordingName);
+
+    describe.skipIf(skipLLM)(`Message Ordering with ${modelConfig.name} (${version}) (Issue #9909)`, () => {
       const dbFile = `file:ordering-test-${version}.db`;
 
       const createMemory = () =>
@@ -204,17 +227,7 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           }),
         });
 
-      const skipIfNoApiKey = () => {
-        if (!process.env[modelConfig.envVar]) {
-          console.info(`Skipping: ${modelConfig.envVar} not set`);
-          return true;
-        }
-        return false;
-      };
-
       it('should preserve text ordering: stream -> raw storage -> recall', async () => {
-        if (skipIfNoApiKey()) return;
-
         const memory = createMemory();
         const tools = createWeatherTools();
 
@@ -227,7 +240,7 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           tools,
         });
 
-        const threadId = randomUUID();
+        const threadId = '28f55d05-8b0b-447c-9d49-28e35cdd5db6';
         const resourceId = 'ordering-test-user';
 
         console.info('\n========================================');
@@ -361,8 +374,6 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
       }, 90000);
 
       it('should preserve ordering with multiple tool calls', async () => {
-        if (skipIfNoApiKey()) return;
-
         const memory = createMemory();
         const tools = createResearchTools();
 
@@ -375,7 +386,7 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           tools,
         });
 
-        const threadId = randomUUID();
+        const threadId = '48f55d05-8b0b-447c-9d49-28e35cdd5db6';
         const resourceId = 'multi-tool-test';
 
         console.info('\n========================================');
@@ -460,8 +471,6 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
       }, 120000);
 
       it('should match stream order exactly in storage', async () => {
-        if (skipIfNoApiKey()) return;
-
         const memory = createMemory();
         const tools = createWeatherTools();
 
@@ -474,7 +483,7 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           tools,
         });
 
-        const threadId = randomUUID();
+        const threadId = '38f55d05-8b0b-447c-9d49-28e35cdd5db6';
         const resourceId = 'exact-match-test';
 
         console.info('\n========================================');

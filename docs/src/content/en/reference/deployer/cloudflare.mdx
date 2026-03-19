@@ -22,44 +22,55 @@ npm install @mastra/deployer-cloudflare@latest
 Import `CloudflareDeployer` and set it as the deployer in your Mastra configuration:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
+import { Mastra } from '@mastra/core'
+import { CloudflareDeployer } from '@mastra/deployer-cloudflare'
 
 export const mastra = new Mastra({
   deployer: new CloudflareDeployer({
-    name: "your-project-name",
+    name: 'your-project-name',
     routes: [
       {
-        pattern: "example.com/*",
-        zone_name: "example.com",
-        custom_domain: true
-      }
+        pattern: 'example.com/*',
+        zone_name: 'example.com',
+        custom_domain: true,
+      },
     ],
     vars: {
-      NODE_ENV: "production",
-      API_KEY: "<api-key>"
+      NODE_ENV: 'production',
     },
     d1_databases: [
       {
-        binding: "DB",
-        database_name: "my-database",
-        database_id: "d1-database-id",
-        preview_database_id: "your-preview-database-id"
-      }
+        binding: 'DB',
+        database_name: 'my-database',
+        database_id: 'd1-database-id',
+        preview_database_id: 'your-preview-database-id',
+      },
     ],
     kv_namespaces: [
       {
-        binding: "CACHE",
-        id: "kv-namespace-id"
-      }
-    ]
-  })
-});
+        binding: 'CACHE',
+        id: 'kv-namespace-id',
+      },
+    ],
+  }),
+})
 ```
 
 ## Constructor options
 
 The `CloudflareDeployer` constructor accepts the same configuration options as `wrangler.jsonc`. See the [Wrangler configuration documentation](https://developers.cloudflare.com/workers/wrangler/configuration/) for all available options.
+
+## Secrets
+
+Environment variables from your `.env` file are **not** written to `wrangler.jsonc`. This prevents secrets from being committed to source control.
+
+To make your `.env` secrets available to your Cloudflare Worker, upload them as [Cloudflare Secrets](https://developers.cloudflare.com/workers/configuration/secrets/):
+
+```bash
+npx wrangler secret bulk .env
+```
+
+Use `vars` in the `CloudflareDeployer` constructor only for non-sensitive configuration values like `NODE_ENV`.
 
 ## Build output
 

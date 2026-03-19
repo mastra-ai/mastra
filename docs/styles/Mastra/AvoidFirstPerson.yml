@@ -1,0 +1,8 @@
+extends: existence
+message: "Avoid first-person singular ('%s'). Mastra docs are not about the author."
+level: warning
+ignorecase: true
+tokens:
+  - '\bI\b'
+  - '\bmy\b'
+  - '\bmine\b'

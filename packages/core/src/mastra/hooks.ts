@@ -62,6 +62,10 @@ export function createOnScorerHook(mastra: Mastra) {
         scorerId: scorerId,
         spanId,
         traceId,
+        scorer: {
+          ...rest.scorer,
+          hasJudge: !!scorerToUse.scorer.judge,
+        },
         metadata: {
           structuredOutput: !!structuredOutput,
         },

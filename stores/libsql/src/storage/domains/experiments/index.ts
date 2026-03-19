@@ -196,6 +196,10 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         updates.push('failedCount = ?');
         values.push(input.failedCount);
       }
+      if (input.totalItems !== undefined) {
+        updates.push('totalItems = ?');
+        values.push(input.totalItems);
+      }
       if (input.startedAt !== undefined) {
         updates.push('startedAt = ?');
         values.push(input.startedAt?.toISOString() ?? null);

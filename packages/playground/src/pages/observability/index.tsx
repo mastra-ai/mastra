@@ -1,4 +1,5 @@
-import { cn } from '@/lib/utils';
+import { EntityType } from '@mastra/core/observability';
+import type { EntityOptions } from '@mastra/playground-ui';
 import {
   HeaderTitle,
   Header,
@@ -6,7 +7,6 @@ import {
   TracesList,
   tracesListColumns,
   PageHeader,
-  EntityOptions,
   TracesTools,
   TraceDialog,
   parseError,
@@ -17,17 +17,21 @@ import {
   EntryListSkeleton,
   getToNextEntryFn,
   getToPreviousEntryFn,
+  groupTracesByThread,
   useAgents,
   useWorkflows,
   useScorers,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { EntityType } from '@mastra/core/observability';
-import { useEffect, useState } from 'react';
-import { EyeIcon } from 'lucide-react';
-import { useTraces } from '@/domains/observability/hooks/use-traces';
-import { useTrace } from '@/domains/observability/hooks/use-trace';
 
+import { EyeIcon } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
+import { useTrace } from '@/domains/observability/hooks/use-trace';
+import { useTraces } from '@/domains/observability/hooks/use-traces';
+
+import { cn } from '@/lib/utils';
 
 export default function Observability() {
   const navigate = useNavigate();
@@ -40,6 +44,7 @@ export default function Observability() {
   });
   const [selectedDateFrom, setSelectedDateFrom] = useState<Date | undefined>(undefined);
   const [selectedDateTo, setSelectedDateTo] = useState<Date | undefined>(undefined);
+  const [groupByThread, setGroupByThread] = useState<boolean>(false);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
   const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
@@ -53,7 +58,7 @@ export default function Observability() {
   const scoreId = searchParams.get('scoreId');
 
   const {
-    data: traces = [],
+    data: tracesData,
     isLoading: isTracesLoading,
     isFetchingNextPage,
     hasNextPage,
@@ -79,40 +84,46 @@ export default function Observability() {
     },
   });
 
-  useEffect(() => {
-    if (traceId) {
-      setSelectedTraceId(traceId);
-      setDialogIsOpen(true);
-    }
-  }, [traceId]);
+  const traces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
+  const threadTitles = tracesData?.threadTitles ?? {};
 
-  const agentOptions: EntityOptions[] = (Object.entries(agents) || []).map(([_, value]) => ({
-    value: value.id,
-    label: value.name,
-    type: EntityType.AGENT,
-  }));
+  // Sync URL traceId to state
+  if (traceId && traceId !== selectedTraceId) {
+    setSelectedTraceId(traceId);
+    setDialogIsOpen(true);
+  }
 
-  const workflowOptions: EntityOptions[] = (Object.entries(workflows || {}) || []).map(([, value]) => ({
-    value: value.name,
-    label: value.name,
-    type: EntityType.WORKFLOW_RUN,
-  }));
+  const agentOptions: EntityOptions[] = useMemo(
+    () =>
+      (Object.entries(agents) || []).map(([_, value]) => ({
+        value: value.id,
+        label: value.name,
+        type: EntityType.AGENT,
+      })),
+    [agents],
+  );
 
-  const entityOptions: EntityOptions[] = [
-    { value: 'all', label: 'All', type: 'all' as const },
-    ...agentOptions,
-    ...workflowOptions,
-  ];
+  const workflowOptions: EntityOptions[] = useMemo(
+    () =>
+      (Object.entries(workflows || {}) || []).map(([, value]) => ({
+        value: value.name,
+        label: value.name,
+        type: EntityType.WORKFLOW_RUN,
+      })),
+    [workflows],
+  );
 
-  useEffect(() => {
-    if (entityOptions) {
-      const entityName = searchParams.get('entity');
-      const entityOption = entityOptions.find(option => option.value === entityName);
-      if (entityOption && entityOption.value !== selectedEntityOption?.value) {
-        setSelectedEntityOption(entityOption);
-      }
-    }
-  }, [searchParams, selectedEntityOption, entityOptions]);
+  const entityOptions: EntityOptions[] = useMemo(
+    () => [{ value: 'all', label: 'All', type: 'all' as const }, ...agentOptions, ...workflowOptions],
+    [agentOptions, workflowOptions],
+  );
+
+  // Sync URL entity to state
+  const entityName = searchParams.get('entity');
+  const matchedEntityOption = entityOptions.find(option => option.value === entityName);
+  if (matchedEntityOption && matchedEntityOption.value !== selectedEntityOption?.value) {
+    setSelectedEntityOption(matchedEntityOption);
+  }
 
   const handleReset = () => {
     setSelectedTraceId(undefined);
@@ -120,6 +131,7 @@ export default function Observability() {
     setDialogIsOpen(false);
     setSelectedDateFrom(undefined);
     setSelectedDateTo(undefined);
+    setGroupByThread(false);
   };
 
   const handleDataChange = (value: Date | undefined, type: 'from' | 'to') => {
@@ -131,7 +143,7 @@ export default function Observability() {
   };
 
   const handleSelectedEntityChange = (option: EntityOptions | undefined) => {
-    option?.value && setSearchParams({ entity: option?.value });
+    if (option?.value) setSearchParams({ entity: option.value });
   };
 
   const handleTraceClick = (id: string) => {
@@ -144,15 +156,65 @@ export default function Observability() {
 
   const error = isTracesError ? parseError(TracesError) : undefined;
 
+  const orderedTraceEntries = useMemo(() => {
+    if (!groupByThread) {
+      return traces.map(item => ({ id: item.traceId }));
+    }
+    const { groups, ungrouped } = groupTracesByThread(traces);
+    const ordered: { id: string }[] = [];
+    for (const group of groups) {
+      for (const trace of group.traces) {
+        ordered.push({ id: trace.traceId });
+      }
+    }
+    for (const trace of ungrouped) {
+      ordered.push({ id: trace.traceId });
+    }
+    return ordered;
+  }, [traces, groupByThread]);
+
+  // 403 check - permission denied for traces
+  if (TracesError && is403ForbiddenError(TracesError)) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <HeaderTitle>
+            <Icon>
+              <EyeIcon />
+            </Icon>
+            Observability
+          </HeaderTitle>
+
+          <HeaderAction>
+            <Button
+              as={Link}
+              to="https://mastra.ai/en/docs/observability/tracing/overview"
+              target="_blank"
+              variant="ghost"
+              size="md"
+            >
+              <DocsIcon />
+              Observability documentation
+            </Button>
+          </HeaderAction>
+        </Header>
+
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="traces" />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
   const filtersApplied = selectedEntityOption?.value !== 'all' || selectedDateFrom || selectedDateTo;
 
   const toNextTrace = getToNextEntryFn({
-    entries: traces.map(item => ({ id: item.traceId })),
+    entries: orderedTraceEntries,
     id: selectedTraceId,
     update: setSelectedTraceId,
   });
   const toPreviousTrace = getToPreviousEntryFn({
-    entries: traces.map(item => ({ id: item.traceId })),
+    entries: orderedTraceEntries,
     id: selectedTraceId,
     update: setSelectedTraceId,
   });
@@ -169,10 +231,14 @@ export default function Observability() {
           </HeaderTitle>
 
           <HeaderAction>
-            <Button as={Link} to="https://mastra.ai/en/docs/observability/tracing/overview" target="_blank">
-              <Icon>
-                <DocsIcon />
-              </Icon>
+            <Button
+              as={Link}
+              to="https://mastra.ai/en/docs/observability/tracing/overview"
+              target="_blank"
+              variant="ghost"
+              size="md"
+            >
+              <DocsIcon />
               Observability documentation
             </Button>
           </HeaderAction>
@@ -195,6 +261,8 @@ export default function Observability() {
               selectedDateFrom={selectedDateFrom}
               selectedDateTo={selectedDateTo}
               isLoading={isTracesLoading || isLoadingAgents || isLoadingWorkflows}
+              groupByThread={groupByThread}
+              onGroupByThreadChange={setGroupByThread}
             />
 
             {isTracesLoading ? (
@@ -209,6 +277,8 @@ export default function Observability() {
                 filtersApplied={Boolean(filtersApplied)}
                 isFetchingNextPage={isFetchingNextPage}
                 hasNextPage={hasNextPage}
+                groupByThread={groupByThread}
+                threadTitles={threadTitles}
               />
             )}
           </div>
@@ -223,7 +293,7 @@ export default function Observability() {
         traceDetails={traces.find(t => t.traceId === selectedTraceId)}
         isOpen={dialogIsOpen}
         onClose={() => {
-          navigate(`/observability`);
+          void navigate(`/observability`);
           setDialogIsOpen(false);
         }}
         onNext={toNextTrace}

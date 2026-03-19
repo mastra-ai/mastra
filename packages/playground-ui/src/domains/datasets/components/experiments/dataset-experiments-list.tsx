@@ -3,7 +3,8 @@ import { EmptyState } from '@/ds/components/EmptyState';
 import { ItemList } from '@/ds/components/ItemList';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Play } from 'lucide-react';
-import { cn } from '@/index';
+import { Chip, cn } from '@/index';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 const experimentsListColumns = [
   { name: 'experimentId', label: 'ID', size: '6rem' },
@@ -13,8 +14,6 @@ const experimentsListColumns = [
   { name: 'counts', label: 'Counts', size: '7rem' },
   { name: 'date', label: 'Created', size: '10rem' },
 ];
-
-const experimentsListColumnsWithCheckbox = [{ name: 'checkbox', label: '', size: '2.5rem' }, ...experimentsListColumns];
 
 /**
  * Truncate experiment ID to first 8 characters or until the first dash
@@ -56,23 +55,21 @@ export function DatasetExperimentsList({
   onRowClick,
   onToggleSelection,
 }: DatasetExperimentsListProps) {
-  const columns = isSelectionActive ? experimentsListColumnsWithCheckbox : experimentsListColumns;
+  const columns = experimentsListColumns;
 
   if (experiments.length === 0) {
     return <EmptyDatasetExperimentsList />;
   }
 
-  console.log({ experiments });
-
   return (
     <ItemList>
-      <ItemList.Header columns={columns}>
-        {columns.map(col => (
-          <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
-        ))}
-      </ItemList.Header>
-
       <ItemList.Scroller>
+        <ItemList.Header columns={columns} isSelectionActive={isSelectionActive}>
+          {columns.map(col => (
+            <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
+          ))}
+        </ItemList.Header>
+
         <ItemList.Items>
           {experiments.map(experiment => {
             const status = experiment.status;
@@ -81,37 +78,40 @@ export function DatasetExperimentsList({
 
             return (
               <ItemList.Row key={experiment.id} isSelected={isSelected}>
+                {isSelectionActive && (
+                  <ItemList.LabelCell>
+                    <Checkbox
+                      checked={isSelected}
+                      onCheckedChange={() => onToggleSelection(experiment.id)}
+                      aria-label={`Select experiment ${experiment.id}`}
+                    />
+                  </ItemList.LabelCell>
+                )}
                 <ItemList.RowButton
-                  entry={entry}
-                  isSelected={isSelected}
-                  columns={columns}
+                  item={entry}
+                  columns={experimentsListColumns}
                   onClick={() => onRowClick(experiment.id)}
                 >
-                  {isSelectionActive && (
-                    <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={() => {}}
-                        onClick={e => {
-                          e.stopPropagation();
-                          onToggleSelection(experiment.id);
-                        }}
-                        aria-label={`Select experiment ${experiment.id}`}
-                      />
-                    </div>
-                  )}
-                  <ItemList.TextCell>{truncateExperimentId(experiment.id)}</ItemList.TextCell>
+                  <ItemList.IdCell id={experiment.id} />
                   <ItemList.StatusCell status={status} />
                   <ItemList.TextCell>{experiment.targetType}</ItemList.TextCell>
                   <ItemList.TextCell>{experiment.targetId}</ItemList.TextCell>
-                  <ItemList.FlexCell className={cn('[&>small]:text-neutral3')}>
-                    <b>{experiment.totalItems}</b>
-                    <small>|</small>
-                    <b>{experiment.succeededCount}</b>
-                    <small>|</small>
-                    <b>{experiment.failedCount}</b>
-                  </ItemList.FlexCell>
-                  <ItemList.TextCell>{formatDate(experiment.createdAt)}</ItemList.TextCell>
+                  <ItemList.Cell>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex gap-1">
+                          {experiment.succeededCount > 0 && <Chip color="green">{experiment.succeededCount}</Chip>}
+                          {experiment.failedCount > 0 && <Chip color="red">{experiment.failedCount}</Chip>}
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {experiment.succeededCount} Succeeded
+                        <br />
+                        {experiment.failedCount} Failed
+                      </TooltipContent>
+                    </Tooltip>
+                  </ItemList.Cell>
+                  <ItemList.DateCell date={experiment.createdAt} withTime={true} />
                 </ItemList.RowButton>
               </ItemList.Row>
             );

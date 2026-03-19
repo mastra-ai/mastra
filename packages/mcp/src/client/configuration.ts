@@ -1,3 +1,4 @@
+import type { Stream } from 'node:stream';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { Tool } from '@mastra/core/tools';
@@ -153,7 +154,7 @@ To fix this you have three different options:
    * await mcp.progress.onUpdate('serverName', (params) => {
    *   console.log(`Progress: ${params.progress}%`);
    *   console.log(`Status: ${params.message}`);
-   *   
+   *
    *   if (params.total) {
    *     console.log(`Completed ${params.progress} of ${params.total} items`);
    *   }
@@ -587,7 +588,6 @@ To fix this you have three different options:
        * @param params.serverName - Name of the server to retrieve from
        * @param params.name - Name of the prompt to retrieve
        * @param params.args - Optional arguments to populate the prompt template
-       * @param params.version - Optional specific version of the prompt
        * @returns Promise resolving to the prompt result with messages
        * @throws {MastraError} If fetching the prompt fails
        *
@@ -597,25 +597,14 @@ To fix this you have three different options:
        *   serverName: 'weatherServer',
        *   name: 'forecast',
        *   args: { city: 'London' },
-       *   version: '1.0'
        * });
        * console.log(prompt.messages);
        * ```
        */
-      get: async ({
-        serverName,
-        name,
-        args,
-        version,
-      }: {
-        serverName: string;
-        name: string;
-        args?: Record<string, any>;
-        version?: string;
-      }) => {
+      get: async ({ serverName, name, args }: { serverName: string; name: string; args?: Record<string, any> }) => {
         try {
           const internalClient = await this.getConnectedClientForServer(serverName);
-          return internalClient.prompts.get({ name, args, version });
+          return internalClient.prompts.get({ name, args });
         } catch (error) {
           throw new MastraError(
             {
@@ -708,7 +697,7 @@ To fix this you have three different options:
         mcpClientInstances.delete(this.id);
 
         // Disconnect all clients in the cache
-        await Promise.all(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
+        await Promise.allSettled(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
         this.mcpClientsById.clear();
       } finally {
         this.disconnectPromise = null;
@@ -719,13 +708,37 @@ To fix this you have three different options:
   }
 
   /**
+   * Reconnects a single MCP server by name.
+   *
+   * If the server is already connected, it will be forcefully disconnected and reconnected.
+   * If the server has never been connected, a new connection will be established.
+   *
+   * @param serverName - The name of the server to reconnect (must match a key in `servers`)
+   * @throws {Error} If the server name is not found in the configuration
+   *
+   * @example
+   * ```typescript
+   * // Reconnect a specific server after it fails
+   * await mcp.reconnectServer('weatherServer');
+   * ```
+   */
+  public async reconnectServer(serverName: string): Promise<void> {
+    const existingClient = this.mcpClientsById.get(serverName);
+    if (existingClient) {
+      await existingClient.forceReconnect();
+    } else {
+      await this.getConnectedClientForServer(serverName);
+    }
+  }
+
+  /**
    * Retrieves all tools from all configured servers with namespaced names.
    *
    * Tool names are namespaced as `serverName_toolName` to prevent conflicts between servers.
    * This method is intended to be passed directly to an Agent definition.
    *
-   * @returns Object mapping namespaced tool names to tool implementations
-   * @throws {MastraError} If retrieving tools fails
+   * @returns Object mapping namespaced tool names to tool implementations.
+   * Errors for individual servers are logged but don't throw - failed servers are skipped.
    *
    * @example
    * ```typescript
@@ -742,21 +755,28 @@ To fix this you have three different options:
     this.addToInstanceCache();
     const connectedTools: Record<string, Tool<any, any, any, any>> = {};
 
-    try {
-      await this.eachClientTools(async ({ serverName, tools }) => {
+    for (const serverName of Object.keys(this.serverConfigs)) {
+      try {
+        const client = await this.getConnectedClientForServer(serverName);
+        const tools = await client.tools();
         for (const [toolName, toolConfig] of Object.entries(tools)) {
-          connectedTools[`${serverName}_${toolName}`] = toolConfig; // namespace tool to prevent tool name conflicts between servers
+          connectedTools[`${serverName}_${toolName}`] = toolConfig;
         }
-      });
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MCP_CLIENT_GET_TOOLS_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
+      } catch (error) {
+        const mastraError = new MastraError(
+          {
+            id: 'MCP_CLIENT_GET_TOOLS_FAILED',
+            domain: ErrorDomain.MCP,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              serverName,
+            },
+          },
+          error,
+        );
+        this.logger.trackException(mastraError);
+        this.logger.error('Failed to list tools from server:', { error: mastraError.toString() });
+      }
     }
 
     return connectedTools;
@@ -768,8 +788,8 @@ To fix this you have three different options:
    * Unlike listTools(), this returns tools grouped by server without namespacing.
    * This is intended to be passed dynamically to the generate() or stream() method.
    *
-   * @returns Object mapping server names to their tool collections
-   * @throws {MastraError} If retrieving toolsets fails
+   * @returns Object mapping server names to their tool collections.
+   * Errors for individual servers are logged but don't throw - failed servers are skipped.
    *
    * @example
    * ```typescript
@@ -786,27 +806,60 @@ To fix this you have three different options:
    * ```
    */
   public async listToolsets(): Promise<Record<string, Record<string, Tool<any, any, any, any>>>> {
+    const result = await this.listToolsetsWithErrors();
+    return result.toolsets;
+  }
+
+  /**
+   * Returns toolsets organized by server name, along with any per-server errors.
+   *
+   * Like listToolsets(), but also returns errors for servers that failed to connect
+   * or list tools. This allows callers to report specific failure reasons per server.
+   *
+   * @returns Object with `toolsets` (successful servers) and `errors` (failed servers with error messages).
+   *
+   * @example
+   * ```typescript
+   * const { toolsets, errors } = await mcp.listToolsetsWithErrors();
+   * for (const [name, err] of Object.entries(errors)) {
+   *   console.error(`Server ${name} failed: ${err}`);
+   * }
+   * ```
+   */
+  public async listToolsetsWithErrors(): Promise<{
+    toolsets: Record<string, Record<string, Tool<any, any, any, any>>>;
+    errors: Record<string, string>;
+  }> {
     this.addToInstanceCache();
     const connectedToolsets: Record<string, Record<string, Tool<any, any, any, any>>> = {};
+    const errors: Record<string, string> = {};
 
-    try {
-      await this.eachClientTools(async ({ serverName, tools }) => {
+    for (const serverName of Object.keys(this.serverConfigs)) {
+      try {
+        const client = await this.getConnectedClientForServer(serverName);
+        const tools = await client.tools();
         if (tools) {
           connectedToolsets[serverName] = tools;
         }
-      });
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MCP_CLIENT_GET_TOOLSETS_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
+      } catch (error) {
+        const mastraError = new MastraError(
+          {
+            id: 'MCP_CLIENT_GET_TOOLSETS_FAILED',
+            domain: ErrorDomain.MCP,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              serverName,
+            },
+          },
+          error,
+        );
+        this.logger.trackException(mastraError);
+        this.logger.error('Failed to list toolsets from server:', { error: mastraError.toString() });
+        errors[serverName] = error instanceof Error ? error.message : String(error);
+      }
     }
 
-    return connectedToolsets;
+    return { toolsets: connectedToolsets, errors };
   }
 
   /**
@@ -832,6 +885,21 @@ To fix this you have three different options:
       }
     }
     return sessionIds;
+  }
+
+  /**
+   * Gets the stderr stream of a connected stdio server.
+   *
+   * Only available for servers using stdio transport with `stderr: 'pipe'`.
+   * Returns null if the server is not connected, not using stdio, or stderr is not piped.
+   *
+   * @param serverName - The name of the server
+   * @returns The stderr stream, or null
+   */
+  public getServerStderr(serverName: string): Stream | null {
+    const client = this.mcpClientsById.get(serverName);
+    if (!client) return null;
+    return client.stderr;
   }
 
   private async getConnectedClient(name: string, config: MastraMCPServerDefinition): Promise<InternalMastraMCPClient> {
@@ -897,21 +965,5 @@ To fix this you have three different options:
       throw new Error(`Server configuration not found for name: ${serverName}`);
     }
     return this.getConnectedClient(serverName, serverConfig);
-  }
-
-  private async eachClientTools(
-    cb: (args: {
-      serverName: string;
-      tools: Record<string, Tool<any, any, any, any>>;
-      client: InstanceType<typeof InternalMastraMCPClient>;
-    }) => Promise<void>,
-  ) {
-    await Promise.all(
-      Object.entries(this.serverConfigs).map(async ([serverName, serverConfig]) => {
-        const client = await this.getConnectedClient(serverName, serverConfig);
-        const tools = await client.tools();
-        await cb({ serverName, tools, client });
-      }),
-    );
   }
 }

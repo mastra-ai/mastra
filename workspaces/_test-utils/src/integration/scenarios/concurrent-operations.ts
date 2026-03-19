@@ -75,8 +75,10 @@ export function createConcurrentOperationsTests(getContext: () => TestContext): 
     it(
       'interleaved API write and sandbox read',
       async () => {
-        const { workspace, getTestPath } = getContext();
+        const ctx = getContext();
+        const { workspace, getTestPath } = ctx;
 
+        if (!ctx.sandboxPathsAligned) return;
         if (!workspace.filesystem || !workspace.sandbox?.executeCommand) return;
 
         const basePath = getTestPath();

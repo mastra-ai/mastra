@@ -429,6 +429,9 @@ export class AIV4Adapter {
               if (aiV4Part.providerOptions) {
                 part.providerMetadata = aiV4Part.providerOptions;
               }
+              if (aiV4Part.filename) {
+                (part as Record<string, unknown>).filename = aiV4Part.filename;
+              }
               parts.push(part);
             } else if (typeof aiV4Part.data === 'string') {
               const categorized = categorizeFileData(aiV4Part.data, aiV4Part.mimeType);
@@ -442,6 +445,9 @@ export class AIV4Adapter {
                 if (aiV4Part.providerOptions) {
                   part.providerMetadata = aiV4Part.providerOptions;
                 }
+                if (aiV4Part.filename) {
+                  (part as Record<string, unknown>).filename = aiV4Part.filename;
+                }
                 parts.push(part);
               } else {
                 try {
@@ -452,6 +458,9 @@ export class AIV4Adapter {
                   };
                   if (aiV4Part.providerOptions) {
                     part.providerMetadata = aiV4Part.providerOptions;
+                  }
+                  if (aiV4Part.filename) {
+                    (part as Record<string, unknown>).filename = aiV4Part.filename;
                   }
                   parts.push(part);
                 } catch (error) {
@@ -467,6 +476,9 @@ export class AIV4Adapter {
                 };
                 if (aiV4Part.providerOptions) {
                   part.providerMetadata = aiV4Part.providerOptions;
+                }
+                if (aiV4Part.filename) {
+                  (part as Record<string, unknown>).filename = aiV4Part.filename;
                 }
                 parts.push(part);
               } catch (error) {

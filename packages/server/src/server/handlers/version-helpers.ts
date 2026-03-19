@@ -262,14 +262,16 @@ export async function handleAutoVersioning<TEntity>(
   existingEntity: TEntity & { activeVersionId?: string },
   updatedEntity: TEntity,
   configFields?: Record<string, unknown>,
+  options?: { changeMessage?: string },
 ): Promise<{ entity: TEntity; versionCreated: boolean }> {
   if (!configFields || Object.keys(configFields).length === 0) {
     return { entity: updatedEntity, versionCreated: false };
   }
 
-  const activeVersion = existingEntity.activeVersionId ? await store.getVersion(existingEntity.activeVersionId) : null;
-
-  const versionToCompare = activeVersion || (await store.getLatestVersion(parentId));
+  // Always compare against the latest version (not the active/published one).
+  // This ensures each draft save is diffed against the last edit, so intermediate
+  // draft changes are never silently reverted to the published baseline.
+  const versionToCompare = await store.getLatestVersion(parentId);
 
   const previousConfig = versionToCompare
     ? extractConfigFromVersion(versionToCompare as unknown as Record<string, unknown>, snapshotConfigFields)
@@ -287,7 +289,7 @@ export async function handleAutoVersioning<TEntity>(
   }
 
   const { versionId } = await createVersionWithRetry(store, parentId, parentIdField, fullConfig, changedFields, {
-    changeMessage: 'Auto-saved after edit',
+    changeMessage: options?.changeMessage ?? 'Auto-saved after edit',
   });
 
   // Do NOT update activeVersionId here — the new version stays as a draft.

@@ -1,5 +1,5 @@
-import { UIMessage } from '@ai-sdk/react';
-import { CompleteAttachment } from '@assistant-ui/react';
+import type { UIMessage } from '@ai-sdk/react';
+import type { CompleteAttachment } from '@assistant-ui/react';
 
 /**
  * Tripwire metadata included when a processor triggers a tripwire
@@ -20,6 +20,10 @@ export type MastraUIMessageMetadata = {
 } & (
   | {
       mode: 'generate';
+      completionResult?: {
+        passed: boolean;
+        suppressFeedback?: boolean;
+      };
       requireApprovalMetadata?: {
         [toolName: string]: {
           toolCallId: string;
@@ -39,6 +43,10 @@ export type MastraUIMessageMetadata = {
     }
   | {
       mode: 'stream';
+      completionResult?: {
+        passed: boolean;
+        suppressFeedback?: boolean;
+      };
       requireApprovalMetadata?: {
         [toolName: string]: {
           toolCallId: string;
@@ -64,6 +72,7 @@ export type MastraUIMessageMetadata = {
       hasMoreMessages?: boolean;
       completionResult?: {
         passed: boolean;
+        suppressFeedback?: boolean;
       };
       requireApprovalMetadata?: {
         [toolName: string]: {

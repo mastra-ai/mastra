@@ -18,7 +18,21 @@ import { handleError } from './error';
 import { handleAutoVersioning } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
 
-const PROMPT_BLOCK_SNAPSHOT_CONFIG_FIELDS = ['name', 'description', 'content', 'rules'] as const;
+const PROMPT_BLOCK_SNAPSHOT_CONFIG_FIELDS = [
+  'name',
+  'description',
+  'content',
+  'rules',
+  'requestContextSchema',
+] as const;
+
+/** Computes whether a prompt block has an unpublished draft version. */
+function computeHasDraft(
+  latestVersion: { id: string } | null | undefined,
+  activeVersionId: string | null | undefined,
+): boolean {
+  return !!(latestVersion && (!activeVersionId || latestVersion.id !== activeVersionId));
+}
 
 // ============================================================================
 // Route Definitions
@@ -59,7 +73,17 @@ export const LIST_STORED_PROMPT_BLOCKS_ROUTE = createRoute({
         metadata,
       });
 
-      return result;
+      // For each block, fetch the latest version to compute hasDraft.
+      // resolvedVersionId from listResolved defaults to 'published' resolution,
+      // so we need the actual latest version to detect unpublished drafts.
+      const promptBlocks = await Promise.all(
+        result.promptBlocks.map(async (block: (typeof result.promptBlocks)[number]) => {
+          const latestVersion = await promptBlockStore.getLatestVersion(block.id);
+          return { ...block, hasDraft: computeHasDraft(latestVersion, block.activeVersionId) };
+        }),
+      );
+
+      return { ...result, promptBlocks };
     } catch (error) {
       return handleError(error, 'Error listing stored prompt blocks');
     }
@@ -100,7 +124,9 @@ export const GET_STORED_PROMPT_BLOCK_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Stored prompt block with id ${storedPromptBlockId} not found` });
       }
 
-      return promptBlock;
+      const latestVersion = await promptBlockStore.getLatestVersion(storedPromptBlockId);
+
+      return { ...promptBlock, hasDraft: computeHasDraft(latestVersion, promptBlock.activeVersionId) };
     } catch (error) {
       return handleError(error, 'Error getting stored prompt block');
     }
@@ -120,7 +146,17 @@ export const CREATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
   description: 'Creates a new prompt block in storage with the provided configuration',
   tags: ['Stored Prompt Blocks'],
   requiresAuth: true,
-  handler: async ({ mastra, id: providedId, authorId, metadata, name, description, content, rules }) => {
+  handler: async ({
+    mastra,
+    id: providedId,
+    authorId,
+    metadata,
+    name,
+    description,
+    content,
+    rules,
+    requestContextSchema,
+  }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -157,6 +193,7 @@ export const CREATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
           description,
           content,
           rules,
+          requestContextSchema,
         },
       });
 
@@ -167,7 +204,13 @@ export const CREATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Failed to resolve created prompt block' });
       }
 
-      return resolved;
+      const latestVersion = await promptBlockStore.getLatestVersion(id);
+      const hasDraft = !!(
+        latestVersion &&
+        (!resolved.activeVersionId || latestVersion.id !== resolved.activeVersionId)
+      );
+
+      return { ...resolved, hasDraft };
     } catch (error) {
       return handleError(error, 'Error creating stored prompt block');
     }
@@ -199,6 +242,7 @@ export const UPDATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
     description,
     content,
     rules,
+    requestContextSchema,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -227,10 +271,11 @@ export const UPDATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
         description,
         content,
         rules,
+        requestContextSchema,
       });
 
       // Build the snapshot config for auto-versioning comparison
-      const configFields = { name, description, content, rules };
+      const configFields = { name, description, content, rules, requestContextSchema };
 
       // Filter out undefined values to get only the config fields that were provided
       const providedConfigFields = Object.fromEntries(Object.entries(configFields).filter(([_, v]) => v !== undefined));
@@ -254,7 +299,13 @@ export const UPDATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Failed to resolve updated prompt block' });
       }
 
-      return resolved;
+      const latestVersion = await promptBlockStore.getLatestVersion(storedPromptBlockId);
+      const hasDraft = !!(
+        latestVersion &&
+        (!resolved.activeVersionId || latestVersion.id !== resolved.activeVersionId)
+      );
+
+      return { ...resolved, hasDraft };
     } catch (error) {
       return handleError(error, 'Error updating stored prompt block');
     }

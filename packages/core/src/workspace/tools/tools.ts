@@ -10,21 +10,31 @@
 import type { WorkspaceToolName } from '../constants';
 import { WORKSPACE_TOOLS } from '../constants';
 import { FileNotFoundError, FileReadRequiredError } from '../errors';
-import { InMemoryFileReadTracker } from '../filesystem';
-import type { FileReadTracker } from '../filesystem';
+import { InMemoryFileReadTracker, InMemoryFileWriteLock } from '../filesystem';
+import type { FileReadTracker, FileWriteLock } from '../filesystem';
 import type { Workspace } from '../workspace';
+import { isAstGrepAvailable, astEditTool } from './ast-edit';
 import { deleteFileTool } from './delete-file';
 import { editFileTool } from './edit-file';
-import { executeCommandTool } from './execute-command';
+import { executeCommandTool, executeCommandWithBackgroundTool } from './execute-command';
 import { fileStatTool } from './file-stat';
+import { getProcessOutputTool } from './get-process-output';
 import { grepTool } from './grep';
 import { indexContentTool } from './index-content';
+import { killProcessTool } from './kill-process';
 import { listFilesTool } from './list-files';
 import { mkdirTool } from './mkdir';
 import { readFileTool } from './read-file';
 import { searchTool } from './search';
 import type { WorkspaceToolsConfig } from './types';
-
+export type {
+  WorkspaceToolConfig,
+  WorkspaceToolsConfig,
+  ExecuteCommandToolConfig,
+  BackgroundProcessConfig,
+  BackgroundProcessMeta,
+  BackgroundProcessExitMeta,
+} from './types';
 import { writeFileTool } from './write-file';
 
 /**
@@ -38,10 +48,18 @@ import { writeFileTool } from './write-file';
 export function resolveToolConfig(
   toolsConfig: WorkspaceToolsConfig | undefined,
   toolName: WorkspaceToolName,
-): { enabled: boolean; requireApproval: boolean; requireReadBeforeWrite?: boolean } {
+): {
+  enabled: boolean;
+  requireApproval: boolean;
+  requireReadBeforeWrite?: boolean;
+  maxOutputTokens?: number;
+  name?: string;
+} {
   let enabled = true;
   let requireApproval = false;
   let requireReadBeforeWrite: boolean | undefined;
+  let maxOutputTokens: number | undefined;
+  let name: string | undefined;
 
   if (toolsConfig) {
     if (toolsConfig.enabled !== undefined) {
@@ -62,29 +80,21 @@ export function resolveToolConfig(
       if (perToolConfig.requireReadBeforeWrite !== undefined) {
         requireReadBeforeWrite = perToolConfig.requireReadBeforeWrite;
       }
+      if (perToolConfig.maxOutputTokens !== undefined) {
+        maxOutputTokens = perToolConfig.maxOutputTokens;
+      }
+      if (perToolConfig.name !== undefined) {
+        name = perToolConfig.name;
+      }
     }
   }
 
-  return { enabled, requireApproval, requireReadBeforeWrite };
+  return { enabled, requireApproval, requireReadBeforeWrite, maxOutputTokens, name };
 }
 
 // ---------------------------------------------------------------------------
 // Wrapper helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Clone a standalone tool with config overrides and inject workspace into context.
- */
-function wrapTool(tool: any, workspace: Workspace, config: { requireApproval: boolean }): any {
-  return {
-    ...tool,
-    requireApproval: config.requireApproval,
-    execute: async (input: any, context: any = {}) => {
-      const enrichedContext = { ...context, workspace: context?.workspace ?? workspace };
-      return tool.execute(input, enrichedContext);
-    },
-  };
-}
 
 /**
  * Wrap a tool with read-before-write tracking (readTracker).
@@ -96,32 +106,44 @@ function wrapWithReadTracker(
   tool: any,
   workspace: Workspace,
   readTracker: FileReadTracker,
-  config: { requireApproval: boolean; requireReadBeforeWrite?: boolean },
+  config: { requireReadBeforeWrite?: boolean },
   mode: 'read' | 'write',
 ): any {
   return {
     ...tool,
-    requireApproval: config.requireApproval,
     execute: async (input: any, context: any = {}) => {
-      const enrichedContext = { ...context, workspace: context?.workspace ?? workspace };
+      // Pre-execution: enforce read-before-write policy and/or attach
+      // optimistic-concurrency mtime for write tools.
+      if (mode === 'write') {
+        // Optimistic concurrency: attach the mtime from the last read
+        // *before* stat so it's preserved even when the file has been
+        // deleted externally (stat throws FileNotFoundError).
+        const record = readTracker.getReadRecord(input.path);
+        if (record) {
+          context = { ...context, __expectedMtime: record.modifiedAtRead };
+        }
 
-      // Pre-execution: check read-before-write for write tools
-      if (mode === 'write' && config.requireReadBeforeWrite) {
         try {
           const stat = await workspace.filesystem!.stat(input.path);
-          const check = readTracker.needsReRead(input.path, stat.modifiedAt);
-          if (check.needsReRead) {
-            throw new FileReadRequiredError(input.path, check.reason!);
+
+          // Policy gate: require the agent to have read the file first
+          if (config.requireReadBeforeWrite) {
+            const check = readTracker.needsReRead(input.path, stat.modifiedAt);
+            if (check.needsReRead) {
+              throw new FileReadRequiredError(input.path, check.reason!);
+            }
           }
         } catch (error) {
           if (!(error instanceof FileNotFoundError)) {
             throw error;
           }
-          // New file — no read required
+          // Missing file: if a read record exists the expectedMtime is
+          // already attached, so downstream writeFile can treat this as
+          // stale. Otherwise it's a genuinely new file.
         }
       }
 
-      const result = await tool.execute(input, enrichedContext);
+      const result = await tool.execute(input, context);
 
       // Post-execution: track reads / clear write records
       if (mode === 'read') {
@@ -136,6 +158,25 @@ function wrapWithReadTracker(
       }
 
       return result;
+    },
+  };
+}
+
+/**
+ * Wrap a tool with a per-file write lock.
+ *
+ * The lock serializes the entire execute pipeline (including any
+ * read-before-write checks) so concurrent calls to the same path
+ * run one at a time.
+ */
+function wrapWithWriteLock(tool: any, writeLock: FileWriteLock): any {
+  return {
+    ...tool,
+    execute: async (input: any, context: any = {}) => {
+      if (!input.path) {
+        throw new Error('wrapWithWriteLock: input.path is required');
+      }
+      return writeLock.withLock(input.path, () => tool.execute(input, context));
     },
   };
 }
@@ -155,29 +196,49 @@ export function createWorkspaceTools(workspace: Workspace) {
   const toolsConfig = workspace.getToolsConfig();
   const isReadOnly = workspace.filesystem?.readOnly ?? false;
 
-  // Shared read tracker for requireReadBeforeWrite
-  let readTracker: FileReadTracker | undefined;
-  const writeFileConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
-  const editFileConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE);
-  if (writeFileConfig.requireReadBeforeWrite || editFileConfig.requireReadBeforeWrite) {
-    readTracker = new InMemoryFileReadTracker();
-  }
+  // Shared write lock — serializes concurrent writes to the same file path
+  const writeLock: FileWriteLock = new InMemoryFileWriteLock();
+
+  // Shared read tracker — always active so optimistic concurrency (mtime
+  // checking) works on every write, regardless of the requireReadBeforeWrite
+  // policy setting.
+  const readTracker: FileReadTracker = new InMemoryFileReadTracker();
 
   // Helper: add a tool with config-driven filtering
   const addTool = (
     name: WorkspaceToolName,
     tool: any,
-    opts?: { requireWrite?: boolean; readTrackerMode?: 'read' | 'write' },
+    opts?: { requireWrite?: boolean; readTrackerMode?: 'read' | 'write'; useWriteLock?: boolean },
   ) => {
     const config = resolveToolConfig(toolsConfig, name);
     if (!config.enabled) return;
     if (opts?.requireWrite && isReadOnly) return;
 
-    if (readTracker && opts?.readTrackerMode) {
-      tools[name] = wrapWithReadTracker(tool, workspace, readTracker, config, opts.readTrackerMode);
-    } else {
-      tools[name] = wrapTool(tool, workspace, config);
+    let wrapped: any = { ...tool, requireApproval: config.requireApproval };
+    if (opts?.readTrackerMode) {
+      wrapped = wrapWithReadTracker(wrapped, workspace, readTracker, config, opts.readTrackerMode);
     }
+
+    // Write lock is outermost — serializes the entire enriched execute pipeline
+    if (opts?.useWriteLock) {
+      wrapped = wrapWithWriteLock(wrapped, writeLock);
+    }
+
+    // Use custom name if provided, otherwise use the default constant name
+    const exposedName = config.name ?? name;
+    if (tools[exposedName]) {
+      throw new Error(
+        `Duplicate workspace tool name "${exposedName}": tool "${name}" conflicts with an already-registered tool. ` +
+          `Check your tools config for duplicate "name" values.`,
+      );
+    }
+    // When the tool is renamed, update its id to match so fallback-by-id
+    // resolution (in tool-call-step, llm-execution-step, etc.) won't allow
+    // the model to call the tool using the old default name.
+    if (exposedName !== name && 'id' in wrapped) {
+      wrapped = { ...wrapped, id: exposedName };
+    }
+    tools[exposedName] = wrapped;
   };
 
   // Filesystem tools
@@ -186,16 +247,27 @@ export function createWorkspaceTools(workspace: Workspace) {
     addTool(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE, writeFileTool, {
       requireWrite: true,
       readTrackerMode: 'write',
+      useWriteLock: true,
     });
     addTool(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE, editFileTool, {
       requireWrite: true,
       readTrackerMode: 'write',
+      useWriteLock: true,
     });
     addTool(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES, listFilesTool);
-    addTool(WORKSPACE_TOOLS.FILESYSTEM.DELETE, deleteFileTool, { requireWrite: true });
+    addTool(WORKSPACE_TOOLS.FILESYSTEM.DELETE, deleteFileTool, { requireWrite: true, useWriteLock: true });
     addTool(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT, fileStatTool);
     addTool(WORKSPACE_TOOLS.FILESYSTEM.MKDIR, mkdirTool, { requireWrite: true });
     addTool(WORKSPACE_TOOLS.FILESYSTEM.GREP, grepTool);
+
+    // AST edit tool (only if @ast-grep/napi is available at runtime)
+    if (isAstGrepAvailable()) {
+      addTool(WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT, astEditTool, {
+        requireWrite: true,
+        readTrackerMode: 'write',
+        useWriteLock: true,
+      });
+    }
   }
 
   // Search tools
@@ -206,17 +278,16 @@ export function createWorkspaceTools(workspace: Workspace) {
 
   // Sandbox tools
   if (workspace.sandbox) {
-    const executeCommandConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
-    if (workspace.sandbox.executeCommand && executeCommandConfig.enabled) {
-      // Inject dynamic path context into description
-      const pathContext = workspace.getPathContext();
-      const pathInfo = pathContext.instructions ? `\n\n${pathContext.instructions}` : '';
-      const description = pathInfo ? `${executeCommandTool.description}${pathInfo}` : executeCommandTool.description;
+    if (workspace.sandbox.executeCommand) {
+      // Pick the right tool variant based on whether processes are available
+      const baseTool = workspace.sandbox.processes ? executeCommandWithBackgroundTool : executeCommandTool;
+      addTool(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, baseTool);
+    }
 
-      tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND] = {
-        ...wrapTool(executeCommandTool, workspace, executeCommandConfig),
-        description,
-      };
+    // Background process tools (only when process manager is available)
+    if (workspace.sandbox.processes) {
+      addTool(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT, getProcessOutputTool);
+      addTool(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, killProcessTool);
     }
   }
 

@@ -64,10 +64,10 @@ export function MemoryPage() {
 
         {isEnabled && (
           <div className="flex flex-col gap-2">
+            <ObservationalMemoryEntity />
             <LastMessagesEntity />
             <SemanticRecallEntity />
             <ReadOnlyEntity />
-            <ObservationalMemoryEntity />
           </div>
         )}
       </div>
@@ -78,38 +78,60 @@ export function MemoryPage() {
 function LastMessagesEntity() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;
+  const lastMessages = useWatch({ control, name: 'memory.lastMessages' });
+  const lastMessagesEnabled = lastMessages !== false;
 
   return (
     <Entity className="flex-col gap-0 p-0 overflow-hidden">
       <div className="flex gap-3 py-3 px-4">
         <EntityContent>
-          <EntityName>Last Messages</EntityName>
+          <EntityName>Message History</EntityName>
           <EntityDescription>Number of recent messages to include in context</EntityDescription>
         </EntityContent>
+
+        {!readOnly && (
+          <Controller
+            name="memory.lastMessages"
+            control={control}
+            render={({ field }) => (
+              <Switch
+                checked={lastMessagesEnabled}
+                onCheckedChange={checked => {
+                  field.onChange(checked ? 40 : false);
+                  if (checked) {
+                    form.setValue('memory.observationalMemory.enabled', false, { shouldDirty: true });
+                  }
+                }}
+              />
+            )}
+          />
+        )}
       </div>
 
-      <div className="bg-surface2 border-t border-border1 p-4">
-        <Controller
-          name="memory.lastMessages"
-          control={control}
-          render={({ field }) => (
-            <Input
-              id="memory-last-messages"
-              type="number"
-              min="1"
-              step="1"
-              value={field.value === false ? '' : (field.value ?? 40)}
-              onChange={e => {
-                const value = e.target.value;
-                field.onChange(value === '' ? false : parseInt(value, 10));
-              }}
-              placeholder="40"
-              className="bg-surface3"
-              disabled={readOnly}
-            />
-          )}
-        />
-      </div>
+      {lastMessagesEnabled && (
+        <div className="bg-surface2 border-t border-border1 p-4">
+          <Controller
+            name="memory.lastMessages"
+            control={control}
+            render={({ field }) => (
+              <Input
+                id="memory-last-messages"
+                type="number"
+                min="1"
+                step="1"
+                value={field.value === false ? '' : (field.value ?? 40)}
+                onChange={e => {
+                  const value = e.target.value;
+                  field.onChange(value === '' ? false : parseInt(value, 10));
+                }}
+                placeholder="40"
+                className="bg-surface3"
+                disabled={readOnly}
+              />
+            )}
+          />
+        </div>
+      )}
     </Entity>
   );
 }
@@ -239,7 +261,17 @@ function ObservationalMemoryEntity() {
           <Controller
             name="memory.observationalMemory.enabled"
             control={control}
-            render={({ field }) => <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />}
+            render={({ field }) => (
+              <Switch
+                checked={field.value ?? false}
+                onCheckedChange={checked => {
+                  field.onChange(checked);
+                  if (checked) {
+                    form.setValue('memory.lastMessages', false, { shouldDirty: true });
+                  }
+                }}
+              />
+            )}
           />
         )}
       </div>
@@ -275,9 +307,8 @@ function ObservationalMemoryFields() {
                   value={field.value ?? ''}
                   onValueChange={v => {
                     field.onChange(v);
-                    setValue('memory.observationalMemory.model.name', '');
+                    setValue('memory.observationalMemory.model.name', '', { shouldDirty: true });
                   }}
-                  variant="light"
                 />
               </div>
             )}
@@ -292,12 +323,7 @@ function ObservationalMemoryFields() {
             control={control}
             render={({ field }) => (
               <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                <LLMModels
-                  value={field.value ?? ''}
-                  onValueChange={field.onChange}
-                  llmId={omProvider}
-                  variant="light"
-                />
+                <LLMModels value={field.value ?? ''} onValueChange={field.onChange} llmId={omProvider} />
               </div>
             )}
           />
@@ -377,9 +403,8 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
                   value={field.value ?? ''}
                   onValueChange={v => {
                     field.onChange(v);
-                    setValue('memory.observationalMemory.observation.model.name', '');
+                    setValue('memory.observationalMemory.observation.model.name', '', { shouldDirty: true });
                   }}
-                  variant="light"
                 />
               </div>
             )}
@@ -394,12 +419,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
             control={control}
             render={({ field }) => (
               <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                <LLMModels
-                  value={field.value ?? ''}
-                  onValueChange={field.onChange}
-                  llmId={observerProvider}
-                  variant="light"
-                />
+                <LLMModels value={field.value ?? ''} onValueChange={field.onChange} llmId={observerProvider} />
               </div>
             )}
           />
@@ -581,9 +601,8 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
                   value={field.value ?? ''}
                   onValueChange={v => {
                     field.onChange(v);
-                    setValue('memory.observationalMemory.reflection.model.name', '');
+                    setValue('memory.observationalMemory.reflection.model.name', '', { shouldDirty: true });
                   }}
-                  variant="light"
                 />
               </div>
             )}
@@ -598,12 +617,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
             control={control}
             render={({ field }) => (
               <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                <LLMModels
-                  value={field.value ?? ''}
-                  onValueChange={field.onChange}
-                  llmId={reflectorProvider}
-                  variant="light"
-                />
+                <LLMModels value={field.value ?? ''} onValueChange={field.onChange} llmId={reflectorProvider} />
               </div>
             )}
           />

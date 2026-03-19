@@ -274,6 +274,24 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       dataQuery += ` ORDER BY "${field}" ${direction}`;
 
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPageForQuery === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
+      // When perPage is 0, we only need included messages — skip data and COUNT queries
+      if (perPageForQuery === 0 && include && include.length > 0) {
+        const includeResult = await this._getIncludedMessages({ include });
+        const list = new MessageList().add(includeResult, 'memory');
+        return {
+          messages: this._sortMessages(list.get.all.db(), field, direction),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       // Apply pagination
       if (perPageForResponse === false) {
         // Get all messages
@@ -356,119 +374,22 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
       // Step 2: Add included messages with context (if any), excluding duplicates
       const messageIds = new Set(paginatedMessages.map((m: MastraDBMessage) => m.id));
-      let includeMessages: MastraDBMessage[] = [];
 
       if (include && include.length > 0) {
-        // Batch lookup threadIds for includes that don't have one (avoids N+1 queries)
-        const includesNeedingThread = include.filter(inc => !inc.threadId);
-        const threadByMessageId = new Map<string, string>();
+        const includeMessages = await this._getIncludedMessages({ include });
 
-        if (includesNeedingThread.length > 0) {
-          const { messages: includeLookup } = await this.listMessagesById({
-            messageIds: includesNeedingThread.map(inc => inc.id),
-          });
-          for (const msg of includeLookup) {
-            if (msg.threadId) {
-              threadByMessageId.set(msg.id, msg.threadId);
-            }
-          }
-        }
-
-        const unionQueries: string[] = [];
-        const params: any[] = [];
-        let paramIdx = 1;
-
-        for (const inc of include) {
-          const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
-
-          // Get the threadId for this included message
-          // If inc.threadId is provided, use it; otherwise use the batched lookup
-          const searchThreadId = inc.threadId ?? threadByMessageId.get(id);
-
-          if (!searchThreadId) continue; // Skip if message not found
-
-          unionQueries.push(`
-            SELECT * FROM (
-              WITH numbered_messages AS (
-                SELECT
-                  id, content, role, type, "createdAt", thread_id, "resourceId",
-                  ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
-                FROM "${TABLE_MESSAGES}"
-                WHERE thread_id = {var_thread_id_${paramIdx}:String}
-              ),
-              target_positions AS (
-                SELECT row_num as target_pos
-                FROM numbered_messages
-                WHERE id = {var_include_id_${paramIdx}:String}
-              )
-              SELECT DISTINCT m.id, m.content, m.role, m.type, m."createdAt", m.thread_id AS "threadId", m."resourceId"
-              FROM numbered_messages m
-              CROSS JOIN target_positions t
-              WHERE m.row_num BETWEEN (t.target_pos - {var_withPreviousMessages_${paramIdx}:Int64}) AND (t.target_pos + {var_withNextMessages_${paramIdx}:Int64})
-            ) AS query_${paramIdx}
-          `);
-
-          params.push(
-            { [`var_thread_id_${paramIdx}`]: searchThreadId },
-            { [`var_include_id_${paramIdx}`]: id },
-            { [`var_withPreviousMessages_${paramIdx}`]: withPreviousMessages },
-            { [`var_withNextMessages_${paramIdx}`]: withNextMessages },
-          );
-          paramIdx++;
-        }
-
-        // Only run the query if we have any valid includes
-        if (unionQueries.length > 0) {
-          const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
-          const mergedParams = params.reduce((acc, paramObj) => ({ ...acc, ...paramObj }), {});
-
-          const includeResult = await this.client.query({
-            query: finalQuery,
-            query_params: mergedParams,
-            clickhouse_settings: {
-              date_time_input_format: 'best_effort',
-              date_time_output_format: 'iso',
-              use_client_time_zone: 1,
-              output_format_json_quote_64bit_integers: 0,
-            },
-          });
-
-          const includeRows = await includeResult.json();
-          includeMessages = transformRows<MastraDBMessage>(includeRows.data);
-
-          // Deduplicate: only add messages that aren't already in the paginated results
-          for (const includeMsg of includeMessages) {
-            if (!messageIds.has(includeMsg.id)) {
-              paginatedMessages.push(includeMsg);
-              messageIds.add(includeMsg.id);
-            }
+        // Deduplicate: only add messages that aren't already in the paginated results
+        for (const includeMsg of includeMessages) {
+          if (!messageIds.has(includeMsg.id)) {
+            paginatedMessages.push(includeMsg);
+            messageIds.add(includeMsg.id);
           }
         }
       }
 
       // Use MessageList for proper deduplication and format conversion to V2
       const list = new MessageList().add(paginatedMessages, 'memory');
-      let finalMessages = list.get.all.db();
-
-      // Sort all messages (paginated + included) for final output
-      finalMessages = finalMessages.sort((a, b) => {
-        const isDateField = field === 'createdAt' || field === 'updatedAt';
-        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
-        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
-
-        // Handle tiebreaker for stable sorting
-        if (aValue === bValue) {
-          return a.id.localeCompare(b.id);
-        }
-
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        }
-        // Fallback to string comparison for non-numeric fields
-        return direction === 'ASC'
-          ? String(aValue).localeCompare(String(bValue))
-          : String(bValue).localeCompare(String(aValue));
-      });
+      const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
@@ -511,6 +432,122 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         hasMore: false,
       };
     }
+  }
+
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    return messages.sort((a, b) => {
+      const isDateField = field === 'createdAt' || field === 'updatedAt';
+      const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+      const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
+
+      if (aValue === bValue) {
+        return a.id.localeCompare(b.id);
+      }
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
+      return direction === 'ASC'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    });
+  }
+
+  private async _getIncludedMessages({
+    include,
+  }: {
+    include: StorageListMessagesInput['include'];
+  }): Promise<MastraDBMessage[]> {
+    if (!include || include.length === 0) return [];
+
+    // Phase 1: Batch-fetch metadata (id, thread_id, createdAt) for all target messages.
+    const targetIds = include.map(inc => inc.id).filter(Boolean);
+    if (targetIds.length === 0) return [];
+
+    const { messages: targetDocs } = await this.listMessagesById({ messageIds: targetIds });
+    const targetMap = new Map(
+      targetDocs.map((msg: any) => [msg.id, { threadId: msg.threadId, createdAt: msg.createdAt }]),
+    );
+
+    // Phase 2: Build cursor-based subqueries using materialized constants from Phase 1.
+    // Uses createdAt range + LIMIT instead of ROW_NUMBER() windowing to avoid full thread scans.
+    const unionQueries: string[] = [];
+    const params: Record<string, any> = {};
+    let paramIdx = 1;
+
+    for (const inc of include) {
+      const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
+      const target = targetMap.get(id);
+      if (!target) continue;
+
+      // Fetch the target message itself plus previous messages.
+      const threadParam = `var_thread_${paramIdx}`;
+      const createdAtParam = `var_createdAt_${paramIdx}`;
+      const limitParam = `var_limit_${paramIdx}`;
+      unionQueries.push(`
+        SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId"
+        FROM "${TABLE_MESSAGES}"
+        WHERE thread_id = {${threadParam}:String}
+          AND createdAt <= parseDateTime64BestEffort({${createdAtParam}:String}, 3)
+        ORDER BY createdAt DESC, id DESC
+        LIMIT {${limitParam}:Int64}
+      `);
+      params[threadParam] = target.threadId;
+      params[createdAtParam] = target.createdAt;
+      params[limitParam] = withPreviousMessages + 1;
+      paramIdx++;
+
+      // Fetch messages after the target (only if requested)
+      if (withNextMessages > 0) {
+        const threadParam2 = `var_thread_${paramIdx}`;
+        const createdAtParam2 = `var_createdAt_${paramIdx}`;
+        const limitParam2 = `var_limit_${paramIdx}`;
+        unionQueries.push(`
+          SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId"
+          FROM "${TABLE_MESSAGES}"
+          WHERE thread_id = {${threadParam2}:String}
+            AND createdAt > parseDateTime64BestEffort({${createdAtParam2}:String}, 3)
+          ORDER BY createdAt ASC, id ASC
+          LIMIT {${limitParam2}:Int64}
+        `);
+        params[threadParam2] = target.threadId;
+        params[createdAtParam2] = target.createdAt;
+        params[limitParam2] = withNextMessages;
+        paramIdx++;
+      }
+    }
+
+    if (unionQueries.length === 0) return [];
+
+    // ClickHouse applies ORDER BY/LIMIT to individual UNION ALL members,
+    // so wrap in a subquery to sort the combined result.
+    let finalQuery: string;
+    if (unionQueries.length === 1) {
+      finalQuery = unionQueries[0]!;
+    } else {
+      finalQuery = `SELECT * FROM (${unionQueries.join(' UNION ALL ')}) ORDER BY "createdAt" ASC, id ASC`;
+    }
+
+    const includeResult = await this.client.query({
+      query: finalQuery,
+      query_params: params,
+      clickhouse_settings: {
+        date_time_input_format: 'best_effort',
+        date_time_output_format: 'iso',
+        use_client_time_zone: 1,
+        output_format_json_quote_64bit_integers: 0,
+      },
+    });
+
+    const includeRows = await includeResult.json();
+
+    // Deduplicate results (messages may appear in multiple context windows)
+    const seen = new Set<string>();
+    return transformRows<MastraDBMessage>(includeRows.data).filter(row => {
+      if (seen.has(row.id)) return false;
+      seen.add(row.id);
+      return true;
+    });
   }
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {

@@ -4,6 +4,7 @@ export * from './agents';
 export * from './prompt-blocks';
 export * from './scorer-definitions';
 export * from './mcp-clients';
+export * from './mcp-servers';
 export * from './workspaces';
 export * from './skills';
 export * from './blobs';

@@ -1,7 +1,7 @@
 import ReactCodeMirror, { EditorView } from '@uiw/react-codemirror';
 import { json } from '@codemirror/lang-json';
 import { CopyButton } from '@/ds/components/CopyButton';
-import { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import { tags as t } from '@lezer/highlight';
 import { Button } from '@/ds/components/Button';
@@ -28,7 +28,7 @@ const useCodemirrorTheme = () => {
 };
 
 export type SideDialogCodeSectionProps = {
-  title: string;
+  title: React.ReactNode;
   icon?: React.ReactNode;
   codeStr?: string;
   simplified?: boolean;

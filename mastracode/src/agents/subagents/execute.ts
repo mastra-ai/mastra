@@ -5,12 +5,16 @@
  * read and write tools to complete it. It can modify files, run commands,
  * and perform actual development work within a constrained scope.
  */
-import type { SubagentDefinition } from "./types.js"
+import type { HarnessSubagent } from '@mastra/core/harness';
 
-export const executeSubagent: SubagentDefinition = {
-	id: "execute",
-	name: "Execute",
-	instructions: `You are a focused execution agent. Your job is to complete a specific, well-defined task by making the necessary changes to the codebase.
+import { taskCheckTool, taskWriteTool } from '@mastra/core/harness';
+
+export const executeSubagent: HarnessSubagent = {
+  id: 'execute',
+  name: 'Execute',
+  description:
+    "Task execution with write capabilities. Use for 'implement feature X', 'fix bug Y', 'refactor module Z'.",
+  instructions: `You are a focused execution agent. Your job is to complete a specific, well-defined task by making the necessary changes to the codebase.
 
 ## Rules
 - You have FULL ACCESS to read, write, and execute within your task scope.
@@ -26,10 +30,10 @@ export const executeSubagent: SubagentDefinition = {
 
 ## Workflow
 . Understand the task and explore relevant code
-. For complex tasks (3+ steps): use todo_write to track progress
+. For complex tasks (3+ steps): use task_write to track progress
 . Make changes incrementally — verify each change before moving on
 . Run tests or type-check to verify
-. If you created todos: ALWAYS call todo_check before finishing
+. If you created tasks: ALWAYS call task_check before finishing
 
 ## Efficiency
 Your output returns to the parent agent. Be concise:
@@ -43,18 +47,8 @@ End with a structured summary:
 . **Changes**: Files modified/created
 . **Verification**: How you verified it works
 . **Notes**: Follow-up needed (if any)`,
-	allowedTools: [
-		// Read tools
-		"view",
-		"search_content",
-		"find_files",
-		// Write tools
-		"string_replace_lsp",
-		"write_file",
-		// Execution tool
-		"execute_command",
-		// Task tracking
-		"todo_write",
-		"todo_check",
-	],
-}
+  tools: {
+    task_write: taskWriteTool,
+    task_check: taskCheckTool,
+  },
+};

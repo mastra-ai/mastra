@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
-import { isGlobPattern, extractGlobBase, createGlobMatcher, matchGlob } from './glob';
+import { isGlobPattern, extractGlobBase, createGlobMatcher, matchGlob, resolvePathPattern } from './glob';
+import type { ReaddirEntry } from './glob';
 
 // =============================================================================
 // isGlobPattern
@@ -43,39 +44,39 @@ describe('isGlobPattern', () => {
 // =============================================================================
 describe('extractGlobBase', () => {
   it('should return the path as-is for plain paths', () => {
-    expect(extractGlobBase('/docs')).toBe('/docs');
-    expect(extractGlobBase('/src/utils')).toBe('/src/utils');
+    expect(extractGlobBase('docs')).toBe('docs');
+    expect(extractGlobBase('src/utils')).toBe('src/utils');
   });
 
   it('should extract base from ** patterns', () => {
-    expect(extractGlobBase('/docs/**/*.md')).toBe('/docs');
-    expect(extractGlobBase('/src/utils/**')).toBe('/src/utils');
+    expect(extractGlobBase('docs/**/*.md')).toBe('docs');
+    expect(extractGlobBase('src/utils/**')).toBe('src/utils');
   });
 
-  it('should return root for patterns starting with **', () => {
-    expect(extractGlobBase('**/*.md')).toBe('/');
-    expect(extractGlobBase('**')).toBe('/');
+  it('should return workspace root for patterns starting with **', () => {
+    expect(extractGlobBase('**/*.md')).toBe('.');
+    expect(extractGlobBase('**')).toBe('.');
   });
 
   it('should extract base from * patterns', () => {
-    expect(extractGlobBase('/src/*.ts')).toBe('/src');
-    expect(extractGlobBase('/a/b/*.config.js')).toBe('/a/b');
+    expect(extractGlobBase('src/*.ts')).toBe('src');
+    expect(extractGlobBase('a/b/*.config.js')).toBe('a/b');
   });
 
   it('should handle brace expansion in path', () => {
-    expect(extractGlobBase('/src/{a,b}/index.ts')).toBe('/src');
+    expect(extractGlobBase('src/{a,b}/index.ts')).toBe('src');
   });
 
   it('should handle character classes in path', () => {
-    expect(extractGlobBase('/src/[A-Z]*.ts')).toBe('/src');
+    expect(extractGlobBase('src/[A-Z]*.ts')).toBe('src');
   });
 
   it('should handle ? wildcard', () => {
-    expect(extractGlobBase('/src/file?.ts')).toBe('/src');
+    expect(extractGlobBase('src/file?.ts')).toBe('src');
   });
 
-  it('should return root when glob is at top level', () => {
-    expect(extractGlobBase('/*.ts')).toBe('/');
+  it('should return workspace root when glob is at top level', () => {
+    expect(extractGlobBase('*.ts')).toBe('.');
   });
 
   it('should extract base from ./ prefixed patterns', () => {
@@ -201,5 +202,161 @@ describe('matchGlob', () => {
     expect(matchGlob('index.ts', ['**/*.ts', '**/*.js'])).toBe(true);
     expect(matchGlob('index.js', ['**/*.ts', '**/*.js'])).toBe(true);
     expect(matchGlob('style.css', ['**/*.ts', '**/*.js'])).toBe(false);
+  });
+});
+
+// =============================================================================
+// resolvePathPattern
+// =============================================================================
+
+/**
+ * Helper: create a mock readdir from a flat file map.
+ * Keys are full paths, values are 'file' | 'directory'.
+ */
+function createMockReaddir(entries: Record<string, 'file' | 'directory'>) {
+  // Build directory contents map
+  const dirContents = new Map<string, ReaddirEntry[]>();
+
+  for (const [fullPath, type] of Object.entries(entries)) {
+    const lastSlash = fullPath.lastIndexOf('/');
+    const parentDir = lastSlash <= 0 ? '/' : fullPath.slice(0, lastSlash);
+    const name = fullPath.slice(lastSlash + 1);
+
+    if (!dirContents.has(parentDir)) {
+      dirContents.set(parentDir, []);
+    }
+    dirContents.get(parentDir)!.push({ name, type });
+  }
+
+  return vi.fn(async (dir: string): Promise<ReaddirEntry[]> => {
+    // Normalize to absolute-style key since the mock uses absolute paths internally
+    let lookupDir: string;
+    if (dir === '.' || dir === '' || dir === '/') {
+      lookupDir = '/';
+    } else if (dir.startsWith('/')) {
+      lookupDir = dir;
+    } else {
+      lookupDir = `/${dir}`;
+    }
+    const contents = dirContents.get(lookupDir);
+    if (!contents) throw new Error(`ENOENT: ${dir}`);
+    return contents;
+  });
+}
+
+describe('resolvePathPattern', () => {
+  // Filesystem layout used across tests:
+  //   /content/faq.md         (file)
+  //   /content/guide.md       (file)
+  //   /content/images/logo.png (file)
+  //   /skills/api-design/SKILL.md (file)
+  //   /skills/api-design/references/guide.md (file)
+  //   /skills/customer-support/SKILL.md (file)
+  //   /src/skills/internal/SKILL.md (file)
+  //   /readme.md              (file)
+  const mockEntries: Record<string, 'file' | 'directory'> = {
+    '/content': 'directory',
+    '/content/faq.md': 'file',
+    '/content/guide.md': 'file',
+    '/content/images': 'directory',
+    '/content/images/logo.png': 'file',
+    '/skills': 'directory',
+    '/skills/api-design': 'directory',
+    '/skills/api-design/SKILL.md': 'file',
+    '/skills/api-design/references': 'directory',
+    '/skills/api-design/references/guide.md': 'file',
+    '/skills/customer-support': 'directory',
+    '/skills/customer-support/SKILL.md': 'file',
+    '/src': 'directory',
+    '/src/skills': 'directory',
+    '/src/skills/internal': 'directory',
+    '/src/skills/internal/SKILL.md': 'file',
+    '/readme.md': 'file',
+  };
+
+  const readdir = createMockReaddir(mockEntries);
+
+  describe('plain paths', () => {
+    it('should resolve a plain directory path', async () => {
+      const results = await resolvePathPattern('/content', readdir);
+      expect(results).toEqual([{ path: '/content', type: 'directory' }]);
+    });
+
+    it('should resolve a plain file path', async () => {
+      const results = await resolvePathPattern('/content/faq.md', readdir);
+      expect(results).toEqual([{ path: '/content/faq.md', type: 'file' }]);
+    });
+
+    it('should resolve a non-existent path as file (consumer handles existence)', async () => {
+      const results = await resolvePathPattern('/nonexistent/file.txt', readdir);
+      expect(results).toEqual([{ path: '/nonexistent/file.txt', type: 'file' }]);
+    });
+
+    it('should resolve a trailing-slash directory path same as without slash', async () => {
+      const results = await resolvePathPattern('/content/', readdir);
+      expect(results).toEqual([{ path: '/content', type: 'directory' }]);
+    });
+  });
+
+  describe('glob patterns matching files', () => {
+    it('should match files with /content/**/*.md', async () => {
+      const results = await resolvePathPattern('/content/**/*.md', readdir);
+      const paths = results.map(r => r.path).sort();
+      expect(paths).toContain('/content/faq.md');
+      expect(paths).toContain('/content/guide.md');
+      // Should NOT include the .png
+      expect(paths).not.toContain('/content/images/logo.png');
+    });
+
+    it('should match specific nested files with /skills/**/SKILL.md', async () => {
+      const results = await resolvePathPattern('/skills/**/SKILL.md', readdir);
+      const paths = results.map(r => r.path).sort();
+      expect(paths).toContain('/skills/api-design/SKILL.md');
+      expect(paths).toContain('/skills/customer-support/SKILL.md');
+      expect(paths).not.toContain('/src/skills/internal/SKILL.md');
+    });
+
+    it('should match files across the tree with **/SKILL.md', async () => {
+      const results = await resolvePathPattern('**/SKILL.md', readdir);
+      const paths = results.map(r => r.path).sort();
+      expect(paths).toContain('skills/api-design/SKILL.md');
+      expect(paths).toContain('skills/customer-support/SKILL.md');
+      expect(paths).toContain('src/skills/internal/SKILL.md');
+    });
+  });
+
+  describe('glob patterns matching directories', () => {
+    it('should match directories with **/skills', async () => {
+      const results = await resolvePathPattern('**/skills', readdir);
+      const paths = results.map(r => r.path).sort();
+      expect(paths).toContain('skills');
+      expect(paths).toContain('src/skills');
+      // All matches should be directories
+      expect(results.every(r => r.type === 'directory')).toBe(true);
+    });
+  });
+
+  describe('glob patterns matching both files and directories', () => {
+    it('should match everything under a dir with /skills/**', async () => {
+      const results = await resolvePathPattern('/skills/**', readdir);
+      const paths = results.map(r => r.path).sort();
+      // Should include subdirectories
+      expect(paths).toContain('/skills/api-design');
+      expect(paths).toContain('/skills/customer-support');
+      // Should include files
+      expect(paths).toContain('/skills/api-design/SKILL.md');
+      expect(paths).toContain('/skills/customer-support/SKILL.md');
+    });
+
+    it('should match everything under a dir with **/skills/**', async () => {
+      const results = await resolvePathPattern('**/skills/**', readdir);
+      const paths = results.map(r => r.path).sort();
+      // Under skills/
+      expect(paths).toContain('skills/api-design');
+      expect(paths).toContain('skills/api-design/SKILL.md');
+      // Under src/skills/
+      expect(paths).toContain('src/skills/internal');
+      expect(paths).toContain('src/skills/internal/SKILL.md');
+    });
   });
 });

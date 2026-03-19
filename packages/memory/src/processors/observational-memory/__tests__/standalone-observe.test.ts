@@ -87,6 +87,34 @@ Continue testing
         },
       ],
     }),
+    doStream: async () => {
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: 'stream-start', warnings: [] });
+          controller.enqueue({
+            type: 'response-metadata',
+            id: 'obs-1',
+            modelId: 'mock-observer-model',
+            timestamp: new Date(),
+          });
+          controller.enqueue({ type: 'text-start', id: 'text-1' });
+          controller.enqueue({ type: 'text-delta', id: 'text-1', delta: observationText });
+          controller.enqueue({ type: 'text-end', id: 'text-1' });
+          controller.enqueue({
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          });
+          controller.close();
+        },
+      });
+
+      return {
+        stream,
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      };
+    },
   } as any);
 }
 

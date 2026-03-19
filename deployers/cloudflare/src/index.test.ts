@@ -19,7 +19,71 @@ describe('CloudflareDeployer', () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
+  describe('bundler platform configuration', () => {
+    it('should use browser platform for Workers-compatible module resolution', () => {
+      // Cloudflare Workers don't have Node.js built-in modules like 'https'.
+      // Packages like the official Cloudflare SDK use conditional exports
+      // to provide different implementations for Node.js vs browser/worker environments.
+      //
+      // When platform is 'node', the bundler uses exportConditions: ['node'],
+      // causing packages to resolve to Node.js-specific code (e.g., node-fetch
+      // which depends on the 'https' module).
+      //
+      // For Cloudflare Workers, we need to use 'browser' platform which:
+      // 1. Uses browser-compatible export conditions ['browser', 'worker', 'default']
+      // 2. Doesn't assume Node.js built-ins are available
+      //
+      // This enables both D1 modes to work:
+      // - Bindings mode: Uses D1Database binding from Workers runtime directly
+      // - REST API mode: Cloudflare SDK resolves to web runtime using global fetch
+      deployer = new CloudflareDeployer({ name: 'test-worker' });
+
+      // @ts-expect-error - accessing protected property for testing
+      expect(deployer.platform).toBe('browser');
+    });
+  });
+
   describe('writeFiles', () => {
+    describe('environment variable handling', () => {
+      it('should exclude .env variables from wrangler config vars', async () => {
+        deployer = new CloudflareDeployer({
+          name: 'test-worker',
+          vars: { NODE_ENV: 'production' },
+        });
+
+        vi.spyOn(deployer, 'loadEnvVars').mockResolvedValue(
+          new Map([
+            ['OPENAI_API_KEY', 'sk-secret-key'],
+            ['DATABASE_URL', 'postgres://user:pass@host/db'],
+          ]),
+        );
+
+        await deployer.writeFiles(tempDir);
+
+        const wranglerConfigPath = join(tempDir, 'output', 'wrangler.json');
+        const wranglerConfig = JSON.parse(await readFile(wranglerConfigPath, 'utf-8'));
+
+        expect(wranglerConfig.vars).not.toHaveProperty('OPENAI_API_KEY');
+        expect(wranglerConfig.vars).not.toHaveProperty('DATABASE_URL');
+        expect(wranglerConfig.vars).toHaveProperty('NODE_ENV', 'production');
+      });
+
+      it('should include only user-provided vars when no .env file exists', async () => {
+        deployer = new CloudflareDeployer({
+          name: 'test-worker',
+          vars: { APP_MODE: 'live' },
+        });
+        vi.spyOn(deployer, 'loadEnvVars').mockResolvedValue(new Map());
+
+        await deployer.writeFiles(tempDir);
+
+        const wranglerConfigPath = join(tempDir, 'output', 'wrangler.json');
+        const wranglerConfig = JSON.parse(await readFile(wranglerConfigPath, 'utf-8'));
+
+        expect(wranglerConfig.vars).toEqual({ APP_MODE: 'live' });
+      });
+    });
+
     describe('TypeScript stub for bundle size optimization', () => {
       it('should create typescript-stub.mjs and configure wrangler alias', async () => {
         deployer = new CloudflareDeployer({ name: 'test-worker' });

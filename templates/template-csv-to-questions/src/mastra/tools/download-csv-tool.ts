@@ -68,7 +68,7 @@ export const csvFetcherTool = createTool({
   execute: async (inputData, context) => {
     const { csvUrl } = inputData;
 
-    console.log('📥 Downloading CSV from URL:', csvUrl);
+    console.log('Downloading CSV from URL');
 
     try {
       // Step 1: Download the CSV
@@ -85,10 +85,10 @@ export const csvFetcherTool = createTool({
         throw new Error('CSV file is empty');
       }
 
-      console.log(`✅ Downloaded CSV: ${csvBuffer.length} bytes`);
+      console.log(`Downloaded CSV: ${csvBuffer.length} bytes`);
 
       // Step 2: Parse and analyze CSV
-      console.log('📊 Parsing and analyzing CSV...');
+      console.log('Parsing and analyzing CSV...');
       const lines = csvText
         .split('\n')
         .map(line => line.trim())
@@ -147,11 +147,11 @@ export const csvFetcherTool = createTool({
         structuredData += `\n... and ${rowCount - 5} more rows\n`;
       }
 
-      console.log(`✅ Parsed CSV: ${rowCount} rows, ${columnCount} columns`);
+      console.log(`Parsed CSV: ${rowCount} rows, ${columnCount} columns`);
 
       // Step 3: Generate summary using the AI agent
-      console.log('🧠 Generating AI summary...');
-      const csvSummarizationAgent = context?.mastra?.getAgent('csvSummarizationAgent');
+      console.log('Generating AI summary...');
+      const csvSummarizationAgent = context?.mastra?.getAgentById('csv-summarization-agent');
       if (!csvSummarizationAgent) {
         throw new Error('CSV summarization agent not found');
       }
@@ -165,7 +165,7 @@ export const csvFetcherTool = createTool({
 
       const summary = summaryResult.text || 'Summary could not be generated';
 
-      console.log(`✅ Generated summary: ${summary.length} characters`);
+      console.log(`Generated summary: ${summary.length} characters`);
 
       return {
         summary,
@@ -176,7 +176,7 @@ export const csvFetcherTool = createTool({
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('❌ CSV processing failed:', errorMessage);
+      console.error('CSV processing failed:', errorMessage);
       throw new Error(`Failed to process CSV from URL: ${errorMessage}`);
     }
   },

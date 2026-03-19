@@ -20,6 +20,7 @@ import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 import { useLinkComponent } from '@/lib/framework';
+import { Chip } from '@/ds/components/Chip';
 
 export interface DatasetPageContentProps {
   datasetId: string;
@@ -76,6 +77,13 @@ export function DatasetPageContent({
     isFetchingNextPage,
     hasNextPage,
   } = useDatasetItems(datasetId, debouncedSearch || undefined, activeDatasetVersion);
+  // Unfiltered query (no search) to determine if dataset has any items — avoids
+  // incorrectly disabling the experiment button when a search yields no matches.
+  const { data: unfilteredItems = [], isLoading: isUnfilteredLoading } = useDatasetItems(
+    datasetId,
+    undefined,
+    activeDatasetVersion,
+  );
   const [experimentsFilters, setExperimentsFilters] = useState<DatasetExperimentsFilters>({});
   const { data: experimentsData, isLoading: isExperimentsLoading } = useDatasetExperiments(
     datasetId,
@@ -190,6 +198,7 @@ export function DatasetPageContent({
               onDuplicateClick={() => setDuplicateDialogOpen(true)}
               onDeleteClick={onDeleteClick}
               experimentTriggerSlot={experimentTriggerSlot}
+              disableExperimentTrigger={!isUnfilteredLoading && unfilteredItems.length === 0}
               onExperimentClick={onExperimentClick}
             />
 
@@ -201,8 +210,13 @@ export function DatasetPageContent({
                 className="grid grid-rows-[auto_1fr] h-full"
               >
                 <TabList>
-                  <Tab value="items">Items ({items.length})</Tab>
-                  <Tab value="experiments">Experiments ({experiments.length})</Tab>
+                  <Tab value="items">
+                    Items <Chip color="gray">{items.length}</Chip>
+                  </Tab>
+                  <Tab value="experiments">
+                    Experiments
+                    <Chip color="gray">{experiments.length}</Chip>
+                  </Tab>
                 </TabList>
 
                 <TabContent value="items" className="grid overflow-auto mt-5">

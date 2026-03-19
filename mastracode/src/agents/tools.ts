@@ -1,99 +1,118 @@
-import { createAnthropic } from "@ai-sdk/anthropic"
-import type { RequestContext } from "@mastra/core/request-context"
-import type { HarnessRuntimeContext } from "../harness/types"
-import type { MCPManager } from "../mcp"
-import type { stateSchema } from "../schema"
-import {
-    createViewTool,
-    createGrepTool,
-    createGlobTool,
-    createExecuteCommandTool,
-    createWriteFileTool,
-    createWebSearchTool,
-    createWebExtractTool,
-    hasTavilyKey,
-    stringReplaceLspTool,
-    astSmartEditTool,
-    submitPlanTool,
-    todoWriteTool,
-    todoCheckTool,
-    askUserTool,
-    requestSandboxAccessTool,
-} from "../tools"
-import { getSubagentTools } from "./subagents/index.js"
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
+import type { HarnessRequestContext } from '@mastra/core/harness';
+import type { RequestContext } from '@mastra/core/request-context';
+import type { HookManager } from '../hooks';
+import type { McpManager } from '../mcp';
+import type { stateSchema } from '../schema';
+import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools';
 
-export function createDynamicTools(mcpManager?: MCPManager) {
-    return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
-        const ctx = requestContext.get("harness") as
-            | HarnessRuntimeContext<typeof stateSchema>
-            | undefined
-        const state = ctx?.getState?.()
-        const modeId = ctx?.modeId ?? "build"
+/** Minimal shape for tools passed to createDynamicTools. */
+interface ToolLike {
+  execute?: (input: unknown, context?: unknown) => Promise<unknown> | unknown;
+  [key: string]: unknown;
+}
 
-        const modelId = state?.currentModelId
-        const isAnthropicModel = modelId?.startsWith("anthropic/")
+function wrapToolWithHooks(toolName: string, tool: ToolLike, hookManager?: HookManager): ToolLike {
+  if (!hookManager || typeof tool?.execute !== 'function') {
+    return tool;
+  }
 
-        const projectPath = state?.projectPath ?? ""
-        const { tool: subagentTool, toolReadOnly: subagentToolReadOnly } = getSubagentTools(projectPath)
+  return {
+    ...tool,
+    async execute(input: unknown, toolContext: unknown) {
+      const preResult = await hookManager.runPreToolUse(toolName, input);
+      if (!preResult.allowed) {
+        return {
+          error: preResult.blockReason ?? `Blocked by PreToolUse hook for tool "${toolName}"`,
+        };
+      }
 
-        // Instantiate project-scoped tools
-        const viewTool = createViewTool(projectPath)
-        const grepTool = createGrepTool(projectPath)
-        const globTool = createGlobTool(projectPath)
-        const executeCommandTool = createExecuteCommandTool(projectPath)
-        const writeFileTool = createWriteFileTool(projectPath)
+      let output: unknown;
+      let toolError = false;
+      try {
+        output = await tool.execute(input, toolContext);
+        return output;
+      } catch (error) {
+        toolError = true;
+        output = {
+          error: error instanceof Error ? error.message : String(error),
+        };
+        throw error;
+      } finally {
+        await hookManager.runPostToolUse(toolName, input, output, toolError).catch(() => undefined);
+      }
+    },
+  };
+}
 
-        // Build tool set based on mode
-        // NOTE: Tool names "grep" and "glob" are reserved by Anthropic's OAuth
-        // validation (they match Claude Code's internal tools). We use
-        // "search_content" and "find_files" to avoid the collision.
-        const tools: Record<string, any> = {
-            // Read-only tools — always available
-            view: viewTool,
-            search_content: grepTool,
-            find_files: globTool,
-            execute_command: executeCommandTool,
-            // Subagent delegation — read-only in plan mode
-            subagent: modeId === "plan" ? subagentToolReadOnly : subagentTool,
-            // Todo tracking — always available (planning tool, not a write tool)
-            todo_write: todoWriteTool,
-            todo_check: todoCheckTool,
-            // User interaction — always available
-            ask_user: askUserTool,
-            request_sandbox_access: requestSandboxAccessTool,
-        }
+export function createDynamicTools(
+  mcpManager?: McpManager,
+  extraTools?: Record<string, ToolLike> | ((ctx: { requestContext: RequestContext }) => Record<string, ToolLike>),
+  hookManager?: HookManager,
+  disabledTools?: string[],
+) {
+  return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
+    const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
+    const state = ctx?.getState?.();
 
-        // Write tools — NOT available in plan mode
-        if (modeId !== "plan") {
-            tools.string_replace_lsp = stringReplaceLspTool
-            tools.ast_smart_edit = astSmartEditTool
-            tools.write_file = writeFileTool
-        }
+    const modelId = state?.currentModelId;
+    const isAnthropicModel = modelId?.startsWith('anthropic/');
+    const isOpenAIModel = modelId?.startsWith('openai/');
 
-        // Plan submission — only available in plan mode
-        if (modeId === "plan") {
-            tools.submit_plan = submitPlanTool
-        }
-        // Web tools — prefer Tavily when available (avoids Anthropic native
-        // web_search provider tool which can cause stream freezes). Fall back
-        // to Anthropic's native web search via getToolsets() for Anthropic models.
-        // Note: hasTavilyKey() is checked at request time, not module load time,
-        // so the key can be set after startup and still be picked up.
-        if (hasTavilyKey()) {
-            tools.web_search = createWebSearchTool()
-            tools.web_extract = createWebExtractTool()
-        } else if (isAnthropicModel) {
-            const anthropic = createAnthropic({})
-            tools.web_search = anthropic.tools.webSearch_20250305()
-        }
+    // Filesystem, grep, glob, edit, write, execute_command, and process
+    // management tools are now provided by the workspace (see workspace.ts).
+    // Only tools without a workspace equivalent remain here.
+    const tools: Record<string, ToolLike> = {
+      request_access: requestSandboxAccessTool,
+    };
 
-        // MCP server tools — injected from connected servers
-        if (mcpManager) {
-            const mcpTools = mcpManager.getTools()
-            Object.assign(tools, mcpTools)
-        }
-
-        return tools
-
+    if (hasTavilyKey()) {
+      tools.web_search = createWebSearchTool();
+      tools.web_extract = createWebExtractTool();
+    } else if (isAnthropicModel) {
+      const anthropic = createAnthropic({});
+      tools.web_search = anthropic.tools.webSearch_20250305();
+    } else if (isOpenAIModel) {
+      const openai = createOpenAI({});
+      tools.web_search = openai.tools.webSearch();
     }
+
+    if (mcpManager) {
+      const mcpTools = mcpManager.getTools();
+      Object.assign(tools, mcpTools);
+    }
+
+    if (extraTools) {
+      const resolved = typeof extraTools === 'function' ? extraTools({ requestContext }) : extraTools;
+      for (const [name, tool] of Object.entries(resolved)) {
+        if (!(name in tools)) {
+          tools[name] = tool;
+        }
+      }
+    }
+
+    // Remove tools explicitly disabled via config so the model never sees them.
+    if (disabledTools?.length) {
+      for (const toolName of disabledTools) {
+        delete tools[toolName];
+      }
+    }
+
+    // Remove tools that have a per-tool 'deny' policy so the model never sees them.
+    const permissionRules = state?.permissionRules;
+    if (permissionRules?.tools) {
+      for (const [name, policy] of Object.entries(permissionRules.tools)) {
+        if (policy === 'deny') {
+          delete tools[name];
+        }
+      }
+    }
+
+    for (const [toolName, tool] of Object.entries(tools)) {
+      tools[toolName] = wrapToolWithHooks(toolName, tool, hookManager);
+    }
+
+    return tools;
+  };
 }

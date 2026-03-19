@@ -50,34 +50,50 @@ export function ScorersPage() {
     if (isSet) {
       const next = { ...selectedScorers };
       delete next[scorerId];
-      form.setValue('scorers', next);
+      form.setValue('scorers', next, { shouldDirty: true });
     } else {
-      form.setValue('scorers', {
-        ...selectedScorers,
-        [scorerId]: { ...selectedScorers?.[scorerId], description: getOriginalDescription(scorerId) },
-      });
+      form.setValue(
+        'scorers',
+        {
+          ...selectedScorers,
+          [scorerId]: { ...selectedScorers?.[scorerId], description: getOriginalDescription(scorerId) },
+        },
+        { shouldDirty: true },
+      );
     }
   };
 
   const handleDescriptionChange = (scorerId: string, description: string) => {
-    form.setValue('scorers', {
-      ...selectedScorers,
-      [scorerId]: { ...selectedScorers?.[scorerId], description },
-    });
+    form.setValue(
+      'scorers',
+      {
+        ...selectedScorers,
+        [scorerId]: { ...selectedScorers?.[scorerId], description },
+      },
+      { shouldDirty: true },
+    );
   };
 
   const handleSamplingChange = (scorerId: string, samplingConfig: ScorerConfig['sampling'] | undefined) => {
-    form.setValue('scorers', {
-      ...selectedScorers,
-      [scorerId]: { ...selectedScorers?.[scorerId], sampling: samplingConfig },
-    });
+    form.setValue(
+      'scorers',
+      {
+        ...selectedScorers,
+        [scorerId]: { ...selectedScorers?.[scorerId], sampling: samplingConfig },
+      },
+      { shouldDirty: true },
+    );
   };
 
   const handleRulesChange = (scorerId: string, rules: RuleGroup | undefined) => {
-    form.setValue('scorers', {
-      ...selectedScorers,
-      [scorerId]: { ...selectedScorers?.[scorerId], rules },
-    });
+    form.setValue(
+      'scorers',
+      {
+        ...selectedScorers,
+        [scorerId]: { ...selectedScorers?.[scorerId], rules },
+      },
+      { shouldDirty: true },
+    );
   };
 
   const filteredOptions = useMemo(() => {

@@ -106,6 +106,7 @@ import { PinoLogger } from '@mastra/loggers';
 import { HttpTransport } from '@mastra/loggers/http';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
+
 const startTime = process.env.RUNNER_START_TIME ? new Date(process.env.RUNNER_START_TIME).getTime() : Date.now();
 const createNodeServerStartTime = Date.now();
 
@@ -160,8 +161,11 @@ if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {
 
   await storage.init()
   mastra?.setStorage(storage)
-} else if (mastra?.storage) {
-  mastra.storage.init()
+} else {
+  const userStorage = mastra?.getStorage();
+  if (userStorage && !userStorage.disableInit) {
+    userStorage.init();
+  }
 }
 
 if (mastra?.getStorage()) {

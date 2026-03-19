@@ -2,7 +2,7 @@
  * Types for integration test configuration.
  */
 
-import type { Workspace } from '@mastra/core/workspace';
+import type { AnyWorkspace } from '@mastra/core/workspace';
 
 /**
  * Configuration for workspace integration tests.
@@ -12,10 +12,10 @@ export interface WorkspaceIntegrationTestConfig {
   suiteName: string;
 
   /** Create a Workspace instance. The factory calls workspace.init() automatically. */
-  createWorkspace: () => Promise<Workspace> | Workspace;
+  createWorkspace: () => Promise<AnyWorkspace> | AnyWorkspace;
 
   /** Cleanup after tests (delete test files, etc.) */
-  cleanupWorkspace?: (workspace: Workspace) => Promise<void>;
+  cleanupWorkspace?: (workspace: AnyWorkspace) => Promise<void>;
 
   /** Test scenarios to run (default: all applicable) */
   testScenarios?: IntegrationTestScenarios;
@@ -78,4 +78,33 @@ export interface IntegrationTestScenarios {
 
   /** Mount isolation - operations on one mount don't affect another */
   mountIsolation?: boolean;
+
+  // LSP scenarios (require sandbox with process manager + LSP deps)
+
+  /** LSP diagnostics - spawn language server, get real diagnostics */
+  lspDiagnostics?: boolean;
+
+  /** LSP per-file root resolution - two projects with different tsconfig settings */
+  lspPerFileRoot?: boolean;
+
+  /** LSP large file diagnostics - ~500-line TypeScript file with type error */
+  lspLargeFile?: boolean;
+
+  /** LSP Python diagnostics - Pyright type checking (graceful skip if not installed) */
+  lspPython?: boolean;
+
+  /** LSP cross-file import diagnostics - TS server reads imports from disk */
+  lspCrossFile?: boolean;
+
+  /** LSP external project diagnostics - getDiagnostics for files outside workspace basePath */
+  lspExternalProject?: boolean;
+
+  /** LSP Go diagnostics - gopls type checking (graceful skip if not installed) */
+  lspGo?: boolean;
+
+  /** LSP Rust diagnostics - rust-analyzer type checking (graceful skip if not installed) */
+  lspRust?: boolean;
+
+  /** LSP ESLint diagnostics + getDiagnosticsMulti (graceful skip if not installed) */
+  lspEslint?: boolean;
 }

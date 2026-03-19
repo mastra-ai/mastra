@@ -45,6 +45,16 @@ export class MessageMerger {
     // Don't merge into sealed messages (e.g., messages that have been observed)
     if (MessageMerger.isSealed(latestMessage)) return false;
 
+    // Don't merge completion result message (network uses completionResult, supervisor uses isTaskCompleteResult)
+    if (
+      incomingMessage.content.metadata?.completionResult ||
+      latestMessage.content.metadata?.completionResult ||
+      incomingMessage.content.metadata?.isTaskCompleteResult ||
+      latestMessage.content.metadata?.isTaskCompleteResult
+    ) {
+      return false;
+    }
+
     // Basic merge conditions: both messages must be assistant messages from the same thread
     const shouldAppendToLastAssistantMessage =
       latestMessage.role === 'assistant' &&

@@ -1,4 +1,5 @@
 import type { StorageCreateAgentInput, StorageUpdateAgentInput } from '@mastra/core/storage';
+import type { z } from 'zod';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -15,6 +16,7 @@ import {
   previewInstructionsBodySchema,
   previewInstructionsResponseSchema,
 } from '../schemas/stored-agents';
+import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { toSlug } from '../utils';
 
@@ -38,6 +40,8 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'scorers',
   'requestContextSchema',
   'mcpClients',
+  'skills',
+  'workspace',
 ] as const;
 
 // ============================================================================
@@ -130,7 +134,14 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
 /**
  * POST /stored/agents - Create a new stored agent
  */
-export const CREATE_STORED_AGENT_ROUTE = createRoute({
+export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
+  InferParams<undefined, undefined, typeof createStoredAgentBodySchema>,
+  z.infer<typeof createStoredAgentResponseSchema>,
+  'json',
+  RouteSchemas<undefined, undefined, typeof createStoredAgentBodySchema, typeof createStoredAgentResponseSchema>,
+  'POST',
+  '/stored/agents'
+> = createRoute({
   method: 'POST',
   path: '/stored/agents',
   responseType: 'json',
@@ -159,6 +170,8 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
     outputProcessors,
     memory,
     scorers,
+    skills,
+    workspace,
     requestContextSchema,
   }) => {
     try {
@@ -209,6 +222,8 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
           outputProcessors,
           memory,
           scorers,
+          skills,
+          workspace,
           requestContextSchema,
         } as StorageCreateAgentInput,
       });
@@ -230,7 +245,19 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
 /**
  * PATCH /stored/agents/:storedAgentId - Update a stored agent
  */
-export const UPDATE_STORED_AGENT_ROUTE = createRoute({
+export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
+  InferParams<typeof storedAgentIdPathParams, undefined, typeof updateStoredAgentBodySchema>,
+  z.infer<typeof updateStoredAgentResponseSchema>,
+  'json',
+  RouteSchemas<
+    typeof storedAgentIdPathParams,
+    undefined,
+    typeof updateStoredAgentBodySchema,
+    typeof updateStoredAgentResponseSchema
+  >,
+  'PATCH',
+  '/stored/agents/:storedAgentId'
+> = createRoute({
   method: 'PATCH',
   path: '/stored/agents/:storedAgentId',
   responseType: 'json',
@@ -262,7 +289,11 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
     outputProcessors,
     memory,
     scorers,
+    skills,
+    workspace,
     requestContextSchema,
+    // Version metadata
+    changeMessage,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -303,6 +334,8 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         outputProcessors,
         memory,
         scorers,
+        skills,
+        workspace,
         requestContextSchema,
       } as StorageUpdateAgentInput);
 
@@ -322,6 +355,8 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         outputProcessors,
         memory,
         scorers,
+        skills,
+        workspace,
         requestContextSchema,
       };
 
@@ -339,6 +374,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         existing,
         updatedAgent,
         providedConfigFields,
+        changeMessage ? { changeMessage } : undefined,
       );
 
       if (!autoVersionResult) {
