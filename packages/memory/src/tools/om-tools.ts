@@ -121,7 +121,7 @@ interface FormattedPart {
 
 function truncateText(text: string, maxChars: number, hint?: string): string {
   if (text.length <= maxChars) return text;
-  const suffix = hint ? `… [truncated — ${hint}]` : '…';
+  const suffix = hint ? `… [truncated — call ${hint} for full content]` : '…';
   return text.slice(0, maxChars) + suffix;
 }
 
