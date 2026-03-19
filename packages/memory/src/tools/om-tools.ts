@@ -14,6 +14,7 @@ export type RecallDetail = 'low' | 'high';
 
 /** Returns true if a message has at least one non-data part with visible content. */
 function hasVisibleParts(msg: MastraDBMessage): boolean {
+  if (typeof msg.content === 'string') return (msg.content as string).length > 0;
   const parts = msg.content?.parts;
   if (!parts || !Array.isArray(parts)) return false;
   return parts.some((p: { type?: string }) => !p.type?.startsWith('data-'));
