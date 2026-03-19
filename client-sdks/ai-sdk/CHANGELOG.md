@@ -1,5 +1,27 @@
 # @mastra/ai-sdk
 
+## 1.2.0-alpha.1
+
+### Minor Changes
+
+- Exposes `messageMetadata` option in `handleChatStream` for attaching custom metadata to streamed messages. ([#14315](https://github.com/mastra-ai/mastra/pull/14315))
+
+  ```ts
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'my-agent',
+    params,
+    messageMetadata: () => ({ createdAt: new Date().toISOString() }),
+  });
+  ```
+
+### Patch Changes
+
+- Fixed `withMastra` to accept `LanguageModelV3` models from the latest AI SDK (`@ai-sdk/openai@3+`, `ai@6+`). Previously, passing a V3 model caused a TypeScript error: `LanguageModelV3 is not assignable to LanguageModelV2`. The function now accepts both `LanguageModelV2` and `LanguageModelV3` via overloads. ([#14380](https://github.com/mastra-ai/mastra/pull/14380))
+
+- Updated dependencies [[`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8)]:
+  - @mastra/core@1.15.0-alpha.2
+
 ## 1.1.5-alpha.0
 
 ### Patch Changes

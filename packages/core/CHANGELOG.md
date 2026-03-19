@@ -1,5 +1,38 @@
 # @mastra/core
 
+## 1.15.0-alpha.2
+
+### Patch Changes
+
+- Fixed deserializeRequestContext to return an actual RequestContext instance instead of a Map, preventing crashes during Inngest durable execution replay with observability enabled. ([#14442](https://github.com/mastra-ai/mastra/pull/14442))
+
+- Fixed generation span output to include tool call data, enabling PostHog's LLM Analytics Tools tab to extract and display tool usage ([#14383](https://github.com/mastra-ai/mastra/pull/14383))
+
+## 1.15.0-alpha.1
+
+### Patch Changes
+
+- Added opt-in Observational Memory thread titles. ([#14436](https://github.com/mastra-ai/mastra/pull/14436))
+
+  When enabled, the Observer suggests a short thread title and updates it as the conversation topic changes. Harness consumers can detect these updates via the new `om_thread_title_updated` event.
+
+  **Example**
+
+  ```ts
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        observation: {
+          threadTitle: true,
+        },
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`cd7b568`](https://github.com/mastra-ai/mastra/commit/cd7b568fe427b1b4838abe744fa5367a47539db3)]:
+  - @mastra/schema-compat@1.2.6-alpha.1
+
 ## 1.15.0-alpha.0
 
 ### Minor Changes
