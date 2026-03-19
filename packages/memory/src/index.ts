@@ -21,7 +21,7 @@ import type {
   ObservationalMemoryOptions,
   MemoryConfig,
 } from '@mastra/core/memory';
-import { SpanType, EntityType, getOrCreateSpan } from '@mastra/core/observability';
+import { SpanType, EntityType } from '@mastra/core/observability';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type {
   InputProcessor,
@@ -211,21 +211,20 @@ export class Memory extends MastraMemory {
   }
 
   private createMemorySpan(
-    operationType: 'recall' | 'save' | 'delete' | 'update_working',
+    operationType: 'recall' | 'save' | 'delete' | 'update',
     observabilityContext?: Partial<ObservabilityContext>,
     input?: any,
     attributes?: Record<string, any>,
   ) {
-    const tracingContext = observabilityContext?.tracingContext ?? observabilityContext?.tracing;
-    if (!tracingContext) return undefined;
-    return getOrCreateSpan({
+    const currentSpan = observabilityContext?.tracingContext?.currentSpan;
+    if (!currentSpan) return undefined;
+    return currentSpan.createChildSpan({
       type: SpanType.MEMORY_OPERATION,
       name: `memory: ${operationType}`,
       entityType: EntityType.MEMORY,
       entityName: 'Memory',
       input,
       attributes: { operationType, ...attributes },
-      tracingContext,
     });
   }
 
@@ -638,7 +637,7 @@ export class Memory extends MastraMemory {
     }
 
     const span = this.createMemorySpan(
-      'update_working',
+      'update',
       observabilityContext,
       { threadId, resourceId },
       {

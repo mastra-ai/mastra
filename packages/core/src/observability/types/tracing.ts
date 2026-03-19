@@ -394,7 +394,7 @@ export interface WorkflowWaitEventAttributes extends AIBaseAttributes {
  * Memory operation attributes
  */
 export interface MemoryOperationAttributes extends AIBaseAttributes {
-  operationType?: 'recall' | 'save' | 'delete' | 'update_working';
+  operationType?: 'recall' | 'save' | 'delete' | 'update';
   messageCount?: number;
   embeddingTokens?: number;
   semanticRecallEnabled?: boolean;

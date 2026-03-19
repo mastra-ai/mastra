@@ -2,8 +2,8 @@ import type { Processor } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { parseMemoryRequestContext } from '../../memory';
 import { removeWorkingMemoryTags, removeSystemReminderTags } from '../../memory/working-memory-utils';
-import { SpanType, EntityType, getOrCreateSpan } from '../../observability';
-import type { ObservabilityContext, TracingContext, MemoryOperationAttributes } from '../../observability';
+import { SpanType, EntityType } from '../../observability';
+import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 
@@ -64,19 +64,19 @@ export class MessageHistory implements Processor {
 
   private createMemorySpan(
     operationType: MemoryOperationAttributes['operationType'],
-    tracingContext?: TracingContext,
+    observabilityContext?: Partial<ObservabilityContext>,
     input?: any,
     attributes?: Partial<MemoryOperationAttributes>,
   ) {
-    if (!tracingContext) return undefined;
-    return getOrCreateSpan({
+    const currentSpan = observabilityContext?.tracingContext?.currentSpan;
+    if (!currentSpan) return undefined;
+    return currentSpan.createChildSpan({
       type: SpanType.MEMORY_OPERATION,
       name: `memory: ${operationType}`,
       entityType: EntityType.MEMORY,
       entityName: 'Memory',
       input,
       attributes: { operationType, ...attributes },
-      tracingContext,
     });
   }
 
@@ -88,8 +88,7 @@ export class MessageHistory implements Processor {
       requestContext?: RequestContext;
     } & Partial<ObservabilityContext>,
   ): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, requestContext } = args;
-    const tracingContext = args.tracingContext ?? args.tracing;
+    const { messageList, requestContext, ...observabilityContext } = args;
 
     // Get memory context from RequestContext or MessageList
     const context = this.getMemoryContext(requestContext, messageList);
@@ -102,7 +101,7 @@ export class MessageHistory implements Processor {
 
     const span = this.createMemorySpan(
       'recall',
-      tracingContext,
+      observabilityContext,
       { threadId, resourceId },
       {
         lastMessages: this.lastMessages,
@@ -226,8 +225,7 @@ export class MessageHistory implements Processor {
       requestContext?: RequestContext;
     } & Partial<ObservabilityContext>,
   ): Promise<MessageList> {
-    const { messageList, requestContext } = args;
-    const tracingContext = args.tracingContext ?? args.tracing;
+    const { messageList, requestContext, ...observabilityContext } = args;
 
     // Get memory context from RequestContext or MessageList
     const context = this.getMemoryContext(requestContext, messageList);
@@ -252,7 +250,7 @@ export class MessageHistory implements Processor {
 
     const span = this.createMemorySpan(
       'save',
-      tracingContext,
+      observabilityContext,
       { messageCount: messagesToSave.length },
       {
         messageCount: messagesToSave.length,

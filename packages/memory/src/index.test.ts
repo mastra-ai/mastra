@@ -2389,7 +2389,7 @@ describe('Memory', () => {
 
       expect(parentSpan.createChildSpan).toHaveBeenCalledTimes(1);
       const spanArgs = parentSpan.createChildSpan.mock.calls[0][0];
-      expect(spanArgs.attributes.operationType).toBe('update_working');
+      expect(spanArgs.attributes.operationType).toBe('update');
 
       expect(childSpan.end).toHaveBeenCalledTimes(1);
       expect(childSpan.end.mock.calls[0][0].attributes.success).toBe(true);
