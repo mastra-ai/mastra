@@ -138,6 +138,7 @@
     "fix-mcp-empty-output",
     "fix-mcp-sighup-child-process-leak",
     "fix-otel-context-propagation",
+    "fix-pg-concurrent-queries-14481",
     "fix-span-serialization-false-circular",
     "fix-withmastra-v3-compat",
     "fix-workflow-step-otel-context",
@@ -152,6 +153,7 @@
     "rich-chairs-attack",
     "server-public-host-protocol",
     "soft-geese-hang",
+    "some-papayas-sneeze",
     "tired-chairs-add",
     "wacky-times-think",
     "young-months-look"
