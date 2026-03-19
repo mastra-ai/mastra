@@ -47,6 +47,16 @@ function isDefined(value: unknown): value is number {
  * 1. AI SDK aggregated inputTokenDetails (properly summed across all steps in multi-step runs)
  * 2. Provider-specific providerMetadata (accurate for single-step, last step only in multi-step)
  * 3. usage.cachedInputTokens (OpenAI/OpenRouter direct field)
+ *
+ * Handles:
+ * - OpenAI: cachedInputTokens in usage object
+ * - Anthropic: cacheCreationInputTokens, cacheReadInputTokens in providerMetadata.anthropic
+ * - Google/Gemini: cachedContentTokenCount, thoughtsTokenCount in providerMetadata.google.usageMetadata
+ * - OpenRouter: Uses OpenAI-compatible structure (cache tokens in usage)
+ *
+ * @param usage - The LanguageModelV2Usage from AI SDK response
+ * @param providerMetadata - Optional provider-specific metadata
+ * @returns UsageStats with inputDetails and outputDetails
  */
 export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata?: ProviderMetadata): UsageStats {
   if (!usage) {
