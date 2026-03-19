@@ -473,7 +473,14 @@
                   "role": "assistant",
                   "content": {
                     "format": 2,
-                    "parts": ["[Circular]"],
+                    "parts": [
+                      {
+                        "type": "text",
+                        "text": {
+                          "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                        }
+                      }
+                    ],
                     "metadata": {
                       "modelId": "mock-model-id"
                     },
