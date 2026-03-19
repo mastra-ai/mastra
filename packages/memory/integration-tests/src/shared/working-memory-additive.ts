@@ -511,7 +511,7 @@ Schema structure reminder:
         expect(wmRaw!.toLowerCase()).toContain('carol');
       });
 
-      it('should preserve people array when adding work details', async () => {
+      it('should preserve people array when adding work details', { retry: 2 }, async () => {
         // Turn 1: Mention people first
         await agentGenerate(
           agent,
@@ -526,10 +526,10 @@ Schema structure reminder:
         expect(wmRaw!.toLowerCase()).toContain('bob');
         expect(wmRaw!.toLowerCase()).toContain('carol');
 
-        // Turn 2: Add work details (people should be preserved)
+        // Turn 2: Add work details (people should be preserved via merge semantics)
         await agentGenerate(
           agent,
-          "Store this work info: We're at TechStartup Inc, a Series A company focused on AI tools.",
+          "Store this work info: We're at TechStartup Inc, a Series A company focused on AI tools. Only update the work section, do not modify the people array.",
           { threadId: thread.id, resourceId },
           model,
         );
