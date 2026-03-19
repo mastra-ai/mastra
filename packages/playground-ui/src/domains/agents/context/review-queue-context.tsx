@@ -126,7 +126,7 @@ export function ReviewQueueProvider({ children }: { children: ReactNode }) {
           datasetId: item.datasetId,
           experimentId: item.experimentId,
           resultId: item.id,
-          status: null as any,
+          status: null,
         });
       }
       setItems(prev => prev.filter(i => i.id !== id));
