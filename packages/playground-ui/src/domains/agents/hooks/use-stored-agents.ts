@@ -34,8 +34,8 @@ export const useStoredAgentMutations = (agentId?: string) => {
     mutationFn: (params: CreateStoredAgentParams) => client.createStoredAgent(params),
     onSuccess: () => {
       // Invalidate both stored-agents list and the merged agents list
-      queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
-      queryClient.invalidateQueries({ queryKey: ['agents'] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
+      void queryClient.invalidateQueries({ queryKey: ['agents'] });
     },
   });
 
@@ -46,12 +46,12 @@ export const useStoredAgentMutations = (agentId?: string) => {
     },
     onSuccess: () => {
       // Invalidate lists
-      queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
-      queryClient.invalidateQueries({ queryKey: ['agents'] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
+      void queryClient.invalidateQueries({ queryKey: ['agents'] });
       // Invalidate specific agent details
       if (agentId) {
-        queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
-        queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
       }
     },
   });
@@ -63,12 +63,12 @@ export const useStoredAgentMutations = (agentId?: string) => {
     },
     onSuccess: () => {
       // Invalidate lists
-      queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
-      queryClient.invalidateQueries({ queryKey: ['agents'] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
+      void queryClient.invalidateQueries({ queryKey: ['agents'] });
       // Invalidate specific agent details
       if (agentId) {
-        queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
-        queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
       }
     },
   });

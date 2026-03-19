@@ -31,7 +31,7 @@ const HighlightedPre = React.memo(({ children, language, ...props }: Highlighted
   const [tokens, setTokens] = useState<any[]>([]);
 
   useEffect(() => {
-    highlight(children, language).then(tokens => {
+    void highlight(children, language).then(tokens => {
       if (tokens) setTokens(tokens);
     });
   }, [children, language]);

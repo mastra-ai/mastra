@@ -288,7 +288,7 @@ export function FileBrowser({
                 const name = prompt('Directory name:');
                 if (name) {
                   const fullPath = isRoot ? name : `${currentPath}/${name}`;
-                  onCreateDirectory(fullPath);
+                  void onCreateDirectory(fullPath);
                 }
               }}
             >

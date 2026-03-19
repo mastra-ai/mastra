@@ -39,7 +39,7 @@ const ComposerPdfAttachment = ({ document }: { document: AttachmentState }) => {
       }
       setState(s => ({ ...s, isLoading: false, text }));
     };
-    run();
+    void run();
 
     return () => {
       isCanceled = true;

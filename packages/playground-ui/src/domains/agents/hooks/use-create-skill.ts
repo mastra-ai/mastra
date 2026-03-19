@@ -58,8 +58,8 @@ export function useCreateSkill() {
       });
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['stored-skills'] });
-      queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-skills'] });
+      void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
       toast.success('Skill created');
     },
     onError: error => {

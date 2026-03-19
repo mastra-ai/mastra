@@ -256,9 +256,9 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
 
         // Reset form dirty state so publish can detect unsaved changes
         form.reset(values);
-        queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
-        queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
-        queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
         toast.success('Draft saved');
       } catch (error) {
         toast.error(`Failed to save draft: ${error instanceof Error ? error.message : 'Unknown error'}`);

@@ -38,7 +38,7 @@ export const useStoredPromptBlockMutations = (blockId?: string) => {
   const createMutation = useMutation({
     mutationFn: (params: CreateStoredPromptBlockParams) => client.createStoredPromptBlock(params),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['stored-prompt-blocks'] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-prompt-blocks'] });
     },
   });
 
@@ -48,10 +48,10 @@ export const useStoredPromptBlockMutations = (blockId?: string) => {
       return client.getStoredPromptBlock(blockId).update(params, requestContext);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['stored-prompt-blocks'] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-prompt-blocks'] });
       if (blockId) {
-        queryClient.invalidateQueries({ queryKey: ['stored-prompt-block', blockId] });
-        queryClient.invalidateQueries({ queryKey: ['prompt-block-versions', blockId] });
+        void queryClient.invalidateQueries({ queryKey: ['stored-prompt-block', blockId] });
+        void queryClient.invalidateQueries({ queryKey: ['prompt-block-versions', blockId] });
       }
     },
   });
@@ -62,9 +62,9 @@ export const useStoredPromptBlockMutations = (blockId?: string) => {
       return client.getStoredPromptBlock(blockId).delete(requestContext);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['stored-prompt-blocks'] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-prompt-blocks'] });
       if (blockId) {
-        queryClient.invalidateQueries({ queryKey: ['stored-prompt-block', blockId] });
+        void queryClient.invalidateQueries({ queryKey: ['stored-prompt-block', blockId] });
       }
     },
   });

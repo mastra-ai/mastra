@@ -15,8 +15,8 @@ export const useCloneAgent = () => {
     try {
       const result = await client.getAgent(agentId).clone({ requestContext });
       // Invalidate agent lists so the cloned agent appears
-      queryClient.invalidateQueries({ queryKey: ['agents'] });
-      queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
+      void queryClient.invalidateQueries({ queryKey: ['agents'] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
       toast.success(`Agent cloned successfully`);
       return result;
     } catch (error) {

@@ -466,8 +466,8 @@ export function MastraRuntimeProvider({
     // accurate token counts even after the stream ends or on page reload
     signalObservationsUpdated();
     // Invalidate both the OM data and status queries to trigger refetch
-    queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
-    queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+    void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+    void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
   };
 
   // Helper to handle activation markers - marks cycleId as activated so buffering badges update
@@ -604,8 +604,8 @@ export function MastraRuntimeProvider({
     setLegacyMessages(prev => markOmMarkersAsDisconnected(prev));
 
     // Refresh to get latest state from server
-    queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
-    queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+    void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+    void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
   };
 
   // On initial load, scan messages for activation markers and the last progress part.
@@ -714,7 +714,7 @@ export function MastraRuntimeProvider({
                 'success' in chunk.payload.result! &&
                 chunk.payload.result?.success
               ) {
-                refreshWorkingMemory?.();
+                void refreshWorkingMemory?.();
               }
 
               if (chunk.type === 'network-execution-event-step-finish') {
@@ -783,7 +783,7 @@ export function MastraRuntimeProvider({
                   'success' in chunk.payload.result! &&
                   chunk.payload.result?.success
                 ) {
-                  refreshWorkingMemory?.();
+                  void refreshWorkingMemory?.();
                 }
 
                 // Signal observation started (for sidebar status)
@@ -819,8 +819,8 @@ export function MastraRuntimeProvider({
                 .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
                 .then(result => {
                   setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
-                  queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
-                  queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+                  void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+                  void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
                 })
                 .catch(() => {});
             }
@@ -1186,8 +1186,8 @@ export function MastraRuntimeProvider({
           .then(result => {
             setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
             setLegacyMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
-            queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
-            queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+            void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+            void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
           })
           .catch(() => {});
       }
@@ -1238,8 +1238,8 @@ export function MastraRuntimeProvider({
           .then(result => {
             setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
             setLegacyMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
-            queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
-            queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+            void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+            void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
           })
           .catch(() => {});
       }

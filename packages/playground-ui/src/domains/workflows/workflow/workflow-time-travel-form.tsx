@@ -274,7 +274,7 @@ export const WorkflowTimeTravelForm = ({
         setDebugMode(false);
       }
 
-      timeTravelWorkflowStream(payload);
+      void timeTravelWorkflowStream(payload);
 
       closeModal();
     } catch (error) {

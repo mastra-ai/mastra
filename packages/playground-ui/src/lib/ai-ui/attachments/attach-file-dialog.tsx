@@ -46,7 +46,7 @@ export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) 
         type: await getFileContentType(url),
       });
 
-      composerRuntime.addAttachment(file);
+      void composerRuntime.addAttachment(file);
       onOpenChange(false);
     }
   };

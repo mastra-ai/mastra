@@ -46,7 +46,7 @@ export const useScorer = (scorerId: string) => {
       }
     };
 
-    fetchScorer();
+    void fetchScorer();
   }, [scorerId]);
 
   return { scorer, isLoading, error };

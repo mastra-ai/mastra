@@ -37,7 +37,7 @@ export const useAdapters = (agentId: string) => {
       }
     };
 
-    check();
+    void check();
   }, [agentId]);
 
   return {

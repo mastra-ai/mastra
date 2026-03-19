@@ -241,7 +241,7 @@ export function AgentPlaygroundVersionBar({
                   onChange={e => setChangeMessage(e.target.value)}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
-                      handleSaveWithMessage();
+                      void handleSaveWithMessage();
                     }
                   }}
                   disabled={isSavingDraft}

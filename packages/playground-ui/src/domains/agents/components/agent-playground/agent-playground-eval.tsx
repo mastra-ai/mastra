@@ -442,7 +442,7 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
         ...(hasRequestContext ? { requestContext: mergedRequestContext } : {}),
       });
 
-      queryClient.invalidateQueries({ queryKey: ['agent-experiments', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['agent-experiments', agentId] });
       toast.success('Experiment started');
     } catch (error) {
       toast.error(`Failed to start experiment: ${error instanceof Error ? error.message : 'Unknown error'}`);

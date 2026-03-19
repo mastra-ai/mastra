@@ -107,7 +107,7 @@ export const useDatasetExperimentResults = ({
 
   useEffect(() => {
     if (isEndOfListInView && query.hasNextPage && !query.isFetchingNextPage) {
-      query.fetchNextPage();
+      void query.fetchNextPage();
     }
   }, [isEndOfListInView, query.hasNextPage, query.isFetchingNextPage]);
 

@@ -161,7 +161,7 @@ export const WorkflowStepActionBar = ({
       setDebugMode(false);
     }
 
-    timeTravelWorkflowStream(payload);
+    void timeTravelWorkflowStream(payload);
   };
 
   return (

@@ -38,9 +38,9 @@ export function useAgentWorkspace(agentId?: string) {
     },
     onSuccess: () => {
       if (agentId) {
-        queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
-        queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
-        queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
       }
     },
   });

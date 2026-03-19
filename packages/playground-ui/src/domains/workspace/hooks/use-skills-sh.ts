@@ -148,7 +148,7 @@ export const useInstallSkill = () => {
       });
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
     },
   });
 };
@@ -185,7 +185,7 @@ export const useUpdateSkills = () => {
       });
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
     },
   });
 };
@@ -222,7 +222,7 @@ export const useRemoveSkill = () => {
       });
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
     },
   });
 };

@@ -139,7 +139,7 @@ const AgentMetadataModelListItem = ({
             checked={enabled}
             onCheckedChange={checked => {
               setEnabled(checked);
-              updateModelInModelList({ modelConfigId: modelConfig.id, enabled: checked });
+              void updateModelInModelList({ modelConfigId: modelConfig.id, enabled: checked });
             }}
             className="flex-shrink-0"
           />

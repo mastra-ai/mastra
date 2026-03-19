@@ -82,6 +82,6 @@ async function playStreamWithWebAudio(stream: ReadableStream) {
 
   return () => {
     source.stop();
-    audioContext.close();
+    void audioContext.close();
   };
 }

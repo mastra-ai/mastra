@@ -91,7 +91,7 @@ export const useDeleteThread = () => {
     onSuccess: (_, variables) => {
       const { agentId } = variables;
       if (agentId) {
-        queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
       }
       toast.success('Chat deleted successfully');
     },
@@ -132,7 +132,7 @@ export const useCloneThread = () => {
     onSuccess: (_, variables) => {
       const { agentId } = variables;
       if (agentId) {
-        queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
       }
       toast.success('Thread cloned successfully');
     },

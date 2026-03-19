@@ -24,7 +24,7 @@ export const ZoomSlider = forwardRef<HTMLDivElement, Omit<PanelProps, 'children'
         max={1}
         step={0.01}
         onValueChange={values => {
-          zoomTo(values[0]);
+          void zoomTo(values[0]);
         }}
       />
       <Button onClick={() => zoomIn({ duration: 300 })}>

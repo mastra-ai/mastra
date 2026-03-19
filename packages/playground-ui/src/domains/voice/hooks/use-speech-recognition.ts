@@ -48,7 +48,7 @@ export const useSpeechRecognition = ({
       }
     };
 
-    check();
+    void check();
   }, [agentId]);
 
   const {
@@ -155,13 +155,13 @@ const useMastraSpeechToText = ({ agent }: { agent: Agent | null }) => {
   }
 
   const handleFinish = (file: File) => {
-    agent.voice.listen(file as any).then(res => {
+    void agent.voice.listen(file as any).then(res => {
       setTranscript((res as unknown as { text: string }).text);
     });
   };
 
   const start = () => {
-    recordMicrophoneToFile(handleFinish).then(recorder => {
+    void recordMicrophoneToFile(handleFinish).then(recorder => {
       setRecorder(recorder);
       recorder.start();
     });

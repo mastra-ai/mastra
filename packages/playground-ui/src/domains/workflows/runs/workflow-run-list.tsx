@@ -99,7 +99,7 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
         onOpenChange={() => setDeleteRunId(null)}
         onDelete={() => {
           if (deleteRunId) {
-            handleDelete(deleteRunId);
+            void handleDelete(deleteRunId);
           }
         }}
       />

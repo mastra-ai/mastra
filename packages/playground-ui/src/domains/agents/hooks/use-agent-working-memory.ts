@@ -61,7 +61,7 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
   }, [agentId, threadId, resourceId]);
 
   useEffect(() => {
-    refetch();
+    void refetch();
   }, [refetch]);
 
   const updateWorkingMemory = async (newMemory: string) => {
@@ -75,7 +75,7 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
         }
       }
       await client.updateWorkingMemory({ agentId, threadId, workingMemory: newMemory, resourceId, requestContext });
-      refetch();
+      void refetch();
     } catch (error) {
       console.error('Error updating working memory', error);
       throw error;

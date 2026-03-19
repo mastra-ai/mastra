@@ -45,7 +45,7 @@ export const useWorkflowRuns = (workflowId: string, { enabled = true }: { enable
 
   useEffect(() => {
     if (isEndOfListInView && hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
+      void fetchNextPage();
     }
   }, [isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
@@ -70,7 +70,7 @@ export const useDeleteWorkflowRun = (workflowId: string) => {
   return useMutation({
     mutationFn: ({ runId }: { runId: string }) => client.getWorkflow(workflowId).deleteRunById(runId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflow-runs', workflowId] });
+      void queryClient.invalidateQueries({ queryKey: ['workflow-runs', workflowId] });
       toast.success('Workflow run deleted successfully');
     },
     onError: () => {

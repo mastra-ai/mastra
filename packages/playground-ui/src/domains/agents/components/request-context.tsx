@@ -47,7 +47,7 @@ export const RequestContext = () => {
       setRequestContextValue(formatted);
     };
 
-    run();
+    void run();
   }, [requestContextStr]);
 
   const handleSaveRequestContext = () => {

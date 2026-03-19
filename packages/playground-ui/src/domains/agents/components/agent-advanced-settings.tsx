@@ -38,7 +38,7 @@ export const AgentAdvancedSettings = () => {
       setProviderOptionsValue(formatted);
     };
 
-    run();
+    void run();
   }, [providerOptionsStr]);
 
   const formatProviderOptions = async () => {

@@ -58,8 +58,8 @@ export const useCreatePromptBlockVersion = ({ blockId }: { blockId: string }) =>
     mutationFn: (params?: CreatePromptBlockVersionParams) =>
       client.getStoredPromptBlock(blockId).createVersion(params, requestContext),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['prompt-block-versions', blockId] });
-      queryClient.invalidateQueries({ queryKey: ['stored-prompt-block', blockId] });
+      void queryClient.invalidateQueries({ queryKey: ['prompt-block-versions', blockId] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-prompt-block', blockId] });
     },
   });
 };
@@ -75,8 +75,8 @@ export const useActivatePromptBlockVersion = ({ blockId }: { blockId: string }) 
   return useMutation<ActivatePromptBlockVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredPromptBlock(blockId).activateVersion(versionId, requestContext),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['prompt-block-versions', blockId] });
-      queryClient.invalidateQueries({ queryKey: ['stored-prompt-block', blockId] });
+      void queryClient.invalidateQueries({ queryKey: ['prompt-block-versions', blockId] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-prompt-block', blockId] });
     },
   });
 };
@@ -92,8 +92,8 @@ export const useRestorePromptBlockVersion = ({ blockId }: { blockId: string }) =
   return useMutation<PromptBlockVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredPromptBlock(blockId).restoreVersion(versionId, requestContext),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['prompt-block-versions', blockId] });
-      queryClient.invalidateQueries({ queryKey: ['stored-prompt-block', blockId] });
+      void queryClient.invalidateQueries({ queryKey: ['prompt-block-versions', blockId] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-prompt-block', blockId] });
     },
   });
 };
@@ -109,8 +109,8 @@ export const useDeletePromptBlockVersion = ({ blockId }: { blockId: string }) =>
   return useMutation<DeletePromptBlockVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredPromptBlock(blockId).deleteVersion(versionId, requestContext),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['prompt-block-versions', blockId] });
-      queryClient.invalidateQueries({ queryKey: ['stored-prompt-block', blockId] });
+      void queryClient.invalidateQueries({ queryKey: ['prompt-block-versions', blockId] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-prompt-block', blockId] });
     },
   });
 };

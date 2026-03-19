@@ -87,7 +87,7 @@ export const MemorySearch = ({
         // If it's been more than 500ms since last search, search immediately
         if (timeSinceLastSearch >= 500) {
           setIsSearching(true);
-          handleSearch(value);
+          void handleSearch(value);
           lastSearchTimeRef.current = now;
         } else {
           // Otherwise, set a timeout for the remaining time
@@ -96,7 +96,7 @@ export const MemorySearch = ({
           const remainingTime = 500 - timeSinceLastSearch;
           searchTimeoutRef.current = setTimeout(() => {
             if (pendingSearchRef.current) {
-              handleSearch(pendingSearchRef.current);
+              void handleSearch(pendingSearchRef.current);
               lastSearchTimeRef.current = Date.now();
               pendingSearchRef.current = null;
             }
@@ -122,7 +122,7 @@ export const MemorySearch = ({
           clearTimeout(searchTimeoutRef.current);
         }
         // Perform search immediately
-        handleSearch(query);
+        void handleSearch(query);
       }
     },
     [query, handleSearch],
@@ -153,7 +153,7 @@ export const MemorySearch = ({
   useEffect(() => {
     if (prevThreadIdRef.current !== currentThreadId && query.trim()) {
       // Thread changed and we have a search query, re-run the search
-      handleSearch(query);
+      void handleSearch(query);
     }
     prevThreadIdRef.current = currentThreadId;
   }, [currentThreadId, query, handleSearch]);
@@ -174,7 +174,7 @@ export const MemorySearch = ({
         // If it's been more than 500ms since last search, search immediately
         if (timeSinceLastSearch >= 500) {
           setIsSearching(true);
-          handleSearch(chatInputValue);
+          void handleSearch(chatInputValue);
           lastSearchTimeRef.current = now;
         } else {
           // Otherwise, set a timeout for the remaining time
@@ -183,7 +183,7 @@ export const MemorySearch = ({
           const remainingTime = 500 - timeSinceLastSearch;
           searchTimeoutRef.current = setTimeout(() => {
             if (pendingSearchRef.current) {
-              handleSearch(pendingSearchRef.current);
+              void handleSearch(pendingSearchRef.current);
               lastSearchTimeRef.current = Date.now();
               pendingSearchRef.current = null;
             }

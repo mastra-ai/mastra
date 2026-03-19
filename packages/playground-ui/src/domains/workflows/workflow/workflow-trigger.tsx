@@ -124,7 +124,7 @@ export function WorkflowTrigger({
       const { initialState, inputData: dataInputData } = data ?? {};
       const inputData = hasStateSchema ? dataInputData : data;
 
-      streamWorkflow({ workflowId, runId: run.runId, inputData, initialState, requestContext });
+      void streamWorkflow({ workflowId, runId: run.runId, inputData, initialState, requestContext });
     } catch {
       toast.error('Error executing workflow');
     }
@@ -202,7 +202,7 @@ export function WorkflowTrigger({
             isStreaming={isStreamingWorkflow}
             onExecute={data => {
               setPayload(data);
-              handleExecuteWorkflow(data);
+              void handleExecuteWorkflow(data);
             }}
             isViewingRun={!!paramsRunId}
             isProcessorWorkflow={workflow?.isProcessorWorkflow}
