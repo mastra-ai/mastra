@@ -21,10 +21,9 @@ interface CreateProjectArgs {
 }
 
 export const createProject = async (projectNameArg: string | undefined, args: CreateProjectArgs) => {
-  const projectName = projectNameArg || args.projectName;
   await analytics.trackCommandExecution({
     command: 'create',
-    args: { ...args, projectName },
+    args: { ...args, projectName: projectNameArg },
     execution: async () => {
       const timeout = args?.timeout ? (args?.timeout === true ? 60000 : parseInt(args?.timeout, 10)) : undefined;
       if (args.default) {
@@ -45,7 +44,7 @@ export const createProject = async (projectNameArg: string | undefined, args: Cr
         addExample: args.example,
         llmApiKey: args.llmApiKey,
         timeout,
-        projectName,
+        projectName: projectNameArg,
         directory: args.dir,
         mcpServer: args.mcp,
         skills: args.skills,
