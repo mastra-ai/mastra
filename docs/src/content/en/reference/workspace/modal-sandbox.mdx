@@ -39,7 +39,7 @@ const workspace = new Workspace({
 })
 
 const agent = new Agent({
-  name: 'dev-agent',
+  id: 'dev-agent',
   model: 'anthropic/claude-opus-4-6',
   workspace,
 })
@@ -192,7 +192,7 @@ Get your credentials from the [Modal dashboard](https://modal.com/settings/token
 
 ## Sandbox lifecycle
 
-- **`_start()`**: Creates a new sandbox from the provided baseImage. On subsequent calls, attempts to reconnect to an existing running sandbox, or creates a sandbox using the latest snapshot.
+- **`_start()`**: Attempts to reconnect to an existing running sandbox. If none is found, creates a sandbox from the latest snapshot (if available from a previous `_stop()`), or from the baseImage.
 - **`_stop()`**: Snapshots the filesystem, then terminates the sandbox. Snapshot is kept in memory on the same instance for future starts.
 - **`_destroy()`**: Terminates the sandbox and discards any snapshot.
 
@@ -211,7 +211,7 @@ await sandbox._start()
 
 ## Background processes
 
-`ModalSandbox` includes a built-in process manager for spawning and managing background processes. Each `spawn()` call creates a new `ContainerProcess` via the Modal SDK's `Process.spawn()` API.
+`ModalSandbox` includes a built-in process manager for spawning and managing background processes. Each `spawn()` call creates a new `ContainerProcess` via the Modal SDK's `Sandbox.exec()` API.
 
 ```typescript
 const sandbox = new ModalSandbox({ id: 'dev-sandbox' })
@@ -233,7 +233,7 @@ await handle.kill()
 
 :::note
 
-`sendStdin()` is not supported — the Modal JS SDK does not expose stdin on `Process.spawn()`.
+`sendStdin()` is not supported — the Modal JS SDK does not expose stdin on `Sandbox.exec()`.
 
 :::
 

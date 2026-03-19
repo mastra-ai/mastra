@@ -12,7 +12,7 @@ const mockSandbox = {
   sandboxId: 'sb-test-123',
   exec: vi.fn(),
   terminate: vi.fn().mockResolvedValue(undefined),
-  detach: vi.fn(),
+  snapshotFilesystem: vi.fn().mockResolvedValue({ imageId: 'snap-123' }),
 };
 
 const mockSandboxes = {
@@ -127,7 +127,7 @@ beforeEach(() => {
   mockApps.fromName.mockResolvedValue({ appId: 'app-123', name: 'mastra' });
   mockImages.fromRegistry.mockReturnValue({ imageId: 'img-ubuntu' });
   mockSandbox.terminate.mockResolvedValue(undefined);
-  mockSandbox.detach.mockReset();
+  mockSandbox.snapshotFilesystem.mockResolvedValue({ imageId: 'snap-123' });
 });
 
 // ---------------------------------------------------------------------------
@@ -168,14 +168,14 @@ describe('ModalSandbox lifecycle', () => {
     await expect(sandbox._start()).rejects.toThrow('Network failure');
   });
 
-  it('stop() detaches — sandbox keeps running on Modal', async () => {
+  it('stop() snapshots and terminates the sandbox', async () => {
     mockSandboxes.fromName.mockResolvedValue(mockSandbox);
     const sandbox = new ModalSandbox({ id: 'test-sb' });
     await sandbox._start();
     await sandbox._stop();
 
-    expect(mockSandbox.detach).toHaveBeenCalled();
-    expect(mockSandbox.terminate).not.toHaveBeenCalled();
+    expect(mockSandbox.snapshotFilesystem).toHaveBeenCalled();
+    expect(mockSandbox.terminate).toHaveBeenCalledWith({ wait: true });
     expect(sandbox.status).toBe('stopped');
   });
 
@@ -236,24 +236,6 @@ describe('ModalSandbox lifecycle', () => {
     );
   });
 
-  it('passes idleTimeoutMs to sandboxes.create()', async () => {
-    const sandbox = new ModalSandbox({ idleTimeoutMs: 600_000 });
-    await sandbox._start();
-
-    expect(mockSandboxes.create).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-      expect.objectContaining({ idleTimeoutMs: 600_000 }),
-    );
-  });
-
-  it('omits idleTimeoutMs when not set', async () => {
-    const sandbox = new ModalSandbox({});
-    await sandbox._start();
-
-    const [, , params] = mockSandboxes.create.mock.calls[0]!;
-    expect(params.idleTimeoutMs).toBeUndefined();
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -261,39 +243,34 @@ describe('ModalSandbox lifecycle', () => {
 // ---------------------------------------------------------------------------
 
 describe('ModalSandbox stop-and-resume', () => {
-  it('stop() keeps sandbox running so a new instance can reconnect', async () => {
-    // First instance: start and stop
+  it('stop() snapshots then terminates, allowing same instance to resume from snapshot', async () => {
     const first = new ModalSandbox({ id: 'resume-test', appName: 'mastra' });
     await first._start();
-    expect(mockSandbox.detach).not.toHaveBeenCalled();
     await first._stop();
-    expect(mockSandbox.detach).toHaveBeenCalled();
-    expect(mockSandbox.terminate).not.toHaveBeenCalled();
 
-    // Simulate Modal keeping the sandbox alive: fromName now succeeds
-    mockSandboxes.fromName.mockResolvedValue(mockSandbox);
+    expect(mockSandbox.snapshotFilesystem).toHaveBeenCalled();
+    expect(mockSandbox.terminate).toHaveBeenCalledWith({ wait: true });
 
-    // Second instance with the same id: should reconnect, not recreate
-    const second = new ModalSandbox({ id: 'resume-test', appName: 'mastra' });
-    await second._start();
+    // Restart the same instance — should create from snapshot
+    mockSandboxes.create.mockResolvedValue(mockSandbox);
+    await first._start();
 
-    expect(mockSandboxes.fromName).toHaveBeenCalledWith('mastra', 'resume-test');
-    expect(mockSandboxes.create).toHaveBeenCalledTimes(1); // only from first._start()
-    expect(second.status).toBe('running');
+    // fromName fails (sandbox was terminated), so create is called with the snapshot
+    expect(mockSandboxes.create).toHaveBeenCalledTimes(2);
+    expect(first.status).toBe('running');
   });
 
-  it('creates a fresh sandbox when idle timeout has expired and reconnect fails', async () => {
+  it('creates a fresh sandbox when a new instance starts with the same id', async () => {
     const first = new ModalSandbox({ id: 'expired-test', appName: 'mastra' });
     await first._start();
     await first._stop();
 
-    // Simulate Modal having reaped the idle sandbox
+    // New instance doesn't have the snapshot, so it creates from base image
     mockSandboxes.fromName.mockRejectedValue(new NotFoundError('sandbox not found'));
 
     const second = new ModalSandbox({ id: 'expired-test', appName: 'mastra' });
     await second._start();
 
-    // fromName was tried and failed; a new sandbox was created
     expect(mockSandboxes.create).toHaveBeenCalledTimes(2);
     expect(second.status).toBe('running');
   });
@@ -306,7 +283,7 @@ describe('ModalSandbox stop-and-resume', () => {
 describe('ModalSandbox metadata', () => {
   it('getInfo() returns sandbox metadata', async () => {
     mockSandboxes.fromName.mockResolvedValue(mockSandbox);
-    const sandbox = new ModalSandbox({ id: 'test-sb', image: 'python:3.12-slim', appName: 'my-app' });
+    const sandbox = new ModalSandbox({ id: 'test-sb', baseImage: 'python:3.12-slim', appName: 'my-app' });
     await sandbox._start();
 
     const info = await sandbox.getInfo();
@@ -318,7 +295,7 @@ describe('ModalSandbox metadata', () => {
   });
 
   it('getInstructions() returns default instructions containing image name', () => {
-    const sandbox = new ModalSandbox({ image: 'python:3.12' });
+    const sandbox = new ModalSandbox({ baseImage: 'python:3.12' });
     expect(sandbox.getInstructions()).toContain('python:3.12');
   });
 
@@ -336,7 +313,7 @@ describe('ModalSandbox metadata', () => {
 
   it('getInstructions() function override receives default instructions', () => {
     const sandbox = new ModalSandbox({
-      image: 'ubuntu:22.04',
+      baseImage: 'ubuntu:22.04',
       instructions: ({ defaultInstructions }) => defaultInstructions,
     });
     expect(sandbox.getInstructions()).toContain('ubuntu:22.04');

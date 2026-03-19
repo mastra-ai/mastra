@@ -4,7 +4,7 @@
 
 import type { MastraSandboxOptions, ProviderStatus, SandboxInfo } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
-import { AlreadyExistsError, ClientClosedError, ModalClient, NotFoundError } from 'modal';
+import { ClientClosedError, ModalClient, NotFoundError } from 'modal';
 import type { App, Image, Sandbox } from 'modal';
 import { ModalProcessManager } from './process-manager';
 
@@ -136,69 +136,45 @@ export class ModalSandbox extends MastraSandbox {
     if (this._sb) {
       return;
     }
-    
-    this.status = 'starting';
+
     const client = this._getClient();
 
     try {
-      // Try to connect to running sandbox if exists
-      // this is not expected in most cases, as stop-and-resume is implemented via snapshot and terminate
       this._sb = await client.sandboxes.fromName(this.appName, this.id);
       this._createdAt = new Date();
       this.logger.debug(`${LOG_PREFIX} Reconnected to running sandbox: ${this.id}`);
       return;
     } catch (error) {
       if (!(error instanceof NotFoundError)) {
-        this.status = 'error';
         throw error;
       }
-      // NotFoundError means no sandbox with this id is running
     }
 
     const app: App = await client.apps.fromName(this.appName, { createIfMissing: true });
 
-    // Try to reboot if snapshot from previous stop is available
-    if (this._imageSnapshot){
+    if (this._imageSnapshot) {
       this.logger.debug(`${LOG_PREFIX} Rebooting from snapshot: ${this.id}`);
-      try {
-        this._sb = await client.sandboxes.create(app, this._imageSnapshot, {
-          name: this.id,
-          timeoutMs: this.timeoutMs,
-          env: Object.keys(this.env).length > 0 ? this.env : undefined,
-          workdir: this.workdir,
-        });
-        this._createdAt = new Date();
-        this.status = 'running';
-        this.logger.debug(`${LOG_PREFIX} Created new sandbox from snapshot: ${this._sb?.sandboxId}`);
-        return;
-      } catch (error) {
-        if (error instanceof AlreadyExistsError) {
-          // unexpected given we check for existence above
-          this.status = 'error';
-          throw error;
-        }
-        this.status = 'error';
-        throw error;
-      }
+      this._sb = await client.sandboxes.create(app, this._imageSnapshot, {
+        name: this.id,
+        timeoutMs: this.timeoutMs,
+        env: Object.keys(this.env).length > 0 ? this.env : undefined,
+        workdir: this.workdir,
+      });
+      this._createdAt = new Date();
+      this.logger.debug(`${LOG_PREFIX} Created new sandbox from snapshot: ${this._sb?.sandboxId}`);
+      return;
     }
 
-    // Base case: first boot, create new sandbox from base image
     const image: Image = client.images.fromRegistry(this.baseImage);
     this.logger.debug(`${LOG_PREFIX} Creating sandbox: ${this.id} (baseImage: ${this.baseImage})`);
-    try {
     this._sb = await client.sandboxes.create(app, image, {
       name: this.id,
       timeoutMs: this.timeoutMs,
       env: Object.keys(this.env).length > 0 ? this.env : undefined,
       workdir: this.workdir,
     });
-      this._createdAt = new Date();
-      this.status = 'running';
-      this.logger.debug(`${LOG_PREFIX} Created sandbox: ${this._sb.sandboxId}`);
-    } catch (error) {
-      this.status = 'error';
-      throw error;
-    }
+    this._createdAt = new Date();
+    this.logger.debug(`${LOG_PREFIX} Created sandbox: ${this._sb.sandboxId}`);
   }
 
   /**
@@ -206,42 +182,53 @@ export class ModalSandbox extends MastraSandbox {
    * Future starts will create net-new sandboxes from the snapshot.
    */
   async stop(): Promise<void> {
-    if (this._sb) {
-      try {
-        const startTime = Date.now();
-        this._imageSnapshot = await this._sb.snapshotFilesystem();
-        const snapshotTime = Date.now();
-        this.logger.debug(`${LOG_PREFIX} Snapshot created: ${this._imageSnapshot.imageId} in ${snapshotTime - startTime}ms`);
-        await this._sb.terminate({wait: true});
-        const terminateTime = Date.now();
-        this.logger.debug(`${LOG_PREFIX} Sandbox terminated: ${this._sb.sandboxId}`);
-        this._sb = null;
-        this.status = 'stopped';
-      } catch (error) {
-        this.status = 'error';
-        throw error;
-      }
+    if (!this._sb) return;
+
+    try {
+      const procs = await this.processes.list();
+      await Promise.all(procs.filter(p => p.running).map(p => this.processes.kill(p.pid)));
+    } catch {
+      // Best-effort: sandbox may already be dead
     }
+
+    try {
+      this._imageSnapshot = await this._sb.snapshotFilesystem();
+      this.logger.debug(`${LOG_PREFIX} Snapshot created: ${this._imageSnapshot.imageId}`);
+    } catch (error) {
+      this.logger.debug(`${LOG_PREFIX} Snapshot failed, terminating without snapshot:`, error);
+    }
+
+    try {
+      await this._sb.terminate({ wait: true });
+      this.logger.debug(`${LOG_PREFIX} Sandbox terminated: ${this._sb.sandboxId}`);
+    } catch {
+      // Best-effort: sandbox may already be dead
+    }
+
+    this._sb = null;
   }
 
-  /**
-   * Terminates the sandbox, ending its lifetime. Unlike stop(), no snapshot is preserved.
-   */
+  /** Terminates the sandbox, ending its lifetime. Unlike stop(), no snapshot is preserved. */
   async destroy(): Promise<void> {
     if (this._sb) {
       try {
-        await this._sb.terminate();
-        this.logger.debug(`${LOG_PREFIX} Sandbox terminated: ${this._sb?.sandboxId}`);
-        this._sb = null;
-        this._imageSnapshot = null; // preserve no snapshot
-        this.status = 'destroyed';
-      } catch (error) {
-        this.status = 'error';
-        throw error;
+        const procs = await this.processes.list();
+        await Promise.all(procs.filter(p => p.running).map(p => this.processes.kill(p.pid)));
+      } catch {
+        // Best-effort: sandbox may already be dead
       }
-    } else {
-      this.status = 'destroyed';
+
+      try {
+        await this._sb.terminate();
+        this.logger.debug(`${LOG_PREFIX} Sandbox terminated: ${this._sb.sandboxId}`);
+      } catch {
+        // Ignore errors during destroy
+      }
+
+      this._sb = null;
     }
+
+    this._imageSnapshot = null;
   }
 
   async getInfo(): Promise<SandboxInfo> {
