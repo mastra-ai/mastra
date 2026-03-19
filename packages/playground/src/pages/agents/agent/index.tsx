@@ -5,6 +5,9 @@ import {
   AgentSettingsProvider,
   WorkingMemoryProvider,
   ThreadInputProvider,
+  BrowserToolCallsProvider,
+  BrowserSessionProvider,
+  BrowserViewPanel,
   useAgent,
   useMemory,
   useThreads,
@@ -120,39 +123,44 @@ function Agent() {
       <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
         <SchemaRequestContextProvider>
           <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
-            <ThreadInputProvider>
-              <ObservationalMemoryProvider>
-                <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
-                  <AgentLayout
-                    agentId={agentId!}
-                    leftSlot={
-                      hasMemory && (
-                        <AgentSidebar
+            <BrowserToolCallsProvider>
+              <BrowserSessionProvider>
+                <ThreadInputProvider>
+                  <ObservationalMemoryProvider>
+                    <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
+                      <AgentLayout
+                        agentId={agentId!}
+                        leftSlot={
+                          hasMemory && (
+                            <AgentSidebar
+                              agentId={agentId!}
+                              threadId={actualThreadId!}
+                              threads={threads || []}
+                              isLoading={isThreadsLoading}
+                            />
+                          )
+                        }
+                        browserOverlay={<BrowserViewPanel agentId={agentId!} />}
+                        rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
+                      >
+                        <AgentChat
+                          key={actualThreadId!}
                           agentId={agentId!}
+                          agentName={agent?.name}
+                          modelVersion={agent?.modelVersion}
                           threadId={actualThreadId!}
-                          threads={threads || []}
-                          isLoading={isThreadsLoading}
+                          memory={hasMemory}
+                          refreshThreadList={handleRefreshThreadList}
+                          modelList={agent?.modelList}
+                          messageId={messageId}
+                          isNewThread={isNewThread}
                         />
-                      )
-                    }
-                    rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
-                  >
-                    <AgentChat
-                      key={actualThreadId!}
-                      agentId={agentId!}
-                      agentName={agent?.name}
-                      modelVersion={agent?.modelVersion}
-                      threadId={actualThreadId!}
-                      memory={hasMemory}
-                      refreshThreadList={handleRefreshThreadList}
-                      modelList={agent?.modelList}
-                      messageId={messageId}
-                      isNewThread={isNewThread}
-                    />
-                  </AgentLayout>
-                </ActivatedSkillsProvider>
-              </ObservationalMemoryProvider>
-            </ThreadInputProvider>
+                      </AgentLayout>
+                    </ActivatedSkillsProvider>
+                  </ObservationalMemoryProvider>
+                </ThreadInputProvider>
+              </BrowserSessionProvider>
+            </BrowserToolCallsProvider>
           </WorkingMemoryProvider>
         </SchemaRequestContextProvider>
       </AgentSettingsProvider>

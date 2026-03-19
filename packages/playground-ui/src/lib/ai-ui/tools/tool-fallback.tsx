@@ -1,5 +1,5 @@
-import { ToolCallMessagePartProps } from '@assistant-ui/react';
 import { useEffect } from 'react';
+import { ToolCallMessagePartProps } from '@assistant-ui/react';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
 
 import { ToolBadge } from './badges/tool-badge';
@@ -9,6 +9,7 @@ import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { MastraUIMessage } from '@mastra/react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
+import { isBrowserTool, useBrowserToolCallsSafe } from '@/domains/agents/context/browser-tool-calls-context';
 import { ObservationMarkerBadge } from './badges/observation-marker-badge';
 import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
 
@@ -25,9 +26,24 @@ export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackP
 };
 
 const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...props }: ToolFallbackProps) => {
-  // Hooks must be called unconditionally at the top (React Rules of Hooks, issue #12726)
+  // All hooks must be called unconditionally before any conditional returns
+  const browserCtx = useBrowserToolCallsSafe();
+  const isBrowser = isBrowserTool(toolName);
   const { activateSkill } = useActivatedSkills();
 
+  useEffect(() => {
+    if (!isBrowser || !browserCtx) return;
+    browserCtx.registerToolCall({
+      toolCallId,
+      toolName,
+      args: typeof args === 'object' ? args : {},
+      result,
+      status: result !== undefined ? 'complete' : 'pending',
+      timestamp: Date.now(),
+    });
+  }, [isBrowser, toolCallId, toolName, args, result, browserCtx]);
+
+  // Detect skill activation tool calls
   useEffect(() => {
     if (toolName !== 'skill') return;
     if (!args?.name) return;
@@ -40,6 +56,11 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   // Handle OM observation markers - render as ObservationMarkerBadge
   if (toolName === 'mastra-memory-om-observation') {
     return <ObservationMarkerBadge toolName={toolName} args={args} metadata={metadata} />;
+  }
+
+  // Hide browser tools from chat when context is available
+  if (isBrowser && browserCtx) {
+    return null;
   }
 
   // We need to handle the stream data even if the workflow is not resolved yet
