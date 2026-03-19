@@ -211,7 +211,7 @@ await sandbox._start()
 
 ## Background processes
 
-`ModalSandbox` includes a built-in process manager for spawning and managing background processes. Each `spawn()` call creates a new `ContainerProcess` via the Modal SDK's `exec()` API.
+`ModalSandbox` includes a built-in process manager for spawning and managing background processes. Each `spawn()` call creates a new `ContainerProcess` via the Modal SDK's `Process.spawn()` API.
 
 ```typescript
 const sandbox = new ModalSandbox({ id: 'dev-sandbox' })
@@ -233,7 +233,7 @@ await handle.kill()
 
 :::note
 
-`sendStdin()` is not supported — the Modal JS SDK does not expose stdin on `exec()`.
+`sendStdin()` is not supported — the Modal JS SDK does not expose stdin on `Process.spawn()`.
 
 :::
 
