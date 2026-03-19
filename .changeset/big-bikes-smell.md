@@ -13,5 +13,3 @@ The recall tool supports:
 - **Pagination flags**: `hasNextPage` and `hasPrevPage` in results
 - **Token limiting**: results are capped at a token budget with `truncated` and `tokenOffset` reporting
 - **Smart range detection**: passing a range as a cursor returns a helpful hint explaining how to extract individual IDs
-
-Message ranges now skip data-only messages (internal markers) so range boundaries always point to messages with visible content.
