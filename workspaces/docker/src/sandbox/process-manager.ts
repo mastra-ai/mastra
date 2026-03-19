@@ -96,7 +96,13 @@ class DockerProcessHandle extends ProcessHandle {
       });
       await killExec.start({});
       return true;
-    } catch {
+    } catch (error: unknown) {
+      // ESRCH / "no such process" is expected if the process exited between inspect and kill
+      const msg = error instanceof Error ? error.message.toLowerCase() : '';
+      if (!msg.includes('no such process') && !msg.includes('esrch')) {
+        // Unexpected error — not fatal but worth noting for debugging
+        console.debug(`[DockerProcessManager] kill(${this.pid}) failed unexpectedly:`, error);
+      }
       return false;
     }
   }

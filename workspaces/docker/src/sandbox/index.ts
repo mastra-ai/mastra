@@ -20,6 +20,8 @@ const LOG_PREFIX = '[DockerSandbox]';
 
 /**
  * Inlined from `@mastra/core/workspace` to avoid requiring a newer core peer dep.
+ * Canonical type: packages/core/src/workspace/sandbox/mastra-sandbox.ts
+ * TODO: Remove once minimum peer dep includes InstructionsOption export.
  */
 type InstructionsOption = string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);
 
@@ -382,7 +384,8 @@ function isContainerNotRunningError(error: unknown): boolean {
 
 function isContainerNotFoundError(error: unknown): boolean {
   if (error instanceof Error) {
-    return error.message.includes('no such container') || error.message.includes('is already in progress');
+    const msg = error.message.toLowerCase();
+    return msg.includes('no such container') || (msg.includes('removal') && msg.includes('is already in progress'));
   }
   return false;
 }
