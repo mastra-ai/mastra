@@ -51,7 +51,7 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
   // ===== OpenAI / OpenRouter =====
   // cachedInputTokens is already in the usage object
   // inputTokens INCLUDES cached tokens (no adjustment needed)
-  if (usage.cachedInputTokens) {
+  if (usage.cachedInputTokens !== undefined) {
     inputDetails.cacheRead = usage.cachedInputTokens;
   }
 
@@ -96,6 +96,19 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
     if (google.usageMetadata.thoughtsTokenCount) {
       outputDetails.reasoning = google.usageMetadata.thoughtsTokenCount;
     }
+  }
+
+  // ===== AI SDK aggregated format (inputTokenDetails) =====
+  // AI SDK v5/v6 may provide aggregated cache tokens in inputTokenDetails.
+  // Use as fallback when provider-specific extraction did not yield cache data
+  // (e.g. multi-step runs where providerMetadata reflects only the last step).
+  const inputTokenDetails = (usage as { inputTokenDetails?: { cacheReadTokens?: number; cacheWriteTokens?: number } })
+    .inputTokenDetails;
+  if (inputDetails.cacheRead === undefined && inputTokenDetails?.cacheReadTokens !== undefined) {
+    inputDetails.cacheRead = inputTokenDetails.cacheReadTokens;
+  }
+  if (inputDetails.cacheWrite === undefined && inputTokenDetails?.cacheWriteTokens !== undefined) {
+    inputDetails.cacheWrite = inputTokenDetails.cacheWriteTokens;
   }
 
   // Build the final UsageStats object
