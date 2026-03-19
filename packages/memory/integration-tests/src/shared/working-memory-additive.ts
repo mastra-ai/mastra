@@ -473,11 +473,11 @@ Schema structure reminder:
         expect(wmRaw!.toLowerCase()).toContain('phoenix');
       });
 
-      it('should remove fields when user asks to forget something (null delete)', { retry: 2 }, async () => {
-        // Turn 1: Set up comprehensive data
+      it('should remove person from people array when user asks to forget them', { retry: 2 }, async () => {
+        // Turn 1: Set up people data
         await agentGenerate(
           agent,
-          'My name is Jordan Lee and I live in Seattle. I work at DataCorp as a software engineer.',
+          'My name is Jordan Lee. Please remember my contacts: Alice Chen is my manager, Bob Smith is a colleague, and Carol Davis is a client.',
           { threadId: thread.id, resourceId },
           model,
         );
@@ -486,13 +486,14 @@ Schema structure reminder:
 
         expect(wmRaw).not.toBeNull();
         expect(wmRaw!.toLowerCase()).toContain('jordan');
-        expect(wmRaw!.toLowerCase()).toContain('datacorp');
-        expect(wmRaw!.toLowerCase()).toContain('seattle');
+        expect(wmRaw!.toLowerCase()).toContain('alice');
+        expect(wmRaw!.toLowerCase()).toContain('bob');
+        expect(wmRaw!.toLowerCase()).toContain('carol');
 
-        // Turn 2: Ask to forget location for privacy - be explicit about which field to null
+        // Turn 2: Ask to forget a person - arrays get replaced entirely, so LLM should send updated array without Bob
         await agentGenerate(
           agent,
-          'Actually, please forget my personal location (in the about section). Remove it from your memory for privacy reasons. Set about.location to null.',
+          'Actually, Bob Smith no longer works with me. Please remove him from my contacts list and update the people array without him.',
           { threadId: thread.id, resourceId },
           model,
         );
@@ -501,12 +502,13 @@ Schema structure reminder:
 
         expect(wmRaw).not.toBeNull();
 
-        // Location should be removed
-        expect(wmRaw!.toLowerCase()).not.toContain('seattle');
+        // Bob should be removed from the people array
+        expect(wmRaw!.toLowerCase()).not.toContain('bob');
 
-        // But other data should still be there
+        // But other people should still be there
         expect(wmRaw!.toLowerCase()).toContain('jordan');
-        expect(wmRaw!.toLowerCase()).toContain('datacorp');
+        expect(wmRaw!.toLowerCase()).toContain('alice');
+        expect(wmRaw!.toLowerCase()).toContain('carol');
       });
 
       it('should preserve people array when adding work details', async () => {
@@ -558,12 +560,11 @@ Schema structure reminder:
         expect(wmRaw!.toLowerCase()).toContain('alice');
         expect(wmRaw!.toLowerCase()).toContain('bob');
       });
-      // 1568
-      it('should clear work info when user changes jobs', async () => {
-        // Turn 1: Set up work info
+      it('should clear projects array when user completes all projects', async () => {
+        // Turn 1: Set up work info with projects
         await agentGenerate(
           agent,
-          "I'm Sam, I work at OldCompany as an engineer. We're working on Project Legacy.",
+          "I'm Sam. I'm working on two projects: Project Alpha which is in progress, and Project Beta which is in planning.",
           { threadId: thread.id, resourceId },
           model,
         );
@@ -571,13 +572,13 @@ Schema structure reminder:
         let wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
         expect(wmRaw).not.toBeNull();
         expect(wmRaw!.toLowerCase()).toContain('sam');
-        expect(wmRaw!.toLowerCase()).toContain('oldcompany');
-        expect(wmRaw!.toLowerCase()).toContain('legacy');
+        expect(wmRaw!.toLowerCase()).toContain('alpha');
+        expect(wmRaw!.toLowerCase()).toContain('beta');
 
-        // Turn 2: User changes jobs - old work info should be cleared
+        // Turn 2: User completes all projects - projects array should be cleared
         await agentGenerate(
           agent,
-          'I just changed jobs! I now work at NewStartup. Please clear all my old work information - different company, different projects.',
+          'Great news! Both Project Alpha and Project Beta are now complete and shipped. Please clear the projects array since I have no active projects right now.',
           { threadId: thread.id, resourceId },
           model,
         );
@@ -585,12 +586,9 @@ Schema structure reminder:
         wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
         expect(wmRaw).not.toBeNull();
 
-        // New work info should be there
-        expect(wmRaw!.toLowerCase()).toContain('newstartup');
-
-        // Old work info should be gone
-        expect(wmRaw!.toLowerCase()).not.toContain('oldcompany');
-        expect(wmRaw!.toLowerCase()).not.toContain('legacy');
+        // Old projects should be gone (array was replaced with empty array)
+        expect(wmRaw!.toLowerCase()).not.toContain('alpha');
+        expect(wmRaw!.toLowerCase()).not.toContain('beta');
 
         // About info should still be there
         expect(wmRaw!.toLowerCase()).toContain('sam');
