@@ -1,16 +1,17 @@
 import { useMemo } from 'react';
-import { Combobox, ComboboxOption } from '@/ds/components/Combobox';
-import { Spinner } from '@/ds/components/Spinner';
+import { Combobox, ComboboxOption, type ComboboxProps } from '@/ds/components/Combobox';
 import { Info } from 'lucide-react';
 import { useLLMProviders } from '../hooks/use-llm-providers';
 import { useFilteredProviders } from '../hooks/use-filtered-providers';
 import { ProviderLogo } from './provider-logo';
-import { cleanProviderId } from '../utils';
+import { cleanProviderId, findProviderById } from '../utils';
+import { Skeleton } from '@/ds/components/Skeleton';
 
 export interface LLMProvidersProps {
   value: string;
   onValueChange: (value: string) => void;
-  variant?: 'default' | 'light';
+  variant?: ComboboxProps['variant'];
+  size?: ComboboxProps['size'];
   className?: string;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -20,7 +21,8 @@ export interface LLMProvidersProps {
 export const LLMProviders = ({
   value,
   onValueChange,
-  variant = 'default',
+  variant = 'inputLike',
+  size = 'default',
   className,
   open,
   onOpenChange,
@@ -66,14 +68,13 @@ export const LLMProviders = ({
   };
 
   if (providersLoading) {
-    return (
-      <div className="flex items-center gap-2">
-        <Spinner className="w-4 h-4" />
-      </div>
-    );
+    return <Skeleton className="w-full h-8" />;
   }
 
-  const currentModelProvider = cleanProviderId(value);
+  // Find the matching provider, handling gateway prefix fallback
+  // (e.g., value='custom' should match provider with id='acme/custom')
+  const matchedProvider = findProviderById(providers, value);
+  const currentModelProvider = matchedProvider?.id || cleanProviderId(value);
 
   return (
     <Combobox
@@ -84,6 +85,7 @@ export const LLMProviders = ({
       searchPlaceholder="Search providers..."
       emptyText="No providers found"
       variant={variant}
+      size={size}
       className={className}
       open={open}
       onOpenChange={onOpenChange}

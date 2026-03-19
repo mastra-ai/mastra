@@ -2,14 +2,14 @@ import { useForm } from 'react-hook-form'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@site/src/components/ui/forms'
 import { Spinner } from './spinner'
 import { cn } from '@site/src/lib/utils'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { valibotResolver } from '@hookform/resolvers/valibot'
 import { useState } from 'react'
-import { z } from 'zod/v4'
+import * as v from 'valibot'
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
 import { Button } from './ui/button'
 
-export const formSchema = z.object({
-  email: z.email(),
+export const formSchema = v.object({
+  email: v.pipe(v.string(), v.email('The email is badly formatted.')),
 })
 
 const buttonCopy = ({
@@ -51,15 +51,15 @@ const SubscribeForm = ({
   }
 
   const [buttonState, setButtonState] = useState('idle')
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+  const form = useForm<v.InferInput<typeof formSchema>>({
+    resolver: valibotResolver(formSchema),
     defaultValues: {
       email: '',
     },
     reValidateMode: 'onSubmit',
   })
 
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+  const onSubmit = async (values: v.InferInput<typeof formSchema>) => {
     if (buttonState === 'success') return
 
     const sanitizedEmail = values.email.trim()

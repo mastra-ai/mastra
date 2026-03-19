@@ -1,0 +1,69 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`json-schema standard-schema adapter > toStandardSchema > should handle nested object schemas 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "tags": {
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+    "user": {
+      "properties": {
+        "email": {
+          "format": "email",
+          "type": "string",
+        },
+        "name": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "name",
+      ],
+      "type": "object",
+    },
+  },
+  "required": [
+    "user",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`json-schema standard-schema adapter > toStandardSchema > should not overwrite existing $schema 1`] = `
+{
+  "$schema": "http://custom-schema.org/schema#",
+  "type": "string",
+}
+`;
+
+exports[`json-schema standard-schema adapter > toStandardSchema > should return JSON Schema with draft-07 target 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "age": {
+      "type": "number",
+    },
+    "name": {
+      "type": "string",
+    },
+  },
+  "type": "object",
+}
+`;
+
+exports[`json-schema standard-schema adapter > toStandardSchema > should return JSON Schema with draft-2020-12 target 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "string",
+}
+`;
+
+exports[`json-schema standard-schema adapter > toStandardSchema > should return JSON Schema with openapi-3.0 target (no $schema) 1`] = `
+{
+  "type": "string",
+}
+`;

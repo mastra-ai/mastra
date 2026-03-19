@@ -6,14 +6,19 @@ import { cn } from '@/lib/utils';
 export interface HeaderProps {
   children?: React.ReactNode;
   border?: boolean;
+  className?: string;
 }
 
-export const Header = ({ children, border = true }: HeaderProps) => {
+export const Header = ({ children, border = true, className }: HeaderProps) => {
   return (
     <header
-      className={cn('h-header-default z-50 flex w-full items-center gap-4 bg-transparent px-3', {
-        'border-b border-border1': border,
-      })}
+      className={cn(
+        'h-header-default z-50 flex w-full items-center gap-4 bg-transparent px-3',
+        {
+          'border-b border-border1': border,
+        },
+        className,
+      )}
     >
       {children}
     </header>

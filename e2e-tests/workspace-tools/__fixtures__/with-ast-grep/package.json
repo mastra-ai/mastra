@@ -1,0 +1,9 @@
+{
+  "name": "with-ast-grep-fixture",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@mastra/core": "{{TAG}}",
+    "@ast-grep/napi": "^0.40.0"
+  }
+}

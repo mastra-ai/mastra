@@ -24,13 +24,6 @@ export const CookieConsent = () => {
   const GA_ID = siteConfig.customFields?.gaId as string | undefined
   const HS_PORTAL_ID = siteConfig.customFields?.hsPortalId as string | undefined
 
-  if (!GA_ID) {
-    console.warn('Google Analytics ID is not defined')
-  }
-  if (!HS_PORTAL_ID) {
-    console.warn('Hubspot Portal ID is not defined')
-  }
-
   useEffect(() => {
     if (cookieConsent) {
       setHasGottenConsentForGoogleTracking(true)

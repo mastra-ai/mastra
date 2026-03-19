@@ -7,6 +7,7 @@ import { shouldSkipDotenvLoading } from '../utils';
 interface StartOptions {
   dir?: string;
   env?: string;
+  customArgs?: string[];
 }
 
 export async function start(options: StartOptions = {}) {
@@ -24,6 +25,10 @@ export async function start(options: StartOptions = {}) {
     }
 
     const commands = [];
+
+    if (options.customArgs) {
+      commands.push(...options.customArgs);
+    }
 
     commands.push('index.mjs');
 

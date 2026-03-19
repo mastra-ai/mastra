@@ -13,4 +13,12 @@
  * }
  * ```
  */
-export const coreFeatures = new Set<string>(['workspaces-v1']);
+// Add feature flags here as new features are introduced
+export const coreFeatures = new Set<string>([
+  'observationalMemory',
+  'asyncBuffering',
+  'request-response-id-rotation',
+  'workspaces-v1',
+  'datasets',
+  'observability:v1.13.2',
+]);

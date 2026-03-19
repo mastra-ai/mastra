@@ -1,10 +1,11 @@
 import deepEqual from 'fast-deep-equal';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
-import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
-import type { Span, SpanType } from '../../../observability';
+import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
+import { resolveObservabilityContext } from '../../../observability';
+import type { ProcessorState } from '../../../processors/runner';
 import type { RequestContext } from '../../../request-context';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
@@ -39,10 +40,9 @@ interface PrepareMemoryStepOptions<OUTPUT = undefined> {
   resourceId?: string;
   runId: string;
   requestContext: RequestContext;
-  agentSpan: Span<SpanType.AGENT_RUN>;
   methodType: AgentMethodType;
   instructions: SystemMessage;
-  memoryConfig?: MemoryConfig;
+  memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
 }
 
@@ -61,15 +61,21 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
     id: 'prepare-memory-step',
     inputSchema: z.object({}),
     outputSchema: prepareMemoryStepOutputSchema,
-    execute: async ({ tracingContext }) => {
+    execute: async ({ ...rest }) => {
+      const observabilityContext = resolveObservabilityContext(rest);
       const thread = threadFromArgs;
       const messageList = new MessageList({
         threadId: thread?.id,
         resourceId,
         generateMessageId: capabilities.generateMessageId,
+        logger: capabilities.logger,
         // @ts-expect-error Flag for agent network messages
         _agentNetworkAppend: capabilities._agentNetworkAppend,
       });
+
+      // Create processorStates map - persists across loop iterations within this agent turn
+      // Shared by all processor methods (input and output) for state sharing
+      const processorStates = new Map<string, ProcessorState>();
 
       // Add instructions as system message(s)
       addSystemMessage(messageList, instructions);
@@ -83,14 +89,16 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         messageList.add(options.messages, 'input');
         const { tripwire } = await capabilities.runInputProcessors({
           requestContext,
-          tracingContext,
+          ...observabilityContext,
           messageList,
           inputProcessorOverrides: options.inputProcessors,
+          processorStates,
         });
         return {
           threadExists: false,
           thread: undefined,
           messageList,
+          processorStates,
           tripwire,
         };
       }
@@ -165,14 +173,16 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
 
       const { tripwire } = await capabilities.runInputProcessors({
         requestContext,
-        tracingContext,
+        ...observabilityContext,
         messageList,
         inputProcessorOverrides: options.inputProcessors,
+        processorStates,
       });
 
       return {
         thread: threadObject,
         messageList: messageList,
+        processorStates,
         tripwire,
         threadExists: !!existingThread,
       };

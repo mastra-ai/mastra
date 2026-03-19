@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { UpdateModelParams, Provider } from '@mastra/client-js';
 import { TriangleAlert } from 'lucide-react';
-import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId } from '@/domains/llm';
+import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
 import { useAgent } from '../hooks/use-agent';
 import { useUpdateAgentModel } from '../hooks/use-agents';
 
@@ -31,16 +31,18 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
 
   const currentModelProvider = cleanProviderId(selectedProvider);
 
+  // Resolve the full provider ID (handles gateway prefix, e.g., 'custom' -> 'acme/custom')
+  const resolvedProvider = findProviderById(providers, currentModelProvider);
+  const fullProviderId = resolvedProvider?.id || currentModelProvider;
+
   // Auto-save when model changes
   const handleModelSelect = async (modelId: string) => {
     setSelectedModel(modelId);
 
-    const providerToUse = currentModelProvider || selectedProvider;
-
-    if (modelId && providerToUse) {
+    if (modelId && fullProviderId) {
       try {
         await updateModel({
-          provider: providerToUse as UpdateModelParams['provider'],
+          provider: fullProviderId as UpdateModelParams['provider'],
           modelId,
         });
       } catch (error) {
@@ -61,7 +63,7 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
     }
   };
 
-  const currentProvider = providers.find((p: Provider) => p.id === currentModelProvider);
+  const currentProvider = findProviderById(providers, currentModelProvider);
 
   if (providersLoading) {
     return null;
@@ -72,13 +74,12 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1.5">
-        <LLMProviders value={currentModelProvider} onValueChange={handleProviderSelect} variant="light" />
+        <LLMProviders value={currentModelProvider} onValueChange={handleProviderSelect} />
 
         <LLMModels
           llmId={currentModelProvider}
           value={selectedModel}
           onValueChange={handleModelSelect}
-          variant="light"
           open={modelOpen}
           onOpenChange={setModelOpen}
           className="min-w-48"

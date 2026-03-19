@@ -51,6 +51,7 @@ const {
         id: `mock-dd-span-${parents.length}`,
         options,
         setTag: vi.fn(),
+        finish: vi.fn(),
       };
       spans.push(ddSpan);
       // Activate this span in scope for the duration of the callback
@@ -309,7 +310,7 @@ describe('DatadogExporter', () => {
     it('converts span.tags string array to object format', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
-        tags: ['production', 'experiment-v2', 'user-request'],
+        tags: ['production', 'experiment-v2', 'instance_name:career-scout-api'],
       });
 
       await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
@@ -320,7 +321,7 @@ describe('DatadogExporter', () => {
           tags: {
             production: true,
             'experiment-v2': true,
-            'user-request': true,
+            instance_name: 'career-scout-api',
           },
         }),
       );
@@ -494,10 +495,13 @@ describe('DatadogExporter', () => {
       expect(mockTrace).toHaveBeenCalledWith(
         expect.objectContaining({
           startTime,
-          endTime: startTime,
         }),
         expect.any(Function),
       );
+
+      // endTime is set via ddSpan.finish() instead of trace options
+      const ddSpan = capturedSpans[0];
+      expect(ddSpan.finish).toHaveBeenCalledWith(startTime.getTime());
     });
 
     it('buffers event spans until parent exists and emits with parent context', async () => {

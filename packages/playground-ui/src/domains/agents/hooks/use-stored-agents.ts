@@ -12,16 +12,18 @@ export const useStoredAgents = (params?: ListStoredAgentsParams) => {
   });
 };
 
-export const useStoredAgent = (agentId?: string) => {
+export const useStoredAgent = (agentId?: string, options?: { status?: 'draft' | 'published' }) => {
   const client = useMastraClient();
   const { requestContext } = usePlaygroundStore();
 
   return useQuery({
-    queryKey: ['stored-agent', agentId, requestContext],
-    queryFn: () => (agentId ? client.getStoredAgent(agentId).details(requestContext) : null),
+    queryKey: ['stored-agent', agentId, options?.status, requestContext],
+    queryFn: () => (agentId ? client.getStoredAgent(agentId).details(requestContext, options) : null),
     enabled: Boolean(agentId),
   });
 };
+
+export type StoredAgent = NonNullable<ReturnType<typeof useStoredAgent>['data']>;
 
 export const useStoredAgentMutations = (agentId?: string) => {
   const client = useMastraClient();

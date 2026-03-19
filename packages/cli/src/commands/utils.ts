@@ -48,6 +48,14 @@ export function parseMcp(value: string) {
   return value;
 }
 
+export function parseSkills(value: string) {
+  // Skills flag accepts comma-separated agent names
+  return value
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
 export function parseComponents(value: string) {
   const parsedValue = value.split(',');
 
@@ -79,7 +87,9 @@ export async function getVersionTag(): Promise<string | undefined> {
     const json = await fsExtra.readJSON(pkgPath);
     const currentVersion = json.version;
 
-    const { stdout } = await execa('npm', ['dist-tag', 'ls', 'mastra']);
+    const { stdout } = await execa('npm', ['dist-tag', 'ls', 'mastra'], {
+      cwd: import.meta.dirname,
+    });
     const tagLine = stdout.split('\n').find((distLine: string) => distLine.endsWith(`: ${currentVersion}`));
     const tag = tagLine ? tagLine.split(':')[0]?.trim() : undefined;
 

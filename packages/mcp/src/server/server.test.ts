@@ -8,6 +8,7 @@ import type { MCPServerConfig, Repository, PackageInfo, RemoteInfo } from '@mast
 import type { InternalCoreTool, Tool } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import { createStep, Workflow } from '@mastra/core/workflows';
+import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type {
   Resource,
@@ -15,18 +16,17 @@ import type {
   ListResourcesResult,
   ReadResourceResult,
   ListResourceTemplatesResult,
-  GetPromptResult,
   Prompt,
 } from '@modelcontextprotocol/sdk/types.js';
 import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai/test';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { weatherTool } from '../__fixtures__/tools';
 import { InternalMastraMCPClient } from '../client/client';
 import { MCPClient } from '../client/configuration';
 import { MCPServer } from './server';
-import type { MCPServerResources, MCPServerResourceContent, MCPRequestHandlerExtra } from './types';
+import type { MastraPrompt, MCPServerResources, MCPServerResourceContent, MCPRequestHandlerExtra } from './types';
 
 const PORT = 9100 + Math.floor(Math.random() * 1000);
 let server: MCPServer;
@@ -480,7 +480,7 @@ describe('MCPServer', () => {
       const content = resourceContentResult.contents[0];
       expect(content.uri).toBe(uri);
       expect(content.mimeType).toBe('application/json');
-      expect(content.text).toBe((mockResourceContents[uri] as { text: string }).text);
+      expect('text' in content && content.text).toBe((mockResourceContents[uri] as { text: string }).text);
     });
 
     it('should read content for weather://forecast', async () => {
@@ -490,7 +490,7 @@ describe('MCPServer', () => {
       const content = resourceContentResult.contents[0];
       expect(content.uri).toBe(uri);
       expect(content.mimeType).toBe('application/json');
-      expect(content.text).toBe((mockResourceContents[uri] as { text: string }).text);
+      expect('text' in content && content.text).toBe((mockResourceContents[uri] as { text: string }).text);
     });
 
     it('should read content for weather://historical', async () => {
@@ -500,7 +500,7 @@ describe('MCPServer', () => {
       const content = resourceContentResult.contents[0];
       expect(content.uri).toBe(uri);
       expect(content.mimeType).toBe('application/json');
-      expect(content.text).toBe((mockResourceContents[uri] as { text: string }).text);
+      expect('text' in content && content.text).toBe((mockResourceContents[uri] as { text: string }).text);
     });
 
     it('should throw an error when reading a non-existent resource URI', async () => {
@@ -697,28 +697,19 @@ describe('MCPServer', () => {
     let promptHttpServer: http.Server;
     const PROMPT_PORT = 9500 + Math.floor(Math.random() * 1000);
 
-    let currentPrompts: Prompt[] = [
+    let currentPrompts: (MastraPrompt & { getMessages?: (args: any) => Promise<any[]> })[] = [
       {
         name: 'explain-code',
-        version: 'v1',
-        description: 'Explain code v1',
+        version: '1.0',
+        description: 'Explain code',
         arguments: [{ name: 'code', required: true }],
         getMessages: async (args: any) => [
-          { role: 'user', content: { type: 'text', text: `Explain this code (v1):\n${args.code}` } },
-        ],
-      },
-      {
-        name: 'explain-code',
-        version: 'v2',
-        description: 'Explain code v2',
-        arguments: [{ name: 'code', required: true }],
-        getMessages: async (args: any) => [
-          { role: 'user', content: { type: 'text', text: `Explain this code (v2):\n${args.code}` } },
+          { role: 'user', content: { type: 'text', text: `Explain this code:\n${args.code}` } },
         ],
       },
       {
         name: 'summarize',
-        version: 'v1',
+        version: '1.0',
         description: 'Summarize text',
         arguments: [{ name: 'text', required: true }],
         getMessages: async (args: any) => [
@@ -737,17 +728,8 @@ describe('MCPServer', () => {
         prompts: {
           listPrompts: async () => currentPrompts,
           getPromptMessages: async (params: { name: string; version?: string; args?: any }) => {
-            let prompt;
-            if (params.version) {
-              prompt = currentPrompts.find(p => p.name === params.name && p.version === params.version);
-            } else {
-              // Select the first matching name if no version is provided.
-              prompt = currentPrompts.find(p => p.name === params.name);
-            }
-            if (!prompt)
-              throw new Error(
-                `Prompt "${params.name}"${params.version ? ` (version ${params.version})` : ''} not found`,
-              );
+            const prompt = currentPrompts.find(p => p.name === params.name);
+            if (!prompt) throw new Error(`Prompt "${params.name}" not found`);
             return (prompt as any).getMessages(params.args);
           },
         },
@@ -798,53 +780,32 @@ describe('MCPServer', () => {
       await expect(listChangedPromise).resolves.toBeUndefined(); // Wait for the notification
     });
 
-    it('should list all prompts with version field', async () => {
+    it('should list all prompts', async () => {
       const result = await promptInternalClient.listPrompts();
       expect(result).toBeDefined();
       expect(result.prompts).toBeInstanceOf(Array);
-      // Should contain both explain-code v1 and v2 and summarize v1
-      const explainV1 = result.prompts.find((p: Prompt) => p.name === 'explain-code' && p.version === 'v1');
-      const explainV2 = result.prompts.find((p: Prompt) => p.name === 'explain-code' && p.version === 'v2');
-      const summarizeV1 = result.prompts.find((p: Prompt) => p.name === 'summarize' && p.version === 'v1');
-      expect(explainV1).toBeDefined();
-      expect(explainV2).toBeDefined();
-      expect(summarizeV1).toBeDefined();
+      const explainCode = result.prompts.find((p: Prompt) => p.name === 'explain-code');
+      const summarize = result.prompts.find((p: Prompt) => p.name === 'summarize');
+      expect(explainCode).toBeDefined();
+      expect(summarize).toBeDefined();
     });
 
-    it('should retrieve prompt by name and version', async () => {
+    it('should retrieve prompt by name', async () => {
       const result = await promptInternalClient.getPrompt({
         name: 'explain-code',
         args: { code: 'let x = 1;' },
-        version: 'v2',
       });
-      const prompt = result.prompt as GetPromptResult;
-      expect(prompt).toBeDefined();
-      expect(prompt.name).toBe('explain-code');
-      expect(prompt.version).toBe('v2');
+      expect(result).toBeDefined();
 
       const messages = result.messages;
       expect(messages).toBeDefined();
       expect(messages.length).toBeGreaterThan(0);
-      expect(messages[0].content.text).toContain('(v2)');
+      expect(messages[0].content.type === 'text' && messages[0].content.text).toContain('Explain this code');
     });
 
-    it('should retrieve prompt by name and default to first version if not specified', async () => {
-      const result = await promptInternalClient.getPrompt({ name: 'explain-code', args: { code: 'let y = 2;' } });
-      expect(result.prompt).toBeDefined();
-      const prompt = result.prompt as GetPromptResult;
-      expect(prompt.name).toBe('explain-code');
-      // Should default to first version (v1)
-      expect(prompt.version).toBe('v1');
-
-      const messages = result.messages;
-      expect(messages).toBeDefined();
-      expect(messages.length).toBeGreaterThan(0);
-      expect(messages[0].content.text).toContain('(v1)');
-    });
-
-    it('should return error if prompt name/version does not exist', async () => {
+    it('should return error if prompt name does not exist', async () => {
       await expect(
-        promptInternalClient.getPrompt({ name: 'explain-code', args: { code: 'foo' }, version: 'v999' }),
+        promptInternalClient.getPrompt({ name: 'nonexistent-prompt', args: { code: 'foo' } }),
       ).rejects.toThrow();
     });
     it('should throw error if required argument is missing', async () => {
@@ -855,15 +816,14 @@ describe('MCPServer', () => {
 
     it('should succeed if all required arguments are provided', async () => {
       const result = await promptInternalClient.getPrompt({ name: 'explain-code', args: { code: 'let z = 3;' } });
-      expect(result.prompt).toBeDefined();
-      expect(result.messages[0].content.text).toContain('let z = 3;');
+      expect(result).toBeDefined();
+      expect(result.messages[0].content.type === 'text' && result.messages[0].content.text).toContain('let z = 3;');
     });
     it('should allow prompts with optional arguments', async () => {
       // Register a prompt with an optional argument
       currentPrompts = [
         {
           name: 'optional-arg-prompt',
-          version: 'v1',
           description: 'Prompt with optional argument',
           arguments: [{ name: 'foo', required: false }],
           getMessages: async (args: any) => [
@@ -873,27 +833,25 @@ describe('MCPServer', () => {
       ];
       await promptServer.prompts.notifyListChanged();
       const result = await promptInternalClient.getPrompt({ name: 'optional-arg-prompt', args: {} });
-      expect(result.prompt).toBeDefined();
-      expect(result.messages[0].content.text).toContain('foo is: none');
+      expect(result).toBeDefined();
+      expect(result.messages[0].content.type === 'text' && result.messages[0].content.text).toContain('foo is: none');
     });
-    it('should retrieve prompt with no version field by name only', async () => {
+    it('should retrieve prompt by name after list change', async () => {
       currentPrompts = [
         {
-          name: 'no-version',
-          description: 'Prompt without version',
+          name: 'simple-prompt',
+          description: 'A simple prompt',
           arguments: [],
-          getMessages: async () => [{ role: 'user', content: { type: 'text', text: 'no version' } }],
+          getMessages: async () => [{ role: 'user', content: { type: 'text', text: 'simple prompt' } }],
         },
       ];
       await promptServer.prompts.notifyListChanged();
-      const result = await promptInternalClient.getPrompt({ name: 'no-version', args: {} });
-      const prompt = result.prompt as GetPromptResult;
-      expect(prompt).toBeDefined();
-      expect(prompt.version).toBeUndefined();
+      const result = await promptInternalClient.getPrompt({ name: 'simple-prompt', args: {} });
+      expect(result).toBeDefined();
       const messages = result.messages;
       expect(messages).toBeDefined();
       expect(messages.length).toBeGreaterThan(0);
-      expect(messages[0].content.text).toContain('no version');
+      expect(messages[0].content.type === 'text' && messages[0].content.text).toContain('simple prompt');
     });
     it('should list prompts with required fields', async () => {
       const result = await promptInternalClient.listPrompts();
@@ -1005,7 +963,7 @@ describe('MCPServer', () => {
         servers: {
           weather: {
             command: 'npx',
-            args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/server-weather.ts')],
+            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__', 'server-weather.ts')],
             env: {
               FAKE_CREDS: 'test',
             },
@@ -1509,11 +1467,17 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     expect(tools[agentToolName].description).toContain("Ask agent 'MyTestAgent' a question.");
     expect(tools[agentToolName].description).toContain('Agent description: Simple mock description.');
 
-    const schema = tools[agentToolName].parameters.jsonSchema;
-    expect(schema.type).toBe('object');
-    if (schema.properties) {
-      expect(schema.properties.message).toBeDefined();
-      const querySchema = schema.properties.message as any;
+    const schema = tools[agentToolName].parameters?.jsonSchema ?? tools[agentToolName].parameters;
+    expect(schema).toBeDefined();
+
+    let jsonSchema: JSONSchema7 | undefined = schema;
+    if (isStandardSchemaWithJSON(schema)) {
+      jsonSchema = standardSchemaToJSONSchema(schema);
+    }
+
+    if (jsonSchema.properties) {
+      expect(jsonSchema.properties.message).toBeDefined();
+      const querySchema = jsonSchema.properties.message as any;
       expect(querySchema.type).toBe('string');
     } else {
       throw new Error('Schema properties are undefined'); // Fail test if properties not found
@@ -1681,6 +1645,15 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     expect(directToolOptions.mcp.extra.authInfo.clientId).toBe('test-client-456');
     expect(directToolOptions.mcp.extra.sessionId).toBe('auth-test-session');
 
+    // Verify requestContext is populated from mcp.extra for regular tools
+    expect(directToolOptions.requestContext).toBeDefined();
+    expect(directToolOptions.requestContext.get('authInfo')).toEqual({
+      token: 'test-auth-token-123',
+      clientId: 'test-client-456',
+      scopes: ['read', 'write'],
+    });
+    expect(directToolOptions.requestContext.get('sessionId')).toBe('auth-test-session');
+
     let agentContextObj: any = null;
     let agentExecOptions: any = null;
 
@@ -1844,8 +1817,17 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
     expect(tools[workflowToolName].description).toBe(
       "Run workflow 'testWorkflowKey'. Workflow description: A test workflow.",
     );
-    expect(tools[workflowToolName].parameters.jsonSchema).toBeDefined();
-    expect(tools[workflowToolName].parameters.jsonSchema.type).toBe('object');
+    const schema = tools[workflowToolName].parameters?.jsonSchema ?? tools[workflowToolName].parameters;
+    expect(schema).toBeDefined();
+    if (schema.type) {
+      expect(schema.type).toBe('object');
+    } else if (typeof schema.safeParse === 'function') {
+      const parsed = schema.safeParse({ input: 'hello' });
+      expect(parsed.success).toBe(true);
+    } else {
+      expect(schema['~standard']).toBeDefined();
+      expect(typeof schema['~standard']?.validate).toBe('function');
+    }
   });
 
   it('should throw an error if workflow.description is undefined or empty', () => {
@@ -2699,11 +2681,11 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
+      expect(result.message).toMatch(/Tool(?: input)? validation failed/i);
       expect(result.message).toContain('Please fix the following errors');
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool input validation failed');
+      expect(result.content[0].text).toMatch(/Tool(?: input)? validation failed/i);
       expect(result.content[0].text).toContain('Please fix the following errors');
     }
   });
@@ -2718,11 +2700,13 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
-      expect(result.message).toContain('String must contain at least 3 character(s)');
+      expect(result.message).toMatch(/Tool(?: input)? validation failed/i);
+      expect(result.message).toMatch(
+        /String must contain at least 3|at least 3 characters|must NOT have fewer than 3 characters/i,
+      );
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool input validation failed');
+      expect(result.content[0].text).toMatch(/Tool(?: input)? validation failed/i);
       expect(result.content[0].text).toContain('Message must be at least 3 characters');
     }
   });
@@ -2737,10 +2721,10 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
+      expect(result.message).toMatch(/Tool(?: input)? validation failed/i);
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool input validation failed');
+      expect(result.content[0].text).toMatch(/Tool(?: input)? validation failed/i);
     }
   });
 
@@ -2755,9 +2739,15 @@ describe('MCPServer - Tool Input Validation', () => {
     });
 
     expect(result).toBeDefined();
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Tool validation failed');
-    expect(result.content[0].text).toContain('Invalid email format');
+    if (result.error) {
+      expect(result.error).toBe(true);
+      expect(result.message).toMatch(/Tool(?: input)? validation failed/i);
+      expect(result.message).toMatch(/Invalid email|Invalid string/i);
+    } else {
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toMatch(/Tool(?: input)? validation failed/i);
+      expect(result.content[0].text).toMatch(/Invalid email|Invalid string/i);
+    }
   });
 
   it('should return validation error for empty array when minimum required', async () => {
@@ -2774,12 +2764,16 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
-      expect(result.message).toContain('Array must contain at least 1 element(s)');
+      expect(result.message).toMatch(/Tool(?: input)? validation failed/i);
+      expect(result.message).toMatch(
+        /Array must contain at least 1|Too small: expected array to have >=1 items|must NOT have fewer than 1 items/i,
+      );
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool input validation failed');
-      expect(result.content[0].text).toContain('Array must contain at least 1 element(s)');
+      expect(result.content[0].text).toMatch(/Tool(?: input)? validation failed/i);
+      expect(result.content[0].text).toMatch(
+        /Array must contain at least 1|Too small: expected array to have >=1 items|must NOT have fewer than 1 items/i,
+      );
     }
   });
 
@@ -2797,10 +2791,10 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool input validation failed');
+      expect(result.message).toMatch(/Tool(?: input)? validation failed/i);
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool input validation failed');
+      expect(result.content[0].text).toMatch(/Tool(?: input)? validation failed/i);
     }
   });
 
@@ -2819,18 +2813,22 @@ describe('MCPServer - Tool Input Validation', () => {
     if (result.error) {
       expect(result.error).toBe(true);
       const errorText = result.message;
-      expect(errorText).toContain('Tool input validation failed');
+      expect(errorText).toMatch(/Tool(?: input)? validation failed/i);
       // Should contain multiple validation errors
       // Note: Some validations might not trigger when there are other errors
-      expect(errorText).toContain('- tags: Array must contain at least 1 element(s)');
+      expect(errorText).toMatch(
+        /tags: (Array must contain at least 1|Too small: expected array to have >=1 items|must NOT have fewer than 1 items)/i,
+      );
       expect(errorText).toContain('Provided arguments:');
     } else {
       expect(result.isError).toBe(true);
       const errorText = result.content[0].text;
-      expect(errorText).toContain('Tool input validation failed');
+      expect(errorText).toMatch(/Tool(?: input)? validation failed/i);
       // Should contain multiple validation errors
       // Note: Some validations might not trigger when there are other errors
-      expect(errorText).toContain('- tags: Array must contain at least 1 element(s)');
+      expect(errorText).toMatch(
+        /tags: (Array must contain at least 1|Too small: expected array to have >=1 items|must NOT have fewer than 1 items)/i,
+      );
       expect(errorText).toContain('Provided arguments:');
     }
   });
@@ -2850,7 +2848,7 @@ describe('MCPServer - Tool Input Validation', () => {
 
     // executeTool returns client-side validation format
     expect(invalidResult.error).toBe(true);
-    expect(invalidResult.message).toContain('Tool input validation failed');
+    expect(invalidResult.message).toMatch(/Tool(?: input)? validation failed/i);
     expect(invalidResult.message).toContain('Message must be at least 3 characters');
   });
 });

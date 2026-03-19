@@ -1,5 +1,5 @@
 ---
-title: "Friendli | Models | Mastra"
+title: "Friendli | Models"
 description: "Use Friendli models with Mastra. 7 models available."
 ---
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "friendli/LGAI-EXAONE/EXAONE-4.0.1-32B"
+  model: "friendli/MiniMaxAI/MiniMax-M2.1"
 });
 
 // Generate a response
@@ -45,30 +45,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
-  {
-    "model": "friendli/LGAI-EXAONE/EXAONE-4.0.1-32B",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 131072,
-    "inputCost": 0.6,
-    "outputCost": 1
-  },
-  {
-    "model": "friendli/LGAI-EXAONE/K-EXAONE-236B-A23B",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": null,
-    "outputCost": null
-  },
   {
     "model": "friendli/meta-llama/Llama-3.1-8B-Instruct",
     "imageInput": false,
@@ -106,6 +82,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
+    "model": "friendli/MiniMaxAI/MiniMax-M2.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 196608,
+    "maxOutput": 196608,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
     "model": "friendli/Qwen/Qwen3-235B-A22B-Instruct-2507",
     "imageInput": false,
     "audioInput": false,
@@ -128,13 +116,25 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 202752,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "friendli/zai-org/GLM-5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202752,
+    "maxOutput": 202752,
+    "inputCost": 1,
+    "outputCost": 3.2
   }
 ]}
 />
 
-## Advanced Configuration
+## Advanced configuration
 
-### Custom Headers
+### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
@@ -142,7 +142,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.friendli.ai/serverless/v1",
-    id: "friendli/LGAI-EXAONE/EXAONE-4.0.1-32B",
+    id: "friendli/MiniMaxAI/MiniMax-M2.1",
     apiKey: process.env.FRIENDLI_TOKEN,
     headers: {
       "X-Custom-Header": "value"
@@ -151,7 +151,7 @@ const agent = new Agent({
 });
 ```
 
-### Dynamic Model Selection
+### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
@@ -160,8 +160,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "friendli/zai-org/GLM-4.7"
-      : "friendli/LGAI-EXAONE/EXAONE-4.0.1-32B";
+      ? "friendli/zai-org/GLM-5"
+      : "friendli/MiniMaxAI/MiniMax-M2.1";
   }
 });
 ```

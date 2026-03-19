@@ -209,13 +209,7 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           const result = await calculateTool.execute!({ operation: 'multiply', a: 6, b: 7 });
 
           expect(result).toBeDefined();
-          expect(result.content).toBeInstanceOf(Array);
-          expect(result.content.length).toBeGreaterThan(0);
-
-          const toolOutput = result.content[0];
-          expect(toolOutput.type).toBe('text');
-          const toolResult = JSON.parse(toolOutput.text);
-          expect(toolResult.result).toBe(42);
+          expect(result).toMatchObject({ result: 42 });
         });
 
         it('should execute weather tool via MCPClient', async () => {
@@ -228,13 +222,10 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           const result = await weatherToolInstance.execute!({ location: 'Austin' });
 
           expect(result).toBeDefined();
-          expect(result.content).toBeInstanceOf(Array);
-
-          const toolOutput = result.content[0];
-          expect(toolOutput.type).toBe('text');
-          const toolResult = JSON.parse(toolOutput.text);
-          expect(toolResult.temperature).toBe(72);
-          expect(toolResult.condition).toBe('Sunny in Austin');
+          expect(result).toMatchObject({
+            temperature: 72,
+            condition: 'Sunny in Austin',
+          });
         });
 
         it('should handle multiple MCP servers', async () => {
@@ -373,13 +364,7 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           const result = await calculateTool.execute!({ operation: 'add', a: 10, b: 5 });
 
           expect(result).toBeDefined();
-          expect(result.content).toBeInstanceOf(Array);
-          expect(result.content.length).toBeGreaterThan(0);
-
-          const toolOutput = result.content[0];
-          expect(toolOutput.type).toBe('text');
-          const toolResult = JSON.parse(toolOutput.text);
-          expect(toolResult.result).toBe(15);
+          expect(result).toMatchObject({ result: 15 });
         });
 
         it('should execute weather tool via MCPClient over SSE', async () => {
@@ -392,13 +377,10 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           const result = await weatherToolInstance.execute!({ location: 'New York' });
 
           expect(result).toBeDefined();
-          expect(result.content).toBeInstanceOf(Array);
-
-          const toolOutput = result.content[0];
-          expect(toolOutput.type).toBe('text');
-          const toolResult = JSON.parse(toolOutput.text);
-          expect(toolResult.temperature).toBe(72);
-          expect(toolResult.condition).toBe('Sunny in New York');
+          expect(result).toMatchObject({
+            temperature: 72,
+            condition: 'Sunny in New York',
+          });
         });
       });
 

@@ -13,9 +13,11 @@ import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provide
  */
 interface ContentItem {
   type: string;
+  data?: unknown;
   metadata?: {
     mode?: string;
     completionResult?: unknown;
+    isTaskCompleteResult?: unknown;
   };
 }
 
@@ -31,7 +33,7 @@ export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
     ({ type, metadata }) =>
       type === 'tool-call' ||
       type === 'reasoning' ||
-      (type === 'text' && metadata?.mode === 'network' && metadata?.completionResult),
+      (type === 'text' && (metadata?.completionResult || metadata?.isTaskCompleteResult)),
   );
 
   const modelMetadata = data.metadata?.custom?.modelMetadata as { modelId: string; modelProvider: string } | undefined;
@@ -39,8 +41,8 @@ export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
   const showModelUsed = hasModelList && modelMetadata;
 
   return (
-    <MessagePrimitive.Root className="max-w-full" data-message-id={messageId}>
-      <div className="text-neutral6 text-ui-lg leading-ui-lg">
+    <MessagePrimitive.Root className="max-w-full" data-message-id={messageId} data-message-index={data.index}>
+      <div className="text-neutral6 text-ui-lg leading-ui-lg pt-2">
         <MessagePrimitive.Parts
           components={{
             Text: ErrorAwareText,
@@ -76,25 +78,20 @@ const AssistantActionBar = () => {
     >
       <MessagePrimitive.If speaking={false}>
         <ActionBarPrimitive.Speak asChild>
-          <IconButton variant="light" size="md" tooltip="Read aloud">
+          <IconButton tooltip="Read aloud">
             <AudioLinesIcon />
           </IconButton>
         </ActionBarPrimitive.Speak>
       </MessagePrimitive.If>
       <MessagePrimitive.If speaking>
         <ActionBarPrimitive.StopSpeaking asChild>
-          <IconButton variant="light" size="md" tooltip="Stop">
+          <IconButton tooltip="Stop">
             <StopCircleIcon />
           </IconButton>
         </ActionBarPrimitive.StopSpeaking>
       </MessagePrimitive.If>
       <ActionBarPrimitive.Copy asChild>
-        <IconButton
-          variant="light"
-          size="md"
-          tooltip="Copy"
-          className="bg-transparent text-neutral3 hover:text-neutral6"
-        >
+        <IconButton tooltip="Copy">
           <MessagePrimitive.If copied>
             <CheckIcon />
           </MessagePrimitive.If>

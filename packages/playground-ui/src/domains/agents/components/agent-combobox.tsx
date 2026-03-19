@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 import { toast } from '@/lib/toast';
-import { Combobox } from '@/ds/components/Combobox';
+import { Combobox, type ComboboxProps } from '@/ds/components/Combobox';
 import { useAgents } from '../hooks/use-agents';
 import { useLinkComponent } from '@/lib/framework';
+import { AgentSourceIcon } from './agent-source-icon';
 
 export interface AgentComboboxProps {
   value?: string;
@@ -12,7 +13,8 @@ export interface AgentComboboxProps {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'light' | 'outline' | 'ghost';
+  variant?: ComboboxProps['variant'];
+  showSourceIcon?: boolean;
 }
 
 export function AgentCombobox({
@@ -23,7 +25,8 @@ export function AgentCombobox({
   emptyText = 'No agents found.',
   className,
   disabled = false,
-  variant = 'default',
+  variant = 'inputLike',
+  showSourceIcon = false,
 }: AgentComboboxProps) {
   const { data: agents = {}, isLoading, isError, error } = useAgents();
   const { navigate, paths } = useLinkComponent();
@@ -38,6 +41,7 @@ export function AgentCombobox({
   const agentOptions = Object.keys(agents).map(key => ({
     label: agents[key]?.name || key,
     value: key,
+    start: showSourceIcon ? <AgentSourceIcon source={agents[key]?.source} tooltipClassName="z-[150]" /> : undefined,
   }));
 
   const handleValueChange = (newAgentId: string) => {

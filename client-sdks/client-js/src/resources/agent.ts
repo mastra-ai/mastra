@@ -9,15 +9,16 @@ import type {
   UseChatOptions,
 } from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
-import type { SerializableStructuredOutputOptions } from '@mastra/core/agent';
+import type { AgentExecutionOptionsBase, SerializableStructuredOutputOptions } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { FullOutput, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
+import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodType } from 'zod';
+import type { ZodType } from 'zod/v3';
 import type {
   GenerateLegacyParams,
   GetAgentResponse,
@@ -30,6 +31,9 @@ import type {
   ReorderModelListParams,
   NetworkStreamParams,
   StreamParamsBaseWithoutMessages,
+  CloneAgentParams,
+  StoredAgentResponse,
+  StructuredOutputOptions,
 } from '../types';
 
 import { parseClientRequestContext, requestContextQueryString } from '../utils';
@@ -82,8 +86,9 @@ async function executeToolCallAndRespond<OUTPUT>({
         });
 
         // Build updated messages from the response, adding the tool result
-        // Do NOT re-include the original user message to avoid storage duplicates
-        const updatedMessages = [
+        // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
+        // When no threadId (stateless), include full conversation history for context
+        const newMessages = [
           ...(response.response.messages || []),
           {
             role: 'tool',
@@ -96,9 +101,13 @@ async function executeToolCallAndRespond<OUTPUT>({
               },
             ],
           },
-        ] as MessageListInput;
+        ];
 
-        return respondFn(updatedMessages, params);
+        const updatedMessages = threadId
+          ? newMessages
+          : [...(Array.isArray(params.messages) ? params.messages : []), ...newMessages];
+
+        return respondFn(updatedMessages as MessageListInput, params);
       }
     }
   }
@@ -204,6 +213,22 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * Clones this agent to a new stored agent in the database
+   * @param params - Clone parameters including optional newId, newName, metadata, authorId, and requestContext
+   * @returns Promise containing the created stored agent
+   */
+  clone(params?: CloneAgentParams): Promise<StoredAgentResponse> {
+    const { requestContext, ...rest } = params || {};
+    return this.request(`/agents/${this.agentId}/clone`, {
+      method: 'POST',
+      body: {
+        ...rest,
+        requestContext: parseClientRequestContext(requestContext),
+      },
+    });
+  }
+
+  /**
    * Generates a response from the agent
    * @param params - Generation parameters including prompt
    * @returns Promise containing the generated response
@@ -211,16 +236,17 @@ export class Agent extends BaseResource {
   async generateLegacy(
     params: GenerateLegacyParams<undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateReturn<any, undefined, undefined>>;
+  // Use `any` in overload return types to avoid "Type instantiation is excessively deep" errors
   async generateLegacy<Output extends JSONSchema7 | ZodType>(
     params: GenerateLegacyParams<Output> & { output: Output; experimental_output?: never },
-  ): Promise<GenerateReturn<any, Output, undefined>>;
+  ): Promise<GenerateReturn<any, any, any>>;
   async generateLegacy<StructuredOutput extends JSONSchema7 | ZodType>(
     params: GenerateLegacyParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
-  ): Promise<GenerateReturn<any, undefined, StructuredOutput>>;
+  ): Promise<GenerateReturn<any, any, any>>;
   async generateLegacy<
     Output extends JSONSchema7 | ZodType | undefined = undefined,
-    StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
-  >(params: GenerateLegacyParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
+    _StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
+  >(params: GenerateLegacyParams<Output>): Promise<GenerateReturn<any, any, any>> {
     const processedParams = {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
@@ -231,13 +257,10 @@ export class Agent extends BaseResource {
 
     const { resourceId, threadId, requestContext } = processedParams as GenerateLegacyParams;
 
-    const response: GenerateReturn<any, Output, StructuredOutput> = await this.request(
-      `/agents/${this.agentId}/generate-legacy`,
-      {
-        method: 'POST',
-        body: processedParams,
-      },
-    );
+    const response: GenerateReturn<any, any, any> = await this.request(`/agents/${this.agentId}/generate-legacy`, {
+      method: 'POST',
+      body: processedParams,
+    });
 
     if (response.finishReason === 'tool-calls') {
       const toolCalls = (
@@ -283,8 +306,9 @@ export class Agent extends BaseResource {
               ],
             },
           ];
-          // @ts-expect-error - tool-result message type differs from generate() overload signatures
-          return this.generate({
+          // Recursive call to generateLegacy with updated messages
+          // Using type assertion to handle the complex overload types
+          return (this.generateLegacy as any)({
             ...params,
             messages: updatedMessages,
           });
@@ -295,16 +319,18 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generate(messages: MessageListInput, options?: StreamParamsBaseWithoutMessages): Promise<FullOutput<undefined>>;
   async generate<OUTPUT extends {}>(
     messages: MessageListInput,
     options: StreamParamsBaseWithoutMessages<OUTPUT> & {
-      structuredOutput: SerializableStructuredOutputOptions<OUTPUT>;
+      structuredOutput: StructuredOutputOptions<OUTPUT>;
     },
   ): Promise<FullOutput<OUTPUT>>;
-  async generate<OUTPUT>(
+  async generate(messages: MessageListInput, options?: StreamParamsBaseWithoutMessages): Promise<FullOutput<undefined>>;
+  async generate<OUTPUT = undefined>(
     messages: MessageListInput,
-    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+    options?: StreamParamsBaseWithoutMessages<OUTPUT> & {
+      structuredOutput?: StructuredOutputOptions<OUTPUT>;
+    },
   ): Promise<FullOutput<OUTPUT>> {
     // Handle both new signature (messages, options) and old signature (single param object)
     const params = {
@@ -318,7 +344,7 @@ export class Agent extends BaseResource {
       structuredOutput: params.structuredOutput
         ? {
             ...params.structuredOutput,
-            schema: zodToJsonSchema(params.structuredOutput.schema),
+            schema: standardSchemaToJSONSchema(toStandardSchema(params.structuredOutput.schema)),
           }
         : undefined,
     };
@@ -1103,6 +1129,12 @@ export class Agent extends BaseResource {
     controller: ReadableStreamDefaultController<Uint8Array>,
     route: string = 'stream',
   ) {
+    // Extract threadId from memory config if present (matching generate() behavior)
+    const { memory } = processedParams ?? {};
+    const { resource, thread } = memory ?? {};
+    const threadId = processedParams.threadId ?? (typeof thread === 'string' ? thread : thread?.id);
+    const resourceId = processedParams.resourceId ?? resource;
+
     const response: Response = await this.request(`/agents/${this.agentId}/${route}`, {
       method: 'POST',
       body: processedParams,
@@ -1187,8 +1219,8 @@ export class Agent extends BaseResource {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
                     toolCallId: toolCall?.toolCallId,
                     suspend: async () => {},
-                    threadId: processedParams.threadId,
-                    resourceId: processedParams.resourceId,
+                    threadId,
+                    resourceId,
                   },
                 });
 
@@ -1219,9 +1251,14 @@ export class Agent extends BaseResource {
                 }
 
                 // Build updated messages for the recursive call
-                // Do NOT re-include the original messages to avoid storage duplicates
-                const updatedMessages =
+                // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
+                // When no threadId (stateless), include full conversation history for context
+                const newMessages =
                   lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
+
+                const updatedMessages = threadId
+                  ? newMessages
+                  : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
 
                 // Recursively call stream with updated messages
                 // This will wait for the recursive stream to complete before continuing
@@ -1270,9 +1307,9 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async network(
+  async network<OUTPUT>(
     messages: MessageListInput,
-    params: Omit<NetworkStreamParams, 'messages'>,
+    params: Omit<NetworkStreamParams<OUTPUT>, 'messages'>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1282,12 +1319,21 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const processedParams = {
+      ...params,
+      messages,
+      requestContext: parseClientRequestContext(params.requestContext),
+      structuredOutput: params.structuredOutput
+        ? {
+            ...params.structuredOutput,
+            schema: zodToJsonSchema(params.structuredOutput.schema),
+          }
+        : undefined,
+    };
+
     const response: Response = await this.request(`/agents/${this.agentId}/network`, {
       method: 'POST',
-      body: {
-        messages,
-        ...params,
-      },
+      body: processedParams,
       stream: true,
     });
 
@@ -1414,7 +1460,7 @@ export class Agent extends BaseResource {
   async stream<OUTPUT extends {}>(
     messages: MessageListInput,
     streamOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
-      structuredOutput: SerializableStructuredOutputOptions<OUTPUT>;
+      structuredOutput: StructuredOutputOptions<OUTPUT>;
     },
   ): Promise<
     Response & {
@@ -1425,20 +1471,20 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   >;
-  // async stream<OUTPUT>(
-  //   messages: MessageListInput,
-  //   streamOptions: Omit<StreamParams<any>, 'messages' | 'structuredOutput'> & {
-  //     structuredOutput?: SerializableStructuredOutputOptions<any>;
-  //   },
-  // ): Promise<
-  //   Response & {
-  //     processDataStream: ({
-  //       onChunk,
-  //     }: {
-  //       onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
-  //     }) => Promise<void>;
-  //   }
-  // >;
+  async stream(
+    messages: MessageListInput,
+    streamOptions: StreamParamsBaseWithoutMessages<any> & {
+      structuredOutput?: StructuredOutputOptions<any>;
+    },
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  >;
   async stream(
     messages: MessageListInput,
     streamOptions?: StreamParamsBaseWithoutMessages,
@@ -1453,7 +1499,9 @@ export class Agent extends BaseResource {
   >;
   async stream<OUTPUT>(
     messagesOrParams: MessageListInput,
-    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+    options?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: StreamParamsBaseWithoutMessages<any>;
+    },
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1468,16 +1516,19 @@ export class Agent extends BaseResource {
       messages: messagesOrParams as MessageListInput,
       ...options,
     } as StreamParams<OUTPUT>;
+
+    let structuredOutput: SerializableStructuredOutputOptions<OUTPUT> | undefined = undefined;
+    if (params.structuredOutput?.schema) {
+      structuredOutput = {
+        ...params.structuredOutput,
+        schema: standardSchemaToJSONSchema(toStandardSchema(params.structuredOutput.schema)),
+      } as SerializableStructuredOutputOptions<OUTPUT>;
+    }
     const processedParams: StreamParams<OUTPUT> = {
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
-      structuredOutput: params.structuredOutput
-        ? ({
-            ...params.structuredOutput,
-            schema: zodToJsonSchema(params.structuredOutput.schema),
-          } as SerializableStructuredOutputOptions<OUTPUT>)
-        : undefined,
+      structuredOutput,
     };
 
     // Create a manually controlled readable stream
@@ -1642,6 +1693,12 @@ export class Agent extends BaseResource {
    * Processes the stream response and handles tool calls
    */
   private async processStreamResponseLegacy(processedParams: any, writable: WritableStream<Uint8Array>) {
+    // Extract threadId from memory config if present (matching generate() behavior)
+    const { memory } = processedParams ?? {};
+    const { resource, thread } = memory ?? {};
+    const threadId = processedParams.threadId ?? (typeof thread === 'string' ? thread : thread?.id);
+    const resourceId = processedParams.resourceId ?? resource;
+
     const response: Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
     } = await this.request(`/agents/${this.agentId}/stream-legacy`, {
@@ -1703,8 +1760,8 @@ export class Agent extends BaseResource {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
                     toolCallId: toolCall?.toolCallId,
                     suspend: async () => {},
-                    threadId: processedParams.threadId,
-                    resourceId: processedParams.resourceId,
+                    threadId,
+                    resourceId,
                   },
                 });
 
@@ -1750,11 +1807,19 @@ export class Agent extends BaseResource {
                   writer.releaseLock();
                 }
 
+                // Build updated messages for the recursive call
+                // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
+                // When no threadId (stateless), include full conversation history for context
+                const newMessages = [...messages.filter(m => m.id !== lastMessage.id), lastMessage];
+                const updatedMessages = threadId
+                  ? newMessages
+                  : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
+
                 // Recursively call stream with updated messages
                 this.processStreamResponseLegacy(
                   {
                     ...processedParams,
-                    messages: [...messages.filter(m => m.id !== lastMessage.id), lastMessage],
+                    messages: updatedMessages,
                   },
                   writable,
                 ).catch(error => {

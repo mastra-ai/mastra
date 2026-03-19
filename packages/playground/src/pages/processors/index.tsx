@@ -15,7 +15,7 @@ import {
 import { Link } from 'react-router';
 
 export function Processors() {
-  const { data: processors = {}, isLoading } = useProcessors();
+  const { data: processors = {}, isLoading, error } = useProcessors();
 
   const isEmpty = !isLoading && Object.keys(processors).length === 0;
 
@@ -30,17 +30,22 @@ export function Processors() {
         </HeaderTitle>
 
         <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/docs/agents/processors" target="_blank" rel="noopener noreferrer">
-            <Icon>
-              <DocsIcon />
-            </Icon>
+          <Button
+            as={Link}
+            to="https://mastra.ai/docs/agents/processors"
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="ghost"
+            size="md"
+          >
+            <DocsIcon />
             Processors documentation
           </Button>
         </HeaderAction>
       </Header>
 
       <MainContentContent isCentered={isEmpty}>
-        <ProcessorTable processors={processors} isLoading={isLoading} />
+        <ProcessorTable processors={processors} isLoading={isLoading} error={error} />
       </MainContentContent>
     </MainContentLayout>
   );

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
 import { ErrorCategory, ErrorDomain, MastraError } from './error';
@@ -9,7 +9,7 @@ import type { MastraLanguageModel, MastraLegacyLanguageModel } from './llm/model
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
-import type { TracingContext, TracingPolicy } from './observability';
+import type { ObservabilityContext, TracingPolicy } from './observability';
 import type { RequestContext } from './request-context';
 import type { CoreTool, VercelTool, VercelToolV5 } from './tools';
 import { Tool } from './tools/tool';
@@ -17,6 +17,7 @@ import { CoreToolBuilder } from './tools/tool-builder/builder';
 import type { ToolToConvert } from './tools/tool-builder/builder';
 import { isVercelTool } from './tools/toolchecks';
 import type { OutputWriter } from './workflows/types';
+import type { Workspace } from './workspace/workspace';
 
 // Re-export Zod utilities for external use (isZodType is defined locally below)
 export { getZodTypeName, getZodDef, isZodArray, isZodObject } from './utils/zod-utils';
@@ -98,21 +99,39 @@ export function deepEqual(a: unknown, b: unknown): boolean {
   return false;
 }
 
-export function generateEmptyFromSchema(schema: string) {
+/**
+ * Generate an empty object from a JSON Schema definition.
+ * Accepts both a JSON string and a pre-parsed object.
+ * Recursively initializes nested object properties and respects default values.
+ */
+export function generateEmptyFromSchema(schema: string | Record<string, unknown>): Record<string, unknown> {
   try {
-    const parsedSchema = JSON.parse(schema);
+    const parsedSchema = typeof schema === 'string' ? JSON.parse(schema) : schema;
     if (!parsedSchema || parsedSchema.type !== 'object' || !parsedSchema.properties) return {};
-    const obj: Record<string, any> = {};
-    const TYPE_DEFAULTS = {
-      string: '',
-      array: [],
-      object: {},
-      number: 0,
-      integer: 0,
-      boolean: false,
-    };
-    for (const [key, prop] of Object.entries<any>(parsedSchema.properties)) {
-      obj[key] = TYPE_DEFAULTS[prop.type as keyof typeof TYPE_DEFAULTS] ?? null;
+    const obj: Record<string, unknown> = {};
+    for (const [key, prop] of Object.entries<Record<string, unknown>>(
+      parsedSchema.properties as Record<string, Record<string, unknown>>,
+    )) {
+      if (prop.default !== undefined) {
+        obj[key] =
+          typeof prop.default === 'object' && prop.default !== null
+            ? JSON.parse(JSON.stringify(prop.default))
+            : prop.default;
+      } else if (prop.type === 'object' && prop.properties) {
+        obj[key] = generateEmptyFromSchema(prop);
+      } else if (prop.type === 'object') {
+        obj[key] = {};
+      } else if (prop.type === 'string') {
+        obj[key] = '';
+      } else if (prop.type === 'array') {
+        obj[key] = [];
+      } else if (prop.type === 'number' || prop.type === 'integer') {
+        obj[key] = 0;
+      } else if (prop.type === 'boolean') {
+        obj[key] = false;
+      } else {
+        obj[key] = null;
+      }
     }
     return obj;
   } catch {
@@ -266,7 +285,7 @@ export function resolveSerializedZodOutput(schema: string): z.ZodType {
   return Function('z', `"use strict";return (${schema});`)(z);
 }
 
-export interface ToolOptions {
+export interface ToolOptions extends Partial<ObservabilityContext> {
   name: string;
   runId?: string;
   threadId?: string;
@@ -275,8 +294,6 @@ export interface ToolOptions {
   description?: string;
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
   requestContext: RequestContext;
-  /** Build-time tracing context (fallback for Legacy methods that can't pass request context) */
-  tracingContext?: TracingContext;
   tracingPolicy?: TracingPolicy;
   memory?: MastraMemory;
   agentName?: string;
@@ -291,6 +308,11 @@ export interface ToolOptions {
   workflowId?: string;
   state?: any;
   setState?: (state: any) => void;
+  /**
+   * Workspace available for tool execution. When provided, tools can access
+   * workspace.filesystem and workspace.sandbox for file operations and command execution.
+   */
+  workspace?: Workspace;
 }
 
 /**
@@ -634,7 +656,7 @@ export async function fetchWithRetry(
         break;
       }
 
-      const delay = Math.min(1000 * Math.pow(2, retryCount) * 1000, 10000);
+      const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }

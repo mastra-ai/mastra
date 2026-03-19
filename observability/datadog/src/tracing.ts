@@ -28,7 +28,9 @@ import { ensureTracer, kindFor, toDate, formatInput, formatOutput } from './util
 import type { DatadogSpanKind } from './utils';
 
 /**
- * LLMObs span options with required name and kind properties.
+ * LLMObs span options passed to dd-trace's llmobs.trace().
+ * Note: endTime is not included because dd-trace does not honor it in trace options.
+ * Instead, we call ddSpan.finish(endTimeMs) explicitly inside the trace callback.
  */
 interface LLMObsSpanOptions {
   kind: DatadogSpanKind;
@@ -39,7 +41,6 @@ interface LLMObsSpanOptions {
   modelName?: string;
   modelProvider?: string;
   startTime?: Date;
-  endTime?: Date;
 }
 
 /**
@@ -299,10 +300,17 @@ export class DatadogExporter extends BaseExporter {
     // The native span error status is also set via ddSpan.setTag('error', true) in emitSpan()
     const tags: Record<string, any> = {};
 
-    // Convert span.tags (string[]) to object format - each tag becomes a key with value true
+    // Convert span.tags (string[]) to object format
+    // Tags in "key:value" format (e.g. "instance_name:career-scout-api") are split into { key: "value" }
+    // Tags without a colon (e.g. "production") are set as { tag: true } (preserving existing behavior)
     if (span.tags?.length) {
       for (const tag of span.tags) {
-        tags[tag] = true;
+        const colonIndex = tag.indexOf(':');
+        if (colonIndex > 0) {
+          tags[tag.substring(0, colonIndex)] = tag.substring(colonIndex + 1);
+        } else {
+          tags[tag] = true;
+        }
       }
     }
 
@@ -565,7 +573,7 @@ export class DatadogExporter extends BaseExporter {
    * Builds LLMObs span options from a Mastra span.
    * Handles trace context, timestamps, and conditional model information for LLM spans.
    */
-  private buildSpanOptions(span: AnyExportedSpan): LLMObsSpanOptions {
+  private buildSpanOptions(span: AnyExportedSpan): { traceOptions: LLMObsSpanOptions; endTimeMs: number } {
     const traceCtx = this.traceContext.get(span.traceId) || {
       userId: span.metadata?.userId,
       sessionId: span.metadata?.sessionId,
@@ -580,14 +588,18 @@ export class DatadogExporter extends BaseExporter {
     const endTime = span.endTime ? toDate(span.endTime) : span.isEvent ? startTime : new Date();
 
     return {
-      kind,
-      name: span.name,
-      sessionId: traceCtx.sessionId,
-      userId: traceCtx.userId,
-      startTime,
-      endTime,
-      ...(kind === 'llm' && attrs?.model ? { modelName: attrs.model } : {}),
-      ...(kind === 'llm' && attrs?.provider ? { modelProvider: attrs.provider } : {}),
+      traceOptions: {
+        kind,
+        name: span.name,
+        sessionId: traceCtx.sessionId,
+        userId: traceCtx.userId,
+        startTime,
+        ...(kind === 'llm' && attrs?.model ? { modelName: attrs.model } : {}),
+        ...(kind === 'llm' && attrs?.provider ? { modelProvider: attrs.provider } : {}),
+      },
+      // endTime as milliseconds for ddSpan.finish() — dd-trace's llmobs.trace() does not
+      // honor endTime in options, so we must call finish(ms) explicitly on the span.
+      endTimeMs: endTime.getTime(),
     };
   }
 
@@ -598,12 +610,12 @@ export class DatadogExporter extends BaseExporter {
    */
   private emitSpanTree(node: SpanNode, state: TraceState): void {
     const span = node.span;
-    const options = this.buildSpanOptions(span);
+    const { traceOptions, endTimeMs } = this.buildSpanOptions(span);
 
     // Use nested llmobs.trace() calls - children are emitted INSIDE the parent's callback
     // This ensures the Datadog SDK automatically establishes parent-child relationships
-    tracer.llmobs.trace(options as any, (ddSpan: any) => {
-      // Annotate this span
+    tracer.llmobs.trace(traceOptions as any, (ddSpan: any) => {
+      // Annotate this span (must happen before finish — annotate throws on finished spans)
       const annotations = this.buildAnnotations(span);
       if (Object.keys(annotations).length > 0) {
         tracer.llmobs.annotate(ddSpan, annotations);
@@ -623,6 +635,14 @@ export class DatadogExporter extends BaseExporter {
       for (const child of node.children) {
         this.emitSpanTree(child, state);
       }
+
+      // Explicitly finish with the correct end time. dd-trace's llmobs.trace() does not
+      // honor endTime in span options — it auto-finishes with Date.now() when the callback
+      // returns. By calling finish() here first, the auto-finish becomes a no-op (dd-trace
+      // skips finish if _duration is already set).
+      if (typeof ddSpan.finish === 'function') {
+        ddSpan.finish(endTimeMs);
+      }
     });
   }
 
@@ -631,10 +651,10 @@ export class DatadogExporter extends BaseExporter {
    * Used for late-arriving spans after the main tree has been emitted.
    */
   private emitSingleSpan(span: AnyExportedSpan, state: TraceState, parent?: any) {
-    const options = this.buildSpanOptions(span);
+    const { traceOptions, endTimeMs } = this.buildSpanOptions(span);
 
     const runTrace = () =>
-      tracer.llmobs.trace(options as any, (ddSpan: any) => {
+      tracer.llmobs.trace(traceOptions as any, (ddSpan: any) => {
         const annotations = this.buildAnnotations(span);
         if (Object.keys(annotations).length > 0) {
           tracer.llmobs.annotate(ddSpan, annotations);
@@ -647,6 +667,11 @@ export class DatadogExporter extends BaseExporter {
 
         const exported = tracer.llmobs.exportSpan ? tracer.llmobs.exportSpan(ddSpan) : undefined;
         state.contexts.set(span.id, { ddSpan, exported });
+
+        // Explicitly finish with the correct end time (see emitSpanTree for details)
+        if (typeof ddSpan.finish === 'function') {
+          ddSpan.finish(endTimeMs);
+        }
       });
 
     if (parent) {

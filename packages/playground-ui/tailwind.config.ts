@@ -31,7 +31,7 @@ export default {
     spacing: Spacings,
     extend: {
       screens: {
-        '3xl': '1900px',
+        '3xl': '1700px',
         '4xl': '2000px',
       },
       fontSize: {

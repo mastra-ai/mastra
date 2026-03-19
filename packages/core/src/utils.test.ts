@@ -1,12 +1,18 @@
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { MastraError } from './error';
 import { ConsoleLogger } from './logger';
 import { RequestContext } from './request-context';
-import type { InternalCoreTool } from './tools';
+import { toStandardSchema } from './schema';
 import { createTool, isVercelTool } from './tools';
-import { makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
+import {
+  fetchWithRetry,
+  generateEmptyFromSchema,
+  makeCoreTool,
+  maskStreamTags,
+  resolveSerializedZodOutput,
+} from './utils';
 
 describe('maskStreamTags', () => {
   async function* makeStream(chunks: string[]) {
@@ -233,9 +239,9 @@ describe('makeCoreTool', () => {
     expect(coreTool.execute).toBeDefined();
 
     if (coreTool.execute) {
-      const result = await coreTool.execute({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
-      expect(result).toBeInstanceOf(MastraError);
-      expect(result.message).toBe('Test error');
+      await expect(coreTool.execute({ name: 'test' }, { toolCallId: 'test-id', messages: [] })).rejects.toThrow(
+        MastraError,
+      );
       expect(errorSpy).toHaveBeenCalled();
     }
     errorSpy.mockRestore();
@@ -257,6 +263,53 @@ describe('makeCoreTool', () => {
     expect(coreTool.execute).toBeUndefined();
   });
 
+  it('should preserve lifecycle hooks through createTool → makeCoreTool pipeline', () => {
+    const onInputStart = vi.fn();
+    const onInputDelta = vi.fn();
+    const onInputAvailable = vi.fn();
+    const onOutput = vi.fn();
+
+    const tool = createTool({
+      id: 'hook-test',
+      description: 'Tool with hooks',
+      inputSchema: z.object({ name: z.string() }),
+      execute: async () => ({ ok: true }),
+      onInputStart,
+      onInputDelta,
+      onInputAvailable,
+      onOutput,
+    });
+
+    // Break 1 fix: Tool instance preserves hooks from createTool options
+    expect(tool.onInputStart).toBe(onInputStart);
+    expect(tool.onInputDelta).toBe(onInputDelta);
+    expect(tool.onInputAvailable).toBe(onInputAvailable);
+    expect(tool.onOutput).toBe(onOutput);
+
+    // Break 2 fix: CoreToolBuilder.build() transfers hooks to CoreTool
+    const coreTool = makeCoreTool(tool, mockOptions);
+    expect((coreTool as any).onInputStart).toBe(onInputStart);
+    expect((coreTool as any).onInputDelta).toBe(onInputDelta);
+    expect((coreTool as any).onInputAvailable).toBe(onInputAvailable);
+    expect((coreTool as any).onOutput).toBe(onOutput);
+  });
+
+  it('should not add hook properties when tool has no hooks', () => {
+    const tool = createTool({
+      id: 'no-hooks',
+      description: 'Tool without hooks',
+      inputSchema: z.object({ name: z.string() }),
+      execute: async () => ({ ok: true }),
+    });
+
+    const coreTool = makeCoreTool(tool, mockOptions);
+
+    expect((coreTool as any).onInputStart).toBeUndefined();
+    expect((coreTool as any).onInputDelta).toBeUndefined();
+    expect((coreTool as any).onInputAvailable).toBeUndefined();
+    expect((coreTool as any).onOutput).toBeUndefined();
+  });
+
   it('should have default parameters if no parameters are provided for Vercel tool', () => {
     const coreTool = makeCoreTool(
       {
@@ -267,9 +320,11 @@ describe('makeCoreTool', () => {
       mockOptions,
     );
 
+    const schema = toStandardSchema(coreTool.parameters);
+
     // Test the schema behavior instead of structure
-    expect(() => (coreTool as InternalCoreTool).parameters.validate({})).not.toThrow();
-    expect(() => (coreTool as InternalCoreTool).parameters.validate({ extra: 'field' })).not.toThrow();
+    expect(() => schema['~standard'].validate({})).not.toThrow();
+    expect(() => schema['~standard'].validate({ extra: 'field' })).not.toThrow();
   });
 });
 
@@ -294,4 +349,168 @@ it('should log correctly for Vercel tool execution', async () => {
   expect(debugSpy).toHaveBeenCalledWith('[Agent:testAgent] - Executing tool testTool', expect.any(Object));
 
   debugSpy.mockRestore();
+});
+
+describe('fetchWithRetry', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('should use exponential backoff delays capped at 10 seconds', async () => {
+    const delays: number[] = [];
+
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, delay?: number) => {
+      if (delay && delay > 100) {
+        delays.push(delay);
+      }
+      // Execute callback immediately so the test completes
+      if (typeof fn === 'function') fn();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout);
+
+    const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
+    vi.stubGlobal('fetch', mockFetch);
+
+    // Use 5 retries so computed backoff 1000 * 2^4 = 16000 exceeds the 10000 cap
+    await expect(fetchWithRetry('https://example.com', {}, 5)).rejects.toThrow();
+
+    // Delays: 2000 (2^1), 4000 (2^2), 8000 (2^3), 10000 (2^4=16000 capped to 10000)
+    expect(delays.length).toBe(4); // 5 max retries = 4 retry delays
+    for (const delay of delays) {
+      expect(delay).toBeLessThanOrEqual(10000);
+    }
+    expect(delays[0]).toBe(2000); // 1000 * 2^1
+    expect(delays[1]).toBe(4000); // 1000 * 2^2
+    expect(delays[2]).toBe(8000); // 1000 * 2^3
+    expect(delays[3]).toBe(10000); // 1000 * 2^4 = 16000, capped at 10000
+  });
+});
+
+describe('generateEmptyFromSchema', () => {
+  it('should handle a JSON string schema', () => {
+    const schema = JSON.stringify({
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        age: { type: 'number' },
+      },
+    });
+    expect(generateEmptyFromSchema(schema)).toEqual({ name: '', age: 0 });
+  });
+
+  it('should handle a pre-parsed object schema', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        count: { type: 'integer' },
+        active: { type: 'boolean' },
+        tags: { type: 'array' },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      name: '',
+      count: 0,
+      active: false,
+      tags: [],
+    });
+  });
+
+  it('should recursively initialize nested object properties', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        user: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            preferences: {
+              type: 'object',
+              properties: {
+                theme: { type: 'string' },
+                fontSize: { type: 'number' },
+              },
+            },
+          },
+        },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      user: {
+        name: '',
+        preferences: {
+          theme: '',
+          fontSize: 0,
+        },
+      },
+    });
+  });
+
+  it('should respect default values defined in the schema', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        name: { type: 'string', default: 'unnamed' },
+        score: { type: 'number', default: 100 },
+        active: { type: 'boolean', default: true },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      name: 'unnamed',
+      score: 100,
+      active: true,
+    });
+  });
+
+  it('should return {} for non-object schemas', () => {
+    expect(generateEmptyFromSchema({ type: 'string' })).toEqual({});
+    expect(generateEmptyFromSchema({ type: 'array' })).toEqual({});
+  });
+
+  it('should return {} for invalid input', () => {
+    expect(generateEmptyFromSchema('not valid json')).toEqual({});
+  });
+
+  it('should return null for unknown property types', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        unknown: { type: 'custom_type' },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({ unknown: null });
+  });
+
+  it('should handle deeply nested objects (3+ levels)', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        level1: {
+          type: 'object',
+          properties: {
+            level2: {
+              type: 'object',
+              properties: {
+                level3: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      level1: { level2: { level3: '' } },
+    });
+  });
+
+  it('should treat object without properties as empty object', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        data: { type: 'object' },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({ data: {} });
+  });
 });

@@ -8,6 +8,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
   GET_MEMORY_STATUS_ROUTE,
+  GET_MEMORY_CONFIG_ROUTE,
+  GET_WORKING_MEMORY_ROUTE,
   LIST_THREADS_ROUTE,
   GET_THREAD_BY_ID_ROUTE,
   SAVE_MESSAGES_ROUTE,
@@ -183,6 +185,71 @@ describe('Memory Handlers', () => {
 
       // This is the expected behavior - graceful empty response
       expect(result).toEqual({ messages: [], uiMessages: [] });
+    });
+  });
+
+  /**
+   * Issue #11765 (regression): GET_MEMORY_CONFIG_ROUTE should gracefully handle agents without memory
+   *
+   * The playground UI calls GET /memory/config?agentId=<agentId> for all agents.
+   * When memory is not configured, this should return null config instead of throwing HTTPException(400).
+   */
+  describe('getMemoryConfigHandler - Issue #11765 regression', () => {
+    it('should return null config when agent has no memory configured (not throw)', async () => {
+      const agentWithoutMemory = new Agent({
+        id: 'no-memory-agent',
+        name: 'Agent Without Memory',
+        instructions: 'test-instructions',
+        model: {} as any,
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: { 'no-memory-agent': agentWithoutMemory },
+      });
+
+      const result = await GET_MEMORY_CONFIG_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'no-memory-agent',
+      });
+
+      expect(result).toEqual({ config: null });
+    });
+  });
+
+  /**
+   * Issue #11765 (regression): GET_WORKING_MEMORY_ROUTE should gracefully handle agents without memory
+   *
+   * The playground UI calls GET /memory/threads/:threadId/working-memory?agentId=<agentId>.
+   * When memory is not configured, this should return null instead of throwing HTTPException(400).
+   */
+  describe('getWorkingMemoryHandler - Issue #11765 regression', () => {
+    it('should return null working memory when agent has no memory configured (not throw)', async () => {
+      const agentWithoutMemory = new Agent({
+        id: 'no-memory-agent',
+        name: 'Agent Without Memory',
+        instructions: 'test-instructions',
+        model: {} as any,
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: { 'no-memory-agent': agentWithoutMemory },
+      });
+
+      const result = await GET_WORKING_MEMORY_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'no-memory-agent',
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+      });
+
+      expect(result).toEqual({
+        workingMemory: null,
+        source: 'thread',
+        workingMemoryTemplate: null,
+        threadExists: false,
+      });
     });
   });
 
@@ -1473,6 +1540,202 @@ describe('Memory Handlers', () => {
         });
 
         expect(result.id).toBe('any-thread');
+      });
+    });
+
+    /**
+     * Regression test for GitHub Issue #12816
+     *
+     * The API should return messages in DESC order (newest first) when
+     * orderBy: { direction: 'DESC' } is passed, but currently the sort
+     * direction is ignored and messages always come back in ASC order.
+     */
+    describe('LIST_MESSAGES_ROUTE - sort direction (#12816)', () => {
+      it('should return messages in DESC order when orderBy direction is DESC', async () => {
+        const threadId = 'sort-test-thread';
+        const resourceId = 'sort-test-resource';
+
+        const mastra = new Mastra({
+          logger: false,
+          agents: {
+            'test-agent': mockAgent,
+          },
+          storage,
+        });
+
+        // Create thread
+        await mockMemory.createThread({ threadId, resourceId });
+
+        // Save messages with distinct timestamps (oldest first)
+        const now = Date.now();
+        const messages: MastraDBMessage[] = [
+          {
+            id: 'msg-oldest',
+            role: 'user',
+            createdAt: new Date(now - 3000),
+            threadId,
+            resourceId,
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'oldest message' }],
+              content: 'oldest message',
+            },
+          },
+          {
+            id: 'msg-middle',
+            role: 'assistant',
+            createdAt: new Date(now - 2000),
+            threadId,
+            resourceId,
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'middle message' }],
+              content: 'middle message',
+            },
+          },
+          {
+            id: 'msg-newest',
+            role: 'user',
+            createdAt: new Date(now - 1000),
+            threadId,
+            resourceId,
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'newest message' }],
+              content: 'newest message',
+            },
+          },
+        ];
+
+        await mockMemory.saveMessages({ messages });
+
+        vi.spyOn(mockMemory, 'getThreadById');
+        vi.spyOn(mockMemory, 'recall');
+
+        // Request messages sorted DESC (newest first)
+        const result = await LIST_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          threadId,
+          resourceId,
+          agentId: 'test-agent',
+          page: 0,
+          perPage: 10,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
+          include: undefined,
+          filter: undefined,
+        });
+
+        expect(result.messages).toHaveLength(3);
+        // With DESC order, newest message should be first
+        expect(result.messages[0].id).toBe('msg-newest');
+        expect(result.messages[1].id).toBe('msg-middle');
+        expect(result.messages[2].id).toBe('msg-oldest');
+      });
+
+      it('should return messages in ASC order when orderBy direction is ASC', async () => {
+        const threadId = 'sort-asc-test-thread';
+        const resourceId = 'sort-asc-test-resource';
+
+        const mastra = new Mastra({
+          logger: false,
+          agents: {
+            'test-agent': mockAgent,
+          },
+          storage,
+        });
+
+        // Create thread
+        await mockMemory.createThread({ threadId, resourceId });
+
+        // Save messages with distinct timestamps
+        const now = Date.now();
+        const messages: MastraDBMessage[] = [
+          {
+            id: 'msg-oldest',
+            role: 'user',
+            createdAt: new Date(now - 3000),
+            threadId,
+            resourceId,
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'oldest message' }],
+              content: 'oldest message',
+            },
+          },
+          {
+            id: 'msg-newest',
+            role: 'user',
+            createdAt: new Date(now - 1000),
+            threadId,
+            resourceId,
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'newest message' }],
+              content: 'newest message',
+            },
+          },
+        ];
+
+        await mockMemory.saveMessages({ messages });
+
+        vi.spyOn(mockMemory, 'getThreadById');
+        vi.spyOn(mockMemory, 'recall');
+
+        // Request messages sorted ASC (oldest first)
+        const result = await LIST_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          threadId,
+          resourceId,
+          agentId: 'test-agent',
+          page: 0,
+          perPage: 10,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+          include: undefined,
+          filter: undefined,
+        });
+
+        expect(result.messages).toHaveLength(2);
+        // With ASC order, oldest message should be first
+        expect(result.messages[0].id).toBe('msg-oldest');
+        expect(result.messages[1].id).toBe('msg-newest');
+      });
+
+      it('should pass orderBy to recall when direction is DESC', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: {
+            'test-agent': mockAgent,
+          },
+          storage,
+        });
+
+        vi.spyOn(mockMemory, 'getThreadById').mockResolvedValue(createThread({}));
+        const recallSpy = vi.spyOn(mockMemory, 'recall').mockResolvedValue({
+          messages: [],
+          total: 0,
+          page: 0,
+          perPage: 10,
+          hasMore: false,
+        });
+
+        await LIST_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+          agentId: 'test-agent',
+          page: 0,
+          perPage: 10,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
+          include: undefined,
+          filter: undefined,
+        });
+
+        // Verify orderBy is passed through to recall with the DESC direction
+        expect(recallSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            orderBy: { field: 'createdAt', direction: 'DESC' },
+          }),
+        );
       });
     });
 

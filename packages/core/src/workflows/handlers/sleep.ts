@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { RequestContext } from '../../di';
 import type { PubSub } from '../../events/pubsub';
-import { SpanType } from '../../observability';
-import type { TracingContext } from '../../observability';
+import { SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
@@ -17,7 +17,7 @@ import type {
   StepResult,
 } from '../types';
 
-export interface ExecuteSleepParams {
+export interface ExecuteSleepParams extends ObservabilityContext {
   workflowId: string;
   runId: string;
   serializedStepGraph: SerializedStepFlowEntry[];
@@ -41,7 +41,6 @@ export interface ExecuteSleepParams {
   abortController: AbortController;
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
-  tracingContext: TracingContext;
 }
 
 export async function executeSleep(engine: DefaultExecutionEngine, params: ExecuteSleepParams): Promise<void> {
@@ -56,13 +55,15 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
     requestContext,
     executionContext,
     outputWriter,
-    tracingContext,
+    ...rest
   } = params;
+
+  const observabilityContext = resolveObservabilityContext(rest);
 
   let { duration, fn } = entry;
 
   const sleepSpan = await engine.createChildSpan({
-    parentSpan: tracingContext.currentSpan,
+    parentSpan: observabilityContext.tracingContext.currentSpan,
     operationId: `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.span.start`,
     options: {
       type: SpanType.WORKFLOW_SLEEP,
@@ -89,9 +90,7 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
           executionContext.state = state;
         },
         retryCount: -1,
-        tracingContext: {
-          currentSpan: sleepSpan,
-        },
+        ...createObservabilityContext({ currentSpan: sleepSpan }),
         getInitData: () => stepResults?.input as any,
         getStepResult: getStepResult.bind(null, stepResults),
         // TODO: this function shouldn't have suspend probably?
@@ -140,7 +139,7 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
   }
 }
 
-export interface ExecuteSleepUntilParams {
+export interface ExecuteSleepUntilParams extends ObservabilityContext {
   workflowId: string;
   runId: string;
   serializedStepGraph: SerializedStepFlowEntry[];
@@ -164,7 +163,6 @@ export interface ExecuteSleepUntilParams {
   abortController: AbortController;
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
-  tracingContext: TracingContext;
 }
 
 export async function executeSleepUntil(
@@ -182,13 +180,15 @@ export async function executeSleepUntil(
     requestContext,
     executionContext,
     outputWriter,
-    tracingContext,
+    ...rest
   } = params;
+
+  const observabilityContext = resolveObservabilityContext(rest);
 
   let { date, fn } = entry;
 
   const sleepUntilSpan = await engine.createChildSpan({
-    parentSpan: tracingContext.currentSpan,
+    parentSpan: observabilityContext.tracingContext.currentSpan,
     operationId: `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.start`,
     options: {
       type: SpanType.WORKFLOW_SLEEP,
@@ -216,9 +216,7 @@ export async function executeSleepUntil(
           executionContext.state = state;
         },
         retryCount: -1,
-        tracingContext: {
-          currentSpan: sleepUntilSpan,
-        },
+        ...createObservabilityContext({ currentSpan: sleepUntilSpan }),
         getInitData: () => stepResults?.input as any,
         getStepResult: getStepResult.bind(null, stepResults),
         // TODO: this function shouldn't have suspend probably?

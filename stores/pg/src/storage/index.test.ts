@@ -10,6 +10,8 @@ import { TABLE_THREADS } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { describe, it, expect, vi } from 'vitest';
 
+import { DatasetsPG } from './domains/datasets';
+import { ExperimentsPG } from './domains/experiments';
 import { MemoryPG } from './domains/memory';
 import { ScoresPG } from './domains/scores';
 import { WorkflowsPG } from './domains/workflows';
@@ -53,6 +55,14 @@ createDomainDirectTests({
   createScoresDomain: () => {
     const pool = createTestPool();
     return new ScoresPG({ pool });
+  },
+  createDatasetsDomain: () => {
+    const pool = createTestPool();
+    return new DatasetsPG({ pool });
+  },
+  createExperimentsDomain: () => {
+    const pool = createTestPool();
+    return new ExperimentsPG({ pool });
   },
 });
 

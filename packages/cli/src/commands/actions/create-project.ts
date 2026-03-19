@@ -16,6 +16,7 @@ interface CreateProjectArgs {
   dir?: string;
   projectName?: string;
   mcp?: Editor;
+  skills?: string[];
   template?: string | boolean;
 }
 
@@ -33,6 +34,7 @@ export const createProject = async (projectNameArg: string | undefined, args: Cr
           addExample: true,
           timeout,
           mcpServer: args.mcp,
+          skills: args.skills,
           template: args.template,
         });
         return;
@@ -46,6 +48,7 @@ export const createProject = async (projectNameArg: string | undefined, args: Cr
         projectName,
         directory: args.dir,
         mcpServer: args.mcp,
+        skills: args.skills,
         template: args.template,
       });
     },

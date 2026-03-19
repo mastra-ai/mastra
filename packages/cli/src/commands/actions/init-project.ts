@@ -38,6 +38,8 @@ export const initProject = async (args: InitArgs) => {
           llmApiKey: result?.llmApiKey as string,
           components: ['agents', 'tools', 'workflows'],
           addExample: true,
+          skills: result?.skills,
+          mcpServer: result?.mcpServer,
           versionTag,
         });
         return;
@@ -49,7 +51,7 @@ export const initProject = async (args: InitArgs) => {
           components: ['agents', 'tools', 'workflows'],
           llmProvider: 'openai',
           addExample: true,
-          configureEditorWithDocsMCP: args.mcp,
+          mcpServer: args.mcp,
           versionTag,
         });
         return;
@@ -61,7 +63,7 @@ export const initProject = async (args: InitArgs) => {
         llmProvider: args.llm,
         addExample: args.example,
         llmApiKey: args.llmApiKey,
-        configureEditorWithDocsMCP: args.mcp,
+        mcpServer: args.mcp,
         versionTag,
       });
       return;

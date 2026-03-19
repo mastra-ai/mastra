@@ -1,9 +1,24 @@
 import { TransformStream } from 'node:stream/web';
+import type {
+  InferUIMessageChunk,
+  TextStreamPart,
+  ToolSet,
+  UIMessage,
+  UIMessageStreamOptions,
+} from '@internal/ai-sdk-v5';
+import type {
+  InferUIMessageChunk as InferUIMessageChunkV6,
+  UIMessage as UIMessageV6,
+  UIMessageStreamOptions as UIMessageStreamOptionsV6,
+} from '@internal/ai-v6';
 import type { LLMStepResult } from '@mastra/core/agent';
 import type { AgentChunkType, ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
 import type { WorkflowRunStatus, WorkflowStepStatus, WorkflowStreamEvent } from '@mastra/core/workflows';
-import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai';
-import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
+import {
+  convertMastraChunkToAISDKv5,
+  convertMastraChunkToAISDKv6,
+  convertFullStreamChunkToUIMessageStream,
+} from './helpers';
 import type { ToolAgentChunkType, ToolWorkflowChunkType, ToolNetworkChunkType } from './helpers';
 import {
   isAgentExecutionDataChunkType,
@@ -85,9 +100,16 @@ export type AgentDataPart = {
 // used so it's not serialized to JSON
 const PRIMITIVE_CACHE_SYMBOL = Symbol('primitive-cache');
 
-export function WorkflowStreamToAISDKTransformer({
-  includeTextStreamParts,
-}: { includeTextStreamParts?: boolean } = {}) {
+type ConvertMastraChunkToAISDK = <OUTPUT>(args: { chunk: ChunkType<OUTPUT>; mode?: 'generate' | 'stream' }) => any;
+
+export function createWorkflowStreamToAISDKTransformer<UI_CHUNK>(
+  convertMastraChunkToAISDK: ConvertMastraChunkToAISDK,
+  {
+    includeTextStreamParts,
+    sendReasoning,
+    sendSources,
+  }: { includeTextStreamParts?: boolean; sendReasoning?: boolean; sendSources?: boolean } = {},
+) {
   const bufferedWorkflows = new Map<
     string,
     {
@@ -101,7 +123,7 @@ export function WorkflowStreamToAISDKTransformer({
         data?: string;
         type?: 'start' | 'finish';
       }
-    | InferUIMessageChunk<UIMessage>
+    | UI_CHUNK
     | WorkflowDataPart
     | ChunkType
     | ToolAgentChunkType
@@ -119,13 +141,47 @@ export function WorkflowStreamToAISDKTransformer({
       });
     },
     transform(chunk, controller) {
-      const transformed = transformWorkflow<any>(chunk, bufferedWorkflows, false, includeTextStreamParts);
-      if (transformed) controller.enqueue(transformed);
+      const transformed = transformWorkflow<any>(
+        chunk,
+        bufferedWorkflows,
+        false,
+        includeTextStreamParts,
+        {
+          sendReasoning,
+          sendSources,
+        },
+        convertMastraChunkToAISDK,
+      );
+      if (transformed) controller.enqueue(transformed as UI_CHUNK);
     },
   });
 }
 
-export function AgentNetworkToAISDKTransformer() {
+export function WorkflowStreamToAISDKTransformer({
+  includeTextStreamParts,
+  sendReasoning,
+  sendSources,
+}: { includeTextStreamParts?: boolean; sendReasoning?: boolean; sendSources?: boolean } = {}) {
+  return createWorkflowStreamToAISDKTransformer<InferUIMessageChunk<UIMessage>>(convertMastraChunkToAISDKv5, {
+    includeTextStreamParts,
+    sendReasoning,
+    sendSources,
+  });
+}
+
+export function WorkflowStreamToAISDKV6Transformer({
+  includeTextStreamParts,
+  sendReasoning,
+  sendSources,
+}: { includeTextStreamParts?: boolean; sendReasoning?: boolean; sendSources?: boolean } = {}) {
+  return createWorkflowStreamToAISDKTransformer<InferUIMessageChunkV6<UIMessageV6>>(convertMastraChunkToAISDKv6, {
+    includeTextStreamParts,
+    sendReasoning,
+    sendSources,
+  });
+}
+
+export function createAgentNetworkToAISDKTransformer<UI_CHUNK>() {
   const bufferedNetworks = new Map<
     string,
     {
@@ -150,7 +206,7 @@ export function AgentNetworkToAISDKTransformer() {
         type?: 'start' | 'finish';
       }
     | NetworkDataPart
-    | InferUIMessageChunk<UIMessage>
+    | UI_CHUNK
     | DataChunkType
   >({
     start(controller) {
@@ -168,11 +224,104 @@ export function AgentNetworkToAISDKTransformer() {
       if (transformed) {
         if (Array.isArray(transformed)) {
           for (const item of transformed) {
-            controller.enqueue(item);
+            controller.enqueue(item as any);
           }
         } else {
-          controller.enqueue(transformed);
+          controller.enqueue(transformed as any);
         }
+      }
+    },
+  });
+}
+
+export function AgentNetworkToAISDKTransformer() {
+  return createAgentNetworkToAISDKTransformer<InferUIMessageChunk<UIMessage>>();
+}
+
+export function AgentNetworkToAISDKV6Transformer() {
+  return createAgentNetworkToAISDKTransformer<InferUIMessageChunkV6<UIMessageV6>>();
+}
+
+export function createAgentStreamToAISDKTransformer<OUTPUT>(
+  convertMastraChunkToAISDK: ConvertMastraChunkToAISDK,
+  {
+    lastMessageId,
+    sendStart = true,
+    sendFinish = true,
+    sendReasoning,
+    sendSources,
+    messageMetadata,
+    onError,
+  }: {
+    lastMessageId?: string;
+    sendStart?: boolean;
+    sendFinish?: boolean;
+    sendReasoning?: boolean;
+    sendSources?: boolean;
+    messageMetadata?: (args: { part: any }) => unknown;
+    onError?: (error: unknown) => string;
+  },
+) {
+  let bufferedSteps = new Map<string, any>();
+  let tripwireOccurred = false;
+  let finishEventSent = false;
+
+  return new TransformStream<ChunkType<OUTPUT>, object>({
+    transform(chunk, controller) {
+      if (chunk.type === 'tripwire') {
+        tripwireOccurred = true;
+      }
+
+      if (chunk.type === 'finish') {
+        finishEventSent = true;
+      }
+
+      const part = convertMastraChunkToAISDK({ chunk, mode: 'stream' });
+
+      const transformedChunk = convertFullStreamChunkToUIMessageStream<any>({
+        part: part as any,
+        sendReasoning,
+        sendSources,
+        messageMetadataValue: part ? messageMetadata?.({ part: part as TextStreamPart<ToolSet> }) : undefined,
+        sendStart,
+        sendFinish,
+        responseMessageId: lastMessageId,
+        onError(error) {
+          return onError ? onError(error) : safeParseErrorObject(error);
+        },
+      });
+
+      if (transformedChunk) {
+        if (transformedChunk.type === 'tool-agent') {
+          const payload = transformedChunk.payload;
+          const agentTransformed = transformAgent<OUTPUT>(payload, bufferedSteps);
+          if (agentTransformed) controller.enqueue(agentTransformed);
+        } else if (transformedChunk.type === 'tool-workflow') {
+          const payload = transformedChunk.payload;
+          const workflowChunk = transformWorkflow(
+            payload,
+            bufferedSteps,
+            true,
+            undefined,
+            undefined,
+            convertMastraChunkToAISDK,
+          );
+          if (workflowChunk) controller.enqueue(workflowChunk);
+        } else if (transformedChunk.type === 'tool-network') {
+          const payload = transformedChunk.payload;
+          const networkChunk = transformNetwork(payload, bufferedSteps, true);
+          if (networkChunk) controller.enqueue(networkChunk);
+        } else {
+          controller.enqueue(transformedChunk as any);
+        }
+      }
+    },
+    flush(controller) {
+      if (tripwireOccurred && !finishEventSent && sendFinish) {
+        controller.enqueue({
+          type: 'finish',
+          finishReason: 'other',
+        } as any);
       }
     },
   });
@@ -195,66 +344,42 @@ export function AgentStreamToAISDKTransformer<OUTPUT>({
   messageMetadata?: UIMessageStreamOptions<UIMessage>['messageMetadata'];
   onError?: UIMessageStreamOptions<UIMessage>['onError'];
 }) {
-  let bufferedSteps = new Map<string, any>();
-  let tripwireOccurred = false;
-  let finishEventSent = false;
+  return createAgentStreamToAISDKTransformer<OUTPUT>(convertMastraChunkToAISDKv5, {
+    lastMessageId,
+    sendStart,
+    sendFinish,
+    sendReasoning,
+    sendSources,
+    messageMetadata,
+    onError,
+  });
+}
 
-  return new TransformStream<ChunkType<OUTPUT>, object>({
-    transform(chunk, controller) {
-      // Track if tripwire occurred
-      if (chunk.type === 'tripwire') {
-        tripwireOccurred = true;
-      }
-
-      // Track if finish event was sent
-      if (chunk.type === 'finish') {
-        finishEventSent = true;
-      }
-
-      const part = convertMastraChunkToAISDKv5({ chunk, mode: 'stream' });
-
-      const transformedChunk = convertFullStreamChunkToUIMessageStream<any>({
-        part: part as any,
-        sendReasoning,
-        sendSources,
-        messageMetadataValue: messageMetadata?.({ part: part as TextStreamPart<ToolSet> }),
-        sendStart,
-        sendFinish,
-        responseMessageId: lastMessageId,
-        onError(error) {
-          return onError ? onError(error) : safeParseErrorObject(error);
-        },
-      });
-
-      if (transformedChunk) {
-        if (transformedChunk.type === 'tool-agent') {
-          const payload = transformedChunk.payload;
-          const agentTransformed = transformAgent<OUTPUT>(payload, bufferedSteps);
-          if (agentTransformed) controller.enqueue(agentTransformed);
-        } else if (transformedChunk.type === 'tool-workflow') {
-          const payload = transformedChunk.payload;
-          const workflowChunk = transformWorkflow(payload, bufferedSteps, true);
-          if (workflowChunk) controller.enqueue(workflowChunk);
-        } else if (transformedChunk.type === 'tool-network') {
-          const payload = transformedChunk.payload;
-          const networkChunk = transformNetwork(payload, bufferedSteps, true);
-          if (networkChunk) controller.enqueue(networkChunk);
-        } else {
-          controller.enqueue(transformedChunk);
-        }
-      }
-    },
-    flush(controller) {
-      // If tripwire occurred but no finish event was sent, send a finish event with 'other' reason
-      if (tripwireOccurred && !finishEventSent && sendFinish) {
-        // Send a finish event with finishReason 'other' to ensure graceful stream completion
-        // AI SDK doesn't support tripwires, so we use 'other' as the finish reason
-        controller.enqueue({
-          type: 'finish',
-          finishReason: 'other',
-        } as any);
-      }
-    },
+export function AgentStreamToAISDKV6Transformer<OUTPUT>({
+  lastMessageId,
+  sendStart = true,
+  sendFinish = true,
+  sendReasoning,
+  sendSources,
+  messageMetadata,
+  onError,
+}: {
+  lastMessageId?: string;
+  sendStart?: boolean;
+  sendFinish?: boolean;
+  sendReasoning?: boolean;
+  sendSources?: boolean;
+  messageMetadata?: UIMessageStreamOptionsV6<UIMessageV6>['messageMetadata'];
+  onError?: UIMessageStreamOptionsV6<UIMessageV6>['onError'];
+}) {
+  return createAgentStreamToAISDKTransformer<OUTPUT>(convertMastraChunkToAISDKv6, {
+    lastMessageId,
+    sendStart,
+    sendFinish,
+    sendReasoning,
+    sendSources,
+    messageMetadata,
+    onError,
   });
 }
 
@@ -418,6 +543,8 @@ export function transformWorkflow<OUTPUT>(
   >,
   isNested?: boolean,
   includeTextStreamParts?: boolean,
+  streamOptions?: { sendReasoning?: boolean; sendSources?: boolean },
+  convertMastraChunkToAISDK: ConvertMastraChunkToAISDK = convertMastraChunkToAISDKv5,
 ) {
   switch (payload.type) {
     case 'workflow-start':
@@ -516,10 +643,12 @@ export function transformWorkflow<OUTPUT>(
 
       if (includeTextStreamParts && output && isMastraTextStreamChunk(output)) {
         // @ts-expect-error - generic type mismatch in conversion
-        const part = convertMastraChunkToAISDKv5<OUTPUT>({ chunk: output, mode: 'stream' });
+        const part = convertMastraChunkToAISDK<OUTPUT>({ chunk: output, mode: 'stream' });
 
         const transformedChunk = convertFullStreamChunkToUIMessageStream({
           part: part as any,
+          sendReasoning: streamOptions?.sendReasoning,
+          sendSources: streamOptions?.sendSources,
           onError(error) {
             return safeParseErrorObject(error);
           },
@@ -844,8 +973,25 @@ export function transformNetwork(
         },
       } as const;
 
+      // Check if the routing agent handled the request directly (no delegation)
+      // In that case, the result text is the selectionReason (routing logic), not user-facing content.
+      // Text events for the actual answer will come from the validation step instead.
+      // Scope to the current step (via payload.payload.runId) to avoid stale matches in multi-iteration scenarios.
+      const finishStepId = payload.payload?.runId;
+      const routingStep = current.steps.find(
+        step => step.id === finishStepId && step.task?.id === 'none' && step.task?.type === 'none',
+      );
+      const isDirectHandling = !!routingStep;
+
       // Fallback: emit text events from result if core didn't send routing-agent-text-* events
-      if (!current.hasEmittedText && resultText && typeof resultText === 'string' && resultText.length > 0) {
+      // Skip this when routing agent handled directly, as the result contains internal routing reasoning
+      if (
+        !isDirectHandling &&
+        !current.hasEmittedText &&
+        resultText &&
+        typeof resultText === 'string' &&
+        resultText.length > 0
+      ) {
         current.hasEmittedText = true;
         return [
           { type: 'text-start', id: payload.runId } as const,

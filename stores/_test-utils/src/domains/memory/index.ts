@@ -4,6 +4,7 @@ import { createThreadsTest } from './threads';
 import { createMessagesUpdateTest } from './messages-update';
 import { createMessagesBulkDeleteTest } from './messages-bulk-delete';
 import { createResourcesTest } from './resources';
+import { createObservationalMemoryTest } from './observational-memory';
 import { beforeAll } from 'vitest';
 import { createMessagesListTest } from './messages-list';
 
@@ -35,4 +36,6 @@ export function createMemoryTest({ storage }: { storage: MastraStorage }) {
   createMessagesBulkDeleteTest({ storage });
 
   createResourcesTest({ storage });
+
+  createObservationalMemoryTest({ storage });
 }

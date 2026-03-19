@@ -1,3 +1,4 @@
+import { openai } from '@ai-sdk/openai-v5';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
@@ -58,6 +59,22 @@ describe('Tools Handlers', () => {
       // expect(result).toHaveProperty(mockVercelTool.id);
       expect(result[mockTool.id]).toHaveProperty('id', mockTool.id);
       // expect(result[mockVercelTool.id]).toHaveProperty('id', mockVercelTool.id);
+    });
+
+    it('should fall back to mastra.listTools() when registeredTools is empty object', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        tools: mockTools,
+      });
+      // This mirrors what happens in the real server adapters (hono/express):
+      // they set registeredTools to `this.tools || {}`, so when no tools are
+      // passed to the server constructor, registeredTools becomes {}
+      const result = await LIST_TOOLS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        registeredTools: {},
+      });
+      expect(result).toHaveProperty(mockTool.id);
+      expect(result[mockTool.id]).toHaveProperty('id', mockTool.id);
     });
   });
 
@@ -346,6 +363,83 @@ describe('Tools Handlers', () => {
       });
       expect(result).toHaveProperty('id', mockTool.id);
       expect(result).toHaveProperty('description', mockTool.description);
+    });
+  });
+
+  describe('provider-defined tools serialization', () => {
+    const providerTool = openai.tools.webSearch({});
+
+    const providerTools = {
+      web_search: providerTool,
+    };
+
+    const mixedTools = {
+      [mockTool.id]: mockTool,
+      web_search: providerTool,
+    };
+
+    describe('listToolsHandler', () => {
+      it('should serialize provider-defined tools without crashing', async () => {
+        const mastra = new Mastra({ logger: false });
+        const result = await LIST_TOOLS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          registeredTools: providerTools as any,
+        });
+        expect(result).toHaveProperty('web_search');
+        expect(result['web_search']).toHaveProperty('type', 'provider-defined');
+        // Verify the lazy inputSchema was actually resolved and serialized
+        expect(result['web_search'].inputSchema).toBeDefined();
+      });
+
+      it('should serialize a mix of regular and provider-defined tools', async () => {
+        const mastra = new Mastra({ logger: false });
+        const result = await LIST_TOOLS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          registeredTools: mixedTools as any,
+        });
+        expect(result).toHaveProperty(mockTool.id);
+        expect(result).toHaveProperty('web_search');
+        expect(result[mockTool.id]).toHaveProperty('id', mockTool.id);
+        expect(result['web_search']).toHaveProperty('type', 'provider-defined');
+      });
+    });
+
+    describe('getToolByIdHandler', () => {
+      it('should serialize a provider-defined tool without crashing', async () => {
+        const mastra = new Mastra({ logger: false });
+        const result = await GET_TOOL_BY_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          registeredTools: providerTools as any,
+          toolId: 'openai.web_search',
+        });
+        expect(result).toHaveProperty('type', 'provider-defined');
+        expect(result).toHaveProperty('id', 'openai.web_search');
+      });
+    });
+
+    describe('getAgentToolHandler', () => {
+      it('should serialize a provider-defined agent tool without crashing', async () => {
+        const agent = new Agent({
+          id: 'provider-tool-agent',
+          name: 'provider-tool-agent',
+          instructions: 'You are a search assistant',
+          tools: providerTools as any,
+          model: 'openai/gpt-4o-mini' as any,
+        });
+
+        const result = await GET_AGENT_TOOL_ROUTE.handler({
+          ...createTestServerContext({
+            mastra: new Mastra({
+              logger: false,
+              agents: { 'provider-tool-agent': agent as any },
+            }),
+          }),
+          agentId: 'provider-tool-agent',
+          toolId: 'openai.web_search',
+        });
+        expect(result).toHaveProperty('type', 'provider-defined');
+        expect(result).toHaveProperty('id', 'openai.web_search');
+      });
     });
   });
 });

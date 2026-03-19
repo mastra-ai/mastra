@@ -15,17 +15,16 @@
 const sidebars = {
   // Docs sidebar - main documentation
   docsSidebar: [
-    'index',
+    {
+      type: 'doc',
+      id: 'index',
+      label: 'Get Started',
+    },
     {
       type: 'category',
-      label: 'Getting Started',
+      label: 'Fundamentals',
       collapsed: false,
       items: [
-        {
-          type: 'doc',
-          id: 'getting-started/start',
-          label: 'Start',
-        },
         {
           type: 'doc',
           id: 'getting-started/studio',
@@ -38,13 +37,13 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'getting-started/mcp-docs-server',
-          label: 'MCP Docs Server',
+          id: 'getting-started/manual-install',
+          label: 'Manual Install',
         },
         {
           type: 'doc',
-          id: 'getting-started/manual-install',
-          label: 'Manual Install',
+          id: 'getting-started/build-with-ai',
+          label: 'Build with AI',
         },
       ],
     },
@@ -60,12 +59,11 @@ const sidebars = {
         {
           type: 'doc',
           id: 'agents/using-tools',
-          label: 'Using Tools',
+          label: 'Tools',
         },
         {
-          type: 'doc',
-          id: 'agents/agent-memory',
-          label: 'Memory',
+          type: 'html',
+          value: '<a class="menu__link" href="/docs/memory/overview"><span>Memory</span></a>',
         },
         {
           type: 'doc',
@@ -74,8 +72,11 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/networks',
-          label: 'Networks',
+          id: 'agents/supervisor-agents',
+          label: 'Supervisor Agents',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',
@@ -94,47 +95,61 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/network-approval',
-          label: 'Network Approval',
+          id: 'agents/adding-voice',
+          label: 'Voice',
         },
         {
           type: 'doc',
-          id: 'agents/adding-voice',
-          label: 'Voice',
+          id: 'agents/networks',
+          label: 'Networks',
+          customProps: {
+            tags: ['deprecated'],
+          },
         },
       ],
     },
     {
       type: 'category',
-      label: 'Workspace',
-      customProps: {
-        tags: ['new'],
-      },
+      label: 'Memory',
+      collapsed: true,
       items: [
         {
           type: 'doc',
-          id: 'workspace/overview',
+          id: 'memory/overview',
           label: 'Overview',
         },
         {
           type: 'doc',
-          id: 'workspace/filesystem',
-          label: 'Filesystem',
+          id: 'memory/storage',
+          label: 'Storage',
         },
         {
           type: 'doc',
-          id: 'workspace/sandbox',
-          label: 'Sandbox',
+          id: 'memory/message-history',
+          label: 'Message History',
         },
         {
           type: 'doc',
-          id: 'workspace/skills',
-          label: 'Skills',
+          id: 'memory/observational-memory',
+          label: 'Observational Memory',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',
-          id: 'workspace/search',
-          label: 'Search and Indexing',
+          id: 'memory/working-memory',
+          label: 'Working Memory',
+        },
+        {
+          type: 'doc',
+          id: 'memory/semantic-recall',
+          label: 'Semantic Recall',
+        },
+        {
+          type: 'doc',
+          id: 'memory/memory-processors',
+          label: 'Memory Processors',
         },
       ],
     },
@@ -234,43 +249,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Memory',
-      collapsed: true,
-      items: [
-        {
-          type: 'doc',
-          id: 'memory/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'memory/storage',
-          label: 'Storage',
-        },
-        {
-          type: 'doc',
-          id: 'memory/message-history',
-          label: 'Message History',
-        },
-        {
-          type: 'doc',
-          id: 'memory/working-memory',
-          label: 'Working Memory',
-        },
-        {
-          type: 'doc',
-          id: 'memory/semantic-recall',
-          label: 'Semantic Recall',
-        },
-        {
-          type: 'doc',
-          id: 'memory/memory-processors',
-          label: 'Memory Processors',
-        },
-      ],
-    },
-    {
-      type: 'category',
       label: 'RAG',
       items: [
         {
@@ -302,6 +280,40 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Workspaces',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'workspace/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/filesystem',
+          label: 'Filesystem',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/sandbox',
+          label: 'Sandbox',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/skills',
+          label: 'Skills',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/search',
+          label: 'Search and Indexing',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Server',
       items: [
         {
@@ -313,17 +325,11 @@ const sidebars = {
           type: 'doc',
           id: 'server/server-adapters',
           label: 'Server Adapters',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
           id: 'server/custom-adapters',
           label: 'Custom Adapters',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -363,6 +369,11 @@ const sidebars = {
               type: 'doc',
               id: 'server/auth/jwt',
               label: 'JSON Web Token',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/better-auth',
+              label: 'Better Auth',
             },
             {
               type: 'doc',
@@ -416,6 +427,11 @@ const sidebars = {
           type: 'doc',
           id: 'deployment/mastra-server',
           label: 'Mastra Server',
+        },
+        {
+          type: 'doc',
+          id: 'deployment/studio',
+          label: 'Studio',
         },
         {
           type: 'doc',
@@ -583,6 +599,22 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: 'category',
+          label: 'Datasets',
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/datasets/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'observability/datasets/running-experiments',
+              label: 'Running Experiments',
+            },
+          ],
+        },
       ],
     },
     {
@@ -634,6 +666,24 @@ const sidebars = {
           type: 'doc',
           id: 'voice/speech-to-speech',
           label: 'Speech to Speech',
+        },
+      ],
+    },
+
+    {
+      type: 'category',
+      label: 'Build with AI',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'build-with-ai/skills',
+          label: 'Skills',
+        },
+        {
+          type: 'doc',
+          id: 'build-with-ai/mcp-docs-server',
+          label: 'MCP Docs Server',
         },
       ],
     },

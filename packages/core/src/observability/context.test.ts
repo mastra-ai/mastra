@@ -7,6 +7,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../mastra';
 import { isMastra, wrapMastra } from './context';
+import { createObservabilityContext } from './context-factory';
 import type { TracingContext } from './types';
 
 // Mock classes
@@ -166,11 +167,13 @@ describe('Tracing Context Integration', () => {
 
       await run.start({ inputData: { test: 'data' }, requestContext: {} });
 
-      expect(mockRun.start).toHaveBeenCalledWith({
-        inputData: { test: 'data' },
-        requestContext: {},
-        tracingContext,
-      });
+      expect(mockRun.start).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputData: { test: 'data' },
+          requestContext: {},
+          ...createObservabilityContext(tracingContext),
+        }),
+      );
     });
 
     it('should preserve user-provided tracingContext in run start', async () => {
@@ -184,10 +187,12 @@ describe('Tracing Context Integration', () => {
         tracingContext: userTracingContext,
       });
 
-      expect(mockRun.start).toHaveBeenCalledWith({
-        inputData: { test: 'data' },
-        tracingContext: userTracingContext, // User's context should take precedence
-      });
+      expect(mockRun.start).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputData: { test: 'data' },
+          tracingContext: userTracingContext, // User's context should take precedence via createObservabilityContext
+        }),
+      );
     });
 
     it('should pass through other run methods unchanged', async () => {
@@ -213,9 +218,10 @@ describe('Tracing Context Integration', () => {
       // When the agent is used, it should automatically get tracing context
       agent.generate('test input');
 
-      expect(mockAgent.generate).toHaveBeenCalledWith('test input', {
-        tracingContext,
-      });
+      expect(mockAgent.generate).toHaveBeenCalledWith(
+        'test input',
+        expect.objectContaining(createObservabilityContext(tracingContext)),
+      );
     });
 
     it('should work with workflow calling another workflow', () => {
@@ -228,9 +234,7 @@ describe('Tracing Context Integration', () => {
 
       expect(mockWorkflow.execute).toHaveBeenCalledWith(
         { input: 'test' },
-        {
-          tracingContext,
-        },
+        expect.objectContaining(createObservabilityContext(tracingContext)),
       );
     });
 
@@ -260,7 +264,10 @@ describe('Tracing Context Integration', () => {
 
       // Wrapped agent should inject context
       await wrappedAgent.generate('test');
-      expect(mockAgent.generate).toHaveBeenLastCalledWith('test', { tracingContext });
+      expect(mockAgent.generate).toHaveBeenLastCalledWith(
+        'test',
+        expect.objectContaining(createObservabilityContext(tracingContext)),
+      );
 
       // Unwrapped agent should be the original (because unwrappedMastra is actually the original)
       expect(unwrappedAgent).toBe(mockAgent);

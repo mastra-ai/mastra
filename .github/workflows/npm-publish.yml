@@ -80,6 +80,7 @@ jobs:
         run: pnpm publish -r --tag ${{ steps.determine-tag.outputs.tag }} --access public --no-git-checks
         env:
           NPM_CONFIG_PROVENANCE: true
+          REQUIRE_PACKAGE_DOCS: 'true'
 
   # ===========================================
   # STABLE RELEASE: Manual trigger only
@@ -169,6 +170,7 @@ jobs:
         run: pnpm publish -r --access public --no-git-checks
         env:
           NPM_CONFIG_PROVENANCE: true
+          REQUIRE_PACKAGE_DOCS: 'true'
 
       - name: Updated alpha versions
         if: ${{ !inputs.dry_run }}
@@ -180,8 +182,8 @@ jobs:
 
       - name: Add tags
         run: |
-          pnpm changeset-cli tag;
-          git push --follow-tags
+          pnpm changeset-cli tag
+          git push origin --tags
 
   enter_prerelease:
     needs: stable
@@ -235,7 +237,9 @@ jobs:
       - name: Push prerelease changes
         if: ${{ !inputs.dry_run }}
         run: |
-          git push --follow-tags
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
 

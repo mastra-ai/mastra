@@ -10,6 +10,7 @@ import { WorkflowRunProvider } from '@/domains/workflows';
 import { MastraUIMessage } from '@mastra/react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { isBrowserTool, useBrowserToolCallsSafe } from '@/domains/agents/context/browser-tool-calls-context';
+import { ObservationMarkerBadge } from './badges/observation-marker-badge';
 import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
 
 export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
@@ -44,12 +45,18 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
 
   // Detect skill activation tool calls
   useEffect(() => {
-    if (toolName === 'skill-activate' && result?.success && args?.name) {
-      activateSkill(args.name);
-    }
-  }, [toolName, result, args, activateSkill]);
+    if (toolName !== 'skill') return;
+    if (!args?.name) return;
+    if (props.status?.type !== 'complete') return;
+    activateSkill(args.name);
+  }, [toolName, args?.name, props.status?.type, activateSkill]);
 
   useWorkflowStream(result);
+
+  // Handle OM observation markers - render as ObservationMarkerBadge
+  if (toolName === 'mastra-memory-om-observation') {
+    return <ObservationMarkerBadge toolName={toolName} args={args} metadata={metadata} />;
+  }
 
   // Hide browser tools from chat when context is available
   if (isBrowser && browserCtx) {
@@ -64,6 +71,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const isWorkflow = (metadata?.mode === 'network' && metadata.from === 'WORKFLOW') || toolName.startsWith('workflow-');
 
   const isNetwork = metadata?.mode === 'network';
+  const isComplete = props.status?.type === 'complete';
 
   const agentToolName = toolName.startsWith('agent-') ? toolName.substring('agent-'.length) : toolName;
   const workflowToolName = toolName.startsWith('workflow-') ? toolName.substring('workflow-'.length) : toolName;
@@ -95,6 +103,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         isNetwork={isNetwork}
         suspendPayload={suspendedToolMetadata?.suspendPayload}
         toolCalled={toolCalled}
+        isComplete={isComplete}
       />
     );
   }
@@ -137,12 +146,12 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   }
 
   // Use custom terminal UI for sandbox execution tools
-  const isSandboxExecution = toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND;
+  const isSandboxExecution =
+    toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND ||
+    toolName === WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT ||
+    toolName === WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS;
 
   if (isSandboxExecution) {
-    // During streaming, result might be an array of output chunks
-    // After completion, it's the final tool result object
-    const streamingOutput = Array.isArray(result) ? result : result?.output || result?.toolOutput || [];
     return (
       <SandboxExecutionBadge
         toolName={toolName}
@@ -151,10 +160,8 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         metadata={metadata}
         toolCallId={toolCallId}
         toolApprovalMetadata={toolApprovalMetadata}
-        suspendPayload={suspendedToolMetadata?.suspendPayload}
         isNetwork={isNetwork}
         toolCalled={toolCalled}
-        toolOutput={streamingOutput}
       />
     );
   }

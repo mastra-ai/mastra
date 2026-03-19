@@ -19,7 +19,7 @@ export interface RequestContextSchemaFormProps {
  * Component that displays a schema-driven form for request context.
  * Only rendered when an agent/workflow defines a requestContextSchema.
  *
- * This component syncs form values to the SchemaRequestContext on every change,
+ * This component syncs form values to the SchemaRequestContext on explicit "Save" click,
  * allowing the agent chat to use these values (which override global context).
  * Empty strings in form fields will override global values intentionally.
  */
@@ -57,7 +57,12 @@ export const RequestContextSchemaForm = ({ requestContextSchema }: RequestContex
         <CopyButton content={localFormValuesStr} />
       </div>
 
-      <DynamicForm schema={zodSchema} onValuesChange={setSchemaValues} defaultValues={schemaValues} />
+      <DynamicForm
+        schema={zodSchema}
+        onSubmit={setSchemaValues}
+        submitButtonLabel="Save"
+        defaultValues={schemaValues}
+      />
     </div>
   );
 };

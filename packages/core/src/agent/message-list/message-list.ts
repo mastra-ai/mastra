@@ -4,6 +4,7 @@ import type * as AIV4Type from '@internal/ai-sdk-v4';
 import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
+import type { IMastraLogger } from '../../logger';
 import type { IdGeneratorContext } from '../../types';
 import { AIV4Adapter, AIV5Adapter } from './adapters';
 import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
@@ -27,6 +28,7 @@ import { downloadAssetsFromMessages } from './prompt/download-assets';
 import { MessageStateManager } from './state';
 import type {
   MastraDBMessage,
+  MastraMessagePart,
   MastraMessageV1,
   MessageSource,
   MemoryInfo,
@@ -77,6 +79,7 @@ export class MessageList {
 
   private generateMessageId?: (context?: IdGeneratorContext) => string;
   private _agentNetworkAppend = false;
+  private logger?: IMastraLogger;
 
   // Event recording for observability
   private isRecording = false;
@@ -94,13 +97,20 @@ export class MessageList {
     threadId,
     resourceId,
     generateMessageId,
+    logger,
     // @ts-expect-error Flag for agent network messages
     _agentNetworkAppend,
-  }: { threadId?: string; resourceId?: string; generateMessageId?: (context?: IdGeneratorContext) => string } = {}) {
+  }: {
+    threadId?: string;
+    resourceId?: string;
+    generateMessageId?: (context?: IdGeneratorContext) => string;
+    logger?: IMastraLogger;
+  } = {}) {
     if (threadId) {
       this.memoryInfo = { threadId, resourceId };
     }
     this.generateMessageId = generateMessageId;
+    this.logger = logger;
     this._agentNetworkAppend = _agentNetworkAppend || false;
   }
 
@@ -110,6 +120,23 @@ export class MessageList {
   public startRecording(): void {
     this.isRecording = true;
     this.recordedEvents = [];
+  }
+
+  public hasRecordedEvents(): boolean {
+    return this.recordedEvents.length > 0;
+  }
+
+  public getRecordedEvents(): Array<{
+    type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
+    source?: MessageSource;
+    count?: number;
+    ids?: string[];
+    text?: string;
+    tag?: string;
+    message?: CoreMessageV4;
+  }> {
+    const events = [...this.recordedEvents];
+    return events;
   }
 
   /**
@@ -125,7 +152,7 @@ export class MessageList {
     message?: CoreMessageV4;
   }> {
     this.isRecording = false;
-    const events = [...this.recordedEvents];
+    const events = this.getRecordedEvents();
     this.recordedEvents = [];
     return events;
   }
@@ -339,7 +366,7 @@ export class MessageList {
 
         const messages = [...systemMessages, ...modelMessages];
 
-        return ensureGeminiCompatibleMessages(messages);
+        return ensureGeminiCompatibleMessages(messages, this.logger);
       },
 
       // Used for creating LLM prompt messages without AI SDK streamText/generateText
@@ -354,6 +381,7 @@ export class MessageList {
         },
       ): Promise<LanguageModelV2Prompt> => {
         // Filter incomplete tool calls when sending messages TO the LLM
+        // Stored toModelOutput results from providerMetadata are applied automatically
         const modelMessages = convertAIV5UIToModelMessages(this.all.aiV5.ui(), this.messages, true);
         const systemMessages = convertAIV4CoreToAIV5ModelMessages(
           [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
@@ -410,9 +438,13 @@ export class MessageList {
           });
         }
 
-        messages = ensureGeminiCompatibleMessages(messages);
+        messages = ensureGeminiCompatibleMessages(messages, this.logger);
 
-        return messages.map(aiV5ModelMessageToV2PromptMessage);
+        return messages
+          .map(aiV5ModelMessageToV2PromptMessage)
+          .filter(
+            message => message.role === 'system' || typeof message.content === 'string' || message.content.length > 0,
+          );
       },
     },
 
@@ -431,7 +463,7 @@ export class MessageList {
         const coreMessages = this.all.aiV4.core();
         const messages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
 
-        return ensureGeminiCompatibleMessages(messages);
+        return ensureGeminiCompatibleMessages(messages, this.logger);
       },
 
       // Used for creating LLM prompt messages without AI SDK streamText/generateText
@@ -441,7 +473,7 @@ export class MessageList {
         const systemMessages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
         let messages = [...systemMessages, ...coreMessages];
 
-        messages = ensureGeminiCompatibleMessages(messages);
+        messages = ensureGeminiCompatibleMessages(messages, this.logger);
 
         return messages.map(aiV4CoreMessageToV1PromptMessage);
       },
@@ -595,6 +627,65 @@ export class MessageList {
     return this.stateManager.isNewMessage(messageOrId);
   }
 
+  /**
+   * Replace a tool-invocation part matching the given toolCallId with the
+   * provided result part. Walks backwards through messages to find the match.
+   * If the message was already persisted (e.g. as a memory message), it is
+   * moved to the response source so it will be re-saved.
+   *
+   * @returns true if the tool call was found and updated, false otherwise.
+   */
+  public updateToolInvocation(inputPart: Extract<MastraMessagePart, { type: 'tool-invocation' }>): boolean {
+    if (!inputPart.toolInvocation?.toolCallId) {
+      return false;
+    }
+    const toolCallId = inputPart.toolInvocation.toolCallId;
+
+    for (let m = this.messages.length - 1; m >= 0; m--) {
+      const msg = this.messages[m]!;
+      if (msg.role !== 'assistant' || !msg.content?.parts) continue;
+
+      for (let i = 0; i < msg.content.parts.length; i++) {
+        const part = msg.content.parts[i];
+        if (part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId) {
+          // Cast to access providerExecuted/providerMetadata which exist at runtime but aren't in the base type
+          const originalPart = part as typeof part & { providerExecuted?: boolean; providerMetadata?: unknown };
+          const inputPartWithMeta = inputPart as typeof inputPart & {
+            providerExecuted?: boolean;
+            providerMetadata?: unknown;
+          };
+
+          msg.content.parts[i] = {
+            ...inputPart,
+            toolInvocation: {
+              ...inputPart.toolInvocation,
+              args: part.toolInvocation.args,
+            },
+            // Preserve providerExecuted from original call if not in result
+            ...(originalPart.providerExecuted !== undefined && inputPartWithMeta.providerExecuted === undefined
+              ? { providerExecuted: originalPart.providerExecuted }
+              : {}),
+            // Preserve providerMetadata from original call if not in result
+            ...(originalPart.providerMetadata !== undefined && inputPartWithMeta.providerMetadata === undefined
+              ? { providerMetadata: originalPart.providerMetadata }
+              : {}),
+          };
+
+          // Move the message to the response source so it gets
+          // picked up by drainUnsavedMessages for re-saving.
+          if (!this.stateManager.isResponseMessage(msg)) {
+            this.stateManager.removeMessage(msg);
+            this.stateManager.addToSource(msg, 'response');
+          }
+
+          return true;
+        }
+      }
+    }
+    this.logger?.warn(`updateToolInvocation: no matching tool call found for toolCallId=${toolCallId}`);
+    return false;
+  }
+
   public getSystemMessages(tag?: string): CoreMessageV4[] {
     if (tag) {
       return this.taggedSystemMessages[tag] || [];
@@ -608,6 +699,19 @@ export class MessageList {
    */
   public getAllSystemMessages(): CoreMessageV4[] {
     return [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
+  }
+
+  /**
+   * Clear system messages, optionally for a specific tag
+   * @param tag - If provided, only clears messages with this tag. Otherwise clears untagged messages.
+   */
+  public clearSystemMessages(tag?: string): this {
+    if (tag) {
+      delete this.taggedSystemMessages[tag];
+    } else {
+      this.systemMessages = [];
+    }
+    return this;
   }
 
   /**
@@ -780,16 +884,17 @@ export class MessageList {
         }
       }
     }
-    // If the last message is an assistant message and the new message is also an assistant message, merge them together and update tool calls with results
-    // Use MessageMerger to handle the complex merge logic
+
+    const replacementTarget = exists && id ? this.messages.find(m => m.id === id) : undefined;
+    const hasSealedReplacementTarget = !!replacementTarget && MessageMerger.isSealed(replacementTarget);
+
+    // Keep this replacement-target guard here instead of MessageMerger.shouldMerge().
+    // shouldMerge() only decides whether to append to the latest assistant message,
+    // but replace-by-id can target an older sealed message elsewhere in the list.
     const isLatestFromMemory = latestMessage ? this.memoryMessages.has(latestMessage) : false;
-    const shouldMerge = MessageMerger.shouldMerge(
-      latestMessage,
-      messageV2,
-      messageSource,
-      isLatestFromMemory,
-      this._agentNetworkAppend,
-    );
+    const shouldMerge =
+      !hasSealedReplacementTarget &&
+      MessageMerger.shouldMerge(latestMessage, messageV2, messageSource, isLatestFromMemory, this._agentNetworkAppend);
 
     if (shouldMerge && latestMessage) {
       // Delegate merge logic to MessageMerger
@@ -807,7 +912,79 @@ export class MessageList {
       const existingMessage = existingIndex !== -1 && this.messages[existingIndex];
 
       if (shouldReplace && existingMessage) {
-        this.messages[existingIndex] = messageV2;
+        // If the existing message is sealed (e.g., after observation), don't replace it.
+        // Instead, generate a new ID for the incoming message and add it as a new message.
+        if (MessageMerger.isSealed(existingMessage)) {
+          // Find the last part with sealedAt metadata in the EXISTING message.
+          // The existing message has the seal boundary marker from insertObservationMarker.
+          const existingParts = existingMessage.content?.parts || [];
+          let sealedPartCount = 0;
+
+          for (let i = existingParts.length - 1; i >= 0; i--) {
+            const part = existingParts[i] as { metadata?: { mastra?: { sealedAt?: number } } };
+            if (part?.metadata?.mastra?.sealedAt) {
+              // The seal is at index i, so sealed content is parts 0 through i (inclusive)
+              sealedPartCount = i + 1;
+              break;
+            }
+          }
+
+          // If no sealedAt found, use the entire existing message length as the boundary
+          if (sealedPartCount === 0) {
+            sealedPartCount = existingParts.length;
+          }
+
+          // Get parts from incoming message that are beyond the sealed boundary
+          const incomingParts = messageV2.content.parts;
+
+          let newParts: typeof incomingParts;
+
+          if (incomingParts.length <= sealedPartCount) {
+            // Incoming message has fewer or equal parts than the sealed boundary.
+            // Check if these are truly stale (same content as the sealed message) or
+            // new content flushed independently (e.g., text deltas flushed with the
+            // same messageId but only containing a text part).
+            if (messagesAreEqual(existingMessage, messageV2)) {
+              // Stale message, ignore - don't replace, don't create new
+              return this;
+            }
+            // Not stale — these are fresh parts (e.g., a text flush). Treat all as new.
+            newParts = incomingParts;
+          } else {
+            newParts = incomingParts.slice(sealedPartCount);
+          }
+
+          // Only create a new message if there are actually new parts
+          if (newParts.length > 0) {
+            // Generate a new ID for the incoming message
+            messageV2.id = this.generateMessageId?.({ idType: 'message', source: 'memory' }) ?? randomUUID();
+            // Replace the parts with only the new ones
+            messageV2.content.parts = newParts;
+            // Ensure the new message has a timestamp after the sealed message
+            if (messageV2.createdAt <= existingMessage.createdAt) {
+              messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
+            }
+            this.messages.push(messageV2);
+          }
+          // If no new parts, don't add anything (the sealed message already has all the content)
+        } else {
+          const isExistingFromMemory = this.memoryMessages.has(existingMessage);
+          const shouldMergeIntoExisting = MessageMerger.shouldMerge(
+            existingMessage,
+            messageV2,
+            messageSource,
+            isExistingFromMemory,
+            this._agentNetworkAppend,
+          );
+          if (shouldMergeIntoExisting) {
+            MessageMerger.merge(existingMessage, messageV2);
+            this.pushMessageToSource(existingMessage, messageSource);
+            // Sort messages and return early — existingMessage stays in messages[] and its Sets
+            this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+            return this;
+          }
+          this.messages[existingIndex] = messageV2;
+        }
       } else if (!exists) {
         this.messages.push(messageV2);
       }

@@ -1,13 +1,13 @@
 import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events';
 import type { Mastra } from '../mastra';
-import type { TracingContext } from '../observability';
+import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { InferZodLikeSchema, SchemaWithValidation } from '../stream/base/schema';
+import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
 import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
 import type { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
-import type { StepResult } from './types';
+import type { OutputWriter, StepResult, StepMetadata } from './types';
 import type { Workflow } from './workflow';
 
 export type SuspendOptions = {
@@ -28,7 +28,7 @@ export type ExecuteFunctionParams<
   TSuspend,
   EngineType,
   TRequestContext extends Record<string, any> | unknown = unknown,
-> = {
+> = Partial<ObservabilityContext> & {
   runId: string;
   resourceId?: string;
   workflowId: string;
@@ -40,17 +40,20 @@ export type ExecuteFunctionParams<
   resumeData?: TResume;
   suspendData?: TSuspend;
   retryCount: number;
-  tracingContext: TracingContext;
-  getInitData<T>(): T extends Workflow<any, any, any, any, any, any, any> ? InferZodLikeSchema<T['inputSchema']> : T;
+  getInitData<T>(): T extends Workflow<any, any, any, any, any, any, any, any>
+    ? InferStandardSchemaOutput<T['inputSchema']>
+    : T;
   getStepResult<TOutput>(step: string): TOutput;
   getStepResult<TStep extends Step<string, any, any, any, any, any, EngineType>>(
     step: TStep,
-  ): InferZodLikeSchema<TStep['outputSchema']>;
+  ): InferStandardSchemaOutput<TStep['outputSchema']>;
   suspend: unknown extends TSuspend
     ? (suspendPayload?: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>
     : (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>;
   bail(result: TStepOutput): InnerOutput;
-  bail(result?: unknown): InnerOutput;
+  bail<T>(
+    result: T extends Workflow<any, any, any, any, any, infer TWorkflowOutput, any, any> ? TWorkflowOutput : T,
+  ): InnerOutput;
   abort(): void;
   resume?: {
     steps: string[];
@@ -62,6 +65,7 @@ export type ExecuteFunctionParams<
   engine: EngineType;
   abortSignal: AbortSignal;
   writer: ToolStream;
+  outputWriter?: OutputWriter;
   validateSchemas?: boolean;
 };
 
@@ -153,24 +157,26 @@ export interface Step<
 > {
   id: TStepId;
   description?: string;
-  inputSchema: SchemaWithValidation<TInput>;
-  outputSchema: SchemaWithValidation<TOutput>;
-  resumeSchema?: SchemaWithValidation<TResume>;
-  suspendSchema?: SchemaWithValidation<TSuspend>;
-  stateSchema?: SchemaWithValidation<TState>;
+  inputSchema: StandardSchemaWithJSON<TInput>;
+  outputSchema: StandardSchemaWithJSON<TOutput>;
+  resumeSchema?: StandardSchemaWithJSON<TResume>;
+  suspendSchema?: StandardSchemaWithJSON<TSuspend>;
+  stateSchema?: StandardSchemaWithJSON<TState>;
   /**
    * Optional schema for validating request context values.
    * When provided, the request context will be validated against this schema before step execution.
    */
-  requestContextSchema?: SchemaWithValidation<TRequestContext>;
+  requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   execute: ExecuteFunction<TState, TInput, TOutput, TResume, TSuspend, TEngineType, TRequestContext>;
   scorers?: DynamicArgument<MastraScorers>;
   retries?: number;
   component?: string;
+  metadata?: StepMetadata;
 }
 
 export const getStepResult = (stepResults: Record<string, StepResult<any, any, any, any>>, step: any) => {
   let result;
+
   if (typeof step === 'string') {
     result = stepResults[step];
   } else {

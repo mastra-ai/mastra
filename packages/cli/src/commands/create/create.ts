@@ -28,6 +28,7 @@ export const create = async (args: {
   timeout?: number;
   directory?: string;
   mcpServer?: Editor;
+  skills?: string[];
   template?: string | boolean;
   analytics?: PosthogAnalytics;
 }) => {
@@ -54,6 +55,8 @@ export const create = async (args: {
     timeout: args?.timeout,
     llmProvider: args?.llmProvider,
     llmApiKey: args?.llmApiKey,
+    skills: args?.skills,
+    mcpServer: args?.mcpServer,
     needsInteractive,
   });
   const directory = args.directory || 'src/';
@@ -68,11 +71,22 @@ export const create = async (args: {
       });
     }
 
+    const interactiveComponents: Component[] = ['agents', 'tools', 'workflows', 'scorers'];
+
+    if (analytics) {
+      analytics.trackEvent('cli_components_selected', {
+        components: interactiveComponents,
+        selection_method: 'interactive',
+      });
+    }
+
     await init({
       ...result,
       llmApiKey: result?.llmApiKey as string | undefined,
-      components: ['agents', 'tools', 'workflows', 'scorers'],
+      components: interactiveComponents,
       addExample: true,
+      skills: result?.skills || args.skills,
+      mcpServer: result?.mcpServer || args.mcpServer,
       versionTag: args.createVersionTag,
     });
     postCreate({ projectName });
@@ -82,10 +96,19 @@ export const create = async (args: {
   const { components = [], llmProvider = 'openai', addExample = false, llmApiKey } = args;
 
   // Track model provider selection from CLI args
-  const analytics = getAnalytics();
-  if (analytics) {
-    analytics.trackEvent('cli_model_provider_selected', {
+  const cliAnalytics = getAnalytics();
+  if (cliAnalytics) {
+    cliAnalytics.trackEvent('cli_model_provider_selected', {
       provider: llmProvider,
+      selection_method: 'cli_args',
+    });
+
+    cliAnalytics.trackEvent('cli_components_selected', {
+      components,
+      has_agents: components.includes('agents'),
+      has_tools: components.includes('tools'),
+      has_workflows: components.includes('workflows'),
+      has_scorers: components.includes('scorers'),
       selection_method: 'cli_args',
     });
   }
@@ -96,7 +119,8 @@ export const create = async (args: {
     llmProvider,
     addExample,
     llmApiKey,
-    configureEditorWithDocsMCP: args.mcpServer,
+    skills: args.skills,
+    mcpServer: args.mcpServer,
     versionTag: args.createVersionTag,
   });
 

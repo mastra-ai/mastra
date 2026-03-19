@@ -1,8 +1,8 @@
 import pMap from 'p-map';
-import z from 'zod';
+import z from 'zod/v4';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
-import { InternalSpans } from '../../observability';
-import type { TracingContext } from '../../observability';
+import { InternalSpans, resolveObservabilityContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
 import type { SpanRecord, TraceRecord, MastraStorage } from '../../storage';
 import { createStep, createWorkflow } from '../../workflows/evented';
 import type { MastraScorer, ScorerRun } from '../base';
@@ -22,7 +22,8 @@ const getTraceStep = createStep({
     scorerId: z.string(),
   }),
   outputSchema: z.any(),
-  execute: async ({ inputData, tracingContext, mastra }) => {
+  execute: async ({ inputData, mastra, ...rest }) => {
+    const observabilityContext = resolveObservabilityContext(rest);
     const logger = mastra.getLogger();
     if (!logger) {
       console.warn(
@@ -71,7 +72,7 @@ const getTraceStep = createStep({
       inputData.targets,
       async target => {
         try {
-          await runScorerOnTarget({ storage, scorer, target, tracingContext });
+          await runScorerOnTarget({ storage, scorer, target, ...observabilityContext });
         } catch (error) {
           const mastraError = new MastraError(
             {
@@ -99,13 +100,12 @@ export async function runScorerOnTarget({
   storage,
   scorer,
   target,
-  tracingContext,
+  ...observabilityContext
 }: {
   storage: MastraStorage;
   scorer: MastraScorer;
   target: { traceId: string; spanId?: string };
-  tracingContext: TracingContext;
-}) {
+} & Partial<ObservabilityContext>) {
   // TODO: add storage api to get a single span
   const observabilityStore = await storage.getStore('observability');
   if (!observabilityStore) {
@@ -136,7 +136,7 @@ export async function runScorerOnTarget({
 
   const scorerRun = buildScorerRun({
     scorerType: scorer.type === 'agent' ? 'agent' : undefined,
-    tracingContext,
+    ...observabilityContext,
     trace,
     targetSpan: span,
   });
@@ -148,6 +148,7 @@ export async function runScorerOnTarget({
       id: scorer.id,
       name: scorer.name || scorer.id,
       description: scorer.description,
+      hasJudge: !!scorer.judge,
     },
     traceId: target.traceId,
     spanId: target.spanId,
@@ -162,6 +163,10 @@ export async function runScorerOnTarget({
   await attachScoreToSpan({ storage, span, scoreRecord: savedScoreRecord });
 }
 
+/**
+ * Saves the score to the legacy ScoresStorage domain.
+ * TODO: Remove once all consumers migrate to observability scores (see attachScoreToSpan).
+ */
 async function validateAndSaveScore({ storage, scorerResult }: { storage: MastraStorage; scorerResult: ScorerRun }) {
   const scoresStore = await storage.getStore('scores');
   if (!scoresStore) {
@@ -179,30 +184,37 @@ async function validateAndSaveScore({ storage, scorerResult }: { storage: Mastra
 
 function buildScorerRun({
   scorerType,
-  tracingContext,
   trace,
   targetSpan,
+  ...observabilityContext
 }: {
   scorerType?: string;
-  tracingContext: TracingContext;
   trace: TraceRecord;
   targetSpan: SpanRecord;
-}) {
-  let runPayload: ScorerRun;
+} & Partial<ObservabilityContext>): ScorerRun {
   if (scorerType === 'agent') {
     const { input, output } = transformTraceToScorerInputAndOutput(trace);
-    runPayload = {
-      input,
-      output,
-    };
-  } else {
-    runPayload = { input: targetSpan.input, output: targetSpan.output };
+    return { input, output, ...observabilityContext };
   }
-
-  runPayload.tracingContext = tracingContext;
-  return runPayload;
+  return { input: targetSpan.input, output: targetSpan.output, ...observabilityContext };
 }
 
+/**
+ * Writes the score to the observability domain via two paths, each wrapped in
+ * a try/catch so that one failing doesn't block the other:
+ *
+ * 1. **updateSpan** — attaches a score link to the span record. Works for
+ *    traditional CRUD stores (libsql, pg, etc.) but fails for event-sourced /
+ *    append-only stores (DuckDB) that don't support arbitrary span updates.
+ *
+ * 2. **createScore** — inserts a row into the observability scores table so
+ *    it can be queried via listScores() with traceId/spanId filters. Works for
+ *    stores that implement the new observability scores domain.
+ *
+ * TODO: Once all stores implement createScore and all consumers migrate to
+ * the observability scores domain, remove the updateSpan path (and the old
+ * ScoresStorage.saveScore() call in validateAndSaveScore above).
+ */
 async function attachScoreToSpan({
   storage,
   span,
@@ -221,19 +233,44 @@ async function attachScoreToSpan({
       text: 'Observability storage domain is not available',
     });
   }
-  const existingLinks = span.links || [];
-  const link = {
-    type: 'score',
-    scoreId: scoreRecord.id,
-    scorerName: scoreRecord.scorer.id,
-    score: scoreRecord.score,
-    createdAt: scoreRecord.createdAt,
-  };
-  await observabilityStore.updateSpan({
-    spanId: span.spanId,
-    traceId: span.traceId,
-    updates: { links: [...existingLinks, link] },
-  });
+
+  // Path 1: Legacy — attach score link to span (fails silently on append-only stores)
+  try {
+    const existingLinks = span.links || [];
+    const link = {
+      type: 'score',
+      scoreId: scoreRecord.id,
+      scorerId: scoreRecord.scorerId ?? scoreRecord.scorer?.id,
+      score: scoreRecord.score,
+      createdAt: scoreRecord.createdAt,
+    };
+    await observabilityStore.updateSpan({
+      spanId: span.spanId,
+      traceId: span.traceId,
+      updates: { links: [...existingLinks, link] },
+    });
+  } catch {
+    // Expected for event-sourced stores (e.g. DuckDB) that don't support updateSpan
+  }
+
+  // Path 2: New — write to observability scores table (fails silently on stores that don't implement it yet)
+  try {
+    await observabilityStore.createScore({
+      score: {
+        timestamp: scoreRecord.createdAt ? new Date(scoreRecord.createdAt) : new Date(),
+        traceId: span.traceId,
+        spanId: span.spanId,
+        scorerId: scoreRecord.scorerId ?? (scoreRecord.scorer?.id as string),
+        score: scoreRecord.score,
+        reason: scoreRecord.reason ?? null,
+        experimentId: null,
+        scoreTraceId: null,
+        metadata: scoreRecord.metadata ?? null,
+      },
+    });
+  } catch {
+    // Expected for stores that haven't implemented observability createScore yet
+  }
 }
 
 export const scoreTracesWorkflow = createWorkflow({

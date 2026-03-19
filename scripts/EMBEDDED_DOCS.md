@@ -1,18 +1,18 @@
-# Embedded Documentation for Packages
+# Embedded documentation for packages
 
-This guide explains how embedded documentation works in Mastra packages, enabling coding agents to understand and use the framework effectively.
+This documents explains what `generate-package-docs.ts` does and how to use it.
 
-## Overview
+This script is executed to create `dist/docs` folders inside packages that use it. Inside the `docs` folder is a `SKILL.md` defined that points to `dist/docs/references`. It contains a collection of markdown files with relevant documentation for that package.
 
-Embedded docs are generated from MDX source files and included in published npm packages. They provide:
+The `SKILL.md` follows the [Agent Skill Specification](https://agentskills.io/specification) so that coding agents can understand how to use the package effectively.
 
-- **SKILL.md** - Entry point with navigation instructions
-- **SOURCE_MAP.json** - Machine-readable index of exports → types → implementation
-- **Topic markdown files** - Conceptual documentation with code references
+The documentation files are copied from the `docs`, more specifically the `llms.txt` files that each docs page has. To figure out which package should get which docs, the script uses the `docs/build/llms-manifest.json` file that is generated when building the docs site.
 
-## How It Works
+## How to add docs to a package
 
-Documentation is driven by **frontmatter in MDX files**. When you add a `packages` field to an MDX file, it will be included in that package's embedded docs:
+The `llms-manifest.json` file is generated through the frontmatter in the docs MDX files. The important frontmatter field is `packages`, which is an array of package names that the doc is relevant for.
+
+If not already existent, add the `packages` frontmatter key:
 
 ```yaml
 ---
@@ -24,118 +24,36 @@ packages:
 ---
 ```
 
-The `generate-package-docs.ts` script:
+The entries inside `packages` should match the package names in their `package.json`.
 
-1. Scans all MDX files in `docs/src/content/en/`
-2. Filters files by the `packages` frontmatter field
-3. Groups files into topics based on folder structure
-4. Generates embedded docs in `dist/docs/`
+## How to generate embedded docs for a package
 
-## Adding Docs for a Package
-
-### Step 1: Add `packages` frontmatter to MDX files
-
-Edit the relevant MDX files in `docs/src/content/en/` and add the `packages` field:
-
-```yaml
----
-title: 'Your Doc Title'
-description: 'Description here'
-packages:
-  - '@mastra/your-package'
----
-```
-
-A file can belong to multiple packages - just list them all.
-
-### Step 2: Add `postbuild` script to package.json
+Add a `build:docs` script to the package's `package.json`:
 
 ```json
 {
   "scripts": {
     "build": "your-existing-build-command",
-    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts @mastra/your-package"
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts"
   }
 }
 ```
 
-Adjust the path based on your package location:
+Add the `build:docs` script to the package's `turbo.json` file so that it runs during the build phase:
 
-- `packages/memory` → `../../scripts/generate-package-docs.ts`
-- `stores/libsql` → `../../scripts/generate-package-docs.ts`
-
-### Step 3: Build and verify
-
-```bash
-pnpm build
+```json
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build:docs": {
+      "inputs": ["src/**", "package.json", "!**/*.md"],
+      "outputs": ["dist/docs/**"]
+    },
+    "build": {
+      "dependsOn": ["build:docs"],
+      "inputs": ["package.json"]
+    }
+  }
+}
 ```
-
-Check the generated files in `dist/docs/`:
-
-```
-your-package/dist/docs/
-├── SKILL.md           # Entry point
-├── README.md          # Navigation index
-├── SOURCE_MAP.json    # Machine-readable export index
-└── memory/
-    ├── 01-overview.md
-    ├── 02-message-history.md
-    └── ...
-```
-
-## Topic Organization
-
-Topics are automatically derived from the folder structure:
-
-| MDX Path                        | Topic       |
-| ------------------------------- | ----------- |
-| `reference/memory/overview.mdx` | `memory`    |
-| `docs/agents/overview.mdx`      | `agents`    |
-| `reference/workflows/step.mdx`  | `workflows` |
-
-Files within a topic are sorted: `overview` and `index` files come first, then alphabetically.
-
-## Code References
-
-Code references are **auto-discovered** from the MDX content by scanning for:
-
-1. **Import statements**: `import { Memory } from "@mastra/memory"`
-2. **Inline code**: `` `Memory` ``
-3. **Function calls**: `new Memory(`, `createMemory(`
-
-These are matched against the package's exports in `SOURCE_MAP.json` and linked to their type definitions and implementation files.
-
-## Running the Script
-
-```bash
-# Generate for a specific package
-pnpx tsx scripts/generate-package-docs.ts @mastra/core
-
-# Or use path format
-pnpx tsx scripts/generate-package-docs.ts packages/core
-
-# Generate for all packages with docs
-pnpx tsx scripts/generate-package-docs.ts
-```
-
-## How Agents Use Embedded Docs
-
-### Direct File Access
-
-```bash
-# Read the skill overview
-cat node_modules/@mastra/core/dist/docs/SKILL.md
-
-# Get the source map
-cat node_modules/@mastra/core/dist/docs/SOURCE_MAP.json
-
-# Read a topic
-cat node_modules/@mastra/core/dist/docs/agents/01-overview.md
-
-# Jump to implementation
-cat node_modules/@mastra/core/dist/chunk-*.js | grep -A 50 "var Agent = class"
-```
-
-### Key Insight
-
-Mastra's compiled JavaScript is **unminified and readable**. Agents can read the actual implementation directly from the `.js` chunk files referenced in `SOURCE_MAP.json`.

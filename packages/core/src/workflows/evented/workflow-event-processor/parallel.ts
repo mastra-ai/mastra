@@ -1,7 +1,7 @@
-import EventEmitter from 'node:events';
 import type { StepFlowEntry } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
+import { resolveCurrentState } from '../helpers';
 import type { StepExecutor } from '../step-executor';
 import type { ProcessorArgs } from '.';
 
@@ -19,6 +19,8 @@ export async function processWorkflowParallel(
     parentWorkflow,
     requestContext,
     perStep,
+    state,
+    outputOptions,
   }: ProcessorArgs,
   {
     pubsub,
@@ -28,6 +30,8 @@ export async function processWorkflowParallel(
     step: Extract<StepFlowEntry, { type: 'parallel' }>;
   },
 ) {
+  // Get current state from stepResults or passed state
+  const currentState = resolveCurrentState({ stepResults, state });
   for (let i = 0; i < step.steps.length; i++) {
     const nestedStep = step.steps[i];
     if (nestedStep?.type === 'step') {
@@ -58,6 +62,8 @@ export async function processWorkflowParallel(
             activeSteps,
             requestContext,
             perStep,
+            state: currentState,
+            outputOptions,
           },
         });
       }),
@@ -78,6 +84,8 @@ export async function processWorkflowConditional(
     parentWorkflow,
     requestContext,
     perStep,
+    state,
+    outputOptions,
   }: ProcessorArgs,
   {
     pubsub,
@@ -89,15 +97,19 @@ export async function processWorkflowConditional(
     step: Extract<StepFlowEntry, { type: 'conditional' }>;
   },
 ) {
+  // Get current state from stepResults or passed state
+  const currentState = resolveCurrentState({ stepResults, state });
+
+  // Create a proper RequestContext from the plain object passed in ProcessorArgs
+  const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
+
   const idxs = await stepExecutor.evaluateConditions({
     workflowId,
     step,
     runId,
     stepResults,
-    // TODO: implement state
-    state: {},
-    emitter: new EventEmitter() as any, // TODO
-    requestContext: new RequestContext(), // TODO
+    state: currentState,
+    requestContext: reqContext,
     input: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
   });
@@ -133,6 +145,8 @@ export async function processWorkflowConditional(
         activeSteps,
         requestContext,
         perStep,
+        state: currentState,
+        outputOptions,
       },
     });
   } else {
@@ -158,6 +172,8 @@ export async function processWorkflowConditional(
               activeSteps,
               requestContext,
               perStep,
+              state: currentState,
+              outputOptions,
             },
           });
         } else {
@@ -176,6 +192,8 @@ export async function processWorkflowConditional(
               activeSteps,
               requestContext,
               perStep,
+              state: currentState,
+              outputOptions,
             },
           });
         }

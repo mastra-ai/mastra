@@ -159,6 +159,8 @@ export const createMastraProject = async ({
   timeout,
   llmProvider,
   llmApiKey,
+  skills,
+  mcpServer,
   needsInteractive,
 }: {
   projectName?: string;
@@ -166,6 +168,8 @@ export const createMastraProject = async ({
   timeout?: number;
   llmProvider?: LLMProvider;
   llmApiKey?: string;
+  skills?: string[];
+  mcpServer?: string;
   needsInteractive?: boolean;
 }) => {
   p.intro(color.inverse(' Mastra Create '));
@@ -177,7 +181,7 @@ export const createMastraProject = async ({
       placeholder: 'my-mastra-app',
       defaultValue: 'my-mastra-app',
       validate: value => {
-        if (value.length === 0) return 'Project name cannot be empty';
+        if (!value || value.length === 0) return 'Project name cannot be empty';
         if (fsSync.existsSync(value)) {
           return `A directory named "${value}" already exists. Please choose a different name.`;
         }
@@ -194,7 +198,12 @@ export const createMastraProject = async ({
   if (needsInteractive) {
     result = await interactivePrompt({
       options: { showBanner: false },
-      skip: { llmProvider: llmProvider !== undefined, llmApiKey: llmApiKey !== undefined },
+      skip: {
+        llmProvider: llmProvider !== undefined,
+        llmApiKey: llmApiKey !== undefined,
+        skills: skills !== undefined && skills.length > 0,
+        mcpServer: mcpServer !== undefined,
+      },
     });
   }
   const s = p.spinner();
@@ -298,6 +307,8 @@ export const createMastraProject = async ({
       await exec(`echo .env >> .gitignore`);
       await exec(`echo *.db >> .gitignore`);
       await exec(`echo *.db-* >> .gitignore`);
+      await exec(`echo .netlify >> .gitignore`);
+      await exec(`echo .vercel >> .gitignore`);
     } catch (error) {
       throw new Error(`Failed to create .gitignore: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }

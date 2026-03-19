@@ -33,7 +33,9 @@ export function createFaithfulnessScorer({
   })
     .preprocess({
       description: 'Extract relevant statements from the LLM output',
-      outputSchema: z.array(z.string()),
+      outputSchema: z.object({
+        claims: z.array(z.string()),
+      }),
       createPrompt: ({ run }) => {
         const prompt = createFaithfulnessExtractPrompt({ output: getAssistantMessageFromRunOutput(run.output) ?? '' });
         return prompt;
@@ -52,7 +54,7 @@ export function createFaithfulnessScorer({
           ) ??
           [];
         const prompt = createFaithfulnessAnalyzePrompt({
-          claims: results.preprocessStepResult || [],
+          claims: results.preprocessStepResult?.claims || [],
           context,
         });
         return prompt;

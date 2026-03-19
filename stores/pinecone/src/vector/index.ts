@@ -239,6 +239,16 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     namespace,
     sparseVector,
   }: PineconeQueryVectorParams): Promise<QueryResult[]> {
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('PINECONE', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for Pinecone queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     const index = this.client.Index(indexName).namespace(namespace || '');
 
     const translatedFilter = this.transformFilter(filter) ?? undefined;

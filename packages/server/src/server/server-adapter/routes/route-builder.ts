@@ -1,7 +1,8 @@
+import type { ValidationErrorHook } from '@mastra/core/server';
 import { z } from 'zod';
 import type { ZodObject, ZodRawShape, ZodTypeAny } from 'zod';
 import { generateRouteOpenAPI } from '../openapi-utils';
-import type { InferParams, ResponseType, ServerRoute, ServerRouteHandler } from './index';
+import type { InferParams, ResponseType, RouteSchemas, ServerRoute, ServerRouteHandler } from './index';
 
 /**
  * Extracts parameters matching a Zod schema's shape from a params object.
@@ -79,10 +80,12 @@ export function jsonQueryParam<T extends ZodTypeAny>(schema: T): z.ZodType<z.inf
 
 /**
  * Gets the type name from a Zod schema's internal definition.
- * Works across zod v3 and v4 by checking _def.typeName.
+ * Works across zod v3 and v4 by checking _def.typeName (v3) and _def.type (v4).
  */
 function getZodTypeName(schema: ZodTypeAny): string | undefined {
-  return (schema as any)?._def?.typeName;
+  const schemaAny = schema as any;
+  const def = schemaAny?._def ?? schemaAny?.def;
+  return def?.typeName ?? def?.type;
 }
 
 /**
@@ -99,14 +102,27 @@ function isComplexType(schema: ZodTypeAny): boolean {
   let inner: ZodTypeAny = schema;
   let typeName = getZodTypeName(inner);
 
-  while (typeName === 'ZodOptional' || typeName === 'ZodNullable') {
-    // Access innerType directly from _def to avoid version-specific method differences
-    inner = (inner as any)._def.innerType;
+  while (
+    typeName === 'ZodOptional' ||
+    typeName === 'ZodNullable' ||
+    typeName === 'optional' ||
+    typeName === 'nullable'
+  ) {
+    // Access innerType from internals to avoid version-specific method differences
+    const innerDef = (inner as any)._def ?? (inner as any).def;
+    inner = innerDef.innerType;
     typeName = getZodTypeName(inner);
   }
 
   // Complex types that need JSON parsing
-  return typeName === 'ZodArray' || typeName === 'ZodRecord' || typeName === 'ZodObject';
+  return (
+    typeName === 'ZodArray' ||
+    typeName === 'ZodRecord' ||
+    typeName === 'ZodObject' ||
+    typeName === 'array' ||
+    typeName === 'record' ||
+    typeName === 'object'
+  );
 }
 
 /**
@@ -134,15 +150,17 @@ function isComplexType(schema: ZodTypeAny): boolean {
  * ```
  */
 export function wrapSchemaForQueryParams<T extends ZodRawShape>(schema: ZodObject<T>): ZodObject<ZodRawShape> {
-  const newShape: ZodRawShape = {};
+  const newShape: Record<string, ZodTypeAny> = {};
 
-  for (const [key, fieldSchema] of Object.entries(schema.shape)) {
-    if (isComplexType(fieldSchema as ZodTypeAny)) {
+  // schema.shape is Readonly in Zod v4, so we need to create a mutable copy
+  const shape = schema.shape as unknown as Record<string, ZodTypeAny>;
+  for (const [key, fieldSchema] of Object.entries(shape)) {
+    if (isComplexType(fieldSchema)) {
       // Wrap complex types to accept JSON strings
-      newShape[key] = jsonQueryParam(fieldSchema as ZodTypeAny);
+      newShape[key] = jsonQueryParam(fieldSchema);
     } else {
       // Keep simple types as-is
-      newShape[key] = fieldSchema as ZodTypeAny;
+      newShape[key] = fieldSchema;
     }
   }
 
@@ -155,9 +173,11 @@ interface RouteConfig<
   TBodySchema extends z.ZodTypeAny | undefined = undefined,
   TResponseSchema extends z.ZodTypeAny | undefined = undefined,
   TResponseType extends ResponseType = 'json',
+  TMethod extends string = string,
+  TPath extends string = string,
 > {
-  method: ServerRoute['method'];
-  path: string;
+  method: TMethod;
+  path: TPath;
   responseType: TResponseType;
   streamFormat?: 'sse' | 'stream'; // Only used when responseType is 'stream'
   handler: ServerRouteHandler<
@@ -175,10 +195,38 @@ interface RouteConfig<
   deprecated?: boolean;
   maxBodySize?: number;
   requiresAuth?: boolean; // Explicit auth requirement for this route
+  /**
+   * Permission required to access this route (EE feature).
+   * If set, the user must have this permission to access the route.
+   * Uses the format: `resource:action` or `resource:action:resourceId`
+   */
+  requiresPermission?: string;
+  onValidationError?: ValidationErrorHook;
 }
 
 /**
  * Creates a server route with auto-generated OpenAPI specification and type-safe handler inference.
+ *
+ * ## Permission System
+ *
+ * Routes use a convention-based permission system. Permissions are automatically derived
+ * from the route path and method using the format: `{resource}:{action}`
+ *
+ * - **resource**: First path segment (e.g., 'agents', 'workflows', 'memory')
+ * - **action**: Derived from HTTP method:
+ *   - GET → 'read'
+ *   - POST → 'write' (or 'execute' for operation endpoints like /generate, /stream)
+ *   - PUT/PATCH → 'write'
+ *   - DELETE → 'delete'
+ *
+ * ### Examples:
+ * - `GET /agents/:id` → `agents:read`
+ * - `POST /agents/:id/generate` → `agents:execute`
+ * - `DELETE /workflows/:id` → `workflows:delete`
+ *
+ * ### Overriding:
+ * - Use `requiresPermission` to explicitly set a custom permission
+ * - Use `createPublicRoute()` for routes that should bypass auth entirely
  *
  * The handler parameters are automatically inferred from the provided schemas:
  * - pathParamSchema: Infers path parameter types (e.g., :agentId)
@@ -191,6 +239,7 @@ interface RouteConfig<
  *
  * @example
  * ```typescript
+ * // Protected route (default) - permission auto-derived as 'agents:read'
  * export const getAgentRoute = createRoute({
  *   method: 'GET',
  *   path: '/agents/:agentId',
@@ -198,13 +247,19 @@ interface RouteConfig<
  *   pathParamSchema: z.object({ agentId: z.string() }),
  *   responseSchema: serializedAgentSchema,
  *   handler: async ({ agentId, mastra, requestContext }) => {
- *     // agentId is typed as string
- *     // mastra, requestContext, tools, taskStore are always available
  *     return mastra.getAgentById(agentId);
  *   },
  *   summary: 'Get agent by ID',
- *   description: 'Returns details for a specific agent',
  *   tags: ['Agents'],
+ * });
+ *
+ * // Protected route with explicit permission override
+ * export const adminRoute = createRoute({
+ *   method: 'POST',
+ *   path: '/agents/:agentId/admin-action',
+ *   responseType: 'json',
+ *   requiresPermission: 'agents:admin', // Override derived 'agents:write'
+ *   handler: async (ctx) => { ... },
  * });
  * ```
  */
@@ -214,14 +269,20 @@ export function createRoute<
   TBodySchema extends z.ZodTypeAny | undefined = undefined,
   TResponseSchema extends z.ZodTypeAny | undefined = undefined,
   TResponseType extends ResponseType = 'json',
+  TMethod extends string = string,
+  TPath extends string = string,
 >(
-  config: RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema, TResponseType>,
+  config: RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema, TResponseType, TMethod, TPath>,
 ): ServerRoute<
   InferParams<TPathSchema, TQuerySchema, TBodySchema>,
   TResponseSchema extends z.ZodTypeAny ? z.infer<TResponseSchema> : unknown,
-  TResponseType
+  TResponseType,
+  RouteSchemas<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema>,
+  TMethod,
+  TPath
 > {
-  const { summary, description, tags, deprecated, requiresAuth, ...baseRoute } = config;
+  const { summary, description, tags, deprecated, requiresAuth, requiresPermission, onValidationError, ...baseRoute } =
+    config;
 
   // Generate OpenAPI specification from the route config
   // Skip OpenAPI generation for 'ALL' method as it doesn't map to OpenAPI
@@ -243,8 +304,73 @@ export function createRoute<
 
   return {
     ...baseRoute,
-    openapi: openapi as any,
+    openapi,
     deprecated,
     requiresAuth,
+    requiresPermission,
+    onValidationError,
   };
+}
+
+/**
+ * Creates a public server route that bypasses authentication and authorization.
+ *
+ * Use this for routes that must be accessible without authentication, such as:
+ * - Auth endpoints (login, logout, OAuth callbacks)
+ * - Health checks
+ * - Public API endpoints
+ *
+ * This is equivalent to calling `createRoute({ ...config, requiresAuth: false })`.
+ *
+ * @param config - Route configuration (same as createRoute, but requiresAuth is forced to false)
+ * @returns Complete ServerRoute marked as public
+ *
+ * @example
+ * ```typescript
+ * // Public route - no authentication required
+ * export const healthCheckRoute = createPublicRoute({
+ *   method: 'GET',
+ *   path: '/health',
+ *   responseType: 'json',
+ *   handler: async () => ({ status: 'ok' }),
+ *   summary: 'Health check',
+ *   tags: ['System'],
+ * });
+ *
+ * // Auth callback - must be public for OAuth flow
+ * export const ssoCallbackRoute = createPublicRoute({
+ *   method: 'GET',
+ *   path: '/auth/sso/callback',
+ *   responseType: 'datastream-response',
+ *   handler: async (ctx) => { ... },
+ *   summary: 'Handle SSO callback',
+ *   tags: ['Auth'],
+ * });
+ * ```
+ */
+export function createPublicRoute<
+  TPathSchema extends z.ZodTypeAny | undefined = undefined,
+  TQuerySchema extends z.ZodTypeAny | undefined = undefined,
+  TBodySchema extends z.ZodTypeAny | undefined = undefined,
+  TResponseSchema extends z.ZodTypeAny | undefined = undefined,
+  TResponseType extends ResponseType = 'json',
+  TMethod extends string = string,
+  TPath extends string = string,
+>(
+  config: Omit<
+    RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema, TResponseType, TMethod, TPath>,
+    'requiresAuth'
+  >,
+): ServerRoute<
+  InferParams<TPathSchema, TQuerySchema, TBodySchema>,
+  TResponseSchema extends z.ZodTypeAny ? z.infer<TResponseSchema> : unknown,
+  TResponseType,
+  RouteSchemas<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema>,
+  TMethod,
+  TPath
+> {
+  return createRoute({
+    ...config,
+    requiresAuth: false,
+  });
 }

@@ -13,9 +13,11 @@ import { type LlmsTxtPluginOptions, resolveOptions, validateOptions } from './op
 import { CacheManager, computeHash } from './cache-manager'
 import { processHtml } from './html-processor'
 import { generateRootLlmsTxt, writeLlmsTxt, type RouteEntry } from './output-generator'
+import { generateManifest, writeManifest } from './manifest-generator'
 
 const PLUGIN_NAME = 'docusaurus-plugin-llms-txt'
 const CONCURRENCY = 10
+const PLUGIN_DIR = path.dirname(new URL(import.meta.url).pathname)
 
 export default function pluginLlmsTxt(_context: LoadContext, userOptions: LlmsTxtPluginOptions): Plugin {
   // Validate and resolve options
@@ -32,7 +34,8 @@ export default function pluginLlmsTxt(_context: LoadContext, userOptions: LlmsTx
 
       // Initialize cache (store in node_modules/.cache to persist across builds)
       const cacheDir = path.join(siteDir, 'node_modules', '.cache', 'llms-txt')
-      const cache = new CacheManager(cacheDir, options.enableCache)
+      const pluginHash = await computePluginHash()
+      const cache = new CacheManager(cacheDir, options.enableCache, pluginHash)
       await cache.load()
 
       // Find all index.html files
@@ -102,6 +105,10 @@ export default function pluginLlmsTxt(_context: LoadContext, userOptions: LlmsTx
       // Filter out null results
       const validRoutes = results.filter((r): r is RouteEntry => r !== null)
 
+      // Generate llms-manifest.json mapping packages to their documentation
+      const manifest = await generateManifest(validRoutes, siteDir, outDir)
+      await writeManifest(manifest, outDir)
+
       // Generate root llms.txt
       await generateRootLlmsTxt(outDir, siteDir)
 
@@ -148,6 +155,22 @@ async function mapConcurrent<T, R>(items: T[], concurrency: number, fn: (item: T
   await Promise.all(workers)
 
   return results
+}
+
+/**
+ * Compute a hash of all plugin source files to invalidate cache when plugin code changes
+ */
+async function computePluginHash(): Promise<string> {
+  const pluginFiles = await glob('*.ts', { cwd: PLUGIN_DIR })
+  const contents: string[] = []
+
+  for (const file of pluginFiles.sort()) {
+    const filePath = path.join(PLUGIN_DIR, file)
+    const content = await fs.readFile(filePath, 'utf-8')
+    contents.push(content)
+  }
+
+  return computeHash(contents.join(''))
 }
 
 // Export types for external use

@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { Plus } from 'lucide-react';
 import {
   Header,
   HeaderTitle,
@@ -13,19 +11,21 @@ import {
   useAgents,
   AgentsTable,
   AgentIcon,
-  CreateAgentDialog,
-  useExperimentalFeatures,
+  useIsCmsAvailable,
+  usePermissions,
 } from '@mastra/playground-ui';
+import { Plus } from 'lucide-react';
 
 function Agents() {
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const { Link, navigate, paths } = useLinkComponent();
-  const { data: agents = {}, isLoading } = useAgents();
-  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
+  const { Link, navigate } = useLinkComponent();
+  const { data: agents = {}, isLoading, error } = useAgents();
+  const { isCmsAvailable } = useIsCmsAvailable();
+  const { canEdit } = usePermissions();
 
-  const handleAgentCreated = (agentId: string) => {
-    setIsCreateDialogOpen(false);
-    navigate(`${paths.agentLink(agentId)}/chat`);
+  const canCreateAgent = isCmsAvailable && canEdit('stored-agents');
+
+  const handleCreateClick = () => {
+    navigate('/cms/agents/create');
   };
 
   return (
@@ -39,18 +39,14 @@ function Agents() {
         </HeaderTitle>
 
         <HeaderAction>
-          {experimentalFeaturesEnabled && (
-            <Button variant="light" onClick={() => setIsCreateDialogOpen(true)}>
-              <Icon>
-                <Plus />
-              </Icon>
-              Create Agent
+          {canCreateAgent && (
+            <Button as={Link} to="/cms/agents/create">
+              <Plus />
+              Create an agent
             </Button>
           )}
-          <Button variant="outline" as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
+          <Button variant="ghost" size="md" as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
+            <DocsIcon />
             Agents documentation
           </Button>
         </HeaderAction>
@@ -60,17 +56,10 @@ function Agents() {
         <AgentsTable
           agents={agents}
           isLoading={isLoading}
-          onCreateClick={experimentalFeaturesEnabled ? () => setIsCreateDialogOpen(true) : undefined}
+          error={error}
+          onCreateClick={canCreateAgent ? handleCreateClick : undefined}
         />
       </MainContentContent>
-
-      {experimentalFeaturesEnabled && (
-        <CreateAgentDialog
-          open={isCreateDialogOpen}
-          onOpenChange={setIsCreateDialogOpen}
-          onSuccess={handleAgentCreated}
-        />
-      )}
     </MainContentLayout>
   );
 }

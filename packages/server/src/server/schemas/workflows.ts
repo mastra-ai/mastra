@@ -37,6 +37,7 @@ const serializedStepSchema = z.object({
   suspendSchema: z.string().optional(),
   component: z.string().optional(),
   isWorkflow: z.boolean().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**
@@ -76,7 +77,7 @@ export const listWorkflowsResponseSchema = z.record(z.string(), workflowInfoSche
 const workflowRunSchema = z.object({
   workflowName: z.string(),
   runId: z.string(),
-  snapshot: z.union([z.object({}), z.string()]),
+  snapshot: z.union([z.record(z.string(), z.any()), z.string()]),
   createdAt: z.date(),
   updatedAt: z.date(),
   resourceId: z.string().optional(),

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { SelectField } from './select-field';
 
 const meta: Meta<typeof SelectField> = {
-  title: 'Elements/SelectField',
+  title: 'Elements/FormFields/SelectField',
   component: SelectField,
   parameters: {
     layout: 'centered',
@@ -37,6 +37,16 @@ const fruitOptions = [
 ];
 
 export const Default: Story = {
+  args: {
+    name: 'example',
+    label: 'Select an Option',
+    options: sampleOptions,
+    placeholder: 'Choose an option...',
+    onValueChange: (value: string) => console.log('Selected:', value),
+  },
+};
+
+export const ExperimentalVariant: Story = {
   args: {
     name: 'example',
     label: 'Select an Option',

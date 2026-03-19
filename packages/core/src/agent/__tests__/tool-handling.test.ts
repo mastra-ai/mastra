@@ -8,11 +8,10 @@ import { describe, expect, it } from 'vitest';
 import z from 'zod';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
-import { getOpenAIModel, getSingleDummyResponseModel } from './mock-model';
+import { getSingleDummyResponseModel } from './mock-model';
 
 function toolhandlingTests(version: 'v1' | 'v2' | 'v3') {
   const dummyModel = getSingleDummyResponseModel(version);
-  const openaiModel = getOpenAIModel(version);
 
   describe(`${version} - agent tool handling`, () => {
     it('should handle tool name collisions caused by formatting', async () => {
@@ -465,7 +464,7 @@ function toolhandlingTests(version: 'v1' | 'v2' | 'v3') {
         id: 'orchestrator-agent',
         name: 'orchestrator-agent',
         instructions: 'You can delegate to sub-agents.',
-        model: openaiModel,
+        model: dummyModel,
         agents: {
           subAgent,
         },
@@ -486,55 +485,111 @@ function toolhandlingTests(version: 'v1' | 'v2' | 'v3') {
       expect(receivedRequestContext?.get('test-key')).toBe('test-value');
     });
 
-    it('should expose sub-agents as tools when using generate/stream', async () => {
-      // Create a research agent that will be used as a tool
-      const researchAgent = new Agent({
-        id: 'research-agent',
-        name: 'research-agent',
-        instructions: 'You are a research agent. Provide concise, factual information.',
+    it('should create agent tools for sub-agents with defaultOptions.memory', async () => {
+      // Create a sub-agent with its own defaultOptions.memory
+      const subAgent = new Agent({
+        id: 'sub-agent-with-memory',
+        name: 'sub-agent-with-memory',
+        instructions: 'You are a sub-agent with custom memory config.',
         model: dummyModel,
-      });
-
-      // Create an orchestrator agent that has access to the research agent
-      const orchestratorAgent = new Agent({
-        id: 'orchestrator-agent',
-        name: 'orchestrator-agent',
-        instructions: 'You can delegate research tasks to specialized agents.',
-        model: openaiModel,
-        agents: {
-          researchAgent,
+        defaultOptions: {
+          memory: {
+            thread: 'custom-thread',
+            resource: 'custom-resource',
+          },
         },
       });
 
-      let result;
-      let toolCalls;
-
-      if (version === 'v1') {
-        result = await orchestratorAgent.generateLegacy('Use the research agent to find information about TypeScript', {
-          maxSteps: 2,
-          toolChoice: 'required',
-        });
-        toolCalls = result.toolResults;
-      } else {
-        result = await orchestratorAgent.generate('Use the research agent to find information about TypeScript');
-        toolCalls = result.toolResults;
-      }
-
-      // Verify that the research agent was called as a tool
-      expect(toolCalls.length).toBeGreaterThan(0);
-
-      const agentToolCall =
-        version === 'v1'
-          ? toolCalls.find((tc: any) => tc.toolName === 'agent-researchAgent')
-          : toolCalls.find((tc: any) => tc.payload?.toolName === 'agent-researchAgent');
-
-      expect(version === 'v1' ? toolCalls[0]?.result : toolCalls[0]?.payload?.result).toStrictEqual({
-        ...(version === 'v1' ? {} : { subAgentResourceId: expect.any(String), subAgentThreadId: expect.any(String) }),
-        text: 'Dummy response',
+      // Create an orchestrator agent
+      const orchestratorAgent = new Agent({
+        id: 'orchestrator-agent',
+        name: 'orchestrator-agent',
+        instructions: 'You can delegate to sub-agents.',
+        model: dummyModel,
+        agents: {
+          subAgent,
+        },
       });
 
-      expect(agentToolCall).toBeDefined();
-    }, 50000);
+      // Verify the agent tool is created with proper configuration
+      const tools = await orchestratorAgent['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'generate',
+        threadId: 'parent-thread',
+        resourceId: 'parent-resource',
+      });
+
+      expect(tools['agent-subAgent']).toBeDefined();
+    });
+
+    it('should create agent tools for sub-agents without defaultOptions', async () => {
+      // Create a sub-agent WITHOUT defaultOptions
+      const subAgent = new Agent({
+        id: 'sub-agent-no-options',
+        name: 'sub-agent-no-options',
+        instructions: 'You are a sub-agent without default options.',
+        model: dummyModel,
+      });
+
+      // Create an orchestrator agent
+      const orchestratorAgent = new Agent({
+        id: 'orchestrator-agent',
+        name: 'orchestrator-agent',
+        instructions: 'You can delegate to sub-agents.',
+        model: dummyModel,
+        agents: {
+          subAgent,
+        },
+      });
+
+      // This should not throw - convertTools should handle missing defaultOptions gracefully
+      const tools = await orchestratorAgent['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'generate',
+        threadId: 'parent-thread',
+        resourceId: 'parent-resource',
+      });
+
+      // Verify the agent tool was created
+      expect(tools['agent-subAgent']).toBeDefined();
+    });
+
+    it('should create agent tools for sub-agents with function-based defaultOptions', async () => {
+      // Create a sub-agent with function-based defaultOptions
+      const subAgent = new Agent({
+        id: 'sub-agent-fn-options',
+        name: 'sub-agent-fn-options',
+        instructions: 'You are a sub-agent with function-based options.',
+        model: dummyModel,
+        defaultOptions: ({ requestContext }) => ({
+          memory: {
+            thread: `thread-${requestContext.get('userId') || 'default'}`,
+            resource: 'custom-resource',
+          },
+        }),
+      });
+
+      // Create an orchestrator agent
+      const orchestratorAgent = new Agent({
+        id: 'orchestrator-agent',
+        name: 'orchestrator-agent',
+        instructions: 'You can delegate to sub-agents.',
+        model: dummyModel,
+        agents: {
+          subAgent,
+        },
+      });
+
+      // Verify the agent tool is created successfully
+      const tools = await orchestratorAgent['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'generate',
+        threadId: 'parent-thread',
+        resourceId: 'parent-resource',
+      });
+
+      expect(tools['agent-subAgent']).toBeDefined();
+    });
   });
 }
 
