@@ -475,13 +475,34 @@ export function ExperimentResultsPanel({
 
                   {/* Output or Error */}
                   {hasError ? (
-                    <div className="space-y-1">
-                      <Txt variant="ui-xs" className="text-red-400 font-medium">
-                        Error
-                      </Txt>
-                      <pre className="text-xs text-red-300 bg-surface1 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
-                        {formatResultValue(result.error)}
-                      </pre>
+                    <div className="space-y-2">
+                      <div className="space-y-1">
+                        <Txt variant="ui-xs" className="text-red-400 font-medium">
+                          Error
+                        </Txt>
+                        <pre className="text-xs text-red-300 bg-surface1 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
+                          {formatResultValue(result.error)}
+                        </pre>
+                      </div>
+                      {result.traceId && (
+                        <div className="flex items-center gap-2">
+                          <Txt variant="ui-xs" className="text-neutral3 font-medium">
+                            Trace
+                          </Txt>
+                          <Txt variant="ui-xs" className="text-neutral2 font-mono truncate">
+                            {result.traceId}
+                          </Txt>
+                          <CopyButton content={result.traceId} tooltip="Copy trace ID" size="sm" />
+                          <button
+                            type="button"
+                            onClick={() => setViewingTraceId(result.traceId!)}
+                            className="flex items-center gap-1 text-xs text-accent1 hover:text-accent2 transition-colors cursor-pointer"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            View Trace
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <ResultOutputSection
