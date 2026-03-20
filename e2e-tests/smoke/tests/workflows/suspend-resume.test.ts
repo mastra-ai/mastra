@@ -9,6 +9,11 @@ describe('suspend/resume workflows', () => {
       });
 
       expect(data.status).toBe('suspended');
+      expect(data.suspended).toEqual([['await-approval']]);
+      expect(data.suspendPayload).toHaveProperty('await-approval');
+      expect(data.suspendPayload['await-approval']).toMatchObject({
+        message: expect.stringContaining('report'),
+      });
     });
 
     it('should resume with data and complete', async () => {
@@ -49,6 +54,11 @@ describe('suspend/resume workflows', () => {
       });
 
       expect(data.status).toBe('suspended');
+      expect(data.suspended).toEqual([['suspend-branch-a'], ['suspend-branch-b']]);
+      expect(data.suspendPayload).toEqual({
+        'suspend-branch-a': { branch: 'A' },
+        'suspend-branch-b': { branch: 'B' },
+      });
     });
 
     it('should resume individual branches by step ID', async () => {
@@ -62,6 +72,9 @@ describe('suspend/resume workflows', () => {
         resumeData: { dataA: 'value-a' },
       });
 
+      // After resuming A, B is still suspended
+      expect(afterA.status).toBe('suspended');
+
       // Resume branch B
       const { data: afterB } = await resumeWorkflow('parallel-suspend', runId, {
         step: 'suspend-branch-b',
@@ -69,9 +82,10 @@ describe('suspend/resume workflows', () => {
       });
 
       expect(afterB.status).toBe('success');
-      const resultStr = JSON.stringify(afterB.result);
-      expect(resultStr).toContain('value-a');
-      expect(resultStr).toContain('value-b');
+      expect(afterB.result).toEqual({
+        'suspend-branch-a': { branchA: 'value-a' },
+        'suspend-branch-b': { branchB: 'value-b' },
+      });
     });
   });
 

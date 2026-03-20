@@ -54,6 +54,7 @@ describe('API endpoint variants', () => {
       // Poll until complete
       const run = await pollWorkflowRun('basic-suspend', runId, ['success']);
       expect(run.status).toBe('success');
+      expect(run.result).toEqual({ result: 'sync-resume-test approved' });
     });
   });
 
@@ -66,9 +67,12 @@ describe('API endpoint variants', () => {
       });
       expect(createRes.status).toBe(200);
 
-      // The run should exist with a pending-like state
-      const { data } = await fetchJson<any>(`/api/workflows/sequential-steps/runs/${runId}`);
+      // The run should exist
+      const { status, data } = await fetchJson<any>(`/api/workflows/sequential-steps/runs/${runId}`);
+      expect(status).toBe(200);
       expect(data.runId).toBe(runId);
+      // Pre-created runs should not yet have a success/failed status
+      expect(data.status).not.toBe('success');
     });
   });
 
@@ -78,7 +82,21 @@ describe('API endpoint variants', () => {
         inputData: { name: 'legacy-stream-test' },
       });
 
-      expect(chunks.length).toBeGreaterThan(0);
+      // Legacy format uses short type names: start, step-start, step-result, step-finish, finish
+      const types = chunks.map((c: any) => c.type);
+      expect(types[0]).toBe('start');
+      expect(types[types.length - 1]).toBe('finish');
+      expect(types).toContain('step-result');
+
+      // Should have step results for each of the 3 steps
+      const stepResults = chunks.filter((c: any) => c.type === 'step-result');
+      expect(stepResults.length).toBe(3);
+
+      // Final step result should contain the combined message
+      const lastStepResult = stepResults[stepResults.length - 1];
+      expect(lastStepResult.payload.output).toEqual({
+        message: 'Hello, legacy-stream-test! Goodbye, legacy-stream-test!',
+      });
     });
   });
 
@@ -89,13 +107,23 @@ describe('API endpoint variants', () => {
         inputData: { name: 'Alice' },
       });
 
-      // Time-travel via stream
+      // Time-travel via stream from add-farewell step with new input
       const { chunks } = await streamTimeTravelWorkflow('sequential-steps', runId, {
         step: 'add-farewell',
         inputData: { name: 'Charlie', greeting: 'Hey Charlie!' },
       });
 
-      expect(chunks.length).toBeGreaterThan(0);
+      const types = chunks.map((c: any) => c.type);
+      expect(types[0]).toBe('workflow-start');
+      expect(types[types.length - 1]).toBe('workflow-finish');
+
+      // The final result should contain Charlie's data
+      const finish = chunks[chunks.length - 1];
+      expect(finish.payload.workflowStatus).toBe('success');
+
+      const stepResults = chunks.filter((c: any) => c.type === 'workflow-step-result');
+      const lastResult = stepResults[stepResults.length - 1];
+      expect(lastResult.payload.output.message).toContain('Charlie');
     });
   });
 

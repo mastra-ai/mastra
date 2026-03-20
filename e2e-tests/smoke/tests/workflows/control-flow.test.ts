@@ -9,8 +9,9 @@ describe('control flow workflows', () => {
       });
 
       expect(data.status).toBe('success');
-      // Branch result may be wrapped by step ID or direct
-      expect(JSON.stringify(data.result)).toContain('Positive: 42');
+      expect(data.result).toEqual({
+        'handle-positive': { result: 'Positive: 42' },
+      });
     });
 
     it('should take the negative branch for negative values', async () => {
@@ -19,7 +20,9 @@ describe('control flow workflows', () => {
       });
 
       expect(data.status).toBe('success');
-      expect(JSON.stringify(data.result)).toContain('Negative: -7');
+      expect(data.result).toEqual({
+        'handle-negative': { result: 'Negative: -7' },
+      });
     });
   });
 
@@ -30,11 +33,11 @@ describe('control flow workflows', () => {
       });
 
       expect(data.status).toBe('success');
-      // Parallel results are keyed by step ID
-      const resultStr = JSON.stringify(data.result);
-      expect(resultStr).toContain('25'); // square
-      expect(resultStr).toContain('10'); // double
-      expect(resultStr).toContain('-5'); // negated
+      expect(data.result).toEqual({
+        'compute-square': { square: 25 },
+        'compute-double': { double: 10 },
+        'compute-negate': { negated: -5 },
+      });
     });
   });
 
@@ -67,10 +70,11 @@ describe('control flow workflows', () => {
       });
 
       expect(data.status).toBe('success');
-      const resultStr = JSON.stringify(data.result);
-      expect(resultStr).toContain('HELLO');
-      expect(resultStr).toContain('WORLD');
-      expect(resultStr).toContain('TEST');
+      expect(data.result).toEqual([
+        { processed: 'HELLO' },
+        { processed: 'WORLD' },
+        { processed: 'TEST' },
+      ]);
     });
   });
 });
