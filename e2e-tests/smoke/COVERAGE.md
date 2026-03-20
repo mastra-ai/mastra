@@ -1,6 +1,6 @@
 # Smoke Test Coverage
 
-> 140 tests across 31 test files — last updated 2026-03-20
+> 147 tests across 32 test files — last updated 2026-03-20
 
 ## What's Tested
 
@@ -200,6 +200,19 @@
 
 ---
 
+### Observability (7 tests, 1 file)
+
+#### Traces (`traces.test.ts` — 7 tests)
+- [x] List spans with pagination (total, page, perPage, hasMore)
+- [x] Span shape — traceId (hex32), spanId (hex16), name, spanType, startedAt
+- [x] Workflow spans present — entityType, entityId, name pattern
+- [x] Successful workflow spans with timing (startedAt ≤ endedAt)
+- [x] Pagination — page 0 and page 1 return distinct spans
+- [x] Get trace by ID — all spans share traceId, span shape verified
+- [x] 404 for non-existent trace
+
+---
+
 ### Memory (14 tests, 3 files)
 
 #### Threads (`threads.test.ts` — 6 tests)
@@ -252,15 +265,20 @@
 
 **Requires:** Embedder config (e.g., `@mastra/openai`) + vector store (LibSQL or PG).
 
-### Logs & Observability (0 coverage)
+### Logs (0 coverage)
 
 | Endpoint | Notes | Priority |
 |----------|-------|----------|
 | `GET /logs/transports` | List log transports | Medium |
 | `GET /logs` | List logs | Medium |
 | `GET /logs/:runId` | Get logs for a run | Medium |
-| `GET /observability/traces` | List traces | Low |
-| `GET /observability/traces/:traceId` | Get trace | Low |
+
+**Requires:** Logger with transports configured.
+
+### Observability — Untested Endpoints
+
+| Endpoint | Notes | Priority |
+|----------|-------|----------|
 | `POST /observability/traces/score` | Score a trace | Low |
 | `POST /observability/metrics/*` | Aggregate, breakdown, timeseries, percentiles | Low |
 | `GET /observability/discovery/*` | Metric names, labels, entity types, etc. | Low |
