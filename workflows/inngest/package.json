@@ -1,6 +1,6 @@
 {
   "name": "@mastra/inngest",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "Mastra Inngest integration",
   "type": "module",
   "main": "dist/index.js",
@@ -34,6 +34,7 @@
   "dependencies": {
     "@inngest/realtime": "^0.4.6",
     "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/core": "^1.30.0",
     "inngest": "^3.52.6"
   },
   "devDependencies": {
@@ -50,7 +51,7 @@
     "@types/express": "^5.0.6",
     "@types/koa": "^3.0.1",
     "@types/koa-bodyparser": "^4.3.13",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ai": "^4.3.19",

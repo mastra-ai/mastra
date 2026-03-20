@@ -43,6 +43,7 @@ export function TraceAsItemDialog({ traceDetails, traceId, isOpen, onClose, leve
       isOpen={isOpen}
       onClose={onClose}
       level={level}
+      source={traceId ? { type: 'trace', referenceId: traceId } : undefined}
     />
   );
 }

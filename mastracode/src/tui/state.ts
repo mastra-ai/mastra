@@ -28,7 +28,7 @@ import type { SubagentExecutionComponent } from './components/subagent-execution
 import type { TaskProgressComponent } from './components/task-progress.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import type { UserMessageComponent } from './components/user-message.js';
-import { getEditorTheme } from './theme.js';
+import { getEditorTheme, TERM_WIDTH_BUFFER } from './theme.js';
 // =============================================================================
 // MastraTUIOptions
 // =============================================================================
@@ -115,10 +115,18 @@ export interface TUIState {
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
   pendingNewThread: boolean;
+  /** Current thread title (for display in status line) */
+  currentThreadTitle?: string;
+  /** Cached thread previews for the current TUI session */
+  threadPreviewCache: Map<string, { preview: string; updatedAt: number }>;
+  /** Threads whose preview lookup already returned empty during this session */
+  attemptedThreadPreviewIds: Set<string>;
 
   // ── Inline interaction ────────────────────────────────────────────────
-  /** Track the most recent ask_user tool for inline question placement */
-  lastAskUserComponent?: IToolExecutionComponent;
+  /** Track the most recent ask_user component for inline question activation */
+  lastAskUserComponent?: AskQuestionInlineComponent;
+  /** Map toolCallId → AskQuestionInlineComponent for streaming arg updates */
+  pendingAskUserComponents: Map<string, AskQuestionInlineComponent>;
   /** Saved editor text for Alt+Z undo */
   lastClearedText: string;
   activeInlineQuestion?: AskQuestionInlineComponent;
@@ -179,13 +187,20 @@ export interface TUIState {
  */
 export function createTUIState(options: MastraTUIOptions): TUIState {
   const terminal = new ProcessTerminal();
+  // Override columns getter to prevent line wrapping in nested terminal emulators
+  Object.defineProperty(terminal, 'columns', {
+    get: () => (process.stdout.columns || 80) - TERM_WIDTH_BUFFER,
+  });
   const ui = new TUI(terminal);
+
+  // Perf profiling removed
+
   const chatContainer = new Container();
   const editorContainer = new Container();
   const footer = new Container();
   const editor = new CustomEditor(ui, getEditorTheme());
-
-  return {
+  editor.getModeColor = () => options.harness.getCurrentMode()?.color;
+  const result: TUIState = {
     // Core dependencies
     harness: options.harness,
     options,
@@ -217,9 +232,13 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Thread / conversation
     pendingNewThread: false,
+    currentThreadTitle: undefined,
+    threadPreviewCache: new Map(),
+    attemptedThreadPreviewIds: new Set(),
 
     // Inline interaction
     lastClearedText: '',
+    pendingAskUserComponents: new Map(),
     pendingInlineQuestions: [],
     pendingFollowUpMessages: [],
     pendingQueuedActions: [],
@@ -239,4 +258,5 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     lastCtrlCTime: 0,
     userInitiatedAbort: false,
   };
+  return result;
 }

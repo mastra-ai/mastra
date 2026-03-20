@@ -21,8 +21,8 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "22.19.13",
-    "typescript": "catalog:"
+    "@types/node": "22.19.15",
+    "typescript": "^5.9.3"
   },
   "pnpm": {
     "overrides": {

@@ -1,5 +1,3 @@
-import { cn } from '@/lib/utils';
-
 export const formElementSizes = {
   sm: 'h-form-sm',
   md: 'h-form-md',
@@ -15,8 +13,9 @@ export const formElementFocusWithin =
 export const formElementRadius = 'rounded-md';
 
 export const sharedFormElementStyle =
-  'bg-white/5 border-2 border-white/10 text-neutral4 hover:text-neutral5 hover:border-white/20 rounded-lg';
-export const sharedFormElementFocusStyle = 'outline-none focus-visible:outline-none focus-visible:border-accent1';
+  'bg-surface2 border-2 border-border1 text-neutral5 hover:text-neutral6 hover:border-border2 rounded-lg';
+export const sharedFormElementFocusStyle =
+  'outline-none focus-visible:outline-none focus-visible:border-accent1 focus-visible:ring-1 focus-visible:ring-accent1/40';
 export const sharedFormElementDisabledStyle = 'disabled:opacity-50 disabled:cursor-not-allowed';
 
 // Common transition utilities for form elements

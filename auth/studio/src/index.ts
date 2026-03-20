@@ -26,6 +26,13 @@ export interface MastraAuthStudioOptions extends MastraAuthProviderOptions<Studi
   sharedApiUrl?: string;
   /** Organization ID that owns this deployed instance. Users not in this org are rejected. */
   organizationId?: string;
+  /**
+   * Cookie domain for session cookies (e.g., '.example.com').
+   * When set, cookies will include Secure and Domain attributes.
+   * Defaults to auto-detecting from sharedApiUrl (uses '.mastra.ai' when sharedApiUrl contains '.mastra.ai').
+   * Can also be set via MASTRA_COOKIE_DOMAIN environment variable.
+   */
+  cookieDomain?: string;
 }
 
 const COOKIE_NAME = 'wos-session';
@@ -50,6 +57,7 @@ export class MastraAuthStudio
   private sharedApiUrl: string;
   private organizationId: string | undefined;
   private useProductionCookies: boolean;
+  private cookieDomain: string | undefined;
 
   constructor(options?: MastraAuthStudioOptions) {
     super({ name: 'mastra-studio', ...options });
@@ -61,10 +69,26 @@ export class MastraAuthStudio
       this.sharedApiUrl = this.sharedApiUrl.slice(0, -1);
     }
 
-    // Use production cookie settings (Secure + Domain=.mastra.ai) only when
-    // the shared API is actually on .mastra.ai — NOT based on NODE_ENV which
-    // may be 'production' even in local dev (e.g. mastra dev sets it).
-    this.useProductionCookies = this.sharedApiUrl.includes('.mastra.ai');
+    // Cookie domain can be explicitly configured, read from env, or auto-detected from sharedApiUrl
+    this.cookieDomain = options?.cookieDomain || process.env.MASTRA_COOKIE_DOMAIN;
+
+    // Use production cookie settings (Secure + Domain) when:
+    // 1. An explicit cookieDomain is configured, OR
+    // 2. The shared API is on .mastra.ai (auto-detect default domain)
+    // Use hostname-based detection to avoid false positives (e.g., api.mastra.ai.evil.com)
+    let autoDetectMastraAi = false;
+    try {
+      const hostname = new URL(this.sharedApiUrl).hostname.toLowerCase();
+      autoDetectMastraAi = hostname === 'mastra.ai' || hostname.endsWith('.mastra.ai');
+    } catch {
+      autoDetectMastraAi = false;
+    }
+    this.useProductionCookies = !!this.cookieDomain || autoDetectMastraAi;
+
+    // If no explicit domain but we're on .mastra.ai, use the default domain
+    if (!this.cookieDomain && autoDetectMastraAi) {
+      this.cookieDomain = '.mastra.ai';
+    }
 
     if (options) {
       this.registerOptions(options);
@@ -253,18 +277,18 @@ export class MastraAuthStudio
 
   getSessionHeaders(session: Session): Record<string, string> {
     const parts = [`${COOKIE_NAME}=${session.id}`, 'HttpOnly', 'SameSite=Lax', 'Path=/', 'Max-Age=86400'];
-    if (this.useProductionCookies) {
+    if (this.useProductionCookies && this.cookieDomain) {
       parts.push('Secure');
-      parts.push('Domain=.mastra.ai');
+      parts.push(`Domain=${this.cookieDomain}`);
     }
     return { 'Set-Cookie': parts.join('; ') };
   }
 
   getClearSessionHeaders(): Record<string, string> {
     const parts = [`${COOKIE_NAME}=`, 'HttpOnly', 'SameSite=Lax', 'Path=/', 'Max-Age=0'];
-    if (this.useProductionCookies) {
+    if (this.useProductionCookies && this.cookieDomain) {
       parts.push('Secure');
-      parts.push('Domain=.mastra.ai');
+      parts.push(`Domain=${this.cookieDomain}`);
     }
     return { 'Set-Cookie': parts.join('; ') };
   }

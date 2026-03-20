@@ -17,6 +17,7 @@ import {
   NotDirectoryError,
   DirectoryNotEmptyError,
   PermissionError,
+  StaleFileError,
   WorkspaceReadOnlyError,
 } from '../errors';
 import type { ProviderStatus } from '../lifecycle';
@@ -359,6 +360,22 @@ export class LocalFilesystem extends MastraFilesystem {
     if (options?.recursive !== false) {
       const dir = nodePath.dirname(absolutePath);
       await fs.mkdir(dir, { recursive: true });
+    }
+
+    // Optimistic concurrency: reject if file was modified since caller last read it
+    if (options?.expectedMtime) {
+      try {
+        const currentStat = await fs.stat(absolutePath);
+        // Compare via Date objects — Node's stats.mtime applies internal
+        // rounding that can diverge from Math.floor(stats.mtimeMs).
+        if (currentStat.mtime.getTime() !== options.expectedMtime.getTime()) {
+          throw new StaleFileError(inputPath, options.expectedMtime, currentStat.mtime);
+        }
+      } catch (error: unknown) {
+        if (error instanceof StaleFileError) throw error;
+        // File doesn't exist yet — no conflict possible, proceed with write
+        if (!isEnoentError(error)) throw error;
+      }
     }
 
     // Use 'wx' flag for atomic overwrite check (avoids TOCTOU race)
