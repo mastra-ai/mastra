@@ -9,6 +9,7 @@ import { createClickTool } from './tools/click.js';
 import { createCloseTool } from './tools/close.js';
 import { createConsoleStartTool, createConsoleGetTool, createConsoleClearTool } from './tools/console.js';
 import { createClearCookiesTool, createGetCookiesTool, createSetCookieTool } from './tools/cookies.js';
+import { createSetCredentialsTool } from './tools/credentials.js';
 import { createSetDeviceTool, createSetMediaTool } from './tools/device-emulation.js';
 import { createDialogHandleTool, createDialogClearTool } from './tools/dialog.js';
 import { createDoubleClickTool } from './tools/double-click.js';
@@ -23,6 +24,7 @@ import { createGetAttributeTool } from './tools/get-attribute.js';
 import { createGetBoundingBoxTool } from './tools/get-bounding-box.js';
 import { createGetCountTool } from './tools/get-count.js';
 import { createGetHtmlTool } from './tools/get-html.js';
+import { createGetStylesTool } from './tools/get-styles.js';
 import { createGetTextTool } from './tools/get-text.js';
 import { createGetTitleTool } from './tools/get-title.js';
 import { createGetUrlTool } from './tools/get-url.js';
@@ -57,6 +59,7 @@ import { createTabsListTool, createTabNewTool, createTabSwitchTool, createTabClo
 import { createTraceStartTool, createTraceStopTool } from './tools/tracing.js';
 import { createTypeTool } from './tools/type.js';
 import { createUncheckTool } from './tools/uncheck.js';
+import { createUploadTool } from './tools/upload.js';
 import { createWaitTool } from './tools/wait.js';
 import type { BrowserConfig } from './types.js';
 
@@ -237,6 +240,15 @@ export class Browser {
 
       // Batch commands
       browser_batch: createBatchTool(getBrowser, () => this.tools),
+
+      // File upload
+      browser_upload: createUploadTool(getBrowser),
+
+      // HTTP credentials
+      browser_set_credentials: createSetCredentialsTool(getBrowser),
+
+      // Get styles
+      browser_get_styles: createGetStylesTool(getBrowser),
     };
   }
 

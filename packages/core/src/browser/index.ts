@@ -194,6 +194,15 @@ export {
   errorsGetOutputSchema,
   errorsClearInputSchema,
   errorsClearOutputSchema,
+  // Upload tool
+  uploadInputSchema,
+  uploadOutputSchema,
+  // Credentials tool
+  setCredentialsInputSchema,
+  setCredentialsOutputSchema,
+  // Get styles tool
+  getStylesInputSchema,
+  getStylesOutputSchema,
 } from './schemas';
 
 export type {
@@ -380,6 +389,15 @@ export type {
   ErrorsGetOutput,
   ErrorsClearInput,
   ErrorsClearOutput,
+  // Upload type
+  UploadInput,
+  UploadOutput,
+  // Credentials type
+  SetCredentialsInput,
+  SetCredentialsOutput,
+  // Get styles type
+  GetStylesInput,
+  GetStylesOutput,
 } from './schemas';
 
 // ============================================================================

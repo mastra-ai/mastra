@@ -43,6 +43,7 @@ export interface BrowserLocator {
   dragTo(target: BrowserLocator, options?: { timeout?: number }): Promise<void>;
   waitFor(options?: { state?: 'visible' | 'hidden' | 'attached' | 'detached'; timeout?: number }): Promise<void>;
   getAttribute(name: string): Promise<string | null>;
+  setInputFiles(files: string | string[]): Promise<void>;
 }
 
 export interface BrowserCDPSession {
@@ -61,6 +62,7 @@ export interface BrowserContext {
   cookies(urls?: string | string[]): Promise<BrowserCookie[]>;
   addCookies(cookies: BrowserCookie[]): Promise<void>;
   clearCookies(): Promise<void>;
+  setHTTPCredentials(credentials: { username: string; password: string } | null): Promise<void>;
 }
 
 export interface BrowserCookie {

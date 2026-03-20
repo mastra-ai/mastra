@@ -1771,6 +1771,85 @@ export type ErrorsClearInput = z.infer<typeof errorsClearInputSchema>;
 export type ErrorsClearOutput = z.infer<typeof errorsClearOutputSchema>;
 
 // ============================================================================
+// Upload Tool Schemas
+// ============================================================================
+
+export const uploadInputSchema = z.object({
+  ref: z.string().describe('Element reference from snapshot (e.g., @e5) for the file input'),
+  files: z.array(z.string()).describe('Array of file paths to upload'),
+});
+
+export const uploadOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    uploaded: z.array(z.string()).describe('List of uploaded file paths'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error classification code'),
+    message: z.string().describe('LLM-friendly error description'),
+    recoveryHint: z.string().optional().describe('Suggested recovery action'),
+    canRetry: z.boolean().optional().describe('Whether the operation can be retried'),
+  }),
+]);
+
+export type UploadInput = z.infer<typeof uploadInputSchema>;
+export type UploadOutput = z.infer<typeof uploadOutputSchema>;
+
+// ============================================================================
+// Set Credentials Tool Schemas (HTTP Basic Auth)
+// ============================================================================
+
+export const setCredentialsInputSchema = z.object({
+  username: z.string().describe('Username for HTTP basic authentication'),
+  password: z.string().describe('Password for HTTP basic authentication'),
+});
+
+export const setCredentialsOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    message: z.string().describe('Confirmation message'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error classification code'),
+    message: z.string().describe('LLM-friendly error description'),
+  }),
+]);
+
+export type SetCredentialsInput = z.infer<typeof setCredentialsInputSchema>;
+export type SetCredentialsOutput = z.infer<typeof setCredentialsOutputSchema>;
+
+// ============================================================================
+// Get Styles Tool Schemas
+// ============================================================================
+
+export const getStylesInputSchema = z.object({
+  ref: z.string().describe('Element reference from snapshot (e.g., @e5)'),
+  properties: z
+    .array(z.string())
+    .optional()
+    .describe('Specific CSS properties to retrieve. If omitted, returns all computed styles.'),
+});
+
+export const getStylesOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    styles: z.record(z.string(), z.string()).describe('Map of CSS property names to computed values'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error classification code'),
+    message: z.string().describe('LLM-friendly error description'),
+    recoveryHint: z.string().optional().describe('Suggested recovery action'),
+    canRetry: z.boolean().optional().describe('Whether the operation can be retried'),
+  }),
+]);
+
+export type GetStylesInput = z.infer<typeof getStylesInputSchema>;
+export type GetStylesOutput = z.infer<typeof getStylesOutputSchema>;
+
+// ============================================================================
 // Base Browser Config
 // ============================================================================
 
