@@ -2150,4 +2150,56 @@ describe('Memory', () => {
       });
     });
   });
+
+  describe('resourceId isolation in getThreadById', () => {
+    let memory: Memory;
+
+    beforeEach(async () => {
+      memory = new Memory({ storage: new InMemoryStore() });
+    });
+
+    it('should return thread when resourceId matches (tenant match)', async () => {
+      const thread = await memory.saveThread({
+        thread: {
+          id: 'thread-match',
+          resourceId: 'tenant-1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      const result = await memory.getThreadById({ threadId: 'thread-match', resourceId: 'tenant-1' });
+      expect(result).not.toBeNull();
+      expect(result?.id).toBe('thread-match');
+    });
+
+    it('should return null when resourceId does not match (tenant mismatch)', async () => {
+      await memory.saveThread({
+        thread: {
+          id: 'thread-mismatch',
+          resourceId: 'tenant-1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      const result = await memory.getThreadById({ threadId: 'thread-mismatch', resourceId: 'tenant-2' });
+      expect(result).toBeNull();
+    });
+
+    it('should return thread when resourceId is not provided (backwards compatibility)', async () => {
+      await memory.saveThread({
+        thread: {
+          id: 'thread-no-resourceId',
+          resourceId: 'tenant-1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      const result = await memory.getThreadById({ threadId: 'thread-no-resourceId' });
+      expect(result).not.toBeNull();
+      expect(result?.id).toBe('thread-no-resourceId');
+    });
+  });
 });
