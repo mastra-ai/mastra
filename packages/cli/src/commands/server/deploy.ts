@@ -56,9 +56,8 @@ async function zipOutput(projectDir: string): Promise<string> {
     archive.on('error', reject);
 
     archive.pipe(output);
-    // Ship only the pre-built .mastra/output + package.json for dependency metadata
+    // Ship only the pre-built .mastra/output (includes its own package.json with externals)
     archive.glob('**', { cwd: outputDir, ignore: ['node_modules/**'] }, { prefix: '.mastra/output' });
-    archive.file(join(projectDir, 'package.json'), { name: 'package.json' });
     void archive.finalize();
   });
 }
