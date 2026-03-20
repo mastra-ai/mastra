@@ -1,248 +1,26 @@
-import { openai } from '@ai-sdk/openai';
 import { google } from '@ai-sdk/google';
-import { jsonSchema, tool } from 'ai';
-import { z } from 'zod';
-import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
-import { cookingTool } from '../tools/index.js';
-import { myWorkflow } from '../workflows/index.js';
-import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
-import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
-import { requestContextDemoAgent } from './request-context-demo-agent';
 
-// Export Dynamic Tools Agent
-export { dynamicToolsAgent } from './dynamic-tools-agent.js';
-
-const memory = new Memory();
-
-// Define schema directly compatible with OpenAI's requirements
-const mySchema = jsonSchema({
-  type: 'object',
-  properties: {
-    city: {
-      type: 'string',
-      description: 'The city to get weather information for',
+const memory = new Memory({
+  options: {
+    lastMessages: 20,
+    semanticRecall: false,
+    workingMemory: {
+      enabled: true,
     },
   },
-  required: ['city'],
 });
 
-export const weatherInfo = tool({
-  description: 'Fetches the current weather information for a given city',
-  parameters: mySchema,
-  execute: async ({ city }) => {
-    return {
-      city,
-      weather: 'sunny',
-      temperature_celsius: 19,
-      temperature_fahrenheit: 66,
-      humidity: 50,
-      wind: '10 mph',
-    };
-  },
-});
-
-export const chefAgent = new Agent({
-  id: 'chef-agent',
-  name: 'Chef Agent',
-  description: 'A chef agent that can help you cook great meals with whatever ingredients you have available.',
+export const memoryTracingAgent = new Agent({
+  id: 'memory-tracing-agent',
+  name: 'Memory Tracing Agent',
+  description: 'A simple agent with memory to test memory operation tracing in the playground.',
   instructions: `
-    YOU MUST USE THE TOOL cooking-tool
-    You are Michel, a practical and experienced home chef who helps people cook great meals with whatever
-    ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
-    You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
-    `,
-  model: openai('gpt-4o-mini'),
-  tools: {
-    cookingTool,
-    weatherInfo,
-  },
-  workflows: {
-    myWorkflow,
-  },
+    You are a helpful assistant with memory capabilities.
+    Remember details the user tells you and recall them when asked.
+    Use working memory to keep track of important facts about the user.
+  `,
+  model: google('gemini-2.5-flash'),
   memory,
-  voice: new OpenAIVoice(),
 });
-
-export const dynamicAgent = new Agent({
-  id: 'dynamic-agent',
-  name: 'Dynamic Agent',
-  instructions: ({ requestContext }) => {
-    if (requestContext.get('foo')) {
-      return 'You are a dynamic agent';
-    }
-    return 'You are a static agent';
-  },
-  model: ({ requestContext }) => {
-    if (requestContext.get('foo')) {
-      return openai('gpt-4o');
-    }
-    return openai('gpt-4o-mini');
-  },
-  tools: ({ requestContext }) => {
-    const tools: Record<string, any> = {
-      cookingTool,
-    };
-
-    if (requestContext.get('foo')) {
-      tools['web_search_preview'] = openai.tools.webSearchPreview();
-    }
-
-    return tools;
-  },
-});
-
-/**
- * Example demonstrating requestContextSchema for type-safe, validated request context.
- *
- * The requestContextSchema allows you to:
- * 1. Define required runtime context values upfront using Zod schemas
- * 2. Get automatic validation with clear error messages when validation fails
- * 3. Have the Playground UI show a schema-driven form instead of raw JSON editor
- *
- * This is useful when you want to ensure certain context values are always present
- * before the agent executes, like API keys, user IDs, feature flags, etc.
- */
-export const schemaValidatedAgent = new Agent({
-  id: 'schema-validated-agent',
-  name: 'Schema Validated Agent',
-  description: 'An agent that demonstrates requestContextSchema for type-safe request context validation',
-
-  // Define the required request context values using a Zod schema
-  requestContextSchema: z.object({
-    userId: z.string().describe('The ID of the current user'),
-    apiKey: z.string().describe('API key for external service access'),
-    featureFlags: z
-      .object({
-        enableSearch: z.boolean().default(false).describe('Enable web search capabilities'),
-        debugMode: z.boolean().default(false).describe('Enable debug logging'),
-      })
-      .optional()
-      .describe('Optional feature flags'),
-  }),
-
-  instructions: ({ requestContext }) => {
-    // Access validated context values with type safety
-    const { userId, featureFlags } = requestContext.all;
-
-    const baseInstructions = `You are a helpful assistant. The current user ID is: ${userId}.`;
-
-    if (featureFlags?.debugMode) {
-      return `${baseInstructions} Debug mode is enabled - provide verbose responses.`;
-    }
-
-    return baseInstructions;
-  },
-
-  model: 'openai/gpt-4o-mini',
-
-  tools: ({ requestContext }) => {
-    const tools: Record<string, any> = {
-      weatherInfo,
-    };
-
-    // Conditionally add tools based on validated feature flags
-    const { featureFlags } = requestContext.all;
-    if (featureFlags?.enableSearch) {
-      tools['web_search_preview'] = openai.tools.webSearchPreview();
-    }
-
-    return tools;
-  },
-});
-
-const piiDetector = new PIIDetector({
-  // model: google('gemini-2.0-flash-001'),
-  model: openai('gpt-4o'),
-  redactionMethod: 'mask',
-  preserveFormat: true,
-  includeDetections: true,
-});
-
-const languageDetector = new LanguageDetector({
-  model: google('gemini-2.0-flash-001'),
-  targetLanguages: ['en'],
-  strategy: 'translate',
-});
-
-const promptInjectionDetector = new PromptInjectionDetector({
-  model: google('gemini-2.0-flash-001'),
-  strategy: 'block',
-});
-
-const moderationDetector = new ModerationProcessor({
-  model: google('gemini-2.0-flash-001'),
-  strategy: 'block',
-  chunkWindow: 10,
-});
-
-export const chefAgentResponses = new Agent({
-  id: 'chef-agent-responses',
-  name: 'Chef Agent Responses',
-  instructions: `
-    You are Michel, a practical and experienced home chef who helps people cook great meals with whatever
-    ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
-    You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
-    `,
-  model: openai.responses('gpt-4o'),
-  // model: cerebras('qwen-3-coder-480b'),
-  tools: async () => {
-    return {
-      web_search_preview: openai.tools.webSearchPreview(),
-      cooking_tool: cookingTool,
-    };
-  },
-  workflows: {
-    myWorkflow,
-  },
-  inputProcessors: [
-    piiDetector,
-    // vegetarianProcessor,
-    // languageDetector,
-    // promptInjectionDetector,
-    // moderationDetector,
-  ],
-});
-
-export const agentThatHarassesYou = new Agent({
-  id: 'agent-that-harasses-you',
-  name: 'Agent That Harasses You',
-  instructions: `
-    You are a agent that harasses you. You are a jerk. You are a meanie. You are a bully. You are a asshole.
-    `,
-  model: openai('gpt-4o'),
-  outputProcessors: [moderationDetector],
-});
-
-const answerRelevance = createAnswerRelevancyScorer({
-  model: openai('gpt-4o'),
-});
-
-console.log(`answerRelevance`, answerRelevance);
-
-export const evalAgent = new Agent({
-  id: 'eval-agent',
-  name: 'Eval Agent',
-  instructions: `
-    You are a helpful assistant with a weather tool.
-    `,
-  model: openai('gpt-4o'),
-  tools: {
-    weatherInfo,
-  },
-  memory: new Memory({
-    options: {
-      workingMemory: {
-        enabled: true,
-      },
-    },
-  }),
-  scorers: {
-    answerRelevance: {
-      scorer: answerRelevance,
-    },
-  },
-});
-
-export { requestContextDemoAgent };
