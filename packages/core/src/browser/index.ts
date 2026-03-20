@@ -105,19 +105,95 @@ export {
   highlightOutputSchema,
   inspectInputSchema,
   inspectOutputSchema,
+  // Batch command tool
+  batchInputSchema,
+  batchOutputSchema,
+  // Uncheck tool
+  uncheckInputSchema,
+  uncheckOutputSchema,
+  // Page info tools
+  getTitleInputSchema,
+  getTitleOutputSchema,
+  getUrlInputSchema,
+  getUrlOutputSchema,
+  // Element info tools
+  getCountInputSchema,
+  getCountOutputSchema,
+  getBoundingBoxInputSchema,
+  getBoundingBoxOutputSchema,
+  // State check tools
+  isVisibleInputSchema,
+  isVisibleOutputSchema,
+  isEnabledInputSchema,
+  isEnabledOutputSchema,
+  isCheckedInputSchema,
+  isCheckedOutputSchema,
+  // Frame tools
+  frameSwitchInputSchema,
+  frameSwitchOutputSchema,
+  frameMainInputSchema,
+  frameMainOutputSchema,
+  // Dialog tools
+  dialogHandleInputSchema,
+  dialogHandleOutputSchema,
+  dialogClearInputSchema,
+  dialogClearOutputSchema,
+  // Geolocation tool
+  setGeolocationInputSchema,
+  setGeolocationOutputSchema,
+  // Offline tool
+  setOfflineInputSchema,
+  setOfflineOutputSchema,
+  // Headers tool
+  setHeadersInputSchema,
+  setHeadersOutputSchema,
+  // LocalStorage tools
+  storageGetInputSchema,
+  storageGetOutputSchema,
+  storageSetInputSchema,
+  storageSetOutputSchema,
+  storageClearInputSchema,
+  storageClearOutputSchema,
+  // Tab tools
+  tabsListInputSchema,
+  tabsListOutputSchema,
+  tabNewInputSchema,
+  tabNewOutputSchema,
+  tabSwitchInputSchema,
+  tabSwitchOutputSchema,
+  tabCloseInputSchema,
+  tabCloseOutputSchema,
   // Recording tools
   recordStartInputSchema,
   recordStartOutputSchema,
   recordStopInputSchema,
   recordStopOutputSchema,
-  // Profiler tools
-  profilerStartInputSchema,
-  profilerStartOutputSchema,
-  profilerStopInputSchema,
-  profilerStopOutputSchema,
-  // Batch command tool
-  batchInputSchema,
-  batchOutputSchema,
+  // Tracing tools
+  traceStartInputSchema,
+  traceStartOutputSchema,
+  traceStopInputSchema,
+  traceStopOutputSchema,
+  // Network tracking tools
+  networkStartInputSchema,
+  networkStartOutputSchema,
+  networkGetInputSchema,
+  networkGetOutputSchema,
+  networkClearInputSchema,
+  networkClearOutputSchema,
+  // Console tracking tools
+  consoleStartInputSchema,
+  consoleStartOutputSchema,
+  consoleGetInputSchema,
+  consoleGetOutputSchema,
+  consoleClearInputSchema,
+  consoleClearOutputSchema,
+  // Error tracking tools
+  errorsStartInputSchema,
+  errorsStartOutputSchema,
+  errorsGetInputSchema,
+  errorsGetOutputSchema,
+  errorsClearInputSchema,
+  errorsClearOutputSchema,
 } from './schemas';
 
 export type {
@@ -215,19 +291,95 @@ export type {
   HighlightOutput,
   InspectInput,
   InspectOutput,
+  // Batch command types
+  BatchInput,
+  BatchOutput,
+  // Uncheck type
+  UncheckInput,
+  UncheckOutput,
+  // Page info types
+  GetTitleInput,
+  GetTitleOutput,
+  GetUrlInput,
+  GetUrlOutput,
+  // Element info types
+  GetCountInput,
+  GetCountOutput,
+  GetBoundingBoxInput,
+  GetBoundingBoxOutput,
+  // State check types
+  IsVisibleInput,
+  IsVisibleOutput,
+  IsEnabledInput,
+  IsEnabledOutput,
+  IsCheckedInput,
+  IsCheckedOutput,
+  // Frame types
+  FrameSwitchInput,
+  FrameSwitchOutput,
+  FrameMainInput,
+  FrameMainOutput,
+  // Dialog types
+  DialogHandleInput,
+  DialogHandleOutput,
+  DialogClearInput,
+  DialogClearOutput,
+  // Geolocation type
+  SetGeolocationInput,
+  SetGeolocationOutput,
+  // Offline type
+  SetOfflineInput,
+  SetOfflineOutput,
+  // Headers type
+  SetHeadersInput,
+  SetHeadersOutput,
+  // LocalStorage types
+  StorageGetInput,
+  StorageGetOutput,
+  StorageSetInput,
+  StorageSetOutput,
+  StorageClearInput,
+  StorageClearOutput,
+  // Tab types
+  TabsListInput,
+  TabsListOutput,
+  TabNewInput,
+  TabNewOutput,
+  TabSwitchInput,
+  TabSwitchOutput,
+  TabCloseInput,
+  TabCloseOutput,
   // Recording types
   RecordStartInput,
   RecordStartOutput,
   RecordStopInput,
   RecordStopOutput,
-  // Profiler types
-  ProfilerStartInput,
-  ProfilerStartOutput,
-  ProfilerStopInput,
-  ProfilerStopOutput,
-  // Batch command types
-  BatchInput,
-  BatchOutput,
+  // Tracing types
+  TraceStartInput,
+  TraceStartOutput,
+  TraceStopInput,
+  TraceStopOutput,
+  // Network tracking types
+  NetworkStartInput,
+  NetworkStartOutput,
+  NetworkGetInput,
+  NetworkGetOutput,
+  NetworkClearInput,
+  NetworkClearOutput,
+  // Console tracking types
+  ConsoleStartInput,
+  ConsoleStartOutput,
+  ConsoleGetInput,
+  ConsoleGetOutput,
+  ConsoleClearInput,
+  ConsoleClearOutput,
+  // Error tracking types
+  ErrorsStartInput,
+  ErrorsStartOutput,
+  ErrorsGetInput,
+  ErrorsGetOutput,
+  ErrorsClearInput,
+  ErrorsClearOutput,
 } from './schemas';
 
 // ============================================================================

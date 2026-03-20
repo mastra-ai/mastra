@@ -1,27 +1,39 @@
 import type { ToolAction } from '@mastra/core/tools';
 
 import type { BrowserManagerLike } from './browser-types.js';
-
 import { ScreencastStream } from './screencast/index.js';
 import type { ScreencastOptions } from './screencast/index.js';
 import { createBatchTool } from './tools/batch.js';
 import { createCheckTool } from './tools/check.js';
 import { createClickTool } from './tools/click.js';
 import { createCloseTool } from './tools/close.js';
+import { createConsoleStartTool, createConsoleGetTool, createConsoleClearTool } from './tools/console.js';
 import { createClearCookiesTool, createGetCookiesTool, createSetCookieTool } from './tools/cookies.js';
 import { createSetDeviceTool, createSetMediaTool } from './tools/device-emulation.js';
+import { createDialogHandleTool, createDialogClearTool } from './tools/dialog.js';
 import { createDoubleClickTool } from './tools/double-click.js';
 import { createDragTool } from './tools/drag.js';
+import { createErrorsStartTool, createErrorsGetTool, createErrorsClearTool } from './tools/errors.js';
 import { createEvaluateTool } from './tools/evaluate.js';
 import { createFillTool } from './tools/fill.js';
 import { createFocusTool } from './tools/focus.js';
+import { createFrameSwitchTool, createFrameMainTool } from './tools/frame.js';
+import { createSetGeolocationTool } from './tools/geolocation.js';
 import { createGetAttributeTool } from './tools/get-attribute.js';
+import { createGetBoundingBoxTool } from './tools/get-bounding-box.js';
+import { createGetCountTool } from './tools/get-count.js';
 import { createGetHtmlTool } from './tools/get-html.js';
 import { createGetTextTool } from './tools/get-text.js';
+import { createGetTitleTool } from './tools/get-title.js';
+import { createGetUrlTool } from './tools/get-url.js';
 import { createGetValueTool } from './tools/get-value.js';
+import { createSetHeadersTool } from './tools/headers.js';
 import { createHighlightTool } from './tools/highlight.js';
 import { createHoverTool } from './tools/hover.js';
 import { createInspectTool } from './tools/inspect.js';
+import { createIsCheckedTool } from './tools/is-checked.js';
+import { createIsEnabledTool } from './tools/is-enabled.js';
+import { createIsVisibleTool } from './tools/is-visible.js';
 import {
   createKeyboardTypeTool,
   createKeyboardInsertTextTool,
@@ -30,16 +42,21 @@ import {
 } from './tools/keyboard.js';
 import { createNavigateTool } from './tools/navigate.js';
 import { createGoBackTool, createGoForwardTool, createReloadTool } from './tools/navigation.js';
+import { createNetworkStartTool, createNetworkGetTool, createNetworkClearTool } from './tools/network.js';
+import { createSetOfflineTool } from './tools/offline.js';
 import { createPressTool } from './tools/press.js';
-
+import { createRecordStartTool, createRecordStopTool } from './tools/recording.js';
 import { createScreenshotTool } from './tools/screenshot.js';
 import { createScrollIntoViewTool } from './tools/scroll-into-view.js';
 import { createScrollTool } from './tools/scroll.js';
 import { createSelectTool } from './tools/select.js';
 import { createSetViewportTool } from './tools/set-viewport.js';
 import { createSnapshotTool } from './tools/snapshot.js';
-
+import { createStorageGetTool, createStorageSetTool, createStorageClearTool } from './tools/storage.js';
+import { createTabsListTool, createTabNewTool, createTabSwitchTool, createTabCloseTool } from './tools/tabs.js';
+import { createTraceStartTool, createTraceStopTool } from './tools/tracing.js';
 import { createTypeTool } from './tools/type.js';
+import { createUncheckTool } from './tools/uncheck.js';
 import { createWaitTool } from './tools/wait.js';
 import type { BrowserConfig } from './types.js';
 
@@ -126,10 +143,24 @@ export class Browser {
       // Form controls
       browser_select: createSelectTool(getBrowser, timeout),
       browser_check: createCheckTool(getBrowser, timeout),
+      browser_uncheck: createUncheckTool(getBrowser),
 
       // Scrolling
       browser_scroll: createScrollTool(getBrowser),
       browser_scroll_into_view: createScrollIntoViewTool(getBrowser, timeout),
+
+      // Page info
+      browser_get_title: createGetTitleTool(getBrowser),
+      browser_get_url: createGetUrlTool(getBrowser),
+
+      // Element info
+      browser_get_count: createGetCountTool(getBrowser),
+      browser_get_bounding_box: createGetBoundingBoxTool(getBrowser),
+
+      // State checks
+      browser_is_visible: createIsVisibleTool(getBrowser),
+      browser_is_enabled: createIsEnabledTool(getBrowser),
+      browser_is_checked: createIsCheckedTool(getBrowser),
 
       // Data extraction
       browser_get_text: createGetTextTool(getBrowser, timeout),
@@ -143,15 +174,60 @@ export class Browser {
       browser_go_forward: createGoForwardTool(getBrowser, timeout),
       browser_reload: createReloadTool(getBrowser, timeout),
 
+      // Frame management
+      browser_frame_switch: createFrameSwitchTool(getBrowser),
+      browser_frame_main: createFrameMainTool(getBrowser),
+
+      // Dialog handling
+      browser_dialog_handle: createDialogHandleTool(getBrowser),
+      browser_dialog_clear: createDialogClearTool(getBrowser),
+
       // Browser state
       browser_set_viewport: createSetViewportTool(getBrowser),
       browser_get_cookies: createGetCookiesTool(getBrowser),
       browser_set_cookie: createSetCookieTool(getBrowser),
       browser_clear_cookies: createClearCookiesTool(getBrowser),
+      browser_set_geolocation: createSetGeolocationTool(getBrowser),
+      browser_set_offline: createSetOfflineTool(getBrowser),
+      browser_set_headers: createSetHeadersTool(getBrowser),
+
+      // LocalStorage
+      browser_storage_get: createStorageGetTool(getBrowser),
+      browser_storage_set: createStorageSetTool(getBrowser),
+      browser_storage_clear: createStorageClearTool(getBrowser),
+
+      // Tab management
+      browser_tabs_list: createTabsListTool(getBrowser),
+      browser_tab_new: createTabNewTool(getBrowser),
+      browser_tab_switch: createTabSwitchTool(getBrowser),
+      browser_tab_close: createTabCloseTool(getBrowser),
 
       // Device emulation
       browser_set_device: createSetDeviceTool(getBrowser),
       browser_set_media: createSetMediaTool(getBrowser),
+
+      // Recording
+      browser_record_start: createRecordStartTool(getBrowser),
+      browser_record_stop: createRecordStopTool(getBrowser),
+
+      // Tracing
+      browser_trace_start: createTraceStartTool(getBrowser),
+      browser_trace_stop: createTraceStopTool(getBrowser),
+
+      // Network tracking
+      browser_network_start: createNetworkStartTool(getBrowser),
+      browser_network_get: createNetworkGetTool(getBrowser),
+      browser_network_clear: createNetworkClearTool(getBrowser),
+
+      // Console tracking
+      browser_console_start: createConsoleStartTool(getBrowser),
+      browser_console_get: createConsoleGetTool(getBrowser),
+      browser_console_clear: createConsoleClearTool(getBrowser),
+
+      // Error tracking
+      browser_errors_start: createErrorsStartTool(getBrowser),
+      browser_errors_get: createErrorsGetTool(getBrowser),
+      browser_errors_clear: createErrorsClearTool(getBrowser),
 
       // Debugging
       browser_inspect: createInspectTool(getBrowser),

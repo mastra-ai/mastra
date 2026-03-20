@@ -130,7 +130,7 @@ export interface KeyboardEventParams {
 
 /** Tab information */
 export interface BrowserTab {
-  id: string;
+  index: number;
   url: string;
   title: string;
   active: boolean;
@@ -169,4 +169,77 @@ export interface BrowserManagerLike {
   stopScreencast(): Promise<void>;
   injectMouseEvent(params: MouseEventParams): Promise<void>;
   injectKeyboardEvent(params: KeyboardEventParams): Promise<void>;
+
+  // Frame management (optional)
+  getFrame?(): BrowserFrame;
+  switchToFrame?(options: { selector?: string; name?: string; url?: string }): Promise<void>;
+  switchToMainFrame?(): void;
+
+  // Dialog handling (optional)
+  setDialogHandler?(action: 'accept' | 'dismiss', promptText?: string): void;
+  clearDialogHandler?(): void;
+
+  // Geolocation (optional)
+  setGeolocation?(latitude: number, longitude: number, accuracy?: number): Promise<void>;
+
+  // Network control (optional)
+  setOffline?(offline: boolean): Promise<void>;
+  setExtraHeaders?(headers: Record<string, string>): Promise<void>;
+  setScopedHeaders?(origin: string, headers: Record<string, string>): Promise<void>;
+
+  // Tab management (optional)
+  listTabs?(): Promise<BrowserTab[]>;
+  newTab?(url?: string): Promise<{ index: number; total: number }>;
+  switchTo?(index: number): Promise<{ index: number; url: string; title: string }>;
+  closeTab?(index?: number): Promise<{ closed: number; remaining: number }>;
+  getActiveIndex?(): number;
+
+  // Recording (optional)
+  startRecording?(outputPath: string, url?: string): Promise<void>;
+  stopRecording?(): Promise<{ path: string; frames?: number }>;
+
+  // Tracing (optional)
+  startTracing?(options: { screenshots?: boolean; snapshots?: boolean }): Promise<void>;
+  stopTracing?(path: string): Promise<void>;
+
+  // Network tracking (optional)
+  startRequestTracking?(): void;
+  getRequests?(filter?: string): NetworkRequest[];
+  clearRequests?(): void;
+
+  // Console tracking (optional)
+  startConsoleTracking?(): void;
+  getConsoleMessages?(): ConsoleMessage[];
+  clearConsoleMessages?(): void;
+
+  // Error tracking (optional)
+  startErrorTracking?(): void;
+  getPageErrors?(): PageError[];
+  clearPageErrors?(): void;
+}
+
+/** Frame interface */
+export interface BrowserFrame {
+  url(): string;
+}
+
+/** Network request info */
+export interface NetworkRequest {
+  url: string;
+  method: string;
+  resourceType: string;
+  timestamp: number;
+}
+
+/** Console message info */
+export interface ConsoleMessage {
+  type: string;
+  text: string;
+  timestamp: number;
+}
+
+/** Page error info */
+export interface PageError {
+  message: string;
+  timestamp: number;
 }

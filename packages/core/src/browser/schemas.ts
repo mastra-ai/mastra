@@ -956,73 +956,6 @@ export type InspectInput = z.infer<typeof inspectInputSchema>;
 export type InspectOutput = z.infer<typeof inspectOutputSchema>;
 
 // ============================================================================
-// Record Tool Schemas
-// ============================================================================
-
-export const recordStartInputSchema = z.object({
-  path: z.string().optional().describe('Output file path for recording (e.g., "recording.webm")'),
-});
-
-export const recordStartOutputSchema = z.object({
-  success: z.boolean().describe('Whether recording started'),
-  path: z.string().optional().describe('Path where recording will be saved'),
-  code: z.string().optional().describe('Error code if operation failed'),
-  message: z.string().optional().describe('Error message if operation failed'),
-});
-
-export type RecordStartInput = z.infer<typeof recordStartInputSchema>;
-export type RecordStartOutput = z.infer<typeof recordStartOutputSchema>;
-
-export const recordStopInputSchema = z.object({});
-
-export const recordStopOutputSchema = z.object({
-  success: z.boolean().describe('Whether recording stopped'),
-  path: z.string().optional().describe('Path where recording was saved'),
-  duration: z.number().optional().describe('Recording duration in seconds'),
-  fileSize: z.number().optional().describe('Recording file size in bytes'),
-  code: z.string().optional().describe('Error code if operation failed'),
-  message: z.string().optional().describe('Error message if operation failed'),
-});
-
-export type RecordStopInput = z.infer<typeof recordStopInputSchema>;
-export type RecordStopOutput = z.infer<typeof recordStopOutputSchema>;
-
-// ============================================================================
-// Profiler Tool Schemas
-// ============================================================================
-
-export const profilerStartInputSchema = z.object({
-  categories: z
-    .array(z.string())
-    .optional()
-    .describe('Trace categories to capture (e.g., ["devtools.timeline", "v8.execute"])'),
-});
-
-export const profilerStartOutputSchema = z.object({
-  success: z.boolean().describe('Whether profiling started'),
-  code: z.string().optional().describe('Error code if operation failed'),
-  message: z.string().optional().describe('Error message if operation failed'),
-});
-
-export type ProfilerStartInput = z.infer<typeof profilerStartInputSchema>;
-export type ProfilerStartOutput = z.infer<typeof profilerStartOutputSchema>;
-
-export const profilerStopInputSchema = z.object({
-  path: z.string().optional().describe('Output file path for trace (e.g., "trace.json")'),
-});
-
-export const profilerStopOutputSchema = z.object({
-  success: z.boolean().describe('Whether profiling stopped'),
-  path: z.string().optional().describe('Path where trace was saved'),
-  fileSize: z.number().optional().describe('Trace file size in bytes'),
-  code: z.string().optional().describe('Error code if operation failed'),
-  message: z.string().optional().describe('Error message if operation failed'),
-});
-
-export type ProfilerStopInput = z.infer<typeof profilerStopInputSchema>;
-export type ProfilerStopOutput = z.infer<typeof profilerStopOutputSchema>;
-
-// ============================================================================
 // Batch Command Tool Schemas
 // ============================================================================
 
@@ -1056,6 +989,786 @@ export const batchOutputSchema = z.object({
 
 export type BatchInput = z.infer<typeof batchInputSchema>;
 export type BatchOutput = z.infer<typeof batchOutputSchema>;
+
+// ============================================================================
+// Uncheck Tool Schemas
+// ============================================================================
+
+export const uncheckInputSchema = z.object({
+  ref: z.string().describe('Element reference from snapshot (e.g., "@e5")'),
+});
+
+export const uncheckOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    url: z.string().describe('Current page URL'),
+    hint: z.string().optional().describe('Contextual hint for next action'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+    recoveryHint: z.string().optional().describe('Suggested recovery action'),
+    canRetry: z.boolean().describe('Whether the operation can be retried'),
+  }),
+]);
+
+export type UncheckInput = z.infer<typeof uncheckInputSchema>;
+export type UncheckOutput = z.infer<typeof uncheckOutputSchema>;
+
+// ============================================================================
+// Get Title Tool Schemas
+// ============================================================================
+
+export const getTitleInputSchema = z.object({});
+
+export const getTitleOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    title: z.string().describe('The page title'),
+    url: z.string().describe('Current page URL'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type GetTitleInput = z.infer<typeof getTitleInputSchema>;
+export type GetTitleOutput = z.infer<typeof getTitleOutputSchema>;
+
+// ============================================================================
+// Get URL Tool Schemas
+// ============================================================================
+
+export const getUrlInputSchema = z.object({});
+
+export const getUrlOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    url: z.string().describe('Current page URL'),
+    title: z.string().describe('The page title'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type GetUrlInput = z.infer<typeof getUrlInputSchema>;
+export type GetUrlOutput = z.infer<typeof getUrlOutputSchema>;
+
+// ============================================================================
+// Get Count Tool Schemas
+// ============================================================================
+
+export const getCountInputSchema = z.object({
+  ref: z.string().describe('Element reference or CSS selector'),
+});
+
+export const getCountOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    count: z.number().describe('Number of matching elements'),
+    url: z.string().describe('Current page URL'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type GetCountInput = z.infer<typeof getCountInputSchema>;
+export type GetCountOutput = z.infer<typeof getCountOutputSchema>;
+
+// ============================================================================
+// Get Bounding Box Tool Schemas
+// ============================================================================
+
+export const getBoundingBoxInputSchema = z.object({
+  ref: z.string().describe('Element reference from snapshot (e.g., "@e5")'),
+});
+
+export const getBoundingBoxOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    box: z
+      .object({
+        x: z.number().describe('X coordinate'),
+        y: z.number().describe('Y coordinate'),
+        width: z.number().describe('Element width'),
+        height: z.number().describe('Element height'),
+      })
+      .nullable()
+      .describe('Bounding box, or null if element is not visible'),
+    url: z.string().describe('Current page URL'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type GetBoundingBoxInput = z.infer<typeof getBoundingBoxInputSchema>;
+export type GetBoundingBoxOutput = z.infer<typeof getBoundingBoxOutputSchema>;
+
+// ============================================================================
+// Is Visible Tool Schemas
+// ============================================================================
+
+export const isVisibleInputSchema = z.object({
+  ref: z.string().describe('Element reference from snapshot (e.g., "@e5")'),
+});
+
+export const isVisibleOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    visible: z.boolean().describe('Whether the element is visible'),
+    url: z.string().describe('Current page URL'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type IsVisibleInput = z.infer<typeof isVisibleInputSchema>;
+export type IsVisibleOutput = z.infer<typeof isVisibleOutputSchema>;
+
+// ============================================================================
+// Is Enabled Tool Schemas
+// ============================================================================
+
+export const isEnabledInputSchema = z.object({
+  ref: z.string().describe('Element reference from snapshot (e.g., "@e5")'),
+});
+
+export const isEnabledOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    enabled: z.boolean().describe('Whether the element is enabled'),
+    url: z.string().describe('Current page URL'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type IsEnabledInput = z.infer<typeof isEnabledInputSchema>;
+export type IsEnabledOutput = z.infer<typeof isEnabledOutputSchema>;
+
+// ============================================================================
+// Is Checked Tool Schemas
+// ============================================================================
+
+export const isCheckedInputSchema = z.object({
+  ref: z.string().describe('Element reference from snapshot (e.g., "@e5")'),
+});
+
+export const isCheckedOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    checked: z.boolean().describe('Whether the checkbox/radio is checked'),
+    url: z.string().describe('Current page URL'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type IsCheckedInput = z.infer<typeof isCheckedInputSchema>;
+export type IsCheckedOutput = z.infer<typeof isCheckedOutputSchema>;
+
+// ============================================================================
+// Frame Switch Tool Schemas
+// ============================================================================
+
+export const frameSwitchInputSchema = z.object({
+  selector: z.string().optional().describe('CSS selector for iframe element'),
+  name: z.string().optional().describe('Frame name attribute'),
+  url: z.string().optional().describe('Frame URL (partial match)'),
+});
+
+export const frameSwitchOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    url: z.string().describe('Current page URL'),
+    frameUrl: z.string().optional().describe('Frame URL if available'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type FrameSwitchInput = z.infer<typeof frameSwitchInputSchema>;
+export type FrameSwitchOutput = z.infer<typeof frameSwitchOutputSchema>;
+
+// ============================================================================
+// Frame Main Tool Schemas
+// ============================================================================
+
+export const frameMainInputSchema = z.object({});
+
+export const frameMainOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    url: z.string().describe('Current page URL'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type FrameMainInput = z.infer<typeof frameMainInputSchema>;
+export type FrameMainOutput = z.infer<typeof frameMainOutputSchema>;
+
+// ============================================================================
+// Dialog Tool Schemas
+// ============================================================================
+
+export const dialogHandleInputSchema = z.object({
+  action: z.enum(['accept', 'dismiss']).describe('How to handle dialogs'),
+  promptText: z.string().optional().describe('Text to enter for prompt dialogs'),
+});
+
+export const dialogHandleOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    message: z.string().describe('Confirmation message'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type DialogHandleInput = z.infer<typeof dialogHandleInputSchema>;
+export type DialogHandleOutput = z.infer<typeof dialogHandleOutputSchema>;
+
+export const dialogClearInputSchema = z.object({});
+
+export const dialogClearOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    message: z.string().describe('Confirmation message'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type DialogClearInput = z.infer<typeof dialogClearInputSchema>;
+export type DialogClearOutput = z.infer<typeof dialogClearOutputSchema>;
+
+// ============================================================================
+// Set Geolocation Tool Schemas
+// ============================================================================
+
+export const setGeolocationInputSchema = z.object({
+  latitude: z.number().min(-90).max(90).describe('Latitude coordinate'),
+  longitude: z.number().min(-180).max(180).describe('Longitude coordinate'),
+  accuracy: z.number().positive().optional().describe('Accuracy in meters'),
+});
+
+export const setGeolocationOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    latitude: z.number().describe('Set latitude'),
+    longitude: z.number().describe('Set longitude'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type SetGeolocationInput = z.infer<typeof setGeolocationInputSchema>;
+export type SetGeolocationOutput = z.infer<typeof setGeolocationOutputSchema>;
+
+// ============================================================================
+// Set Offline Tool Schemas
+// ============================================================================
+
+export const setOfflineInputSchema = z.object({
+  offline: z.boolean().describe('Whether to enable offline mode'),
+});
+
+export const setOfflineOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    offline: z.boolean().describe('Current offline state'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type SetOfflineInput = z.infer<typeof setOfflineInputSchema>;
+export type SetOfflineOutput = z.infer<typeof setOfflineOutputSchema>;
+
+// ============================================================================
+// Set Headers Tool Schemas
+// ============================================================================
+
+export const setHeadersInputSchema = z.object({
+  headers: z.record(z.string(), z.string()).describe('HTTP headers to set'),
+  origin: z.string().optional().describe('Only apply headers to requests matching this origin'),
+});
+
+export const setHeadersOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    headerCount: z.number().describe('Number of headers set'),
+    scoped: z.boolean().describe('Whether headers are scoped to an origin'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type SetHeadersInput = z.infer<typeof setHeadersInputSchema>;
+export type SetHeadersOutput = z.infer<typeof setHeadersOutputSchema>;
+
+// ============================================================================
+// LocalStorage Tool Schemas
+// ============================================================================
+
+export const storageGetInputSchema = z.object({
+  key: z.string().optional().describe('Specific key to get, or omit for all'),
+});
+
+export const storageGetOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    data: z.record(z.string(), z.string()).describe('LocalStorage data'),
+    url: z.string().describe('Current page URL'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type StorageGetInput = z.infer<typeof storageGetInputSchema>;
+export type StorageGetOutput = z.infer<typeof storageGetOutputSchema>;
+
+export const storageSetInputSchema = z.object({
+  key: z.string().describe('Storage key'),
+  value: z.string().describe('Storage value'),
+});
+
+export const storageSetOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    url: z.string().describe('Current page URL'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type StorageSetInput = z.infer<typeof storageSetInputSchema>;
+export type StorageSetOutput = z.infer<typeof storageSetOutputSchema>;
+
+export const storageClearInputSchema = z.object({});
+
+export const storageClearOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    url: z.string().describe('Current page URL'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type StorageClearInput = z.infer<typeof storageClearInputSchema>;
+export type StorageClearOutput = z.infer<typeof storageClearOutputSchema>;
+
+// ============================================================================
+// Tab Tool Schemas
+// ============================================================================
+
+export const tabsListInputSchema = z.object({});
+
+export const tabsListOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    tabs: z.array(
+      z.object({
+        index: z.number().describe('Tab index'),
+        url: z.string().describe('Tab URL'),
+        title: z.string().describe('Tab title'),
+        active: z.boolean().describe('Whether this tab is active'),
+      }),
+    ),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type TabsListInput = z.infer<typeof tabsListInputSchema>;
+export type TabsListOutput = z.infer<typeof tabsListOutputSchema>;
+
+export const tabNewInputSchema = z.object({
+  url: z.string().optional().describe('URL to open in new tab'),
+});
+
+export const tabNewOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    index: z.number().describe('Index of the new tab'),
+    total: z.number().describe('Total number of tabs'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type TabNewInput = z.infer<typeof tabNewInputSchema>;
+export type TabNewOutput = z.infer<typeof tabNewOutputSchema>;
+
+export const tabSwitchInputSchema = z.object({
+  index: z.number().describe('Tab index to switch to'),
+});
+
+export const tabSwitchOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    index: z.number().describe('Current tab index'),
+    url: z.string().describe('Tab URL'),
+    title: z.string().describe('Tab title'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type TabSwitchInput = z.infer<typeof tabSwitchInputSchema>;
+export type TabSwitchOutput = z.infer<typeof tabSwitchOutputSchema>;
+
+export const tabCloseInputSchema = z.object({
+  index: z.number().optional().describe('Tab index to close (defaults to current)'),
+});
+
+export const tabCloseOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    closed: z.number().describe('Index of closed tab'),
+    remaining: z.number().describe('Number of remaining tabs'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type TabCloseInput = z.infer<typeof tabCloseInputSchema>;
+export type TabCloseOutput = z.infer<typeof tabCloseOutputSchema>;
+
+// ============================================================================
+// Recording Tool Schemas
+// ============================================================================
+
+export const recordStartInputSchema = z.object({
+  path: z.string().describe('Output path for the video file (.webm)'),
+  url: z.string().optional().describe('URL to navigate to (defaults to current page)'),
+});
+
+export const recordStartOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    path: z.string().describe('Recording output path'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type RecordStartInput = z.infer<typeof recordStartInputSchema>;
+export type RecordStartOutput = z.infer<typeof recordStartOutputSchema>;
+
+export const recordStopInputSchema = z.object({});
+
+export const recordStopOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    path: z.string().describe('Saved video file path'),
+    frames: z.number().optional().describe('Number of frames recorded'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type RecordStopInput = z.infer<typeof recordStopInputSchema>;
+export type RecordStopOutput = z.infer<typeof recordStopOutputSchema>;
+
+// ============================================================================
+// Tracing Tool Schemas
+// ============================================================================
+
+export const traceStartInputSchema = z.object({
+  screenshots: z.boolean().optional().default(true).describe('Capture screenshots'),
+  snapshots: z.boolean().optional().default(true).describe('Capture DOM snapshots'),
+});
+
+export const traceStartOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    message: z.string().describe('Confirmation message'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type TraceStartInput = z.infer<typeof traceStartInputSchema>;
+export type TraceStartOutput = z.infer<typeof traceStartOutputSchema>;
+
+export const traceStopInputSchema = z.object({
+  path: z.string().describe('Output path for the trace file (.zip)'),
+});
+
+export const traceStopOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    path: z.string().describe('Saved trace file path'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type TraceStopInput = z.infer<typeof traceStopInputSchema>;
+export type TraceStopOutput = z.infer<typeof traceStopOutputSchema>;
+
+// ============================================================================
+// Network Tracking Tool Schemas
+// ============================================================================
+
+export const networkStartInputSchema = z.object({});
+
+export const networkStartOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    message: z.string().describe('Confirmation message'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type NetworkStartInput = z.infer<typeof networkStartInputSchema>;
+export type NetworkStartOutput = z.infer<typeof networkStartOutputSchema>;
+
+export const networkGetInputSchema = z.object({
+  filter: z.string().optional().describe('Filter requests by URL pattern'),
+});
+
+export const networkGetOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    requests: z.array(
+      z.object({
+        url: z.string().describe('Request URL'),
+        method: z.string().describe('HTTP method'),
+        resourceType: z.string().describe('Resource type'),
+        timestamp: z.number().describe('Request timestamp'),
+      }),
+    ),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type NetworkGetInput = z.infer<typeof networkGetInputSchema>;
+export type NetworkGetOutput = z.infer<typeof networkGetOutputSchema>;
+
+export const networkClearInputSchema = z.object({});
+
+export const networkClearOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    message: z.string().describe('Confirmation message'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type NetworkClearInput = z.infer<typeof networkClearInputSchema>;
+export type NetworkClearOutput = z.infer<typeof networkClearOutputSchema>;
+
+// ============================================================================
+// Console Tracking Tool Schemas
+// ============================================================================
+
+export const consoleStartInputSchema = z.object({});
+
+export const consoleStartOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    message: z.string().describe('Confirmation message'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type ConsoleStartInput = z.infer<typeof consoleStartInputSchema>;
+export type ConsoleStartOutput = z.infer<typeof consoleStartOutputSchema>;
+
+export const consoleGetInputSchema = z.object({});
+
+export const consoleGetOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    messages: z.array(
+      z.object({
+        type: z.string().describe('Message type (log, warn, error, etc.)'),
+        text: z.string().describe('Message text'),
+        timestamp: z.number().describe('Message timestamp'),
+      }),
+    ),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type ConsoleGetInput = z.infer<typeof consoleGetInputSchema>;
+export type ConsoleGetOutput = z.infer<typeof consoleGetOutputSchema>;
+
+export const consoleClearInputSchema = z.object({});
+
+export const consoleClearOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    message: z.string().describe('Confirmation message'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type ConsoleClearInput = z.infer<typeof consoleClearInputSchema>;
+export type ConsoleClearOutput = z.infer<typeof consoleClearOutputSchema>;
+
+// ============================================================================
+// Error Tracking Tool Schemas
+// ============================================================================
+
+export const errorsStartInputSchema = z.object({});
+
+export const errorsStartOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    message: z.string().describe('Confirmation message'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type ErrorsStartInput = z.infer<typeof errorsStartInputSchema>;
+export type ErrorsStartOutput = z.infer<typeof errorsStartOutputSchema>;
+
+export const errorsGetInputSchema = z.object({});
+
+export const errorsGetOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    errors: z.array(
+      z.object({
+        message: z.string().describe('Error message'),
+        timestamp: z.number().describe('Error timestamp'),
+      }),
+    ),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type ErrorsGetInput = z.infer<typeof errorsGetInputSchema>;
+export type ErrorsGetOutput = z.infer<typeof errorsGetOutputSchema>;
+
+export const errorsClearInputSchema = z.object({});
+
+export const errorsClearOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    message: z.string().describe('Confirmation message'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error code'),
+    message: z.string().describe('Error message'),
+  }),
+]);
+
+export type ErrorsClearInput = z.infer<typeof errorsClearInputSchema>;
+export type ErrorsClearOutput = z.infer<typeof errorsClearOutputSchema>;
 
 // ============================================================================
 // Base Browser Config
