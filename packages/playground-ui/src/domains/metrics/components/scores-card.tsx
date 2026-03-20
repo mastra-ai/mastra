@@ -1,12 +1,19 @@
 import { useMemo } from 'react';
 import { MetricsCard } from '@/ds/components/MetricsCard';
-import { MetricsDataTable } from '@/ds/components/DashboardDataTable/dashboard-data-table';
+import { MetricsDataTable } from '@/ds/components/MetricsDataTable/metrics-data-table';
 import { MetricsLineChart } from '@/ds/components/MetricsLineChart';
 import { CHART_COLORS } from './metrics-utils';
 import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 import { useScoresMetrics } from '../hooks/use-scores-metrics';
 
-const SERIES_COLORS = [CHART_COLORS.green, CHART_COLORS.blue, CHART_COLORS.purple, CHART_COLORS.orange, CHART_COLORS.pink, CHART_COLORS.yellow];
+const SERIES_COLORS = [
+  CHART_COLORS.green,
+  CHART_COLORS.blue,
+  CHART_COLORS.purple,
+  CHART_COLORS.orange,
+  CHART_COLORS.pink,
+  CHART_COLORS.yellow,
+];
 
 export function ScoresCard() {
   const { data, isLoading } = useScoresMetrics();
@@ -19,7 +26,10 @@ export function ScoresCard() {
       label: name,
       color: SERIES_COLORS[i % SERIES_COLORS.length],
       aggregate: (points: Record<string, unknown>[]) => ({
-        value: points.length > 0 ? (points.reduce((s, d) => s + ((d[name] as number) ?? 0), 0) / points.length).toFixed(2) : '0',
+        value:
+          points.length > 0
+            ? (points.reduce((s, d) => s + ((d[name] as number) ?? 0), 0) / points.length).toFixed(2)
+            : '0',
         suffix: 'avg',
       }),
     }));
@@ -29,7 +39,12 @@ export function ScoresCard() {
     <MetricsCard>
       <MetricsCard.TopBar>
         <MetricsCard.TitleAndDescription title="Scores" description="Evaluation scorer performance." />
-        {hasData && <MetricsCard.Summary value={data?.avgScore != null ? `avg ${data.avgScore}` : '—'} label="Across all scorers" />}
+        {hasData && (
+          <MetricsCard.Summary
+            value={data?.avgScore != null ? `avg ${data.avgScore}` : '—'}
+            label="Across all scorers"
+          />
+        )}
       </MetricsCard.TopBar>
       {isLoading ? (
         <MetricsCard.Loading />
@@ -40,8 +55,12 @@ export function ScoresCard() {
           ) : (
             <Tabs defaultTab="over-time" className="overflow-visible">
               <TabList>
-                <Tab value="over-time" size="smaller">Over Time</Tab>
-                <Tab value="summary" size="smaller">Summary</Tab>
+                <Tab value="over-time" size="smaller">
+                  Over Time
+                </Tab>
+                <Tab value="summary" size="smaller">
+                  Summary
+                </Tab>
               </TabList>
               <TabContent value="over-time">
                 {data.overTimeData.length > 0 ? (

@@ -32,9 +32,7 @@ export function useScoresMetrics() {
 
       // Fetch scores for each scorer in parallel
       const allResults = await Promise.all(
-        scorerIds.map(scorerId =>
-          client.listScoresByScorerId({ scorerId, perPage: 100 }),
-        ),
+        scorerIds.map(scorerId => client.listScoresByScorerId({ scorerId, perPage: 100 })),
       );
 
       // Collect all scores with their scorer name, filtered by selected time range

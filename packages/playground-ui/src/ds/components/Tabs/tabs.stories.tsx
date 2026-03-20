@@ -79,9 +79,15 @@ export const TabSizes: Story = {
       </Tabs>
       <Tabs defaultTab="tab1">
         <TabList>
-          <Tab value="tab1" size="smaller">Overview</Tab>
-          <Tab value="tab2" size="smaller">Details</Tab>
-          <Tab value="tab3" size="smaller">Settings</Tab>
+          <Tab value="tab1" size="smaller">
+            Overview
+          </Tab>
+          <Tab value="tab2" size="smaller">
+            Details
+          </Tab>
+          <Tab value="tab3" size="smaller">
+            Settings
+          </Tab>
         </TabList>
         <TabContent value="tab1">
           <div className="text-neutral2 text-ui-md">Small size tabs</div>

@@ -8,11 +8,7 @@ import { libInjectCss } from 'vite-plugin-lib-inject-css';
 import nodeExternals from 'rollup-plugin-node-externals';
 
 export default defineConfig({
-  plugins: [
-    react(),
-    libInjectCss(),
-    nodeExternals(),
-  ],
+  plugins: [react(), libInjectCss(), nodeExternals()],
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),

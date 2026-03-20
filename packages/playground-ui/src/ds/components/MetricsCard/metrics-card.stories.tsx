@@ -75,7 +75,10 @@ export const WithSummary: Story = {
     <div style={{ width: '30rem' }}>
       <MetricsCard>
         <MetricsCard.TopBar>
-          <MetricsCard.TitleAndDescription title="Token Usage by Agent" description="Token consumption grouped by agent." />
+          <MetricsCard.TitleAndDescription
+            title="Token Usage by Agent"
+            description="Token consumption grouped by agent."
+          />
           <MetricsCard.Summary value="45.2k" label="Total tokens" />
         </MetricsCard.TopBar>
         <MetricsCard.Content>

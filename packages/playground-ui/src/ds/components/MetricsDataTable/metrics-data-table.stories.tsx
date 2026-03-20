@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { MetricsDataTable } from './dashboard-data-table';
+import { MetricsDataTable } from './metrics-data-table';
 
 type ModelRow = {
   key: string;
@@ -12,9 +12,23 @@ type ModelRow = {
 
 const sampleData: ModelRow[] = [
   { key: 'gpt-4o', model: 'gpt-4o', input: 12450, output: 8320, cacheRead: 3200, cacheWrite: 1100 },
-  { key: 'claude-sonnet', model: 'claude-sonnet-4-20250514', input: 9800, output: 6540, cacheRead: 2100, cacheWrite: 890 },
+  {
+    key: 'claude-sonnet',
+    model: 'claude-sonnet-4-20250514',
+    input: 9800,
+    output: 6540,
+    cacheRead: 2100,
+    cacheWrite: 890,
+  },
   { key: 'gpt-4o-mini', model: 'gpt-4o-mini', input: 5600, output: 3200, cacheRead: 1800, cacheWrite: 450 },
-  { key: 'claude-haiku', model: 'claude-haiku-4-5-20251001', input: 3200, output: 1800, cacheRead: 900, cacheWrite: 200 },
+  {
+    key: 'claude-haiku',
+    model: 'claude-haiku-4-5-20251001',
+    input: 3200,
+    output: 1800,
+    cacheRead: 900,
+    cacheWrite: 200,
+  },
 ];
 
 const columns = [

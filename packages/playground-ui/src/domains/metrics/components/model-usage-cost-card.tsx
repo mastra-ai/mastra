@@ -1,5 +1,5 @@
 import { MetricsCard } from '@/ds/components/MetricsCard';
-import { MetricsDataTable } from '@/ds/components/DashboardDataTable/dashboard-data-table';
+import { MetricsDataTable } from '@/ds/components/MetricsDataTable/metrics-data-table';
 import { useModelUsageCostMetrics } from '../hooks/use-model-usage-cost-metrics';
 
 export function ModelUsageCostCard() {

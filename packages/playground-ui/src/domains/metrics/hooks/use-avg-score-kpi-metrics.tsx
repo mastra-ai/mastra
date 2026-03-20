@@ -18,9 +18,7 @@ export function useAvgScoreKpiMetrics() {
       }
 
       const allResults = await Promise.all(
-        scorerIds.map(scorerId =>
-          client.listScoresByScorerId({ scorerId, perPage: 100 }),
-        ),
+        scorerIds.map(scorerId => client.listScoresByScorerId({ scorerId, perPage: 100 })),
       );
 
       const startMs = timestamp.start.getTime();

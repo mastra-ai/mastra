@@ -9,7 +9,7 @@ export { useMetricsFilters } from '../hooks/use-metrics-filters';
 export { DateRangeSelector } from './date-range-selector';
 export { ChartCard, CustomTooltip } from './chart-card';
 export { MetricsCard } from '@/ds/components/MetricsCard';
-export { MetricsDataTable } from '@/ds/components/DashboardDataTable/dashboard-data-table';
+export { MetricsDataTable } from '@/ds/components/MetricsDataTable/metrics-data-table';
 export { MetricsKpiCard } from '@/ds/components/MetricsKpiCard';
 export { ModelIcon } from './model-icon';
 export { ModelUsageCostCard } from './model-usage-cost-card';

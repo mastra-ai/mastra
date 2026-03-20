@@ -57,9 +57,15 @@ export function LatencyCard() {
           ) : (
             <Tabs defaultTab="agents" className="overflow-visible">
               <TabList>
-                <Tab value="agents" size="smaller">Agents</Tab>
-                <Tab value="workflows" size="smaller">Workflows</Tab>
-                <Tab value="tools" size="smaller">Tools</Tab>
+                <Tab value="agents" size="smaller">
+                  Agents
+                </Tab>
+                <Tab value="workflows" size="smaller">
+                  Workflows
+                </Tab>
+                <Tab value="tools" size="smaller">
+                  Tools
+                </Tab>
               </TabList>
               <TabContent value="agents">
                 <LatencyChart data={data.agentData} />

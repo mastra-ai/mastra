@@ -11,10 +11,15 @@ export function AgentRunsKpiCard() {
   return (
     <MetricsKpiCard>
       <MetricsKpiCard.Label>Total Agent Runs</MetricsKpiCard.Label>
-      <MetricsKpiCard.Value className={hasData ? undefined : 'invisible'}>{hasData ? agentRunsKpi.value!.toLocaleString() : '—'}</MetricsKpiCard.Value>
+      <MetricsKpiCard.Value className={hasData ? undefined : 'invisible'}>
+        {hasData ? agentRunsKpi.value!.toLocaleString() : '—'}
+      </MetricsKpiCard.Value>
       {hasData ? (
         agentRunsKpi.changePercent != null ? (
-          <MetricsKpiCard.Change changePct={agentRunsKpi.changePercent} prevValue={agentRunsKpi.previousValue?.toLocaleString()} />
+          <MetricsKpiCard.Change
+            changePct={agentRunsKpi.changePercent}
+            prevValue={agentRunsKpi.previousValue?.toLocaleString()}
+          />
         ) : (
           <MetricsKpiCard.NoChange />
         )
@@ -42,7 +47,9 @@ export function TotalTokensKpiCard() {
   return (
     <MetricsKpiCard>
       <MetricsKpiCard.Label>Total Tokens</MetricsKpiCard.Label>
-      <MetricsKpiCard.Value className={hasData ? undefined : 'invisible'}>{hasData ? formatCompact(totalTokensKpi.value!) : '—'}</MetricsKpiCard.Value>
+      <MetricsKpiCard.Value className={hasData ? undefined : 'invisible'}>
+        {hasData ? formatCompact(totalTokensKpi.value!) : '—'}
+      </MetricsKpiCard.Value>
       {hasData ? (
         totalTokensKpi.changePercent != null ? (
           <MetricsKpiCard.Change
@@ -66,7 +73,9 @@ export function AvgScoreKpiCard() {
   return (
     <MetricsKpiCard>
       <MetricsKpiCard.Label>Avg Score</MetricsKpiCard.Label>
-      <MetricsKpiCard.Value className={hasData ? undefined : 'invisible'}>{hasData ? String(avgScoreKpi.value) : '—'}</MetricsKpiCard.Value>
+      <MetricsKpiCard.Value className={hasData ? undefined : 'invisible'}>
+        {hasData ? String(avgScoreKpi.value) : '—'}
+      </MetricsKpiCard.Value>
       {hasData ? (
         avgScoreKpi.changePercent != null ? (
           <MetricsKpiCard.Change

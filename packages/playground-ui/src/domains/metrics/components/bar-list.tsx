@@ -36,7 +36,10 @@ export function BarListContent({
           return (
             <div key={d.name} className="group flex items-center gap-3">
               <div className="relative flex-1 h-7">
-                <div className="absolute inset-y-0 left-0 rounded" style={{ width: `${pct}%`, backgroundColor: color }} />
+                <div
+                  className="absolute inset-y-0 left-0 rounded"
+                  style={{ width: `${pct}%`, backgroundColor: color }}
+                />
                 <span className="absolute inset-y-0 left-2 flex items-center text-xs text-white whitespace-nowrap">
                   {d.name}
                 </span>
@@ -92,7 +95,11 @@ export function StackedRunsBars({ data }: { data: Array<{ name: string; complete
                   <TooltipTrigger asChild>
                     <div
                       className="absolute inset-y-0 rounded-r cursor-default"
-                      style={{ left: `${completedWidth}%`, width: `${errorsWidth}%`, backgroundColor: CHART_COLORS.red }}
+                      style={{
+                        left: `${completedWidth}%`,
+                        width: `${errorsWidth}%`,
+                        backgroundColor: CHART_COLORS.red,
+                      }}
                     />
                   </TooltipTrigger>
                   <TooltipContent side="top" className="font-mono">
