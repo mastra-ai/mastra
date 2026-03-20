@@ -1375,6 +1375,8 @@ export type ProviderModelsMap = {
     'openai/gpt-5.2-pro',
     'openai/gpt-5.3-codex',
     'openai/gpt-5.4',
+    'openai/gpt-5.4-mini',
+    'openai/gpt-5.4-nano',
     'openai/gpt-5.4-pro',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-120b:exacto',
