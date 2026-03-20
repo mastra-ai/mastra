@@ -337,7 +337,7 @@ describe('createWorkspaceTools', () => {
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.DELETE);
     });
 
-    it('should default to enabled when enabled function throws', async () => {
+    it('should disable tool when enabled function throws (fail-closed)', async () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
         tools: {
@@ -351,8 +351,8 @@ describe('createWorkspaceTools', () => {
       const configContext = { requestContext: {}, workspace };
       const tools = await createWorkspaceTools(workspace, configContext);
 
-      // Safe default: include the tool
-      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.DELETE);
+      // Fail-closed: exclude the tool when its enabled function throws
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.DELETE);
     });
 
     it('should set needsApprovalFn when requireApproval is a function', async () => {
