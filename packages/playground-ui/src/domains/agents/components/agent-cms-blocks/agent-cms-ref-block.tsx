@@ -14,13 +14,12 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover
 import { useLinkComponent } from '@/lib/framework';
 import { useStoredPromptBlock, useStoredPromptBlockMutations } from '@/domains/prompt-blocks';
 import { useStoredAgents } from '../../hooks/use-stored-agents';
-import type { InstructionBlock, RefInstructionBlock } from '../agent-edit-page/utils/form-validation';
+import type { RefInstructionBlock } from '../agent-edit-page/utils/form-validation';
 import type { JsonSchema } from '@/lib/rule-engine';
 
 export interface AgentCMSRefBlockProps {
   index: number;
   block: RefInstructionBlock;
-  onBlockChange: (block: InstructionBlock) => void;
   onDelete?: (index: number) => void;
   className?: string;
   schema?: JsonSchema;

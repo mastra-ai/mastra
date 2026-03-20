@@ -291,7 +291,6 @@ export const AgentCMSBlock = ({
       <AgentCMSRefBlock
         index={index}
         block={block}
-        onBlockChange={onBlockChange}
         onDelete={onDelete}
         className={className}
         schema={schema}
