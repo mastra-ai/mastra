@@ -66,6 +66,17 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
 - Bad: Running \`cat file.txt\` — use the ${MC_TOOLS.VIEW} tool instead.`);
   }
 
+  if (!denied.has(MC_TOOLS.LSP_INSPECT)) {
+    readTools.push(`
+**${MC_TOOLS.LSP_INSPECT}** — Inspect code using Language Server Protocol
+- Use this to get type information, documentation, and navigation for symbols at a specific position.
+- Input: \`path\` (file path), \`line\` (1-indexed line number), \`match\` (line content with \`<<<\` marking cursor position).
+- Output includes: hover (type/documentation), definition (declaration location), implementation (usage locations).
+- Example: \`{ path: "src/foo.ts", line: 10, match: "const foo = <<<bar()" }\` — inspect the symbol at the \`<<<\` position.
+- Use when you need to understand what a symbol is, its type, or where it's defined/used.
+- Use \`${MC_TOOLS.VIEW}\` when you need to read file contents to understand implementation.`);
+  }
+
   if (readTools.length > 0) {
     sections.push(readTools.join('\n'));
   }
