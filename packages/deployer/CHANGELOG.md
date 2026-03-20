@@ -1,5 +1,67 @@
 # @mastra/deployer
 
+## 1.15.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`da93115`](https://github.com/mastra-ai/mastra/commit/da931155c1a9bc63d455d3d86b4ec984db5991fe), [`0efe12a`](https://github.com/mastra-ai/mastra/commit/0efe12a5f008a939a1aac71699486ba40138054e)]:
+  - @mastra/core@1.15.0-alpha.4
+  - @mastra/server@1.15.0-alpha.4
+
+## 1.15.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`d7f14c3`](https://github.com/mastra-ai/mastra/commit/d7f14c3285cd253ecdd5f58139b7b6cbdf3678b5)]:
+  - @mastra/core@1.15.0-alpha.3
+  - @mastra/server@1.15.0-alpha.3
+
+## 1.15.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8), [`437fb10`](https://github.com/mastra-ai/mastra/commit/437fb10ca135d37bcae6817841f91a59691509de)]:
+  - @mastra/core@1.15.0-alpha.2
+  - @mastra/server@1.15.0-alpha.2
+
+## 1.15.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`681ee1c`](https://github.com/mastra-ai/mastra/commit/681ee1c811359efd1b8bebc4bce35b9bb7b14bec)]:
+  - @mastra/core@1.15.0-alpha.1
+  - @mastra/server@1.15.0-alpha.1
+
+## 1.15.0-alpha.0
+
+### Minor Changes
+
+- Add `server.studioHost`, `server.studioProtocol`, and `server.studioPort` options for Studio in cloud deployments ([#12899](https://github.com/mastra-ai/mastra/pull/12899))
+
+  When deploying to cloud environments (e.g., Google Cloud Run), `server.host` must be `0.0.0.0` for the container to accept traffic, and the internal port often differs from the external one (e.g., 8080 internally vs 443 externally). Studio needs the actual public domain, protocol, and port to make API calls from the browser. These new options decouple the server bind configuration from the Studio API URL.
+
+  ```typescript
+  export const mastra = new Mastra({
+    server: {
+      host: '0.0.0.0',
+      port: 8080,
+      studioHost: 'my-app.run.app',
+      studioProtocol: 'https',
+      studioPort: 443,
+    },
+  });
+  ```
+
+  All three options are optional and fall back to existing behavior when not set.
+
+### Patch Changes
+
+- dependencies updates: ([#14084](https://github.com/mastra-ai/mastra/pull/14084))
+  - Updated dependency [`@rollup/plugin-commonjs@29.0.2` ↗︎](https://www.npmjs.com/package/@rollup/plugin-commonjs/v/29.0.2) (from `29.0.0`, in `dependencies`)
+- Updated dependencies [[`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5), [`62d1d3c`](https://github.com/mastra-ai/mastra/commit/62d1d3cc08fe8182e7080237fd975de862ec8c91), [`8681ecb`](https://github.com/mastra-ai/mastra/commit/8681ecb86184d5907267000e4576cc442a9a83fc), [`28d0249`](https://github.com/mastra-ai/mastra/commit/28d0249295782277040ad1e0d243e695b7ab1ce4), [`bb0f09d`](https://github.com/mastra-ai/mastra/commit/bb0f09dbac58401b36069f483acf5673202db5b5), [`5f7e9d0`](https://github.com/mastra-ai/mastra/commit/5f7e9d0db664020e1f3d97d7d18c6b0b9d4843d0), [`8ccbd39`](https://github.com/mastra-ai/mastra/commit/8ccbd39f7b1e76b0894db5ac4faa398ab885cedf)]:
+  - @mastra/core@1.15.0-alpha.0
+  - @mastra/server@1.15.0-alpha.0
+
 ## 1.14.0
 
 ### Patch Changes

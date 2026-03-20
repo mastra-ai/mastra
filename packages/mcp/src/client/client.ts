@@ -116,6 +116,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private operationContextStore = new AsyncLocalStorage<RequestContext | null>();
   private exitHookUnsubscribe?: () => void;
   private sigTermHandler?: () => void;
+  private sigHupHandler?: () => void;
   private _roots: Root[];
 
   /** Provides access to resource operations (list, read, subscribe, etc.) */
@@ -430,6 +431,11 @@ export class InternalMastraMCPClient extends MastraBase {
       process.on('SIGTERM', this.sigTermHandler);
     }
 
+    if (!this.sigHupHandler) {
+      this.sigHupHandler = () => gracefulExit();
+      process.on('SIGHUP', this.sigHupHandler);
+    }
+
     this.log('debug', `Successfully connected to MCP server`);
     return this.isConnected;
   }
@@ -490,6 +496,10 @@ export class InternalMastraMCPClient extends MastraBase {
       if (this.sigTermHandler) {
         process.off('SIGTERM', this.sigTermHandler);
         this.sigTermHandler = undefined;
+      }
+      if (this.sigHupHandler) {
+        process.off('SIGHUP', this.sigHupHandler);
+        this.sigHupHandler = undefined;
       }
     }
   }
@@ -696,39 +706,6 @@ export class InternalMastraMCPClient extends MastraBase {
     }
   }
 
-  private async convertOutputSchema(
-    outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'],
-  ): Promise<JSONSchema7 | undefined> {
-    if (!outputSchema) return;
-
-    try {
-      await $RefParser.dereference(outputSchema);
-      return ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema7;
-    } catch (error: unknown) {
-      let errorDetails: string | undefined;
-      if (error instanceof Error) {
-        errorDetails = error.stack;
-      } else {
-        try {
-          errorDetails = JSON.stringify(error);
-        } catch {
-          errorDetails = String(error);
-        }
-      }
-      this.log('error', 'Failed to dereference JSON schema', {
-        error: errorDetails,
-        originalJsonSchema: outputSchema,
-      });
-
-      throw new MastraError({
-        id: 'MCP_TOOL_OUTPUT_SCHEMA_CONVERSION_FAILED',
-        domain: ErrorDomain.MCP,
-        category: ErrorCategory.USER,
-        details: { error: errorDetails ?? 'Unknown error' },
-      });
-    }
-  }
-
   async tools(): Promise<Record<string, Tool<any, any, any, any>>> {
     this.log('debug', `Requesting tools from MCP server`);
     const { tools } = await this.client.listTools({}, { timeout: this.timeout });
@@ -740,7 +717,10 @@ export class InternalMastraMCPClient extends MastraBase {
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
           inputSchema: await this.convertInputSchema(tool.inputSchema),
-          outputSchema: await this.convertOutputSchema(tool.outputSchema),
+          // Don't pass outputSchema to createTool — the MCP SDK's Client.callTool()
+          // already validates structuredContent against the tool's outputSchema using AJV.
+          // Passing it here causes Zod to strip unrecognized keys from the CallToolResult
+          // envelope, returning {} for tools without structuredContent.
           mcpMetadata: {
             serverName: this.name,
             serverVersion: this.client.getServerVersion()?.version,
@@ -776,28 +756,6 @@ export class InternalMastraMCPClient extends MastraBase {
                 // so that output validation works correctly
                 if (res.structuredContent !== undefined) {
                   return res.structuredContent;
-                }
-
-                // When the tool has an outputSchema but the server didn't return
-                // structuredContent (e.g. older MCP protocol versions that predate the
-                // structuredContent spec), extract the result from the content array.
-                // Without this, the raw CallToolResult envelope ({ content, isError,
-                // _meta }) gets validated against the outputSchema and Zod strips all
-                // unrecognised keys, producing {}.
-                if (tool.outputSchema && !res.isError) {
-                  const content = res.content as Array<{ type: string; text?: string }> | undefined;
-                  if (
-                    content &&
-                    content.length === 1 &&
-                    content[0]!.type === 'text' &&
-                    content[0]!.text !== undefined
-                  ) {
-                    try {
-                      return JSON.parse(content[0]!.text);
-                    } catch {
-                      return content[0]!.text;
-                    }
-                  }
                 }
 
                 return res;

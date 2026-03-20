@@ -1,5 +1,25 @@
 # @mastra/observability
 
+## 1.5.1-alpha.1
+
+### Patch Changes
+
+- Fix cache token extraction in multi-step agent runs. Prefer AI SDK aggregated `inputTokenDetails` over `providerMetadata` (which only reflects the last step). Also fix truthiness checks to correctly handle zero values for cache and reasoning tokens. ([#14492](https://github.com/mastra-ai/mastra/pull/14492))
+
+  Fix Datadog metric keys to match dd-trace expected format: `cacheReadTokens`, `cacheWriteTokens`, `reasoningOutputTokens`.
+
+- Updated dependencies [[`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8)]:
+  - @mastra/core@1.15.0-alpha.2
+
+## 1.5.1-alpha.0
+
+### Patch Changes
+
+- Fixed span serialization to avoid incorrect [Circular] placeholders in traces. ([#14263](https://github.com/mastra-ai/mastra/pull/14263))
+
+- Updated dependencies [[`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5), [`62d1d3c`](https://github.com/mastra-ai/mastra/commit/62d1d3cc08fe8182e7080237fd975de862ec8c91), [`8681ecb`](https://github.com/mastra-ai/mastra/commit/8681ecb86184d5907267000e4576cc442a9a83fc), [`28d0249`](https://github.com/mastra-ai/mastra/commit/28d0249295782277040ad1e0d243e695b7ab1ce4), [`bb0f09d`](https://github.com/mastra-ai/mastra/commit/bb0f09dbac58401b36069f483acf5673202db5b5), [`5f7e9d0`](https://github.com/mastra-ai/mastra/commit/5f7e9d0db664020e1f3d97d7d18c6b0b9d4843d0)]:
+  - @mastra/core@1.15.0-alpha.0
+
 ## 1.5.0
 
 ### Minor Changes

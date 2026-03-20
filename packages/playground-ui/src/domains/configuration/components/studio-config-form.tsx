@@ -6,6 +6,7 @@ import { SaveIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button/Button';
 import { toast } from '@/lib/toast';
 import { TextFieldBlock } from '@/ds/components/FormFieldBlocks/fields/text-field-block';
+import { TooltipProvider } from '@/ds/components/Tooltip';
 
 export interface StudioConfigFormProps {
   initialConfig?: StudioConfig;
@@ -49,28 +50,30 @@ export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProp
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <TextFieldBlock
-        name="url"
-        label="Mastra instance URL"
-        placeholder="e.g: http://localhost:4111"
-        required
-        defaultValue={initialConfig?.baseUrl}
-      />
+    <TooltipProvider delayDuration={0}>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <TextFieldBlock
+          name="url"
+          label="Mastra instance URL"
+          placeholder="e.g: http://localhost:4111"
+          required
+          defaultValue={initialConfig?.baseUrl}
+        />
 
-      <TextFieldBlock
-        name="apiPrefix"
-        label="API prefix"
-        placeholder="e.g: /api (default)"
-        defaultValue={initialConfig?.apiPrefix || ''}
-      />
+        <TextFieldBlock
+          name="apiPrefix"
+          label="API prefix"
+          placeholder="e.g: /api (default)"
+          defaultValue={initialConfig?.apiPrefix || ''}
+        />
 
-      <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
+        <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
 
-      <Button type="submit" className="!mt-10 ml-auto">
-        <SaveIcon />
-        Save Configuration
-      </Button>
-    </form>
+        <Button type="submit" className="!mt-10 ml-auto">
+          <SaveIcon />
+          Save Configuration
+        </Button>
+      </form>
+    </TooltipProvider>
   );
 };

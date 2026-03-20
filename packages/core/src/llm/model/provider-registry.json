@@ -420,7 +420,7 @@
       "apiKeyEnvVar": "XIAOMI_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Xiaomi",
-      "models": ["mimo-v2-flash"],
+      "models": ["mimo-v2-flash", "mimo-v2-omni", "mimo-v2-pro"],
       "docUrl": "https://platform.xiaomimimo.com/#/docs",
       "gateway": "models.dev"
     },
@@ -648,6 +648,7 @@
         "minimax-m2",
         "minimax-m2.1",
         "minimax-m2.5",
+        "minimax-m2.7",
         "ministral-3:14b",
         "ministral-3:3b",
         "ministral-3:8b",
@@ -751,7 +752,14 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax Coding Plan (minimaxi.com)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+      "models": [
+        "MiniMax-M2",
+        "MiniMax-M2.1",
+        "MiniMax-M2.5",
+        "MiniMax-M2.5-highspeed",
+        "MiniMax-M2.7",
+        "MiniMax-M2.7-highspeed"
+      ],
       "docUrl": "https://platform.minimaxi.com/docs/coding-plan/intro",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -884,7 +892,8 @@
         "gpt-5.4-nano",
         "gpt-5.4-pro",
         "kimi-k2.5",
-        "mimo-v2-flash-free",
+        "mimo-v2-omni-free",
+        "mimo-v2-pro-free",
         "minimax-m2.5",
         "minimax-m2.5-free",
         "nemotron-3-super-free"
@@ -1045,7 +1054,14 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax (minimaxi.com)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+      "models": [
+        "MiniMax-M2",
+        "MiniMax-M2.1",
+        "MiniMax-M2.5",
+        "MiniMax-M2.5-highspeed",
+        "MiniMax-M2.7",
+        "MiniMax-M2.7-highspeed"
+      ],
       "docUrl": "https://platform.minimaxi.com/docs/guides/quickstart",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -1146,7 +1162,9 @@
         "@cf/meta/m2m100-1.2b",
         "@cf/mistral/mistral-7b-instruct-v0.1",
         "@cf/mistralai/mistral-small-3.1-24b-instruct",
+        "@cf/moonshotai/kimi-k2.5",
         "@cf/myshell-ai/melotts",
+        "@cf/nvidia/nemotron-3-120b-a12b",
         "@cf/openai/gpt-oss-120b",
         "@cf/openai/gpt-oss-20b",
         "@cf/pfnet/plamo-embedding-1b",
@@ -1269,7 +1287,14 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax Coding Plan (minimax.io)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+      "models": [
+        "MiniMax-M2",
+        "MiniMax-M2.1",
+        "MiniMax-M2.5",
+        "MiniMax-M2.5-highspeed",
+        "MiniMax-M2.7",
+        "MiniMax-M2.7-highspeed"
+      ],
       "docUrl": "https://platform.minimax.io/docs/coding-plan/intro",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -1595,7 +1620,8 @@
         "glm-4.6v",
         "glm-4.6v-flash",
         "glm-4.7",
-        "glm-5"
+        "glm-5",
+        "glm-5-turbo"
       ],
       "docUrl": "https://docs.bigmodel.cn/cn/coding-plan/overview",
       "gateway": "models.dev"
@@ -1697,6 +1723,7 @@
         "minimax/minimax-m2",
         "minimax/minimax-m2.1",
         "minimax/minimax-m2.5",
+        "minimax/minimax-m2.7",
         "mistralai/codestral-2508",
         "mistralai/devstral-2512",
         "mistralai/devstral-2512:free",
@@ -1747,6 +1774,8 @@
         "openai/gpt-5.2-pro",
         "openai/gpt-5.3-codex",
         "openai/gpt-5.4",
+        "openai/gpt-5.4-mini",
+        "openai/gpt-5.4-nano",
         "openai/gpt-5.4-pro",
         "openai/gpt-oss-120b",
         "openai/gpt-oss-120b:exacto",
@@ -1811,6 +1840,8 @@
         "x-ai/grok-4.20-multi-agent-beta",
         "x-ai/grok-code-fast-1",
         "xiaomi/mimo-v2-flash",
+        "xiaomi/mimo-v2-omni",
+        "xiaomi/mimo-v2-pro",
         "z-ai/glm-4.5",
         "z-ai/glm-4.5-air",
         "z-ai/glm-4.5-air:free",
@@ -2119,7 +2150,7 @@
       "apiKeyEnvVar": "OPENCODE_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "OpenCode Go",
-      "models": ["glm-5", "kimi-k2.5", "minimax-m2.5"],
+      "models": ["glm-5", "kimi-k2.5", "minimax-m2.5", "minimax-m2.7"],
       "docUrl": "https://opencode.ai/docs/zen",
       "gateway": "models.dev"
     },
@@ -2133,7 +2164,7 @@
       "gateway": "models.dev"
     },
     "firmware": {
-      "url": "https://app.firmware.ai/api/v1",
+      "url": "https://app.frogbot.ai/api/v1",
       "apiKeyEnvVar": "FIRMWARE_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Firmware",
@@ -2163,7 +2194,7 @@
         "kimi-k2.5",
         "minimax-m2-5"
       ],
-      "docUrl": "https://docs.firmware.ai",
+      "docUrl": "https://docs.frogbot.ai",
       "gateway": "models.dev"
     },
     "ovhcloud": {
@@ -2581,6 +2612,8 @@
         "minimax/minimax-m2.1-lightning",
         "minimax/minimax-m2.5",
         "minimax/minimax-m2.5-highspeed",
+        "minimax/minimax-m2.7",
+        "minimax/minimax-m2.7-highspeed",
         "mistral/codestral",
         "mistral/codestral-embed",
         "mistral/devstral-2",
@@ -2781,7 +2814,14 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax (minimax.io)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+      "models": [
+        "MiniMax-M2",
+        "MiniMax-M2.1",
+        "MiniMax-M2.5",
+        "MiniMax-M2.5-highspeed",
+        "MiniMax-M2.7",
+        "MiniMax-M2.7-highspeed"
+      ],
       "docUrl": "https://platform.minimax.io/docs/guides/quickstart",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -4522,7 +4562,7 @@
       "perplexity/sonar",
       "xai/grok-4-1-fast-non-reasoning"
     ],
-    "xiaomi": ["mimo-v2-flash"],
+    "xiaomi": ["mimo-v2-flash", "mimo-v2-omni", "mimo-v2-pro"],
     "synthetic": [
       "hf:MiniMaxAI/MiniMax-M2",
       "hf:MiniMaxAI/MiniMax-M2.1",
@@ -4718,6 +4758,7 @@
       "minimax-m2",
       "minimax-m2.1",
       "minimax-m2.5",
+      "minimax-m2.7",
       "ministral-3:14b",
       "ministral-3:3b",
       "ministral-3:8b",
@@ -4765,7 +4806,14 @@
       "zai-org/GLM-4.5-Air",
       "zai-org/GLM-4.5-FP8"
     ],
-    "minimax-cn-coding-plan": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+    "minimax-cn-coding-plan": [
+      "MiniMax-M2",
+      "MiniMax-M2.1",
+      "MiniMax-M2.5",
+      "MiniMax-M2.5-highspeed",
+      "MiniMax-M2.7",
+      "MiniMax-M2.7-highspeed"
+    ],
     "novita-ai": [
       "baichuan/baichuan-m2-32b",
       "baidu/ernie-4.5-21B-a3b",
@@ -4881,7 +4929,8 @@
       "gpt-5.4-nano",
       "gpt-5.4-pro",
       "kimi-k2.5",
-      "mimo-v2-flash-free",
+      "mimo-v2-omni-free",
+      "mimo-v2-pro-free",
       "minimax-m2.5",
       "minimax-m2.5-free",
       "nemotron-3-super-free"
@@ -5018,7 +5067,14 @@
       "qwen3-max-2026-01-23",
       "qwen3.5-plus"
     ],
-    "minimax-cn": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+    "minimax-cn": [
+      "MiniMax-M2",
+      "MiniMax-M2.1",
+      "MiniMax-M2.5",
+      "MiniMax-M2.5-highspeed",
+      "MiniMax-M2.7",
+      "MiniMax-M2.7-highspeed"
+    ],
     "bailing": ["Ling-1T", "Ring-1T"],
     "alibaba": [
       "qvq-max",
@@ -5094,7 +5150,9 @@
       "@cf/meta/m2m100-1.2b",
       "@cf/mistral/mistral-7b-instruct-v0.1",
       "@cf/mistralai/mistral-small-3.1-24b-instruct",
+      "@cf/moonshotai/kimi-k2.5",
       "@cf/myshell-ai/melotts",
+      "@cf/nvidia/nemotron-3-120b-a12b",
       "@cf/openai/gpt-oss-120b",
       "@cf/openai/gpt-oss-20b",
       "@cf/pfnet/plamo-embedding-1b",
@@ -5185,7 +5243,14 @@
       "qwen3-max-2026-01-23",
       "qwen3.5-plus"
     ],
-    "minimax-coding-plan": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+    "minimax-coding-plan": [
+      "MiniMax-M2",
+      "MiniMax-M2.1",
+      "MiniMax-M2.5",
+      "MiniMax-M2.5-highspeed",
+      "MiniMax-M2.7",
+      "MiniMax-M2.7-highspeed"
+    ],
     "kimi-for-coding": ["k2p5", "kimi-k2-thinking"],
     "mistral": [
       "codestral-latest",
@@ -5422,7 +5487,8 @@
       "glm-4.6v",
       "glm-4.6v-flash",
       "glm-4.7",
-      "glm-5"
+      "glm-5",
+      "glm-5-turbo"
     ],
     "deepseek": ["deepseek-chat", "deepseek-reasoner"],
     "lmstudio": ["openai/gpt-oss-20b", "qwen/qwen3-30b-a3b-2507", "qwen/qwen3-coder-30b"],
@@ -5502,6 +5568,7 @@
       "minimax/minimax-m2",
       "minimax/minimax-m2.1",
       "minimax/minimax-m2.5",
+      "minimax/minimax-m2.7",
       "mistralai/codestral-2508",
       "mistralai/devstral-2512",
       "mistralai/devstral-2512:free",
@@ -5552,6 +5619,8 @@
       "openai/gpt-5.2-pro",
       "openai/gpt-5.3-codex",
       "openai/gpt-5.4",
+      "openai/gpt-5.4-mini",
+      "openai/gpt-5.4-nano",
       "openai/gpt-5.4-pro",
       "openai/gpt-oss-120b",
       "openai/gpt-oss-120b:exacto",
@@ -5616,6 +5685,8 @@
       "x-ai/grok-4.20-multi-agent-beta",
       "x-ai/grok-code-fast-1",
       "xiaomi/mimo-v2-flash",
+      "xiaomi/mimo-v2-omni",
+      "xiaomi/mimo-v2-pro",
       "z-ai/glm-4.5",
       "z-ai/glm-4.5-air",
       "z-ai/glm-4.5-air:free",
@@ -5833,7 +5904,7 @@
       "glm-5",
       "glm-5-turbo"
     ],
-    "opencode-go": ["glm-5", "kimi-k2.5", "minimax-m2.5"],
+    "opencode-go": ["glm-5", "kimi-k2.5", "minimax-m2.5", "minimax-m2.7"],
     "drun": ["public/deepseek-r1", "public/deepseek-v3", "public/minimax-m25"],
     "firmware": [
       "claude-haiku-4-5",
@@ -6217,6 +6288,8 @@
       "minimax/minimax-m2.1-lightning",
       "minimax/minimax-m2.5",
       "minimax/minimax-m2.5-highspeed",
+      "minimax/minimax-m2.7",
+      "minimax/minimax-m2.7-highspeed",
       "mistral/codestral",
       "mistral/codestral-embed",
       "mistral/devstral-2",
@@ -6386,7 +6459,14 @@
     ],
     "moark": ["GLM-4.7", "MiniMax-M2.1"],
     "morph": ["auto", "morph-v3-fast", "morph-v3-large"],
-    "minimax": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
+    "minimax": [
+      "MiniMax-M2",
+      "MiniMax-M2.1",
+      "MiniMax-M2.5",
+      "MiniMax-M2.5-highspeed",
+      "MiniMax-M2.7",
+      "MiniMax-M2.7-highspeed"
+    ],
     "vultr": [
       "DeepSeek-R1-Distill-Llama-70B",
       "DeepSeek-R1-Distill-Qwen-32B",

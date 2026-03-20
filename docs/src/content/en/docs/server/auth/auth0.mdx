@@ -1,6 +1,6 @@
 ---
-title: "MastraAuthAuth0 class | Auth"
-description: "Documentation for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication."
+title: "Auth0 | Auth"
+description: "Documentation for the @mastra/auth-auth0 package, which authenticates Mastra applications using Auth0 authentication."
 packages:
   - "@mastra/auth-auth0"
   - "@mastra/client-js"
@@ -10,9 +10,9 @@ packages:
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-# MastraAuthAuth0 class
+# Auth0
 
-The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It verifies incoming requests using Auth0-issued JWT tokens and integrates with the Mastra server using the `auth` option.
+The `@mastra/auth-auth0` package provides authentication for Mastra using Auth0. It verifies incoming requests using Auth0-issued JWT tokens and integrates with the Mastra server using the `auth` option.
 
 ## Prerequisites
 
@@ -40,7 +40,7 @@ For detailed setup instructions, refer to the [Auth0 quickstarts](https://auth0.
 
 Before you can use the `MastraAuthAuth0` class you have to install the `@mastra/auth-auth0` package.
 
-```bash
+```bash npm2yarn
 npm install @mastra/auth-auth0@latest
 ```
 
@@ -113,7 +113,7 @@ When using Auth0 auth, you'll need to set up the Auth0 React SDK, authenticate u
 
 First, install and configure the Auth0 React SDK in your application:
 
-```bash
+```bash npm2yarn
 npm install @auth0/auth0-react
 ```
 

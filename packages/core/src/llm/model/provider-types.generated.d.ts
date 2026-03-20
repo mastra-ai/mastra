@@ -318,7 +318,7 @@ export type ProviderModelsMap = {
     'perplexity/sonar',
     'xai/grok-4-1-fast-non-reasoning',
   ];
-  readonly xiaomi: readonly ['mimo-v2-flash'];
+  readonly xiaomi: readonly ['mimo-v2-flash', 'mimo-v2-omni', 'mimo-v2-pro'];
   readonly synthetic: readonly [
     'hf:MiniMaxAI/MiniMax-M2',
     'hf:MiniMaxAI/MiniMax-M2.1',
@@ -514,6 +514,7 @@ export type ProviderModelsMap = {
     'minimax-m2',
     'minimax-m2.1',
     'minimax-m2.5',
+    'minimax-m2.7',
     'ministral-3:14b',
     'ministral-3:3b',
     'ministral-3:8b',
@@ -561,7 +562,14 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.5-FP8',
   ];
-  readonly 'minimax-cn-coding-plan': readonly ['MiniMax-M2', 'MiniMax-M2.1', 'MiniMax-M2.5', 'MiniMax-M2.5-highspeed'];
+  readonly 'minimax-cn-coding-plan': readonly [
+    'MiniMax-M2',
+    'MiniMax-M2.1',
+    'MiniMax-M2.5',
+    'MiniMax-M2.5-highspeed',
+    'MiniMax-M2.7',
+    'MiniMax-M2.7-highspeed',
+  ];
   readonly 'novita-ai': readonly [
     'baichuan/baichuan-m2-32b',
     'baidu/ernie-4.5-21B-a3b',
@@ -677,7 +685,8 @@ export type ProviderModelsMap = {
     'gpt-5.4-nano',
     'gpt-5.4-pro',
     'kimi-k2.5',
-    'mimo-v2-flash-free',
+    'mimo-v2-omni-free',
+    'mimo-v2-pro-free',
     'minimax-m2.5',
     'minimax-m2.5-free',
     'nemotron-3-super-free',
@@ -814,7 +823,14 @@ export type ProviderModelsMap = {
     'qwen3-max-2026-01-23',
     'qwen3.5-plus',
   ];
-  readonly 'minimax-cn': readonly ['MiniMax-M2', 'MiniMax-M2.1', 'MiniMax-M2.5', 'MiniMax-M2.5-highspeed'];
+  readonly 'minimax-cn': readonly [
+    'MiniMax-M2',
+    'MiniMax-M2.1',
+    'MiniMax-M2.5',
+    'MiniMax-M2.5-highspeed',
+    'MiniMax-M2.7',
+    'MiniMax-M2.7-highspeed',
+  ];
   readonly bailing: readonly ['Ling-1T', 'Ring-1T'];
   readonly alibaba: readonly [
     'qvq-max',
@@ -890,7 +906,9 @@ export type ProviderModelsMap = {
     '@cf/meta/m2m100-1.2b',
     '@cf/mistral/mistral-7b-instruct-v0.1',
     '@cf/mistralai/mistral-small-3.1-24b-instruct',
+    '@cf/moonshotai/kimi-k2.5',
     '@cf/myshell-ai/melotts',
+    '@cf/nvidia/nemotron-3-120b-a12b',
     '@cf/openai/gpt-oss-120b',
     '@cf/openai/gpt-oss-20b',
     '@cf/pfnet/plamo-embedding-1b',
@@ -981,7 +999,14 @@ export type ProviderModelsMap = {
     'qwen3-max-2026-01-23',
     'qwen3.5-plus',
   ];
-  readonly 'minimax-coding-plan': readonly ['MiniMax-M2', 'MiniMax-M2.1', 'MiniMax-M2.5', 'MiniMax-M2.5-highspeed'];
+  readonly 'minimax-coding-plan': readonly [
+    'MiniMax-M2',
+    'MiniMax-M2.1',
+    'MiniMax-M2.5',
+    'MiniMax-M2.5-highspeed',
+    'MiniMax-M2.7',
+    'MiniMax-M2.7-highspeed',
+  ];
   readonly 'kimi-for-coding': readonly ['k2p5', 'kimi-k2-thinking'];
   readonly mistral: readonly [
     'codestral-latest',
@@ -1219,6 +1244,7 @@ export type ProviderModelsMap = {
     'glm-4.6v-flash',
     'glm-4.7',
     'glm-5',
+    'glm-5-turbo',
   ];
   readonly deepseek: readonly ['deepseek-chat', 'deepseek-reasoner'];
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
@@ -1298,6 +1324,7 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2',
     'minimax/minimax-m2.1',
     'minimax/minimax-m2.5',
+    'minimax/minimax-m2.7',
     'mistralai/codestral-2508',
     'mistralai/devstral-2512',
     'mistralai/devstral-2512:free',
@@ -1348,6 +1375,8 @@ export type ProviderModelsMap = {
     'openai/gpt-5.2-pro',
     'openai/gpt-5.3-codex',
     'openai/gpt-5.4',
+    'openai/gpt-5.4-mini',
+    'openai/gpt-5.4-nano',
     'openai/gpt-5.4-pro',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-120b:exacto',
@@ -1412,6 +1441,8 @@ export type ProviderModelsMap = {
     'x-ai/grok-4.20-multi-agent-beta',
     'x-ai/grok-code-fast-1',
     'xiaomi/mimo-v2-flash',
+    'xiaomi/mimo-v2-omni',
+    'xiaomi/mimo-v2-pro',
     'z-ai/glm-4.5',
     'z-ai/glm-4.5-air',
     'z-ai/glm-4.5-air:free',
@@ -1635,7 +1666,7 @@ export type ProviderModelsMap = {
     'glm-5',
     'glm-5-turbo',
   ];
-  readonly 'opencode-go': readonly ['glm-5', 'kimi-k2.5', 'minimax-m2.5'];
+  readonly 'opencode-go': readonly ['glm-5', 'kimi-k2.5', 'minimax-m2.5', 'minimax-m2.7'];
   readonly drun: readonly ['public/deepseek-r1', 'public/deepseek-v3', 'public/minimax-m25'];
   readonly firmware: readonly [
     'claude-haiku-4-5',
@@ -2019,6 +2050,8 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2.1-lightning',
     'minimax/minimax-m2.5',
     'minimax/minimax-m2.5-highspeed',
+    'minimax/minimax-m2.7',
+    'minimax/minimax-m2.7-highspeed',
     'mistral/codestral',
     'mistral/codestral-embed',
     'mistral/devstral-2',
@@ -2188,7 +2221,14 @@ export type ProviderModelsMap = {
   ];
   readonly moark: readonly ['GLM-4.7', 'MiniMax-M2.1'];
   readonly morph: readonly ['auto', 'morph-v3-fast', 'morph-v3-large'];
-  readonly minimax: readonly ['MiniMax-M2', 'MiniMax-M2.1', 'MiniMax-M2.5', 'MiniMax-M2.5-highspeed'];
+  readonly minimax: readonly [
+    'MiniMax-M2',
+    'MiniMax-M2.1',
+    'MiniMax-M2.5',
+    'MiniMax-M2.5-highspeed',
+    'MiniMax-M2.7',
+    'MiniMax-M2.7-highspeed',
+  ];
   readonly vultr: readonly [
     'DeepSeek-R1-Distill-Llama-70B',
     'DeepSeek-R1-Distill-Qwen-32B',

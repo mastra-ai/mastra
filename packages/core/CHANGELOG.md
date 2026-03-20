@@ -1,5 +1,120 @@
 # @mastra/core
 
+## 1.15.0-alpha.4
+
+### Patch Changes
+
+- Added experimental retrieval-mode recall tooling for observational memory. ([#14437](https://github.com/mastra-ai/mastra/pull/14437))
+
+  When `observationalMemory.retrieval` is enabled with `scope: 'thread'`, observation groups store colon-delimited message ranges (`startId:endId`) pointing back to the raw messages they were derived from. A `recall` tool is registered that lets agents retrieve those source messages via cursor-based pagination.
+
+  The recall tool supports:
+  - **Detail levels**: `detail: 'low'` (default) returns truncated text with part indices; `detail: 'high'` returns full content clamped to one part per call with continuation hints
+  - **Part-level fetch**: `partIndex` targets a single message part at full detail
+  - **Pagination flags**: `hasNextPage` and `hasPrevPage` in results
+  - **Token limiting**: results are capped at a token budget with `truncated` and `tokenOffset` reporting
+  - **Smart range detection**: passing a range as a cursor returns a helpful hint explaining how to extract individual IDs
+
+- Fixed a bug where workflow-based processor execution would pass null stream parts to subsequent processors. When a processor's processOutputStream returns null (e.g., a guardrail filtering a part), the next processor in the chain would receive null as the part, causing potential errors. The null guard now matches the inline processor path behavior, skipping processors when the part is null. ([#14514](https://github.com/mastra-ai/mastra/pull/14514))
+
+## 1.15.0-alpha.3
+
+### Minor Changes
+
+- Added filesystem-level optimistic concurrency for file writes. When `expectedMtime` is provided in `WriteOptions`, the write will be rejected with a `StaleFileError` if the file was modified externally since it was last read. This provides defense-in-depth against external modifications (e.g., LSP-based editors) that occur between the tool-level mtime check and the actual write. ([#14354](https://github.com/mastra-ai/mastra/pull/14354))
+
+  **New `expectedMtime` option on `WriteOptions`**
+
+  Any caller of `filesystem.writeFile()` can now opt into optimistic concurrency:
+
+  ```ts
+  // Read a file and capture its mtime
+  const stat = await filesystem.stat('config.json');
+  const content = await filesystem.readFile('config.json');
+
+  // Later, write with mtime guard — fails if file changed externally
+  await filesystem.writeFile('config.json', newContent, {
+    overwrite: true,
+    expectedMtime: stat.modifiedAt,
+  });
+  ```
+
+  If the file was modified between the read and write, a `StaleFileError` is thrown instead of silently overwriting.
+
+  **Automatic mtime pass-through for workspace tools**
+
+  When `requireReadBeforeWrite` is enabled, the `edit_file`, `write_file`, and `ast_edit` tools now automatically pass the recorded mtime through to the filesystem layer, providing a second line of defense beyond the existing tool-level read tracker check.
+
+## 1.15.0-alpha.2
+
+### Patch Changes
+
+- Fixed deserializeRequestContext to return an actual RequestContext instance instead of a Map, preventing crashes during Inngest durable execution replay with observability enabled. ([#14442](https://github.com/mastra-ai/mastra/pull/14442))
+
+- Fixed generation span output to include tool call data, enabling PostHog's LLM Analytics Tools tab to extract and display tool usage ([#14383](https://github.com/mastra-ai/mastra/pull/14383))
+
+## 1.15.0-alpha.1
+
+### Patch Changes
+
+- Added opt-in Observational Memory thread titles. ([#14436](https://github.com/mastra-ai/mastra/pull/14436))
+
+  When enabled, the Observer suggests a short thread title and updates it as the conversation topic changes. Harness consumers can detect these updates via the new `om_thread_title_updated` event.
+
+  **Example**
+
+  ```ts
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        observation: {
+          threadTitle: true,
+        },
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`cd7b568`](https://github.com/mastra-ai/mastra/commit/cd7b568fe427b1b4838abe744fa5367a47539db3)]:
+  - @mastra/schema-compat@1.2.6-alpha.1
+
+## 1.15.0-alpha.0
+
+### Minor Changes
+
+- Add `server.studioHost`, `server.studioProtocol`, and `server.studioPort` options for Studio in cloud deployments ([#12899](https://github.com/mastra-ai/mastra/pull/12899))
+
+  When deploying to cloud environments (e.g., Google Cloud Run), `server.host` must be `0.0.0.0` for the container to accept traffic, and the internal port often differs from the external one (e.g., 8080 internally vs 443 externally). Studio needs the actual public domain, protocol, and port to make API calls from the browser. These new options decouple the server bind configuration from the Studio API URL.
+
+  ```typescript
+  export const mastra = new Mastra({
+    server: {
+      host: '0.0.0.0',
+      port: 8080,
+      studioHost: 'my-app.run.app',
+      studioProtocol: 'https',
+      studioPort: 443,
+    },
+  });
+  ```
+
+  All three options are optional and fall back to existing behavior when not set.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5))
+
+- Fixed agent.stream() so the returned spanId matches the top-level agent run span instead of the nested model span. ([#14447](https://github.com/mastra-ai/mastra/pull/14447))
+
+- Fixed trace context propagation in evented workflow steps and processors. Operations started inside those steps now appear under the correct parent in distributed traces. ([#14455](https://github.com/mastra-ai/mastra/pull/14455))
+
+- Fix OTEL context propagation in workflow step execution. Wrapping `step.execute()` in `executeWithContext` ensures auto-instrumented code inside a step (e.g. AI SDK spans) is correctly nested under the workflow step span rather than appearing as siblings. ([#13755](https://github.com/mastra-ai/mastra/pull/13755))
+
+- Added version query parameters to GET /api/agents/:agentId endpoint. Code-defined agents can now be resolved with specific stored config versions using ?status=draft (latest, default), ?status=published (active version), or ?versionId=<id> (specific version). ([#14156](https://github.com/mastra-ai/mastra/pull/14156))
+
+- Updated dependencies [[`b71bce1`](https://github.com/mastra-ai/mastra/commit/b71bce144912ed33f76c52a94e594988a649c3e1)]:
+  - @mastra/schema-compat@1.2.6-alpha.0
+
 ## 1.14.0
 
 ### Patch Changes
