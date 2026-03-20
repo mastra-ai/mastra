@@ -67,8 +67,8 @@ describe('edge cases', () => {
         inputData: { items: [] },
       });
 
-      // Should complete successfully with empty result
       expect(data.status).toBe('success');
+      expect(data.result).toEqual([]);
     });
 
     it('should handle foreach with single item', async () => {
@@ -77,7 +77,7 @@ describe('edge cases', () => {
       });
 
       expect(data.status).toBe('success');
-      expect(JSON.stringify(data.result)).toContain('ONLY');
+      expect(data.result).toEqual([{ processed: 'ONLY' }]);
     });
   });
 
@@ -94,10 +94,10 @@ describe('edge cases', () => {
       expect(run2.data.status).toBe('success');
       expect(run3.data.status).toBe('success');
 
-      // Each run should have its own result
-      expect(run1.data.result.message).toContain('concurrent-1');
-      expect(run2.data.result.message).toContain('concurrent-2');
-      expect(run3.data.result.message).toContain('concurrent-3');
+      // Each run should have its own isolated result
+      expect(run1.data.result).toEqual({ message: 'Hello, concurrent-1! Goodbye, concurrent-1!' });
+      expect(run2.data.result).toEqual({ message: 'Hello, concurrent-2! Goodbye, concurrent-2!' });
+      expect(run3.data.result).toEqual({ message: 'Hello, concurrent-3! Goodbye, concurrent-3!' });
 
       // Each run should have a unique runId
       const ids = new Set([run1.runId, run2.runId, run3.runId]);
