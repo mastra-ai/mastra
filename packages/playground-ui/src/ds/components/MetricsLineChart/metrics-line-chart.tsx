@@ -27,11 +27,11 @@ export function MetricsLineChart({
         {series.map(s => {
           const aggregated = s.aggregate?.(data);
           return (
-            <div key={s.dataKey} className="inline-flex items-baseline gap-2  LABEL">
-              <div className="h-0.5 w-3 rounded-full -translate-y-0.5" style={{ backgroundColor: s.color }} />
+            <div key={s.dataKey} className="inline-flex items-baseline gap-2">
+              <div className="size-2 shrink-0 rounded-full translate-y-[-1px]" style={{ backgroundColor: s.color }} />
               <span className="text-ui-sm text-neutral3 truncate max-w-24">{s.label}</span>
               {aggregated && (
-                <span className="text-ui-md text-neutral4">
+                <span className="text-ui-lg text-neutral4">
                   {aggregated.value}
                   {aggregated.suffix && <span className="text-ui-sm text-neutral2"> {aggregated.suffix}</span>}
                 </span>
