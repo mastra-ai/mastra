@@ -80,7 +80,7 @@ export function getDynamicMemory(storage: MastraCompositeStore) {
             threadTitle: true,
           },
           reflection: {
-            bufferActivation: isResourceScope ? undefined : 1 / 2,
+            bufferActivation: isResourceScope ? undefined : 0.65,
             blockAfter: 1.1,
             model: getReflectorModel,
             observationTokens: refThreshold,
