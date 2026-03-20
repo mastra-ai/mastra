@@ -25,6 +25,39 @@ export { getZodTypeName, getZodDef, isZodArray, isZodObject } from './utils/zod-
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
+ * Safely JSON-stringifies a value, replacing circular references with "[Circular]".
+ */
+export function safeStringify(value: unknown, space?: string | number): string {
+  const seen = new WeakSet();
+  return JSON.stringify(
+    value,
+    (_key, val) => {
+      if (val !== null && typeof val === 'object') {
+        if (seen.has(val)) return '[Circular]';
+        seen.add(val);
+      }
+      return val;
+    },
+    space,
+  );
+}
+
+/**
+ * Returns a JSON-serializable copy of a value by stripping circular references.
+ * If the value is already serializable, returns it unchanged (no cloning overhead).
+ */
+export function ensureSerializable(value: unknown): unknown {
+  if (value === null || typeof value !== 'object') return value;
+
+  try {
+    JSON.stringify(value);
+    return value;
+  } catch {
+    return JSON.parse(safeStringify(value));
+  }
+}
+
+/**
  * Checks if a value is a plain object (not an array, function, Date, RegExp, etc.)
  */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
