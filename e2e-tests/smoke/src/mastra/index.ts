@@ -1,8 +1,8 @@
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
 
-import { testAgent } from './agents/index.js';
-import { calculatorTool, stringTool, failingTool, noInputTool } from './tools/index.js';
+import { testAgent, approvalAgent } from './agents/index.js';
+import { calculatorTool, stringTool, failingTool, noInputTool, approvalTool } from './tools/index.js';
 import { sequentialSteps, schemaValidation, mapBetweenSteps } from './workflows/basic.js';
 import {
   branchWorkflow,
@@ -30,6 +30,7 @@ import { testMcpServer } from './mcp/index.js';
 export const mastra = new Mastra({
   agents: {
     'test-agent': testAgent,
+    'approval-agent': approvalAgent,
   },
   mcpServers: {
     'test-mcp': testMcpServer,
@@ -39,6 +40,7 @@ export const mastra = new Mastra({
     'string-transform': stringTool,
     'always-fails': failingTool,
     timestamp: noInputTool,
+    'needs-approval': approvalTool,
   },
   workflows: {
     'sequential-steps': sequentialSteps,

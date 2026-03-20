@@ -233,7 +233,7 @@ export async function streamAgent(
  * Mastra streams use standard SSE format: "data: {JSON}" lines.
  * Each parsed event has { type, runId, from, payload }.
  */
-function parseSSEEvents(text: string): any[] {
+export function parseSSEEvents(text: string): any[] {
   const events: any[] = [];
   const lines = text.split('\n');
 

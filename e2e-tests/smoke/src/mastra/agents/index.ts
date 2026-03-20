@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 
-import { calculatorTool, stringTool } from '../tools/index.js';
+import { calculatorTool, stringTool, approvalTool } from '../tools/index.js';
 
 export const memory = new Memory({
   options: {
@@ -19,4 +19,12 @@ export const testAgent = new Agent({
   model: 'openai/gpt-4o-mini',
   tools: { calculator: calculatorTool, 'string-transform': stringTool },
   memory,
+});
+
+export const approvalAgent = new Agent({
+  id: 'approval-agent',
+  name: 'Approval Agent',
+  instructions: 'You are a helpful agent. When asked to greet someone, always use the needs-approval tool.',
+  model: 'openai/gpt-4o-mini',
+  tools: { 'needs-approval': approvalTool },
 });
