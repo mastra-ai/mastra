@@ -18,6 +18,7 @@ import type {
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
+  UpdateExperimentResultInput,
   ListExperimentsInput,
   ListExperimentsOutput,
   ListExperimentResultsInput,
@@ -103,6 +104,8 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       completedAt: ensureDate(row.completedAt as string | Date)!,
       retryCount: row.retryCount as number,
       traceId: (row.traceId as string | null) ?? null,
+      status: (row.status as ExperimentResult['status']) ?? null,
+      tags: row.tags ? safelyParseJSON(row.tags as string) : null,
       createdAt: ensureDate(row.createdAt as string | Date)!,
     };
   }
@@ -372,6 +375,8 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           completedAt: input.completedAt.toISOString(),
           retryCount: input.retryCount,
           traceId: input.traceId ?? null,
+          status: input.status ?? null,
+          tags: input.tags !== undefined && input.tags !== null ? JSON.stringify(input.tags) : null,
           createdAt: nowIso,
         },
       });
@@ -389,12 +394,84 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         completedAt: input.completedAt,
         retryCount: input.retryCount,
         traceId: input.traceId ?? null,
+        status: input.status ?? null,
+        tags: input.tags ?? null,
         createdAt: now,
       };
     } catch (error) {
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'ADD_EXPERIMENT_RESULT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async updateExperimentResult(input: UpdateExperimentResultInput): Promise<ExperimentResult> {
+    try {
+      const setClauses: string[] = [];
+      const values: InValue[] = [];
+
+      if (input.status !== undefined) {
+        setClauses.push(`"status" = ?`);
+        values.push(input.status);
+      }
+      if (input.tags !== undefined) {
+        setClauses.push(`"tags" = ?`);
+        values.push(JSON.stringify(input.tags));
+      }
+
+      if (setClauses.length === 0) {
+        const existing = await this.getExperimentResultById({ id: input.id });
+        if (!existing) {
+          throw new MastraError({
+            id: createStorageErrorId('LIBSQL', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { resultId: input.id },
+          });
+        }
+        return existing;
+      }
+
+      values.push(input.id);
+      let whereClause = `"id" = ?`;
+      if (input.experimentId) {
+        values.push(input.experimentId);
+        whereClause += ` AND "experimentId" = ?`;
+      }
+      const updateResult = await this.#client.execute({
+        sql: `UPDATE ${TABLE_EXPERIMENT_RESULTS} SET ${setClauses.join(', ')} WHERE ${whereClause}`,
+        args: values,
+      });
+
+      if (updateResult.rowsAffected === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { resultId: input.id, ...(input.experimentId ? { experimentId: input.experimentId } : {}) },
+        });
+      }
+
+      const result = await this.getExperimentResultById({ id: input.id });
+      if (!result) {
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { resultId: input.id },
+        });
+      }
+      return result;
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'UPDATE_EXPERIMENT_RESULT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
