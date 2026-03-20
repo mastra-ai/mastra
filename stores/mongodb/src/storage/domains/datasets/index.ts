@@ -385,7 +385,15 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         { $inc: { version: 1 } },
         { returnDocument: 'after' },
       );
-      const newVersion = result!.version as number;
+      if (!result) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'ADD_ITEM', 'DATASET_NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { datasetId: args.datasetId },
+        });
+      }
+      const newVersion = result.version as number;
 
       // Insert item
       await itemsCollection.insertOne({
@@ -475,7 +483,15 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         { $inc: { version: 1 } },
         { returnDocument: 'after' },
       );
-      const newVersion = result!.version as number;
+      if (!result) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'UPDATE_ITEM', 'DATASET_NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { datasetId: args.datasetId },
+        });
+      }
+      const newVersion = result.version as number;
 
       // Close old row (set validTo = newVersion)
       await itemsCollection.updateOne(
@@ -556,7 +572,15 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         { $inc: { version: 1 } },
         { returnDocument: 'after' },
       );
-      const newVersion = result!.version as number;
+      if (!result) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'DELETE_ITEM', 'DATASET_NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { datasetId },
+        });
+      }
+      const newVersion = result.version as number;
 
       // Close old row
       await itemsCollection.updateOne({ id, validTo: null, isDeleted: false }, { $set: { validTo: newVersion } });
@@ -630,7 +654,15 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         { $inc: { version: 1 } },
         { returnDocument: 'after' },
       );
-      const newVersion = result!.version as number;
+      if (!result) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'BULK_ADD_ITEMS', 'DATASET_NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { datasetId: input.datasetId },
+        });
+      }
+      const newVersion = result.version as number;
 
       // Batch insert items
       if (itemsWithIds.length > 0) {
@@ -719,7 +751,15 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         { $inc: { version: 1 } },
         { returnDocument: 'after' },
       );
-      const newVersion = result!.version as number;
+      if (!result) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'BULK_DELETE_ITEMS', 'DATASET_NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { datasetId: input.datasetId },
+        });
+      }
+      const newVersion = result.version as number;
 
       // Close old rows
       for (const item of currentItems) {
