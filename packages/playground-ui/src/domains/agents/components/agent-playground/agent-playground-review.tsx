@@ -538,6 +538,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     <Button
                       variant="outline"
                       size="sm"
+                      aria-label={`Create Scorer from ${filteredItems.length} item${filteredItems.length !== 1 ? 's' : ''}`}
                       onClick={() => {
                         onCreateScorer(
                           filteredItems.map(item => ({
