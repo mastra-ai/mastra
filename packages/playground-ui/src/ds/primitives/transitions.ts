@@ -35,8 +35,7 @@ export const focusRing = {
   // Focus ring without glow
   simple: 'focus:outline-none focus:ring-1 focus:ring-accent1',
   // Focus visible only (keyboard navigation)
-  visible:
-    'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1 focus-visible:shadow-focus-ring',
+  visible: 'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring',
 } as const;
 
 export type TransitionPreset = keyof typeof transitions;

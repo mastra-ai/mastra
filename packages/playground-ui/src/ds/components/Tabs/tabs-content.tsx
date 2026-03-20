@@ -12,7 +12,7 @@ export const TabContent = ({ children, value, className }: TabContentProps) => {
   return (
     <RadixTabs.Content
       value={value}
-      className={cn('grid pt-4 overflow-y-auto ring-offset-background', focusRing.visible, className)}
+      className={cn('grid py-3 overflow-y-auto ring-offset-background', focusRing.visible, className)}
     >
       {children}
     </RadixTabs.Content>

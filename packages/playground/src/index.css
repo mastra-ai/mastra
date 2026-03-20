@@ -29,7 +29,6 @@
 
   /* Dark theme (default) */
   --surface1: #09090b;
-  --cardSurface: #0d0d0f;
   --surface2: #111113;
   --surface3: #18181b;
   --surface4: #212124;
@@ -69,7 +68,6 @@
 
 html.light {
   --surface1: #ffffff;
-  --cardSurface: #fbfcfd;
   --surface2: #f8fafc;
   --surface3: #f1f5f9;
   --surface4: #e2e8f0;

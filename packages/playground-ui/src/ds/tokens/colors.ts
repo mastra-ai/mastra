@@ -1,6 +1,5 @@
 export const Colors = {
   surface1: 'var(--surface1)',
-  cardSurface: 'var(--cardSurface)',
   surface2: 'var(--surface2)',
   surface3: 'var(--surface3)',
   surface4: 'var(--surface4)',
