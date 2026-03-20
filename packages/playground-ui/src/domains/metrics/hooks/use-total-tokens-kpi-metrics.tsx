@@ -29,8 +29,7 @@ export function useTotalTokensKpiMetrics() {
       const hasPrevious = input.previousValue != null || output.previousValue != null;
       const value = (input.value ?? 0) + (output.value ?? 0);
       const previousValue = (input.previousValue ?? 0) + (output.previousValue ?? 0);
-      const changePercent =
-        hasPrevious && previousValue > 0 ? ((value - previousValue) / previousValue) * 100 : null;
+      const changePercent = hasPrevious && previousValue > 0 ? ((value - previousValue) / previousValue) * 100 : null;
 
       return {
         value: hasCurrent ? value : null,
