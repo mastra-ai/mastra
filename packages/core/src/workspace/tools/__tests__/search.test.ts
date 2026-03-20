@@ -35,6 +35,25 @@ describe('workspace_search', () => {
     expect(result).not.toContain('0 results');
   });
 
+  it('should fallback to bm25 when hybrid mode requested but only BM25 configured (#14531)', async () => {
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      bm25: true,
+      // No vector config — canHybrid is false
+    });
+    const tools = createWorkspaceTools(workspace);
+    await workspace.index('/doc.txt', 'The quick brown fox');
+
+    // Should not throw "Hybrid search requires both vector and BM25 configuration."
+    const result = await tools[WORKSPACE_TOOLS.SEARCH.SEARCH].execute(
+      { query: 'quick', mode: 'hybrid' },
+      { workspace },
+    );
+    expect(typeof result).toBe('string');
+    expect(result).toContain('bm25 search');
+    expect(result).not.toContain('0 results');
+  });
+
   it('should return empty results for no matches', async () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
