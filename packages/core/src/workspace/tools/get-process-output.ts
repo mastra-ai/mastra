@@ -100,6 +100,7 @@ Use this after starting a background command with execute_command (background: t
     const stderr = await truncateOutput(handle.stderr, tail, tokenLimit, 'sandwich');
 
     if (!stdout && !stderr) {
+      span.end({ exitCode: handle.exitCode });
       return '(no output yet)';
     }
 
