@@ -237,7 +237,8 @@ export const createMastraProject = async ({
         dev: 'mastra dev',
         build: 'mastra build',
         start: 'mastra start',
-        deploy: 'mastra studio deploy',
+        'studio:deploy': 'mastra studio deploy',
+        'server:deploy': 'mastra server deploy',
       });
       await writeReadmeFile({ dirPath: process.cwd(), projectName });
     } catch (error) {
