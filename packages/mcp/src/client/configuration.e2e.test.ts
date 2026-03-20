@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { getLLMTestMode } from '@internal/llm-recorder';
-import { setupDummyApiKeys } from '@internal/test-utils';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
@@ -11,7 +11,11 @@ import type { LogHandler, LogMessage } from './client';
 
 const MODE = getLLMTestMode();
 setupDummyApiKeys(MODE, ['openai']);
+const mock = createGatewayMock();
 import { MCPClient } from './configuration';
+
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 
