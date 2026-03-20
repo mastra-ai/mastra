@@ -28,6 +28,7 @@ import {
 } from './workflows/nested-advanced.js';
 import { foreachErrorWorkflow, foreachRetryWorkflow } from './workflows/foreach-errors.js';
 import { testMcpServer } from './mcp/index.js';
+import { uppercaseProcessor, suffixProcessor, tripwireProcessor } from './processors/index.js';
 
 const testWorkspace = new Workspace({
   id: 'test-workspace',
@@ -90,6 +91,11 @@ export const mastra = new Mastra({
     'nested-suspend-workflow': nestedSuspendWorkflow,
     'foreach-error-workflow': foreachErrorWorkflow,
     'foreach-retry-workflow': foreachRetryWorkflow,
+  },
+  processors: {
+    uppercase: uppercaseProcessor,
+    suffix: suffixProcessor,
+    'tripwire-test': tripwireProcessor,
   },
   storage: new LibSQLStore({
     id: 'smoke-test',

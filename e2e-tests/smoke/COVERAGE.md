@@ -1,6 +1,6 @@
 # Smoke Test Coverage
 
-> 171 tests across 35 test files — last updated 2026-03-20
+> 188 tests across 36 test files — last updated 2026-03-20
 
 ## What's Tested
 
@@ -271,6 +271,29 @@
 
 ---
 
+### Processors (17 tests, 1 file)
+
+#### Processors (`processors.test.ts` — 17 tests)
+- [x] List all registered processors (shape, phases, isWorkflow)
+- [x] Get processor details by ID (phases, configurations)
+- [x] Get suffix processor — verify both input and outputResult phases
+- [x] 404 for non-existent processor
+- [x] Execute uppercase processor on input phase (exact text transform)
+- [x] Execute suffix processor on input phase (append suffix)
+- [x] Execute suffix processor on outputResult phase (append suffix)
+- [x] Process multiple messages at once (batch transform)
+- [x] Preserve non-text parts while transforming text parts (mixed part types)
+- [x] Trigger tripwire with metadata when message contains BLOCK
+- [x] Pass through when tripwire is not triggered
+- [x] Compose input and outputResult phases independently (chained execution)
+- [x] Handle empty messages array
+- [x] 400 when phase is missing
+- [x] 400 when messages is missing
+- [x] 400 for unsupported phase on processor
+- [x] 404 for non-existent processor (execute)
+
+---
+
 ## What's NOT Tested
 
 ### Agents — Untested Endpoints
@@ -394,13 +417,14 @@
 | `GET /.well-known/:agentId/agent-card.json` | Agent discovery card | Medium |
 | `POST /a2a/:agentId` | Agent execution | Medium |
 
-### Processors (0 coverage)
+### Processor Providers (0 coverage)
 
 | Endpoint | Notes | Priority |
 |----------|-------|----------|
-| `GET /processors` | List processors | Low |
-| `GET /processors/:processorId` | Get processor | Low |
-| `POST /processors/:processorId/execute` | Execute processor | Low |
+| `GET /processor-providers` | List processor providers | Low |
+| `GET /processor-providers/:providerId` | Get provider with config schema | Low |
+
+**Requires:** Editor configuration (`mastra.getEditor()`).
 
 ### Scores / Scorers (0 coverage)
 
