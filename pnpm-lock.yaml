@@ -2772,6 +2772,9 @@ importers:
       execa:
         specifier: ^9.6.1
         version: 9.6.1
+      fastq:
+        specifier: ^1.19.1
+        version: 1.19.1
       gray-matter:
         specifier: ^4.0.3
         version: 4.0.3
