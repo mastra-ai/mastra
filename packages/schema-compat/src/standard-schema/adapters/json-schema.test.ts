@@ -239,6 +239,9 @@ describe('json-schema standard-schema adapter', () => {
         // missing required 'url'
       });
       expect('issues' in invalidResult).toBe(true);
+      if ('issues' in invalidResult && invalidResult.issues) {
+        expect(invalidResult.issues.length).toBeGreaterThan(0);
+      }
     });
   });
 
