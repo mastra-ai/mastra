@@ -97,7 +97,7 @@ export function AgentsList({ agents, isLoading, error, onCreateClick, search: ex
             <EntityList.DescriptionCell>{instructions || ''}</EntityList.DescriptionCell>
             <EntityList.Cell>
               <TextAndIcon>
-                {agent.provider && <ProviderLogo providerId={agent.provider} />}
+                {agent.provider && <ProviderLogo providerId={agent.provider} className="dark:invert" />}
                 <span className="truncate">{agent.modelId || 'N/A'}</span>
               </TextAndIcon>
             </EntityList.Cell>

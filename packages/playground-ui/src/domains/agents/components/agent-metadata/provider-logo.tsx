@@ -7,14 +7,13 @@ interface ProviderLogoProps {
   providerId: string;
   className?: string;
   size?: number;
-  noStyle?: boolean; // Option to disable default styling for special cases like gateways
 }
 
 /**
  * Component to display provider logos from models.dev
  * Falls back to local icons if the logo fails to load
  */
-export const ProviderLogo = ({ providerId, className = '', size = 20, noStyle = false }: ProviderLogoProps) => {
+export const ProviderLogo = ({ providerId, className = '', size = 20 }: ProviderLogoProps) => {
   const [imageError, setImageError] = useState(false);
 
   // Clean provider ID (remove .chat, .x, .messages, etc. suffixes)
@@ -59,7 +58,7 @@ export const ProviderLogo = ({ providerId, className = '', size = 20, noStyle = 
       alt={`${providerId} logo`}
       width={size}
       height={size}
-      className={`dark:invert ${className}`}
+      className={className}
       onError={() => setImageError(true)}
       loading="lazy"
       style={{
