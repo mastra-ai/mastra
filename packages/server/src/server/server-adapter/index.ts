@@ -5,7 +5,7 @@ import { MastraServerBase } from '@mastra/core/server';
 import type { ApiRoute, HttpLoggingConfig, ValidationErrorContext, ValidationErrorResponse } from '@mastra/core/server';
 import { Hono } from 'hono';
 import type { ZodError } from 'zod';
-import { z } from 'zod/v4';
+import type { z } from 'zod/v4';
 
 import type { InMemoryTaskStore } from '../a2a/store';
 import { coreAuthMiddleware } from '../auth/helpers';
@@ -115,12 +115,15 @@ function parseComplexQueryParams(
   queryParamSchema: z.ZodTypeAny,
   params: Record<string, QueryParamValue>,
 ): Record<string, QueryParamValue | unknown> {
-  if (!(queryParamSchema instanceof z.ZodObject)) {
+  // Use type name check instead of instanceof to work across zod instances (v3/v4, file: overrides)
+  const typeName = getSchemaTypeName(queryParamSchema);
+  const schemaShape = (queryParamSchema as any).shape;
+  if ((typeName !== 'ZodObject' && typeName !== 'object') || !schemaShape) {
     return params;
   }
 
   const parsedParams: Record<string, QueryParamValue | unknown> = { ...params };
-  const shape = queryParamSchema.shape as Record<string, z.ZodTypeAny>;
+  const shape = schemaShape as Record<string, z.ZodTypeAny>;
 
   for (const [key, fieldSchema] of Object.entries(shape)) {
     const rawValue = parsedParams[key];
