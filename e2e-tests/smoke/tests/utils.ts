@@ -156,28 +156,6 @@ export async function resumeWorkflowSync(
 }
 
 /**
- * Stream a workflow using the legacy /stream-legacy endpoint.
- */
-export async function streamLegacyWorkflow(
-  workflowId: string,
-  body: Record<string, unknown> = {},
-  runId?: string,
-): Promise<{ runId: string; chunks: any[] }> {
-  const id = runId ?? crypto.randomUUID();
-  const baseUrl = getBaseUrl();
-  const res = await fetch(`${baseUrl}/api/workflows/${workflowId}/stream-legacy?runId=${id}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  const text = await res.text();
-  const chunks = parseStreamChunks(text);
-
-  return { runId: id, chunks };
-}
-
-/**
  * Stream a time-travel execution via /time-travel-stream.
  */
 export async function streamTimeTravelWorkflow(

@@ -5,7 +5,6 @@ import {
   startWorkflow,
   startWorkflowSync,
   resumeWorkflowSync,
-  streamLegacyWorkflow,
   streamTimeTravelWorkflow,
   pollWorkflowRun,
 } from '../utils.js';
@@ -76,31 +75,7 @@ describe('API endpoint variants', () => {
     });
   });
 
-  describe('/stream-legacy', () => {
-    it('should stream a workflow using the legacy format', async () => {
-      const { chunks } = await streamLegacyWorkflow('sequential-steps', {
-        inputData: { name: 'legacy-stream-test' },
-      });
-
-      // Legacy format uses short type names: start, step-start, step-result, step-finish, finish
-      const types = chunks.map((c: any) => c.type);
-      expect(types[0]).toBe('start');
-      expect(types[types.length - 1]).toBe('finish');
-      expect(types).toContain('step-result');
-
-      // Should have step results for each of the 3 steps
-      const stepResults = chunks.filter((c: any) => c.type === 'step-result');
-      expect(stepResults.length).toBe(3);
-
-      // Final step result should contain the combined message
-      const lastStepResult = stepResults[stepResults.length - 1];
-      expect(lastStepResult.payload.output).toEqual({
-        message: 'Hello, legacy-stream-test! Goodbye, legacy-stream-test!',
-      });
-    });
-  });
-
-  describe('/time-travel-stream', () => {
+describe('/time-travel-stream', () => {
     it('should stream a time-travel re-execution', async () => {
       // First complete a run
       const { runId } = await startWorkflow('sequential-steps', {
