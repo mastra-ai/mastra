@@ -51,6 +51,16 @@ export const snapshotInputSchema = z.object({
     .describe(
       'Only show interactive elements (buttons, links, inputs). Set to false to see ALL page text content — required for reading articles, paragraphs, or any non-interactive text.',
     ),
+  includeCursorElements: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      'Include cursor-interactive elements (divs with onclick, cursor:pointer) in addition to standard interactive elements.',
+    ),
+  compact: z.boolean().optional().default(false).describe('Remove empty structural elements for cleaner output.'),
+  maxDepth: z.number().optional().describe('Limit accessibility tree depth to N levels.'),
+  selector: z.string().optional().describe('CSS selector to scope snapshot to a specific element subtree.'),
   maxElements: z.number().optional().default(50).describe('Maximum elements to include in output'),
   offset: z
     .number()
@@ -80,6 +90,7 @@ export type SnapshotOutput = z.infer<typeof snapshotOutputSchema>;
 export const clickInputSchema = z.object({
   ref: z.string().describe('Element ref from snapshot (e.g., @e5)'),
   button: z.enum(['left', 'right', 'middle']).optional().default('left').describe('Mouse button to click with'),
+  newTab: z.boolean().optional().default(false).describe('Open link in new tab instead of current tab'),
 });
 
 export const clickOutputSchema = z.object({
@@ -163,6 +174,11 @@ export const screenshotInputSchema = z.object({
   format: z.enum(['png', 'jpeg']).optional().default('png').describe('Image format. PNG is lossless, JPEG is smaller.'),
   quality: z.number().min(0).max(100).optional().default(80).describe('JPEG quality (0-100). Ignored for PNG.'),
   ref: z.string().optional().describe('Element ref from snapshot to capture specific element (e.g., @e5)'),
+  annotate: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe('Overlay numbered labels on interactive elements. Each label [N] corresponds to ref @eN.'),
 });
 
 export const screenshotOutputSchema = z.object({
@@ -641,6 +657,407 @@ export type ReloadInput = z.infer<typeof reloadInputSchema>;
 export type ReloadOutput = z.infer<typeof reloadOutputSchema>;
 
 // ============================================================================
+// Keyboard Type Tool Schemas (type at current focus, no selector)
+// ============================================================================
+
+export const keyboardTypeInputSchema = z.object({
+  text: z.string().describe('Text to type at current focus position'),
+});
+
+export const keyboardTypeOutputSchema = z.object({
+  success: z.boolean().describe('Whether the keyboard type succeeded'),
+  url: z.string().optional().describe('Current page URL'),
+  hint: z.string().optional().describe('Hint for next action'),
+  code: z.string().optional().describe('Error code if operation failed'),
+  message: z.string().optional().describe('Error message if operation failed'),
+  canRetry: z.boolean().optional().describe('Whether the operation can be retried'),
+});
+
+export type KeyboardTypeInput = z.infer<typeof keyboardTypeInputSchema>;
+export type KeyboardTypeOutput = z.infer<typeof keyboardTypeOutputSchema>;
+
+// ============================================================================
+// Keyboard Insert Text Tool Schemas (insert without key events)
+// ============================================================================
+
+export const keyboardInsertTextInputSchema = z.object({
+  text: z.string().describe('Text to insert at current focus position (without key events)'),
+});
+
+export const keyboardInsertTextOutputSchema = z.object({
+  success: z.boolean().describe('Whether the text insert succeeded'),
+  url: z.string().optional().describe('Current page URL'),
+  hint: z.string().optional().describe('Hint for next action'),
+  code: z.string().optional().describe('Error code if operation failed'),
+  message: z.string().optional().describe('Error message if operation failed'),
+  canRetry: z.boolean().optional().describe('Whether the operation can be retried'),
+});
+
+export type KeyboardInsertTextInput = z.infer<typeof keyboardInsertTextInputSchema>;
+export type KeyboardInsertTextOutput = z.infer<typeof keyboardInsertTextOutputSchema>;
+
+// ============================================================================
+// Key Down/Up Tool Schemas
+// ============================================================================
+
+export const keyDownInputSchema = z.object({
+  key: z.string().describe('Key to hold down (e.g., "Shift", "Control", "Alt")'),
+});
+
+export const keyDownOutputSchema = z.object({
+  success: z.boolean().describe('Whether the key down succeeded'),
+  url: z.string().optional().describe('Current page URL'),
+  code: z.string().optional().describe('Error code if operation failed'),
+  message: z.string().optional().describe('Error message if operation failed'),
+  canRetry: z.boolean().optional().describe('Whether the operation can be retried'),
+});
+
+export type KeyDownInput = z.infer<typeof keyDownInputSchema>;
+export type KeyDownOutput = z.infer<typeof keyDownOutputSchema>;
+
+export const keyUpInputSchema = z.object({
+  key: z.string().describe('Key to release (e.g., "Shift", "Control", "Alt")'),
+});
+
+export const keyUpOutputSchema = z.object({
+  success: z.boolean().describe('Whether the key up succeeded'),
+  url: z.string().optional().describe('Current page URL'),
+  code: z.string().optional().describe('Error code if operation failed'),
+  message: z.string().optional().describe('Error message if operation failed'),
+  canRetry: z.boolean().optional().describe('Whether the operation can be retried'),
+});
+
+export type KeyUpInput = z.infer<typeof keyUpInputSchema>;
+export type KeyUpOutput = z.infer<typeof keyUpOutputSchema>;
+
+// ============================================================================
+// Get HTML Tool Schemas
+// ============================================================================
+
+export const getHtmlInputSchema = z.object({
+  ref: z.string().optional().describe('Element ref from snapshot (e.g., @e5). Omit to get full page HTML.'),
+  outer: z.boolean().optional().default(true).describe('Get outer HTML (includes element tag) vs inner HTML'),
+});
+
+export const getHtmlOutputSchema = z.object({
+  success: z.boolean().describe('Whether the HTML extraction succeeded'),
+  html: z.string().optional().describe('HTML content'),
+  url: z.string().optional().describe('Current page URL'),
+  code: z.string().optional().describe('Error code if extraction failed'),
+  message: z.string().optional().describe('Error message if extraction failed'),
+  canRetry: z.boolean().optional().describe('Whether the operation can be retried'),
+});
+
+export type GetHtmlInput = z.infer<typeof getHtmlInputSchema>;
+export type GetHtmlOutput = z.infer<typeof getHtmlOutputSchema>;
+
+// ============================================================================
+// Get Value Tool Schemas (for input fields)
+// ============================================================================
+
+export const getValueInputSchema = z.object({
+  ref: z.string().describe('Element ref from snapshot (e.g., @e5) - should be an input/textarea/select'),
+});
+
+export const getValueOutputSchema = z.object({
+  success: z.boolean().describe('Whether the value extraction succeeded'),
+  value: z.string().optional().describe('Current value of the input field'),
+  url: z.string().optional().describe('Current page URL'),
+  code: z.string().optional().describe('Error code if extraction failed'),
+  message: z.string().optional().describe('Error message if extraction failed'),
+  canRetry: z.boolean().optional().describe('Whether the operation can be retried'),
+});
+
+export type GetValueInput = z.infer<typeof getValueInputSchema>;
+export type GetValueOutput = z.infer<typeof getValueOutputSchema>;
+
+// ============================================================================
+// Get Attribute Tool Schemas
+// ============================================================================
+
+export const getAttributeInputSchema = z.object({
+  ref: z.string().describe('Element ref from snapshot (e.g., @e5)'),
+  name: z.string().describe('Attribute name to get (e.g., "href", "src", "data-id")'),
+});
+
+export const getAttributeOutputSchema = z.object({
+  success: z.boolean().describe('Whether the attribute extraction succeeded'),
+  value: z.string().nullable().optional().describe('Attribute value (null if not present)'),
+  url: z.string().optional().describe('Current page URL'),
+  code: z.string().optional().describe('Error code if extraction failed'),
+  message: z.string().optional().describe('Error message if extraction failed'),
+  canRetry: z.boolean().optional().describe('Whether the operation can be retried'),
+});
+
+export type GetAttributeInput = z.infer<typeof getAttributeInputSchema>;
+export type GetAttributeOutput = z.infer<typeof getAttributeOutputSchema>;
+
+// ============================================================================
+// Tab Management Tool Schemas
+// ============================================================================
+
+export const getTabsInputSchema = z.object({});
+
+export const getTabsOutputSchema = z.object({
+  success: z.boolean().describe('Whether the tab list was retrieved'),
+  tabs: z
+    .array(
+      z.object({
+        id: z.string().describe('Tab identifier'),
+        url: z.string().describe('Tab URL'),
+        title: z.string().describe('Tab title'),
+        active: z.boolean().describe('Whether this is the active tab'),
+      }),
+    )
+    .optional()
+    .describe('List of open tabs'),
+  code: z.string().optional().describe('Error code if operation failed'),
+  message: z.string().optional().describe('Error message if operation failed'),
+});
+
+export type GetTabsInput = z.infer<typeof getTabsInputSchema>;
+export type GetTabsOutput = z.infer<typeof getTabsOutputSchema>;
+
+export const switchTabInputSchema = z.object({
+  tabId: z.string().optional().describe('Tab ID to switch to'),
+  index: z.number().optional().describe('Tab index to switch to (0-based)'),
+});
+
+export const switchTabOutputSchema = z.object({
+  success: z.boolean().describe('Whether the tab switch succeeded'),
+  url: z.string().optional().describe('URL of the new active tab'),
+  title: z.string().optional().describe('Title of the new active tab'),
+  code: z.string().optional().describe('Error code if operation failed'),
+  message: z.string().optional().describe('Error message if operation failed'),
+});
+
+export type SwitchTabInput = z.infer<typeof switchTabInputSchema>;
+export type SwitchTabOutput = z.infer<typeof switchTabOutputSchema>;
+
+export const newTabInputSchema = z.object({
+  url: z.string().url().optional().describe('URL to open in new tab (optional, opens blank tab if omitted)'),
+});
+
+export const newTabOutputSchema = z.object({
+  success: z.boolean().describe('Whether the new tab was created'),
+  tabId: z.string().optional().describe('ID of the new tab'),
+  url: z.string().optional().describe('URL of the new tab'),
+  code: z.string().optional().describe('Error code if operation failed'),
+  message: z.string().optional().describe('Error message if operation failed'),
+});
+
+export type NewTabInput = z.infer<typeof newTabInputSchema>;
+export type NewTabOutput = z.infer<typeof newTabOutputSchema>;
+
+export const closeTabInputSchema = z.object({
+  tabId: z.string().optional().describe('Tab ID to close (closes current tab if omitted)'),
+});
+
+export const closeTabOutputSchema = z.object({
+  success: z.boolean().describe('Whether the tab was closed'),
+  remainingTabs: z.number().optional().describe('Number of remaining tabs'),
+  code: z.string().optional().describe('Error code if operation failed'),
+  message: z.string().optional().describe('Error message if operation failed'),
+});
+
+export type CloseTabInput = z.infer<typeof closeTabInputSchema>;
+export type CloseTabOutput = z.infer<typeof closeTabOutputSchema>;
+
+// ============================================================================
+// Device Emulation Tool Schemas
+// ============================================================================
+
+export const setDeviceInputSchema = z.object({
+  device: z
+    .string()
+    .describe(
+      'Device name to emulate (e.g., "iPhone 14", "iPad Pro", "Pixel 7"). Sets viewport, user agent, and device scale.',
+    ),
+});
+
+export const setDeviceOutputSchema = z.object({
+  success: z.boolean().describe('Whether the device emulation was set'),
+  device: z.string().optional().describe('Device name that was set'),
+  viewport: z
+    .object({
+      width: z.number(),
+      height: z.number(),
+      deviceScaleFactor: z.number(),
+    })
+    .optional()
+    .describe('Viewport dimensions for the device'),
+  userAgent: z.string().optional().describe('User agent string for the device'),
+  code: z.string().optional().describe('Error code if operation failed'),
+  message: z.string().optional().describe('Error message if operation failed'),
+});
+
+export type SetDeviceInput = z.infer<typeof setDeviceInputSchema>;
+export type SetDeviceOutput = z.infer<typeof setDeviceOutputSchema>;
+
+export const setMediaInputSchema = z.object({
+  colorScheme: z.enum(['light', 'dark', 'no-preference']).optional().describe('Preferred color scheme'),
+  reducedMotion: z.enum(['reduce', 'no-preference']).optional().describe('Reduced motion preference'),
+  forcedColors: z.enum(['active', 'none']).optional().describe('Forced colors mode'),
+});
+
+export const setMediaOutputSchema = z.object({
+  success: z.boolean().describe('Whether the media settings were applied'),
+  settings: z
+    .object({
+      colorScheme: z.string().optional(),
+      reducedMotion: z.string().optional(),
+      forcedColors: z.string().optional(),
+    })
+    .optional()
+    .describe('Applied media settings'),
+  url: z.string().optional().describe('Current page URL'),
+  code: z.string().optional().describe('Error code if operation failed'),
+  message: z.string().optional().describe('Error message if operation failed'),
+});
+
+export type SetMediaInput = z.infer<typeof setMediaInputSchema>;
+export type SetMediaOutput = z.infer<typeof setMediaOutputSchema>;
+
+// ============================================================================
+// Highlight Tool Schemas
+// ============================================================================
+
+export const highlightInputSchema = z.object({
+  ref: z.string().describe('Element ref from snapshot (e.g., @e5)'),
+  color: z.string().optional().default('red').describe('Highlight color (CSS color value)'),
+  duration: z.number().optional().default(2000).describe('Duration to show highlight in milliseconds'),
+});
+
+export const highlightOutputSchema = z.object({
+  success: z.boolean().describe('Whether the highlight was applied'),
+  url: z.string().optional().describe('Current page URL'),
+  code: z.string().optional().describe('Error code if operation failed'),
+  message: z.string().optional().describe('Error message if operation failed'),
+});
+
+export type HighlightInput = z.infer<typeof highlightInputSchema>;
+export type HighlightOutput = z.infer<typeof highlightOutputSchema>;
+
+// ============================================================================
+// Inspect Tool Schemas (open DevTools)
+// ============================================================================
+
+export const inspectInputSchema = z.object({
+  ref: z.string().optional().describe('Element ref to inspect (opens Elements panel focused on element)'),
+});
+
+export const inspectOutputSchema = z.object({
+  success: z.boolean().describe('Whether DevTools was opened'),
+  code: z.string().optional().describe('Error code if operation failed'),
+  message: z.string().optional().describe('Error message if operation failed'),
+});
+
+export type InspectInput = z.infer<typeof inspectInputSchema>;
+export type InspectOutput = z.infer<typeof inspectOutputSchema>;
+
+// ============================================================================
+// Record Tool Schemas
+// ============================================================================
+
+export const recordStartInputSchema = z.object({
+  path: z.string().optional().describe('Output file path for recording (e.g., "recording.webm")'),
+});
+
+export const recordStartOutputSchema = z.object({
+  success: z.boolean().describe('Whether recording started'),
+  path: z.string().optional().describe('Path where recording will be saved'),
+  code: z.string().optional().describe('Error code if operation failed'),
+  message: z.string().optional().describe('Error message if operation failed'),
+});
+
+export type RecordStartInput = z.infer<typeof recordStartInputSchema>;
+export type RecordStartOutput = z.infer<typeof recordStartOutputSchema>;
+
+export const recordStopInputSchema = z.object({});
+
+export const recordStopOutputSchema = z.object({
+  success: z.boolean().describe('Whether recording stopped'),
+  path: z.string().optional().describe('Path where recording was saved'),
+  duration: z.number().optional().describe('Recording duration in seconds'),
+  fileSize: z.number().optional().describe('Recording file size in bytes'),
+  code: z.string().optional().describe('Error code if operation failed'),
+  message: z.string().optional().describe('Error message if operation failed'),
+});
+
+export type RecordStopInput = z.infer<typeof recordStopInputSchema>;
+export type RecordStopOutput = z.infer<typeof recordStopOutputSchema>;
+
+// ============================================================================
+// Profiler Tool Schemas
+// ============================================================================
+
+export const profilerStartInputSchema = z.object({
+  categories: z
+    .array(z.string())
+    .optional()
+    .describe('Trace categories to capture (e.g., ["devtools.timeline", "v8.execute"])'),
+});
+
+export const profilerStartOutputSchema = z.object({
+  success: z.boolean().describe('Whether profiling started'),
+  code: z.string().optional().describe('Error code if operation failed'),
+  message: z.string().optional().describe('Error message if operation failed'),
+});
+
+export type ProfilerStartInput = z.infer<typeof profilerStartInputSchema>;
+export type ProfilerStartOutput = z.infer<typeof profilerStartOutputSchema>;
+
+export const profilerStopInputSchema = z.object({
+  path: z.string().optional().describe('Output file path for trace (e.g., "trace.json")'),
+});
+
+export const profilerStopOutputSchema = z.object({
+  success: z.boolean().describe('Whether profiling stopped'),
+  path: z.string().optional().describe('Path where trace was saved'),
+  fileSize: z.number().optional().describe('Trace file size in bytes'),
+  code: z.string().optional().describe('Error code if operation failed'),
+  message: z.string().optional().describe('Error message if operation failed'),
+});
+
+export type ProfilerStopInput = z.infer<typeof profilerStopInputSchema>;
+export type ProfilerStopOutput = z.infer<typeof profilerStopOutputSchema>;
+
+// ============================================================================
+// Batch Command Tool Schemas
+// ============================================================================
+
+export const batchInputSchema = z.object({
+  commands: z
+    .array(
+      z.object({
+        tool: z.string().describe('Tool name to execute'),
+        input: z.record(z.string(), z.unknown()).describe('Tool input parameters'),
+      }),
+    )
+    .describe('Array of commands to execute sequentially'),
+  stopOnError: z.boolean().optional().default(true).describe('Stop execution on first error'),
+});
+
+export const batchOutputSchema = z.object({
+  success: z.boolean().describe('Whether all commands succeeded'),
+  results: z
+    .array(
+      z.object({
+        tool: z.string(),
+        success: z.boolean(),
+        output: z.unknown().optional(),
+        error: z.string().optional(),
+      }),
+    )
+    .describe('Results from each command'),
+  executedCount: z.number().describe('Number of commands executed'),
+  totalCount: z.number().describe('Total number of commands'),
+});
+
+export type BatchInput = z.infer<typeof batchInputSchema>;
+export type BatchOutput = z.infer<typeof batchOutputSchema>;
+
+// ============================================================================
 // Base Browser Config
 // ============================================================================
 
@@ -660,4 +1077,22 @@ export interface BaseBrowserConfig {
    * @default 10000 (10 seconds)
    */
   timeout?: number;
+
+  /**
+   * Allow access to file:// URLs
+   * @default false
+   */
+  allowFileAccess?: boolean;
+
+  /**
+   * CDP URL to connect to an existing browser instance
+   * e.g., "ws://localhost:9222/devtools/browser/..."
+   */
+  cdpUrl?: string;
+
+  /**
+   * Auto-connect to a running Chrome instance with remote debugging enabled
+   * @default false
+   */
+  autoConnect?: boolean;
 }

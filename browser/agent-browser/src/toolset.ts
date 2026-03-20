@@ -4,26 +4,41 @@ import type { BrowserManagerLike } from './browser-types.js';
 
 import { ScreencastStream } from './screencast/index.js';
 import type { ScreencastOptions } from './screencast/index.js';
+import { createBatchTool } from './tools/batch.js';
 import { createCheckTool } from './tools/check.js';
 import { createClickTool } from './tools/click.js';
 import { createCloseTool } from './tools/close.js';
 import { createClearCookiesTool, createGetCookiesTool, createSetCookieTool } from './tools/cookies.js';
+import { createSetDeviceTool, createSetMediaTool } from './tools/device-emulation.js';
 import { createDoubleClickTool } from './tools/double-click.js';
 import { createDragTool } from './tools/drag.js';
 import { createEvaluateTool } from './tools/evaluate.js';
 import { createFillTool } from './tools/fill.js';
 import { createFocusTool } from './tools/focus.js';
+import { createGetAttributeTool } from './tools/get-attribute.js';
+import { createGetHtmlTool } from './tools/get-html.js';
 import { createGetTextTool } from './tools/get-text.js';
+import { createGetValueTool } from './tools/get-value.js';
+import { createHighlightTool } from './tools/highlight.js';
 import { createHoverTool } from './tools/hover.js';
+import { createInspectTool } from './tools/inspect.js';
+import {
+  createKeyboardTypeTool,
+  createKeyboardInsertTextTool,
+  createKeyDownTool,
+  createKeyUpTool,
+} from './tools/keyboard.js';
 import { createNavigateTool } from './tools/navigate.js';
 import { createGoBackTool, createGoForwardTool, createReloadTool } from './tools/navigation.js';
 import { createPressTool } from './tools/press.js';
+
 import { createScreenshotTool } from './tools/screenshot.js';
 import { createScrollIntoViewTool } from './tools/scroll-into-view.js';
 import { createScrollTool } from './tools/scroll.js';
 import { createSelectTool } from './tools/select.js';
 import { createSetViewportTool } from './tools/set-viewport.js';
 import { createSnapshotTool } from './tools/snapshot.js';
+
 import { createTypeTool } from './tools/type.js';
 import { createWaitTool } from './tools/wait.js';
 import type { BrowserConfig } from './types.js';
@@ -59,7 +74,13 @@ export class Browser {
   private onBrowserReadyCallbacks = new Set<() => void>();
 
   /** Configuration for the browser */
-  private config: Required<BrowserConfig>;
+  private config: {
+    headless: boolean;
+    timeout: number;
+    allowFileAccess?: boolean;
+    cdpUrl?: string;
+    autoConnect?: boolean;
+  };
 
   /** Tools record for the agent */
   readonly tools: Record<string, ToolAction<any, any, any, any>>;
@@ -68,6 +89,9 @@ export class Browser {
     this.config = {
       headless: config.headless ?? true,
       timeout: config.timeout ?? 10_000,
+      allowFileAccess: config.allowFileAccess,
+      cdpUrl: config.cdpUrl,
+      autoConnect: config.autoConnect,
     };
 
     const getBrowser = () => this.getBrowser();
@@ -86,11 +110,18 @@ export class Browser {
       browser_hover: createHoverTool(getBrowser, timeout),
       browser_focus: createFocusTool(getBrowser, timeout),
       browser_drag: createDragTool(getBrowser, timeout),
+      browser_highlight: createHighlightTool(getBrowser),
 
       // Text input
       browser_type: createTypeTool(getBrowser, timeout),
       browser_fill: createFillTool(getBrowser, timeout),
       browser_press: createPressTool(getBrowser),
+
+      // Keyboard (no selector, current focus)
+      browser_keyboard_type: createKeyboardTypeTool(getBrowser),
+      browser_keyboard_insert_text: createKeyboardInsertTextTool(getBrowser),
+      browser_key_down: createKeyDownTool(getBrowser),
+      browser_key_up: createKeyUpTool(getBrowser),
 
       // Form controls
       browser_select: createSelectTool(getBrowser, timeout),
@@ -102,6 +133,9 @@ export class Browser {
 
       // Data extraction
       browser_get_text: createGetTextTool(getBrowser, timeout),
+      browser_get_html: createGetHtmlTool(getBrowser),
+      browser_get_value: createGetValueTool(getBrowser),
+      browser_get_attribute: createGetAttributeTool(getBrowser),
       browser_evaluate: createEvaluateTool(getBrowser),
 
       // Navigation history
@@ -115,8 +149,18 @@ export class Browser {
       browser_set_cookie: createSetCookieTool(getBrowser),
       browser_clear_cookies: createClearCookiesTool(getBrowser),
 
+      // Device emulation
+      browser_set_device: createSetDeviceTool(getBrowser),
+      browser_set_media: createSetMediaTool(getBrowser),
+
+      // Debugging
+      browser_inspect: createInspectTool(getBrowser),
+
       // Waiting
       browser_wait: createWaitTool(getBrowser, timeout),
+
+      // Batch commands
+      browser_batch: createBatchTool(getBrowser, () => this.tools),
     };
   }
 

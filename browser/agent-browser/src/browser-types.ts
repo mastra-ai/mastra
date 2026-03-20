@@ -42,6 +42,7 @@ export interface BrowserLocator {
   scrollIntoViewIfNeeded(options?: { timeout?: number }): Promise<void>;
   dragTo(target: BrowserLocator, options?: { timeout?: number }): Promise<void>;
   waitFor(options?: { state?: 'visible' | 'hidden' | 'attached' | 'detached'; timeout?: number }): Promise<void>;
+  getAttribute(name: string): Promise<string | null>;
 }
 
 export interface BrowserCDPSession {
@@ -80,6 +81,7 @@ export interface BrowserPage {
   reload(options?: { timeout?: number; waitUntil?: string }): Promise<unknown>;
   url(): string;
   title(): Promise<string>;
+  content(): Promise<string>;
   screenshot(options?: { fullPage?: boolean; type?: string; quality?: number; timeout?: number }): Promise<Buffer>;
   evaluate<T>(expression: string | ((...args: any[]) => T), ...args: any[]): Promise<T>;
   viewportSize(): { width: number; height: number } | null;
@@ -126,6 +128,27 @@ export interface KeyboardEventParams {
   modifiers?: number;
 }
 
+/** Tab information */
+export interface BrowserTab {
+  id: string;
+  url: string;
+  title: string;
+  active: boolean;
+}
+
+/** Recording result */
+export interface RecordingResult {
+  path: string;
+  duration?: number;
+  fileSize?: number;
+}
+
+/** Profiler result */
+export interface ProfilerResult {
+  path: string;
+  fileSize?: number;
+}
+
 /**
  * Minimal interface matching agent-browser's BrowserManager.
  * Used for type-safe coding without importing the actual package types.
@@ -136,7 +159,12 @@ export interface BrowserManagerLike {
   getPage(): BrowserPage;
   getLocatorFromRef(refArg: string): BrowserLocator | null;
   getCDPSession(): Promise<BrowserCDPSession>;
-  getSnapshot(options?: { interactive?: boolean; compact?: boolean }): Promise<EnhancedSnapshot>;
+  getSnapshot(options?: {
+    interactive?: boolean;
+    compact?: boolean;
+    maxDepth?: number;
+    selector?: string;
+  }): Promise<EnhancedSnapshot>;
   startScreencast(callback: (frame: ScreencastFrame) => void, options?: ScreencastOptions): Promise<void>;
   stopScreencast(): Promise<void>;
   injectMouseEvent(params: MouseEventParams): Promise<void>;
