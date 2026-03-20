@@ -320,6 +320,17 @@ export class MastraTUI {
     // This emits om_status → display_state_changed → updateStatusLine.
     await this.state.harness.loadOMProgress();
 
+    // Sync current thread title — the thread_changed event from
+    // promptForThreadSelection fired before we subscribed above.
+    const initThreadId = this.state.harness.getCurrentThreadId();
+    if (initThreadId) {
+      const initThreads = await this.state.harness.listThreads();
+      const initThread = initThreads.find(t => t.id === initThreadId);
+      if (initThread?.title) {
+        this.state.currentThreadTitle = initThread.title;
+      }
+    }
+
     // Start the UI
     this.state.ui.start();
     this.state.isInitialized = true;

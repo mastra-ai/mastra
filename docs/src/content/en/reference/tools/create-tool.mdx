@@ -212,40 +212,45 @@ export const weatherTool = createTool({
             description: 'Optional execution context containing metadata',
             properties: [
               {
-                name: 'requestContext',
-                type: 'RequestContext',
-                isOptional: true,
-                description: 'Request Context for accessing shared state and dependencies',
-              },
-              {
-                name: 'tracingContext',
-                type: 'TracingContext',
-                isOptional: true,
-                description: 'Tracing context for creating child spans and adding metadata',
-              },
-              {
-                name: 'abortSignal',
-                type: 'AbortSignal',
-                isOptional: true,
-                description: 'Signal for aborting the tool execution',
-              },
-              {
-                name: 'agent',
-                type: 'AgentToolExecutionContext',
-                isOptional: true,
-                description: 'Agent-specific context (messages, suspend, resumeData, etc.)',
-              },
-              {
-                name: 'workflow',
-                type: 'WorkflowToolExecutionContext',
-                isOptional: true,
-                description: 'Workflow-specific context (state, setState, suspend, etc.)',
-              },
-              {
-                name: 'mcp',
-                type: 'MCPToolExecutionContext',
-                isOptional: true,
-                description: 'MCP-specific context (elicitation, etc.)',
+                type: 'ToolExecutionContext',
+                parameters: [
+                  {
+                    name: 'requestContext',
+                    type: 'RequestContext',
+                    isOptional: true,
+                    description: 'Request Context for accessing shared state and dependencies',
+                  },
+                  {
+                    name: 'tracingContext',
+                    type: 'TracingContext',
+                    isOptional: true,
+                    description: 'Tracing context for creating child spans and adding metadata',
+                  },
+                  {
+                    name: 'abortSignal',
+                    type: 'AbortSignal',
+                    isOptional: true,
+                    description: 'Signal for aborting the tool execution',
+                  },
+                  {
+                    name: 'agent',
+                    type: 'AgentToolExecutionContext',
+                    isOptional: true,
+                    description: 'Agent-specific context (messages, suspend, resumeData, etc.)',
+                  },
+                  {
+                    name: 'workflow',
+                    type: 'WorkflowToolExecutionContext',
+                    isOptional: true,
+                    description: 'Workflow-specific context (state, setState, suspend, etc.)',
+                  },
+                  {
+                    name: 'mcp',
+                    type: 'MCPToolExecutionContext',
+                    isOptional: true,
+                    description: 'MCP-specific context (elicitation, etc.)',
+                  },
+                ],
               },
             ],
           },
@@ -375,11 +380,11 @@ export const tool = createTool({
 
 For a typical streaming tool call, the hooks are invoked in this order:
 
-1. **onInputStart** - Input streaming begins
-1. **onInputDelta** - Called multiple times as chunks arrive
-1. **onInputAvailable** - Complete input is parsed and validated
+1. **onInputStart**: Input streaming begins
+1. **onInputDelta**: Called multiple times as chunks arrive
+1. **onInputAvailable**: Complete input is parsed and validated
 1. Tool's **execute** function runs
-1. **onOutput** - Tool has completed successfully
+1. **onOutput**: Tool has completed successfully
 
 ### Hook Parameters
 

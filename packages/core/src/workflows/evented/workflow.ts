@@ -1033,7 +1033,7 @@ function createStepFromProcessor<TProcessorId extends string>(
           }
 
           case 'outputStream': {
-            if (processor.processOutputStream) {
+            if (processor.processOutputStream && part) {
               // Manage per-processor span lifecycle across stream chunks
               // Use unique key to store span on shared state object
               const spanKey = `__outputStreamSpan_${processor.id}`;
