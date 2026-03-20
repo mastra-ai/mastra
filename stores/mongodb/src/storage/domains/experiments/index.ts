@@ -228,16 +228,6 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
   }
 
   async updateExperiment(input: UpdateExperimentInput): Promise<Experiment> {
-    const existing = await this.getExperimentById({ id: input.id });
-    if (!existing) {
-      throw new MastraError({
-        id: createStorageErrorId('MONGODB', 'UPDATE_EXPERIMENT', 'NOT_FOUND'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        details: { experimentId: input.id },
-      });
-    }
-
     const updateFields: Record<string, unknown> = { updatedAt: new Date() };
 
     if (input.name !== undefined) updateFields.name = input.name;
@@ -253,8 +243,19 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
     try {
       const collection = await this.getCollection(TABLE_EXPERIMENTS);
-      await collection.updateOne({ id: input.id }, { $set: updateFields });
-      return (await this.getExperimentById({ id: input.id }))!;
+      const result = await collection.updateOne({ id: input.id }, { $set: updateFields });
+
+      if (result.matchedCount === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'UPDATE_EXPERIMENT', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { experimentId: input.id },
+        });
+      }
+
+      const updated = await this.getExperimentById({ id: input.id });
+      return updated!;
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
