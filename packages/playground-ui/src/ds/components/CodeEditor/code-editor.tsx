@@ -121,6 +121,8 @@ export type CodeEditorProps = {
   /** JSON Schema to enable variable autocomplete for {{variable}} placeholders (markdown only) */
   schema?: JsonSchema;
   autoFocus?: boolean;
+  /** Show line numbers in the gutter (default: true) */
+  lineNumbers?: boolean;
 } & Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
 
 export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
@@ -137,6 +139,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       wordWrap = false,
       schema,
       autoFocus,
+      lineNumbers = true,
       ...props
     },
     ref,
@@ -182,6 +185,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
           height="100%"
           style={{ height: '100%' }}
           autoFocus={autoFocus}
+          basicSetup={{ lineNumbers }}
         />
       </div>
     );
