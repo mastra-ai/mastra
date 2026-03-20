@@ -14,6 +14,7 @@ import {
   OBSERVATIONAL_MEMORY_DEFAULTS,
   OBSERVATION_CONTEXT_PROMPT,
   OBSERVATION_CONTEXT_INSTRUCTIONS,
+  OBSERVATION_RETRIEVAL_INSTRUCTIONS,
 } from './constants';
 
 /**
@@ -28,6 +29,34 @@ export function getLatestStepParts(parts: MastraDBMessage['content']['parts']): 
   }
   return parts;
 }
+
+/**
+ * Returns true when a message contains at least one part with visible user/assistant
+ * content (text, tool-invocation, reasoning, image, file).  Messages that only carry
+ * internal `data-*` parts (buffering markers, observation markers, etc.) return false.
+ */
+function messageHasVisibleContent(msg: MastraDBMessage): boolean {
+  const content = msg.content as { parts?: Array<{ type?: string }>; content?: string };
+  if (content?.parts && Array.isArray(content.parts)) {
+    return content.parts.some(p => {
+      const t = p?.type;
+      return t && !t.startsWith('data-') && t !== 'step-start';
+    });
+  }
+  if (content?.content) return true;
+  return false;
+}
+
+/**
+ * Build a messageRange string from the first and last messages that have visible
+ * content.  Falls back to the full array boundaries when every message is data-only.
+ */
+export function buildMessageRange(messages: MastraDBMessage[]): string {
+  const first = messages.find(messageHasVisibleContent) ?? messages[0]!;
+  const last = [...messages].reverse().find(messageHasVisibleContent) ?? messages[messages.length - 1]!;
+  return `${first.id}:${last.id}`;
+}
+
 import { addRelativeTimeToObservations } from './date-utils';
 import { omDebug, omError } from './debug';
 import { createBufferingStartMarker, createActivationMarker } from './markers';
@@ -37,6 +66,7 @@ import {
   getBufferedChunks,
   stripThreadTags,
 } from './message-utils';
+import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import { ObservationStrategy } from './observation-strategies/index';
 import { ObservationTurn } from './observation-turn/index';
 import { optimizeObservationsForContext, formatMessagesForObserver } from './observer-agent';
@@ -107,6 +137,8 @@ export class ObservationalMemory {
   private storage: MemoryStorage;
   private tokenCounter: TokenCounter;
   readonly scope: 'resource' | 'thread';
+  /** Whether retrieval-mode observation groups are enabled (thread scope only). */
+  readonly retrieval: boolean;
   private observationConfig: ResolvedObservationConfig;
   private reflectionConfig: ResolvedReflectionConfig;
   private onDebugEvent?: (event: ObservationDebugEvent) => void;
@@ -200,6 +232,7 @@ export class ObservationalMemory {
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
+    this.retrieval = this.scope === 'thread' && (config.retrieval ?? false);
 
     // Resolve "default" to the default model
     const resolveModel = (m: typeof config.model) =>
@@ -398,6 +431,7 @@ export class ObservationalMemory {
    */
   get config(): {
     scope: 'resource' | 'thread';
+    retrieval: boolean;
     observation: {
       messageTokens: number | ThresholdRange;
       previousObserverTokens: number | false | undefined;
@@ -408,6 +442,7 @@ export class ObservationalMemory {
   } {
     return {
       scope: this.scope,
+      retrieval: this.retrieval,
       observation: {
         messageTokens: this.observationConfig.messageTokens,
         previousObserverTokens: this.observationConfig.previousObserverTokens,
@@ -1209,16 +1244,21 @@ export class ObservationalMemory {
     suggestedResponse?: string,
     unobservedContextBlocks?: string,
     currentDate?: Date,
+    retrieval = false,
   ): string[] {
-    // Optimize observations to save tokens
-    let optimized = optimizeObservationsForContext(observations);
+    // Optimize observations to save tokens unless retrieval mode needs durable group metadata preserved.
+    let optimized = retrieval
+      ? (renderObservationGroupsForReflection(observations) ?? optimizeObservationsForContext(observations))
+      : optimizeObservationsForContext(observations);
 
     // Add relative time annotations to date headers if currentDate is provided
     if (currentDate) {
       optimized = addRelativeTimeToObservations(optimized, currentDate);
     }
 
-    const messages = [`${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}`];
+    const messages = [
+      `${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${OBSERVATION_RETRIEVAL_INSTRUCTIONS}` : ''}`,
+    ];
 
     // Add unobserved context from other threads (resource scope only)
     if (unobservedContextBlocks) {
@@ -1458,11 +1498,13 @@ ${formattedMessages}
    * Used in resource scope to track which thread observations came from.
    * @internal Used by observation strategies. Do not call directly.
    */
-  async wrapWithThreadTag(threadId: string, observations: string): Promise<string> {
+  async wrapWithThreadTag(threadId: string, observations: string, messageRange?: string): Promise<string> {
     // First strip any thread tags the Observer might have added
     const cleanObservations = stripThreadTags(observations);
+    const groupedObservations =
+      this.retrieval && messageRange ? wrapInObservationGroup(cleanObservations, messageRange) : cleanObservations;
     const obscuredId = await this.representThreadIDInContext(threadId);
-    return `<thread id="${obscuredId}">\n${cleanObservations}\n</thread>`;
+    return `<thread id="${obscuredId}">\n${groupedObservations}\n</thread>`;
   }
 
   /**
@@ -1547,10 +1589,11 @@ ${formattedMessages}
     existingObservations: string,
     threadId: string,
     lastObservedAt?: Date,
+    messageRange?: string,
   ): Promise<string> | string {
     if (this.scope === 'resource') {
       return (async () => {
-        const threadSection = await this.wrapWithThreadTag(threadId, rawObservations);
+        const threadSection = await this.wrapWithThreadTag(threadId, rawObservations, messageRange);
         return this.replaceOrAppendThreadSection(
           existingObservations,
           threadId,
@@ -1559,7 +1602,9 @@ ${formattedMessages}
         );
       })();
     }
-    return existingObservations ? `${existingObservations}\n\n${rawObservations}` : rawObservations;
+    const grouped =
+      this.retrieval && messageRange ? wrapInObservationGroup(rawObservations, messageRange) : rawObservations;
+    return existingObservations ? `${existingObservations}\n\n${grouped}` : grouped;
   }
 
   // ────────────────────────────────────────────────────────────────────────
@@ -2109,6 +2154,7 @@ ${formattedMessages}
       suggestedResponse,
       unobservedContextBlocks,
       currentDate,
+      this.retrieval,
     );
   }
 

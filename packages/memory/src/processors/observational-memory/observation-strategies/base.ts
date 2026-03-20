@@ -5,6 +5,7 @@ import xxhash from 'xxhash-wasm';
 
 import { omDebug, omError } from '../debug';
 import { stripThreadTags } from '../message-utils';
+import { wrapInObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
 import type { ReflectorRunner } from '../reflector-runner';
 import { getMaxThreshold } from '../thresholds';
@@ -32,6 +33,7 @@ export interface StrategyDeps {
   observationConfig: ResolvedObservationConfig;
   reflectionConfig: ResolvedReflectionConfig;
   scope: 'thread' | 'resource';
+  retrieval: boolean;
   observer: ObserverRunner;
   reflector: ReflectorRunner;
   observedMessageIds: Set<string>;
@@ -53,6 +55,7 @@ export abstract class ObservationStrategy {
   protected readonly observationConfig: ResolvedObservationConfig;
   protected readonly reflectionConfig: ResolvedReflectionConfig;
   protected readonly scope: 'thread' | 'resource';
+  protected readonly retrieval: boolean;
 
   /** Select the right strategy based on scope and mode. Wired up by index.ts. */
   static create: (om: unknown, opts: ObservationRunOpts) => ObservationStrategy;
@@ -67,6 +70,7 @@ export abstract class ObservationStrategy {
     this.observationConfig = deps.observationConfig;
     this.reflectionConfig = deps.reflectionConfig;
     this.scope = deps.scope;
+    this.retrieval = deps.retrieval;
   }
 
   /** Run the full observation lifecycle. */
@@ -159,14 +163,16 @@ export abstract class ObservationStrategy {
    * Wrap observations in a thread attribution tag.
    * In resource scope, thread IDs can be obscured via xxhash.
    */
-  protected async wrapWithThreadTag(threadId: string, observations: string): Promise<string> {
+  protected async wrapWithThreadTag(threadId: string, observations: string, messageRange?: string): Promise<string> {
     const cleanObservations = stripThreadTags(observations);
+    const groupedObservations =
+      this.retrieval && messageRange ? wrapInObservationGroup(cleanObservations, messageRange) : cleanObservations;
     let displayId = threadId;
     if (this.deps.obscureThreadIds) {
       const hasher = await hasherPromise;
       displayId = hasher.h32ToString(threadId);
     }
-    return `<thread id="${displayId}">\n${cleanObservations}\n</thread>`;
+    return `<thread id="${displayId}">\n${groupedObservations}\n</thread>`;
   }
 
   /**
@@ -186,18 +192,21 @@ export abstract class ObservationStrategy {
     existingObservations: string,
     threadId: string,
     lastObservedAt?: Date,
+    messageRange?: string,
   ): Promise<string> | string {
     if (this.scope === 'resource') {
       return (async () => {
-        const threadSection = await this.wrapWithThreadTag(threadId, rawObservations);
+        const threadSection = await this.wrapWithThreadTag(threadId, rawObservations, messageRange);
         return this.replaceOrAppendThreadSection(existingObservations, threadId, threadSection, lastObservedAt);
       })();
     }
-    if (!existingObservations) return rawObservations;
+    const grouped =
+      this.retrieval && messageRange ? wrapInObservationGroup(rawObservations, messageRange) : rawObservations;
+    if (!existingObservations) return grouped;
     const boundary = lastObservedAt
       ? ObservationStrategy.createMessageBoundary(lastObservedAt)
       : '\n\n';
-    return `${existingObservations}${boundary}${rawObservations}`;
+    return `${existingObservations}${boundary}${grouped}`;
   }
 
   protected replaceOrAppendThreadSection(

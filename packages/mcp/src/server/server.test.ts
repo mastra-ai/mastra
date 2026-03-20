@@ -2552,7 +2552,9 @@ describe('MCPServer with Tool Output Schema', () => {
     const tools = await clientWithOutputSchema.listTools();
     const tool = tools['local_structuredTool'];
     expect(tool).toBeDefined();
-    expect(tool.outputSchema).toBeDefined();
+    // outputSchema is not passed to createTool (MCP SDK validates via AJV internally),
+    // so it won't be on the Mastra tool wrapper
+    expect(tool.outputSchema).toBeUndefined();
   });
 
   it('should call tool and receive structuredContent', async () => {

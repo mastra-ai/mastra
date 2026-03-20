@@ -69,3 +69,49 @@ KNOWLEDGE UPDATES: When asked about current state (e.g., "where do I currently..
 PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm going to...", "I'm looking forward to...", "I will...") and the date they planned to do it is now in the past (check the relative time like "3 weeks ago"), assume they completed the action unless there's evidence they didn't. For example, if someone said "I'll start my new diet on Monday" and that was 2 weeks ago, assume they started the diet.
 
 MOST RECENT USER INPUT: Treat the most recent user message as the highest-priority signal for what to do next. Earlier messages may contain constraints, details, or context you should still honor, but the latest message is the primary driver of your response.`;
+
+/**
+ * Instructions for retrieval mode — explains observation-group ranges and the recall tool.
+ * Appended to context when `retrieval` is enabled.
+ */
+export const OBSERVATION_RETRIEVAL_INSTRUCTIONS = `## Recall — looking up source messages
+
+Your memory is comprised of observations which are sometimes wrapped in <observation-group> xml tags containing ranges like <observation-group range="startId:endId">. These ranges point back to the raw messages that each observation group was derived from. The original messages are still available — use the **recall** tool to retrieve them.
+
+### When to use recall
+- The user asks you to **repeat, show, or reproduce** something from a past conversation
+- The user asks for **exact content** — code, text, quotes, error messages, URLs, file paths, specific numbers
+- Your observations mention something but your memory lacks the detail needed to fully answer (e.g. you know a blog post was shared but only have a summary of it)
+- You want to **verify or expand on** an observation before responding
+
+**Default to using recall when the user references specific past content.** Your observations capture the gist, not the details. If there's any doubt whether your memory is complete enough, use recall.
+
+### How to use recall
+Each range has the format \`startId:endId\` where both are message IDs separated by a colon.
+
+1. Find the observation group relevant to the user's question and extract the start or end ID from its range.
+2. Call \`recall\` with that ID as the \`cursor\`.
+3. Use \`page: 1\` (or omit) to read forward from the cursor, \`page: -1\` to read backward.
+4. If the first page doesn't have what you need, increment the page number to keep paginating.
+5. Check \`hasNextPage\`/\`hasPrevPage\` in the result to know if more pages exist in each direction.
+
+### Detail levels
+By default recall returns **low** detail: truncated text and tool names only. Each message shows its ID and each part has a positional index like \`[p0]\`, \`[p1]\`, etc.
+
+- Use \`detail: "high"\` to get full message content including tool arguments and results. This will only return the high detail version of a single message part at a time.
+- Use \`partIndex\` with a cursor to fetch a single part at full detail — for example, to read one specific tool result or code block without loading every part.
+
+If the result says \`truncated: true\`, the output was cut to fit the token budget. You can paginate or use \`partIndex\` to target specific content.
+
+### Following up on truncated parts
+Low-detail results may include truncation hints like:
+\`[truncated — call recall cursor="..." partIndex=N detail="high" for full content]\`
+
+**When you see these hints and need the full content, make the exact call described in the hint.** This is the normal workflow: first recall at low detail to scan, then drill into specific parts at high detail. Do not stop at the low-detail result if the user asked for exact content.
+
+### When recall is NOT needed
+- The user is asking for a high-level summary and your observations already cover it
+- The question is about general preferences or facts that don't require source text
+- There is no relevant range in your observations for the topic
+
+Observation groups with range IDs and your recall tool allows you to think back and remember details you're fuzzy on.`;

@@ -5,6 +5,7 @@ import { omDebug } from '../debug';
 import { createObservationEndMarker, createObservationFailedMarker, createObservationStartMarker } from '../markers';
 import { getLastObservedMessageCursor } from '../message-utils';
 
+import { buildMessageRange } from '../observational-memory';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
@@ -102,7 +103,8 @@ export class SyncObservationStrategy extends ObservationStrategy {
     const { record, threadId, messages } = this.opts;
 
     const lastObservedAt = this.getMaxMessageTimestamp(messages);
-    const newObservations = await this.wrapObservations(output.observations, existingObservations, threadId, lastObservedAt);
+    const messageRange = this.retrieval ? buildMessageRange(messages) : undefined;
+    const newObservations = await this.wrapObservations(output.observations, existingObservations, threadId, lastObservedAt, messageRange);
     const observationTokens = this.tokenCounter.countObservations(newObservations);
     const cycleObservationTokens = this.tokenCounter.countObservations(output.observations);
 

@@ -748,6 +748,17 @@ export interface ObservationalMemoryConfig {
   storage: MemoryStorage;
 
   /**
+   * **Experimental.** Enable retrieval-mode observation group metadata.
+   * When true, observation groups are treated as durable pointers to raw
+   * message history and a `recall` tool is registered so the actor can
+   * inspect raw messages behind a stored observation summary.
+   *
+   * @experimental
+   * @default false
+   */
+  retrieval?: boolean;
+
+  /**
    * Model for both Observer and Reflector agents.
    * Sets the model for both agents at once. Cannot be used together with
    * `observation.model` or `reflection.model` — an error will be thrown.

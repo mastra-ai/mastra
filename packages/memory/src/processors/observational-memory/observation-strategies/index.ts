@@ -24,6 +24,7 @@ ObservationStrategy.create = ((om: ObservationalMemory, opts: ObservationRunOpts
     observationConfig: om.getObservationConfig(),
     reflectionConfig: om.getReflectionConfig(),
     scope: om.scope,
+    retrieval: om.retrieval,
     observer: om.observer,
     reflector: om.reflector,
     observedMessageIds: om.observedMessageIds,

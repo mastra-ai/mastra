@@ -4,6 +4,8 @@ import { omDebug } from '../debug';
 import { createBufferingEndMarker, createBufferingFailedMarker } from '../markers';
 import { getBufferedChunks, combineObservationsForBuffering } from '../message-utils';
 
+import { wrapInObservationGroup } from '../observation-groups';
+import { buildMessageRange } from '../observational-memory';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
@@ -62,11 +64,15 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       };
     }
 
+    const messageRange = this.retrieval ? buildMessageRange(messages) : undefined;
     let newObservations: string;
     if (this.scope === 'resource') {
-      newObservations = await this.wrapWithThreadTag(threadId, output.observations);
+      newObservations = await this.wrapWithThreadTag(threadId, output.observations, messageRange);
     } else {
-      newObservations = output.observations;
+      newObservations =
+        this.retrieval && messageRange
+          ? wrapInObservationGroup(output.observations, messageRange)
+          : output.observations;
     }
 
     const observationTokens = this.tokenCounter.countObservations(newObservations);

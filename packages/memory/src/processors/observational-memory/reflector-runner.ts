@@ -212,7 +212,7 @@ export class ReflectorRunner {
         totalUsage.totalTokens += usage.totalTokens ?? 0;
       }
 
-      parsed = parseReflectorOutput(result.text);
+      parsed = parseReflectorOutput(result.text, observations);
 
       if (parsed.degenerate) {
         omDebug(

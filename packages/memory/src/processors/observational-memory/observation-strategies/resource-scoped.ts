@@ -4,6 +4,7 @@ import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
 import { createObservationEndMarker, createObservationFailedMarker, createObservationStartMarker } from '../markers';
 import { getLastObservedMessageCursor, sortThreadsByOldestMessage } from '../message-utils';
+import { buildMessageRange } from '../observational-memory';
 import { getMaxThreshold } from '../thresholds';
 
 import { ObservationStrategy } from './base';
@@ -276,7 +277,8 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
 
       cycleObservationTokens += this.tokenCounter.countObservations(result.observations);
 
-      const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
+      const messageRange = this.retrieval ? buildMessageRange(threadMessages) : undefined;
+      const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
       const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
       currentObservations = this.replaceOrAppendThreadSection(currentObservations, threadId, threadSection, threadLastObservedAt);
       threadMetadataUpdates!.push({
