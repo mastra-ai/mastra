@@ -769,11 +769,16 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
       let row;
       if (args.datasetVersion !== undefined) {
-        row = await collection.findOne({
-          id: args.id,
-          datasetVersion: args.datasetVersion,
-          isDeleted: false,
-        });
+        // SCD-2 window predicate: find the row whose version range includes the requested version
+        row = await collection.findOne(
+          {
+            id: args.id,
+            datasetVersion: { $lte: args.datasetVersion },
+            $or: [{ validTo: null }, { validTo: { $gt: args.datasetVersion } }],
+            isDeleted: false,
+          },
+          { sort: { datasetVersion: -1 } },
+        );
       } else {
         row = await collection.findOne({
           id: args.id,
