@@ -65,6 +65,21 @@ export const failingTool = createTool({
   },
 });
 
+export const approvalTool = createTool({
+  id: 'needs-approval',
+  description: 'A tool that requires user approval before executing. Returns a greeting.',
+  inputSchema: z.object({
+    name: z.string(),
+  }),
+  outputSchema: z.object({
+    greeting: z.string(),
+  }),
+  requireApproval: true,
+  execute: async (data) => {
+    return { greeting: `Hello, ${data.name}!` };
+  },
+});
+
 export const noInputTool = createTool({
   id: 'timestamp',
   description: 'Returns the current timestamp with no input required',

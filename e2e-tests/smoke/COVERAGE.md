@@ -1,6 +1,6 @@
 # Smoke Test Coverage
 
-> 133 tests across 27 test files — last updated 2026-03-20
+> 140 tests across 31 test files — last updated 2026-03-20
 
 ## What's Tested
 
@@ -129,7 +129,7 @@
 
 ---
 
-### Agents (19 tests, 4 files)
+### Agents (26 tests, 8 files)
 
 #### Discovery (`agents.test.ts` — 4 tests)
 - [x] List all registered agents
@@ -149,6 +149,21 @@
 - [x] Text streaming — event sequence (start → text-delta → step-finish → finish), usage info
 - [x] Tool use streaming — tool-call + tool-result events with exact result
 - [x] 404 for non-existent agent
+
+#### Structured Output (`structured-output.test.ts` — 2 tests)
+- [x] Generate with structuredOutput — JSON response matching schema (name, capital, population)
+- [x] Stream with structuredOutput — text deltas form valid structured JSON
+
+#### Stream with Memory (`stream-memory.test.ts` — 1 test)
+- [x] Multi-turn recall across thread turns via stream endpoint
+
+#### Tool Approval (`tool-approval.test.ts` — 2 tests)
+- [x] Approve tool call — pause on tool-call-approval, resume after approval with tool result
+- [x] Decline tool call — pause on tool-call-approval, resume after decline with rejection message
+
+#### Providers (`providers.test.ts` — 2 tests)
+- [x] List available providers with expected shape (id, name, connected)
+- [x] OpenAI listed as a connected provider
 
 #### Agent-Scoped Tools (`agent-tools.test.ts` — 6 tests)
 - [x] Get calculator tool metadata through agent endpoint
@@ -215,17 +230,12 @@
 
 | Endpoint | Why Not Tested | Priority |
 |----------|---------------|----------|
-| `POST /agents/:agentId/generate` with `structuredOutput` | Requires schema setup, separate concern | Medium |
-| `POST /agents/:agentId/stream` with memory | Same server-side path as generate; low risk | Low |
 | `POST /agents/:agentId/generate-legacy` | Deprecated endpoint | Low |
 | `POST /agents/:agentId/stream-legacy` | Deprecated endpoint | Low |
 | `POST /agents/:agentId/clone` | Stored agent feature | Low |
 | `POST /agents/:agentId/instructions/enhance` | Requires LLM, non-deterministic output | Low |
 | `POST /agents/:agentId/model` (update/get/reset) | Model management, requires stored agents | Low |
-| `POST /agents/:agentId/approve-tool-call` | Requires interactive tool approval flow | Medium |
-| `POST /agents/:agentId/decline-tool-call` | Requires interactive tool approval flow | Medium |
-| `GET /agents/providers` | Provider registry, useful for discovery | Medium |
-| `POST /agents/:agentId/skills/:skillName` | Requires workspace/skills setup | Low |
+| `GET /agents/:agentId/skills/:skillName` | Requires workspace/skills setup | Low |
 
 ### Vector Store (0 coverage)
 
