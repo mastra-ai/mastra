@@ -5,3 +5,4 @@ export * from './types';
 export * from './components/playground-config-guard';
 export * from './hooks/use-mastra-packages';
 export * from './hooks/use-package-updates';
+export * from './hooks/use-has-observability';

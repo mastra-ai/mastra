@@ -1,32 +1,31 @@
-import { Play, CheckCircle, XCircle, Clock, Loader2, ChevronDown, ChevronRight, ArrowLeft } from 'lucide-react';
-import { useState, useCallback, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import {
+  CheckCircle,
+  XCircle,
+  Clock,
+  Loader2,
+  ChevronRight,
+  ArrowLeft,
+  ClipboardCheck,
+  Award,
+  ExternalLink,
+} from 'lucide-react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '@mastra/react';
 
 import { Button } from '@/ds/components/Button';
+import { Checkbox } from '@/ds/components/Checkbox';
 import { Icon } from '@/ds/icons/Icon';
 import { Spinner } from '@/ds/components/Spinner';
-import { Label } from '@/ds/components/Label';
 import { Txt } from '@/ds/components/Txt';
 import { Badge } from '@/ds/components/Badge';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible/collapsible';
 import { CopyButton } from '@/ds/components/CopyButton/copy-button';
+import { TraceDialog } from '@/domains/observability/components/trace-dialog';
 import { cn } from '@/lib/utils';
-import { toast } from '@/lib/toast';
-import { DatasetCombobox } from '@/domains/datasets/components/dataset-combobox';
-import { ScorerSelector } from '@/domains/datasets/components/experiment-trigger/scorer-selector';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useDatasetExperimentResults, useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
-import { LLMProviders, LLMModels } from '@/domains/llm';
-import { useAgentExperiments } from '../../hooks/use-agent-experiments';
-import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import type { AgentExperiment } from '../../hooks/use-agent-experiments';
-
-interface AgentPlaygroundEvalProps {
-  agentId: string;
-  onSaveDraft: (changeMessage?: string) => Promise<void>;
-}
 
 function formatTimestamp(dateStr: string | Date): string {
   const date = new Date(dateStr);
@@ -73,43 +72,6 @@ function ExperimentStatusBadge({ status }: { status: string }) {
   }
 }
 
-function PastRunRow({
-  experiment,
-  isSelected,
-  onClick,
-}: {
-  experiment: AgentExperiment;
-  isSelected: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'flex items-center gap-3 px-4 py-3 border-b border-border1 hover:bg-surface3 transition-colors w-full text-left cursor-pointer',
-        isSelected && 'bg-surface3',
-      )}
-    >
-      <Icon size="sm" className="text-neutral3 shrink-0">
-        {isSelected ? <ChevronDown /> : <ChevronRight />}
-      </Icon>
-      <ExperimentStatusBadge status={experiment.status} />
-      <Txt variant="ui-xs" className="text-neutral2 shrink-0">
-        {experiment.startedAt ? formatTimestamp(experiment.startedAt) : '-'}
-      </Txt>
-      <Txt variant="ui-sm" className="text-neutral5 truncate flex-1">
-        {experiment.datasetName}
-      </Txt>
-      {experiment.status === 'completed' && (
-        <Txt variant="ui-xs" className="text-neutral3 shrink-0">
-          {experiment.succeededCount}/{experiment.totalItems} passed
-        </Txt>
-      )}
-    </button>
-  );
-}
-
 function formatResultValue(value: unknown): string {
   if (value === null || value === undefined) return '-';
   if (typeof value === 'string') return value;
@@ -153,8 +115,17 @@ function parseOutput(output: unknown): ParsedOutput {
   };
 }
 
-function ResultOutputSection({ output }: { output: unknown }) {
+function ResultOutputSection({
+  output,
+  traceId,
+  onViewTrace,
+}: {
+  output: unknown;
+  traceId?: string | null;
+  onViewTrace?: (traceId: string) => void;
+}) {
   const parsed = parseOutput(output);
+  const effectiveTraceId = traceId || parsed.traceId;
 
   return (
     <div className="space-y-2">
@@ -243,16 +214,26 @@ function ResultOutputSection({ output }: { output: unknown }) {
         </div>
       )}
 
-      {/* Trace ID */}
-      {parsed.traceId && (
+      {/* Trace ID + View Trace button */}
+      {effectiveTraceId && (
         <div className="flex items-center gap-2">
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
             Trace
           </Txt>
           <Txt variant="ui-xs" className="text-neutral2 font-mono truncate">
-            {parsed.traceId}
+            {effectiveTraceId}
           </Txt>
-          <CopyButton content={parsed.traceId} tooltip="Copy trace ID" size="sm" />
+          <CopyButton content={effectiveTraceId} tooltip="Copy trace ID" size="sm" />
+          {onViewTrace && (
+            <button
+              type="button"
+              onClick={() => onViewTrace(effectiveTraceId)}
+              className="flex items-center gap-1 text-xs text-accent1 hover:text-accent2 transition-colors cursor-pointer"
+            >
+              <ExternalLink className="h-3 w-3" />
+              View Trace
+            </button>
+          )}
         </div>
       )}
 
@@ -271,7 +252,32 @@ function ResultOutputSection({ output }: { output: unknown }) {
   );
 }
 
-function ExperimentResultsPanel({ experiment, onBack }: { experiment: AgentExperiment; onBack: () => void }) {
+export function ExperimentResultsPanel({
+  experiment,
+  onBack,
+  onSendToReview,
+  onCreateScorer,
+}: {
+  experiment: AgentExperiment;
+  onBack: () => void;
+  onSendToReview?: (
+    items: Array<{
+      id: string;
+      input: unknown;
+      output: unknown;
+      error: unknown;
+      itemId: string;
+      datasetId: string;
+      scores?: Record<string, number>;
+      experimentId?: string;
+      traceId?: string;
+    }>,
+  ) => void;
+  onCreateScorer?: (items: Array<{ input: unknown; output: unknown }>) => void;
+}) {
+  const client = useMastraClient();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [viewingTraceId, setViewingTraceId] = useState<string | undefined>();
   const experimentStatus = experiment.status as 'running' | 'pending' | 'completed' | 'failed';
   const {
     data: results,
@@ -285,6 +291,34 @@ function ExperimentResultsPanel({ experiment, onBack }: { experiment: AgentExper
     experimentStatus,
   });
   const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experimentStatus);
+
+  const { data: traceData, isLoading: isLoadingTrace } = useQuery({
+    queryKey: ['trace', viewingTraceId],
+    queryFn: () => client.getTrace(viewingTraceId!),
+    enabled: !!viewingTraceId,
+  });
+
+  const toggleItem = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const selectAllFailed = () => {
+    if (!results) return;
+    const failedIds = results.filter(r => Boolean(r.error)).map(r => r.id);
+    setSelectedIds(new Set(failedIds));
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const selectedResults = results?.filter(r => selectedIds.has(r.id)) || [];
 
   return (
     <div className="flex flex-col h-full">
@@ -307,6 +341,84 @@ function ExperimentResultsPanel({ experiment, onBack }: { experiment: AgentExper
         </Txt>
       </div>
 
+      {/* Selection action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-surface3 border-b border-border1">
+          <Txt variant="ui-xs" className="text-neutral5 font-medium">
+            {selectedIds.size} selected
+          </Txt>
+          <div className="flex-1" />
+          {onCreateScorer && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                onCreateScorer(
+                  selectedResults.map(r => ({
+                    input: r.input,
+                    output: r.output,
+                  })),
+                );
+              }}
+            >
+              <Icon size="sm">
+                <Award />
+              </Icon>
+              Create Scorer
+            </Button>
+          )}
+          {onSendToReview && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                onSendToReview(
+                  selectedResults.map(r => {
+                    const itemScores = scoresByItemId?.[r.itemId];
+                    const scores: Record<string, number> = {};
+                    if (itemScores) {
+                      for (const s of itemScores) {
+                        if (typeof s.score === 'number') {
+                          scores[s.scorerId || 'unknown'] = s.score;
+                        }
+                      }
+                    }
+                    return {
+                      id: r.id,
+                      input: r.input,
+                      output: r.output,
+                      error: r.error,
+                      itemId: r.itemId,
+                      datasetId: experiment.datasetId,
+                      scores,
+                      experimentId: experiment.id,
+                      traceId: r.traceId ?? undefined,
+                    };
+                  }),
+                );
+              }}
+            >
+              <Icon size="sm">
+                <ClipboardCheck />
+              </Icon>
+              Send to Review
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={clearSelection}>
+            Clear
+          </Button>
+        </div>
+      )}
+
+      {/* Quick filter bar */}
+      {results && results.length > 0 && selectedIds.size === 0 && (
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-border1">
+          <Button variant="ghost" size="sm" onClick={selectAllFailed}>
+            Select all failures
+          </Button>
+        </div>
+      )}
+
       {/* Results */}
       <ScrollArea className="flex-1 min-h-0">
         {isLoading ? (
@@ -324,10 +436,15 @@ function ExperimentResultsPanel({ experiment, onBack }: { experiment: AgentExper
             {results.map(result => {
               const hasError = Boolean(result.error);
               const itemScores = scoresByItemId?.[result.itemId] ?? [];
+              const isChecked = selectedIds.has(result.id);
 
               return (
-                <div key={result.id} className="border-b border-border1 px-4 py-3 space-y-2">
+                <div
+                  key={result.id}
+                  className={cn('border-b border-border1 px-4 py-3 space-y-2', isChecked && 'bg-surface3/50')}
+                >
                   <div className="flex items-center gap-2">
+                    <Checkbox checked={isChecked} onCheckedChange={() => toggleItem(result.id)} />
                     <Badge variant={hasError ? 'error' : 'success'}>{hasError ? 'Error' : 'Success'}</Badge>
                     <Txt variant="ui-xs" className="text-neutral2 font-mono">
                       {result.itemId.slice(0, 8)}
@@ -358,16 +475,41 @@ function ExperimentResultsPanel({ experiment, onBack }: { experiment: AgentExper
 
                   {/* Output or Error */}
                   {hasError ? (
-                    <div className="space-y-1">
-                      <Txt variant="ui-xs" className="text-red-400 font-medium">
-                        Error
-                      </Txt>
-                      <pre className="text-xs text-red-300 bg-surface1 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
-                        {formatResultValue(result.error)}
-                      </pre>
+                    <div className="space-y-2">
+                      <div className="space-y-1">
+                        <Txt variant="ui-xs" className="text-red-400 font-medium">
+                          Error
+                        </Txt>
+                        <pre className="text-xs text-red-300 bg-surface1 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
+                          {formatResultValue(result.error)}
+                        </pre>
+                      </div>
+                      {result.traceId && (
+                        <div className="flex items-center gap-2">
+                          <Txt variant="ui-xs" className="text-neutral3 font-medium">
+                            Trace
+                          </Txt>
+                          <Txt variant="ui-xs" className="text-neutral2 font-mono truncate">
+                            {result.traceId}
+                          </Txt>
+                          <CopyButton content={result.traceId} tooltip="Copy trace ID" size="sm" />
+                          <button
+                            type="button"
+                            onClick={() => setViewingTraceId(result.traceId!)}
+                            className="flex items-center gap-1 text-xs text-accent1 hover:text-accent2 transition-colors cursor-pointer"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            View Trace
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <ResultOutputSection output={result.output} />
+                    <ResultOutputSection
+                      output={result.output}
+                      traceId={result.traceId}
+                      onViewTrace={setViewingTraceId}
+                    />
                   )}
                 </div>
               );
@@ -390,192 +532,20 @@ function ExperimentResultsPanel({ experiment, onBack }: { experiment: AgentExper
           </div>
         )}
       </ScrollArea>
+
+      {/* Trace Dialog */}
+      <TraceDialog
+        traceId={viewingTraceId}
+        traceSpans={traceData?.spans}
+        traceDetails={traceData?.spans?.find(s => !s.parentSpanId)}
+        isOpen={!!viewingTraceId}
+        onClose={() => setViewingTraceId(undefined)}
+        isLoadingSpans={isLoadingTrace}
+        computeTraceLink={(tid, spanId) => `/observability?traceId=${tid}${spanId ? `&spanId=${spanId}` : ''}`}
+      />
     </div>
   );
 }
 
-export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEvalProps) {
-  const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
-  const [selectedScorers, setSelectedScorers] = useState<string[]>([]);
-  const [isRunning, setIsRunning] = useState(false);
-  const isStartingExperimentRef = useRef(false);
-  const [selectedExperimentId, setSelectedExperimentId] = useState<string | null>(null);
-
-  const { form } = useAgentEditFormContext();
-  const isDirty = form.formState.isDirty;
-
-  const [experimentProvider, setExperimentProvider] = useState(() => form.getValues('model.provider') || '');
-  const [experimentModel, setExperimentModel] = useState(() => form.getValues('model.name') || '');
-  const mergedRequestContext = useMergedRequestContext();
-
-  const queryClient = useQueryClient();
-  const { triggerExperiment } = useDatasetMutations();
-  const { data: experiments, isLoading: isLoadingExperiments } = useAgentExperiments(agentId);
-
-  const handleRunExperiment = useCallback(async () => {
-    if (isStartingExperimentRef.current) return;
-
-    if (!selectedDatasetId) {
-      toast.error('Please select a dataset');
-      return;
-    }
-
-    isStartingExperimentRef.current = true;
-    setIsRunning(true);
-    try {
-      // Apply experiment model override to form before saving
-      if (experimentProvider) {
-        form.setValue('model.provider', experimentProvider);
-        form.setValue('model.name', experimentModel);
-      }
-
-      // Save draft first to persist current config
-      await onSaveDraft();
-
-      // Then trigger the experiment
-      const hasRequestContext = Object.keys(mergedRequestContext).length > 0;
-      await triggerExperiment.mutateAsync({
-        datasetId: selectedDatasetId,
-        targetType: 'agent',
-        targetId: agentId,
-        ...(selectedScorers.length > 0 ? { scorerIds: selectedScorers } : {}),
-        ...(hasRequestContext ? { requestContext: mergedRequestContext } : {}),
-      });
-
-      queryClient.invalidateQueries({ queryKey: ['agent-experiments', agentId] });
-      toast.success('Experiment started');
-    } catch (error) {
-      toast.error(`Failed to start experiment: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      isStartingExperimentRef.current = false;
-      setIsRunning(false);
-    }
-  }, [
-    selectedDatasetId,
-    selectedScorers,
-    agentId,
-    onSaveDraft,
-    triggerExperiment,
-    mergedRequestContext,
-    queryClient,
-    experimentProvider,
-    experimentModel,
-    form,
-  ]);
-
-  const selectedExperiment = selectedExperimentId ? experiments?.find(e => e.id === selectedExperimentId) : null;
-
-  // Show results panel when an experiment is selected
-  if (selectedExperiment) {
-    return <ExperimentResultsPanel experiment={selectedExperiment} onBack={() => setSelectedExperimentId(null)} />;
-  }
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="p-4 space-y-4 border-b border-border1">
-        <Txt variant="ui-sm" className="text-neutral3">
-          Run your agent against a dataset to evaluate its performance. Select a dataset, choose scorers to grade the
-          results, and optionally override the model. Any request context values you've set will be included
-          automatically.
-        </Txt>
-
-        {/* Dataset selector */}
-        <div className="grid gap-2">
-          <Label>Dataset</Label>
-          <DatasetCombobox
-            value={selectedDatasetId}
-            onValueChange={setSelectedDatasetId}
-            placeholder="Select a dataset..."
-            disabled={isRunning}
-          />
-        </div>
-
-        {/* Scorer selector */}
-        <ScorerSelector
-          selectedScorers={selectedScorers}
-          setSelectedScorers={setSelectedScorers}
-          disabled={isRunning}
-        />
-
-        {/* Provider + Model selector (local state, not persisted to agent form) */}
-        <div className="grid grid-cols-2 gap-2">
-          <div className="grid gap-1">
-            <Label>Provider</Label>
-            <LLMProviders
-              value={experimentProvider}
-              onValueChange={value => {
-                setExperimentProvider(value);
-                setExperimentModel('');
-              }}
-            />
-          </div>
-          <div className="grid gap-1">
-            <Label>Model</Label>
-            <LLMModels llmId={experimentProvider} value={experimentModel} onValueChange={setExperimentModel} />
-          </div>
-        </div>
-
-        {/* Run button */}
-        <div className="flex items-center justify-end gap-3">
-          {isDirty && !isRunning && (
-            <Txt variant="ui-xs" className="text-neutral3">
-              Current changes will be saved before running
-            </Txt>
-          )}
-          <Button variant="cta" onClick={handleRunExperiment} disabled={!selectedDatasetId || isRunning}>
-            {isRunning ? (
-              <>
-                <Spinner className="h-4 w-4" />
-                Running...
-              </>
-            ) : (
-              <>
-                <Icon>
-                  <Play />
-                </Icon>
-                Run Experiment
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
-
-      {/* Past runs */}
-      <div className="flex-1 min-h-0 flex flex-col">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-border1">
-          <Icon size="sm" className="text-neutral3">
-            <Clock />
-          </Icon>
-          <Txt variant="ui-sm" className="font-medium text-neutral5">
-            Past Runs
-          </Txt>
-        </div>
-
-        <ScrollArea className="flex-1 min-h-0">
-          {isLoadingExperiments ? (
-            <div className="flex items-center justify-center py-8">
-              <Spinner className="h-5 w-5" />
-            </div>
-          ) : !experiments || experiments.length === 0 ? (
-            <div className="px-4 py-8 text-center">
-              <Txt variant="ui-sm" className="text-neutral2">
-                No experiment runs yet
-              </Txt>
-            </div>
-          ) : (
-            <div>
-              {experiments.map(experiment => (
-                <PastRunRow
-                  key={experiment.id}
-                  experiment={experiment}
-                  isSelected={experiment.id === selectedExperimentId}
-                  onClick={() => setSelectedExperimentId(experiment.id)}
-                />
-              ))}
-            </div>
-          )}
-        </ScrollArea>
-      </div>
-    </div>
-  );
-}
+// Note: AgentPlaygroundEval has been replaced by sidebar-based navigation in agent-playground-evaluate.tsx.
+// ExperimentResultsPanel above is the only component still used externally.
