@@ -913,7 +913,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       }
 
       if (args.search) {
-        const regex = new RegExp(args.search, 'i');
+        const escaped = args.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(escaped, 'i');
         const searchCondition = [{ $expr: { $regexMatch: { input: { $toString: '$input' }, regex } } }];
         if (filter.$or) {
           filter.$and = [{ $or: filter.$or }, { $or: searchCondition }];
