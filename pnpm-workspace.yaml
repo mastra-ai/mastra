@@ -6,6 +6,7 @@ packages:
   - deployers/*
   - stores/*
   - voice/*
+  - examples/voice/aws-nova-sonic-test
   - workflows/*
   - workspaces/*
   - server-adapters/*
