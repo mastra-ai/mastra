@@ -15,6 +15,33 @@ import { requireWorkspace, emitWorkspaceMetadata } from './helpers';
 
 const CURSOR_MARKER = '<<<';
 
+/**
+ * Get a single line preview from a file at the specified line number.
+ * Returns the trimmed line content, or null if the line cannot be read.
+ */
+async function getLinePreview(filePath: string, lineNumber: number): Promise<string | null> {
+  try {
+    const fs = await import('node:fs/promises');
+    const content = await fs.readFile(filePath, 'utf-8');
+    const lines = content.split('\n');
+    const line = lines[lineNumber - 1];
+    return line?.trim() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Compress a file path by replacing the current working directory prefix with $cwd
+ */
+function compressPath(filePath: string): string {
+  const cwd = process.cwd();
+  if (filePath.startsWith(cwd)) {
+    return '$cwd' + filePath.slice(cwd.length);
+  }
+  return filePath;
+}
+
 export const lspInspectTool = createTool({
   id: WORKSPACE_TOOLS.LSP.LSP_INSPECT,
   description:
@@ -99,9 +126,7 @@ export const lspInspectTool = createTool({
     const position = { line: line - 1, character: character - 1 };
 
     // Execute queries - minimal output
-    const result: Record<string, unknown> = {
-      path: filePath,
-    };
+    const result: Record<string, unknown> = {};
 
     try {
       // Primary query: hover
@@ -132,7 +157,7 @@ export const lspInspectTool = createTool({
       ]);
 
       if (definitionResult.length > 0) {
-        result.definition = definitionResult
+        const definitionLocations = definitionResult
           .map((loc: any) => ({
             // Handle both Location (uri + range) and LocationLink (targetUri + targetRange) formats
             uri: loc.uri ?? loc.targetUri,
@@ -146,13 +171,27 @@ export const lspInspectTool = createTool({
           }))
           // Filter out definitions that point to the same location we're querying
           .filter((loc: any) => !(loc.path === absolutePath && loc.line === line));
+
+        // Fetch previews for definition locations
+        const previewPromises = definitionLocations.map((loc: any) => getLinePreview(loc.path, loc.line));
+        const previews = await Promise.all(previewPromises);
+
+        // Format: path:Lline:Cchar - with preview included
+        result.definition = definitionLocations.map((loc: any, i: number) => ({
+          location: `${compressPath(loc.path)}:L${loc.line}:C${loc.character}`,
+          preview: previews[i],
+        }));
       }
 
       if (implResult.length > 0) {
         const defPaths: string[] = Array.isArray(result.definition)
-          ? result.definition.map((d: any) => `${d.path}:${d.line}`)
+          ? result.definition.map((d: any) =>
+              d.location?.split(':L')[1]
+                ? `${d.location.split(':L')[0]}:L${d.location.split(':L')[1].split(':C')[0]}`
+                : '',
+            )
           : [];
-        result.implementation = implResult
+        const implementationLocations = implResult
           .map((loc: any) => ({
             uri: loc.uri ?? loc.targetUri,
             range: loc.range ?? loc.targetRange,
@@ -168,6 +207,11 @@ export const lspInspectTool = createTool({
             (loc: any) =>
               !defPaths.includes(`${loc.path}:${loc.line}`) && !(loc.path === absolutePath && loc.line === line),
           );
+
+        // Compress implementation to just path:line:character strings for efficiency
+        result.implementation = implementationLocations.map(
+          (loc: any) => `${compressPath(loc.path)}:L${loc.line}:C${loc.character}`,
+        );
       }
     } catch (err) {
       result.error = `LSP query failed: ${err instanceof Error ? err.message : String(err)}`;

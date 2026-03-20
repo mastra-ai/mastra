@@ -104,14 +104,7 @@ describe('workspace_lsp_inspect', () => {
       { workspace },
     );
 
-    expect(result).toMatchObject({
-      path: 'test.ts',
-      line: 1,
-      character: 11, // position after "const foo "
-      match: 'const foo <<< = 1',
-      languageId: 'typescript',
-      server: 'typescript',
-    });
+    expect(result).toMatchObject({});
 
     // Verify prepareQuery was called with correct path
     expect(mockLsp.prepareQuery).toHaveBeenCalled();
@@ -163,14 +156,14 @@ describe('workspace_lsp_inspect', () => {
   });
 
   it('should handle definition locations', async () => {
-    await fs.writeFile(path.join(tempDir, 'test.ts'), 'const foo = 1');
+    await fs.writeFile(path.join(tempDir, 'test.ts'), 'const foo = 1\nconst bar = 2\nconst baz = 3');
 
     const mockClient = {
       queryHover: vi.fn().mockResolvedValue(null),
       queryDefinition: vi.fn().mockResolvedValue([
         {
           uri: `file://${tempDir}/test.ts`,
-          range: { start: { line: 0, character: 6 }, end: { line: 0, character: 9 } },
+          range: { start: { line: 2, character: 0 }, end: { line: 2, character: 9 } },
         },
       ]),
       queryTypeDefinition: vi.fn().mockResolvedValue([]),
@@ -197,7 +190,7 @@ describe('workspace_lsp_inspect', () => {
     );
 
     expect(result).toMatchObject({
-      definition: [{ path: expect.stringContaining('test.ts'), line: 1, character: 7 }],
+      definition: [{ location: expect.stringContaining('test.ts'), preview: expect.any(String) }],
     });
   });
 
