@@ -1,5 +1,11 @@
 # mastracode
 
+## 0.9.1-alpha.5
+
+### Patch Changes
+
+- Fixed mastracode dependency ranges to use explicit semver constraints instead of latest. ([#14541](https://github.com/mastra-ai/mastra/pull/14541))
+
 ## 0.9.1-alpha.4
 
 ### Patch Changes
