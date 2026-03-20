@@ -547,12 +547,18 @@ describe('safeStringify', () => {
     expect(safeStringify({ a: 1 }, 2)).toBe('{\n  "a": 1\n}');
   });
 
-  it('should replace repeated object references with [Circular]', () => {
+  it('should preserve shared (non-circular) references by duplicating them', () => {
     const shared = { x: 1 };
     const obj = { a: shared, b: shared };
     const result = JSON.parse(safeStringify(obj));
     expect(result.a).toEqual({ x: 1 });
-    expect(result.b).toBe('[Circular]');
+    expect(result.b).toEqual({ x: 1 });
+  });
+
+  it('should handle BigInt values without throwing', () => {
+    const obj = { count: BigInt(42), name: 'test' };
+    const result = safeStringify(obj);
+    expect(JSON.parse(result)).toEqual({ count: '42', name: 'test' });
   });
 });
 

@@ -547,8 +547,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
 
         const rawResult = await tool.execute(args, toolOptions);
-        // Tool results must be JSON-serializable for storage and LLM context.
-        // Strip circular references to prevent downstream JSON.stringify crashes.
         const result = ensureSerializable(rawResult);
 
         // Call onOutput hook after successful execution

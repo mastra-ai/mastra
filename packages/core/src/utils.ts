@@ -26,15 +26,22 @@ export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, 
 
 /**
  * Safely JSON-stringifies a value, replacing circular references with "[Circular]".
+ * Uses a stack-based approach so shared (non-circular) references are preserved.
  */
 export function safeStringify(value: unknown, space?: string | number): string {
-  const seen = new WeakSet();
+  const stack: unknown[] = [];
   return JSON.stringify(
     value,
-    (_key, val) => {
+    function (this: unknown, _key: string, val: unknown) {
+      if (typeof val === 'bigint') return val.toString();
       if (val !== null && typeof val === 'object') {
-        if (seen.has(val)) return '[Circular]';
-        seen.add(val);
+        // Trim the stack: pop entries that are no longer ancestors of the current path.
+        // `this` is the parent object containing the current key.
+        while (stack.length > 0 && stack[stack.length - 1] !== this) {
+          stack.pop();
+        }
+        if (stack.includes(val)) return '[Circular]';
+        stack.push(val);
       }
       return val;
     },
