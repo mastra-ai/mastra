@@ -126,8 +126,8 @@ export async function resolveToolConfig(
     }
   }
 
-  // Resolve `enabled` now (tool-listing time) — safe default: true (include tool)
-  const resolvedEnabled = await resolveDynamicValue(enabled, context, true);
+  // Resolve `enabled` now (tool-listing time) — safe default: false (fail-closed)
+  const resolvedEnabled = await resolveDynamicValue(enabled, context, false);
 
   return { enabled: resolvedEnabled, requireApproval, requireReadBeforeWrite, maxOutputTokens, name };
 }
@@ -238,6 +238,9 @@ function wrapWithWriteLock(tool: any, writeLock: FileWriteLock): any {
  * @returns Record of workspace tools
  */
 export async function createWorkspaceTools(workspace: Workspace, configContext?: ToolConfigContext) {
+  // Seed fallback context so dynamic enabled functions always get called,
+  // even if the caller omits configContext.
+  const effectiveConfigContext = configContext ?? { requestContext: {}, workspace };
   const tools: Record<string, any> = {};
   const toolsConfig = workspace.getToolsConfig();
   const isReadOnly = workspace.filesystem?.readOnly ?? false;
@@ -256,7 +259,7 @@ export async function createWorkspaceTools(workspace: Workspace, configContext?:
     tool: any,
     opts?: { requireWrite?: boolean; readTrackerMode?: 'read' | 'write'; useWriteLock?: boolean },
   ) => {
-    const config = await resolveToolConfig(toolsConfig, name, configContext);
+    const config = await resolveToolConfig(toolsConfig, name, effectiveConfigContext);
     if (!config.enabled) return;
     if (opts?.requireWrite && isReadOnly) return;
 
