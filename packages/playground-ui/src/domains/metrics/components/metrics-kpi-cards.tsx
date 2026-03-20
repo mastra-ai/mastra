@@ -5,7 +5,7 @@ import { useTotalTokensKpiMetrics } from '../hooks/use-total-tokens-kpi-metrics'
 import { useAvgScoreKpiMetrics } from '../hooks/use-avg-score-kpi-metrics';
 
 export function AgentRunsKpiCard() {
-  const { data: agentRunsKpi } = useAgentRunsKpiMetrics();
+  const { data: agentRunsKpi, isLoading, isError } = useAgentRunsKpiMetrics();
   const hasData = agentRunsKpi?.value != null;
 
   return (
@@ -14,7 +14,11 @@ export function AgentRunsKpiCard() {
       <MetricsKpiCard.Value className={hasData ? undefined : 'invisible'}>
         {hasData ? agentRunsKpi.value!.toLocaleString() : '—'}
       </MetricsKpiCard.Value>
-      {hasData ? (
+      {isError ? (
+        <MetricsKpiCard.Error />
+      ) : isLoading ? (
+        <MetricsKpiCard.Loading />
+      ) : hasData ? (
         agentRunsKpi.changePercent != null ? (
           <MetricsKpiCard.Change
             changePct={agentRunsKpi.changePercent}
@@ -41,7 +45,7 @@ export function ModelCostKpiCard() {
 }
 
 export function TotalTokensKpiCard() {
-  const { data: totalTokensKpi } = useTotalTokensKpiMetrics();
+  const { data: totalTokensKpi, isLoading, isError } = useTotalTokensKpiMetrics();
   const hasData = totalTokensKpi?.value != null;
 
   return (
@@ -50,7 +54,11 @@ export function TotalTokensKpiCard() {
       <MetricsKpiCard.Value className={hasData ? undefined : 'invisible'}>
         {hasData ? formatCompact(totalTokensKpi.value!) : '—'}
       </MetricsKpiCard.Value>
-      {hasData ? (
+      {isError ? (
+        <MetricsKpiCard.Error />
+      ) : isLoading ? (
+        <MetricsKpiCard.Loading />
+      ) : hasData ? (
         totalTokensKpi.changePercent != null ? (
           <MetricsKpiCard.Change
             changePct={totalTokensKpi.changePercent}
@@ -67,7 +75,7 @@ export function TotalTokensKpiCard() {
 }
 
 export function AvgScoreKpiCard() {
-  const { data: avgScoreKpi } = useAvgScoreKpiMetrics();
+  const { data: avgScoreKpi, isLoading, isError } = useAvgScoreKpiMetrics();
   const hasData = avgScoreKpi?.value != null;
 
   return (
@@ -76,7 +84,11 @@ export function AvgScoreKpiCard() {
       <MetricsKpiCard.Value className={hasData ? undefined : 'invisible'}>
         {hasData ? String(avgScoreKpi.value) : '—'}
       </MetricsKpiCard.Value>
-      {hasData ? (
+      {isError ? (
+        <MetricsKpiCard.Error />
+      ) : isLoading ? (
+        <MetricsKpiCard.Loading />
+      ) : hasData ? (
         avgScoreKpi.changePercent != null ? (
           <MetricsKpiCard.Change
             changePct={avgScoreKpi.changePercent}

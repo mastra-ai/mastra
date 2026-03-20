@@ -4,6 +4,8 @@ import { MetricsKpiCardValue } from './metrics-kpi-card-value';
 import { MetricsKpiCardChange } from './metrics-kpi-card-change';
 import { MetricsKpiCardNoChange } from './metrics-kpi-card-no-change';
 import { MetricsKpiCardNoData } from './metrics-kpi-card-no-data';
+import { MetricsKpiCardError } from './metrics-kpi-card-error';
+import { MetricsKpiCardLoading } from './metrics-kpi-card-loading';
 
 export const MetricsKpiCard = Object.assign(MetricsKpiCardRoot, {
   Label: MetricsKpiCardLabel,
@@ -11,4 +13,6 @@ export const MetricsKpiCard = Object.assign(MetricsKpiCardRoot, {
   Change: MetricsKpiCardChange,
   NoChange: MetricsKpiCardNoChange,
   NoData: MetricsKpiCardNoData,
+  Error: MetricsKpiCardError,
+  Loading: MetricsKpiCardLoading,
 });
