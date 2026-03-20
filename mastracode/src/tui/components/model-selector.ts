@@ -3,7 +3,7 @@
  * Uses pi-tui overlay pattern with search and fuzzy filtering.
  */
 
-import { Box, Container, fuzzyFilter, getEditorKeybindings, Input, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, Container, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, TUI } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 import { theme } from '../theme.js';
@@ -237,26 +237,26 @@ export class ModelSelectorComponent extends Box implements Focusable {
   }
 
   handleInput(keyData: string): void {
-    const kb = getEditorKeybindings();
+    const kb = getKeybindings();
 
     const totalItems = this.filteredModels.length + (this.hasCustomItem ? 1 : 0);
 
     // Up arrow
-    if (kb.matches(keyData, 'selectUp')) {
+    if (kb.matches(keyData, 'tui.select.up')) {
       if (totalItems === 0) return;
       this.selectedIndex = this.selectedIndex === 0 ? totalItems - 1 : this.selectedIndex - 1;
       this.updateList();
       this.tui.requestRender();
     }
     // Down arrow
-    else if (kb.matches(keyData, 'selectDown')) {
+    else if (kb.matches(keyData, 'tui.select.down')) {
       if (totalItems === 0) return;
       this.selectedIndex = this.selectedIndex === totalItems - 1 ? 0 : this.selectedIndex + 1;
       this.updateList();
       this.tui.requestRender();
     }
     // Enter
-    else if (kb.matches(keyData, 'selectConfirm')) {
+    else if (kb.matches(keyData, 'tui.select.confirm')) {
       if (this.hasCustomItem && this.selectedIndex === 0) {
         const query = this.searchInput.getValue().trim();
         if (query) this.handleSelect(this.makeCustomModelItem(query));
@@ -267,7 +267,7 @@ export class ModelSelectorComponent extends Box implements Focusable {
       }
     }
     // Escape or Ctrl+C
-    else if (kb.matches(keyData, 'selectCancel')) {
+    else if (kb.matches(keyData, 'tui.select.cancel')) {
       this.onCancelCallback();
     }
     // Pass everything else to search input

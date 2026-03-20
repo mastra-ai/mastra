@@ -10,7 +10,7 @@ import {
   Box,
   Container,
   fuzzyFilter,
-  getEditorKeybindings,
+  getKeybindings,
   Input,
   SelectList,
   SettingsList,
@@ -298,23 +298,23 @@ export class ModelSelectSubmenu extends Container {
   }
 
   handleInput(data: string): void {
-    const kb = getEditorKeybindings();
+    const kb = getKeybindings();
     const total = this.filteredModels.length;
 
-    if (kb.matches(data, 'selectUp')) {
+    if (kb.matches(data, 'tui.select.up')) {
       if (total === 0) return;
       this.selectedIndex = this.selectedIndex === 0 ? total - 1 : this.selectedIndex - 1;
       this.updateList();
       this.tui.requestRender();
-    } else if (kb.matches(data, 'selectDown')) {
+    } else if (kb.matches(data, 'tui.select.down')) {
       if (total === 0) return;
       this.selectedIndex = this.selectedIndex === total - 1 ? 0 : this.selectedIndex + 1;
       this.updateList();
       this.tui.requestRender();
-    } else if (kb.matches(data, 'selectConfirm')) {
+    } else if (kb.matches(data, 'tui.select.confirm')) {
       const selected = this.filteredModels[this.selectedIndex];
       if (selected) void this.onSelect(selected.id);
-    } else if (kb.matches(data, 'selectCancel')) {
+    } else if (kb.matches(data, 'tui.select.cancel')) {
       this.onCancel();
     } else {
       const normalized = normalizeSearchInput(data);

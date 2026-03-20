@@ -14,7 +14,7 @@
 
 import {
   Container,
-  getEditorKeybindings,
+  getKeybindings,
   Input,
   SelectList,
   Spacer,
@@ -402,7 +402,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
         this.handleAnswer(trimmed);
       }
     };
-    (this.input as any).keybindings = getEditorKeybindings();
+    (this.input as any).keybindings = getKeybindings();
   }
 
   private handleAnswer(answer: string): void {
@@ -431,8 +431,8 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     if (this.selectList) {
       this.selectList.handleInput(data);
     } else if (this.input) {
-      const kb = getEditorKeybindings();
-      if (kb.matches(data, 'selectCancel')) {
+      const kb = getKeybindings();
+      if (kb.matches(data, 'tui.select.cancel')) {
         this.handleCancel();
         return;
       }

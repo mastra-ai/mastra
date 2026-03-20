@@ -4,7 +4,7 @@
  * Used by the ask_user tool to collect structured answers from the user.
  */
 
-import { Box, getEditorKeybindings, Input, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, getKeybindings, Input, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem } from '@mariozechner/pi-tui';
 import { theme, getSelectListTheme } from '../theme.js';
 
@@ -89,8 +89,8 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
     if (this.selectList) {
       this.selectList.handleInput(data);
     } else if (this.input) {
-      const kb = getEditorKeybindings();
-      if (kb.matches(data, 'selectCancel')) {
+      const kb = getKeybindings();
+      if (kb.matches(data, 'tui.select.cancel')) {
         this.onCancel();
         return;
       }
