@@ -28,9 +28,7 @@ export function TokenUsageByAgentCard() {
           ) : (
             <Tabs defaultTab="tokens" className="grid grid-rows-[auto_1fr] overflow-y-auto h-full">
               <TabList>
-                <Tab value="tokens">
-                  Tokens
-                </Tab>
+                <Tab value="tokens">Tokens</Tab>
                 {/* 
                   Cost related metrics hidden for now
                   <Tab value="cost">

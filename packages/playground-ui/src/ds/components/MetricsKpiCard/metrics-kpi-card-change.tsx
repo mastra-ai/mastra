@@ -20,7 +20,9 @@ export function MetricsKpiCardChange({
         <span className={cn('[&>svg]:w-4 [&>svg]:h-4', isGood ? 'text-green-600' : 'text-red-600')}>
           {changePct >= 0 ? <TrendingUpIcon /> : <TrendingDownIcon />}
         </span>
-        <span className={cn(isGood ? 'text-green-600' : 'text-red-600')}>{`${changePct >= 0 ? '+' : '-'}${Math.abs(changePct).toFixed(1)}%`}</span>
+        <span
+          className={cn(isGood ? 'text-green-600' : 'text-red-600')}
+        >{`${changePct >= 0 ? '+' : '-'}${Math.abs(changePct).toFixed(1)}%`}</span>
       </div>
       {prevValue && (
         <div>
