@@ -1,6 +1,6 @@
 # Smoke Test Coverage
 
-> 131 tests across 27 test files — last updated 2026-03-20
+> 133 tests across 27 test files — last updated 2026-03-20
 
 ## What's Tested
 
@@ -160,9 +160,9 @@
 
 ---
 
-### MCP (15 tests, 2 files)
+### MCP (17 tests, 2 files)
 
-#### REST API (`rest.test.ts` — 10 tests)
+#### REST API (`rest.test.ts` — 11 tests)
 - [x] List registered MCP servers (name, version, is_latest)
 - [x] Get server details by ID
 - [x] 404 for non-existent server
@@ -173,13 +173,15 @@
 - [x] Execute calculator via MCP REST endpoint (exact result)
 - [x] Execute string-transform via MCP REST endpoint (exact result)
 - [x] 500 when executing non-existent tool
+- [x] Validation error for missing required fields (200 with error shape)
 
-#### Client Transport (`client.test.ts` — 5 tests)
+#### Client Transport (`client.test.ts` — 6 tests)
 - [x] Connect and list tools via Streamable HTTP transport
 - [x] Execute calculator tool via Streamable HTTP
 - [x] Execute string-transform tool via Streamable HTTP
 - [x] Connect and list tools via SSE fallback transport
 - [x] Execute calculator tool via SSE transport
+- [x] Execute string-transform tool via SSE transport
 
 ---
 
