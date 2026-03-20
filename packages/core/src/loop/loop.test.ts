@@ -1,5 +1,6 @@
 import { beforeEach, afterEach, describe, vi } from 'vitest';
 import { loop } from './loop';
+import { multiStepReasoningTests } from './multi-step-reasoning.test-utils';
 import { fullStreamTests } from './test-utils/fullStream';
 import { generateTextTestsV5 } from './test-utils/generateText';
 import { optionsTests } from './test-utils/options';
@@ -27,6 +28,7 @@ describe('Loop Tests', () => {
     optionsTests({ loopFn: loop, runId: 'test-run-id' });
     generateTextTestsV5({ loopFn: loop, runId: 'test-run-id' });
     toolsTests({ loopFn: loop, runId: 'test-run-id' });
+    multiStepReasoningTests({ loopFn: loop, runId: 'test-run-id' });
 
     streamObjectTests({ loopFn: loop, runId: 'test-run-id' });
   });
