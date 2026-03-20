@@ -425,7 +425,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
     if (Object.keys(updateFields).length === 0) {
       const existing = await this.getExperimentResultById({ id: input.id });
-      if (!existing) {
+      if (!existing || (input.experimentId && existing.experimentId !== input.experimentId)) {
         throw new MastraError({
           id: createStorageErrorId('MONGODB', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
           domain: ErrorDomain.STORAGE,
