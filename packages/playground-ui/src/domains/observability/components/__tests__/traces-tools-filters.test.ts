@@ -32,9 +32,9 @@ describe('TracesTools filter capabilities (Issue #14005)', () => {
     expect(componentSource).toContain('onErrorOnlyChange');
   });
 
-  it('should render metadata key-value filter controls', () => {
-    // TracesTools should destructure and use metadata filter props
-    expect(componentSource).toContain('metadataFilters');
-    expect(componentSource).toContain('onMetadataFiltersChange');
+  it('should render metadata picker filter controls', () => {
+    // TracesTools should destructure and use metadata picker props
+    expect(componentSource).toContain('selectedMetadata');
+    expect(componentSource).toContain('onMetadataChange');
   });
 });
