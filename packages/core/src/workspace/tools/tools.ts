@@ -280,7 +280,10 @@ export function createWorkspaceTools(workspace: Workspace) {
       workspace.canBM25 ? 'bm25' : null,
       workspace.canVector ? 'vector' : null,
       workspace.canHybrid ? 'hybrid' : null,
-    ].filter(Boolean) as ['bm25', ...('vector' | 'hybrid')[]];
+    ].filter(Boolean) as Array<'bm25' | 'vector' | 'hybrid'> as [
+      'bm25' | 'vector' | 'hybrid',
+      ...('bm25' | 'vector' | 'hybrid')[],
+    ];
 
     const dynamicSearchTool = {
       ...searchTool,
