@@ -31,7 +31,7 @@ const sampleData: ModelRow[] = [
   },
 ];
 
-const columns = [
+const columns: { label: string; value: (row: ModelRow) => string | number; highlight?: boolean }[] = [
   { label: 'Model', value: (row: ModelRow) => row.model },
   { label: 'Input', value: (row: ModelRow) => row.input.toLocaleString() },
   { label: 'Output', value: (row: ModelRow) => row.output.toLocaleString() },
@@ -40,7 +40,7 @@ const columns = [
   { label: 'Cost', value: () => '—', highlight: true as const },
 ];
 
-const meta: Meta<typeof MetricsDataTable> = {
+const meta: Meta<typeof MetricsDataTable<ModelRow>> = {
   title: 'Metrics/MetricsDataTable',
   component: MetricsDataTable,
   parameters: {
@@ -50,7 +50,7 @@ const meta: Meta<typeof MetricsDataTable> = {
 };
 
 export default meta;
-type Story = StoryObj<typeof MetricsDataTable>;
+type Story = StoryObj<typeof MetricsDataTable<ModelRow>>;
 
 export const Default: Story = {
   args: {

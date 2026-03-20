@@ -55,10 +55,10 @@ export function ScoresCard() {
           ) : (
             <Tabs defaultTab="over-time" className="overflow-visible">
               <TabList>
-                <Tab value="over-time" size="smaller">
+                <Tab value="over-time">
                   Over Time
                 </Tab>
-                <Tab value="summary" size="smaller">
+                <Tab value="summary">
                   Summary
                 </Tab>
               </TabList>

@@ -20,7 +20,7 @@ export function MetricsDataTable<T extends { key: string }>({
   if (columns.length === 0) return null;
 
   return (
-    <ScrollArea className={cn('w-full h-full', className)} maxHeight="20rem" orientation="both">
+    <ScrollArea className={cn('w-full h-full', className)} maxHeight="20rem">
       <div
         className="grid items-center"
         style={{

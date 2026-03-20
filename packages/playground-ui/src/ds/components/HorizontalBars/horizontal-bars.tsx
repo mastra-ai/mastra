@@ -26,7 +26,7 @@ export function HorizontalBars({
   const isStacked = segments.length > 1;
 
   return (
-    <ScrollArea className={cn('w-full h-full', className)} orientation="vertical">
+    <ScrollArea className={cn('w-full h-full', className)}>
       <div className="flex items-center gap-3 mb-4 mt-2">
         <div className="flex-1 flex items-center gap-4">
           {segments.map(seg => (

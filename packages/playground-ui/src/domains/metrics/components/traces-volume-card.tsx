@@ -42,13 +42,13 @@ export function TracesVolumeCard() {
           ) : (
             <Tabs defaultTab="agents" className="grid grid-rows-[auto_1fr] overflow-y-auto h-full">
               <TabList>
-                <Tab value="agents" size="smaller">
+                <Tab value="agents">
                   Agents
                 </Tab>
-                <Tab value="workflows" size="smaller">
+                <Tab value="workflows">
                   Workflows
                 </Tab>
-                <Tab value="tools" size="smaller">
+                <Tab value="tools">
                   Tools
                 </Tab>
               </TabList>
