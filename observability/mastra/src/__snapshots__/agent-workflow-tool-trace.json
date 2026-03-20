@@ -24,7 +24,8 @@
         "entityType": "agent",
         "entityId": "workflow-agent",
         "attributes": {
-          "instructions": "You can execute workflows using the workflow executor tool"
+          "instructions": "You can execute workflows using the workflow executor tool",
+          "availableTools": ["workflowExecutor"]
         },
         "metadata": {
           "runId": "<runId-1>",

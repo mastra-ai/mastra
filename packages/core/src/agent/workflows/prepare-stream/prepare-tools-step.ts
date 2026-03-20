@@ -73,11 +73,14 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
       });
 
       // Update the agent span with available tool names for observability
-      agentSpan.update({
-        attributes: {
-          availableTools: Object.keys(convertedTools),
-        },
-      });
+      const toolNames = Object.keys(convertedTools);
+      if (toolNames.length > 0) {
+        agentSpan.update({
+          attributes: {
+            availableTools: toolNames,
+          },
+        });
+      }
 
       return {
         convertedTools,
