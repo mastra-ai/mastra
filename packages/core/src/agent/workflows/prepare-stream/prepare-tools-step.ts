@@ -72,6 +72,13 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
         delegation: options.delegation,
       });
 
+      // Update the agent span with available tool names for observability
+      agentSpan.update({
+        attributes: {
+          availableTools: Object.keys(convertedTools),
+        },
+      });
+
       return {
         convertedTools,
       };
