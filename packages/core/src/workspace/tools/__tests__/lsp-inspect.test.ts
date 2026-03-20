@@ -89,6 +89,7 @@ describe('workspace_lsp_inspect', () => {
 
     const mockLsp = {
       root: tempDir,
+      getDiagnostics: vi.fn().mockResolvedValue([]),
       prepareQuery: vi.fn().mockResolvedValue({
         client: mockClient,
         uri: `file://${tempDir}/test.ts`,
@@ -132,6 +133,7 @@ describe('workspace_lsp_inspect', () => {
 
     const mockLsp = {
       root: tempDir,
+      getDiagnostics: vi.fn().mockResolvedValue([]),
       prepareQuery: vi.fn().mockResolvedValue({
         client: mockClient,
         uri: `file://${tempDir}/test.ts`,
@@ -174,6 +176,7 @@ describe('workspace_lsp_inspect', () => {
 
     const mockLsp = {
       root: tempDir,
+      getDiagnostics: vi.fn().mockResolvedValue([]),
       prepareQuery: vi.fn().mockResolvedValue({
         client: mockClient,
         uri: `file://${tempDir}/test.ts`,
@@ -192,6 +195,62 @@ describe('workspace_lsp_inspect', () => {
     expect(result).toMatchObject({
       definition: [{ location: expect.stringContaining('test.ts'), preview: expect.any(String) }],
     });
+  });
+
+  it('should return diagnostics for the inspected line', async () => {
+    await fs.writeFile(path.join(tempDir, 'test.ts'), 'const foo: string = 42\nconst bar = true');
+
+    const mockClient = {
+      queryHover: vi.fn().mockResolvedValue(null),
+      queryDefinition: vi.fn().mockResolvedValue([]),
+      queryImplementation: vi.fn().mockResolvedValue([]),
+      notifyClose: vi.fn(),
+      serverName: 'typescript',
+    };
+
+    const mockLsp = {
+      root: tempDir,
+      getDiagnostics: vi.fn().mockResolvedValue([
+        {
+          severity: 'error',
+          message: "Type 'number' is not assignable to type 'string'.",
+          line: 1,
+          character: 7,
+          source: 'typescript',
+        },
+        {
+          severity: 'warning',
+          message: 'Unused variable bar',
+          line: 2,
+          character: 7,
+          source: 'typescript',
+        },
+      ]),
+      prepareQuery: vi.fn().mockResolvedValue({
+        client: mockClient,
+        uri: `file://${tempDir}/test.ts`,
+        languageId: 'typescript',
+        serverName: 'typescript',
+      }),
+    };
+
+    Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
+
+    const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
+      { path: 'test.ts', line: 1, match: 'const foo: <<<string = 42' },
+      { workspace },
+    );
+
+    expect(result).toMatchObject({
+      diagnostics: [
+        {
+          severity: 'error',
+          message: "Type 'number' is not assignable to type 'string'.",
+          source: 'typescript',
+        },
+      ],
+    });
+    expect(mockLsp.getDiagnostics).toHaveBeenCalled();
   });
 
   it('should handle prepareQuery returning null (no server available)', async () => {
@@ -250,6 +309,7 @@ describe('workspace_lsp_inspect', () => {
 
     const mockLsp = {
       root: tempDir,
+      getDiagnostics: vi.fn().mockResolvedValue([]),
       prepareQuery: vi.fn().mockResolvedValue({
         client: mockClient,
         uri: `file://${tempDir}/test.ts`,

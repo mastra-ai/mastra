@@ -964,6 +964,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     // Parse lsp_inspect result
     let parsed: {
       hover?: { value: string; kind: string };
+      diagnostics?: Array<{ severity: string; message: string; source: string | null }>;
       definition?: Array<{ location: string; preview: string | null }>;
       implementation?: string[];
       error?: string;
@@ -991,12 +992,34 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     // Render hover content
     if (parsed.hover) {
       const hoverValue = parsed.hover.value || '';
-      // Split hover content into lines
       const hoverLines = hoverValue.split('\n').filter(line => line.trim() !== '');
+      if (hoverLines.length > 0) {
+        this.contentBox.addChild(new Text(border('│') + ' ' + theme.fg('toolArgs', 'hover:'), 0, 0));
+      }
       for (const line of hoverLines) {
         const truncated = truncateAnsi(line, maxLineWidth - 2);
         const prefix = border('│') + ' ';
         this.contentBox.addChild(new Text(prefix + theme.fg('text', truncated), 0, 0));
+      }
+    }
+
+    // Render line diagnostics
+    if (parsed.diagnostics && parsed.diagnostics.length > 0) {
+      this.contentBox.addChild(new Text(border('│'), 0, 0));
+      this.contentBox.addChild(new Text(border('│') + ' ' + theme.fg('toolArgs', 'diagnostics:'), 0, 0));
+
+      for (const diagnostic of parsed.diagnostics) {
+        const label = diagnostic.source ? `${diagnostic.severity} (${diagnostic.source})` : diagnostic.severity;
+        const diagLine = `${label}: ${diagnostic.message}`;
+        this.contentBox.addChild(
+          new Text(
+            border('│') +
+              ' ' +
+              theme.fg(diagnostic.severity === 'error' ? 'error' : 'text', truncateAnsi(diagLine, maxLineWidth - 2)),
+            0,
+            0,
+          ),
+        );
       }
     }
 
@@ -1011,11 +1034,13 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         const preview = def.preview || '';
         // Parse location: "$cwd/path:Lline:Cchar" or just "path:Lline:Cchar"
         const parsedLoc = this.parseLspLocation(location);
-        const displayLoc = parsedLoc ? fileLink(
-          theme.fg('toolOutput', parsedLoc.shortPath + ':' + parsedLoc.lineCol),
-          parsedLoc.absPath,
-          parsedLoc.line
-        ) : theme.fg('toolOutput', location);
+        const displayLoc = parsedLoc
+          ? fileLink(
+              theme.fg('toolOutput', parsedLoc.shortPath + ':' + parsedLoc.lineCol),
+              parsedLoc.absPath,
+              parsedLoc.line,
+            )
+          : theme.fg('toolOutput', location);
 
         const defLine = border('│') + ' ' + displayLoc;
         this.contentBox.addChild(new Text(truncateAnsi(defLine, maxLineWidth), 0, 0));
@@ -1044,11 +1069,13 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
       for (const loc of shown) {
         const parsedLoc = this.parseLspLocation(loc);
-        const displayLoc = parsedLoc ? fileLink(
-          theme.fg('toolOutput', parsedLoc.shortPath + ':' + parsedLoc.lineCol),
-          parsedLoc.absPath,
-          parsedLoc.line
-        ) : theme.fg('toolOutput', loc);
+        const displayLoc = parsedLoc
+          ? fileLink(
+              theme.fg('toolOutput', parsedLoc.shortPath + ':' + parsedLoc.lineCol),
+              parsedLoc.absPath,
+              parsedLoc.line,
+            )
+          : theme.fg('toolOutput', loc);
         const implLine = border('│') + ' ' + displayLoc;
         this.contentBox.addChild(new Text(truncateAnsi(implLine, maxLineWidth), 0, 0));
       }
@@ -1060,8 +1087,14 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     }
 
     // Show message if no results found
-    if (!parsed.hover && !parsed.definition?.length && !parsed.implementation?.length) {
-      this.contentBox.addChild(new Text(border('│') + ' ' + theme.fg('muted', 'No results'), 0, 0));
+    if (!parsed.hover && !parsed.diagnostics?.length && !parsed.definition?.length && !parsed.implementation?.length) {
+      this.contentBox.addChild(
+        new Text(
+          border('│') + ' ' + theme.fg('muted', 'No hover, diagnostics, definition, or implementation results'),
+          0,
+          0,
+        ),
+      );
     }
 
     this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
@@ -1070,7 +1103,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   /**
    * Parse an LSP location string like "$cwd/path:Lline:Cchar" into components.
    */
-  private parseLspLocation(location: string): { absPath: string; shortPath: string; line: number; lineCol: string } | null {
+  private parseLspLocation(
+    location: string,
+  ): { absPath: string; shortPath: string; line: number; lineCol: string } | null {
     // Match patterns like:
     // - "$cwd/packages/core/src/foo.ts:L10:C5"
     // - "/absolute/path/to/file.ts:L1:C1"

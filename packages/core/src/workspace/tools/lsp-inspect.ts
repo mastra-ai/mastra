@@ -45,10 +45,11 @@ function compressPath(filePath: string): string {
 export const lspInspectTool = createTool({
   id: WORKSPACE_TOOLS.LSP.LSP_INSPECT,
   description:
-    'Inspect code at a specific position using the Language Server Protocol. ' +
-    'Provide the file path, line number, and a line with <<< marking the cursor position. ' +
-    'Returns hover information (types, documentation) and optionally definition and implementation locations. ' +
-    'Use this to understand what a symbol is, its type, or where it is defined.',
+    'Inspect code at a specific symbol position using the Language Server Protocol. ' +
+    'Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. ' +
+    'Exactly one <<< marker is required. ' +
+    'Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. ' +
+    'Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.',
 
   inputSchema: z.object({
     path: z.string().describe('Absolute path to the file'),
@@ -104,6 +105,14 @@ export const lspInspectTool = createTool({
       workspace.filesystem?.resolveAbsolutePath?.(filePath) ??
       path.resolve(lspManager.root, filePath.replace(/^\/+/, ''));
 
+    let fileContent = '';
+    try {
+      const fs = await import('node:fs/promises');
+      fileContent = await fs.readFile(absolutePath, 'utf-8');
+    } catch {
+      fileContent = '';
+    }
+
     // Get client and prepare for querying
     let queryResult;
     try {
@@ -150,11 +159,26 @@ export const lspInspectTool = createTool({
         }
       }
 
-      // Secondary queries: definition and implementation
-      const [definitionResult, implResult] = await Promise.all([
+      // Secondary queries: diagnostics, definition, and implementation
+      const [diagnosticsResult, definitionResult, implResult] = await Promise.all([
+        lspManager.getDiagnostics(absolutePath, fileContent).catch(() => []),
         client.queryDefinition(uri, position).catch(() => []),
         client.queryImplementation(uri, position).catch(() => []),
       ]);
+
+      if (diagnosticsResult && diagnosticsResult.length > 0) {
+        const lineDiagnostics = diagnosticsResult
+          .filter(diagnostic => diagnostic.line === line)
+          .map(diagnostic => ({
+            severity: diagnostic.severity,
+            message: diagnostic.message,
+            source: diagnostic.source ?? null,
+          }));
+
+        if (lineDiagnostics.length > 0) {
+          result.diagnostics = lineDiagnostics;
+        }
+      }
 
       if (definitionResult.length > 0) {
         const definitionLocations = definitionResult
