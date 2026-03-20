@@ -103,6 +103,36 @@ The result is a three-tier system:
 1. **Observations**: A log of what the Observer has seen
 1. **Reflections**: Condensed observations when memory becomes too long
 
+### Retrieval mode (experimental)
+
+:::note
+Retrieval mode is experimental. The API may change in future releases.
+:::
+
+Normal OM compresses messages into observations, which is great for staying on task — but the original wording is gone. Retrieval mode fixes this by keeping each observation group linked to the raw messages that produced it. When the agent needs exact wording, tool output, or chronology that the summary compressed away, it can call a `recall` tool to page through the source messages.
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      scope: 'thread',
+      retrieval: true,
+    },
+  },
+})
+```
+
+With retrieval mode enabled, OM:
+
+- Stores a `range` (e.g. `startId:endId`) on each observation group pointing to the messages it was derived from
+- Keeps range metadata visible in the agent's context so the agent knows which observations map to which messages
+- Registers a `recall` tool the agent can call to page through the raw messages behind any range
+
+Retrieval mode is only active for thread-scoped OM. Setting `retrieval: true` with `scope: 'resource'` has no effect — OM keeps resource-scoped behavior but skips retrieval-mode context and does not register the `recall` tool.
+
+See the [recall tool reference](/reference/memory/observational-memory#recall-tool) for the full API (detail levels, part indexing, pagination, and token limiting).
+
 ## Models
 
 The Observer and Reflector run in the background. Any model that works with Mastra's [model routing](/models) (`provider/model`) can be used. When using `observationalMemory: true`, the default model is `google/gemini-2.5-flash`. When passing a config object, a `model` must be explicitly set.
