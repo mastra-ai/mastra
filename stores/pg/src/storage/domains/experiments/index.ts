@@ -113,6 +113,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       datasetId: (row.datasetId as string | null) ?? null,
       datasetVersion: row.datasetVersion != null ? (row.datasetVersion as number) : null,
+      agentVersion: (row.agentVersion as string | null) ?? null,
       targetType: row.targetType as Experiment['targetType'],
       targetId: row.targetId as string,
       status: row.status as Experiment['status'],
