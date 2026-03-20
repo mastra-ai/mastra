@@ -67,7 +67,7 @@ function openBrowser(url: string) {
   execSync(`${cmd} "${url}"`);
 }
 
-async function tryRefreshToken(creds: Credentials): Promise<string | null> {
+export async function tryRefreshToken(creds: Credentials): Promise<string | null> {
   if (!creds.refreshToken) return null;
 
   try {

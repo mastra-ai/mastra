@@ -1,5 +1,4 @@
-import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL, throwApiError } from '../auth/client.js';
-import { getToken } from '../auth/credentials.js';
+import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL, platformFetch, throwApiError } from '../auth/client.js';
 
 export interface Project {
   id: string;
@@ -81,7 +80,7 @@ export async function uploadDeploy(
   if (meta?.projectName) headers['x-project-name'] = meta.projectName;
 
   // Step 1: Create the deploy with optional envVars
-  const createResp = await fetch(`${MASTRA_PLATFORM_API_URL}/v1/studio/deploys`, {
+  const createResp = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/studio/deploys`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ envVars: meta?.envVars }),
@@ -112,10 +111,13 @@ export async function uploadDeploy(
   }
 
   // Notify API that upload is complete → triggers deploy pipeline
-  const completeResp = await fetch(`${MASTRA_PLATFORM_API_URL}/v1/studio/deploys/${deploy.id}/upload-complete`, {
-    method: 'POST',
-    headers: authHeaders(token, orgId),
-  });
+  const completeResp = await platformFetch(
+    `${MASTRA_PLATFORM_API_URL}/v1/studio/deploys/${deploy.id}/upload-complete`,
+    {
+      method: 'POST',
+      headers: authHeaders(token, orgId),
+    },
+  );
   if (!completeResp.ok) {
     const body = (await completeResp.json().catch(() => ({}))) as { detail?: string };
     throwApiError('Upload confirmation failed', completeResp.status, body.detail);
@@ -130,7 +132,7 @@ async function streamDeployLogs(deployId: string, token: string, orgId: string, 
 
   const url = `${MASTRA_PLATFORM_API_URL}/v1/studio/deploys/${deployId}/logs/stream`;
 
-  const resp = await fetch(url, {
+  const resp = await platformFetch(url, {
     headers: authHeaders(token, orgId),
     signal,
   });
@@ -165,17 +167,16 @@ export async function pollDeploy(
   deployId: string,
   token: string,
   orgId: string,
-  maxWaitMs = 180000,
+  maxWaitMs = 600000,
 ): Promise<DeployStatus> {
   const start = Date.now();
   let lastStatus = '';
-  let currentToken = token;
 
   // Start streaming logs in the background via SSE
-  let logAbort = new AbortController();
-  streamDeployLogs(deployId, currentToken, orgId, logAbort.signal).catch(() => {});
+  const logAbort = new AbortController();
+  streamDeployLogs(deployId, token, orgId, logAbort.signal).catch(() => {});
 
-  let client = createApiClient(currentToken, orgId);
+  const client = createApiClient(token, orgId);
 
   try {
     while (Date.now() - start < maxWaitMs) {
@@ -184,18 +185,6 @@ export async function pollDeploy(
       });
 
       if (error) {
-        if (response.status === 401) {
-          // Token expired mid-poll — refresh and retry
-          currentToken = await getToken();
-          client = createApiClient(currentToken, orgId);
-
-          // Restart log stream with fresh token
-          logAbort.abort();
-          logAbort = new AbortController();
-          streamDeployLogs(deployId, currentToken, orgId, logAbort.signal).catch(() => {});
-
-          continue;
-        }
         throwApiError('Poll failed', response.status, error.detail);
       }
 
