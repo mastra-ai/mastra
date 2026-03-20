@@ -388,6 +388,7 @@ export function AgentTracesPanel({ agentId }: AgentTracesPanelProps) {
       const items = selectedTraces.map(trace => ({
         input: extractRawInput(trace),
         groundTruth: trace.output ?? undefined,
+        source: { type: 'trace' as const, referenceId: trace.traceId },
       }));
 
       try {
