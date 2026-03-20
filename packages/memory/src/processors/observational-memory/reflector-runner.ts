@@ -561,7 +561,7 @@ export class ReflectorRunner {
       }
     }
 
-    if (observationTokens <= reflectThreshold) {
+    if (observationTokens < reflectThreshold) {
       return;
     }
 
