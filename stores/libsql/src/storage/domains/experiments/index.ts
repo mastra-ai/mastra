@@ -72,6 +72,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       id: row.id as string,
       datasetId: (row.datasetId as string | null) ?? null,
       datasetVersion: row.datasetVersion != null ? (row.datasetVersion as number) : null,
+      agentVersion: (row.agentVersion as string | null) ?? null,
       targetType: row.targetType as Experiment['targetType'],
       targetId: row.targetId as string,
       name: (row.name as string) ?? undefined,
