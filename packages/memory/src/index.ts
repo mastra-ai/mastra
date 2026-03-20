@@ -40,6 +40,7 @@ import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/schema-compa
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
+import { recallTool } from './tools/om-tools';
 import {
   updateWorkingMemoryTool,
   __experimental_updateWorkingMemoryToolVNext,
@@ -51,13 +52,17 @@ import {
  * Returns the options object if enabled, undefined if disabled.
  * Inlined here to avoid importing runtime exports that don't exist on older @mastra/core versions.
  */
+type NormalizedObservationalMemoryConfig = ObservationalMemoryOptions & {
+  retrieval?: boolean;
+};
+
 function normalizeObservationalMemoryConfig(
   config: boolean | ObservationalMemoryOptions | undefined,
-): ObservationalMemoryOptions | undefined {
+): NormalizedObservationalMemoryConfig | undefined {
   if (config === true) return { model: 'google/gemini-2.5-flash' };
   if (config === false || config === undefined) return undefined;
   if (typeof config === 'object' && (config as ObservationalMemoryOptions).enabled === false) return undefined;
-  return config as ObservationalMemoryOptions;
+  return config as NormalizedObservationalMemoryConfig;
 }
 
 // Re-export for testing purposes
@@ -1190,16 +1195,20 @@ Notes:
 
   public listTools(config?: MemoryConfigInternal): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
-    // Don't provide update tools in readOnly mode
+    const tools: Record<string, ToolAction<any, any, any>> = {};
+
     if (mergedConfig.workingMemory?.enabled && !mergedConfig.readOnly) {
-      return {
-        updateWorkingMemory: this.isVNextWorkingMemoryConfig(mergedConfig)
-          ? // use the new experimental tool
-            __experimental_updateWorkingMemoryToolVNext(mergedConfig)
-          : updateWorkingMemoryTool(mergedConfig),
-      };
+      tools.updateWorkingMemory = this.isVNextWorkingMemoryConfig(mergedConfig)
+        ? __experimental_updateWorkingMemoryToolVNext(mergedConfig)
+        : updateWorkingMemoryTool(mergedConfig);
     }
-    return {};
+
+    const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
+    if (omConfig?.retrieval && (omConfig.scope ?? 'thread') === 'thread') {
+      tools.recall = recallTool(mergedConfig);
+    }
+
+    return tools;
   }
 
   /**
@@ -2004,6 +2013,7 @@ Notes:
     return new ObservationalMemory({
       storage: memoryStore,
       scope: omConfig.scope,
+      retrieval: omConfig.retrieval,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
       observation: omConfig.observation
