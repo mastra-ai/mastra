@@ -28,17 +28,17 @@ export default async function setup(project: TestProject) {
   const baseUrl = `http://127.0.0.1:${port}`;
 
   // Step 1: Build
+  const mastraBin = join(projectDir, 'node_modules', '.bin', 'mastra');
   console.log('[smoke] Running mastra build...');
-  await execa('npx', ['mastra', 'build'], {
+  await execa(mastraBin, ['build'], {
     cwd: projectDir,
     stdio: 'pipe',
   });
   console.log('[smoke] Build complete.');
 
-  // Step 2: Start server (use node directly instead of npx mastra start)
-  const entryPoint = join(projectDir, '.mastra', 'output', 'index.mjs');
-  console.log(`[smoke] Starting server on port ${port}...`);
-  const serverProc = execa('node', [entryPoint], {
+  // Step 2: Start server via mastra start
+  console.log(`[smoke] Starting mastra server on port ${port}...`);
+  const serverProc = execa(mastraBin, ['start'], {
     cwd: projectDir,
     env: {
       ...process.env,
