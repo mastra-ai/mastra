@@ -17,7 +17,7 @@ interface PrepareToolsStepOptions<OUTPUT = undefined> {
   resourceId?: string;
   runId: string;
   requestContext: RequestContext;
-  agentSpan: Span<SpanType.AGENT_RUN>;
+  agentSpan?: Span<SpanType.AGENT_RUN>;
   methodType: AgentMethodType;
   memory?: MastraMemory;
 }
@@ -75,7 +75,7 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
       // Update the agent span with available tool names for observability
       const toolNames = Object.keys(convertedTools);
       if (toolNames.length > 0) {
-        agentSpan.update({
+        agentSpan?.update({
           attributes: {
             availableTools: toolNames,
           },
