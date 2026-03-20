@@ -280,16 +280,13 @@ export function createWorkspaceTools(workspace: Workspace) {
       workspace.canBM25 ? 'bm25' : null,
       workspace.canVector ? 'vector' : null,
       workspace.canHybrid ? 'hybrid' : null,
-    ].filter(Boolean) as Array<'bm25' | 'vector' | 'hybrid'> as [
-      'bm25' | 'vector' | 'hybrid',
-      ...('bm25' | 'vector' | 'hybrid')[],
-    ];
+    ].filter((m): m is 'bm25' | 'vector' | 'hybrid' => m !== null);
 
     const dynamicSearchTool = {
       ...searchTool,
       inputSchema: searchTool.inputSchema.extend({
         mode: z
-          .enum(availableModes)
+          .enum(availableModes as ['bm25' | 'vector' | 'hybrid', ...('bm25' | 'vector' | 'hybrid')[]])
           .optional()
           .describe(`Search mode: ${availableModes.join(', ')}`),
       }),
