@@ -21,6 +21,7 @@ interface CreateProjectArgs {
 }
 
 export const createProject = async (projectNameArg: string | undefined, args: CreateProjectArgs) => {
+  // TODO(major): Remove args.projectName in favor of projectNameArg
   const projectName = projectNameArg || args.projectName;
   await analytics.trackCommandExecution({
     command: 'create',
