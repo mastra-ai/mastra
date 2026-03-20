@@ -1,5 +1,25 @@
 # @mastra/memory
 
+## 1.9.0-alpha.2
+
+### Minor Changes
+
+- Added experimental retrieval-mode recall tooling for observational memory. ([#14437](https://github.com/mastra-ai/mastra/pull/14437))
+
+  When `observationalMemory.retrieval` is enabled with `scope: 'thread'`, observation groups store colon-delimited message ranges (`startId:endId`) pointing back to the raw messages they were derived from. A `recall` tool is registered that lets agents retrieve those source messages via cursor-based pagination.
+
+  The recall tool supports:
+  - **Detail levels**: `detail: 'low'` (default) returns truncated text with part indices; `detail: 'high'` returns full content clamped to one part per call with continuation hints
+  - **Part-level fetch**: `partIndex` targets a single message part at full detail
+  - **Pagination flags**: `hasNextPage` and `hasPrevPage` in results
+  - **Token limiting**: results are capped at a token budget with `truncated` and `tokenOffset` reporting
+  - **Smart range detection**: passing a range as a cursor returns a helpful hint explaining how to extract individual IDs
+
+### Patch Changes
+
+- Updated dependencies [[`da93115`](https://github.com/mastra-ai/mastra/commit/da931155c1a9bc63d455d3d86b4ec984db5991fe), [`0efe12a`](https://github.com/mastra-ai/mastra/commit/0efe12a5f008a939a1aac71699486ba40138054e)]:
+  - @mastra/core@1.15.0-alpha.4
+
 ## 1.9.0-alpha.1
 
 ### Minor Changes
