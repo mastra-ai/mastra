@@ -14,6 +14,8 @@
  */
 
 import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+import { LibSQLVector } from '@mastra/libsql';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import {
   ProcessorStepSchema,
@@ -328,6 +330,34 @@ export const agentWithBranchingWorkflow = new Agent({
 // Approach 3: Simple Agent (for comparison)
 // =============================================================================
 
+const simpleAssistantMemory = new Memory({
+  vector: new LibSQLVector({
+    id: 'simple-assistant-memory-vector',
+    url: 'file:../mastra-memory.db',
+  }),
+  embedder: 'openai/text-embedding-3-small',
+  options: {
+    semanticRecall: {
+      topK: 3,
+      messageRange: {
+        before: 2,
+        after: 1,
+      },
+    },
+    workingMemory: {
+      enabled: true,
+    },
+  },
+});
+
+const omAgentMemory = new Memory({
+  options: {
+    observationalMemory: {
+      enabled: true,
+    },
+  },
+});
+
 /**
  * Simple Agent without Processors
  *
@@ -339,4 +369,13 @@ export const simpleAssistantAgent = new Agent({
   name: 'Simple Assistant',
   instructions: 'You are a helpful assistant.',
   model: 'openai/gpt-4o-mini',
+  memory: simpleAssistantMemory,
+});
+
+export const omAgent = new Agent({
+  id: 'om-agent',
+  name: 'OM Agent',
+  instructions: 'You are an AI assistant with amazing memory. Be helpful, concise, and context-aware.',
+  model: 'openai/gpt-4o-mini',
+  memory: omAgentMemory,
 });

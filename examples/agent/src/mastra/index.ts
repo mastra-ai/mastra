@@ -38,6 +38,7 @@ import {
   agentWithProcessorWorkflow,
   contentModerationWorkflow,
   simpleAssistantAgent,
+  omAgent,
   agentWithBranchingWorkflow,
   advancedModerationWorkflow,
 } from './workflows/content-moderation';
@@ -75,6 +76,7 @@ const config = {
     moderatedAssistantAgent,
     agentWithProcessorWorkflow,
     simpleAssistantAgent,
+    omAgent,
     agentWithBranchingWorkflow,
     agentWithAdvancedModeration,
     agentWithBranchingModeration,
