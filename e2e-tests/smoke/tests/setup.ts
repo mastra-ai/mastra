@@ -24,27 +24,33 @@ async function waitForServer(baseUrl: string, maxAttempts = 60): Promise<void> {
 }
 
 export default async function setup(project: TestProject) {
-  const port = await getPort();
-  const baseUrl = `http://localhost:${port}`;
+  const port = await getPort({ host: '0.0.0.0' });
+  const baseUrl = `http://127.0.0.1:${port}`;
 
   // Step 1: Build
   console.log('[smoke] Running mastra build...');
   await execa('npx', ['mastra', 'build'], {
     cwd: projectDir,
-    stdio: 'inherit',
+    stdio: 'pipe',
   });
   console.log('[smoke] Build complete.');
 
-  // Step 2: Start server
-  console.log(`[smoke] Starting mastra server on port ${port}...`);
-  const serverProc = execa('npx', ['mastra', 'start'], {
+  // Step 2: Start server (use node directly instead of npx mastra start)
+  const entryPoint = join(projectDir, '.mastra', 'output', 'index.mjs');
+  console.log(`[smoke] Starting server on port ${port}...`);
+  const serverProc = execa('node', [entryPoint], {
     cwd: projectDir,
     env: {
       ...process.env,
       PORT: port.toString(),
+      MASTRA_HOST: '0.0.0.0',
+      NODE_ENV: 'production',
     },
     stdio: 'pipe',
   });
+
+  // Suppress unhandled rejection from execa when we kill the process
+  serverProc.catch(() => {});
 
   // Log server output for debugging
   serverProc.stdout?.on('data', (data: Buffer) => {
@@ -75,10 +81,12 @@ export default async function setup(project: TestProject) {
     // Wait briefly for graceful shutdown
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    // Clean up build output and database
-    await rm(join(projectDir, '.mastra'), { recursive: true, force: true }).catch(() => {});
+    // Clean up database (may be in project root or .mastra/output depending on cwd)
     await rm(join(projectDir, 'test.db'), { force: true }).catch(() => {});
     await rm(join(projectDir, 'test.db-journal'), { force: true }).catch(() => {});
+    await rm(join(projectDir, '.mastra', 'output', 'test.db'), { force: true }).catch(() => {});
+    await rm(join(projectDir, '.mastra', 'output', 'test.db-journal'), { force: true }).catch(() => {});
+    // Note: we keep .mastra/output/ to avoid rebuilding on next run
   };
 }
 
