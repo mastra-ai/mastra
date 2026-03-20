@@ -79,6 +79,7 @@ export type { TripwireProperties, MastraModelConfig, OpenAICompatibleConfig } fr
 export { ModelRouterLanguageModel } from './model/router';
 export { PROVIDER_REGISTRY, parseModelString, getProviderConfig } from './model/provider-registry.js';
 export { resolveModelConfig } from './model/resolve-model';
+export { ModelByInputTokens, OM_INPUT_TOKENS_KEY } from './model/model-by-input-tokens';
 
 export type OutputType = StructuredOutput | StandardSchemaWithJSON | undefined;
 

@@ -6,6 +6,7 @@ import type { z, ZodSchema } from 'zod/v3';
 import type { TracingPolicy } from '../../observability';
 import type { StandardSchemaWithJSON, InferStandardSchemaOutput } from '../../schema';
 import type { ScoringData } from './base.types';
+import type { ModelByInputTokens } from './model-by-input-tokens';
 import type { ModelRouterModelId } from './provider-registry.js';
 
 export type inferOutput<Output extends StandardSchemaWithJSON | ZodSchema | JSONSchema7 | undefined = undefined> =
@@ -75,13 +76,15 @@ export type SharedProviderOptions = SharedV2ProviderOptions | SharedV3ProviderOp
 // - { id: "openai/gpt-4o", apiKey: "..." } (config object)
 // - { id: "custom", url: "...", apiKey: "..." } (custom endpoint)
 // - LanguageModelV1/V2/V3 (existing AI SDK models)
+// - ModelByInputTokens (token-threshold-based model selection)
 export type MastraModelConfig =
   | LanguageModelV1
   | LanguageModelV2
   | LanguageModelV3
   | ModelRouterModelId
   | OpenAICompatibleConfig
-  | MastraLanguageModel;
+  | MastraLanguageModel
+  | ModelByInputTokens;
 
 export type MastraModelOptions = {
   tracingPolicy?: TracingPolicy;
