@@ -25,10 +25,14 @@ import {
   nestedSuspendWorkflow,
 } from './workflows/nested-advanced.js';
 import { foreachErrorWorkflow, foreachRetryWorkflow } from './workflows/foreach-errors.js';
+import { testMcpServer } from './mcp/index.js';
 
 export const mastra = new Mastra({
   agents: {
     'test-agent': testAgent,
+  },
+  mcpServers: {
+    'test-mcp': testMcpServer,
   },
   tools: {
     calculator: calculatorTool,
