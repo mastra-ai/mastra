@@ -401,6 +401,25 @@ function coerceStringifiedJsonValues(schema: StandardSchemaWithJSON<unknown>, in
 }
 
 /**
+ * Gets the value at a dot-separated path from an object.
+ * Returns undefined if the path does not exist.
+ */
+function getValueAtPath(obj: unknown, path: string): unknown {
+  if (!path || typeof obj !== 'object' || obj === null) {
+    return undefined;
+  }
+  const keys = path.split('.');
+  let current: unknown = obj;
+  for (const key of keys) {
+    if (typeof current !== 'object' || current === null) {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
+}
+
+/**
  * Validates raw input data against a schema.
  *
  * @param schema The schema to validate against (or undefined to skip validation)
@@ -470,9 +489,12 @@ export function validateToolInput<T = unknown>(
   // validation errors, preserving null for .nullable() schemas that need it.
   const failingNullPaths = new Set(
     validation.issues
-      .filter(issue => issue.message?.includes('null'))
       .map(issue => issue.path?.map(p => (typeof p === 'object' && 'key' in p ? String(p.key) : String(p))).join('.'))
-      .filter((p): p is string => !!p),
+      .filter((p): p is string => !!p)
+      .filter(p => {
+        const value = getValueAtPath(input, p);
+        return value === null || value === undefined;
+      }),
   );
   const strippedInput =
     failingNullPaths.size > 0 ? stripNullishValuesAtPaths(input, failingNullPaths) : stripNullishValues(input);
