@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Agent } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { StorageThreadType } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -28,6 +28,7 @@ type StoredResponseEntry = {
   agentId: string;
   threadId: string;
   resourceId: string;
+  input: InputMessage[];
   response: ResponseObject;
 };
 
@@ -43,6 +44,12 @@ type ThreadExecutionContext = {
   resourceId: string;
 };
 
+type StoredResponseMatch = {
+  entry: StoredResponseEntry;
+  thread: StorageThreadType;
+  memoryStore: MemoryStorage;
+};
+
 type UsageLike = {
   inputTokens?: number;
   outputTokens?: number;
@@ -51,11 +58,14 @@ type UsageLike = {
   completionTokens?: number;
 } | null;
 
+type ProviderMetadataLike = Record<string, Record<string, unknown> | undefined> | undefined;
+
 type ResponseExecutionResult = {
   text?: string;
   finishReason?: string;
   totalUsage?: UsageLike | Promise<UsageLike>;
   usage?: UsageLike | Promise<UsageLike>;
+  providerMetadata?: ProviderMetadataLike | Promise<ProviderMetadataLike>;
 };
 
 type ResponseStreamResult = {
@@ -64,6 +74,7 @@ type ResponseStreamResult = {
   finishReason: Promise<string | undefined> | string | undefined;
   totalUsage?: Promise<UsageLike> | UsageLike;
   usage?: Promise<UsageLike> | UsageLike;
+  providerMetadata?: Promise<ProviderMetadataLike> | ProviderMetadataLike;
 };
 
 const encoder = new TextEncoder();
@@ -88,9 +99,23 @@ function normalizeMessageContent(content: ResponseInputMessage['content']): stri
   return content.map(part => part.text).join('');
 }
 
-function normalizeInput(input: CreateResponseBody['input']): string | InputMessage[] {
+function isInputMessage(value: unknown): value is InputMessage {
+  return (
+    isPlainObject(value) &&
+    (value.role === 'system' || value.role === 'user' || value.role === 'assistant') &&
+    typeof value.content === 'string'
+  );
+}
+
+/**
+ * Normalizes incoming Responses API input into plain text messages that Mastra can replay.
+ *
+ * The Responses route stores these normalized messages alongside each stored response so
+ * follow-up turns can rebuild the conversation chain from `previous_response_id`.
+ */
+function normalizeInputToMessages(input: CreateResponseBody['input']): InputMessage[] {
   if (typeof input === 'string') {
-    return input;
+    return [{ role: 'user', content: input }];
   }
 
   return input.map(message => ({
@@ -99,6 +124,9 @@ function normalizeInput(input: CreateResponseBody['input']): string | InputMessa
   }));
 }
 
+/**
+ * Reads stored response metadata from a memory thread.
+ */
 function getStoredResponseEntries(metadata?: Record<string, unknown>): StoredResponseEntry[] {
   if (!metadata) {
     return [];
@@ -114,20 +142,34 @@ function getStoredResponseEntries(metadata?: Record<string, unknown>): StoredRes
     return [];
   }
 
-  return responses.filter((value): value is StoredResponseEntry => {
-    if (!isPlainObject(value) || !isPlainObject(value.response)) {
-      return false;
+  return responses.flatMap(value => {
+    if (
+      !isPlainObject(value) ||
+      !isPlainObject(value.response) ||
+      typeof value.id !== 'string' ||
+      typeof value.agentId !== 'string' ||
+      typeof value.threadId !== 'string' ||
+      typeof value.resourceId !== 'string'
+    ) {
+      return [];
     }
 
-    return (
-      typeof value.id === 'string' &&
-      typeof value.agentId === 'string' &&
-      typeof value.threadId === 'string' &&
-      typeof value.resourceId === 'string'
-    );
+    return [
+      {
+        id: value.id,
+        agentId: value.agentId,
+        threadId: value.threadId,
+        resourceId: value.resourceId,
+        input: Array.isArray(value.input) ? value.input.filter(isInputMessage) : [],
+        response: value.response as ResponseObject,
+      },
+    ];
   });
 }
 
+/**
+ * Persists the responses metadata array back onto a memory thread.
+ */
 function setStoredResponseEntries(
   metadata: Record<string, unknown> | undefined,
   entries: StoredResponseEntry[],
@@ -185,6 +227,7 @@ function buildResponseObject({
   usage,
   instructions,
   previousResponseId,
+  providerOptions,
   store,
 }: {
   responseId: string;
@@ -197,6 +240,7 @@ function buildResponseObject({
   usage: UsageLike;
   instructions?: string;
   previousResponseId?: string;
+  providerOptions?: ProviderMetadataLike;
   store: boolean;
 }): ResponseObject {
   return {
@@ -220,6 +264,7 @@ function buildResponseObject({
     incomplete_details: null,
     instructions: instructions ?? null,
     previous_response_id: previousResponseId ?? null,
+    providerOptions,
     tools: [],
     store,
   };
@@ -280,6 +325,59 @@ function createOutputTextPart(text: string) {
   };
 }
 
+function getResponseOutputText(response: ResponseObject): string {
+  return response.output
+    .flatMap(message => message.content)
+    .map(part => part.text)
+    .join('');
+}
+
+/**
+ * Replays the stored response chain into a linear message history.
+ *
+ * This keeps the Responses API chaining model simple: each stored response remembers the
+ * user input that created it, and follow-up turns replay the ancestor chain before
+ * appending the current request input.
+ */
+function buildConversationHistory(match: StoredResponseMatch | null): InputMessage[] {
+  if (!match) {
+    return [];
+  }
+
+  const entries = getStoredResponseEntries(match.thread.metadata);
+  const entriesById = new Map(entries.map(entry => [entry.id, entry] as const));
+  const visited = new Set<string>();
+  const history: InputMessage[] = [];
+
+  const appendEntry = (entry: StoredResponseEntry | undefined) => {
+    if (!entry || visited.has(entry.id)) {
+      return;
+    }
+
+    visited.add(entry.id);
+
+    if (entry.response.previous_response_id) {
+      appendEntry(entriesById.get(entry.response.previous_response_id));
+    }
+
+    history.push(...entry.input);
+
+    const outputText = getResponseOutputText(entry.response);
+    if (outputText) {
+      history.push({
+        role: 'assistant',
+        content: outputText,
+      });
+    }
+  };
+
+  appendEntry(match.entry);
+  return history;
+}
+
+/**
+ * Resolves the memory storage domain used for stored Responses API entries.
+ */
 async function getMemoryStore(mastra: Mastra | undefined): Promise<MemoryStorage | null> {
   const storage = mastra?.getStorage();
   if (!storage) {
@@ -294,6 +392,9 @@ async function getMemoryStore(mastra: Mastra | undefined): Promise<MemoryStorage
   return memoryStore;
 }
 
+/**
+ * Looks up a stored response by walking memory threads visible to the current request.
+ */
 async function findStoredResponseEntry({
   mastra,
   responseId,
@@ -302,7 +403,7 @@ async function findStoredResponseEntry({
   mastra: Mastra | undefined;
   responseId: string;
   requestContext: RequestContext;
-}): Promise<{ entry: StoredResponseEntry; thread: StorageThreadType; memoryStore: MemoryStorage } | null> {
+}): Promise<StoredResponseMatch | null> {
   const memoryStore = await getMemoryStore(mastra);
   if (!memoryStore) {
     return null;
@@ -328,6 +429,9 @@ async function findStoredResponseEntry({
   return null;
 }
 
+/**
+ * Appends or replaces a stored response entry on the owning memory thread.
+ */
 async function appendStoredResponseEntry({
   mastra,
   threadId,
@@ -358,6 +462,9 @@ async function appendStoredResponseEntry({
   await memoryStore.saveThread({ thread: updatedThread });
 }
 
+/**
+ * Removes a stored response entry from the owning memory thread.
+ */
 async function deleteStoredResponseEntry({
   mastra,
   responseId,
@@ -383,28 +490,28 @@ async function deleteStoredResponseEntry({
   return true;
 }
 
+/**
+ * Resolves the memory thread that should back the current response request.
+ *
+ * If `previous_response_id` is present, the request continues on that stored thread.
+ * Otherwise, the route only creates or reuses a thread when the caller asked to store
+ * the response and the resolved agent actually has memory configured.
+ */
 async function resolveThreadExecutionContext({
   agent,
-  mastra,
   store,
-  previousResponseId,
+  previousResponseMatch,
   requestContext,
 }: {
-  agent: Agent;
-  mastra: Mastra | undefined;
+  agent: Agent<any, any, any, any>;
   store: boolean;
-  previousResponseId?: string;
+  previousResponseMatch: StoredResponseMatch | null;
   requestContext: RequestContext;
 }): Promise<ThreadExecutionContext | null> {
-  if (previousResponseId) {
-    const match = await findStoredResponseEntry({ mastra, responseId: previousResponseId, requestContext });
-    if (!match) {
-      throw new HTTPException(404, { message: `Stored response ${previousResponseId} was not found` });
-    }
-
+  if (previousResponseMatch) {
     return {
-      threadId: match.thread.id,
-      resourceId: match.thread.resourceId,
+      threadId: previousResponseMatch.thread.id,
+      resourceId: previousResponseMatch.thread.resourceId,
     };
   }
 
@@ -442,71 +549,72 @@ async function resolveThreadExecutionContext({
   };
 }
 
-async function executeGenerate({
-  agent,
-  body,
-  requestContext,
-  abortSignal,
-  threadContext,
+/**
+ * Resolves the execution agent for the request.
+ *
+ * When `agent_id` is present, the route uses the registered Mastra agent directly.
+ * Without `agent_id`, the route creates a temporary stateless agent that only carries
+ * the requested model and request-scoped instructions.
+ */
+async function resolveResponseAgent({
+  mastra,
+  model,
+  agentId,
+  previousResponseMatch,
+  instructions,
 }: {
-  agent: Agent;
-  body: CreateResponseBody;
-  requestContext: RequestContext;
-  abortSignal: AbortSignal;
-  threadContext: ThreadExecutionContext | null;
-}) {
-  const normalizedInput = normalizeInput(body.input) as AgentExecutionInput;
-  const executionMemory =
-    threadContext &&
-    ({
-      memory: {
-        thread: threadContext.threadId,
-        resource: threadContext.resourceId,
-      },
-    } as const);
-  const commonOptions = {
-    instructions: body.instructions,
-    requestContext,
-    abortSignal,
-    ...(executionMemory ?? {}),
-  };
-  const model = await agent.getModel({ requestContext });
+  mastra: Mastra | undefined;
+  model: string;
+  agentId?: string;
+  previousResponseMatch: StoredResponseMatch | null;
+  instructions?: string;
+}): Promise<Agent<any, any, any, any>> {
+  const resolvedAgentId = agentId ?? previousResponseMatch?.entry.agentId;
 
-  if (model.specificationVersion === 'v1') {
-    if (threadContext) {
-      return (await agent.generateLegacy(normalizedInput, {
-        instructions: body.instructions,
-        requestContext,
-        abortSignal,
-        resourceId: threadContext.resourceId,
-        threadId: threadContext.threadId,
-      })) as ResponseExecutionResult;
+  if (resolvedAgentId) {
+    if (!mastra) {
+      throw new HTTPException(500, { message: 'Mastra instance is required for agent-backed responses' });
     }
 
-    return (await agent.generateLegacy(normalizedInput, {
-      instructions: body.instructions,
-      requestContext,
-      abortSignal,
-    })) as ResponseExecutionResult;
+    return getAgentFromSystem({ mastra, agentId: resolvedAgentId });
   }
 
-  return (await agent.generate(normalizedInput, commonOptions)) as ResponseExecutionResult;
+  const config: ConstructorParameters<typeof Agent>[0] = {
+    id: 'responses-route-agent',
+    name: 'Responses Route Agent',
+    instructions: instructions ?? '',
+    model,
+  };
+
+  if (mastra) {
+    config.mastra = mastra;
+  }
+
+  return new Agent(config);
 }
 
-async function executeStream({
+/**
+ * Executes a non-streaming Responses API request through the resolved Mastra agent.
+ */
+async function executeGenerate({
   agent,
-  body,
+  model,
+  instructions,
+  providerOptions,
+  input,
   requestContext,
   abortSignal,
   threadContext,
 }: {
   agent: Agent;
-  body: CreateResponseBody;
+  model: string;
+  instructions: string | undefined;
+  providerOptions: CreateResponseBody['providerOptions'];
+  input: AgentExecutionInput;
   requestContext: RequestContext;
   abortSignal: AbortSignal;
   threadContext: ThreadExecutionContext | null;
 }) {
-  const normalizedInput = normalizeInput(body.input) as AgentExecutionInput;
   const executionMemory =
     threadContext &&
     ({
@@ -516,36 +624,113 @@ async function executeStream({
       },
     } as const);
   const commonOptions = {
-    instructions: body.instructions,
+    instructions,
     requestContext,
     abortSignal,
+    model,
+    providerOptions,
     ...(executionMemory ?? {}),
   };
-  const model = await agent.getModel({ requestContext });
+  const resolvedModel = await agent.getModel({ requestContext, modelConfig: model });
 
-  if (model.specificationVersion === 'v1') {
+  if (resolvedModel.specificationVersion === 'v1') {
     if (threadContext) {
-      return (await agent.streamLegacy(normalizedInput, {
-        instructions: body.instructions,
+      return (await agent.generateLegacy(input, {
+        instructions,
         requestContext,
         abortSignal,
+        model,
+        providerOptions,
         resourceId: threadContext.resourceId,
         threadId: threadContext.threadId,
-      })) as ResponseStreamResult;
+      } as never)) as ResponseExecutionResult;
     }
 
-    return (await agent.streamLegacy(normalizedInput, {
-      instructions: body.instructions,
+    return (await agent.generateLegacy(input, {
+      instructions,
       requestContext,
       abortSignal,
-    })) as ResponseStreamResult;
+      model,
+      providerOptions,
+    } as never)) as ResponseExecutionResult;
   }
 
-  return (await agent.stream(normalizedInput, commonOptions)) as ResponseStreamResult;
+  return (await agent.generate(input, commonOptions as never)) as ResponseExecutionResult;
+}
+
+/**
+ * Executes a streaming Responses API request through the resolved Mastra agent.
+ */
+async function executeStream({
+  agent,
+  model,
+  instructions,
+  providerOptions,
+  input,
+  requestContext,
+  abortSignal,
+  threadContext,
+}: {
+  agent: Agent;
+  model: string;
+  instructions: string | undefined;
+  providerOptions: CreateResponseBody['providerOptions'];
+  input: AgentExecutionInput;
+  requestContext: RequestContext;
+  abortSignal: AbortSignal;
+  threadContext: ThreadExecutionContext | null;
+}) {
+  const executionMemory =
+    threadContext &&
+    ({
+      memory: {
+        thread: threadContext.threadId,
+        resource: threadContext.resourceId,
+      },
+    } as const);
+  const commonOptions = {
+    instructions,
+    requestContext,
+    abortSignal,
+    model,
+    providerOptions,
+    ...(executionMemory ?? {}),
+  };
+  const resolvedModel = await agent.getModel({ requestContext, modelConfig: model });
+
+  if (resolvedModel.specificationVersion === 'v1') {
+    if (threadContext) {
+      return (await agent.streamLegacy(input, {
+        instructions,
+        requestContext,
+        abortSignal,
+        model,
+        providerOptions,
+        resourceId: threadContext.resourceId,
+        threadId: threadContext.threadId,
+      } as never)) as ResponseStreamResult;
+    }
+
+    return (await agent.streamLegacy(input, {
+      instructions,
+      requestContext,
+      abortSignal,
+      model,
+      providerOptions,
+    } as never)) as ResponseStreamResult;
+  }
+
+  return (await agent.stream(input, commonOptions as never)) as ResponseStreamResult;
 }
 
 async function resolveUsage(result: ResponseExecutionResult | ResponseStreamResult): Promise<UsageLike> {
   return (await (result.totalUsage ?? result.usage ?? null)) as UsageLike;
+}
+
+async function resolveProviderMetadata(
+  result: ResponseExecutionResult | ResponseStreamResult,
+): Promise<ProviderMetadataLike> {
+  return (await (result.providerMetadata ?? undefined)) as ProviderMetadataLike;
 }
 
 async function resolveFinishReason(
@@ -589,30 +774,65 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
   bodySchema: createResponseBodySchema,
   responseSchema: responseObjectSchema,
   summary: 'Create a response',
-  description: 'Executes a Mastra agent through an OpenAI Responses API-compatible route',
+  description: 'Creates a response through a Mastra-hosted Responses API-compatible route',
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: 'agents:execute',
   handler: async ({ mastra, requestContext, abortSignal, ...body }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId: body.model });
+      const previousResponseMatch = body.previous_response_id
+        ? await findStoredResponseEntry({ mastra, responseId: body.previous_response_id, requestContext })
+        : null;
+
+      if (body.previous_response_id && !previousResponseMatch) {
+        throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
+      }
+
+      const currentInput = normalizeInputToMessages(body.input);
+      const executionInput = [
+        ...buildConversationHistory(previousResponseMatch),
+        ...currentInput,
+      ] as AgentExecutionInput;
+
+      if (body.store && !body.agent_id && !previousResponseMatch?.entry.agentId) {
+        throw new HTTPException(400, {
+          message: 'Stored responses require an agent_id with memory configured',
+        });
+      }
+
+      const agent = await resolveResponseAgent({
+        mastra,
+        model: body.model,
+        agentId: body.agent_id,
+        previousResponseMatch,
+        instructions: body.instructions,
+      });
       const responseId = createResponseId();
       const outputMessageId = createMessageId();
       const createdAt = Math.floor(Date.now() / 1000);
       const shouldStore = body.store ?? false;
       const threadContext = await resolveThreadExecutionContext({
         agent,
-        mastra,
         store: shouldStore,
-        previousResponseId: body.previous_response_id,
+        previousResponseMatch,
         requestContext,
       });
+
+      if (shouldStore && !threadContext) {
+        throw new HTTPException(400, {
+          message: 'Stored responses require the target agent to have memory configured',
+        });
+      }
+
       const didStore = shouldStore && Boolean(threadContext);
 
       if (!body.stream) {
         const result = await executeGenerate({
           agent,
-          body,
+          model: body.model,
+          instructions: body.instructions,
+          providerOptions: body.providerOptions,
+          input: executionInput,
           requestContext,
           abortSignal,
           threadContext,
@@ -629,6 +849,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
           usage: await resolveUsage(result),
           instructions: body.instructions,
           previousResponseId: body.previous_response_id,
+          providerOptions: await resolveProviderMetadata(result),
           store: didStore,
         });
 
@@ -638,9 +859,10 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
             threadId: threadContext.threadId,
             entry: {
               id: responseId,
-              agentId: body.model,
+              agentId: agent.id,
               threadId: threadContext.threadId,
               resourceId: threadContext.resourceId,
+              input: currentInput,
               response,
             },
           });
@@ -651,7 +873,10 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
 
       const streamResult = await executeStream({
         agent,
-        body,
+        model: body.model,
+        instructions: body.instructions,
+        providerOptions: body.providerOptions,
+        input: executionInput,
         requestContext,
         abortSignal,
         threadContext,
@@ -749,6 +974,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
               usage: await resolveUsage(streamResult),
               instructions: body.instructions,
               previousResponseId: body.previous_response_id,
+              providerOptions: await resolveProviderMetadata(streamResult),
               store: didStore,
             });
 
@@ -758,9 +984,10 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
                 threadId: threadContext.threadId,
                 entry: {
                   id: responseId,
-                  agentId: body.model,
+                  agentId: agent.id,
                   threadId: threadContext.threadId,
                   resourceId: threadContext.resourceId,
+                  input: currentInput,
                   response,
                 },
               });

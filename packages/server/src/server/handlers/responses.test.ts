@@ -7,14 +7,14 @@ import { HTTPException } from '../http-exception';
 import { CREATE_RESPONSE_ROUTE, DELETE_RESPONSE_ROUTE, GET_RESPONSE_ROUTE } from './responses';
 import { createTestServerContext } from './test-utils';
 
-function createGenerateResult(text: string) {
+function createGenerateResult(text: string, providerMetadata?: Record<string, Record<string, unknown> | undefined>) {
   return {
     text,
     usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
     steps: [],
     finishReason: 'stop',
     warnings: [],
-    providerMetadata: undefined,
+    providerMetadata,
     request: {},
     reasoning: [],
     reasoningText: undefined,
@@ -56,7 +56,7 @@ function createLegacyGenerateResult(text: string) {
   } as unknown as Awaited<ReturnType<Agent['generateLegacy']>>;
 }
 
-function createStreamResult(text: string) {
+function createStreamResult(text: string, providerMetadata?: Record<string, Record<string, unknown> | undefined>) {
   const fullStream = new ReadableStream({
     start(controller) {
       controller.enqueue({
@@ -80,6 +80,7 @@ function createStreamResult(text: string) {
     text: Promise.resolve(text),
     finishReason: Promise.resolve('stop'),
     totalUsage: Promise.resolve({ inputTokens: 12, outputTokens: 4, totalTokens: 16 }),
+    providerMetadata: Promise.resolve(providerMetadata),
   } as unknown as Awaited<ReturnType<Agent['stream']>>;
 }
 
@@ -150,7 +151,8 @@ describe('Responses Handlers', () => {
 
     const response = (await CREATE_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
-      model: 'test-agent',
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
       input: 'Hello',
       store: true,
       stream: false,
@@ -161,7 +163,7 @@ describe('Responses Handlers', () => {
     const created = await readJson(response);
     expect(created).toMatchObject({
       object: 'response',
-      model: 'test-agent',
+      model: 'openai/gpt-5',
       status: 'completed',
       store: true,
       completed_at: expect.any(Number),
@@ -197,7 +199,7 @@ describe('Responses Handlers', () => {
     expect(retrieved).toEqual(created);
   });
 
-  it('falls back to stateless execution when the agent has no memory configured', async () => {
+  it('returns 400 when store is requested for an agent without memory', async () => {
     const statelessAgent = new Agent({
       id: 'stateless-agent',
       name: 'stateless-agent',
@@ -216,25 +218,28 @@ describe('Responses Handlers', () => {
     mockAgentSpecVersion(statelessAgent);
     vi.spyOn(statelessAgent, 'generate').mockResolvedValue(createGenerateResult('Stateless response'));
 
-    const response = (await CREATE_RESPONSE_ROUTE.handler({
-      ...createTestServerContext({ mastra }),
-      model: 'stateless-agent',
-      input: 'Hello',
-      store: true,
-      stream: false,
-    })) as Response;
+    await expect(
+      CREATE_RESPONSE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        model: 'openai/gpt-5-mini',
+        agent_id: 'stateless-agent',
+        input: 'Hello',
+        store: true,
+        stream: false,
+      }),
+    ).rejects.toThrow(HTTPException);
+  });
 
-    const created = await readJson(response);
-    expect(created).toMatchObject({
-      model: 'stateless-agent',
-      status: 'completed',
-      store: false,
-      output: [
-        {
-          content: [{ type: 'output_text', text: 'Stateless response' }],
-        },
-      ],
-    });
+  it('returns 400 when store is requested without agent_id', async () => {
+    await expect(
+      CREATE_RESPONSE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        model: 'openai/gpt-5',
+        input: 'Hello',
+        store: true,
+        stream: false,
+      }),
+    ).rejects.toThrow(HTTPException);
   });
 
   it('reuses the stored thread when previous_response_id is provided', async () => {
@@ -243,7 +248,8 @@ describe('Responses Handlers', () => {
 
     const firstResponse = (await CREATE_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
-      model: 'test-agent',
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
       input: 'First turn',
       store: true,
       stream: false,
@@ -258,7 +264,8 @@ describe('Responses Handlers', () => {
 
     await CREATE_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
-      model: 'test-agent',
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
       input: 'Second turn',
       previous_response_id: firstCreated.id,
       store: true,
@@ -272,6 +279,13 @@ describe('Responses Handlers', () => {
         resource: firstResourceId,
       },
     });
+
+    const secondInput = generateSpy.mock.calls[1]?.[0];
+    expect(secondInput).toEqual([
+      { role: 'user', content: 'First turn' },
+      { role: 'assistant', content: 'First response' },
+      { role: 'user', content: 'Second turn' },
+    ]);
   });
 
   it('falls back to generateLegacy for AI SDK v4 agents', async () => {
@@ -283,7 +297,8 @@ describe('Responses Handlers', () => {
 
     const response = (await CREATE_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
-      model: 'test-agent',
+      model: 'openai/gpt-4o',
+      agent_id: 'test-agent',
       input: 'Hello',
       store: false,
       stream: false,
@@ -291,7 +306,7 @@ describe('Responses Handlers', () => {
 
     const created = await readJson(response);
     expect(created).toMatchObject({
-      model: 'test-agent',
+      model: 'openai/gpt-4o',
       status: 'completed',
       output: [
         {
@@ -308,12 +323,55 @@ describe('Responses Handlers', () => {
     expect(generateSpy).not.toHaveBeenCalled();
   });
 
+  it('passes providerOptions through to generate calls', async () => {
+    const generateSpy = vi.spyOn(agent, 'generate').mockResolvedValue(
+      createGenerateResult('Provider aware', {
+        openai: {
+          responseId: 'resp_provider_123',
+        },
+      }),
+    );
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'Hello',
+      providerOptions: {
+        openai: {
+          previousResponseId: 'resp_provider_123',
+        },
+      },
+      store: false,
+      stream: false,
+    })) as Response;
+
+    expect(generateSpy).toHaveBeenCalledWith(
+      [{ role: 'user', content: 'Hello' }],
+      expect.objectContaining({
+        providerOptions: {
+          openai: {
+            previousResponseId: 'resp_provider_123',
+          },
+        },
+      }),
+    );
+
+    const created = await readJson(response);
+    expect(created.providerOptions).toEqual({
+      openai: {
+        responseId: 'resp_provider_123',
+      },
+    });
+  });
+
   it('streams SSE events and stores the completed response', async () => {
     vi.spyOn(agent, 'stream').mockResolvedValue(createStreamResult('Hello world'));
 
     const response = (await CREATE_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
-      model: 'test-agent',
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
       input: 'Hello',
       store: true,
       stream: true,
@@ -365,7 +423,8 @@ describe('Responses Handlers', () => {
 
     const response = (await CREATE_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
-      model: 'test-agent',
+      model: 'openai/gpt-4o',
+      agent_id: 'test-agent',
       input: 'Hello',
       store: false,
       stream: true,
@@ -379,12 +438,51 @@ describe('Responses Handlers', () => {
     expect(streamSpy).not.toHaveBeenCalled();
   });
 
+  it('passes providerOptions through to stream calls', async () => {
+    const streamSpy = vi.spyOn(agent, 'stream').mockResolvedValue(
+      createStreamResult('Hello world', {
+        openai: {
+          responseId: 'resp_provider_stream_123',
+        },
+      }),
+    );
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'Hello',
+      providerOptions: {
+        openai: {
+          conversation: 'conv_123',
+        },
+      },
+      store: false,
+      stream: true,
+    })) as Response;
+
+    expect(streamSpy).toHaveBeenCalledWith(
+      [{ role: 'user', content: 'Hello' }],
+      expect.objectContaining({
+        providerOptions: {
+          openai: {
+            conversation: 'conv_123',
+          },
+        },
+      }),
+    );
+
+    const body = await response.text();
+    expect(body).toContain('"providerOptions":{"openai":{"responseId":"resp_provider_stream_123"}}');
+  });
+
   it('deletes a stored response', async () => {
     vi.spyOn(agent, 'generate').mockResolvedValue(createGenerateResult('To delete'));
 
     const response = (await CREATE_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
-      model: 'test-agent',
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
       input: 'Hello',
       store: true,
       stream: false,
@@ -411,11 +509,42 @@ describe('Responses Handlers', () => {
     ).rejects.toThrow(HTTPException);
   });
 
-  it('returns 404 when the target agent does not exist', async () => {
+  it('supports model-only execution without a Mastra agent', async () => {
+    const getModelSpy = vi
+      .spyOn(Agent.prototype, 'getModel')
+      .mockResolvedValue({ specificationVersion: 'v2' } as never);
+    const generateSpy = vi.spyOn(Agent.prototype, 'generate').mockResolvedValue(createGenerateResult('Model only'));
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      input: 'Hello',
+      stream: false,
+      store: false,
+    })) as Response;
+
+    const created = await readJson(response);
+    expect(created).toMatchObject({
+      model: 'openai/gpt-5',
+      status: 'completed',
+      store: false,
+      output: [
+        {
+          content: [{ text: 'Model only' }],
+        },
+      ],
+    });
+    expect(generateSpy).toHaveBeenCalled();
+    generateSpy.mockRestore();
+    getModelSpy.mockRestore();
+  });
+
+  it('returns 404 when the requested agent does not exist', async () => {
     await expect(
       CREATE_RESPONSE_ROUTE.handler({
         ...createTestServerContext({ mastra }),
-        model: 'missing-agent',
+        model: 'openai/gpt-5',
+        agent_id: 'missing-agent',
         input: 'Hello',
         stream: false,
         store: false,

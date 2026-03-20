@@ -79,7 +79,7 @@ export interface AgentLegacyCapabilities {
   /** Get instructions */
   getInstructions(options: { requestContext: RequestContext }): Promise<AgentInstructions>;
   /** Get LLM instance */
-  getLLM(options: { requestContext: RequestContext }): Promise<MastraLLMV1>;
+  getLLM(options: { requestContext: RequestContext; model?: DynamicArgument<MastraModelConfig> }): Promise<MastraLLMV1>;
   /** Get memory instance */
   getMemory(options: { requestContext: RequestContext }): Promise<MastraMemory | undefined>;
   /** Get memory messages (deprecated - use input processors) */
@@ -787,7 +787,10 @@ export class AgentLegacyHandler {
       }) ||
       randomUUID();
     const instructions = args.instructions || (await this.capabilities.getInstructions({ requestContext }));
-    const llm = await this.capabilities.getLLM({ requestContext });
+    const llm = await this.capabilities.getLLM({
+      requestContext,
+      model: (args as { model?: DynamicArgument<MastraModelConfig> }).model,
+    });
 
     const memory = await this.capabilities.getMemory({ requestContext });
 

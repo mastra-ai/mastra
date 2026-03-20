@@ -129,6 +129,8 @@ export type ResponsesResponse = {
   incomplete_details?: null;
   instructions?: string | null;
   previous_response_id?: string | null;
+  /** Provider-returned response state, such as `openai.responseId`, for provider-native continuation. */
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
   tools?: unknown[];
   store?: boolean;
   output_text: string;
@@ -141,11 +143,21 @@ export type ResponsesDeleteResponse = {
 };
 
 export type CreateResponseParams = {
+  /** Target model identifier, such as `openai/gpt-5`. */
   model: string;
+  /** Optional Mastra agent ID for agent-backed execution and memory-backed persistence. */
+  agent_id?: string;
+  /** Input text or message history for the current turn. */
   input: string | ResponseInputMessage[];
+  /** Request-scoped instructions for the current response. */
   instructions?: string;
+  /** Optional provider-specific options passed through to the underlying model call. */
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+  /** When true, returns a streaming Responses API event stream. */
   stream?: boolean;
+  /** Persists the response through the selected agent's memory. Requires `agent_id` and configured agent memory. */
   store?: boolean;
+  /** Continues a previously stored response chain. */
   previous_response_id?: string;
   requestContext?: RequestContext | Record<string, any>;
 };

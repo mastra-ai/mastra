@@ -7,7 +7,11 @@ packages:
 
 # Responses API
 
-The Responses API adds an OpenAI-style namespace to `MastraClient` so you can call Mastra's built-in `/v1/responses` routes with `client.responses.create()`, `client.responses.retrieve()`, and `client.responses.del()`.
+The Responses API adds an OpenAI-style namespace to `MastraClient` so you can call Mastra's built-in `/v1/responses` routes with `client.responses.create()`, `client.responses.retrieve()`, `client.responses.stream()`, and `client.responses.delete()`.
+
+`model` is always the target model string, such as `openai/gpt-5`. If you also pass `agent_id`, Mastra executes the request through that registered agent. Without `agent_id`, the request stays stateless.
+
+If you want to compare this with the official `openai` SDK migration path, see the [OpenAI Responses migration example](https://github.com/mastra-ai/mastra/tree/main/examples/openai-responses-migration).
 
 ## Usage example
 
@@ -21,7 +25,8 @@ const client = new MastraClient({
 })
 
 const response = await client.responses.create({
-  model: 'support-agent',
+  model: 'openai/gpt-5',
+  agent_id: 'support-agent',
   input: 'Summarize this ticket',
   store: true,
 })
@@ -33,7 +38,7 @@ Stream response events:
 
 ```typescript
 const stream = await client.responses.create({
-  model: 'support-agent',
+  model: 'openai/gpt-5',
   input: 'Say hello',
   stream: true,
 })
@@ -50,8 +55,15 @@ for await (const event of stream) {
   {
     name: 'model',
     type: 'string',
-    description: 'Required. The Mastra agent ID to execute.',
+    description: 'Required. The target model identifier, such as `openai/gpt-5`.',
     isOptional: false,
+  },
+  {
+    name: 'agent_id',
+    type: 'string',
+    description:
+      'Optional. Runs the request through a registered Mastra agent while keeping `model` as the underlying model selector. Use this when you need tools, agent instructions, or memory.',
+    isOptional: true,
   },
   {
     name: 'input',
@@ -66,6 +78,13 @@ for await (const event of stream) {
     isOptional: true,
   },
   {
+    name: 'providerOptions',
+    type: 'Record<string, Record<string, unknown> | undefined>',
+    description:
+      'Optional provider-specific options passed straight through to the underlying model call. Use this as an advanced escape hatch for provider-native features such as OpenAI-specific continuation fields.',
+    isOptional: true,
+  },
+  {
     name: 'stream',
     type: 'boolean',
     description: 'When true, returns an async-iterable stream of Responses API SSE events.',
@@ -74,13 +93,15 @@ for await (const event of stream) {
   {
     name: 'store',
     type: 'boolean',
-    description: 'Persists the response when the target agent has memory configured.',
+    description:
+      'Persists the response through the selected agent memory. Requires `agent_id` and memory configured on that agent. Model-only requests stay stateless.',
     isOptional: true,
   },
   {
     name: 'previous_response_id',
     type: 'string',
-    description: 'Continues a stored conversation thread from a previous response.',
+    description:
+      'Continues a stored conversation chain from a previous response. Stored chaining requires an agent-backed response with memory.',
     isOptional: true,
   },
   {
@@ -102,7 +123,8 @@ Creates a response using the OpenAI-compatible route.
 
 ```typescript
 const response = await client.responses.create({
-  model: 'support-agent',
+  model: 'openai/gpt-5',
+  agent_id: 'support-agent',
   input: 'Summarize this ticket',
 })
 ```
@@ -113,7 +135,7 @@ When `stream: true`, `create()` returns an async iterable of SSE event payloads:
 
 ```typescript
 const stream = await client.responses.create({
-  model: 'support-agent',
+  model: 'openai/gpt-5',
   input: 'Summarize this ticket',
   stream: true,
 })
@@ -123,6 +145,52 @@ for await (const event of stream) {
     process.stdout.write(event.delta)
   }
 }
+```
+
+**Returns:** `Promise<ResponsesStream>`.
+
+For provider-native features, you can also pass `providerOptions` through unchanged:
+
+```typescript
+const response = await client.responses.create({
+  model: 'openai/gpt-5',
+  input: 'Continue this exchange',
+  providerOptions: {
+    openai: {
+      previousResponseId: 'resp_123',
+    },
+  },
+})
+```
+
+When the underlying provider returns provider-native response state, Mastra includes it back on the response as `providerOptions`. That lets you keep chaining provider-native state without leaving the Responses API surface:
+
+```typescript
+const first = await client.responses.create({
+  model: 'openai/gpt-5',
+  input: 'Tell me three facts about Saturn.',
+})
+
+const second = await client.responses.create({
+  model: 'openai/gpt-5',
+  input: 'Expand on the second fact.',
+  providerOptions: {
+    openai: {
+      previousResponseId: first.providerOptions?.openai?.responseId as string,
+    },
+  },
+})
+```
+
+#### `stream(params)`
+
+Creates a streaming response using the OpenAI-style helper.
+
+```typescript
+const stream = await client.responses.stream({
+  model: 'openai/gpt-5',
+  input: 'Summarize this ticket',
+})
 ```
 
 **Returns:** `Promise<ResponsesStream>`.
@@ -139,16 +207,16 @@ console.log(response.output_text)
 
 **Returns:** `Promise<ResponsesResponse>`.
 
-#### `del(responseId, requestContext?)`
+#### `delete(responseId, requestContext?)`
 
 Deletes a stored response by ID.
 
 ```typescript
-await client.responses.del('resp_123')
+await client.responses.delete('resp_123')
 ```
 
 **Returns:** `Promise<{ id: string; object: 'response'; deleted: true }>`.
 
 ## Additional configuration
 
-The client SDK adds an `output_text` convenience field to non-streaming response objects and to the `response` payload on `response.created` and `response.completed` stream events. This mirrors the ergonomics of the OpenAI SDK while still calling Mastra's server routes underneath.
+The client SDK adds an `output_text` convenience field to non-streaming response objects and to the `response` payload on `response.created`, `response.in_progress`, and `response.completed` stream events. The underlying response object also includes OpenAI-style fields such as `completed_at`, `error`, `incomplete_details`, `tools`, token detail objects, and provider-returned `providerOptions` when the Mastra server provides them. Streaming events preserve the server-provided `sequence_number` field and surface `response.content_part.*` plus `response.output_item.done` when the server emits them.

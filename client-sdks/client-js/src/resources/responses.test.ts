@@ -74,6 +74,11 @@ describe('Responses Resource', () => {
         output_tokens: 5,
         total_tokens: 15,
       },
+      providerOptions: {
+        openai: {
+          responseId: 'resp_provider_123',
+        },
+      },
       instructions: null,
       previous_response_id: null,
       store: true,
@@ -86,6 +91,11 @@ describe('Responses Resource', () => {
     });
 
     expect(response.output_text).toBe('Hello from Mastra');
+    expect(response.providerOptions).toEqual({
+      openai: {
+        responseId: 'resp_provider_123',
+      },
+    });
     expect(global.fetch).toHaveBeenCalledWith(
       'http://localhost:4111/api/v1/responses',
       expect.objectContaining({
@@ -95,6 +105,46 @@ describe('Responses Resource', () => {
           model: 'support-agent',
           input: 'Summarize this ticket',
           store: true,
+        }),
+      }),
+    );
+  });
+
+  it('passes providerOptions through in create requests', async () => {
+    mockJsonResponse({
+      id: 'resp_123',
+      object: 'response',
+      created_at: 1234567890,
+      model: 'openai/gpt-5',
+      status: 'completed',
+      output: [],
+      usage: null,
+      instructions: null,
+      previous_response_id: null,
+      store: false,
+    });
+
+    await client.responses.create({
+      model: 'openai/gpt-5',
+      input: 'Continue this',
+      providerOptions: {
+        openai: {
+          previousResponseId: 'resp_provider_123',
+        },
+      },
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:4111/api/v1/responses',
+      expect.objectContaining({
+        body: JSON.stringify({
+          model: 'openai/gpt-5',
+          input: 'Continue this',
+          providerOptions: {
+            openai: {
+              previousResponseId: 'resp_provider_123',
+            },
+          },
         }),
       }),
     );

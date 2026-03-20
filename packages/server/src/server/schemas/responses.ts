@@ -16,11 +16,25 @@ export const responseInputMessageSchema = z.object({
 
 export type ResponseInputMessage = z.infer<typeof responseInputMessageSchema>;
 
+const providerOptionValuesSchema = z.record(z.string(), z.unknown());
+
+const providerOptionsSchema = z
+  .object({
+    openai: providerOptionValuesSchema
+      .optional()
+      .describe('OpenAI provider options such as previousResponseId, conversation, or responseId'),
+  })
+  .passthrough();
+
 export const createResponseBodySchema = z
   .object({
-    model: z.string().describe('Mastra agent ID used to resolve the target agent'),
+    model: z.string().describe('Model identifier used to generate the response, such as openai/gpt-5'),
+    agent_id: z.string().optional().describe('Optional Mastra agent ID used for agent-backed execution'),
     input: z.union([z.string(), z.array(responseInputMessageSchema)]),
     instructions: z.string().optional(),
+    providerOptions: providerOptionsSchema
+      .optional()
+      .describe('Optional provider-specific options passed through to the underlying model call'),
     stream: z.boolean().optional().default(false),
     store: z.boolean().optional().default(false),
     previous_response_id: z.string().optional(),
@@ -75,6 +89,7 @@ export const responseObjectSchema = z.object({
   incomplete_details: z.null().optional(),
   instructions: z.string().nullable().optional(),
   previous_response_id: z.string().nullable().optional(),
+  providerOptions: providerOptionsSchema.optional(),
   tools: z.array(z.unknown()).optional(),
   store: z.boolean().optional(),
 });
