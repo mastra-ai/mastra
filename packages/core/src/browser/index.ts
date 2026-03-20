@@ -1,4 +1,17 @@
-import type { ToolsInput } from '../agent/types';
+// ============================================================================
+// MastraBrowser Base Class
+// ============================================================================
+
+export { MastraBrowser } from './browser';
+export type {
+  BrowserStatus,
+  BrowserLifecycleHook,
+  BrowserConfig,
+  ScreencastOptions,
+  ScreencastStream,
+  MouseEventParams,
+  KeyboardEventParams,
+} from './browser';
 
 // ============================================================================
 // Error handling
@@ -8,538 +21,112 @@ export { createError } from './errors';
 export type { ErrorCode, BrowserToolError } from './errors';
 
 // ============================================================================
-// Tool schemas & types
+// Legacy types (for backwards compatibility - will be removed)
+// ============================================================================
+
+export type { BaseBrowserConfig } from './types';
+
+// ============================================================================
+// Tool Factory & Helpers
 // ============================================================================
 
 export {
-  // Core tools
+  createBrowserTools,
+  resolveBrowserToolConfig,
+  BROWSER_TOOLS,
+  requireBrowser,
+  BrowserNotAvailableError,
+  browserTools,
+} from './tools';
+
+export type { BrowserToolName, BrowserToolConfig, BrowserToolsConfig, BrowserToolExecutionContext } from './tools';
+
+// Individual tool exports
+export {
+  browserNavigateTool,
+  browserInteractTool,
+  browserInputTool,
+  browserKeyboardTool,
+  browserFormTool,
+  browserScrollTool,
+  browserExtractTool,
+  browserElementStateTool,
+  browserStateTool,
+  browserStorageTool,
+  browserEmulationTool,
+  browserFramesTool,
+  browserDialogsTool,
+  browserTabsTool,
+  browserRecordingTool,
+  browserMonitoringTool,
+  browserClipboardTool,
+  browserDebugTool,
+  browserWaitTool,
+} from './tools';
+
+// ============================================================================
+// Schemas (19 grouped tools)
+// ============================================================================
+
+export {
+  // 1. Navigate (5 actions: goto, back, forward, reload, close)
   navigateInputSchema,
-  navigateOutputSchema,
-  snapshotInputSchema,
-  snapshotOutputSchema,
-  clickInputSchema,
-  clickOutputSchema,
-  typeInputSchema,
-  typeOutputSchema,
+  // 2. Interact (6 actions: click, double_click, hover, focus, drag, tap)
+  interactInputSchema,
+  // 3. Input (5 actions: fill, type, press, clear, select_all)
+  inputInputSchema,
+  // 4. Keyboard (4 actions: type, insert_text, key_down, key_up)
+  keyboardInputSchema,
+  // 5. Form (4 actions: select, check, uncheck, upload)
+  formInputSchema,
+  // 6. Scroll (2 actions: scroll, into_view)
   scrollInputSchema,
-  scrollOutputSchema,
-  selectInputSchema,
-  selectOutputSchema,
-  screenshotInputSchema,
-  screenshotOutputSchema,
-  closeInputSchema,
-  closeOutputSchema,
-  // Interaction tools
-  hoverInputSchema,
-  hoverOutputSchema,
-  focusInputSchema,
-  focusOutputSchema,
-  doubleClickInputSchema,
-  doubleClickOutputSchema,
-  checkInputSchema,
-  checkOutputSchema,
-  pressInputSchema,
-  pressOutputSchema,
-  fillInputSchema,
-  fillOutputSchema,
-  dragInputSchema,
-  dragOutputSchema,
-  // Keyboard tools
-  keyboardTypeInputSchema,
-  keyboardTypeOutputSchema,
-  keyboardInsertTextInputSchema,
-  keyboardInsertTextOutputSchema,
-  keyDownInputSchema,
-  keyDownOutputSchema,
-  keyUpInputSchema,
-  keyUpOutputSchema,
-  // Data extraction tools
-  getTextInputSchema,
-  getTextOutputSchema,
-  getHtmlInputSchema,
-  getHtmlOutputSchema,
-  getValueInputSchema,
-  getValueOutputSchema,
-  getAttributeInputSchema,
-  getAttributeOutputSchema,
-  evaluateInputSchema,
-  evaluateOutputSchema,
-  // Scroll/viewport tools
-  scrollIntoViewInputSchema,
-  scrollIntoViewOutputSchema,
-  setViewportInputSchema,
-  setViewportOutputSchema,
-  // Cookie tools
-  getCookiesInputSchema,
-  getCookiesOutputSchema,
-  setCookieInputSchema,
-  setCookieOutputSchema,
-  clearCookiesInputSchema,
-  clearCookiesOutputSchema,
-  // Wait tool
+  // 7. Extract (12 actions: snapshot, screenshot, text, html, value, attribute, title, url, count, bounding_box, styles, evaluate)
+  extractInputSchema,
+  // 8. Element State (3 actions: is_visible, is_enabled, is_checked)
+  elementStateInputSchema,
+  // 9. Browser State (5 actions: set_viewport, set_credentials, get_cookies, set_cookie, clear_cookies)
+  browserStateInputSchema,
+  // 10. Storage (6 actions via type + action)
+  storageInputSchema,
+  // 11. Emulation (5 actions: device, media, geolocation, offline, headers)
+  emulationInputSchema,
+  // 12. Frames (2 actions: switch, main)
+  framesInputSchema,
+  // 13. Dialogs (2 actions: handle, clear)
+  dialogsInputSchema,
+  // 14. Tabs (4 actions: list, new, switch, close)
+  tabsInputSchema,
+  // 15. Recording (4 actions: record_start, record_stop, trace_start, trace_stop)
+  recordingInputSchema,
+  // 16. Monitoring (9 actions via type + action)
+  monitoringInputSchema,
+  // 17. Clipboard (4 actions: copy, paste, read, write)
+  clipboardInputSchema,
+  // 18. Debug (2 actions: inspect, highlight)
+  debugInputSchema,
+  // 19. Wait
   waitInputSchema,
-  waitOutputSchema,
-  // Navigation history tools
-  goBackInputSchema,
-  goBackOutputSchema,
-  goForwardInputSchema,
-  goForwardOutputSchema,
-  reloadInputSchema,
-  reloadOutputSchema,
-  // Tab management tools
-  getTabsInputSchema,
-  getTabsOutputSchema,
-  switchTabInputSchema,
-  switchTabOutputSchema,
-  newTabInputSchema,
-  newTabOutputSchema,
-  closeTabInputSchema,
-  closeTabOutputSchema,
-  // Device emulation tools
-  setDeviceInputSchema,
-  setDeviceOutputSchema,
-  setMediaInputSchema,
-  setMediaOutputSchema,
-  // Debugging tools
-  highlightInputSchema,
-  highlightOutputSchema,
-  inspectInputSchema,
-  inspectOutputSchema,
-  // Batch command tool
-  batchInputSchema,
-  batchOutputSchema,
-  // Uncheck tool
-  uncheckInputSchema,
-  uncheckOutputSchema,
-  // Page info tools
-  getTitleInputSchema,
-  getTitleOutputSchema,
-  getUrlInputSchema,
-  getUrlOutputSchema,
-  // Element info tools
-  getCountInputSchema,
-  getCountOutputSchema,
-  getBoundingBoxInputSchema,
-  getBoundingBoxOutputSchema,
-  // State check tools
-  isVisibleInputSchema,
-  isVisibleOutputSchema,
-  isEnabledInputSchema,
-  isEnabledOutputSchema,
-  isCheckedInputSchema,
-  isCheckedOutputSchema,
-  // Frame tools
-  frameSwitchInputSchema,
-  frameSwitchOutputSchema,
-  frameMainInputSchema,
-  frameMainOutputSchema,
-  // Dialog tools
-  dialogHandleInputSchema,
-  dialogHandleOutputSchema,
-  dialogClearInputSchema,
-  dialogClearOutputSchema,
-  // Geolocation tool
-  setGeolocationInputSchema,
-  setGeolocationOutputSchema,
-  // Offline tool
-  setOfflineInputSchema,
-  setOfflineOutputSchema,
-  // Headers tool
-  setHeadersInputSchema,
-  setHeadersOutputSchema,
-  // LocalStorage tools
-  storageGetInputSchema,
-  storageGetOutputSchema,
-  storageSetInputSchema,
-  storageSetOutputSchema,
-  storageClearInputSchema,
-  storageClearOutputSchema,
-  // Tab tools
-  tabsListInputSchema,
-  tabsListOutputSchema,
-  tabNewInputSchema,
-  tabNewOutputSchema,
-  tabSwitchInputSchema,
-  tabSwitchOutputSchema,
-  tabCloseInputSchema,
-  tabCloseOutputSchema,
-  // Recording tools
-  recordStartInputSchema,
-  recordStartOutputSchema,
-  recordStopInputSchema,
-  recordStopOutputSchema,
-  // Tracing tools
-  traceStartInputSchema,
-  traceStartOutputSchema,
-  traceStopInputSchema,
-  traceStopOutputSchema,
-  // Network tracking tools
-  networkStartInputSchema,
-  networkStartOutputSchema,
-  networkGetInputSchema,
-  networkGetOutputSchema,
-  networkClearInputSchema,
-  networkClearOutputSchema,
-  // Console tracking tools
-  consoleStartInputSchema,
-  consoleStartOutputSchema,
-  consoleGetInputSchema,
-  consoleGetOutputSchema,
-  consoleClearInputSchema,
-  consoleClearOutputSchema,
-  // Error tracking tools
-  errorsStartInputSchema,
-  errorsStartOutputSchema,
-  errorsGetInputSchema,
-  errorsGetOutputSchema,
-  errorsClearInputSchema,
-  errorsClearOutputSchema,
-  // Upload tool
-  uploadInputSchema,
-  uploadOutputSchema,
-  // Credentials tool
-  setCredentialsInputSchema,
-  setCredentialsOutputSchema,
-  // Get styles tool
-  getStylesInputSchema,
-  getStylesOutputSchema,
-  // Session storage tools
-  sessionStorageGetInputSchema,
-  sessionStorageGetOutputSchema,
-  sessionStorageSetInputSchema,
-  sessionStorageSetOutputSchema,
-  sessionStorageClearInputSchema,
-  sessionStorageClearOutputSchema,
-  // Clipboard tools
-  clipboardCopyInputSchema,
-  clipboardCopyOutputSchema,
-  clipboardPasteInputSchema,
-  clipboardPasteOutputSchema,
-  clipboardReadInputSchema,
-  clipboardReadOutputSchema,
-  clipboardWriteInputSchema,
-  clipboardWriteOutputSchema,
-  // Clear input tool
-  clearInputSchema,
-  clearOutputSchema,
-  // Select all tool
-  selectAllInputSchema,
-  selectAllOutputSchema,
-  // Tap tool
-  tapInputSchema,
-  tapOutputSchema,
 } from './schemas';
 
 export type {
-  // Core types
   NavigateInput,
-  NavigateOutput,
-  SnapshotInput,
-  SnapshotOutput,
-  ClickInput,
-  ClickOutput,
-  TypeInput,
-  TypeOutput,
+  InteractInput,
+  InputInput,
+  KeyboardInput,
+  FormInput,
   ScrollInput,
-  ScrollOutput,
-  SelectInput,
-  SelectOutput,
-  ScreenshotInput,
-  ScreenshotOutput,
-  CloseInput,
-  CloseOutput,
-  BaseBrowserConfig,
-  // Interaction types
-  HoverInput,
-  HoverOutput,
-  FocusInput,
-  FocusOutput,
-  DoubleClickInput,
-  DoubleClickOutput,
-  CheckInput,
-  CheckOutput,
-  PressInput,
-  PressOutput,
-  FillInput,
-  FillOutput,
-  DragInput,
-  DragOutput,
-  // Keyboard types
-  KeyboardTypeInput,
-  KeyboardTypeOutput,
-  KeyboardInsertTextInput,
-  KeyboardInsertTextOutput,
-  KeyDownInput,
-  KeyDownOutput,
-  KeyUpInput,
-  KeyUpOutput,
-  // Data extraction types
-  GetTextInput,
-  GetTextOutput,
-  GetHtmlInput,
-  GetHtmlOutput,
-  GetValueInput,
-  GetValueOutput,
-  GetAttributeInput,
-  GetAttributeOutput,
-  EvaluateInput,
-  EvaluateOutput,
-  // Scroll/viewport types
-  ScrollIntoViewInput,
-  ScrollIntoViewOutput,
-  SetViewportInput,
-  SetViewportOutput,
-  // Cookie types
-  GetCookiesInput,
-  GetCookiesOutput,
-  SetCookieInput,
-  SetCookieOutput,
-  ClearCookiesInput,
-  ClearCookiesOutput,
-  // Wait type
+  ExtractInput,
+  ElementStateInput,
+  BrowserStateInput,
+  StorageInput,
+  EmulationInput,
+  FramesInput,
+  DialogsInput,
+  TabsInput,
+  RecordingInput,
+  MonitoringInput,
+  ClipboardInput,
+  DebugInput,
   WaitInput,
-  WaitOutput,
-  // Navigation history types
-  GoBackInput,
-  GoBackOutput,
-  GoForwardInput,
-  GoForwardOutput,
-  ReloadInput,
-  ReloadOutput,
-  // Tab management types
-  GetTabsInput,
-  GetTabsOutput,
-  SwitchTabInput,
-  SwitchTabOutput,
-  NewTabInput,
-  NewTabOutput,
-  CloseTabInput,
-  CloseTabOutput,
-  // Device emulation types
-  SetDeviceInput,
-  SetDeviceOutput,
-  SetMediaInput,
-  SetMediaOutput,
-  // Debugging types
-  HighlightInput,
-  HighlightOutput,
-  InspectInput,
-  InspectOutput,
-  // Batch command types
-  BatchInput,
-  BatchOutput,
-  // Uncheck type
-  UncheckInput,
-  UncheckOutput,
-  // Page info types
-  GetTitleInput,
-  GetTitleOutput,
-  GetUrlInput,
-  GetUrlOutput,
-  // Element info types
-  GetCountInput,
-  GetCountOutput,
-  GetBoundingBoxInput,
-  GetBoundingBoxOutput,
-  // State check types
-  IsVisibleInput,
-  IsVisibleOutput,
-  IsEnabledInput,
-  IsEnabledOutput,
-  IsCheckedInput,
-  IsCheckedOutput,
-  // Frame types
-  FrameSwitchInput,
-  FrameSwitchOutput,
-  FrameMainInput,
-  FrameMainOutput,
-  // Dialog types
-  DialogHandleInput,
-  DialogHandleOutput,
-  DialogClearInput,
-  DialogClearOutput,
-  // Geolocation type
-  SetGeolocationInput,
-  SetGeolocationOutput,
-  // Offline type
-  SetOfflineInput,
-  SetOfflineOutput,
-  // Headers type
-  SetHeadersInput,
-  SetHeadersOutput,
-  // LocalStorage types
-  StorageGetInput,
-  StorageGetOutput,
-  StorageSetInput,
-  StorageSetOutput,
-  StorageClearInput,
-  StorageClearOutput,
-  // Tab types
-  TabsListInput,
-  TabsListOutput,
-  TabNewInput,
-  TabNewOutput,
-  TabSwitchInput,
-  TabSwitchOutput,
-  TabCloseInput,
-  TabCloseOutput,
-  // Recording types
-  RecordStartInput,
-  RecordStartOutput,
-  RecordStopInput,
-  RecordStopOutput,
-  // Tracing types
-  TraceStartInput,
-  TraceStartOutput,
-  TraceStopInput,
-  TraceStopOutput,
-  // Network tracking types
-  NetworkStartInput,
-  NetworkStartOutput,
-  NetworkGetInput,
-  NetworkGetOutput,
-  NetworkClearInput,
-  NetworkClearOutput,
-  // Console tracking types
-  ConsoleStartInput,
-  ConsoleStartOutput,
-  ConsoleGetInput,
-  ConsoleGetOutput,
-  ConsoleClearInput,
-  ConsoleClearOutput,
-  // Error tracking types
-  ErrorsStartInput,
-  ErrorsStartOutput,
-  ErrorsGetInput,
-  ErrorsGetOutput,
-  ErrorsClearInput,
-  ErrorsClearOutput,
-  // Upload type
-  UploadInput,
-  UploadOutput,
-  // Credentials type
-  SetCredentialsInput,
-  SetCredentialsOutput,
-  // Get styles type
-  GetStylesInput,
-  GetStylesOutput,
-  // Session storage types
-  SessionStorageGetInput,
-  SessionStorageGetOutput,
-  SessionStorageSetInput,
-  SessionStorageSetOutput,
-  SessionStorageClearInput,
-  SessionStorageClearOutput,
-  // Clipboard types
-  ClipboardCopyInput,
-  ClipboardCopyOutput,
-  ClipboardPasteInput,
-  ClipboardPasteOutput,
-  ClipboardReadInput,
-  ClipboardReadOutput,
-  ClipboardWriteInput,
-  ClipboardWriteOutput,
-  // Clear input type
-  ClearInput,
-  ClearOutput,
-  // Select all type
-  SelectAllInput,
-  SelectAllOutput,
-  // Tap type
-  TapInput,
-  TapOutput,
 } from './schemas';
-
-// ============================================================================
-// Structural interfaces (for Agent.browser integration)
-// ============================================================================
-
-/** Options for screencast streaming */
-export interface ScreencastOptionsLike {
-  format?: 'jpeg' | 'png';
-  quality?: number;
-  maxWidth?: number;
-  maxHeight?: number;
-  everyNthFrame?: number;
-}
-
-/** Screencast stream with event-emitter interface */
-export interface ScreencastStreamLike {
-  on(event: 'frame', handler: (frame: { data: string; viewport: { width: number; height: number } }) => void): void;
-  on(event: 'stop', handler: (reason: string) => void): void;
-  on(event: 'error', handler: (error: Error) => void): void;
-  stop(): Promise<void>;
-}
-
-/**
- * Structural interface for browser toolsets compatible with Agent.browser.
- *
- * Any object satisfying this shape can be used as an agent's browser — no need
- * to extend a base class.  This keeps `@mastra/core` free of runtime browser
- * dependencies while still giving first-class typing.
- */
-export interface BrowserToolsetLike {
-  /** Browser automation tools to be merged into agent tools */
-  readonly tools: ToolsInput;
-
-  /**
-   * Check if the browser is currently running.
-   * Does NOT launch the browser — just checks current state.
-   */
-  isBrowserRunning(): boolean;
-
-  /**
-   * Register a callback to be invoked when the browser launches.
-   * If browser is already running, callback is invoked immediately.
-   * @returns Cleanup function to unregister the callback
-   */
-  onBrowserReady(callback: () => void): () => void;
-
-  /**
-   * Start screencast streaming for live browser view.
-   * Launches browser if not already running.
-   */
-  startScreencast(options?: ScreencastOptionsLike): Promise<ScreencastStreamLike>;
-
-  /**
-   * Start screencast only if browser is already running.
-   * Does NOT launch the browser — returns null if not running.
-   */
-  startScreencastIfBrowserActive(options?: ScreencastOptionsLike): Promise<ScreencastStreamLike | null>;
-
-  /**
-   * Get the current page URL without launching the browser.
-   * @returns The current URL string, or null if browser is not running
-   */
-  getCurrentUrl(): string | null;
-
-  /** Close browser and release resources */
-  close(): Promise<void>;
-
-  /**
-   * Inject a mouse event into the browser via CDP.
-   * Used by server to forward user mouse interactions from live view.
-   */
-  injectMouseEvent(event: {
-    type: 'mousePressed' | 'mouseReleased' | 'mouseMoved' | 'mouseWheel';
-    x: number;
-    y: number;
-    button?: 'left' | 'right' | 'middle' | 'none';
-    clickCount?: number;
-    deltaX?: number;
-    deltaY?: number;
-    modifiers?: number;
-  }): Promise<void>;
-
-  /**
-   * Inject a keyboard event into the browser via CDP.
-   * Used by server to forward user keyboard interactions from live view.
-   */
-  injectKeyboardEvent(event: {
-    type: 'keyDown' | 'keyUp' | 'char';
-    key?: string;
-    code?: string;
-    text?: string;
-    modifiers?: number;
-  }): Promise<void>;
-}
