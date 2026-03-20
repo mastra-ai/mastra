@@ -63,6 +63,11 @@ export interface OktaSessionOptions {
    * Defaults to OKTA_COOKIE_PASSWORD env var.
    */
   cookiePassword?: string;
+  /**
+   * Set the Secure flag on session cookies.
+   * Defaults to true when NODE_ENV=production, false otherwise.
+   */
+  secureCookies?: boolean;
 }
 
 /**

@@ -1,7 +1,7 @@
 /**
  * MastraAuthOkta - Okta authentication provider for Mastra with SSO support.
  *
- * Supports OAuth 2.0 / OIDC login flow with PKCE and session management.
+ * Supports OAuth 2.0 / OIDC login flow with client_secret and session management.
  */
 
 import type {
@@ -15,7 +15,7 @@ import type {
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
 import { MastraAuthProvider } from '@mastra/core/server';
 import type { HonoRequest } from 'hono';
-import { createRemoteJWKSet, jwtVerify, decodeJwt } from 'jose';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 import type { OktaUser, MastraAuthOktaOptions } from './types.js';
 import { mapOktaClaimsToUser } from './types.js';
@@ -29,49 +29,58 @@ const DEFAULT_COOKIE_MAX_AGE = 86400;
 /** Default OAuth scopes */
 const DEFAULT_SCOPES = ['openid', 'profile', 'email', 'groups'];
 
+/** PBKDF2 salt length in bytes */
+const SALT_LENGTH = 16;
+
+/** AES-GCM IV length in bytes */
+const IV_LENGTH = 12;
+
 /**
- * Encrypt session data for cookie storage.
+ * Derive an AES-GCM key from password + salt using PBKDF2.
  */
-async function encryptSession(data: unknown, password: string): Promise<string> {
+async function deriveKey(password: string, salt: Uint8Array, usage: 'encrypt' | 'decrypt') {
   const encoder = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, [
     'deriveBits',
     'deriveKey',
   ]);
-  const key = await crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: encoder.encode('okta_session_salt'), iterations: 100000, hash: 'SHA-256' },
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
     false,
-    ['encrypt'],
+    [usage],
   );
-  const iv = crypto.getRandomValues(new Uint8Array(12));
+}
+
+/**
+ * Encrypt session data for cookie storage.
+ * Format: base64(salt || iv || ciphertext)
+ * Salt is random per-encryption to ensure unique derived keys.
+ */
+async function encryptSession(data: unknown, password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
+  const key = await deriveKey(password, salt, 'encrypt');
+  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
   const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoder.encode(JSON.stringify(data)));
-  const combined = new Uint8Array(iv.length + new Uint8Array(encrypted).length);
-  combined.set(iv);
-  combined.set(new Uint8Array(encrypted), iv.length);
+  const combined = new Uint8Array(salt.length + iv.length + new Uint8Array(encrypted).length);
+  combined.set(salt);
+  combined.set(iv, salt.length);
+  combined.set(new Uint8Array(encrypted), salt.length + iv.length);
   return btoa(String.fromCharCode(...combined));
 }
 
 /**
  * Decrypt session data from cookie.
+ * Reads the random salt from the ciphertext prefix to derive the same key.
  */
 async function decryptSession(encrypted: string, password: string): Promise<unknown> {
-  const encoder = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, [
-    'deriveBits',
-    'deriveKey',
-  ]);
-  const key = await crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: encoder.encode('okta_session_salt'), iterations: 100000, hash: 'SHA-256' },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['decrypt'],
-  );
   const combined = Uint8Array.from(atob(encrypted), c => c.charCodeAt(0));
-  const iv = combined.slice(0, 12);
-  const data = combined.slice(12);
+  const salt = combined.slice(0, SALT_LENGTH);
+  const iv = combined.slice(SALT_LENGTH, SALT_LENGTH + IV_LENGTH);
+  const data = combined.slice(SALT_LENGTH + IV_LENGTH);
+  const key = await deriveKey(password, salt, 'decrypt');
   const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
   return JSON.parse(new TextDecoder().decode(decrypted));
 }
@@ -85,7 +94,7 @@ const stateStore = new Map<string, { expiresAt: number }>();
 /**
  * Mastra authentication provider for Okta with SSO support.
  *
- * Implements OAuth 2.0 / OIDC login flow with PKCE and encrypted session cookies.
+ * Implements OAuth 2.0 / OIDC login flow with encrypted session cookies.
  *
  * @example Basic usage with SSO
  * ```typescript
@@ -112,6 +121,8 @@ export class MastraAuthOkta
   protected cookieName: string;
   protected cookieMaxAge: number;
   protected cookiePassword: string;
+  protected secureCookies: boolean;
+  private jwks: ReturnType<typeof createRemoteJWKSet>;
 
   constructor(options?: MastraAuthOktaOptions) {
     super({ name: options?.name ?? 'okta' });
@@ -159,6 +170,8 @@ export class MastraAuthOkta
     this.cookieName = options?.session?.cookieName ?? DEFAULT_COOKIE_NAME;
     this.cookieMaxAge = options?.session?.cookieMaxAge ?? DEFAULT_COOKIE_MAX_AGE;
     this.cookiePassword = cookiePassword;
+    this.secureCookies = options?.session?.secureCookies ?? process.env.NODE_ENV === 'production';
+    this.jwks = createRemoteJWKSet(new URL(`${this.issuer}/v1/keys`));
 
     this.registerOptions(options as MastraAuthProviderOptions<OktaUser>);
   }
@@ -184,10 +197,7 @@ export class MastraAuthOkta
     }
 
     try {
-      const jwksUrl = `${this.issuer}/v1/keys`;
-      const JWKS = createRemoteJWKSet(new URL(jwksUrl));
-
-      const { payload } = await jwtVerify(token, JWKS, {
+      const { payload } = await jwtVerify(token, this.jwks, {
         issuer: this.issuer,
         audience: this.clientId,
       });
@@ -246,6 +256,7 @@ export class MastraAuthOkta
       const session = (await decryptSession(decodeURIComponent(sessionValue), this.cookiePassword)) as {
         user: OktaUser;
         accessToken: string;
+        idToken?: string;
         expiresAt: number;
       };
 
@@ -255,6 +266,32 @@ export class MastraAuthOkta
       }
 
       return session.user;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Extract the raw ID token from the encrypted session cookie.
+   * Used to provide id_token_hint for Okta logout.
+   */
+  private async getIdTokenFromSession(request: Request): Promise<string | null> {
+    try {
+      const cookieHeader =
+        'header' in request ? (request as unknown as HonoRequest).header('cookie') : request.headers.get('cookie');
+      if (!cookieHeader) return null;
+
+      const cookies = cookieHeader.split(';').map((c: string) => c.trim());
+      const sessionCookie = cookies.find((c: string) => c.startsWith(`${this.cookieName}=`));
+      if (!sessionCookie) return null;
+
+      const sessionValue = sessionCookie.split('=')[1];
+      if (!sessionValue) return null;
+
+      const session = (await decryptSession(decodeURIComponent(sessionValue), this.cookiePassword)) as {
+        idToken?: string;
+      };
+      return session.idToken ?? null;
     } catch {
       return null;
     }
@@ -289,7 +326,7 @@ export class MastraAuthOkta
       client_id: this.clientId,
       response_type: 'code',
       scope: this.scopes.join(' '),
-      redirect_uri: redirectUri || this.redirectUri,
+      redirect_uri: redirectUri ?? this.redirectUri,
       state,
     });
 
@@ -339,8 +376,11 @@ export class MastraAuthOkta
       token_type: string;
     };
 
-    // Decode ID token to get user info
-    const idTokenPayload = decodeJwt(tokens.id_token);
+    // Verify and decode ID token
+    const { payload: idTokenPayload } = await jwtVerify(tokens.id_token, this.jwks, {
+      issuer: this.issuer,
+      audience: this.clientId,
+    });
     const user = mapOktaClaimsToUser(idTokenPayload);
 
     // Create encrypted session cookie
@@ -348,11 +388,12 @@ export class MastraAuthOkta
       user,
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token,
+      idToken: tokens.id_token,
       expiresAt: Date.now() + tokens.expires_in * 1000,
     };
 
     const encryptedSession = await encryptSession(sessionData, this.cookiePassword);
-    const cookieValue = `${this.cookieName}=${encodeURIComponent(encryptedSession)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${this.cookieMaxAge}`;
+    const cookieValue = `${this.cookieName}=${encodeURIComponent(encryptedSession)}; ${this.cookieFlags(this.cookieMaxAge)}`;
 
     return {
       user,
@@ -368,17 +409,27 @@ export class MastraAuthOkta
 
   /**
    * Get the URL to redirect users to for logout.
+   * Includes id_token_hint from session when available (required by Okta).
    */
-  async getLogoutUrl(redirectUri: string, _request?: Request): Promise<string | null> {
+  async getLogoutUrl(redirectUri: string, request?: Request): Promise<string | null> {
     const params = new URLSearchParams({
       post_logout_redirect_uri: redirectUri,
       client_id: this.clientId,
     });
+
+    // Try to extract id_token from session for id_token_hint (Okta requires this)
+    if (request) {
+      const idToken = await this.getIdTokenFromSession(request);
+      if (idToken) {
+        params.set('id_token_hint', idToken);
+      }
+    }
+
     return `${this.issuer}/v1/logout?${params.toString()}`;
   }
 
   /**
-   * Get cookies to set during login (for PKCE state).
+   * Get cookies to set during login.
    */
   getLoginCookies(_state: string): string[] {
     return [];
@@ -431,8 +482,16 @@ export class MastraAuthOkta
 
   getClearSessionHeaders(): Record<string, string> {
     return {
-      'Set-Cookie': `${this.cookieName}=; Path=/; Max-Age=0; HttpOnly`,
+      'Set-Cookie': `${this.cookieName}=; ${this.cookieFlags(0)}`,
     };
+  }
+
+  /**
+   * Build consistent cookie attribute string for set/clear operations.
+   */
+  private cookieFlags(maxAge: number): string {
+    const flags = `Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
+    return this.secureCookies ? `${flags}; Secure` : flags;
   }
 
   // ============================================================================

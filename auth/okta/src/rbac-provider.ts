@@ -145,8 +145,13 @@ export class MastraRBACOkta implements IRBACProvider<OktaUser> {
       return cached;
     }
 
-    // Create and cache the group fetch promise
-    const groupsPromise = this.fetchGroupsFromOkta(userId);
+    // Create and cache the group fetch promise.
+    // On rejection, evict from cache so the next request retries
+    // instead of returning the cached rejected promise.
+    const groupsPromise = this.fetchGroupsFromOkta(userId).catch(err => {
+      this.rolesCache.delete(userId);
+      throw err;
+    });
     this.rolesCache.set(userId, groupsPromise);
 
     return groupsPromise;
@@ -178,7 +183,8 @@ export class MastraRBACOkta implements IRBACProvider<OktaUser> {
       }
 
       return groupNames;
-    } catch {
+    } catch (err) {
+      console.error(`[MastraRBACOkta] Failed to fetch groups for user ${userId}:`, err);
       // Return empty groups on error - _default permissions will be applied
       return [];
     }
