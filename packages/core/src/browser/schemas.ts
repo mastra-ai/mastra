@@ -1850,6 +1850,211 @@ export type GetStylesInput = z.infer<typeof getStylesInputSchema>;
 export type GetStylesOutput = z.infer<typeof getStylesOutputSchema>;
 
 // ============================================================================
+// Session Storage Tool Schemas
+// ============================================================================
+
+export const sessionStorageGetInputSchema = z.object({
+  key: z.string().optional().describe('Specific key to retrieve. If omitted, returns all sessionStorage data.'),
+});
+
+export const sessionStorageGetOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    data: z.record(z.string(), z.string()).describe('SessionStorage data'),
+    url: z.string().describe('Current page URL'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error classification code'),
+    message: z.string().describe('LLM-friendly error description'),
+  }),
+]);
+
+export const sessionStorageSetInputSchema = z.object({
+  key: z.string().describe('The key to set'),
+  value: z.string().describe('The value to store'),
+});
+
+export const sessionStorageSetOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    url: z.string().describe('Current page URL'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error classification code'),
+    message: z.string().describe('LLM-friendly error description'),
+  }),
+]);
+
+export const sessionStorageClearInputSchema = z.object({});
+
+export const sessionStorageClearOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    url: z.string().describe('Current page URL'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error classification code'),
+    message: z.string().describe('LLM-friendly error description'),
+  }),
+]);
+
+export type SessionStorageGetInput = z.infer<typeof sessionStorageGetInputSchema>;
+export type SessionStorageGetOutput = z.infer<typeof sessionStorageGetOutputSchema>;
+export type SessionStorageSetInput = z.infer<typeof sessionStorageSetInputSchema>;
+export type SessionStorageSetOutput = z.infer<typeof sessionStorageSetOutputSchema>;
+export type SessionStorageClearInput = z.infer<typeof sessionStorageClearInputSchema>;
+export type SessionStorageClearOutput = z.infer<typeof sessionStorageClearOutputSchema>;
+
+// ============================================================================
+// Clipboard Tool Schemas
+// ============================================================================
+
+export const clipboardCopyInputSchema = z.object({});
+
+export const clipboardCopyOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    message: z.string().describe('Confirmation message'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error classification code'),
+    message: z.string().describe('LLM-friendly error description'),
+  }),
+]);
+
+export const clipboardPasteInputSchema = z.object({});
+
+export const clipboardPasteOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    message: z.string().describe('Confirmation message'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error classification code'),
+    message: z.string().describe('LLM-friendly error description'),
+  }),
+]);
+
+export const clipboardReadInputSchema = z.object({});
+
+export const clipboardReadOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    text: z.string().describe('Clipboard text content'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error classification code'),
+    message: z.string().describe('LLM-friendly error description'),
+  }),
+]);
+
+export const clipboardWriteInputSchema = z.object({
+  text: z.string().describe('Text to write to clipboard'),
+});
+
+export const clipboardWriteOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    message: z.string().describe('Confirmation message'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error classification code'),
+    message: z.string().describe('LLM-friendly error description'),
+  }),
+]);
+
+export type ClipboardCopyInput = z.infer<typeof clipboardCopyInputSchema>;
+export type ClipboardCopyOutput = z.infer<typeof clipboardCopyOutputSchema>;
+export type ClipboardPasteInput = z.infer<typeof clipboardPasteInputSchema>;
+export type ClipboardPasteOutput = z.infer<typeof clipboardPasteOutputSchema>;
+export type ClipboardReadInput = z.infer<typeof clipboardReadInputSchema>;
+export type ClipboardReadOutput = z.infer<typeof clipboardReadOutputSchema>;
+export type ClipboardWriteInput = z.infer<typeof clipboardWriteInputSchema>;
+export type ClipboardWriteOutput = z.infer<typeof clipboardWriteOutputSchema>;
+
+// ============================================================================
+// Clear Input Tool Schema
+// ============================================================================
+
+export const clearInputSchema = z.object({
+  ref: z.string().describe('Element reference from snapshot (e.g., @e5) for the input to clear'),
+});
+
+export const clearOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    message: z.string().describe('Confirmation message'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error classification code'),
+    message: z.string().describe('LLM-friendly error description'),
+    recoveryHint: z.string().optional().describe('Suggested recovery action'),
+    canRetry: z.boolean().optional().describe('Whether the operation can be retried'),
+  }),
+]);
+
+export type ClearInput = z.infer<typeof clearInputSchema>;
+export type ClearOutput = z.infer<typeof clearOutputSchema>;
+
+// ============================================================================
+// Select All Text Tool Schema
+// ============================================================================
+
+export const selectAllInputSchema = z.object({
+  ref: z.string().describe('Element reference from snapshot (e.g., @e5) to select all text in'),
+});
+
+export const selectAllOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    message: z.string().describe('Confirmation message'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error classification code'),
+    message: z.string().describe('LLM-friendly error description'),
+    recoveryHint: z.string().optional().describe('Suggested recovery action'),
+    canRetry: z.boolean().optional().describe('Whether the operation can be retried'),
+  }),
+]);
+
+export type SelectAllInput = z.infer<typeof selectAllInputSchema>;
+export type SelectAllOutput = z.infer<typeof selectAllOutputSchema>;
+
+// ============================================================================
+// Tap Tool Schema (touch event)
+// ============================================================================
+
+export const tapInputSchema = z.object({
+  ref: z.string().describe('Element reference from snapshot (e.g., @e5) to tap'),
+});
+
+export const tapOutputSchema = z.discriminatedUnion('success', [
+  z.object({
+    success: z.literal(true),
+    message: z.string().describe('Confirmation message'),
+  }),
+  z.object({
+    success: z.literal(false),
+    code: z.string().describe('Error classification code'),
+    message: z.string().describe('LLM-friendly error description'),
+    recoveryHint: z.string().optional().describe('Suggested recovery action'),
+    canRetry: z.boolean().optional().describe('Whether the operation can be retried'),
+  }),
+]);
+
+export type TapInput = z.infer<typeof tapInputSchema>;
+export type TapOutput = z.infer<typeof tapOutputSchema>;
+
+// ============================================================================
 // Base Browser Config
 // ============================================================================
 

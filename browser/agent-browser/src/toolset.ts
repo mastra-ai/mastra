@@ -5,7 +5,14 @@ import { ScreencastStream } from './screencast/index.js';
 import type { ScreencastOptions } from './screencast/index.js';
 import { createBatchTool } from './tools/batch.js';
 import { createCheckTool } from './tools/check.js';
+import { createClearTool } from './tools/clear.js';
 import { createClickTool } from './tools/click.js';
+import {
+  createClipboardCopyTool,
+  createClipboardPasteTool,
+  createClipboardReadTool,
+  createClipboardWriteTool,
+} from './tools/clipboard.js';
 import { createCloseTool } from './tools/close.js';
 import { createConsoleStartTool, createConsoleGetTool, createConsoleClearTool } from './tools/console.js';
 import { createClearCookiesTool, createGetCookiesTool, createSetCookieTool } from './tools/cookies.js';
@@ -51,11 +58,18 @@ import { createRecordStartTool, createRecordStopTool } from './tools/recording.j
 import { createScreenshotTool } from './tools/screenshot.js';
 import { createScrollIntoViewTool } from './tools/scroll-into-view.js';
 import { createScrollTool } from './tools/scroll.js';
+import { createSelectAllTool } from './tools/select-all.js';
 import { createSelectTool } from './tools/select.js';
+import {
+  createSessionStorageGetTool,
+  createSessionStorageSetTool,
+  createSessionStorageClearTool,
+} from './tools/session-storage.js';
 import { createSetViewportTool } from './tools/set-viewport.js';
 import { createSnapshotTool } from './tools/snapshot.js';
 import { createStorageGetTool, createStorageSetTool, createStorageClearTool } from './tools/storage.js';
 import { createTabsListTool, createTabNewTool, createTabSwitchTool, createTabCloseTool } from './tools/tabs.js';
+import { createTapTool } from './tools/tap.js';
 import { createTraceStartTool, createTraceStopTool } from './tools/tracing.js';
 import { createTypeTool } from './tools/type.js';
 import { createUncheckTool } from './tools/uncheck.js';
@@ -249,6 +263,26 @@ export class Browser {
 
       // Get styles
       browser_get_styles: createGetStylesTool(getBrowser),
+
+      // Clear input
+      browser_clear: createClearTool(getBrowser),
+
+      // Select all text
+      browser_select_all: createSelectAllTool(getBrowser),
+
+      // Tap (touch)
+      browser_tap: createTapTool(getBrowser),
+
+      // Clipboard
+      browser_clipboard_copy: createClipboardCopyTool(getBrowser),
+      browser_clipboard_paste: createClipboardPasteTool(getBrowser),
+      browser_clipboard_read: createClipboardReadTool(getBrowser),
+      browser_clipboard_write: createClipboardWriteTool(getBrowser),
+
+      // SessionStorage
+      browser_session_storage_get: createSessionStorageGetTool(getBrowser),
+      browser_session_storage_set: createSessionStorageSetTool(getBrowser),
+      browser_session_storage_clear: createSessionStorageClearTool(getBrowser),
     };
   }
 

@@ -44,6 +44,9 @@ export interface BrowserLocator {
   waitFor(options?: { state?: 'visible' | 'hidden' | 'attached' | 'detached'; timeout?: number }): Promise<void>;
   getAttribute(name: string): Promise<string | null>;
   setInputFiles(files: string | string[]): Promise<void>;
+  clear(options?: { timeout?: number }): Promise<void>;
+  selectText(options?: { timeout?: number }): Promise<void>;
+  tap(options?: { timeout?: number }): Promise<void>;
 }
 
 export interface BrowserCDPSession {

@@ -203,6 +203,31 @@ export {
   // Get styles tool
   getStylesInputSchema,
   getStylesOutputSchema,
+  // Session storage tools
+  sessionStorageGetInputSchema,
+  sessionStorageGetOutputSchema,
+  sessionStorageSetInputSchema,
+  sessionStorageSetOutputSchema,
+  sessionStorageClearInputSchema,
+  sessionStorageClearOutputSchema,
+  // Clipboard tools
+  clipboardCopyInputSchema,
+  clipboardCopyOutputSchema,
+  clipboardPasteInputSchema,
+  clipboardPasteOutputSchema,
+  clipboardReadInputSchema,
+  clipboardReadOutputSchema,
+  clipboardWriteInputSchema,
+  clipboardWriteOutputSchema,
+  // Clear input tool
+  clearInputSchema,
+  clearOutputSchema,
+  // Select all tool
+  selectAllInputSchema,
+  selectAllOutputSchema,
+  // Tap tool
+  tapInputSchema,
+  tapOutputSchema,
 } from './schemas';
 
 export type {
@@ -398,6 +423,31 @@ export type {
   // Get styles type
   GetStylesInput,
   GetStylesOutput,
+  // Session storage types
+  SessionStorageGetInput,
+  SessionStorageGetOutput,
+  SessionStorageSetInput,
+  SessionStorageSetOutput,
+  SessionStorageClearInput,
+  SessionStorageClearOutput,
+  // Clipboard types
+  ClipboardCopyInput,
+  ClipboardCopyOutput,
+  ClipboardPasteInput,
+  ClipboardPasteOutput,
+  ClipboardReadInput,
+  ClipboardReadOutput,
+  ClipboardWriteInput,
+  ClipboardWriteOutput,
+  // Clear input type
+  ClearInput,
+  ClearOutput,
+  // Select all type
+  SelectAllInput,
+  SelectAllOutput,
+  // Tap type
+  TapInput,
+  TapOutput,
 } from './schemas';
 
 // ============================================================================
