@@ -38,7 +38,7 @@ export function HorizontalBars({
         </div>
         <span className="shrink-0 text-ui-sm text-neutral2 pr-2">Total</span>
       </div>
-      <div className="grid gap-4">
+      <div className="grid gap-3.5">
         {sorted.map(d => {
           const total = d.values.reduce((s, v) => s + v, 0);
 
