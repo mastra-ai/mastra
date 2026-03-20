@@ -22,11 +22,7 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
 
   return (
     <TooltipProvider>
-      <EntityHeader
-        icon={<AgentIcon />}
-        title={agentName}
-        isLoading={isLoading}
-      >
+      <EntityHeader icon={<AgentIcon />} title={agentName} isLoading={isLoading}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
           <Tooltip>
             <TooltipTrigger asChild>
