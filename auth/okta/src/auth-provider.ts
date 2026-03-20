@@ -173,6 +173,19 @@ export class MastraAuthOkta
     this.secureCookies = options?.session?.secureCookies ?? process.env.NODE_ENV === 'production';
     this.jwks = createRemoteJWKSet(new URL(`${this.issuer}/v1/keys`));
 
+    // Warn about insecure defaults in production
+    if (!options?.session?.cookiePassword && !process.env.OKTA_COOKIE_PASSWORD) {
+      console.warn(
+        '[MastraAuthOkta] No cookie password set — using auto-generated value. Sessions will not survive restarts and will break in multi-instance deployments. Set OKTA_COOKIE_PASSWORD for production use.',
+      );
+    }
+
+    if (process.env.NODE_ENV === 'production') {
+      console.warn(
+        '[MastraAuthOkta] Using in-memory OAuth state store. This will not work in serverless or multi-instance deployments. Consider implementing a custom state store for production.',
+      );
+    }
+
     this.registerOptions(options as MastraAuthProviderOptions<OktaUser>);
   }
 
@@ -255,7 +268,6 @@ export class MastraAuthOkta
 
       const session = (await decryptSession(decodeURIComponent(sessionValue), this.cookiePassword)) as {
         user: OktaUser;
-        accessToken: string;
         idToken?: string;
         expiresAt: number;
       };
@@ -383,11 +395,11 @@ export class MastraAuthOkta
     });
     const user = mapOktaClaimsToUser(idTokenPayload);
 
-    // Create encrypted session cookie
+    // Create encrypted session cookie.
+    // Only store user claims, id_token (for logout hint), and expiry.
+    // Access/refresh tokens are NOT stored to keep cookie under 4KB browser limit.
     const sessionData = {
       user,
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
       idToken: tokens.id_token,
       expiresAt: Date.now() + tokens.expires_in * 1000,
     };

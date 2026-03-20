@@ -74,21 +74,33 @@ const mastra = new Mastra({
 
 ### Environment Variables
 
-| Variable         | Description                               | Required                                           |
-| ---------------- | ----------------------------------------- | -------------------------------------------------- |
-| `OKTA_DOMAIN`    | Okta domain (e.g., `dev-123456.okta.com`) | Yes                                                |
-| `OKTA_CLIENT_ID` | OAuth client ID                           | For auth only                                      |
-| `OKTA_ISSUER`    | Token issuer URL                          | No (defaults to `https://{domain}/oauth2/default`) |
-| `OKTA_API_TOKEN` | API token for management SDK              | For RBAC only                                      |
+| Variable               | Description                               | Required                                           |
+| ---------------------- | ----------------------------------------- | -------------------------------------------------- |
+| `OKTA_DOMAIN`          | Okta domain (e.g., `dev-123456.okta.com`) | Yes                                                |
+| `OKTA_CLIENT_ID`       | OAuth client ID                           | For auth only                                      |
+| `OKTA_CLIENT_SECRET`   | OAuth client secret                       | For auth only                                      |
+| `OKTA_REDIRECT_URI`    | OAuth redirect URI for SSO callback       | For auth only                                      |
+| `OKTA_ISSUER`          | Token issuer URL                          | No (defaults to `https://{domain}/oauth2/default`) |
+| `OKTA_COOKIE_PASSWORD` | Session encryption key (min 32 chars)     | No (auto-generated if omitted; set for production) |
+| `OKTA_API_TOKEN`       | API token for management SDK              | For RBAC only                                      |
 
 ### MastraAuthOkta Options
 
 ```typescript
 interface MastraAuthOktaOptions {
-  domain?: string; // Okta domain
-  clientId?: string; // OAuth client ID
-  issuer?: string; // Token issuer URL
+  domain?: string; // Okta domain (or OKTA_DOMAIN env var)
+  clientId?: string; // OAuth client ID (or OKTA_CLIENT_ID)
+  clientSecret?: string; // OAuth client secret (or OKTA_CLIENT_SECRET)
+  redirectUri?: string; // SSO callback URI (or OKTA_REDIRECT_URI)
+  issuer?: string; // Token issuer URL (or OKTA_ISSUER)
+  scopes?: string[]; // OAuth scopes (default: ['openid', 'profile', 'email', 'groups'])
   name?: string; // Provider name (default: 'okta')
+  session?: {
+    cookieName?: string; // Cookie name (default: 'okta_session')
+    cookieMaxAge?: number; // Cookie max age in seconds (default: 86400)
+    cookiePassword?: string; // Encryption key, min 32 chars (or OKTA_COOKIE_PASSWORD)
+    secureCookies?: boolean; // Set Secure flag (default: auto-detect from NODE_ENV)
+  };
 }
 ```
 

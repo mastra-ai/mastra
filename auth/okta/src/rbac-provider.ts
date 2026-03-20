@@ -146,11 +146,12 @@ export class MastraRBACOkta implements IRBACProvider<OktaUser> {
     }
 
     // Create and cache the group fetch promise.
-    // On rejection, evict from cache so the next request retries
-    // instead of returning the cached rejected promise.
+    // On failure, evict from cache so the next request retries,
+    // then fall back to empty groups (which applies _default permissions).
     const groupsPromise = this.fetchGroupsFromOkta(userId).catch(err => {
+      console.error(`[MastraRBACOkta] Failed to fetch groups for user ${userId}:`, err);
       this.rolesCache.delete(userId);
-      throw err;
+      return [];
     });
     this.rolesCache.set(userId, groupsPromise);
 
@@ -170,24 +171,19 @@ export class MastraRBACOkta implements IRBACProvider<OktaUser> {
 
   /**
    * Fetch groups from Okta API.
+   * Errors propagate to the caller so the cache eviction in getRoles() works.
    */
   private async fetchGroupsFromOkta(userId: string): Promise<string[]> {
-    try {
-      const groups = await this.oktaClient.userApi.listUserGroups({ userId });
-      const groupNames: string[] = [];
+    const groups = await this.oktaClient.userApi.listUserGroups({ userId });
+    const groupNames: string[] = [];
 
-      for await (const group of groups) {
-        if (group && group.profile?.name) {
-          groupNames.push(group.profile.name);
-        }
+    for await (const group of groups) {
+      if (group && group.profile?.name) {
+        groupNames.push(group.profile.name);
       }
-
-      return groupNames;
-    } catch (err) {
-      console.error(`[MastraRBACOkta] Failed to fetch groups for user ${userId}:`, err);
-      // Return empty groups on error - _default permissions will be applied
-      return [];
     }
+
+    return groupNames;
   }
 
   /**

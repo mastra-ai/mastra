@@ -9,7 +9,6 @@ import type { OktaUser } from './types';
 vi.mock('jose', () => ({
   createRemoteJWKSet: vi.fn(),
   jwtVerify: vi.fn(),
-  decodeJwt: vi.fn(),
 }));
 
 // Mock Okta SDK - use class syntax for proper constructor behavior
@@ -387,24 +386,32 @@ describe('MastraRBACOkta', () => {
 
   describe('getUserId option', () => {
     test('uses custom getUserId function for cross-provider support', async () => {
+      // Mock Okta API to return groups when called with the correct user ID
+      mockListUserGroups.mockReturnValueOnce(
+        (async function* () {
+          yield { profile: { name: 'Admin' } };
+        })(),
+      );
+
       const rbac = new MastraRBACOkta({
         roleMapping: { Admin: ['*'] },
         getUserId: (user: any) => user.metadata?.oktaUserId,
       });
 
-      // Simulate an Auth0 user with Okta ID in metadata
+      // Simulate an Auth0 user with Okta ID in metadata — no pre-populated groups
       const auth0User = {
         id: 'auth0|123',
-        oktaId: '', // Not the primary ID
-        groups: ['Admin'], // Pre-populated for this test
+        oktaId: '',
+        groups: [],
         metadata: {
           oktaUserId: 'okta-user-456',
         },
       } as OktaUser;
 
-      // The getUserId function should extract the correct Okta ID
       const roles = await rbac.getRoles(auth0User);
       expect(roles).toEqual(['Admin']);
+      // Verify getUserId resolved the correct Okta user ID for the API call
+      expect(mockListUserGroups).toHaveBeenCalledWith({ userId: 'okta-user-456' });
     });
   });
 });
