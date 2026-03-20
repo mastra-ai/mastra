@@ -1,6 +1,6 @@
 # Smoke Test Coverage
 
-> 147 tests across 32 test files — last updated 2026-03-20
+> 171 tests across 35 test files — last updated 2026-03-20
 
 ## What's Tested
 
@@ -237,6 +237,40 @@
 
 ---
 
+### Workspace (22 tests, 3 files)
+
+#### Metadata (`metadata.test.ts` — 3 tests)
+- [x] List all workspaces with capabilities (hasFilesystem, hasSkills, readOnly)
+- [x] Get workspace details — status, filesystem provider, capabilities
+- [x] Non-existent workspace returns isWorkspaceConfigured: false
+
+#### Filesystem (`filesystem.test.ts` — 13 tests)
+- [x] List root directory entries (file type, size, directory type)
+- [x] List subdirectory entries
+- [x] 404 for non-existent directory
+- [x] Read file content (exact content match)
+- [x] 404 for non-existent file
+- [x] Stat file metadata (type, size derived from fixture)
+- [x] Stat directory metadata
+- [x] 404 for non-existent stat path
+- [x] Write file and read back
+- [x] Write with recursive directory creation
+- [x] Create directory (+ verify via stat)
+- [x] Create nested directories with recursive
+- [x] Delete file (+ verify 404 after)
+- [x] Delete directory recursively (+ verify 404 after)
+- [x] 404 when deleting non-existent path
+
+#### Skills (`skills.test.ts` — 6 tests)
+- [x] List discovered skills (name, description, path)
+- [x] Get skill details — instructions, source, references, scripts, assets
+- [x] 404 for non-existent skill
+- [x] List skill reference files
+- [x] Get reference file content (exact content match)
+- [x] 404 for non-existent reference
+
+---
+
 ## What's NOT Tested
 
 ### Agents — Untested Endpoints
@@ -334,15 +368,16 @@
 
 **Requires:** EE license / stored entity infrastructure.
 
-### Workspace (0 coverage)
+### Workspace — Untested Endpoints
 
 | Endpoint | Notes | Priority |
 |----------|-------|----------|
-| File system operations (6 routes) | list, read, write, mkdir, delete, stat | Low |
-| Skills management (8 routes) | list, get, search | Low |
-| Index management | workspace indexing | Low |
+| `GET /workspaces/:id/search` | Requires vector store + embedder | Low |
+| `POST /workspaces/:id/index` | Requires vector store + embedder | Low |
+| `GET /workspaces/:id/skills/search` | Requires search configuration | Low |
+| `GET /workspaces/:id/skills-sh/*` (6 routes) | External skills.sh API proxy | Low |
 
-**Requires:** Workspace configuration.
+**Requires:** Vector store + embedder for search; external API for skills.sh.
 
 ### Datasets (0 coverage)
 
