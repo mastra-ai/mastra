@@ -9,25 +9,7 @@ import { AISDKSpeech } from '../speech';
 import { AISDKTranscription } from '../transcription';
 
 describe('AI SDK Voice Integration Tests', () => {
-  useLLMRecording('core-src-voice-aisdk-__tests__-aisdk-voice.e2e', {
-    transformRequest: ({ url, body }) => {
-      if (!url.includes('/audio/transcriptions') || !(body instanceof FormData)) {
-        return { url, body };
-      }
-
-      const model = body.get('model');
-      const file = body.get('file');
-
-      return {
-        url,
-        body: {
-          model: typeof model === 'string' ? model : String(model ?? ''),
-          fileName: file instanceof File ? file.name : 'audio-file',
-          fileSize: file instanceof File ? file.size : 0,
-        },
-      };
-    },
-  });
+  useLLMRecording('core-src-voice-aisdk-__tests__-aisdk-voice.e2e');
 
   const outputDir = path.join(process.cwd(), 'test-outputs');
 
