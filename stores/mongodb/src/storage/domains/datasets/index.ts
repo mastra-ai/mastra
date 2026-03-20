@@ -464,14 +464,26 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         });
       }
 
+      // Short-circuit if no mutable fields are provided
+      const hasChanges =
+        args.input !== undefined ||
+        args.groundTruth !== undefined ||
+        args.requestContext !== undefined ||
+        args.metadata !== undefined ||
+        args.source !== undefined;
+
+      if (!hasChanges) {
+        return existing;
+      }
+
       const now = new Date();
       const versionId = randomUUID();
 
-      const mergedInput = args.input ?? existing.input;
-      const mergedGroundTruth = args.groundTruth ?? existing.groundTruth;
-      const mergedRequestContext = args.requestContext ?? existing.requestContext;
-      const mergedMetadata = args.metadata ?? existing.metadata;
-      const mergedSource = args.source ?? existing.source;
+      const mergedInput = args.input !== undefined ? args.input : existing.input;
+      const mergedGroundTruth = args.groundTruth !== undefined ? args.groundTruth : existing.groundTruth;
+      const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
+      const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
+      const mergedSource = args.source !== undefined ? args.source : existing.source;
 
       const datasetsCollection = await this.getCollection(TABLE_DATASETS);
       const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
