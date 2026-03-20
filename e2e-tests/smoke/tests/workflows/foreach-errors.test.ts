@@ -9,7 +9,10 @@ describe('foreach error handling', () => {
       });
 
       expect(data.status).toBe('failed');
-      expect(data.error).toBeDefined();
+      expect(data.error).toEqual({
+        message: 'Item "FAIL" failed processing',
+        name: 'Error',
+      });
     });
 
     it('should succeed when no items throw', async () => {

@@ -118,5 +118,25 @@ describe('suspend/resume workflows', () => {
         items: ['first', 'second', 'third'],
       });
     });
+
+    it('should execute once and stop when starting at threshold (do-while semantics)', async () => {
+      // iteration starts at 3 (threshold). do-while: body executes first, then checks.
+      // Body suspends → resume → iteration becomes 4 → condition (4 < 3) is false → done.
+      const { runId, data: start } = await startWorkflow('loop-suspend', {
+        inputData: { iteration: 3, items: [] },
+      });
+      expect(start.status).toBe('suspended');
+
+      const { data: final } = await resumeWorkflow('loop-suspend', runId, {
+        step: 'loop-with-suspend',
+        resumeData: { value: 'only' },
+      });
+
+      expect(final.status).toBe('success');
+      expect(final.result).toEqual({
+        iteration: 4,
+        items: ['only'],
+      });
+    });
   });
 });

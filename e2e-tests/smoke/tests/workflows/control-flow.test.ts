@@ -24,6 +24,17 @@ describe('control flow workflows', () => {
         'handle-negative': { result: 'Negative: -7' },
       });
     });
+
+    it('should take the positive branch for value 0 (boundary: >= 0)', async () => {
+      const { data } = await startWorkflow('branch-workflow', {
+        inputData: { value: 0 },
+      });
+
+      expect(data.status).toBe('success');
+      expect(data.result).toEqual({
+        'handle-positive': { result: 'Positive: 0' },
+      });
+    });
   });
 
   describe('parallel-workflow', () => {
@@ -50,6 +61,17 @@ describe('control flow workflows', () => {
       expect(data.status).toBe('success');
       expect(data.result).toEqual({ count: 5 });
     });
+
+    it('should execute at least once even when starting at threshold (do-while semantics)', async () => {
+      const { data } = await startWorkflow('dowhile-workflow', {
+        inputData: { count: 5 },
+      });
+
+      // do-while: body executes first, then condition is checked.
+      // count starts at 5 → increments to 6 → condition (6 < 5) is false → stops.
+      expect(data.status).toBe('success');
+      expect(data.result).toEqual({ count: 6 });
+    });
   });
 
   describe('dountil-workflow', () => {
@@ -60,6 +82,17 @@ describe('control flow workflows', () => {
 
       expect(data.status).toBe('success');
       expect(data.result).toEqual({ total: 50 });
+    });
+
+    it('should execute at least once even when starting at threshold (do-until semantics)', async () => {
+      const { data } = await startWorkflow('dountil-workflow', {
+        inputData: { total: 50 },
+      });
+
+      // do-until: body executes first, then condition is checked.
+      // total starts at 50 → adds 10 → 60 → condition (60 >= 50) is true → stops.
+      expect(data.status).toBe('success');
+      expect(data.result).toEqual({ total: 60 });
     });
   });
 

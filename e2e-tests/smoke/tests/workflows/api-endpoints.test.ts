@@ -75,7 +75,7 @@ describe('API endpoint variants', () => {
     });
   });
 
-describe('/time-travel-stream', () => {
+  describe('/time-travel-stream', () => {
     it('should stream a time-travel re-execution', async () => {
       // First complete a run
       const { runId } = await startWorkflow('sequential-steps', {
@@ -98,47 +98,12 @@ describe('/time-travel-stream', () => {
 
       const stepResults = chunks.filter((c: any) => c.type === 'workflow-step-result');
       const lastResult = stepResults[stepResults.length - 1];
-      expect(lastResult.payload.output.message).toContain('Charlie');
+      expect(lastResult.payload.output).toEqual({ message: 'Hey Charlie! Goodbye, Charlie!' });
     });
   });
 
-  describe('/restart-async', () => {
-    it('should restart an active workflow and return the result', async () => {
-      const runId = crypto.randomUUID();
-
-      // Create and fire-and-forget start (cancelable-workflow has 60s sleep)
-      await fetchApi(`/api/workflows/cancelable-workflow/create-run?runId=${runId}`, {
-        method: 'POST',
-      });
-      await fetchApi(`/api/workflows/cancelable-workflow/start?runId=${runId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inputData: { label: 'restart-async-test' } }),
-      });
-
-      // Wait for it to enter the sleep state
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Restart-async blocks until the restarted run completes (or sleeps again)
-      // Since the restarted run will also hit the 60s sleep, use a short timeout
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-
-      try {
-        const res = await fetchApi(`/api/workflows/cancelable-workflow/restart-async?runId=${runId}`, {
-          method: 'POST',
-          body: JSON.stringify({}),
-          signal: controller.signal,
-        });
-        // If we get a response, it should be valid
-        expect(res.status).toBe(200);
-      } catch {
-        // AbortError is expected — restart-async blocks and the restarted
-        // workflow will sleep for 60s. The important thing is that the
-        // request was accepted (we'd get an immediate error if not).
-      } finally {
-        clearTimeout(timeout);
-      }
-    });
-  });
+  // Note: /restart-async (blocking variant) is not tested here because it blocks until
+  // the restarted workflow completes. Since cancelable-workflow has a 60s sleep, this
+  // would either time out or require aborting — making the test unreliable.
+  // The fire-and-forget /restart endpoint is tested in run-management.test.ts.
 });

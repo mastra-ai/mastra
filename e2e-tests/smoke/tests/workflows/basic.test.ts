@@ -24,20 +24,49 @@ describe('basic workflows', () => {
     });
 
     it('should reject invalid input (value too high)', async () => {
-      const { data } = await startWorkflow('schema-validation', {
+      const { status, data } = await startWorkflow('schema-validation', {
         inputData: { value: 200 },
       });
 
-      // Input validation happens before workflow runs — returns error, not status
-      expect(data.error).toBeDefined();
+      expect(status).toBe(500);
+      expect(data.error).toContain('Too big');
+      expect(data.error).toContain('<=100');
     });
 
     it('should reject invalid input (wrong type)', async () => {
-      const { data } = await startWorkflow('schema-validation', {
+      const { status, data } = await startWorkflow('schema-validation', {
         inputData: { value: 'not-a-number' },
       });
 
-      expect(data.error).toBeDefined();
+      expect(status).toBe(500);
+      expect(data.error).toContain('expected number, received string');
+    });
+
+    it('should accept boundary value 0 (minimum)', async () => {
+      const { data } = await startWorkflow('schema-validation', {
+        inputData: { value: 0 },
+      });
+
+      expect(data.status).toBe('success');
+      expect(data.result).toEqual({ result: 0 });
+    });
+
+    it('should accept boundary value 100 (maximum)', async () => {
+      const { data } = await startWorkflow('schema-validation', {
+        inputData: { value: 100 },
+      });
+
+      expect(data.status).toBe('success');
+      expect(data.result).toEqual({ result: 200 });
+    });
+
+    it('should reject value below minimum', async () => {
+      const { status, data } = await startWorkflow('schema-validation', {
+        inputData: { value: -1 },
+      });
+
+      expect(status).toBe(500);
+      expect(data.error).toContain('Too small');
     });
   });
 

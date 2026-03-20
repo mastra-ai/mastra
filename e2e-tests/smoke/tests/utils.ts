@@ -198,16 +198,11 @@ export async function pollWorkflowRun(
 
 /**
  * Parse \x1E-delimited stream chunks.
+ * Throws on malformed JSON rather than silently returning raw strings.
  */
 function parseStreamChunks(text: string): any[] {
   return text
     .split('\x1E')
     .filter(s => s.trim().length > 0)
-    .map(s => {
-      try {
-        return JSON.parse(s);
-      } catch {
-        return s;
-      }
-    });
+    .map(s => JSON.parse(s));
 }

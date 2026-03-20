@@ -23,24 +23,21 @@ describe('edge cases', () => {
   });
 
   describe('invalid operations', () => {
-    it('should handle resuming a completed (non-suspended) run', async () => {
+    it('should return 500 when resuming a completed (non-suspended) run', async () => {
       const { runId } = await startWorkflow('sequential-steps', {
         inputData: { name: 'completed-resume-test' },
       });
 
-      // Try to resume a completed run — should error or return non-success
       const { status, data } = await resumeWorkflow('sequential-steps', runId, {
         step: 'add-greeting',
         resumeData: {},
       });
 
-      // The server should indicate this is not valid
-      // Could be an error status or an error in the response body
-      const isError = status >= 400 || data.error || data.status === 'failed';
-      expect(isError).toBe(true);
+      expect(status).toBe(500);
+      expect(data.error).toBe('This workflow run was not suspended');
     });
 
-    it('should handle time-travel with non-existent step', async () => {
+    it('should return 500 when time-traveling to non-existent step', async () => {
       const { runId } = await startWorkflow('sequential-steps', {
         inputData: { name: 'bad-step-test' },
       });
@@ -56,8 +53,8 @@ describe('edge cases', () => {
         },
       );
 
-      const isError = status >= 400 || data.error || data.status === 'failed';
-      expect(isError).toBe(true);
+      expect(status).toBe(500);
+      expect(data.error).toContain("Time travel target step not found in execution graph: 'nonexistent-step'");
     });
   });
 

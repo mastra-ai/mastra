@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fetchJson, fetchApi, startWorkflow } from '../utils.js';
+import { fetchJson, fetchApi, startWorkflow, pollWorkflowRun } from '../utils.js';
 
 describe('run management', () => {
   describe('workflow discovery', () => {
@@ -29,11 +29,12 @@ describe('run management', () => {
 
       const { data } = await fetchJson<any>('/api/workflows/sequential-steps/runs');
 
-      expect(data.runs).toBeDefined();
-      expect(data.runs.length).toBeGreaterThan(0);
-
-      const run = data.runs.find((r: any) => r.runId === runId);
-      expect(run).toBeDefined();
+      const targetRun = data.runs.find((r: any) => r.runId === runId);
+      expect(targetRun).toBeDefined();
+      expect(targetRun.runId).toBe(runId);
+      expect(targetRun.workflowName).toBe('sequential-steps');
+      expect(targetRun.snapshot.status).toBe('success');
+      expect(targetRun.snapshot.result).toEqual({ message: 'Hello, run-list-test! Goodbye, run-list-test!' });
     });
 
     it('should get run details by ID', async () => {
@@ -45,7 +46,7 @@ describe('run management', () => {
 
       expect(data.runId).toBe(runId);
       expect(data.status).toBe('success');
-      expect(data.result).toBeDefined();
+      expect(data.result).toEqual({ message: 'Hello, run-detail-test! Goodbye, run-detail-test!' });
     });
 
     it('should delete a run', async () => {
@@ -83,8 +84,8 @@ describe('run management', () => {
       });
       expect(startRes.status).toBe(200);
 
-      // Give it a moment to enter the sleep state
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Poll until the run enters sleeping state
+      await pollWorkflowRun('cancelable-workflow', runId, ['sleeping', 'waiting']);
 
       // Cancel
       const cancelRes = await fetchApi(`/api/workflows/cancelable-workflow/runs/${runId}/cancel`, {
@@ -116,7 +117,7 @@ describe('run management', () => {
       );
 
       expect(data.status).toBe('success');
-      expect(JSON.stringify(data.result)).toContain('Bob');
+      expect(data.result).toEqual({ message: 'Hi Bob! Goodbye, Bob!' });
     });
   });
 
@@ -139,8 +140,8 @@ describe('run management', () => {
       });
       expect(startRes.status).toBe(200);
 
-      // Give it a moment to enter the sleep step (becomes "active")
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Poll until the run enters sleeping state
+      await pollWorkflowRun('cancelable-workflow', runId, ['sleeping', 'waiting']);
 
       // Restart (fire-and-forget) — the run should be re-created and started fresh
       const restartRes = await fetchApi(`/api/workflows/cancelable-workflow/restart?runId=${runId}`, {
