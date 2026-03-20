@@ -5,6 +5,7 @@ import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { ChunkFrom } from '../../../stream/types';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
+import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
@@ -545,7 +546,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
-        const result = await tool.execute(args, toolOptions);
+        const rawResult = await tool.execute(args, toolOptions);
+        const result = ensureSerializable(rawResult);
 
         // Call onOutput hook after successful execution
         if (tool && 'onOutput' in tool && typeof (tool as any).onOutput === 'function') {

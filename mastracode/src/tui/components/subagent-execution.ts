@@ -76,7 +76,11 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
       if (toolCall.name === name && !toolCall.done) {
         toolCall.done = true;
         toolCall.isError = isError;
-        toolCall.result = typeof result === 'string' ? result : JSON.stringify(result ?? '');
+        try {
+          toolCall.result = typeof result === 'string' ? result : JSON.stringify(result ?? '');
+        } catch {
+          toolCall.result = String(result);
+        }
         break;
       }
     }

@@ -9,6 +9,7 @@ import { toStandardSchema } from '../schema';
 import type { InferPublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
+import { safeStringify } from '../utils';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
@@ -2393,7 +2394,7 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
         const tool = ds.activeTools.get(event.toolCallId);
         if (tool) {
           tool.partialResult =
-            typeof event.partialResult === 'string' ? event.partialResult : JSON.stringify(event.partialResult);
+            typeof event.partialResult === 'string' ? event.partialResult : safeStringify(event.partialResult);
         }
         break;
       }

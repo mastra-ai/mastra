@@ -99,7 +99,11 @@ function formatArgs(args: unknown): string[] {
     } else if (typeof value === 'string') {
       valueStr = value.length > 50 ? `"${value.slice(0, 47)}..."` : `"${value}"`;
     } else if (typeof value === 'object') {
-      valueStr = JSON.stringify(value);
+      try {
+        valueStr = JSON.stringify(value);
+      } catch {
+        valueStr = String(value);
+      }
       if (valueStr.length > 50) {
         valueStr = valueStr.slice(0, 47) + '...';
       }
