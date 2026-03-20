@@ -50,7 +50,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
   },
   {
     name: 'model',
-    type: 'string | LanguageModel | DynamicModel | ModelWithRetries[]',
+    type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
     description:
       'Model for both the Observer and Reflector agents. Sets the model for both at once. Cannot be used together with `observation.model` or `reflection.model` — an error will be thrown if both are set. When using `observationalMemory: true`, defaults to `google/gemini-2.5-flash`. When passing a config object, this or `observation.model`/`reflection.model` must be set. Use `"default"` to explicitly use the default model (`google/gemini-2.5-flash`).',
     isOptional: true,
@@ -91,7 +91,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
         parameters: [
           {
             name: 'model',
-            type: 'string | LanguageModel | DynamicModel | ModelWithRetries[]',
+            type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
             description:
               'Model for the Observer agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `reflection.model`.',
             isOptional: true,
@@ -202,7 +202,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
         parameters: [
           {
             name: 'model',
-            type: 'string | LanguageModel | DynamicModel | ModelWithRetries[]',
+            type: 'string | LanguageModel | DynamicModel | ModelByInputTokens | ModelWithRetries[]',
             description:
               'Model for the Reflector agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `observation.model`.',
             isOptional: true,
@@ -891,6 +891,57 @@ When `retrieval: true` is set with `scope: 'thread'`, OM registers a `recall` to
     type: 'number',
     isOptional: true,
     description: 'Approximate number of tokens that were trimmed when `truncated` is true.',
+  },
+]}
+/>
+
+### ModelByInputTokens
+
+`ModelByInputTokens` selects a model based on the input token count. It chooses the model for the smallest threshold that covers the actual input size.
+
+#### Constructor
+
+```typescript
+new ModelByInputTokens(config)
+```
+
+Where `config` is an object with `upTo` keys that map token thresholds (numbers) to model targets.
+
+#### Example
+
+```typescript
+import { ModelByInputTokens } from '@mastra/core/llm'
+
+const selector = new ModelByInputTokens({
+  upTo: {
+    10_000: 'google/gemini-2.5-flash', // Fast for small inputs
+    40_000: 'openai/gpt-4o', // Stronger for medium inputs
+    1_000_000: 'openai/gpt-4.5', // Most capable for large inputs
+  },
+})
+```
+
+#### Behavior
+
+- Thresholds are sorted internally, so the order in the config object does not matter.
+- `inputTokens ≤ smallest threshold` → uses that threshold's model
+- `inputTokens > largest threshold` → throws an error
+- OM automatically sets the input token count in the request context before resolving the model
+
+#### Methods
+
+<PropertiesTable
+  content={[
+  {
+    name: 'resolve',
+    type: '(inputTokens: number) => MastraModelConfig',
+    description:
+      'Returns the model for the given input token count. Throws if inputTokens exceeds the largest configured threshold.',
+  },
+  {
+    name: 'getThresholds',
+    type: '() => number[]',
+    description: 'Returns the configured thresholds in ascending order. Useful for introspection.',
   },
 ]}
 />
