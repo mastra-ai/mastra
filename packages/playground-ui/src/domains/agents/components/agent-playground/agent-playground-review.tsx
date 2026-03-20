@@ -76,6 +76,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
   const [showCompleted, setShowCompleted] = useState(false);
 
   // Analyze config dialog
+  const analyzeContentRef = useRef<HTMLDivElement>(null);
   const [showAnalyzeDialog, setShowAnalyzeDialog] = useState(false);
   const [analyzeMode, setAnalyzeMode] = useState<'untagged' | 'selected'>('untagged');
   const [analyzePrompt, setAnalyzePrompt] = useState('');
@@ -606,7 +607,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
 
       {/* Analyze configuration dialog */}
       <Dialog open={showAnalyzeDialog} onOpenChange={setShowAnalyzeDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent ref={analyzeContentRef} className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Analyze {analyzeMode === 'untagged' ? 'Untagged' : 'Selected'} Items</DialogTitle>
           </DialogHeader>
@@ -624,10 +625,11 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                         setAnalyzeModel('');
                       }}
                       size="sm"
+                      container={analyzeContentRef}
                     />
                   </div>
                   <div className="flex-1">
-                    <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} size="sm" />
+                    <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} size="sm" container={analyzeContentRef} />
                   </div>
                 </div>
               </div>

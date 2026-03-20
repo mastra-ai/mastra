@@ -10,6 +10,7 @@ import {
   SchemaRequestContextProvider,
   PlaygroundModelProvider,
   ReviewQueueProvider,
+  GenerationProvider,
 } from '@mastra/playground-ui';
 import type { AgentPageTab } from '@mastra/playground-ui';
 import { useParams, useLocation } from 'react-router';
@@ -67,7 +68,9 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   return (
     <SchemaRequestContextProvider>
       <PlaygroundModelProvider defaultProvider={defaultProvider} defaultModel={defaultModel}>
-        <ReviewQueueProvider>{content}</ReviewQueueProvider>
+        <GenerationProvider>
+          <ReviewQueueProvider>{content}</ReviewQueueProvider>
+        </GenerationProvider>
       </PlaygroundModelProvider>
     </SchemaRequestContextProvider>
   );

@@ -383,13 +383,13 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     if (isCodeAgentOverride) {
       // Code agent overrides only need instructions to be filled
       const instructionsDone = (watched.instructionBlocks ?? []).some(
-        b => b.type === 'prompt_block_ref' || (b.type === 'prompt_block' && b.content?.trim()),
+        b => b.type === 'prompt_block_ref' || (b.type === 'prompt_block' && typeof b.content === 'string' && b.content.trim()),
       );
       return instructionsDone;
     }
     const identityDone = !!watched.name && !!watched.model?.provider && !!watched.model?.name;
     const instructionsDone = (watched.instructionBlocks ?? []).some(
-      b => b.type === 'prompt_block_ref' || (b.type === 'prompt_block' && b.content?.trim()),
+      b => b.type === 'prompt_block_ref' || (b.type === 'prompt_block' && typeof b.content === 'string' && b.content.trim()),
     );
     return identityDone && instructionsDone;
   }, [isCodeAgentOverride, watched.name, watched.model?.provider, watched.model?.name, watched.instructionBlocks]);

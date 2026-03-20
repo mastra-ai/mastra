@@ -3,6 +3,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Txt } from '@/ds/components/Txt';
 import { Button } from '@/ds/components/Button';
 import { Searchbar } from '@/ds/components/Searchbar';
+import { Spinner } from '@/ds/components/Spinner';
 
 import { Icon } from '@/ds/icons/Icon';
 import { ScrollArea } from '@/ds/components/ScrollArea';
@@ -18,7 +19,8 @@ import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { useWatch } from 'react-hook-form';
 import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
-import { GenerateItemsDialog } from '@/domains/datasets/components/generate-items-dialog';
+import { GenerateConfigDialog, GenerateReviewDialog } from '@/domains/datasets/components/generate-items-dialog';
+import { useGenerationTasks } from '@/domains/datasets/context/generation-context';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useReviewQueue } from '../../context/review-queue-context';
 import { useStoredAgentMutations } from '../../hooks/use-stored-agents';
@@ -60,8 +62,20 @@ export function AgentPlaygroundEvaluate({
   const [attachScorerSearch, setAttachScorerSearch] = useState('');
   const [generateDatasetId, setGenerateDatasetId] = useState<string | null>(null);
   const [scorerSearch, setScorerSearch] = useState('');
+  const [reviewDatasetId, setReviewDatasetId] = useState<string | null>(null);
   const { addItems } = useReviewQueue();
   const { updateExperimentResult, updateDataset } = useDatasetMutations();
+  const { tasks: generationTasks, dismissTask } = useGenerationTasks();
+
+  // Auto-open review dialog when generation completes
+  useEffect(() => {
+    for (const [dsId, task] of Object.entries(generationTasks)) {
+      if (task.status === 'review-ready' && !reviewDatasetId) {
+        setReviewDatasetId(dsId);
+        break;
+      }
+    }
+  }, [generationTasks, reviewDatasetId]);
 
   // Handle pending scorer items from Review tab
   useEffect(() => {
@@ -322,28 +336,71 @@ export function AgentPlaygroundEvaluate({
                     {datasets.map(ds => {
                       const exp = datasetExperimentMap[ds.id];
                       const isActive = view.type === 'dataset' && view.id === ds.id;
+                      const genTask = generationTasks[ds.id];
+                      const isGenerating = genTask?.status === 'generating';
+                      const hasReviewItems = genTask?.status === 'review-ready';
+                      const hasError = genTask?.status === 'error';
                       return (
                         <NavItem
                           key={ds.id}
                           isActive={isActive}
                           icon={<Database />}
                           label={ds.name}
-                          onClick={() => setView({ type: 'dataset', id: ds.id })}
-                          badge={exp ? <ExperimentBadge experiment={exp} /> : undefined}
+                          onClick={() => {
+                            if (hasReviewItems) {
+                              setReviewDatasetId(ds.id);
+                            }
+                            setView({ type: 'dataset', id: ds.id });
+                          }}
+                          badge={
+                            isGenerating ? (
+                              <span className="flex items-center gap-1 text-accent1">
+                                <Spinner className="w-3 h-3" />
+                                <Txt variant="ui-xs" className="text-accent1">Generating...</Txt>
+                              </span>
+                            ) : hasReviewItems ? (
+                              <button
+                                type="button"
+                                onClick={(e: React.MouseEvent) => {
+                                  e.stopPropagation();
+                                  setReviewDatasetId(ds.id);
+                                }}
+                                className="text-xs text-green-400 hover:text-green-300 font-medium"
+                              >
+                                Review items
+                              </button>
+                            ) : hasError ? (
+                              <button
+                                type="button"
+                                onClick={(e: React.MouseEvent) => {
+                                  e.stopPropagation();
+                                  dismissTask(ds.id);
+                                }}
+                                className="text-xs text-red-400 hover:text-red-300"
+                                title={genTask.error}
+                              >
+                                Failed
+                              </button>
+                            ) : exp ? (
+                              <ExperimentBadge experiment={exp} />
+                            ) : undefined
+                          }
                           action={
-                            <button
-                              type="button"
-                              onClick={(e: React.MouseEvent) => {
-                                e.stopPropagation();
-                                setGenerateDatasetId(ds.id);
-                              }}
-                              className="text-neutral3 hover:text-accent1 transition-colors p-0.5"
-                              title="Generate test data with AI"
-                            >
-                              <Icon size="sm">
-                                <Sparkles />
-                              </Icon>
-                            </button>
+                            isGenerating ? undefined : (
+                              <button
+                                type="button"
+                                onClick={(e: React.MouseEvent) => {
+                                  e.stopPropagation();
+                                  setGenerateDatasetId(ds.id);
+                                }}
+                                className="text-neutral3 hover:text-accent1 transition-colors p-0.5"
+                                title="Generate test data with AI"
+                              >
+                                <Icon size="sm">
+                                  <Sparkles />
+                                </Icon>
+                              </button>
+                            )
                           }
                         />
                       );
@@ -520,10 +577,21 @@ export function AgentPlaygroundEvaluate({
         targetIds={[agentId]}
       />
       {generateDatasetId && (
-        <GenerateItemsDialog
+        <GenerateConfigDialog
           datasetId={generateDatasetId}
           agentContext={agentContext}
           onDismiss={() => setGenerateDatasetId(null)}
+        />
+      )}
+      {reviewDatasetId && generationTasks[reviewDatasetId]?.status === 'review-ready' && generationTasks[reviewDatasetId]?.items && (
+        <GenerateReviewDialog
+          datasetId={reviewDatasetId}
+          items={generationTasks[reviewDatasetId].items!}
+          modelId={generationTasks[reviewDatasetId].modelId}
+          onDismiss={() => {
+            dismissTask(reviewDatasetId);
+            setReviewDatasetId(null);
+          }}
         />
       )}
 

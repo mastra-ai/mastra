@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { resolveModelConfig } from '@mastra/core/llm';
+import { RequestContext } from '@mastra/core/request-context';
 import type { TargetType } from '@mastra/core/storage';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
@@ -519,14 +520,24 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { targetType, targetId, scorerIds, version, maxConcurrency, requestContext } = params as {
+      const {
+        targetType,
+        targetId,
+        scorerIds,
+        version,
+        maxConcurrency,
+        requestContext: rawRequestContext,
+      } = params as {
         targetType: 'agent' | 'workflow' | 'scorer';
         targetId: string;
         scorerIds?: string[];
         version?: number;
         maxConcurrency?: number;
-        requestContext?: Record<string, unknown>;
+        requestContext?: Record<string, unknown> | RequestContext;
       };
+      // The adapter middleware merges body + query requestContext into a RequestContext instance.
+      // startExperimentAsync expects a plain Record, so convert it.
+      const requestContext = rawRequestContext instanceof RequestContext ? rawRequestContext.all : rawRequestContext;
       const ds = await mastra.datasets.get({ id: datasetId });
       const result = await ds.startExperimentAsync({
         targetType,
