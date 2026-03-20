@@ -20,6 +20,7 @@ import { aliasHono } from '../plugins/hono-alias';
 import { moduleResolveMap } from '../plugins/module-resolve-map';
 import { nodeGypDetector } from '../plugins/node-gyp-detector';
 import { protocolExternalResolver } from '../plugins/protocol-external-resolver';
+import { relativeExtensionResolver } from '../plugins/relative-extension-resolver';
 import { subpathExternalsResolver } from '../plugins/subpath-externals-resolver';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
 import type { DependencyMetadata } from '../types';
@@ -240,6 +241,7 @@ async function getInputPlugins(
       ignoreTryCatch: false,
     }),
     bundlerOptions.noBundling ? null : nodeResolve(getNodeResolveOptions(platform)),
+    bundlerOptions.noBundling ? relativeExtensionResolver() : null,
     bundlerOptions.noBundling ? esmShim() : null,
     // hono is imported from deployer, so we need to resolve from here instead of the project root
     aliasHono(),
