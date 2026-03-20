@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { startWorkflow, resumeWorkflow } from '../utils.js';
+import { startWorkflow, resumeWorkflow, getWorkflowRun } from '../utils.js';
 
 describe('concurrent suspend/resume', () => {
   it('should resume both parallel branches simultaneously', async () => {
@@ -19,13 +19,28 @@ describe('concurrent suspend/resume', () => {
       }),
     ]);
 
-    // At least one should complete successfully with the full result
-    // The other may still show suspended (race condition) or also succeed
-    const results = [resultA.data, resultB.data];
-    const successResult = results.find(r => r.status === 'success');
+    // Neither response should be a server error
+    expect(resultA.status).toBeLessThan(500);
+    expect(resultB.status).toBeLessThan(500);
 
+    // Each response should be either 'success' or 'suspended' — never 'failed'
+    const results = [resultA.data, resultB.data];
+    for (const r of results) {
+      expect(['success', 'suspended']).toContain(r.status);
+    }
+
+    // At least one should complete successfully with the full result
+    const successResult = results.find(r => r.status === 'success');
     expect(successResult).toBeDefined();
     expect(successResult.result).toEqual({
+      'suspend-branch-a': { branchA: 'concurrent-a' },
+      'suspend-branch-b': { branchB: 'concurrent-b' },
+    });
+
+    // Verify final run state is definitely success with both branches
+    const { data: finalRun } = await getWorkflowRun('parallel-suspend', runId);
+    expect(finalRun.status).toBe('success');
+    expect(finalRun.result).toEqual({
       'suspend-branch-a': { branchA: 'concurrent-a' },
       'suspend-branch-b': { branchB: 'concurrent-b' },
     });

@@ -11,6 +11,6 @@ describe('sleep workflows', () => {
     expect(data.result.label).toBe('sleep-test');
     // Sleep was 2000ms — allow some tolerance
     expect(data.result.sleptMs).toBeGreaterThanOrEqual(1500);
-    expect(data.result.sleptMs).toBeLessThan(10000);
+    expect(data.result.sleptMs).toBeLessThan(5000);
   });
 });

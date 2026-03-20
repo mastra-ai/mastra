@@ -14,13 +14,16 @@ describe('error handling workflows', () => {
   });
 
   describe('failure-workflow', () => {
-    it('should report failed status with error details', async () => {
+    it('should report failed status with the intentional error', async () => {
       const { data } = await startWorkflow('failure-workflow', {
         inputData: { input: 'will-fail' },
       });
 
       expect(data.status).toBe('failed');
-      expect(data.error).toBeDefined();
+      expect(data.error).toEqual({
+        message: 'Intentional failure for smoke test',
+        name: 'Error',
+      });
     });
   });
 });

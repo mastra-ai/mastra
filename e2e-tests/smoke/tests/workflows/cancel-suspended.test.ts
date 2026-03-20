@@ -33,14 +33,13 @@ describe('cancel suspended workflow', () => {
       method: 'POST',
     });
 
-    // Attempt to resume the cancelled run
+    // Attempt to resume the cancelled run — should get 500 with clear error
     const { status, data } = await resumeWorkflow('basic-suspend', runId, {
       step: 'await-approval',
       resumeData: { approved: true },
     });
 
-    // Should fail — can't resume a cancelled run
-    const isError = status >= 400 || data.error || data.status === 'failed' || data.status === 'canceled';
-    expect(isError).toBe(true);
+    expect(status).toBe(500);
+    expect(data.error).toBe('This workflow run was not suspended');
   });
 });

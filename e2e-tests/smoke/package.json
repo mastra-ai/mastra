@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@mastra/core": "alpha",
-    "@mastra/libsql": "alpha"
+    "@mastra/libsql": "alpha",
+    "@mastra/memory": "alpha"
   },
   "devDependencies": {
     "mastra": "alpha",

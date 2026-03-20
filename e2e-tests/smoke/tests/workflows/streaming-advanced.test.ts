@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { streamWorkflow, streamResumeWorkflow } from '../utils.js';
+import { streamWorkflow, streamResumeWorkflow, getWorkflowRun } from '../utils.js';
 
 describe('advanced streaming', () => {
   describe('stream failure', () => {
@@ -15,6 +15,16 @@ describe('advanced streaming', () => {
       // workflow-finish should report failed status
       const finish = chunks[chunks.length - 1];
       expect(finish.payload.workflowStatus).toBe('failed');
+
+      // The step result should contain the specific error
+      const stepResults = chunks.filter((c: any) => c.type === 'workflow-step-result');
+      expect(stepResults).toHaveLength(1);
+      expect(stepResults[0].payload.stepName).toBe('always-fails');
+      expect(stepResults[0].payload.status).toBe('failed');
+      expect(stepResults[0].payload.error).toEqual({
+        message: 'Intentional failure for smoke test',
+        name: 'Error',
+      });
     });
   });
 
@@ -32,11 +42,10 @@ describe('advanced streaming', () => {
       const finish = chunks[chunks.length - 1];
       expect(finish.payload.workflowStatus).toBe('success');
 
-      // Should have a step result with the successful output
+      // Should have exactly 1 step result (the successful attempt)
       const stepResults = chunks.filter((c: any) => c.type === 'workflow-step-result');
-      expect(stepResults.length).toBeGreaterThanOrEqual(1);
-      const lastResult = stepResults[stepResults.length - 1];
-      expect(lastResult.payload.output).toEqual({
+      expect(stepResults).toHaveLength(1);
+      expect(stepResults[0].payload.output).toEqual({
         result: 'stream-retry',
         attempts: 3,
       });
@@ -62,7 +71,8 @@ describe('advanced streaming', () => {
       expect(finish.type).toBe('workflow-finish');
       expect(finish.payload.workflowStatus).toBe('suspended');
 
-      // Resume branch A via stream
+      // Resume branches sequentially to ensure deterministic behavior.
+      // Resume branch A first.
       const { chunks: resumeAChunks } = await streamResumeWorkflow('parallel-suspend', runId, {
         step: 'suspend-branch-a',
         resumeData: { dataA: 'streamed-a' },
@@ -71,21 +81,26 @@ describe('advanced streaming', () => {
       const resumeAFinish = resumeAChunks[resumeAChunks.length - 1];
       expect(resumeAFinish.type).toBe('workflow-finish');
 
-      // After resuming A, B may still be suspended or the workflow may already be complete
-      // depending on internal parallel resolution. Either outcome is valid.
-      if (resumeAFinish.payload.workflowStatus === 'suspended') {
-        // Resume branch B via stream
-        const { chunks: resumeBChunks } = await streamResumeWorkflow('parallel-suspend', runId, {
-          step: 'suspend-branch-b',
-          resumeData: { dataB: 'streamed-b' },
-        });
+      // Resume branch B
+      const { chunks: resumeBChunks } = await streamResumeWorkflow('parallel-suspend', runId, {
+        step: 'suspend-branch-b',
+        resumeData: { dataB: 'streamed-b' },
+      });
 
-        const resumeBFinish = resumeBChunks[resumeBChunks.length - 1];
-        expect(resumeBFinish.type).toBe('workflow-finish');
-        expect(resumeBFinish.payload.workflowStatus).toBe('success');
-      } else {
-        expect(resumeAFinish.payload.workflowStatus).toBe('success');
-      }
+      const resumeBFinish = resumeBChunks[resumeBChunks.length - 1];
+      expect(resumeBFinish.type).toBe('workflow-finish');
+
+      // The last resume should complete the workflow
+      const finishStatuses = [resumeAFinish.payload.workflowStatus, resumeBFinish.payload.workflowStatus];
+      expect(finishStatuses).toContain('success');
+
+      // Verify final run state has both branches' data
+      const { data: finalRun } = await getWorkflowRun('parallel-suspend', runId);
+      expect(finalRun.status).toBe('success');
+      expect(finalRun.result).toEqual({
+        'suspend-branch-a': { branchA: 'streamed-a' },
+        'suspend-branch-b': { branchB: 'streamed-b' },
+      });
     });
   });
 });

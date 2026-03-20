@@ -1,6 +1,8 @@
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
 
+import { testAgent } from './agents/index.js';
+import { calculatorTool, stringTool, failingTool, noInputTool } from './tools/index.js';
 import { sequentialSteps, schemaValidation, mapBetweenSteps } from './workflows/basic.js';
 import {
   branchWorkflow,
@@ -25,6 +27,15 @@ import {
 import { foreachErrorWorkflow, foreachRetryWorkflow } from './workflows/foreach-errors.js';
 
 export const mastra = new Mastra({
+  agents: {
+    'test-agent': testAgent,
+  },
+  tools: {
+    calculator: calculatorTool,
+    'string-transform': stringTool,
+    'always-fails': failingTool,
+    timestamp: noInputTool,
+  },
   workflows: {
     'sequential-steps': sequentialSteps,
     'schema-validation': schemaValidation,
