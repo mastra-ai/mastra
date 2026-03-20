@@ -305,6 +305,12 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
       const normalizedPerPage = normalizePerPage(perPageInput, 100);
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, normalizedPerPage);
+
+      // Handle perPage = 0 edge case (MongoDB limit(0) disables limit)
+      if (normalizedPerPage === 0) {
+        return { experiments: [], pagination: { total, page, perPage: perPageForResponse, hasMore: total > 0 } };
+      }
+
       const limitValue = perPageInput === false ? total : normalizedPerPage;
 
       const docs = await collection.find(filter).sort({ createdAt: -1 }).skip(offset).limit(limitValue).toArray();
@@ -498,6 +504,12 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
       const normalizedPerPage = normalizePerPage(perPageInput, 100);
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, normalizedPerPage);
+
+      // Handle perPage = 0 edge case (MongoDB limit(0) disables limit)
+      if (normalizedPerPage === 0) {
+        return { results: [], pagination: { total, page, perPage: perPageForResponse, hasMore: total > 0 } };
+      }
+
       const limitValue = perPageInput === false ? total : normalizedPerPage;
 
       const docs = await collection.find(filter).sort({ startedAt: 1 }).skip(offset).limit(limitValue).toArray();
