@@ -658,9 +658,7 @@ describe('Koa Server Adapter', () => {
       app.use(bodyParser());
       const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
 
-      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(
-        /reserved for internal Mastra API routes/,
-      );
+      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(/reserved for internal Mastra API routes/);
     });
 
     it('should throw when a manually constructed route conflicts with a custom prefix', async () => {
@@ -670,9 +668,7 @@ describe('Koa Server Adapter', () => {
       app.use(bodyParser());
       const adapter = new MastraServer({ app, mastra, prefix: '/mastra', customApiRoutes: routes });
 
-      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(
-        /reserved for internal Mastra API routes/,
-      );
+      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(/reserved for internal Mastra API routes/);
     });
 
     it('should throw when a manually constructed route path equals the prefix exactly', async () => {
@@ -682,9 +678,7 @@ describe('Koa Server Adapter', () => {
       app.use(bodyParser());
       const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
 
-      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(
-        /reserved for internal Mastra API routes/,
-      );
+      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(/reserved for internal Mastra API routes/);
     });
 
     it('should not throw for a path that shares a prefix string but is not a sub-path', async () => {
@@ -699,7 +693,7 @@ describe('Koa Server Adapter', () => {
       app.use(bodyParser());
       const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
 
-      await expect(adapter.registerCustomApiRoutes()).resolves.not.toThrow();
+      await expect(adapter.registerCustomApiRoutes()).resolves.toBeUndefined();
     });
 
     it('should not throw for a valid route path with the default prefix', async () => {
@@ -714,7 +708,7 @@ describe('Koa Server Adapter', () => {
       app.use(bodyParser());
       const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
 
-      await expect(adapter.registerCustomApiRoutes()).resolves.not.toThrow();
+      await expect(adapter.registerCustomApiRoutes()).resolves.toBeUndefined();
     });
 
     it('should throw when a no-prefix route conflicts with an internal Mastra route segment', async () => {
@@ -724,7 +718,9 @@ describe('Koa Server Adapter', () => {
       app.use(bodyParser());
       const adapter = new MastraServer({ app, mastra, prefix: '', customApiRoutes: routes });
 
-      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(/conflicts with the reserved internal Mastra API path/);
+      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(
+        /conflicts with the reserved internal Mastra API path/,
+      );
     });
 
     it('should not throw for a non-conflicting route when empty prefix is used', async () => {
@@ -739,7 +735,7 @@ describe('Koa Server Adapter', () => {
       app.use(bodyParser());
       const adapter = new MastraServer({ app, mastra, prefix: '', customApiRoutes: routes });
 
-      await expect(adapter.registerCustomApiRoutes()).resolves.not.toThrow();
+      await expect(adapter.registerCustomApiRoutes()).resolves.toBeUndefined();
     });
   });
 });

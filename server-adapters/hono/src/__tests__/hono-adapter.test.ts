@@ -770,7 +770,7 @@ describe('Hono Server Adapter', () => {
       const app = new Hono();
       const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
 
-      await expect(adapter.registerCustomApiRoutes()).resolves.not.toThrow();
+      await expect(adapter.registerCustomApiRoutes()).resolves.toBeUndefined();
     });
 
     it('should not throw for a valid route path with the default prefix', async () => {
@@ -784,7 +784,7 @@ describe('Hono Server Adapter', () => {
       const app = new Hono();
       const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
 
-      await expect(adapter.registerCustomApiRoutes()).resolves.not.toThrow();
+      await expect(adapter.registerCustomApiRoutes()).resolves.toBeUndefined();
     });
 
     it('should throw when a no-prefix route conflicts with an internal Mastra route segment', async () => {
@@ -793,7 +793,9 @@ describe('Hono Server Adapter', () => {
       const app = new Hono();
       const adapter = new MastraServer({ app, mastra, prefix: '', customApiRoutes: routes });
 
-      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(/conflicts with the reserved internal Mastra API path/);
+      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(
+        /conflicts with the reserved internal Mastra API path/,
+      );
     });
 
     it('should not throw for a non-conflicting route when empty prefix is used', async () => {
@@ -807,7 +809,7 @@ describe('Hono Server Adapter', () => {
       const app = new Hono();
       const adapter = new MastraServer({ app, mastra, prefix: '', customApiRoutes: routes });
 
-      await expect(adapter.registerCustomApiRoutes()).resolves.not.toThrow();
+      await expect(adapter.registerCustomApiRoutes()).resolves.toBeUndefined();
     });
   });
 });

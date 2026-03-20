@@ -606,9 +606,7 @@ describe('Fastify Server Adapter', () => {
       const app = Fastify();
       const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
 
-      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(
-        /reserved for internal Mastra API routes/,
-      );
+      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(/reserved for internal Mastra API routes/);
 
       await app.close();
     });
@@ -619,9 +617,7 @@ describe('Fastify Server Adapter', () => {
       const app = Fastify();
       const adapter = new MastraServer({ app, mastra, prefix: '/mastra', customApiRoutes: routes });
 
-      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(
-        /reserved for internal Mastra API routes/,
-      );
+      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(/reserved for internal Mastra API routes/);
 
       await app.close();
     });
@@ -632,9 +628,7 @@ describe('Fastify Server Adapter', () => {
       const app = Fastify();
       const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
 
-      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(
-        /reserved for internal Mastra API routes/,
-      );
+      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(/reserved for internal Mastra API routes/);
 
       await app.close();
     });
@@ -650,7 +644,7 @@ describe('Fastify Server Adapter', () => {
       const app = Fastify();
       const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
 
-      await expect(adapter.registerCustomApiRoutes()).resolves.not.toThrow();
+      await expect(adapter.registerCustomApiRoutes()).resolves.toBeUndefined();
 
       await app.close();
     });
@@ -666,7 +660,7 @@ describe('Fastify Server Adapter', () => {
       const app = Fastify();
       const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
 
-      await expect(adapter.registerCustomApiRoutes()).resolves.not.toThrow();
+      await expect(adapter.registerCustomApiRoutes()).resolves.toBeUndefined();
 
       await app.close();
     });
@@ -677,7 +671,9 @@ describe('Fastify Server Adapter', () => {
       const app = Fastify();
       const adapter = new MastraServer({ app, mastra, prefix: '', customApiRoutes: routes });
 
-      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(/conflicts with the reserved internal Mastra API path/);
+      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(
+        /conflicts with the reserved internal Mastra API path/,
+      );
 
       await app.close();
     });
@@ -693,7 +689,7 @@ describe('Fastify Server Adapter', () => {
       const app = Fastify();
       const adapter = new MastraServer({ app, mastra, prefix: '', customApiRoutes: routes });
 
-      await expect(adapter.registerCustomApiRoutes()).resolves.not.toThrow();
+      await expect(adapter.registerCustomApiRoutes()).resolves.toBeUndefined();
 
       await app.close();
     });
