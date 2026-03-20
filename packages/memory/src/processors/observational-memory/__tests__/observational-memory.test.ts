@@ -11898,4 +11898,94 @@ describe('OM context loading with no prior observations', () => {
     // Observer should have been called again (either via activation path or new buffering)
     expect(observerCalls.length).toBeGreaterThan(callsAfterTurn1);
   });
+
+  it('should emit data-om-status with non-zero effectiveObservationTokensThreshold', async () => {
+    // Regression test: the processor was hardcoding effectiveObservationTokensThreshold: 0
+    // in emitProgress, causing the TUI to show "memory X/0k" instead of "memory X/40k".
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const storage = createInMemoryStorage();
+    const threadId = 'status-threshold-thread';
+    const resourceId = 'status-threshold-resource';
+
+    const reflectionThreshold = 40000;
+    const mockModel = createStreamCapableMockModel({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+        content: [{ type: 'text' as const, text: '<observations>\n* test\n</observations>' }],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: 5000 },
+      reflection: { observationTokens: reflectionThreshold },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {},
+      },
+    });
+    await storage.saveMessages({
+      messages: [
+        {
+          id: 'status-msg-1',
+          role: 'user' as const,
+          content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Hello' }] },
+          type: 'text',
+          createdAt: new Date(),
+          threadId,
+          resourceId,
+        },
+      ],
+    });
+
+    // Capture the data-om-status part via a mock writer
+    let capturedStatusPart: any = null;
+    const mockWriter = {
+      custom: async (part: any) => {
+        if (part?.type === 'data-om-status') {
+          capturedStatusPart = part;
+        }
+      },
+    };
+
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+    const messageList = new MessageList({ threadId, resourceId });
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      writer: mockWriter as any,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    expect(capturedStatusPart).toBeTruthy();
+    // The reflection threshold must be non-zero — this is what the TUI shows as the denominator
+    const obsThreshold = capturedStatusPart.data.windows.active.observations.threshold;
+    expect(obsThreshold).toBe(reflectionThreshold);
+  });
 });
