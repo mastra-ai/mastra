@@ -3,6 +3,7 @@ import { ChatAdapterChannel } from '@mastra/channel-chat-adapter';
 import { DiscordAdapter } from '@chat-adapter/discord';
 import { Memory } from '@mastra/memory';
 import { ChannelContext } from '@mastra/core/channels';
+import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace';
 
 export const exampleAgent = new Agent({
   id: 'example-agent',
@@ -34,4 +35,9 @@ Keep your responses concise and conversational. If you're writing a long message
       }),
     }),
   },
+  workspace: new Workspace({
+    id: 'example-workspace',
+    filesystem: new LocalFilesystem({ basePath: './workspace' }),
+    sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  }),
 });
