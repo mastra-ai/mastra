@@ -220,7 +220,7 @@ const workspace = new Workspace({
     // Dynamic enabled: disable command execution unless explicitly allowed
     [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
       enabled: async ({ requestContext }) => {
-        return requestContext.get('allowExecution') === 'true'
+        return requestContext['allowExecution'] === 'true'
       },
     },
 

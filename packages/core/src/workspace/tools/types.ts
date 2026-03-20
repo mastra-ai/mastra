@@ -42,7 +42,7 @@ export interface ToolConfigWithArgsContext extends ToolConfigContext {
  *
  * // Dynamic - based on request context
  * requireApproval: async ({ requestContext }) => {
- *   return requestContext.get('userTier') !== 'admin';
+ *   return requestContext['userTier'] !== 'admin';
  * },
  *
  * // Dynamic - based on args (execution-time only)
