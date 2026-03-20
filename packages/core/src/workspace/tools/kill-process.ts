@@ -4,6 +4,7 @@ import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
 import { emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { truncateOutput, sandboxToModelOutput } from './output-helpers';
+import { startWorkspaceSpan } from './tracing';
 
 const KILL_TAIL_LINES = 50;
 
@@ -24,6 +25,14 @@ Use this to stop a long-running background process that was started with execute
     }
 
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS);
+
+    const span = startWorkspaceSpan(context, workspace, {
+      category: 'sandbox',
+      operation: 'killProcess',
+      input: { pid },
+      attributes: { pid: Number(pid) || undefined, sandboxProvider: sandbox.provider },
+    });
+
     const toolCallId = context?.agent?.toolCallId;
 
     // Snapshot output before kill
@@ -44,6 +53,7 @@ Use this to stop a long-running background process that was started with execute
         type: 'data-sandbox-exit',
         data: { exitCode: handle?.exitCode ?? -1, success: false, killed: false, toolCallId },
       });
+      span.end({ success: false });
       return `Process ${pid} was not found or had already exited.`;
     }
 
@@ -67,6 +77,7 @@ Use this to stop a long-running background process that was started with execute
       }
     }
 
+    span.end({ exitCode: handle?.exitCode ?? 137 });
     return parts.join('\n');
   },
 });

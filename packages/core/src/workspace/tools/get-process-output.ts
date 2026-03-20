@@ -4,6 +4,7 @@ import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
 import { emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
+import { startWorkspaceSpan } from './tracing';
 
 export const getProcessOutputTool = createTool({
   id: WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT,
@@ -35,10 +36,18 @@ Use this after starting a background command with execute_command (background: t
 
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT);
 
+    const span = startWorkspaceSpan(context, workspace, {
+      category: 'sandbox',
+      operation: 'getProcessOutput',
+      input: { pid, tail, wait: shouldWait },
+      attributes: { pid: Number(pid) || undefined, sandboxProvider: sandbox.provider },
+    });
+
     const toolCallId = context?.agent?.toolCallId;
 
     const handle = await sandbox.processes.get(pid);
     if (!handle) {
+      span.end({ success: false });
       return `No background process found with PID ${pid}.`;
     }
 
@@ -109,6 +118,7 @@ Use this after starting a background command with execute_command (background: t
       parts.push('', `Exit code: ${handle.exitCode}`);
     }
 
+    span.end({ exitCode: handle.exitCode });
     return parts.join('\n');
   },
 });

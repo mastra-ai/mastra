@@ -70,6 +70,8 @@ export enum SpanType {
   WORKFLOW_WAIT_EVENT = 'workflow_wait_event',
   /** Memory operation (recall, save, delete, update working memory) */
   MEMORY_OPERATION = 'memory_operation',
+  /** Workspace action (filesystem, sandbox, search, skill, mount operations) */
+  WORKSPACE_ACTION = 'workspace_action',
 }
 
 export { EntityType };
@@ -404,6 +406,26 @@ export interface MemoryOperationAttributes extends AIBaseAttributes {
 }
 
 /**
+ * Workspace Action attributes — metadata about the span context.
+ * Operation-specific inputs/outputs are recorded via span input/output,
+ * not as attributes.
+ */
+export interface WorkspaceActionAttributes extends AIBaseAttributes {
+  /** Workspace identifier */
+  workspaceId?: string;
+  /** Human-readable workspace name */
+  workspaceName?: string;
+  /** Action category */
+  category: 'filesystem' | 'sandbox' | 'search' | 'skill' | 'mount';
+  /** Sandbox provider name (e.g. 'e2b', 'docker', 'local') */
+  sandboxProvider?: string;
+  /** Filesystem provider name (e.g. 'local', 'agentfs', 's3') */
+  filesystemProvider?: string;
+  /** Whether the operation succeeded */
+  success?: boolean;
+}
+
+/**
  * AI-specific span types mapped to their attributes
  */
 export interface SpanTypeMap {
@@ -424,6 +446,7 @@ export interface SpanTypeMap {
   [SpanType.WORKFLOW_LOOP]: WorkflowLoopAttributes;
   [SpanType.WORKFLOW_SLEEP]: WorkflowSleepAttributes;
   [SpanType.WORKFLOW_WAIT_EVENT]: WorkflowWaitEventAttributes;
+  [SpanType.WORKSPACE_ACTION]: WorkspaceActionAttributes;
   [SpanType.GENERIC]: AIBaseAttributes;
   [SpanType.MEMORY_OPERATION]: MemoryOperationAttributes;
 }
