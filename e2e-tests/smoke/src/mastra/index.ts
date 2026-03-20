@@ -14,6 +14,15 @@ import { statefulWorkflow, initialStateWorkflow } from './workflows/state.js';
 import { innerWorkflow, outerWorkflow } from './workflows/nested.js';
 import { retryWorkflow, failureWorkflow, cancelableWorkflow } from './workflows/error-handling.js';
 import { sleepWorkflow } from './workflows/sleep.js';
+import { stateSuspendWorkflow, stateLoopWorkflow, stateParallelWorkflow } from './workflows/state-suspend.js';
+import {
+  deepInnerWorkflow,
+  deepMiddleWorkflow,
+  deepNestedWorkflow,
+  nestedSuspendInner,
+  nestedSuspendWorkflow,
+} from './workflows/nested-advanced.js';
+import { foreachErrorWorkflow, foreachRetryWorkflow } from './workflows/foreach-errors.js';
 
 export const mastra = new Mastra({
   workflows: {
@@ -36,6 +45,16 @@ export const mastra = new Mastra({
     'failure-workflow': failureWorkflow,
     'cancelable-workflow': cancelableWorkflow,
     'sleep-workflow': sleepWorkflow,
+    'state-suspend-workflow': stateSuspendWorkflow,
+    'state-loop-workflow': stateLoopWorkflow,
+    'state-parallel-workflow': stateParallelWorkflow,
+    'deep-inner-workflow': deepInnerWorkflow,
+    'deep-middle-workflow': deepMiddleWorkflow,
+    'deep-nested-workflow': deepNestedWorkflow,
+    'nested-suspend-inner': nestedSuspendInner,
+    'nested-suspend-workflow': nestedSuspendWorkflow,
+    'foreach-error-workflow': foreachErrorWorkflow,
+    'foreach-retry-workflow': foreachRetryWorkflow,
   },
   storage: new LibSQLStore({
     id: 'smoke-test',
