@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MCPClient } from '@mastra/mcp';
 import { getBaseUrl } from '../utils.js';
 
@@ -6,11 +6,7 @@ describe('MCP client transport', () => {
   describe('Streamable HTTP transport', () => {
     let client: MCPClient;
 
-    afterAll(async () => {
-      await client?.disconnect();
-    });
-
-    it('should connect and list tools via Streamable HTTP', async () => {
+    beforeAll(async () => {
       const baseUrl = getBaseUrl();
       client = new MCPClient({
         id: 'smoke-http',
@@ -20,7 +16,13 @@ describe('MCP client transport', () => {
           },
         },
       });
+    });
 
+    afterAll(async () => {
+      await client?.disconnect();
+    });
+
+    it('should connect and list tools via Streamable HTTP', async () => {
       const tools = await client.listTools();
 
       // Tools are namespaced as serverName_toolName
@@ -33,49 +35,29 @@ describe('MCP client transport', () => {
       const tools = await client.listTools();
       const calculator = tools['test-mcp_calculator'];
       expect(calculator, 'calculator tool not found').toBeDefined();
+      expect(calculator.execute, 'calculator tool has no execute method').toBeDefined();
 
-      const result = await calculator.execute!({ operation: 'add', a: 10, b: 32 });
+      const result = await calculator.execute({ operation: 'add', a: 10, b: 32 });
 
-      // MCP tool results come as { content: [{ type: 'text', text: '...' }] }
-      expect(result).toBeDefined();
-      const parsed = typeof result === 'string' ? JSON.parse(result) : result;
-      // The result might be wrapped differently depending on transport
-      // Check for the actual value in either format
-      if (parsed.content) {
-        const textContent = parsed.content.find((c: any) => c.type === 'text');
-        expect(textContent).toBeDefined();
-        expect(JSON.parse(textContent.text)).toEqual({ result: 42 });
-      } else {
-        expect(parsed).toEqual({ result: 42 });
-      }
+      expect(result).toEqual({ result: 42 });
     });
 
     it('should execute string-transform tool via Streamable HTTP', async () => {
       const tools = await client.listTools();
       const transform = tools['test-mcp_string-transform'];
       expect(transform, 'string-transform tool not found').toBeDefined();
+      expect(transform.execute, 'string-transform tool has no execute method').toBeDefined();
 
-      const result = await transform.execute!({ text: 'hello world', transform: 'upper' });
+      const result = await transform.execute({ text: 'hello world', transform: 'upper' });
 
-      const parsed = typeof result === 'string' ? JSON.parse(result) : result;
-      if (parsed.content) {
-        const textContent = parsed.content.find((c: any) => c.type === 'text');
-        expect(textContent).toBeDefined();
-        expect(JSON.parse(textContent.text)).toEqual({ result: 'HELLO WORLD' });
-      } else {
-        expect(parsed).toEqual({ result: 'HELLO WORLD' });
-      }
+      expect(result).toEqual({ result: 'HELLO WORLD' });
     });
   });
 
   describe('SSE transport', () => {
     let client: MCPClient;
 
-    afterAll(async () => {
-      await client?.disconnect();
-    });
-
-    it('should connect and list tools via SSE fallback', async () => {
+    beforeAll(async () => {
       const baseUrl = getBaseUrl();
       client = new MCPClient({
         id: 'smoke-sse',
@@ -85,7 +67,13 @@ describe('MCP client transport', () => {
           },
         },
       });
+    });
 
+    afterAll(async () => {
+      await client?.disconnect();
+    });
+
+    it('should connect and list tools via SSE fallback', async () => {
       const tools = await client.listTools();
 
       const toolNames = Object.keys(tools);
@@ -97,17 +85,22 @@ describe('MCP client transport', () => {
       const tools = await client.listTools();
       const calculator = tools['test-mcp_calculator'];
       expect(calculator, 'calculator tool not found').toBeDefined();
+      expect(calculator.execute, 'calculator tool has no execute method').toBeDefined();
 
-      const result = await calculator.execute!({ operation: 'subtract', a: 100, b: 58 });
+      const result = await calculator.execute({ operation: 'subtract', a: 100, b: 58 });
 
-      const parsed = typeof result === 'string' ? JSON.parse(result) : result;
-      if (parsed.content) {
-        const textContent = parsed.content.find((c: any) => c.type === 'text');
-        expect(textContent).toBeDefined();
-        expect(JSON.parse(textContent.text)).toEqual({ result: 42 });
-      } else {
-        expect(parsed).toEqual({ result: 42 });
-      }
+      expect(result).toEqual({ result: 42 });
+    });
+
+    it('should execute string-transform tool via SSE transport', async () => {
+      const tools = await client.listTools();
+      const transform = tools['test-mcp_string-transform'];
+      expect(transform, 'string-transform tool not found').toBeDefined();
+      expect(transform.execute, 'string-transform tool has no execute method').toBeDefined();
+
+      const result = await transform.execute({ text: 'mastra', transform: 'reverse' });
+
+      expect(result).toEqual({ result: 'artsam' });
     });
   });
 });

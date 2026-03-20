@@ -35,7 +35,7 @@ describe('MCP REST API', () => {
       const { status, data } = await fetchJson<any>('/api/mcp/test-mcp/tools');
 
       expect(status).toBe(200);
-      expect(data.tools).toBeDefined();
+      expect(data.tools).toHaveLength(2);
 
       const toolNames = data.tools.map((t: any) => t.name);
       expect(toolNames).toContain('calculator');
@@ -49,9 +49,10 @@ describe('MCP REST API', () => {
       expect(data.name).toBe('calculator');
       expect(data.description).toBe('Performs basic arithmetic operations');
       expect(data.inputSchema).toBeDefined();
-      expect(data.inputSchema.properties).toHaveProperty('operation');
-      expect(data.inputSchema.properties).toHaveProperty('a');
-      expect(data.inputSchema.properties).toHaveProperty('b');
+      expect(data.inputSchema.properties.operation.enum).toEqual(['add', 'subtract', 'multiply', 'divide']);
+      expect(data.inputSchema.properties.a.type).toBe('number');
+      expect(data.inputSchema.properties.b.type).toBe('number');
+      expect(data.inputSchema.required).toEqual(expect.arrayContaining(['operation', 'a', 'b']));
     });
 
     it('should return 404 for non-existent tool on valid server', async () => {
@@ -98,6 +99,22 @@ describe('MCP REST API', () => {
 
       // MCP executeTool throws "Unknown tool" which surfaces as 500
       expect(res.status).toBe(500);
+      const body = await res.json();
+      expect(body.error).toContain('Unknown tool');
+    });
+
+    it('should return validation error when executing tool with missing required fields', async () => {
+      const { status, data } = await fetchJson<any>('/api/mcp/test-mcp/tools/calculator/execute', {
+        method: 'POST',
+        body: JSON.stringify({ data: {} }),
+      });
+
+      expect(status).toBe(200);
+      expect(data.result.error).toBe(true);
+      expect(data.result.message).toContain('Tool input validation failed');
+      expect(data.result.validationErrors.fields.a.errors[0]).toContain('expected number');
+      expect(data.result.validationErrors.fields.b.errors[0]).toContain('expected number');
+      expect(data.result.validationErrors.fields.operation.errors[0]).toContain('Invalid option');
     });
   });
 });
