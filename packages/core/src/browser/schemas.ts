@@ -499,14 +499,30 @@ export type DebugInput = z.infer<typeof debugInputSchema>;
 // 19. Wait
 // ============================================================================
 
-export const waitInputSchema = z.object({
-  ref: z.string().optional().describe('Element ref to wait for'),
-  state: z
-    .enum(['visible', 'hidden', 'attached', 'detached'])
-    .optional()
-    .default('visible')
-    .describe('State to wait for'),
-  timeout: z.number().optional().describe('Timeout in ms'),
-});
+export const waitInputSchema = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('element'),
+    ref: z.string().describe('Element ref to wait for'),
+    state: z
+      .enum(['visible', 'hidden', 'attached', 'detached'])
+      .optional()
+      .default('visible')
+      .describe('State to wait for'),
+    timeout: z.number().optional().describe('Timeout in ms'),
+  }),
+  z.object({
+    action: z.literal('load'),
+    state: z
+      .enum(['load', 'domcontentloaded', 'networkidle'])
+      .optional()
+      .default('networkidle')
+      .describe('Page load state to wait for'),
+    timeout: z.number().optional().describe('Timeout in ms'),
+  }),
+  z.object({
+    action: z.literal('timeout'),
+    ms: z.number().describe('Milliseconds to wait'),
+  }),
+]);
 
 export type WaitInput = z.infer<typeof waitInputSchema>;

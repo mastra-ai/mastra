@@ -1024,19 +1024,39 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   // ---------------------------------------------------------------------------
-  // 19. Wait: wait for element state
+  // 19. Wait: wait for element state, page load, or timeout
   // ---------------------------------------------------------------------------
 
-  async wait(input: { ref?: string; state?: string; timeout?: number }): Promise<unknown> {
-    if (input.ref) {
-      const locator = this.requireLocator(input.ref);
-      await locator.waitFor({
-        state: (input.state as 'visible' | 'hidden' | 'attached' | 'detached') ?? 'visible',
-        timeout: input.timeout ?? this.defaultTimeout,
-      });
-    } else {
-      await this.getPage().waitForTimeout(input.timeout ?? 1000);
+  async wait(input: { action: string; ref?: string; state?: string; timeout?: number; ms?: number }): Promise<unknown> {
+    const page = this.getPage();
+
+    switch (input.action) {
+      case 'element': {
+        if (!input.ref) {
+          throw new Error('ref is required for element wait');
+        }
+        const locator = this.requireLocator(input.ref);
+        await locator.waitFor({
+          state: (input.state as 'visible' | 'hidden' | 'attached' | 'detached') ?? 'visible',
+          timeout: input.timeout ?? this.defaultTimeout,
+        });
+        return { success: true, action: 'element', ref: input.ref, state: input.state ?? 'visible' };
+      }
+
+      case 'load': {
+        const loadState = (input.state as 'load' | 'domcontentloaded' | 'networkidle') ?? 'networkidle';
+        await page.waitForLoadState(loadState, { timeout: input.timeout ?? this.defaultTimeout });
+        return { success: true, action: 'load', state: loadState };
+      }
+
+      case 'timeout': {
+        const ms = input.ms ?? 1000;
+        await page.waitForTimeout(ms);
+        return { success: true, action: 'timeout', ms };
+      }
+
+      default:
+        throw new Error(`Unknown wait action: ${input.action}`);
     }
-    return { success: true };
   }
 }

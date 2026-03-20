@@ -7,6 +7,12 @@ import type { BaseBrowserConfig } from '@mastra/core/browser';
  */
 export interface BrowserConfig extends BaseBrowserConfig {
   /**
+   * Run browser in headless mode.
+   * @default true
+   */
+  headless?: boolean;
+
+  /**
    * Allow file:// URLs to be loaded.
    * @default false
    */

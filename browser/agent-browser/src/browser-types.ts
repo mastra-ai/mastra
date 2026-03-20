@@ -94,6 +94,7 @@ export interface BrowserPage {
   keyboard: BrowserKeyboard;
   context(): BrowserContext;
   waitForTimeout(timeout: number): Promise<void>;
+  waitForLoadState(state: 'load' | 'domcontentloaded' | 'networkidle', options?: { timeout?: number }): Promise<void>;
 }
 
 export interface EnhancedSnapshot {
