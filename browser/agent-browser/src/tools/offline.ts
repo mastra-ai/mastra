@@ -1,12 +1,13 @@
 import type { SetOfflineOutput } from '@mastra/core/browser';
-import { setOfflineInputSchema, setOfflineOutputSchema, ErrorCode } from '@mastra/core/browser';
+import { setOfflineInputSchema, setOfflineOutputSchema } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
+
 import type { BrowserManagerLike } from '../browser-types';
 
 export function createSetOfflineTool(getBrowser: () => Promise<BrowserManagerLike>) {
   return createTool({
     id: 'browser_set_offline',
-    description: 'Enable or disable offline mode. Useful for testing offline behavior.',
+    description: 'Set the browser to offline or online mode.',
     inputSchema: setOfflineInputSchema,
     outputSchema: setOfflineOutputSchema,
     execute: async ({ context }): Promise<SetOfflineOutput> => {
@@ -14,26 +15,17 @@ export function createSetOfflineTool(getBrowser: () => Promise<BrowserManagerLik
 
       try {
         const browser = await getBrowser();
-
-        if (browser.setOffline) {
-          await browser.setOffline(offline);
-        } else {
-          return {
-            success: false,
-            code: ErrorCode.UNKNOWN,
-            message: 'Offline mode not supported by this browser provider.',
-          };
-        }
+        await browser.setOffline?.(offline);
 
         return {
           success: true,
-          offline,
+          message: offline ? 'Browser is now offline' : 'Browser is now online',
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'browser_error',
           message,
         };
       }

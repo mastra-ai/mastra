@@ -8,7 +8,6 @@ import {
   tabSwitchOutputSchema,
   tabCloseInputSchema,
   tabCloseOutputSchema,
-  ErrorCode,
 } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 import type { BrowserManagerLike } from '../browser-types';
@@ -26,7 +25,7 @@ export function createTabsListTool(getBrowser: () => Promise<BrowserManagerLike>
         if (!browser.listTabs) {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Tab management not supported by this browser provider.',
           };
         }
@@ -46,7 +45,7 @@ export function createTabsListTool(getBrowser: () => Promise<BrowserManagerLike>
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -69,7 +68,7 @@ export function createTabNewTool(getBrowser: () => Promise<BrowserManagerLike>) 
         if (!browser.newTab) {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Tab management not supported by this browser provider.',
           };
         }
@@ -86,7 +85,7 @@ export function createTabNewTool(getBrowser: () => Promise<BrowserManagerLike>) 
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -109,7 +108,7 @@ export function createTabSwitchTool(getBrowser: () => Promise<BrowserManagerLike
         if (!browser.switchTo) {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Tab management not supported by this browser provider.',
           };
         }
@@ -127,7 +126,7 @@ export function createTabSwitchTool(getBrowser: () => Promise<BrowserManagerLike
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -150,7 +149,7 @@ export function createTabCloseTool(getBrowser: () => Promise<BrowserManagerLike>
         if (!browser.closeTab) {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Tab management not supported by this browser provider.',
           };
         }
@@ -168,7 +167,7 @@ export function createTabCloseTool(getBrowser: () => Promise<BrowserManagerLike>
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }

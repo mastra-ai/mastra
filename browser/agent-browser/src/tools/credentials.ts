@@ -1,5 +1,5 @@
 import type { SetCredentialsOutput } from '@mastra/core/browser';
-import { setCredentialsInputSchema, setCredentialsOutputSchema, ErrorCode } from '@mastra/core/browser';
+import { setCredentialsInputSchema, setCredentialsOutputSchema } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 
 import type { BrowserManagerLike } from '../browser-types';
@@ -28,7 +28,7 @@ export function createSetCredentialsTool(getBrowser: () => Promise<BrowserManage
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'browser_error',
           message,
         };
       }

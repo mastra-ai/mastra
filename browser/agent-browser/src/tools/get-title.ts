@@ -1,5 +1,5 @@
 import type { GetTitleOutput } from '@mastra/core/browser';
-import { getTitleInputSchema, getTitleOutputSchema, ErrorCode } from '@mastra/core/browser';
+import { getTitleInputSchema, getTitleOutputSchema } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 import type { BrowserManagerLike } from '../browser-types';
 
@@ -25,7 +25,7 @@ export function createGetTitleTool(getBrowser: () => Promise<BrowserManagerLike>
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'browser_error',
           message,
         };
       }

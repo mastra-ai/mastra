@@ -6,7 +6,6 @@ import {
   sessionStorageSetOutputSchema,
   sessionStorageClearInputSchema,
   sessionStorageClearOutputSchema,
-  ErrorCode,
 } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 
@@ -49,7 +48,7 @@ export function createSessionStorageGetTool(getBrowser: () => Promise<BrowserMan
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -85,7 +84,7 @@ export function createSessionStorageSetTool(getBrowser: () => Promise<BrowserMan
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -116,7 +115,7 @@ export function createSessionStorageClearTool(getBrowser: () => Promise<BrowserM
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }

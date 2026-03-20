@@ -4,7 +4,6 @@ import {
   traceStartOutputSchema,
   traceStopInputSchema,
   traceStopOutputSchema,
-  ErrorCode,
 } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 import type { BrowserManagerLike } from '../browser-types';
@@ -24,7 +23,7 @@ export function createTraceStartTool(getBrowser: () => Promise<BrowserManagerLik
         if (!browser.startTracing) {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Tracing not supported by this browser provider.',
           };
         }
@@ -39,7 +38,7 @@ export function createTraceStartTool(getBrowser: () => Promise<BrowserManagerLik
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -62,7 +61,7 @@ export function createTraceStopTool(getBrowser: () => Promise<BrowserManagerLike
         if (!browser.stopTracing) {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Tracing not supported by this browser provider.',
           };
         }
@@ -77,7 +76,7 @@ export function createTraceStopTool(getBrowser: () => Promise<BrowserManagerLike
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }

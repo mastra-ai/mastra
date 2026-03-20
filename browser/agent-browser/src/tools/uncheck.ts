@@ -1,5 +1,5 @@
 import type { UncheckOutput } from '@mastra/core/browser';
-import { uncheckInputSchema, uncheckOutputSchema, ErrorCode, BrowserToolError } from '@mastra/core/browser';
+import { uncheckInputSchema, uncheckOutputSchema } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 import type { BrowserManagerLike } from '../browser-types';
 
@@ -18,7 +18,7 @@ export function createUncheckTool(getBrowser: () => Promise<BrowserManagerLike>)
         if (!locator) {
           return {
             success: false,
-            code: ErrorCode.STALE_REF,
+            code: 'stale_ref',
             message: `Element reference "${ref}" not found. Take a new snapshot.`,
             recoveryHint: 'Use browser_snapshot to get current element references.',
             canRetry: false,
@@ -35,19 +35,10 @@ export function createUncheckTool(getBrowser: () => Promise<BrowserManagerLike>)
           hint: 'Checkbox unchecked. Take a snapshot to verify.',
         };
       } catch (error) {
-        if (error instanceof BrowserToolError) {
-          return {
-            success: false,
-            code: error.code,
-            message: error.message,
-            recoveryHint: error.recoveryHint,
-            canRetry: error.canRetry,
-          };
-        }
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
           canRetry: true,
         };

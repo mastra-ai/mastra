@@ -13,7 +13,6 @@ import {
   clipboardReadOutputSchema,
   clipboardWriteInputSchema,
   clipboardWriteOutputSchema,
-  ErrorCode,
 } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 
@@ -40,7 +39,7 @@ export function createClipboardCopyTool(getBrowser: () => Promise<BrowserManager
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -69,7 +68,7 @@ export function createClipboardPasteTool(getBrowser: () => Promise<BrowserManage
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -98,7 +97,7 @@ export function createClipboardReadTool(getBrowser: () => Promise<BrowserManager
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -129,7 +128,7 @@ export function createClipboardWriteTool(getBrowser: () => Promise<BrowserManage
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }

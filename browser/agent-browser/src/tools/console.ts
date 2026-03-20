@@ -6,7 +6,6 @@ import {
   consoleGetOutputSchema,
   consoleClearInputSchema,
   consoleClearOutputSchema,
-  ErrorCode,
 } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 import type { BrowserManagerLike } from '../browser-types';
@@ -24,7 +23,7 @@ export function createConsoleStartTool(getBrowser: () => Promise<BrowserManagerL
         if (!browser.startConsoleTracking) {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Console tracking not supported by this browser provider.',
           };
         }
@@ -39,7 +38,7 @@ export function createConsoleStartTool(getBrowser: () => Promise<BrowserManagerL
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -60,7 +59,7 @@ export function createConsoleGetTool(getBrowser: () => Promise<BrowserManagerLik
         if (!browser.getConsoleMessages) {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Console tracking not supported by this browser provider.',
           };
         }
@@ -79,7 +78,7 @@ export function createConsoleGetTool(getBrowser: () => Promise<BrowserManagerLik
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -100,7 +99,7 @@ export function createConsoleClearTool(getBrowser: () => Promise<BrowserManagerL
         if (!browser.clearConsoleMessages) {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Console tracking not supported by this browser provider.',
           };
         }
@@ -115,7 +114,7 @@ export function createConsoleClearTool(getBrowser: () => Promise<BrowserManagerL
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }

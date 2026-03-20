@@ -4,7 +4,6 @@ import {
   recordStartOutputSchema,
   recordStopInputSchema,
   recordStopOutputSchema,
-  ErrorCode,
 } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 import type { BrowserManagerLike } from '../browser-types';
@@ -24,7 +23,7 @@ export function createRecordStartTool(getBrowser: () => Promise<BrowserManagerLi
         if (!browser.startRecording) {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Recording not supported by this browser provider.',
           };
         }
@@ -39,7 +38,7 @@ export function createRecordStartTool(getBrowser: () => Promise<BrowserManagerLi
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -60,7 +59,7 @@ export function createRecordStopTool(getBrowser: () => Promise<BrowserManagerLik
         if (!browser.stopRecording) {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Recording not supported by this browser provider.',
           };
         }
@@ -76,7 +75,7 @@ export function createRecordStopTool(getBrowser: () => Promise<BrowserManagerLik
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }

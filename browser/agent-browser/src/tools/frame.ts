@@ -4,7 +4,6 @@ import {
   frameSwitchOutputSchema,
   frameMainInputSchema,
   frameMainOutputSchema,
-  ErrorCode,
 } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 import type { BrowserManagerLike } from '../browser-types';
@@ -27,7 +26,7 @@ export function createFrameSwitchTool(getBrowser: () => Promise<BrowserManagerLi
         } else {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Frame switching not supported by this browser provider.',
           };
         }
@@ -44,7 +43,7 @@ export function createFrameSwitchTool(getBrowser: () => Promise<BrowserManagerLi
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -67,7 +66,7 @@ export function createFrameMainTool(getBrowser: () => Promise<BrowserManagerLike
         } else {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Frame switching not supported by this browser provider.',
           };
         }
@@ -82,7 +81,7 @@ export function createFrameMainTool(getBrowser: () => Promise<BrowserManagerLike
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }

@@ -1,5 +1,5 @@
 import type { IsEnabledOutput } from '@mastra/core/browser';
-import { isEnabledInputSchema, isEnabledOutputSchema, ErrorCode, BrowserToolError } from '@mastra/core/browser';
+import { isEnabledInputSchema, isEnabledOutputSchema } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 import type { BrowserManagerLike } from '../browser-types';
 
@@ -18,7 +18,7 @@ export function createIsEnabledTool(getBrowser: () => Promise<BrowserManagerLike
         if (!locator) {
           return {
             success: false,
-            code: ErrorCode.STALE_REF,
+            code: 'stale_ref',
             message: `Element reference "${ref}" not found. Take a new snapshot.`,
           };
         }
@@ -39,17 +39,10 @@ export function createIsEnabledTool(getBrowser: () => Promise<BrowserManagerLike
           url: page.url(),
         };
       } catch (error) {
-        if (error instanceof BrowserToolError) {
-          return {
-            success: false,
-            code: error.code,
-            message: error.message,
-          };
-        }
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }

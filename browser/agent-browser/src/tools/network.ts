@@ -6,7 +6,6 @@ import {
   networkGetOutputSchema,
   networkClearInputSchema,
   networkClearOutputSchema,
-  ErrorCode,
 } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 import type { BrowserManagerLike } from '../browser-types';
@@ -24,7 +23,7 @@ export function createNetworkStartTool(getBrowser: () => Promise<BrowserManagerL
         if (!browser.startRequestTracking) {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Network tracking not supported by this browser provider.',
           };
         }
@@ -39,7 +38,7 @@ export function createNetworkStartTool(getBrowser: () => Promise<BrowserManagerL
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -62,7 +61,7 @@ export function createNetworkGetTool(getBrowser: () => Promise<BrowserManagerLik
         if (!browser.getRequests) {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Network tracking not supported by this browser provider.',
           };
         }
@@ -82,7 +81,7 @@ export function createNetworkGetTool(getBrowser: () => Promise<BrowserManagerLik
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -103,7 +102,7 @@ export function createNetworkClearTool(getBrowser: () => Promise<BrowserManagerL
         if (!browser.clearRequests) {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Network tracking not supported by this browser provider.',
           };
         }
@@ -118,7 +117,7 @@ export function createNetworkClearTool(getBrowser: () => Promise<BrowserManagerL
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }

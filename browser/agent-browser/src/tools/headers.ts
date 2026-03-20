@@ -1,12 +1,13 @@
 import type { SetHeadersOutput } from '@mastra/core/browser';
-import { setHeadersInputSchema, setHeadersOutputSchema, ErrorCode } from '@mastra/core/browser';
+import { setHeadersInputSchema, setHeadersOutputSchema } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
+
 import type { BrowserManagerLike } from '../browser-types';
 
 export function createSetHeadersTool(getBrowser: () => Promise<BrowserManagerLike>) {
   return createTool({
     id: 'browser_set_headers',
-    description: 'Set extra HTTP headers for all requests. Optionally scope to a specific origin.',
+    description: 'Set extra HTTP headers for all requests.',
     inputSchema: setHeadersInputSchema,
     outputSchema: setHeadersOutputSchema,
     execute: async ({ context }): Promise<SetHeadersOutput> => {
@@ -15,28 +16,21 @@ export function createSetHeadersTool(getBrowser: () => Promise<BrowserManagerLik
       try {
         const browser = await getBrowser();
 
-        if (origin && browser.setScopedHeaders) {
-          await browser.setScopedHeaders(origin, headers);
-        } else if (browser.setExtraHeaders) {
-          await browser.setExtraHeaders(headers);
+        if (origin) {
+          await browser.setScopedHeaders?.(origin, headers);
         } else {
-          return {
-            success: false,
-            code: ErrorCode.UNKNOWN,
-            message: 'Header setting not supported by this browser provider.',
-          };
+          await browser.setExtraHeaders?.(headers);
         }
 
         return {
           success: true,
-          headerCount: Object.keys(headers).length,
-          scoped: !!origin,
+          message: origin ? `Headers set for ${origin}` : 'Headers set for all requests',
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'browser_error',
           message,
         };
       }

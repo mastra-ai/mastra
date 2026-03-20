@@ -1,10 +1,5 @@
 import type { GetBoundingBoxOutput } from '@mastra/core/browser';
-import {
-  getBoundingBoxInputSchema,
-  getBoundingBoxOutputSchema,
-  ErrorCode,
-  BrowserToolError,
-} from '@mastra/core/browser';
+import { getBoundingBoxInputSchema, getBoundingBoxOutputSchema } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 import type { BrowserManagerLike } from '../browser-types';
 
@@ -23,7 +18,7 @@ export function createGetBoundingBoxTool(getBrowser: () => Promise<BrowserManage
         if (!locator) {
           return {
             success: false,
-            code: ErrorCode.STALE_REF,
+            code: 'stale_ref',
             message: `Element reference "${ref}" not found. Take a new snapshot.`,
           };
         }
@@ -44,17 +39,10 @@ export function createGetBoundingBoxTool(getBrowser: () => Promise<BrowserManage
           url: page.url(),
         };
       } catch (error) {
-        if (error instanceof BrowserToolError) {
-          return {
-            success: false,
-            code: error.code,
-            message: error.message,
-          };
-        }
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }

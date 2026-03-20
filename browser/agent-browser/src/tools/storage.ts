@@ -6,7 +6,6 @@ import {
   storageSetOutputSchema,
   storageClearInputSchema,
   storageClearOutputSchema,
-  ErrorCode,
 } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 import type { BrowserManagerLike } from '../browser-types';
@@ -48,7 +47,7 @@ export function createStorageGetTool(getBrowser: () => Promise<BrowserManagerLik
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -84,7 +83,7 @@ export function createStorageSetTool(getBrowser: () => Promise<BrowserManagerLik
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -115,7 +114,7 @@ export function createStorageClearTool(getBrowser: () => Promise<BrowserManagerL
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }

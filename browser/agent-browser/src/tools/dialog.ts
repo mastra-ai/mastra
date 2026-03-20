@@ -4,7 +4,6 @@ import {
   dialogHandleOutputSchema,
   dialogClearInputSchema,
   dialogClearOutputSchema,
-  ErrorCode,
 } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 import type { BrowserManagerLike } from '../browser-types';
@@ -26,7 +25,7 @@ export function createDialogHandleTool(getBrowser: () => Promise<BrowserManagerL
         } else {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Dialog handling not supported by this browser provider.',
           };
         }
@@ -39,7 +38,7 @@ export function createDialogHandleTool(getBrowser: () => Promise<BrowserManagerL
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -62,7 +61,7 @@ export function createDialogClearTool(getBrowser: () => Promise<BrowserManagerLi
         } else {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Dialog handling not supported by this browser provider.',
           };
         }
@@ -75,7 +74,7 @@ export function createDialogClearTool(getBrowser: () => Promise<BrowserManagerLi
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }

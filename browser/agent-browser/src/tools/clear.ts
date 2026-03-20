@@ -1,5 +1,5 @@
 import type { ClearOutput } from '@mastra/core/browser';
-import { clearInputSchema, clearOutputSchema, ErrorCode, BrowserToolError } from '@mastra/core/browser';
+import { clearInputSchema, clearOutputSchema } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 
 import type { BrowserManagerLike } from '../browser-types';
@@ -20,7 +20,7 @@ export function createClearTool(getBrowser: () => Promise<BrowserManagerLike>) {
         if (!locator) {
           return {
             success: false,
-            code: ErrorCode.STALE_REF,
+            code: 'stale_ref',
             message: `Element reference ${ref} not found. The page may have changed.`,
             recoveryHint: 'Take a new snapshot to get fresh element references.',
             canRetry: false,
@@ -34,20 +34,10 @@ export function createClearTool(getBrowser: () => Promise<BrowserManagerLike>) {
           message: `Cleared input ${ref}`,
         };
       } catch (error) {
-        if (error instanceof BrowserToolError) {
-          return {
-            success: false,
-            code: error.code,
-            message: error.message,
-            recoveryHint: error.recoveryHint,
-            canRetry: error.canRetry,
-          };
-        }
-
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }

@@ -6,7 +6,6 @@ import {
   errorsGetOutputSchema,
   errorsClearInputSchema,
   errorsClearOutputSchema,
-  ErrorCode,
 } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 import type { BrowserManagerLike } from '../browser-types';
@@ -24,7 +23,7 @@ export function createErrorsStartTool(getBrowser: () => Promise<BrowserManagerLi
         if (!browser.startErrorTracking) {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Error tracking not supported by this browser provider.',
           };
         }
@@ -39,7 +38,7 @@ export function createErrorsStartTool(getBrowser: () => Promise<BrowserManagerLi
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -60,7 +59,7 @@ export function createErrorsGetTool(getBrowser: () => Promise<BrowserManagerLike
         if (!browser.getPageErrors) {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Error tracking not supported by this browser provider.',
           };
         }
@@ -78,7 +77,7 @@ export function createErrorsGetTool(getBrowser: () => Promise<BrowserManagerLike
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }
@@ -99,7 +98,7 @@ export function createErrorsClearTool(getBrowser: () => Promise<BrowserManagerLi
         if (!browser.clearPageErrors) {
           return {
             success: false,
-            code: ErrorCode.UNKNOWN,
+            code: 'unknown',
             message: 'Error tracking not supported by this browser provider.',
           };
         }
@@ -114,7 +113,7 @@ export function createErrorsClearTool(getBrowser: () => Promise<BrowserManagerLi
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'unknown',
           message,
         };
       }

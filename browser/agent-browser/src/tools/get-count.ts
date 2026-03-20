@@ -1,5 +1,5 @@
 import type { GetCountOutput } from '@mastra/core/browser';
-import { getCountInputSchema, getCountOutputSchema, ErrorCode } from '@mastra/core/browser';
+import { getCountInputSchema, getCountOutputSchema } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 import type { BrowserManagerLike } from '../browser-types';
 
@@ -37,7 +37,7 @@ export function createGetCountTool(getBrowser: () => Promise<BrowserManagerLike>
         const message = error instanceof Error ? error.message : String(error);
         return {
           success: false,
-          code: ErrorCode.UNKNOWN,
+          code: 'browser_error',
           message,
         };
       }
