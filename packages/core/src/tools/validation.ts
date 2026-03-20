@@ -468,9 +468,24 @@ export function validateToolInput<T = unknown>(
   // LLMs like Gemini send null for optional fields, but Zod's .optional() only
   // accepts undefined, not null. We only strip nulls for fields that caused
   // validation errors, preserving null for .nullable() schemas that need it.
+  // Check actual values at failing paths instead of relying on error message text.
+  // Error messages vary across schema validators — "null" may not appear even when
+  // the issue is caused by a null value (e.g., "must be string" from JSON Schema).
   const failingNullPaths = new Set(
     validation.issues
-      .filter(issue => issue.message?.includes('null'))
+      .filter(issue => {
+        // Resolve the value at the failing path in the original input
+        const path = issue.path;
+        if (!path || path.length === 0) return false;
+        let value: unknown = input;
+        for (const segment of path) {
+          const key = typeof segment === 'object' && 'key' in segment ? segment.key : segment;
+          if (value === null || value === undefined || typeof value !== 'object') return false;
+          value = (value as Record<string, unknown>)[String(key)];
+        }
+        // The issue is null-related if the actual value is null or undefined
+        return value === null || value === undefined;
+      })
       .map(issue => issue.path?.map(p => (typeof p === 'object' && 'key' in p ? String(p.key) : String(p))).join('.'))
       .filter((p): p is string => !!p),
   );
