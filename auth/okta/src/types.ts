@@ -95,6 +95,12 @@ export interface MastraAuthOktaOptions {
    * Default: ['openid', 'profile', 'email', 'groups']
    */
   scopes?: string[];
+  /**
+   * Okta API token for user lookups via the Users API.
+   * Required for getUser() to return user data by ID.
+   * Defaults to OKTA_API_TOKEN env var.
+   */
+  apiToken?: string;
   /** Session configuration */
   session?: OktaSessionOptions;
   /** Custom provider name (default: 'okta') */

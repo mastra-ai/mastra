@@ -159,6 +159,47 @@ describe('MastraAuthOkta', () => {
       expect(auth.authorizeUser(user, {} as any)).toBe(false);
     });
   });
+
+  describe('getUser', () => {
+    test('returns user from Okta Users API when apiToken is set', async () => {
+      const auth = new MastraAuthOkta({ apiToken: 'test-api-token' });
+
+      const mockResponse = {
+        ok: true,
+        json: async () => ({
+          id: '00u123',
+          profile: { login: 'user@example.com', email: 'user@example.com', firstName: 'Test', lastName: 'User' },
+        }),
+      };
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(mockResponse as any);
+
+      const user = await auth.getUser('00u123');
+      expect(user).toEqual({
+        id: '00u123',
+        oktaId: '00u123',
+        email: 'user@example.com',
+        name: 'Test User',
+      });
+      expect(fetch).toHaveBeenCalledWith(
+        'https://dev-123456.okta.com/api/v1/users/00u123',
+        expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'SSWS test-api-token' }) }),
+      );
+    });
+
+    test('returns null when no apiToken is configured', async () => {
+      const auth = new MastraAuthOkta();
+      delete process.env.OKTA_API_TOKEN;
+      const user = await (auth as any).getUser('00u123');
+      expect(user).toBeNull();
+    });
+
+    test('returns null when user is not found', async () => {
+      const auth = new MastraAuthOkta({ apiToken: 'test-api-token' });
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({ ok: false, status: 404 } as any);
+      const user = await auth.getUser('nonexistent');
+      expect(user).toBeNull();
+    });
+  });
 });
 
 describe('MastraRBACOkta', () => {

@@ -89,7 +89,7 @@ async function decryptSession(encrypted: string, password: string): Promise<unkn
  * In-memory store for state validation (keyed by state).
  * Used to validate that callback state matches the login request.
  */
-const stateStore = new Map<string, { expiresAt: number }>();
+const stateStore = new Map<string, { expiresAt: number; redirectUri: string }>();
 
 /**
  * Mastra authentication provider for Okta with SSO support.
@@ -122,6 +122,7 @@ export class MastraAuthOkta
   protected cookieMaxAge: number;
   protected cookiePassword: string;
   protected secureCookies: boolean;
+  protected apiToken?: string;
   private jwks: ReturnType<typeof createRemoteJWKSet>;
 
   constructor(options?: MastraAuthOktaOptions) {
@@ -171,6 +172,7 @@ export class MastraAuthOkta
     this.cookieMaxAge = options?.session?.cookieMaxAge ?? DEFAULT_COOKIE_MAX_AGE;
     this.cookiePassword = cookiePassword;
     this.secureCookies = options?.session?.secureCookies ?? process.env.NODE_ENV === 'production';
+    this.apiToken = options?.apiToken ?? process.env.OKTA_API_TOKEN;
     this.jwks = createRemoteJWKSet(new URL(`${this.issuer}/v1/keys`));
 
     // Warn about insecure defaults in production
@@ -242,12 +244,46 @@ export class MastraAuthOkta
   }
 
   /**
-   * Get a user by ID.
-   * Note: This returns null as we don't have a user store - users are session-based.
+   * Get a user by ID via the Okta Users API.
+   * Requires an API token (set OKTA_API_TOKEN or pass apiToken in options).
+   * Returns null if no API token is configured or user is not found.
    */
-  async getUser(_userId: string): Promise<OktaUser | null> {
-    // We don't maintain a user store - users come from Okta via SSO
-    return null;
+  async getUser(userId: string): Promise<OktaUser | null> {
+    if (!this.apiToken) {
+      return null;
+    }
+
+    try {
+      const response = await fetch(`https://${this.domain}/api/v1/users/${userId}`, {
+        headers: {
+          Authorization: `SSWS ${this.apiToken}`,
+          Accept: 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const oktaProfile = (await response.json()) as {
+        id: string;
+        profile: {
+          login: string;
+          email: string;
+          firstName?: string;
+          lastName?: string;
+        };
+      };
+
+      return {
+        id: oktaProfile.id,
+        oktaId: oktaProfile.id,
+        email: oktaProfile.profile.email,
+        name: [oktaProfile.profile.firstName, oktaProfile.profile.lastName].filter(Boolean).join(' ') || undefined,
+      };
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -322,9 +358,11 @@ export class MastraAuthOkta
     // Extract just the UUID for storage (callback receives only UUID)
     const stateId = state.includes('|') ? state.split('|')[0]! : state;
 
-    // Store state ID for validation (expires in 10 minutes)
+    // Store state ID with redirect_uri for validation (expires in 10 minutes)
+    const actualRedirectUri = redirectUri ?? this.redirectUri;
     stateStore.set(stateId, {
       expiresAt: Date.now() + 10 * 60 * 1000,
+      redirectUri: actualRedirectUri,
     });
 
     // Clean up expired states
@@ -338,7 +376,7 @@ export class MastraAuthOkta
       client_id: this.clientId,
       response_type: 'code',
       scope: this.scopes.join(' '),
-      redirect_uri: redirectUri ?? this.redirectUri,
+      redirect_uri: actualRedirectUri,
       state,
     });
 
@@ -371,7 +409,7 @@ export class MastraAuthOkta
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code,
-        redirect_uri: this.redirectUri,
+        redirect_uri: stored.redirectUri,
       }),
     });
 
