@@ -12,12 +12,10 @@
   "dependencies": {
     "@ai-sdk/openai": "^2.0.23",
     "@chat-adapter/discord": "^4.20.2",
-    "@mastra/channel-chat-adapter": "latest",
     "@mastra/channel-slack": "latest",
     "@mastra/core": "latest",
     "@mastra/libsql": "latest",
-    "@mastra/memory": "latest",
-    "chat": "^4.20.2"
+    "@mastra/memory": "latest"
   },
   "devDependencies": {
     "@mastra/cli": "latest",
@@ -27,7 +25,6 @@
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../packages/core",
-      "@mastra/channel-chat-adapter": "link:../../channels/chat-adapter",
       "@mastra/channel-slack": "link:../../channels/slack",
       "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/memory": "link:../../packages/memory",

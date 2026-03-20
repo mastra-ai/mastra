@@ -1,13 +1,14 @@
-import { MastraChannel } from '@mastra/core/channels';
-import type { ChannelSendParams, ChannelSendResult } from '@mastra/core/channels';
-import type { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
-import type { ApiRoute } from '@mastra/core/server';
-import { createTool } from '@mastra/core/tools';
 import type { Adapter, Message, Thread } from 'chat';
 import { Chat } from 'chat';
 import type { Context } from 'hono';
 import { z } from 'zod';
+
+import type { Mastra } from '../../mastra';
+import { RequestContext } from '../../request-context';
+import type { ApiRoute } from '../../server/types';
+import { createTool } from '../../tools/tool';
+import { MastraChannel } from '../base';
+import type { ChannelContext, ChannelSendParams, ChannelSendResult } from '../types';
 
 import { InMemoryStateShim } from './state-shim';
 import type { ChatAdapterChannelConfig } from './types';
@@ -21,15 +22,12 @@ import type { ChatAdapterChannelConfig } from './types';
  *
  * @example
  * ```ts
- * import { ChatAdapterChannel } from '@mastra/channel-chat-adapter';
  * import { DiscordAdapter } from '@chat-adapter/discord';
  *
  * const myAgent = new Agent({
  *   name: 'myAgent',
  *   channels: {
- *     discord: new ChatAdapterChannel({
- *       adapter: new DiscordAdapter({ ... }),
- *     }),
+ *     discord: new DiscordAdapter({ ... }),
  *   },
  * });
  * ```
@@ -80,9 +78,7 @@ export class ChatAdapterChannel extends MastraChannel {
           text: z.string().describe('The message text to send'),
         }),
         execute: async ({ channelId, threadId, text }) => {
-          const encodedThreadId = threadId
-            ? `${platform}:${channelId}:${threadId}`
-            : `${platform}:${channelId}:`;
+          const encodedThreadId = threadId ? `${platform}:${channelId}:${threadId}` : `${platform}:${channelId}:`;
           const result = await adapter.postMessage(encodedThreadId, { markdown: text });
           return { ok: true, messageId: result.id };
         },
@@ -98,9 +94,7 @@ export class ChatAdapterChannel extends MastraChannel {
           text: z.string().describe('The new message text'),
         }),
         execute: async ({ channelId, threadId, messageId, text }) => {
-          const encodedThreadId = threadId
-            ? `${platform}:${channelId}:${threadId}`
-            : `${platform}:${channelId}:`;
+          const encodedThreadId = threadId ? `${platform}:${channelId}:${threadId}` : `${platform}:${channelId}:`;
           await adapter.editMessage(encodedThreadId, messageId, { markdown: text });
           return { ok: true };
         },
@@ -115,9 +109,7 @@ export class ChatAdapterChannel extends MastraChannel {
           messageId: z.string().describe('The ID of the message to delete'),
         }),
         execute: async ({ channelId, threadId, messageId }) => {
-          const encodedThreadId = threadId
-            ? `${platform}:${channelId}:${threadId}`
-            : `${platform}:${channelId}:`;
+          const encodedThreadId = threadId ? `${platform}:${channelId}:${threadId}` : `${platform}:${channelId}:`;
           await adapter.deleteMessage(encodedThreadId, messageId);
           return { ok: true };
         },
@@ -133,9 +125,7 @@ export class ChatAdapterChannel extends MastraChannel {
           emoji: z.string().describe('The emoji to react with (e.g. "thumbsup")'),
         }),
         execute: async ({ channelId, threadId, messageId, emoji }) => {
-          const encodedThreadId = threadId
-            ? `${platform}:${channelId}:${threadId}`
-            : `${platform}:${channelId}:`;
+          const encodedThreadId = threadId ? `${platform}:${channelId}:${threadId}` : `${platform}:${channelId}:`;
           await adapter.addReaction(encodedThreadId, messageId, emoji);
           return { ok: true };
         },
@@ -151,9 +141,7 @@ export class ChatAdapterChannel extends MastraChannel {
           emoji: z.string().describe('The emoji to remove'),
         }),
         execute: async ({ channelId, threadId, messageId, emoji }) => {
-          const encodedThreadId = threadId
-            ? `${platform}:${channelId}:${threadId}`
-            : `${platform}:${channelId}:`;
+          const encodedThreadId = threadId ? `${platform}:${channelId}:${threadId}` : `${platform}:${channelId}:`;
           await adapter.removeReaction(encodedThreadId, messageId, emoji);
           return { ok: true };
         },
@@ -161,16 +149,15 @@ export class ChatAdapterChannel extends MastraChannel {
     };
   }
 
+  /** Minimum interval between message edits to avoid rate limits. */
+  private editIntervalMs = 1000;
+
   /**
    * Core handler wired to Chat SDK's onDirectMessage, onNewMention,
-   * and onSubscribedMessage. Runs the Mastra agent pipeline and replies
-   * via the Chat SDK thread.
+   * and onSubscribedMessage. Streams the Mastra agent response and
+   * updates the channel message in real-time via edits.
    */
-  private async handleChatMessage(
-    sdkThread: Thread,
-    message: Message,
-    mastra: Mastra,
-  ): Promise<void> {
+  private async handleChatMessage(sdkThread: Thread, message: Message, mastra: Mastra): Promise<void> {
     const agent = this.agent;
 
     // Map to a Mastra thread for memory/history
@@ -186,15 +173,19 @@ export class ChatAdapterChannel extends MastraChannel {
     requestContext.set('channel', {
       platform: this.platform,
       eventType: sdkThread.isDM ? 'message' : 'mention',
+      isDM: sdkThread.isDM,
+      threadId: sdkThread.id,
+      channelId: sdkThread.channelId,
+      messageId: message.id,
       userId: message.author.userId,
       userName: message.author.fullName || message.author.userName,
-    });
+    } satisfies ChannelContext);
 
     // Show typing indicator while generating
     await sdkThread.startTyping();
 
-    // Run the agent
-    const result = await agent.generate(message.text, {
+    // Stream the agent response
+    const stream = await agent.stream(message.text, {
       requestContext,
       memory: {
         thread: mastraThread,
@@ -202,10 +193,58 @@ export class ChatAdapterChannel extends MastraChannel {
       },
     });
 
-    // Reply via Chat SDK — automatically goes to the right thread
-    if (result.text) {
-      await sdkThread.post(result.text);
+    // Post an initial placeholder and stream edits
+    let sentMessage: Awaited<ReturnType<typeof sdkThread.post>> | null = null;
+    let accumulated = '';
+    let lastEditTime = 0;
+    let pendingEdit: ReturnType<typeof setTimeout> | null = null;
+
+    const flushEdit = async () => {
+      if (pendingEdit) {
+        clearTimeout(pendingEdit);
+        pendingEdit = null;
+      }
+      if (!sentMessage || !accumulated) return;
+      try {
+        sentMessage = await sentMessage.edit(accumulated);
+        lastEditTime = Date.now();
+      } catch (err) {
+        this.channelLogger.error(`[${this.platform}] Failed to edit message`, err);
+      }
+    };
+
+    const reader = stream.textStream.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        accumulated += value;
+
+        if (!sentMessage) {
+          // Post the first message as soon as we have content
+          sentMessage = await sdkThread.post(accumulated);
+          lastEditTime = Date.now();
+          continue;
+        }
+
+        // Debounce edits to respect rate limits
+        const elapsed = Date.now() - lastEditTime;
+        if (elapsed >= this.editIntervalMs) {
+          await flushEdit();
+        } else if (!pendingEdit) {
+          pendingEdit = setTimeout(() => {
+            pendingEdit = null;
+            void flushEdit();
+          }, this.editIntervalMs - elapsed);
+        }
+      }
+    } finally {
+      reader.releaseLock();
     }
+
+    // Final edit with the complete response
+    await flushEdit();
 
     // Subscribe so follow-up messages also get handled
     await sdkThread.subscribe();
@@ -221,8 +260,7 @@ export class ChatAdapterChannel extends MastraChannel {
       userName: this.userName,
     });
 
-    const handler = (sdkThread: Thread, message: Message) =>
-      this.handleChatMessage(sdkThread, message, mastra);
+    const handler = (sdkThread: Thread, message: Message) => this.handleChatMessage(sdkThread, message, mastra);
 
     chat.onDirectMessage(handler);
     chat.onNewMention(handler);
@@ -253,7 +291,7 @@ export class ChatAdapterChannel extends MastraChannel {
             await startGateway(
               {
                 waitUntil: (p: Promise<unknown>) => {
-                  p.then(() => resolve!());
+                  void p.then(() => resolve!());
                 },
               },
               DURATION,
@@ -266,7 +304,7 @@ export class ChatAdapterChannel extends MastraChannel {
           }
         }
       };
-      reconnect();
+      void reconnect();
     }
   }
 
@@ -286,9 +324,7 @@ export class ChatAdapterChannel extends MastraChannel {
           }
 
           return async (c: Context) => {
-            channel.channelLogger.info(
-              `[${channel.platform}] Incoming webhook request: ${c.req.method} ${c.req.url}`,
-            );
+            channel.channelLogger.info(`[${channel.platform}] Incoming webhook request: ${c.req.method} ${c.req.url}`);
             try {
               // Delegate directly to the Chat SDK's webhook handler
               const response = await channel.chat!.webhooks[channel.platform]!(c.req.raw);

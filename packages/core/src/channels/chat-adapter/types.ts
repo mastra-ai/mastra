@@ -1,13 +1,13 @@
-import type { ChannelCommand } from '@mastra/core/channels';
-
 import type { Adapter, StateAdapter } from 'chat';
+
+import type { ChannelCommand } from '../types';
 
 /**
  * Configuration for the ChatAdapterChannel bridge.
  */
 export type ChatAdapterChannelConfig = {
   /**
-   * A Chat SDK adapter instance (e.g. `createSlackAdapter()` from `@chat-adapter/slack`).
+   * A Chat SDK adapter instance (e.g. `new DiscordAdapter()` from `@chat-adapter/discord`).
    */
   adapter: Adapter;
 
@@ -24,7 +24,7 @@ export type ChatAdapterChannelConfig = {
 
   /**
    * Optional Chat SDK StateAdapter for adapter-level caching/locking.
-   * If not provided, a Mastra-storage-backed shim is used.
+   * If not provided, an in-memory shim is used.
    */
   state?: StateAdapter;
 

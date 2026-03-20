@@ -67,11 +67,7 @@ export class InMemoryStateShim implements StateAdapter {
     return entry.values as T[];
   }
 
-  async appendToList(
-    key: string,
-    value: unknown,
-    options?: { maxLength?: number; ttlMs?: number },
-  ): Promise<void> {
+  async appendToList(key: string, value: unknown, options?: { maxLength?: number; ttlMs?: number }): Promise<void> {
     const entry = this.lists.get(key) ?? { values: [], expiresAt: undefined };
     entry.values.push(value);
     if (options?.maxLength && entry.values.length > options.maxLength) {
