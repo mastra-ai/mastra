@@ -1611,3 +1611,39 @@ describe('OpenAISchemaCompatLayer - ZodIntersection', () => {
     `);
   });
 });
+
+describe('OpenAISchemaCompatLayer - typeless anyOf branches from z.any()', () => {
+  const layer = new OpenAISchemaCompatLayer({
+    provider: 'openai.responses',
+    modelId: 'gpt-4.1',
+    supportsStructuredOutputs: true,
+  });
+
+  it('should give every anyOf branch a type key for z.any().optional()', () => {
+    const schema = z.object({
+      prompt: z.string(),
+      resumeData: z.any().describe('Resume data from suspended tool').optional(),
+    });
+
+    const result = layer.toJSONSchema(schema);
+    const resumeData = result.properties?.resumeData as Record<string, any>;
+
+    expect(resumeData).toBeDefined();
+    expect(resumeData.description).toBe('Resume data from suspended tool');
+    expect(resumeData.anyOf).toBeDefined();
+
+    // Every branch must have a concrete type
+    for (const branch of resumeData.anyOf) {
+      expect(branch.type).toBeDefined();
+    }
+
+    // Should cover common JSON types including null
+    const types = resumeData.anyOf.map((b: any) => b.type);
+    expect(types).toContain('string');
+    expect(types).toContain('number');
+    expect(types).toContain('integer');
+    expect(types).toContain('boolean');
+    expect(types).toContain('object');
+    expect(types).toContain('null');
+  });
+});
