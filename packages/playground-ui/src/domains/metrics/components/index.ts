@@ -1,5 +1,4 @@
 export { MetricsDashboard } from './metrics-dashboard';
-export { MetricsFilterBar, DateRangePickerButton } from './metrics-filter-bar';
 export { MetricsProvider, useMetrics, isValidPreset } from '../hooks/use-metrics';
 export type { DatePreset } from '../hooks/use-metrics';
 export { useAgentRunsKpiMetrics } from '../hooks/use-agent-runs-kpi-metrics';

@@ -10,6 +10,8 @@ export interface ScorerSummary {
   count: number;
 }
 
+// Flat structure required by Recharts. Scorer names become keys alongside `time`.
+// A scorer named "time" would collide — scorer names are code-defined so this is safe in practice.
 export interface ScoresOverTimePoint {
   time: string;
   [scorer: string]: string | number;

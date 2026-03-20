@@ -65,10 +65,10 @@ export const ManyRows: Story = {
     data: Array.from({ length: 20 }, (_, i) => ({
       key: `model-${i}`,
       model: `model-variant-${i}`,
-      input: Math.round(Math.random() * 15000),
-      output: Math.round(Math.random() * 10000),
-      cacheRead: Math.round(Math.random() * 5000),
-      cacheWrite: Math.round(Math.random() * 2000),
+      input: (i * 1379) % 15001,
+      output: (i * 977) % 10001,
+      cacheRead: (i * 541) % 5001,
+      cacheWrite: (i * 313) % 2001,
     })),
   },
 };

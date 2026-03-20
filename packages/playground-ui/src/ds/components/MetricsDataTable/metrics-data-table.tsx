@@ -33,7 +33,7 @@ export function MetricsDataTable<T extends { key: string }>({
         {/* Header */}
         {columns.map((col, i) => (
           <span
-            key={col.label}
+            key={`${i}-${col.label}`}
             className={cn(
               'h-9 py-1 flex items-center border-b border-surface5 uppercase whitespace-nowrap text-neutral2 tracking-widest text-ui-xs sticky top-0 z-10 bg-surface2',
               i === 0
@@ -50,7 +50,7 @@ export function MetricsDataTable<T extends { key: string }>({
           <Fragment key={row.key}>
             {columns.map((col, i) => (
               <span
-                key={col.label}
+                key={`${row.key}-${i}`}
                 className={cn(
                   'h-10 flex items-center text-ui-sm whitespace-nowrap border-t border-surface5',
                   rowIndex === 0 && 'border-t-transparent',
