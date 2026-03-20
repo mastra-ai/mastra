@@ -53,33 +53,29 @@ function createMemoryProvider(om: ObservationalMemory): MemoryContextProvider {
         });
       }
 
-      // Load messages from storage (mirrors Memory.getContext() message loading)
+      // Load messages from storage (mirrors Memory.getContext() / main's loadHistoricalMessagesIfNeeded)
+      // When OM is active, load ALL unobserved messages (not just lastMessages).
+      // When lastObservedAt exists, filter to messages after that boundary.
+      // When lastObservedAt is NULL, load everything (no date filter).
       const storage = (om as any).storage;
       let messages: MastraDBMessage[] = [];
-      if (record?.lastObservedAt) {
-        const startDate = new Date(new Date(record.lastObservedAt).getTime() + 1);
-        if (om.scope === 'resource' && resourceId) {
-          const result = await storage.listMessagesByResourceId({
-            resourceId,
-            orderBy: { field: 'createdAt', direction: 'ASC' },
-            perPage: false,
-            filter: { dateRange: { start: startDate } },
-          });
-          messages = result.messages;
-        } else {
-          const result = await storage.listMessages({
-            threadId,
-            orderBy: { field: 'createdAt', direction: 'ASC' },
-            perPage: false,
-            filter: { dateRange: { start: startDate } },
-          });
-          messages = result.messages;
-        }
+      const dateFilter = record?.lastObservedAt
+        ? { dateRange: { start: new Date(new Date(record.lastObservedAt).getTime() + 1) } }
+        : undefined;
+      if (om.scope === 'resource' && resourceId) {
+        const result = await storage.listMessagesByResourceId({
+          resourceId,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+          perPage: false,
+          filter: dateFilter,
+        });
+        messages = result.messages;
       } else {
         const result = await storage.listMessages({
           threadId,
           orderBy: { field: 'createdAt', direction: 'ASC' },
           perPage: false,
+          filter: dateFilter,
         });
         messages = result.messages;
       }
@@ -7419,6 +7415,39 @@ describe('Full Async Buffering Flow', () => {
     expect(observerCalls.length).toBeGreaterThan(0);
   });
 
+  it('should trigger sync observation at step > 0 even when bufferTokens is set without blockAfter', async () => {
+    // Regression test: when async buffering is enabled (bufferTokens set) but blockAfter
+    // is NOT configured, sync observation at step > 0 must still fire once pending tokens
+    // exceed the threshold. Previously, the blockAfter gate had `if (!blockAfter) return false`
+    // which silently disabled ALL sync observation when blockAfter was unset.
+    const { step, waitForAsyncOps, observerCalls, storage, threadId, resourceId } =
+      await setupAsyncBufferingScenario({
+        messageTokens: 2000, // Threshold that will be exceeded
+        bufferTokens: 500, // Async buffering enabled
+        bufferActivation: 1.0,
+        // blockAfter intentionally NOT set — this is the default and the bug trigger
+        reflectionObservationTokens: 50000,
+        messageCount: 20, // ~4000 tokens, well above the 2000 threshold
+      });
+
+    // Step 0: no observation (step 0 never does sync observation)
+    await step(0);
+    await waitForAsyncOps();
+    const callsAfterStep0 = observerCalls.length;
+
+    // Step 1: pending tokens exceed threshold → sync observation MUST fire,
+    // even though bufferTokens is set and blockAfter is not configured.
+    await step(1);
+    await waitForAsyncOps();
+
+    // The observer must have been called at step 1 (sync observation path)
+    expect(observerCalls.length).toBeGreaterThan(callsAfterStep0);
+
+    // Verify observations were actually persisted to the record
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(record?.activeObservations).toBeTruthy();
+  });
+
   it('should defer async buffering when messages contain pending tool calls (state: call)', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
@@ -11560,5 +11589,313 @@ describe('Processor behavioral regressions', () => {
     } finally {
       engine.observe = originalObserve;
     }
+  });
+});
+
+// =============================================================================
+// Regression: getContext loads all messages when OM active but lastObservedAt is NULL
+// =============================================================================
+
+describe('OM context loading with no prior observations', () => {
+  it('should activate buffered chunks on next turn even when lastObservedAt is NULL', async () => {
+    // Regression test: when OM has buffered chunks from previous turns but
+    // lastObservedAt is NULL (no sync observation has ever completed), the
+    // processor must load ALL messages so pendingTokens exceeds the threshold
+    // and activation fires. Previously, Memory.getContext() only loaded
+    // lastMessages (~40) when lastObservedAt was NULL, keeping tokens below
+    // threshold and preventing activation forever.
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'activation-no-cursor-thread';
+    const resourceId = 'activation-no-cursor-resource';
+
+    const observerCalls: string[] = [];
+    const mockModel = createStreamCapableMockModel({
+      doGenerate: async () => {
+        observerCalls.push('called');
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>\nDate: Jan 1, 2025\n* 🔴 Observed content\n</observations>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: {
+        messageTokens: 2000, // Threshold
+        bufferTokens: 500, // Async buffering enabled
+        bufferActivation: 1.0,
+      },
+      reflection: { observationTokens: 50000 },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    // Save enough messages to exceed the 2000 token threshold
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    for (let i = 0; i < 20; i++) {
+      await storage.saveMessages({
+        messages: [
+          {
+            id: `msg-${i}`,
+            role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+            },
+            type: 'text',
+            createdAt: new Date(Date.UTC(2025, 0, 1, 9, i)),
+            threadId,
+            resourceId,
+          },
+        ],
+      });
+    }
+
+    // Manually create a buffered chunk (simulates a previous turn's async buffering)
+    const record = await om.getOrCreateRecord(threadId, resourceId);
+    await storage.updateBufferedObservations({
+      id: record.id,
+      chunk: {
+        observations: '* 🔴 Previously buffered observation from turn 1',
+        tokenCount: 50,
+        messageIds: ['msg-0', 'msg-1', 'msg-2'],
+        messageTokens: 600,
+        lastObservedAt: new Date('2025-01-01T09:02:00Z'),
+        cycleId: 'previous-turn-buffer',
+      },
+    });
+
+    // Verify: lastObservedAt is NULL, buffered chunks exist
+    const preRecord = await storage.getObservationalMemory(threadId, resourceId);
+    expect(preRecord?.lastObservedAt).toBeFalsy();
+    expect(preRecord?.bufferedObservationChunks).toBeTruthy();
+
+    // Run processInputStep step 0 — this must load ALL messages, detect
+    // threshold exceeded, and activate the buffered chunks
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+    const messageList = new MessageList({ threadId, resourceId });
+    const state: Record<string, unknown> = {};
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    requestContext.set('currentDate', new Date('2025-01-01T12:00:00Z').toISOString());
+
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    // Activation must have fired — active observations should now exist
+    const postRecord = await storage.getObservationalMemory(threadId, resourceId);
+    expect(postRecord?.activeObservations).toContain('Previously buffered observation');
+    expect(postRecord?.observationTokenCount).toBeGreaterThan(0);
+  });
+
+  it('should continue buffering new messages after activation', async () => {
+    // After activation fires, new messages should still trigger buffering
+    // when they cross the next bufferTokens interval.
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'post-activation-buffer-thread';
+    const resourceId = 'post-activation-buffer-resource';
+
+    const observerCalls: string[] = [];
+    const mockModel = createStreamCapableMockModel({
+      doGenerate: async () => {
+        observerCalls.push('called');
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>\nDate: Jan 1, 2025\n* 🔴 Observed at call ${observerCalls.length}\n</observations>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: {
+        messageTokens: 10000,
+        bufferTokens: 500,
+        bufferActivation: 1.0,
+      },
+      reflection: { observationTokens: 50000 },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    // Save messages (~4400 tokens, below the 10000 threshold but above bufferTokens interval)
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    for (let i = 0; i < 20; i++) {
+      await storage.saveMessages({
+        messages: [
+          {
+            id: `pbuf-msg-${i}`,
+            role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+            },
+            type: 'text',
+            createdAt: new Date(Date.UTC(2025, 0, 1, 9, i)),
+            threadId,
+            resourceId,
+          },
+        ],
+      });
+    }
+
+    // Turn 1, step 0: should trigger async buffering (below threshold, above interval)
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+    const messageList = new MessageList({ threadId, resourceId });
+    const state: Record<string, unknown> = {};
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    // Wait for async buffering
+    const start = Date.now();
+    while (Date.now() - start < 3000) {
+      if (BufferingCoordinator.asyncBufferingOps.size === 0) break;
+      await Promise.allSettled([...BufferingCoordinator.asyncBufferingOps.values()]);
+      await new Promise(r => setTimeout(r, 50));
+    }
+
+    const callsAfterTurn1 = observerCalls.length;
+    expect(callsAfterTurn1).toBeGreaterThan(0);
+
+    // Verify chunks were created
+    let record = await storage.getObservationalMemory(threadId, resourceId);
+    const chunks1 = typeof record?.bufferedObservationChunks === 'string'
+      ? JSON.parse(record.bufferedObservationChunks)
+      : (record?.bufferedObservationChunks ?? []);
+    expect(chunks1.length).toBeGreaterThan(0);
+
+    // Add more messages to cross the next buffer interval
+    for (let i = 20; i < 30; i++) {
+      await storage.saveMessages({
+        messages: [
+          {
+            id: `pbuf-msg-${i}`,
+            role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+            },
+            type: 'text',
+            createdAt: new Date(Date.UTC(2025, 0, 1, 10, i)),
+            threadId,
+            resourceId,
+          },
+        ],
+      });
+    }
+
+    // Turn 2, step 0: activation should fire (if above threshold) or buffering continues
+    const messageList2 = new MessageList({ threadId, resourceId });
+    const state2: Record<string, unknown> = {};
+    const requestContext2 = new RequestContext();
+    requestContext2.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await processor.processInputStep({
+      messageList: messageList2,
+      messages: [],
+      requestContext: requestContext2,
+      stepNumber: 0,
+      state: state2,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    // Wait for async ops
+    const start2 = Date.now();
+    while (Date.now() - start2 < 3000) {
+      if (BufferingCoordinator.asyncBufferingOps.size === 0) break;
+      await Promise.allSettled([...BufferingCoordinator.asyncBufferingOps.values()]);
+      await new Promise(r => setTimeout(r, 50));
+    }
+
+    // Observer should have been called again (either via activation path or new buffering)
+    expect(observerCalls.length).toBeGreaterThan(callsAfterTurn1);
   });
 });

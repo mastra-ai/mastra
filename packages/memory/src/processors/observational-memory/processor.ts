@@ -151,7 +151,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           stepNumber,
           pendingTokens: ctx.status.pendingTokens,
           threshold: ctx.status.threshold,
-          effectiveObservationTokensThreshold: 0,
+          effectiveObservationTokensThreshold: ctx.status.effectiveObservationTokensThreshold,
           currentObservationTokens: record.observationTokenCount ?? 0,
           writer,
           threadId,

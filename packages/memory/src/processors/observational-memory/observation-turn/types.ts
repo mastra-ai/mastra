@@ -26,6 +26,7 @@ export interface StepContext {
   status: {
     pendingTokens: number;
     threshold: number;
+    effectiveObservationTokensThreshold: number;
     shouldObserve: boolean;
     shouldBuffer: boolean;
     shouldReflect: boolean;

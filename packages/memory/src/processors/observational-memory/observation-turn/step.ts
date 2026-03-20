@@ -231,6 +231,7 @@ export class ObservationStep {
       status: {
         pendingTokens: statusSnapshot.pendingTokens,
         threshold: statusSnapshot.threshold,
+        effectiveObservationTokensThreshold: statusSnapshot.effectiveObservationTokensThreshold,
         shouldObserve: statusSnapshot.shouldObserve,
         shouldBuffer: statusSnapshot.shouldBuffer,
         shouldReflect: statusSnapshot.shouldReflect,
@@ -294,19 +295,8 @@ export class ObservationStep {
       }
     }
 
-    // Check blockAfter gate
-    const config = om.getObservationConfig();
-    if (config.bufferTokens) {
-      const blockAfter = config.blockAfter;
-      if (!blockAfter || freshStatus.pendingTokens < blockAfter) {
-        omDebug(
-          `[OM:step] below blockAfter (${freshStatus.pendingTokens} < ${blockAfter ?? 'unset'}), deferring to async`,
-        );
-        return { succeeded: false, record: freshStatus.record };
-      }
-    }
-
-    // Sync observation
+    // Sync observation — we've waited for buffering and tried activation,
+    // if we're still above threshold we must observe synchronously.
     const obsResult = await om.observe({
       threadId,
       resourceId,

@@ -1147,10 +1147,14 @@ ${workingMemory}`;
 
     // 3. Load messages — unobserved if OM is active, or recent N
     let messages: MastraDBMessage[];
-    if (omEngine && omRecord?.lastObservedAt) {
-      // OM is active: load messages after the observation boundary
-      const startDate = new Date(new Date(omRecord.lastObservedAt).getTime() + 1);
-      const dateFilter = { dateRange: { start: startDate } };
+    if (omEngine && omRecord) {
+      // OM is active: load unobserved messages.
+      // When lastObservedAt exists, load only messages after the boundary.
+      // When lastObservedAt is NULL (no observations yet), load ALL messages
+      // so the threshold check can fire on the full context.
+      const dateFilter = omRecord.lastObservedAt
+        ? { dateRange: { start: new Date(new Date(omRecord.lastObservedAt).getTime() + 1) } }
+        : undefined;
 
       if (omEngine.scope === 'resource' && resourceId) {
         const result = await memoryStore.listMessagesByResourceId({
@@ -1170,7 +1174,7 @@ ${workingMemory}`;
         messages = result.messages;
       }
     } else {
-      // No OM or no observations yet: load recent messages
+      // No OM: load recent messages
       const lastMessages = config.lastMessages;
       if (lastMessages === false) {
         messages = [];
