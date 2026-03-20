@@ -137,8 +137,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   }
 
   async refresh(): Promise<void> {
+    // Remove only skill entries from the shared search engine (not workspace content)
+    for (const skill of this.#skills.values()) {
+      await this.#removeSkillFromIndex(skill);
+    }
     this.#skills.clear();
-    this.#searchEngine?.clear();
     this.#initialized = false;
     this.#initPromise = null;
     await this.#discoverSkills();

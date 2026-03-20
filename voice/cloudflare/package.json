@@ -35,11 +35,11 @@
     "cloudflare": "^4.5.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20251111.0",
+    "@cloudflare/workers-types": "^4.20260316.1",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.39.4",

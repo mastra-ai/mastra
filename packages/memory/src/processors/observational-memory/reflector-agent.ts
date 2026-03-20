@@ -1,3 +1,5 @@
+import { injectAnchorIds, stripEphemeralAnchorIds } from './anchor-ids';
+import { reconcileObservationGroupsFromReflection, renderObservationGroupsForReflection } from './observation-groups';
 import {
   OBSERVER_EXTRACTION_INSTRUCTIONS,
   OBSERVER_OUTPUT_FORMAT_BASE,
@@ -59,6 +61,8 @@ When consolidating observations:
 - Preserve and include dates/times when present (temporal context is critical)
 - Retain the most relevant timestamps (start times, completion times, significant events)
 - Combine related items where it makes sense (e.g., "agent called view tool 5 times on file x")
+- Preserve ✅ completion markers — they are memory signals that tell the assistant what is already resolved and help prevent repeated work
+- Preserve the concrete resolved outcome captured by ✅ markers so the assistant knows what exactly is done
 - Condense older observations more aggressively, retain more detail for recent ones
 
 CRITICAL: USER ASSERTIONS vs QUESTIONS
@@ -147,6 +151,8 @@ Please re-process with slightly more compression:
 - Closer to the end, retain more fine details (recent context matters more)
 - Memory is getting long - use a more condensed style throughout
 - Combine related items more aggressively but do not lose important specific details of names, places, events, and people
+- Preserve ✅ completion markers — they are memory signals that tell the assistant what is already resolved and help prevent repeated work
+- Preserve the concrete resolved outcome captured by ✅ markers so the assistant knows what exactly is done
 - For example if there is a long nested observation list about repeated tool calls, you can combine those into a single line and observe that the tool was called multiple times for x reason, and finally y outcome happened.
 
 Your current detail level was a 10/10, lets aim for a 8/10 detail level.
@@ -161,6 +167,8 @@ Please re-process with much more aggressive compression:
 - Closer to the end, retain fine details (recent context matters more)
 - Memory is getting very long - use a significantly more condensed style throughout
 - Combine related items aggressively but do not lose important specific details of names, places, events, and people
+- Preserve ✅ completion markers — they are memory signals that tell the assistant what is already resolved and help prevent repeated work
+- Preserve the concrete resolved outcome captured by ✅ markers so the assistant knows what exactly is done
 - For example if there is a long nested observation list about repeated tool calls, you can combine those into a single line and observe that the tool was called multiple times for x reason, and finally y outcome happened.
 - Remove redundant information and merge overlapping observations
 
@@ -177,6 +185,8 @@ Please re-process with maximum compression:
 - Ruthlessly merge related observations — if 10 observations are about the same topic, combine into 1-2 lines
 - Drop procedural details (tool calls, retries, intermediate steps) — keep only final outcomes
 - Drop observations that are no longer relevant or have been superseded by newer information
+- Preserve ✅ completion markers — they are memory signals that tell the assistant what is already resolved and help prevent repeated work
+- Preserve the concrete resolved outcome captured by ✅ markers so the assistant knows what exactly is done
 - Preserve: names, dates, decisions, errors, user preferences, and architectural choices
 
 Your current detail level was a 10/10, lets aim for a 4/10 detail level.
@@ -199,10 +209,12 @@ export function buildReflectorPrompt(
 ): string {
   // Normalize: boolean `true` maps to level 1 for backwards compat
   const level: 0 | 1 | 2 | 3 = typeof compressionLevel === 'number' ? compressionLevel : compressionLevel ? 1 : 0;
+  const reflectionView = renderObservationGroupsForReflection(observations) ?? observations;
+  const anchoredObservations = injectAnchorIds(reflectionView);
 
   let prompt = `## OBSERVATIONS TO REFLECT ON
 
-${observations}
+${anchoredObservations}
 
 ---
 
@@ -234,7 +246,7 @@ ${guidance}`;
  * Parse the Reflector's output to extract observations, current task, and suggested response.
  * Uses XML tag parsing for structured extraction.
  */
-export function parseReflectorOutput(output: string): ReflectorResult {
+export function parseReflectorOutput(output: string, sourceObservations?: string): ReflectorResult {
   // Check for degenerate repetition before parsing
   if (detectDegenerateRepetition(output)) {
     return {
@@ -244,13 +256,13 @@ export function parseReflectorOutput(output: string): ReflectorResult {
   }
 
   const parsed = parseReflectorSectionXml(output);
-
-  // Return observations WITHOUT current-task/suggested-response tags
-  // Those are stored separately in thread metadata and injected dynamically
-  const observations = sanitizeObservationLines(parsed.observations || '');
+  const sanitizedObservations = sanitizeObservationLines(stripEphemeralAnchorIds(parsed.observations || ''));
+  const reconciledObservations = sourceObservations
+    ? reconcileObservationGroupsFromReflection(sanitizedObservations, sourceObservations)
+    : null;
 
   return {
-    observations,
+    observations: reconciledObservations ?? sanitizedObservations,
     suggestedContinuation: parsed.suggestedResponse || undefined,
     // Note: Reflector's currentTask is not used - thread metadata preserves per-thread tasks
   };

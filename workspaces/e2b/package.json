@@ -30,7 +30,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "e2b": "^2.12.1"
+    "e2b": "^2.14.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -39,7 +39,7 @@
     "@mastra/core": "workspace:*",
     "@mastra/gcs": "workspace:*",
     "@mastra/s3": "workspace:*",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.3.1",

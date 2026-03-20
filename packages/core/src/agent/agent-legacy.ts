@@ -958,6 +958,7 @@ export class AgentLegacyHandler {
     const beforeResult = await before();
     const { messageList, requestContext: contextWithMemory } = beforeResult;
     const traceId = beforeResult.agentSpan?.externalTraceId;
+    const spanId = beforeResult.agentSpan?.id;
 
     // Check for tripwire and return early if triggered
     if (beforeResult.tripwire) {
@@ -997,6 +998,7 @@ export class AgentLegacyHandler {
         experimental_providerMetadata: undefined,
         tripwire: beforeResult.tripwire,
         traceId,
+        spanId,
       };
 
       return tripwireResult as unknown as OUTPUT extends undefined
@@ -1071,6 +1073,7 @@ export class AgentLegacyHandler {
           experimental_providerMetadata: undefined,
           tripwire: outputProcessorResult.tripwire,
           traceId,
+          spanId,
         };
 
         return tripwireResult as unknown as OUTPUT extends undefined
@@ -1134,6 +1137,7 @@ export class AgentLegacyHandler {
       }
 
       result.traceId = traceId;
+      (result as any).spanId = spanId;
 
       return result as any;
     }
@@ -1199,6 +1203,7 @@ export class AgentLegacyHandler {
         experimental_providerMetadata: undefined,
         tripwire: outputProcessorResult.tripwire,
         traceId,
+        spanId,
       };
 
       return tripwireResult as unknown as OUTPUT extends undefined
@@ -1233,6 +1238,7 @@ export class AgentLegacyHandler {
     }
 
     result.traceId = traceId;
+    (result as any).spanId = spanId;
 
     return result as any;
   }
@@ -1291,6 +1297,7 @@ export class AgentLegacyHandler {
 
     const beforeResult = await before();
     const traceId = beforeResult.agentSpan?.externalTraceId;
+    const spanId = beforeResult.agentSpan?.id;
 
     // Check for tripwire and return early if triggered
     if (beforeResult.tripwire) {
@@ -1340,6 +1347,7 @@ export class AgentLegacyHandler {
         steps: undefined,
         experimental_providerMetadata: undefined,
         traceId,
+        spanId,
         toAIStream: () =>
           Promise.resolve('').then(() => {
             const emptyStream = new (globalThis as any).ReadableStream({
@@ -1428,6 +1436,7 @@ export class AgentLegacyHandler {
       });
 
       streamResult.traceId = traceId;
+      (streamResult as any).spanId = spanId;
 
       return streamResult as unknown as
         | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
@@ -1506,6 +1515,7 @@ export class AgentLegacyHandler {
     });
 
     (streamObjectResult as any).traceId = traceId;
+    (streamObjectResult as any).spanId = spanId;
 
     return streamObjectResult as StreamObjectResult<OUTPUT extends ZodSchema ? OUTPUT : never> & TracingProperties;
   }

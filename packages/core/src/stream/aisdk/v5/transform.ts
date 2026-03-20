@@ -82,6 +82,11 @@ export function tryRepairJson(input: string): Record<string, any> | null {
   // e.g. {"a":1,} → {"a":1}
   repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
 
+  // Fix 5: Unquoted date/datetime values (issue #14230)
+  // e.g. {"dueStart": 2026-04-15} → {"dueStart": "2026-04-15"}
+  // e.g. {"start": 2026-04-15T09:00:00} → {"start": "2026-04-15T09:00:00"}
+  repaired = repaired.replace(/:\s*(\d{4}-\d{2}-\d{2}(?:T[\d:]+)?)\s*([,}])/g, ': "$1"$2');
+
   try {
     return JSON.parse(repaired);
   } catch {

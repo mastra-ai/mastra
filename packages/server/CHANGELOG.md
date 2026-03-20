@@ -1,5 +1,201 @@
 # @mastra/server
 
+## 1.15.0
+
+### Minor Changes
+
+- Added version query parameters to GET /api/agents/:agentId endpoint. Code-defined agents can now be resolved with specific stored config versions using ?status=draft (latest, default), ?status=published (active version), or ?versionId=<id> (specific version). ([#14156](https://github.com/mastra-ai/mastra/pull/14156))
+
+### Patch Changes
+
+- Added missing route "GET_METRICS_BREAKDOWN" to observability server domain. ([#14457](https://github.com/mastra-ai/mastra/pull/14457))
+
+- fix: remove explicit Transfer-Encoding header to prevent duplicate headers in Bun runtime ([#11545](https://github.com/mastra-ai/mastra/pull/11545))
+
+  Removes explicit `Transfer-Encoding: chunked` header from `toTextStreamResponse()` and `toDataStreamResponse()` calls in agent streaming handlers. When deploying with Bun, the runtime automatically adds this header for `ReadableStream` responses. Setting it explicitly caused duplicate headers, which broke HTTP protocol compliance and resulted in 502 errors.
+
+  Node.js runtimes will continue to automatically add the `Transfer-Encoding` header for chunked responses, so this change has no impact on Node.js deployments.
+
+  Fixes #11510
+
+- Updated dependencies [[`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5), [`da93115`](https://github.com/mastra-ai/mastra/commit/da931155c1a9bc63d455d3d86b4ec984db5991fe), [`62d1d3c`](https://github.com/mastra-ai/mastra/commit/62d1d3cc08fe8182e7080237fd975de862ec8c91), [`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`8681ecb`](https://github.com/mastra-ai/mastra/commit/8681ecb86184d5907267000e4576cc442a9a83fc), [`28d0249`](https://github.com/mastra-ai/mastra/commit/28d0249295782277040ad1e0d243e695b7ab1ce4), [`681ee1c`](https://github.com/mastra-ai/mastra/commit/681ee1c811359efd1b8bebc4bce35b9bb7b14bec), [`bb0f09d`](https://github.com/mastra-ai/mastra/commit/bb0f09dbac58401b36069f483acf5673202db5b5), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8), [`5f7e9d0`](https://github.com/mastra-ai/mastra/commit/5f7e9d0db664020e1f3d97d7d18c6b0b9d4843d0), [`d7f14c3`](https://github.com/mastra-ai/mastra/commit/d7f14c3285cd253ecdd5f58139b7b6cbdf3678b5), [`0efe12a`](https://github.com/mastra-ai/mastra/commit/0efe12a5f008a939a1aac71699486ba40138054e)]:
+  - @mastra/core@1.15.0
+
+## 1.15.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`da93115`](https://github.com/mastra-ai/mastra/commit/da931155c1a9bc63d455d3d86b4ec984db5991fe), [`0efe12a`](https://github.com/mastra-ai/mastra/commit/0efe12a5f008a939a1aac71699486ba40138054e)]:
+  - @mastra/core@1.15.0-alpha.4
+
+## 1.15.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`d7f14c3`](https://github.com/mastra-ai/mastra/commit/d7f14c3285cd253ecdd5f58139b7b6cbdf3678b5)]:
+  - @mastra/core@1.15.0-alpha.3
+
+## 1.15.0-alpha.2
+
+### Patch Changes
+
+- fix: remove explicit Transfer-Encoding header to prevent duplicate headers in Bun runtime ([#11545](https://github.com/mastra-ai/mastra/pull/11545))
+
+  Removes explicit `Transfer-Encoding: chunked` header from `toTextStreamResponse()` and `toDataStreamResponse()` calls in agent streaming handlers. When deploying with Bun, the runtime automatically adds this header for `ReadableStream` responses. Setting it explicitly caused duplicate headers, which broke HTTP protocol compliance and resulted in 502 errors.
+
+  Node.js runtimes will continue to automatically add the `Transfer-Encoding` header for chunked responses, so this change has no impact on Node.js deployments.
+
+  Fixes #11510
+
+- Updated dependencies [[`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8)]:
+  - @mastra/core@1.15.0-alpha.2
+
+## 1.15.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`681ee1c`](https://github.com/mastra-ai/mastra/commit/681ee1c811359efd1b8bebc4bce35b9bb7b14bec)]:
+  - @mastra/core@1.15.0-alpha.1
+
+## 1.15.0-alpha.0
+
+### Minor Changes
+
+- Added version query parameters to GET /api/agents/:agentId endpoint. Code-defined agents can now be resolved with specific stored config versions using ?status=draft (latest, default), ?status=published (active version), or ?versionId=<id> (specific version). ([#14156](https://github.com/mastra-ai/mastra/pull/14156))
+
+### Patch Changes
+
+- Added missing route "GET_METRICS_BREAKDOWN" to observability server domain. ([#14457](https://github.com/mastra-ai/mastra/pull/14457))
+
+- Updated dependencies [[`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5), [`62d1d3c`](https://github.com/mastra-ai/mastra/commit/62d1d3cc08fe8182e7080237fd975de862ec8c91), [`8681ecb`](https://github.com/mastra-ai/mastra/commit/8681ecb86184d5907267000e4576cc442a9a83fc), [`28d0249`](https://github.com/mastra-ai/mastra/commit/28d0249295782277040ad1e0d243e695b7ab1ce4), [`bb0f09d`](https://github.com/mastra-ai/mastra/commit/bb0f09dbac58401b36069f483acf5673202db5b5), [`5f7e9d0`](https://github.com/mastra-ai/mastra/commit/5f7e9d0db664020e1f3d97d7d18c6b0b9d4843d0)]:
+  - @mastra/core@1.15.0-alpha.0
+
+## 1.14.0
+
+### Minor Changes
+
+- Added new observability API endpoints and client methods for logs, scores, feedback, metrics (aggregate, breakdown, time series, percentiles), and discovery (metric names, label keys/values, entity types/names, service names, environments, tags) ([#14270](https://github.com/mastra-ai/mastra/pull/14270))
+
+### Patch Changes
+
+- Fixed server tool serialization for plain JSON Schema objects to prevent tools from disappearing in Studio. ([#13920](https://github.com/mastra-ai/mastra/pull/13920))
+
+- Updated dependencies [[`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`085e371`](https://github.com/mastra-ai/mastra/commit/085e3718a7d0fe9a210fe7dd1c867b9bdfe8d16b), [`b77aa19`](https://github.com/mastra-ai/mastra/commit/b77aa1981361c021f2c881bee8f0c703687f00da), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8b4ce84`](https://github.com/mastra-ai/mastra/commit/8b4ce84aed0808b9805cc4fd7147c1f8a2ef7a36), [`8d4cfe6`](https://github.com/mastra-ai/mastra/commit/8d4cfe6b9a7157d3876206227ec9f04cde6dbc4a), [`dd6ca1c`](https://github.com/mastra-ai/mastra/commit/dd6ca1cdea3b8b6182f4cf61df41070ba0cc0deb), [`ce26fe2`](https://github.com/mastra-ai/mastra/commit/ce26fe2166dd90254f8bee5776e55977143e97de), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`4cb4edf`](https://github.com/mastra-ai/mastra/commit/4cb4edf3c909d197ec356c1790d13270514ffef6), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a)]:
+  - @mastra/core@1.14.0
+
+## 1.14.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`8b4ce84`](https://github.com/mastra-ai/mastra/commit/8b4ce84aed0808b9805cc4fd7147c1f8a2ef7a36), [`8d4cfe6`](https://github.com/mastra-ai/mastra/commit/8d4cfe6b9a7157d3876206227ec9f04cde6dbc4a), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a)]:
+  - @mastra/core@1.14.0-alpha.3
+
+## 1.14.0-alpha.2
+
+### Minor Changes
+
+- Added new observability API endpoints and client methods for logs, scores, feedback, metrics (aggregate, breakdown, time series, percentiles), and discovery (metric names, label keys/values, entity types/names, service names, environments, tags) ([#14270](https://github.com/mastra-ai/mastra/pull/14270))
+
+### Patch Changes
+
+- Updated dependencies [[`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f)]:
+  - @mastra/core@1.14.0-alpha.2
+
+## 1.13.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`b77aa19`](https://github.com/mastra-ai/mastra/commit/b77aa1981361c021f2c881bee8f0c703687f00da), [`dd6ca1c`](https://github.com/mastra-ai/mastra/commit/dd6ca1cdea3b8b6182f4cf61df41070ba0cc0deb), [`4cb4edf`](https://github.com/mastra-ai/mastra/commit/4cb4edf3c909d197ec356c1790d13270514ffef6)]:
+  - @mastra/core@1.13.3-alpha.1
+
+## 1.13.3-alpha.0
+
+### Patch Changes
+
+- Fixed server tool serialization for plain JSON Schema objects to prevent tools from disappearing in Studio. ([#13920](https://github.com/mastra-ai/mastra/pull/13920))
+
+- Updated dependencies [[`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`085e371`](https://github.com/mastra-ai/mastra/commit/085e3718a7d0fe9a210fe7dd1c867b9bdfe8d16b), [`ce26fe2`](https://github.com/mastra-ai/mastra/commit/ce26fe2166dd90254f8bee5776e55977143e97de), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1)]:
+  - @mastra/core@1.13.3-alpha.0
+
+## 1.13.2
+
+### Patch Changes
+
+- Updated dependencies [[`0ce6035`](https://github.com/mastra-ai/mastra/commit/0ce603591189f547397704e53f23c77bc5630071)]:
+  - @mastra/core@1.13.2
+
+## 1.13.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`0ce6035`](https://github.com/mastra-ai/mastra/commit/0ce603591189f547397704e53f23c77bc5630071)]:
+  - @mastra/core@1.13.2-alpha.0
+
+## 1.13.1
+
+### Patch Changes
+
+- Fixed memory API endpoints (`/memory/config` and `/memory/threads/:threadId/working-memory`) returning 400 errors when agents don't have memory configured. These endpoints now return graceful null responses instead of throwing, preventing console error noise in the playground/studio. Fixes regression of #11765. ([#14234](https://github.com/mastra-ai/mastra/pull/14234))
+
+- Updated dependencies [[`205e76c`](https://github.com/mastra-ai/mastra/commit/205e76c3ba652205dafb037f50a4a8eea73f6736)]:
+  - @mastra/core@1.13.1
+
+## 1.13.0
+
+### Minor Changes
+
+- Added `@mastra/server/schemas` export with utility types that infer path params, query params, request body, and response types from any route in `SERVER_ROUTES`. When you add a new route via `createRoute()`, it automatically appears in the `RouteMap` type — no manual contract needed. ([#14008](https://github.com/mastra-ai/mastra/pull/14008))
+
+  ```ts
+  import type { RouteMap, RouteContract, InferPathParams, InferBody, InferResponse } from '@mastra/server/schemas';
+
+  type GetAgentParams = InferPathParams<RouteMap['GET /agents/:agentId']>;
+  // => { agentId: string }
+
+  type GenerateBody = InferBody<RouteMap['POST /agents/:agentId/generate']>;
+  // => { messages: CoreMessage[], ... }
+
+  type AgentResponse = InferResponse<RouteMap['GET /agents/:agentId']>;
+  // => { name: string, tools: ..., ... }
+  ```
+
+### Patch Changes
+
+- Fixed OpenAPI spec for custom route paths. Custom routes registered via `registerApiRoute` are served at the root path (e.g. `/health`), not under `/api`. The OpenAPI spec now correctly represents this so that API tools and clients using the spec will resolve them to the correct URL. ([#13930](https://github.com/mastra-ai/mastra/pull/13930))
+
+- Fixed an unnecessary runtime dependency in `@mastra/server`, reducing install size for consumers. Moved `@mastra/schema-compat` from dependencies to devDependencies since it is only needed at build time. ([#14223](https://github.com/mastra-ai/mastra/pull/14223))
+
+- Updated dependencies [[`ea86967`](https://github.com/mastra-ai/mastra/commit/ea86967449426e0a3673253bd1c2c052a99d970d), [`db21c21`](https://github.com/mastra-ai/mastra/commit/db21c21a6ae5f33539262cc535342fa8757eb359), [`11f5dbe`](https://github.com/mastra-ai/mastra/commit/11f5dbe9a1e7ad8ef3b1ea34fb4a9fa3631d1587), [`6751354`](https://github.com/mastra-ai/mastra/commit/67513544d1a64be891d9de7624d40aadc895d56e), [`c958cd3`](https://github.com/mastra-ai/mastra/commit/c958cd36627c1eea122ec241b2b15492977a263a), [`86f2426`](https://github.com/mastra-ai/mastra/commit/86f242631d252a172d2f9f9a2ea0feb8647a76b0), [`950eb07`](https://github.com/mastra-ai/mastra/commit/950eb07b7e7354629630e218d49550fdd299c452)]:
+  - @mastra/core@1.13.0
+
+## 1.13.0-alpha.0
+
+### Minor Changes
+
+- Added `@mastra/server/schemas` export with utility types that infer path params, query params, request body, and response types from any route in `SERVER_ROUTES`. When you add a new route via `createRoute()`, it automatically appears in the `RouteMap` type — no manual contract needed. ([#14008](https://github.com/mastra-ai/mastra/pull/14008))
+
+  ```ts
+  import type { RouteMap, RouteContract, InferPathParams, InferBody, InferResponse } from '@mastra/server/schemas';
+
+  type GetAgentParams = InferPathParams<RouteMap['GET /agents/:agentId']>;
+  // => { agentId: string }
+
+  type GenerateBody = InferBody<RouteMap['POST /agents/:agentId/generate']>;
+  // => { messages: CoreMessage[], ... }
+
+  type AgentResponse = InferResponse<RouteMap['GET /agents/:agentId']>;
+  // => { name: string, tools: ..., ... }
+  ```
+
+### Patch Changes
+
+- Fixed OpenAPI spec for custom route paths. Custom routes registered via `registerApiRoute` are served at the root path (e.g. `/health`), not under `/api`. The OpenAPI spec now correctly represents this so that API tools and clients using the spec will resolve them to the correct URL. ([#13930](https://github.com/mastra-ai/mastra/pull/13930))
+
+- Fixed an unnecessary runtime dependency in `@mastra/server`, reducing install size for consumers. Moved `@mastra/schema-compat` from dependencies to devDependencies since it is only needed at build time. ([#14223](https://github.com/mastra-ai/mastra/pull/14223))
+
+- Updated dependencies [[`ea86967`](https://github.com/mastra-ai/mastra/commit/ea86967449426e0a3673253bd1c2c052a99d970d), [`db21c21`](https://github.com/mastra-ai/mastra/commit/db21c21a6ae5f33539262cc535342fa8757eb359), [`11f5dbe`](https://github.com/mastra-ai/mastra/commit/11f5dbe9a1e7ad8ef3b1ea34fb4a9fa3631d1587), [`6751354`](https://github.com/mastra-ai/mastra/commit/67513544d1a64be891d9de7624d40aadc895d56e), [`c958cd3`](https://github.com/mastra-ai/mastra/commit/c958cd36627c1eea122ec241b2b15492977a263a), [`86f2426`](https://github.com/mastra-ai/mastra/commit/86f242631d252a172d2f9f9a2ea0feb8647a76b0), [`950eb07`](https://github.com/mastra-ai/mastra/commit/950eb07b7e7354629630e218d49550fdd299c452)]:
+  - @mastra/core@1.13.0-alpha.0
+
 ## 1.12.0
 
 ### Patch Changes

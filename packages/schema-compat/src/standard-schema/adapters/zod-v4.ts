@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../standard-schema.types';
 
@@ -6,6 +7,16 @@ import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../sta
  * Works with both real Zod v4 and Zod 3.25's v4 compat layer.
  */
 const SUPPORTED_TARGETS = new Set(['draft-07', 'draft-04', 'draft-2020-12']);
+
+/**
+ * Maps Mastra's target names to Zod v4's expected format.
+ * Zod v4's z.toJSONSchema() expects "draft-7" instead of "draft-07",
+ * and "draft-4" instead of "draft-04".
+ */
+const ZOD_V4_TARGET_MAP: Record<string, string> = {
+  'draft-07': 'draft-7',
+  'draft-04': 'draft-4',
+};
 
 /**
  * Options for the Zod v4 adapter's JSON Schema conversion.
@@ -35,7 +46,7 @@ function convertToJsonSchema(
   const target = SUPPORTED_TARGETS.has(options.target) ? options.target : 'draft-07';
 
   const jsonSchemaOptions: Record<string, unknown> = {
-    target,
+    target: ZOD_V4_TARGET_MAP[target] ?? target,
   };
 
   if (adapterOptions.unrepresentable) {
@@ -51,21 +62,61 @@ function convertToJsonSchema(
 }
 
 /**
- * Cached reference to z.toJSONSchema from zod/v4.
+ * Cached reference to z.toJSONSchema.
  */
 let _toJSONSchema: ((schema: unknown, options?: unknown) => unknown) | null = null;
 let _toJSONSchemaResolved = false;
+
+let __require: ReturnType<typeof createRequire>;
+
+function getRequire(): ReturnType<typeof createRequire> {
+  if (!__require) {
+    __require = createRequire(import.meta.url);
+  }
+  return __require;
+}
+function pickToJSONSchema(mod: unknown): ((schema: unknown, options?: unknown) => unknown) | null {
+  const candidate = mod as {
+    toJSONSchema?: unknown;
+    z?: { toJSONSchema?: unknown };
+    default?: { toJSONSchema?: unknown; z?: { toJSONSchema?: unknown } };
+  };
+
+  const picks = [
+    candidate?.toJSONSchema,
+    candidate?.z?.toJSONSchema,
+    candidate?.default?.toJSONSchema,
+    candidate?.default?.z?.toJSONSchema,
+  ];
+
+  const toJSONSchema = picks.find(fn => typeof fn === 'function');
+  return (toJSONSchema as ((schema: unknown, options?: unknown) => unknown) | undefined) ?? null;
+}
+
+function resolveToJSONSchema(
+  loadModule: (moduleName: 'zod/v4' | 'zod') => unknown,
+): ((schema: unknown, options?: unknown) => unknown) | null {
+  for (const moduleName of ['zod/v4', 'zod'] as const) {
+    try {
+      const zodModule = loadModule(moduleName);
+      const toJSONSchema = pickToJSONSchema(zodModule);
+      if (toJSONSchema) {
+        return toJSONSchema;
+      }
+    } catch {
+      // Try next module path.
+    }
+  }
+
+  return null;
+}
 
 function getToJSONSchema(): ((schema: unknown, options?: unknown) => unknown) | null {
   if (_toJSONSchemaResolved) {
     return _toJSONSchema;
   }
-  try {
-    const zv4 = require('zod/v4');
-    _toJSONSchema = typeof zv4.toJSONSchema === 'function' ? zv4.toJSONSchema : null;
-  } catch {
-    _toJSONSchema = null;
-  }
+
+  _toJSONSchema = resolveToJSONSchema(moduleName => getRequire()(moduleName));
   _toJSONSchemaResolved = true;
   return _toJSONSchema;
 }

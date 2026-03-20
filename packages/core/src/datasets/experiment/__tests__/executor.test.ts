@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Agent } from '../../../agent';
+import { RequestContext } from '../../../request-context';
 import type { Workflow } from '../../../workflows';
 import { executeTarget } from '../executor';
 
@@ -65,6 +66,34 @@ describe('executeTarget', () => {
         scorers: {},
         returnScorerData: true,
       });
+    });
+
+    it('passes requestContext to agent.generate as a RequestContext instance', async () => {
+      const mockAgent = createMockAgent('Hello response');
+
+      await executeTarget(
+        mockAgent,
+        'agent',
+        {
+          id: 'item-1',
+          datasetId: 'ds-1',
+          input: 'Hello',
+          groundTruth: null,
+          version: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        { requestContext: { userId: 'dev-user-123', environment: 'development' } },
+      );
+
+      expect(mockAgent.generate).toHaveBeenCalledTimes(1);
+      const callArgs = (mockAgent.generate as ReturnType<typeof vi.fn>).mock.calls[0];
+      const options = callArgs[1];
+
+      // requestContext should be a RequestContext instance
+      expect(options.requestContext).toBeInstanceOf(RequestContext);
+      // It should contain the values we passed
+      expect(options.requestContext.all).toEqual({ userId: 'dev-user-123', environment: 'development' });
     });
 
     it('handles messages array input and returns FullOutput', async () => {
