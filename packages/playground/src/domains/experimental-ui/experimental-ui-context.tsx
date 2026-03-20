@@ -66,18 +66,12 @@ export function ExperimentalUIProvider({
     setVariants(initial);
   }, [experiments, validVariantsMap]);
 
-  const getVariant = React.useCallback(
-    (key: string) => variants[key] ?? DEFAULT_VARIANT,
-    [variants],
-  );
+  const getVariant = React.useCallback((key: string) => variants[key] ?? DEFAULT_VARIANT, [variants]);
 
-  const setVariant = React.useCallback(
-    (key: string, variant: string) => {
-      window.localStorage.setItem(STORAGE_PREFIX + key, variant);
-      setVariants(prev => ({ ...prev, [key]: variant }));
-    },
-    [],
-  );
+  const setVariant = React.useCallback((key: string, variant: string) => {
+    window.localStorage.setItem(STORAGE_PREFIX + key, variant);
+    setVariants(prev => ({ ...prev, [key]: variant }));
+  }, []);
 
   const contextValue = React.useMemo<ExperimentalUIContextValue>(
     () => ({ experiments, getVariant, setVariant }),

@@ -23,7 +23,14 @@ export interface ToolsListProps {
   onSearch?: (search: string) => void;
 }
 
-export function ToolsList({ tools, agents, isLoading, error, search: externalSearch, onSearch: externalOnSearch }: ToolsListProps) {
+export function ToolsList({
+  tools,
+  agents,
+  isLoading,
+  error,
+  search: externalSearch,
+  onSearch: externalOnSearch,
+}: ToolsListProps) {
   const { paths } = useLinkComponent();
   const [internalSearch, setInternalSearch] = useState('');
   const search = externalSearch ?? internalSearch;
@@ -67,11 +74,7 @@ export function ToolsList({ tools, agents, isLoading, error, search: externalSea
   }
 
   if (isLoading) {
-    return (
-      <EntityListSkeleton
-        columns="auto 1fr auto"
-      />
-    );
+    return <EntityListSkeleton columns="auto 1fr auto" />;
   }
 
   return (
@@ -94,10 +97,10 @@ export function ToolsList({ tools, agents, isLoading, error, search: externalSea
 
         return (
           <EntityList.RowLink key={tool.id} to={paths.toolLink(tool.id)}>
-              <EntityList.NameCell>{name}</EntityList.NameCell>
-              <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
-              <EntityList.TextCell className="text-center">{agentsCount || ''}</EntityList.TextCell>
-            </EntityList.RowLink>
+            <EntityList.NameCell>{name}</EntityList.NameCell>
+            <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
+            <EntityList.TextCell className="text-center">{agentsCount || ''}</EntityList.TextCell>
+          </EntityList.RowLink>
         );
       })}
     </EntityList>

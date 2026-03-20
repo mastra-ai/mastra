@@ -44,11 +44,7 @@ export function DatasetsList({
   }
 
   if (isLoading) {
-    return (
-      <EntityListSkeleton
-        columns="auto 1fr auto auto"
-      />
-    );
+    return <EntityListSkeleton columns="auto 1fr auto auto" />;
   }
 
   return (

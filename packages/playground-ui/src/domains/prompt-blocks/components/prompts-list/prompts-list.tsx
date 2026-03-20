@@ -15,7 +15,12 @@ export interface PromptsListProps {
   onSearch?: (search: string) => void;
 }
 
-export function PromptsList({ promptBlocks, isLoading, search: externalSearch, onSearch: externalOnSearch }: PromptsListProps) {
+export function PromptsList({
+  promptBlocks,
+  isLoading,
+  search: externalSearch,
+  onSearch: externalOnSearch,
+}: PromptsListProps) {
   const { paths } = useLinkComponent();
   const [internalSearch, setInternalSearch] = useState('');
   const search = externalSearch ?? internalSearch;
@@ -46,11 +51,7 @@ export function PromptsList({ promptBlocks, isLoading, search: externalSearch, o
   }
 
   if (isLoading) {
-    return (
-      <EntityListSkeleton
-        columns="auto 1fr auto auto"
-      />
-    );
+    return <EntityListSkeleton columns="auto 1fr auto auto" />;
   }
 
   return (
@@ -68,15 +69,15 @@ export function PromptsList({ promptBlocks, isLoading, search: externalSearch, o
 
         return (
           <EntityList.RowLink key={block.id} to={paths.cmsPromptBlockEditLink(block.id)}>
-              <EntityList.NameCell>{name}</EntityList.NameCell>
-              <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
-              <EntityList.TextCell className="text-center">
-                {(block.hasDraft || !block.activeVersionId) && <CheckIcon className="size-4 mx-auto" />}
-              </EntityList.TextCell>
-              <EntityList.TextCell className="text-center">
-                {block.activeVersionId && <CheckIcon className="size-4 mx-auto" />}
-              </EntityList.TextCell>
-            </EntityList.RowLink>
+            <EntityList.NameCell>{name}</EntityList.NameCell>
+            <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
+            <EntityList.TextCell className="text-center">
+              {(block.hasDraft || !block.activeVersionId) && <CheckIcon className="size-4 mx-auto" />}
+            </EntityList.TextCell>
+            <EntityList.TextCell className="text-center">
+              {block.activeVersionId && <CheckIcon className="size-4 mx-auto" />}
+            </EntityList.TextCell>
+          </EntityList.RowLink>
         );
       })}
     </EntityList>

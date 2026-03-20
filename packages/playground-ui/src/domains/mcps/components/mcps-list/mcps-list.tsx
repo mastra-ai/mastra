@@ -39,16 +39,22 @@ function McpServerRow({ server }: { server: McpServer }) {
 
   return (
     <EntityList.RowLink to={paths.mcpServerLink(server.id)}>
-        <EntityList.NameCell>{name}</EntityList.NameCell>
-        <EntityList.DescriptionCell>{sseUrl}</EntityList.DescriptionCell>
-        <EntityList.TextCell className="text-center">{agentToolsCount || ''}</EntityList.TextCell>
-        <EntityList.TextCell className="text-center">{toolsCount || ''}</EntityList.TextCell>
-        <EntityList.TextCell className="text-center">{workflowToolsCount || ''}</EntityList.TextCell>
-      </EntityList.RowLink>
+      <EntityList.NameCell>{name}</EntityList.NameCell>
+      <EntityList.DescriptionCell>{sseUrl}</EntityList.DescriptionCell>
+      <EntityList.TextCell className="text-center">{agentToolsCount || ''}</EntityList.TextCell>
+      <EntityList.TextCell className="text-center">{toolsCount || ''}</EntityList.TextCell>
+      <EntityList.TextCell className="text-center">{workflowToolsCount || ''}</EntityList.TextCell>
+    </EntityList.RowLink>
   );
 }
 
-export function McpServersList({ mcpServers, isLoading, error, search: externalSearch, onSearch: externalOnSearch }: McpServersListProps) {
+export function McpServersList({
+  mcpServers,
+  isLoading,
+  error,
+  search: externalSearch,
+  onSearch: externalOnSearch,
+}: McpServersListProps) {
   const [internalSearch, setInternalSearch] = useState('');
   const search = externalSearch ?? internalSearch;
 
@@ -82,11 +88,7 @@ export function McpServersList({ mcpServers, isLoading, error, search: externalS
   }
 
   if (isLoading) {
-    return (
-      <EntityListSkeleton
-        columns="auto 1fr auto auto auto"
-      />
-    );
+    return <EntityListSkeleton columns="auto 1fr auto auto auto" />;
   }
 
   return (
@@ -96,7 +98,12 @@ export function McpServersList({ mcpServers, isLoading, error, search: externalS
         <EntityList.TopCell>URL</EntityList.TopCell>
         <EntityList.TopCellSmart long="Agents" short={<AgentIcon />} tooltip="Agent Tools" className="text-center" />
         <EntityList.TopCellSmart long="Tools" short={<ToolsIcon />} tooltip="Tools" className="text-center" />
-        <EntityList.TopCellSmart long="Workflows" short={<WorkflowIcon />} tooltip="Workflow Tools" className="text-center" />
+        <EntityList.TopCellSmart
+          long="Workflows"
+          short={<WorkflowIcon />}
+          tooltip="Workflow Tools"
+          className="text-center"
+        />
       </EntityList.Top>
 
       {filteredData.map(server => (

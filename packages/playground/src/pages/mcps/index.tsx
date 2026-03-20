@@ -55,7 +55,13 @@ const MCPs = () => {
           </div>
         </EntityListPageLayout.Top>
 
-        <McpServersList mcpServers={mcpServers} isLoading={isLoading} error={error} search={search} onSearch={setSearch} />
+        <McpServersList
+          mcpServers={mcpServers}
+          isLoading={isLoading}
+          error={error}
+          search={search}
+          onSearch={setSearch}
+        />
       </EntityListPageLayout>
     );
   }

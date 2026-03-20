@@ -20,7 +20,13 @@ export interface ScorersListProps {
   onSearch?: (search: string) => void;
 }
 
-export function ScorersList({ scorers, isLoading, error, search: externalSearch, onSearch: externalOnSearch }: ScorersListProps) {
+export function ScorersList({
+  scorers,
+  isLoading,
+  error,
+  search: externalSearch,
+  onSearch: externalOnSearch,
+}: ScorersListProps) {
   const { paths } = useLinkComponent();
   const [internalSearch, setInternalSearch] = useState('');
   const search = externalSearch ?? internalSearch;
@@ -37,9 +43,7 @@ export function ScorersList({ scorers, isLoading, error, search: externalSearch,
   const filteredData = useMemo(() => {
     const term = search.toLowerCase();
     return scorersData.filter(
-      s =>
-        s.scorer.config?.id?.toLowerCase().includes(term) ||
-        s.scorer.config?.name?.toLowerCase().includes(term),
+      s => s.scorer.config?.id?.toLowerCase().includes(term) || s.scorer.config?.name?.toLowerCase().includes(term),
     );
   }, [scorersData, search]);
 
@@ -75,11 +79,7 @@ export function ScorersList({ scorers, isLoading, error, search: externalSearch,
   }
 
   if (isLoading) {
-    return (
-      <EntityListSkeleton
-        columns="auto 1fr auto auto"
-      />
-    );
+    return <EntityListSkeleton columns="auto 1fr auto auto" />;
   }
 
   return (
@@ -99,11 +99,11 @@ export function ScorersList({ scorers, isLoading, error, search: externalSearch,
 
         return (
           <EntityList.RowLink key={scorer.id} to={paths.scorerLink(scorer.id)}>
-              <EntityList.NameCell>{name}</EntityList.NameCell>
-              <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
-              <EntityList.TextCell className="text-center">{agentsCount || ''}</EntityList.TextCell>
-              <EntityList.TextCell className="text-center">{workflowsCount || ''}</EntityList.TextCell>
-            </EntityList.RowLink>
+            <EntityList.NameCell>{name}</EntityList.NameCell>
+            <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
+            <EntityList.TextCell className="text-center">{agentsCount || ''}</EntityList.TextCell>
+            <EntityList.TextCell className="text-center">{workflowsCount || ''}</EntityList.TextCell>
+          </EntityList.RowLink>
         );
       })}
     </EntityList>

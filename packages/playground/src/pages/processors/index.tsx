@@ -55,7 +55,13 @@ export function Processors() {
           </div>
         </EntityListPageLayout.Top>
 
-        <ProcessorsList processors={processors} isLoading={isLoading} error={error} search={search} onSearch={setSearch} />
+        <ProcessorsList
+          processors={processors}
+          isLoading={isLoading}
+          error={error}
+          search={search}
+          onSearch={setSearch}
+        />
       </EntityListPageLayout>
     );
   }

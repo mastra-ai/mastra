@@ -72,11 +72,7 @@ export function WorkflowsList({
   }
 
   if (isLoading) {
-    return (
-      <EntityListSkeleton
-        columns="auto 1fr auto"
-      />
-    );
+    return <EntityListSkeleton columns="auto 1fr auto" />;
   }
 
   return (
@@ -94,10 +90,10 @@ export function WorkflowsList({
 
         return (
           <EntityList.RowLink key={wf.id} to={paths.workflowLink(wf.id)}>
-              <EntityList.NameCell>{name}</EntityList.NameCell>
-              <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
-              <EntityList.TextCell className="text-center">{stepsCount || ''}</EntityList.TextCell>
-            </EntityList.RowLink>
+            <EntityList.NameCell>{name}</EntityList.NameCell>
+            <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
+            <EntityList.TextCell className="text-center">{stepsCount || ''}</EntityList.TextCell>
+          </EntityList.RowLink>
         );
       })}
     </EntityList>
