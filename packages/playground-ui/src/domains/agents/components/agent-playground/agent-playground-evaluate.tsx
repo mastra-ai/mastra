@@ -356,7 +356,9 @@ export function AgentPlaygroundEvaluate({
                             isGenerating ? (
                               <span className="flex items-center gap-1 text-accent1">
                                 <Spinner className="w-3 h-3" />
-                                <Txt variant="ui-xs" className="text-accent1">Generating...</Txt>
+                                <Txt variant="ui-xs" className="text-accent1">
+                                  Generating...
+                                </Txt>
                               </span>
                             ) : hasReviewItems ? (
                               <button
@@ -583,17 +585,19 @@ export function AgentPlaygroundEvaluate({
           onDismiss={() => setGenerateDatasetId(null)}
         />
       )}
-      {reviewDatasetId && generationTasks[reviewDatasetId]?.status === 'review-ready' && generationTasks[reviewDatasetId]?.items && (
-        <GenerateReviewDialog
-          datasetId={reviewDatasetId}
-          items={generationTasks[reviewDatasetId].items!}
-          modelId={generationTasks[reviewDatasetId].modelId}
-          onDismiss={() => {
-            dismissTask(reviewDatasetId);
-            setReviewDatasetId(null);
-          }}
-        />
-      )}
+      {reviewDatasetId &&
+        generationTasks[reviewDatasetId]?.status === 'review-ready' &&
+        generationTasks[reviewDatasetId]?.items && (
+          <GenerateReviewDialog
+            datasetId={reviewDatasetId}
+            items={generationTasks[reviewDatasetId].items!}
+            modelId={generationTasks[reviewDatasetId].modelId}
+            onDismiss={() => {
+              dismissTask(reviewDatasetId);
+              setReviewDatasetId(null);
+            }}
+          />
+        )}
 
       {/* Attach Existing Dataset dialog */}
       <Dialog

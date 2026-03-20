@@ -629,7 +629,13 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     />
                   </div>
                   <div className="flex-1">
-                    <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} size="sm" container={analyzeContentRef} />
+                    <LLMModels
+                      llmId={analyzeProvider}
+                      value={analyzeModel}
+                      onValueChange={setAnalyzeModel}
+                      size="sm"
+                      container={analyzeContentRef}
+                    />
                   </div>
                 </div>
               </div>

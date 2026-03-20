@@ -172,7 +172,9 @@ export const mapInstructionBlocksToApi = (blocks: InstructionBlock[] | undefined
 const normalizeBlockContent = (content: unknown): string => {
   if (typeof content === 'string') return content;
   if (content && typeof content === 'object' && 'content' in content) {
-    return typeof (content as { content: unknown }).content === 'string' ? (content as { content: string }).content : '';
+    return typeof (content as { content: unknown }).content === 'string'
+      ? (content as { content: string }).content
+      : '';
   }
   return '';
 };
@@ -201,7 +203,10 @@ export const mapInstructionBlocksFromApi = (
   // If the raw value is an AgentInstructionBlock[] (array of objects with `type`),
   // process each block individually.
   const isBlockArray =
-    Array.isArray(instructionsRaw) && instructionsRaw.length > 0 && typeof instructionsRaw[0] === 'object' && 'type' in instructionsRaw[0];
+    Array.isArray(instructionsRaw) &&
+    instructionsRaw.length > 0 &&
+    typeof instructionsRaw[0] === 'object' &&
+    'type' in instructionsRaw[0];
 
   if (isBlockArray) {
     const blocks = instructionsRaw as AgentInstructionBlock[];

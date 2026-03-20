@@ -123,7 +123,13 @@ export function GenerateConfigDialog({ datasetId, agentContext, onDismiss }: Gen
                   />
                 </div>
                 <div className="flex-1">
-                  <LLMModels llmId={localProvider} value={localModel} onValueChange={setLocalModel} size="sm" container={configContentRef} />
+                  <LLMModels
+                    llmId={localProvider}
+                    value={localModel}
+                    onValueChange={setLocalModel}
+                    size="sm"
+                    container={configContentRef}
+                  />
                 </div>
               </div>
             </div>

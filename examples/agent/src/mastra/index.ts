@@ -54,13 +54,13 @@ const libsqlStore = new LibSQLStore({
   url: 'file:./mastra.db',
 });
 
-const observability = await (new InMemoryStore({ id: 'observability' }).getStore('observability'))
+const observability = await new InMemoryStore({ id: 'observability' }).getStore('observability');
 const storage = new MastraCompositeStore({
   id: 'composite-storage',
   default: libsqlStore,
   domains: {
-    observability: observability
-  }
+    observability: observability,
+  },
   // editor: new FilesystemStore({ dir: '.mastra-storage' }),
 });
 
