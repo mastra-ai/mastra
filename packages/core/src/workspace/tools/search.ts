@@ -28,9 +28,7 @@ export const searchTool = createTool({
           ? 'vector'
           : 'bm25'
         : mode === 'vector' && !workspace.canVector
-          ? workspace.canBM25
-            ? 'bm25'
-            : 'hybrid'
+          ? 'bm25'
           : (mode ?? (workspace.canHybrid ? 'hybrid' : workspace.canVector ? 'vector' : 'bm25'));
 
     const results = await workspace.search(query, {
