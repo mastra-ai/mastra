@@ -29,7 +29,7 @@ import {
 } from '@mastra/playground-ui';
 
 import { EyeIcon } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useTrace } from '@/domains/observability/hooks/use-trace';
 import { useTraces } from '@/domains/observability/hooks/use-traces';
@@ -130,9 +130,10 @@ export default function Observability() {
 
   const allTraces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
 
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const traces = useMemo(() => {
-    if (!searchQuery.trim()) return allTraces;
-    const q = searchQuery.trim().toLowerCase();
+    if (!deferredSearchQuery.trim()) return allTraces;
+    const q = deferredSearchQuery.trim().toLowerCase();
     return allTraces.filter(t => {
       if (t.name?.toLowerCase().includes(q)) return true;
       if (t.entityId?.toLowerCase().includes(q)) return true;
@@ -145,85 +146,87 @@ export default function Observability() {
       }
       return false;
     });
-  }, [allTraces, searchQuery]);
+  }, [allTraces, deferredSearchQuery]);
   const threadTitles = tracesData?.threadTitles ?? {};
 
   // Accumulate available metadata keys/values across all loaded trace batches.
   // Values only grow (never shrink when filters narrow results) so pickers stay populated.
-  const [availableMetadata, setAvailableMetadata] = useState<Record<string, string[]>>({});
-  const [availableContextValues, setAvailableContextValues] = useState<Record<string, string[]>>({});
+  // Uses useRef + useMemo to avoid the extra render cycle that useEffect+useState causes.
+  const metadataAccRef = useRef<Record<string, Set<string>>>({});
+  const prevMetadataResultRef = useRef<Record<string, string[]>>({});
 
-  useEffect(() => {
-    setAvailableMetadata(prev => {
-      let changed = false;
-      const next: Record<string, Set<string>> = {};
-      for (const [k, v] of Object.entries(prev)) next[k] = new Set(v);
-      for (const trace of allTraces) {
-        const meta = (trace as any).metadata;
-        if (meta && typeof meta === 'object') {
-          for (const [key, value] of Object.entries(meta)) {
-            if (value == null) continue;
-            if (!next[key]) {
-              next[key] = new Set();
-              changed = true;
-            }
-            const str = String(value);
-            if (!next[key].has(str)) {
-              next[key].add(str);
-              changed = true;
-            }
+  const availableMetadata = useMemo(() => {
+    let changed = false;
+    const acc = metadataAccRef.current;
+    for (const trace of allTraces) {
+      const meta = (trace as any).metadata;
+      if (meta && typeof meta === 'object') {
+        for (const [key, value] of Object.entries(meta)) {
+          if (value == null) continue;
+          if (!acc[key]) {
+            acc[key] = new Set();
+            changed = true;
+          }
+          const str = String(value);
+          if (!acc[key].has(str)) {
+            acc[key].add(str);
+            changed = true;
           }
         }
       }
-      if (!changed) return prev;
-      return Object.fromEntries(Object.entries(next).map(([k, v]) => [k, [...v].sort()]));
-    });
+    }
+    if (!changed) return prevMetadataResultRef.current;
+    const result = Object.fromEntries(Object.entries(acc).map(([k, v]) => [k, [...v].sort()]));
+    prevMetadataResultRef.current = result;
+    return result;
   }, [allTraces]);
 
-  useEffect(() => {
-    setAvailableContextValues(prev => {
-      let changed = false;
-      const next: Record<string, Set<string>> = {};
-      for (const [k, v] of Object.entries(prev)) next[k] = new Set(v);
-      for (const trace of allTraces) {
-        for (const field of CONTEXT_FIELD_IDS) {
-          const value = (trace as any)[field];
-          if (value != null && typeof value === 'string' && value.trim()) {
-            if (!next[field]) {
-              next[field] = new Set();
-              changed = true;
-            }
-            if (!next[field].has(value)) {
-              next[field].add(value);
-              changed = true;
-            }
+  const contextAccRef = useRef<Record<string, Set<string>>>({});
+  const prevContextResultRef = useRef<Record<string, string[]>>({});
+
+  const availableContextValues = useMemo(() => {
+    let changed = false;
+    const acc = contextAccRef.current;
+    for (const trace of allTraces) {
+      for (const field of CONTEXT_FIELD_IDS) {
+        const value = (trace as any)[field];
+        if (value != null && typeof value === 'string' && value.trim()) {
+          if (!acc[field]) {
+            acc[field] = new Set();
+            changed = true;
+          }
+          if (!acc[field].has(value)) {
+            acc[field].add(value);
+            changed = true;
           }
         }
       }
-      // Merge in discovery API results
-      for (const env of discoveredEnvironments) {
-        if (!next['environment']) {
-          next['environment'] = new Set();
-          changed = true;
-        }
-        if (!next['environment'].has(env)) {
-          next['environment'].add(env);
-          changed = true;
-        }
+    }
+    // Merge in discovery API results
+    for (const env of discoveredEnvironments) {
+      if (!acc['environment']) {
+        acc['environment'] = new Set();
+        changed = true;
       }
-      for (const sn of discoveredServiceNames) {
-        if (!next['serviceName']) {
-          next['serviceName'] = new Set();
-          changed = true;
-        }
-        if (!next['serviceName'].has(sn)) {
-          next['serviceName'].add(sn);
-          changed = true;
-        }
+      if (!acc['environment'].has(env)) {
+        acc['environment'].add(env);
+        changed = true;
       }
-      if (!changed) return prev;
-      return Object.fromEntries(Object.entries(next).map(([k, v]) => [k, [...v].sort()]));
-    });
+    }
+    for (const sn of discoveredServiceNames) {
+      if (!acc['serviceName']) {
+        acc['serviceName'] = new Set();
+        changed = true;
+      }
+      if (!acc['serviceName'].has(sn)) {
+        acc['serviceName'].add(sn);
+        changed = true;
+      }
+    }
+    if (!changed) return prevContextResultRef.current;
+    const result = Object.fromEntries(Object.entries(acc).map(([k, v]) => [k, [...v].sort()]));
+    prevContextResultRef.current = result;
+    return result;
   }, [allTraces, discoveredEnvironments, discoveredServiceNames]);
 
   // Sync URL traceId to state
@@ -277,8 +280,10 @@ export default function Observability() {
     setSelectedMetadata({});
     setDatePreset('last-24h');
     setContextFilters({});
-    setAvailableMetadata({});
-    setAvailableContextValues({});
+    metadataAccRef.current = {};
+    prevMetadataResultRef.current = {};
+    contextAccRef.current = {};
+    prevContextResultRef.current = {};
   };
 
   const handleDataChange = (value: Date | undefined, type: 'from' | 'to') => {

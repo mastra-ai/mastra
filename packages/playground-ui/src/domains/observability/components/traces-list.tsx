@@ -25,6 +25,7 @@ type Trace = {
   entityName?: string | null;
   attributes?: Record<string, any> | null;
   input?: unknown;
+  startedAt?: Date | string | null;
   createdAt: Date | string;
   threadId?: string | null;
 };
@@ -44,14 +45,14 @@ type TracesListProps = {
 };
 
 function traceToEntry(trace: Trace, selectedTraceId?: string) {
-  const createdAtDate = new Date(trace.createdAt);
-  const isTodayDate = isToday(createdAtDate);
+  const displayDate = new Date(trace.startedAt ?? trace.createdAt);
+  const isTodayDate = isToday(displayDate);
 
   return {
     id: trace.traceId,
     shortId: getShortId(trace?.traceId) || 'n/a',
-    date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
-    time: format(createdAtDate, 'h:mm:ss aaa'),
+    date: isTodayDate ? 'Today' : format(displayDate, 'MMM dd'),
+    time: format(displayDate, 'h:mm:ss aaa'),
     name: trace?.name,
     input: getInputPreview(trace?.input),
     entityId: trace?.entityName || trace?.entityId || trace?.attributes?.agentId || trace?.attributes?.workflowId,

@@ -5,7 +5,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover
 import { Searchbar } from '@/ds/components/Searchbar/searchbar';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/ds/components/Switch/switch';
-import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
+import { Portal as DropdownMenuPortal, SubContent as DropdownMenuSubContent } from '@radix-ui/react-dropdown-menu';
 import { format, isValid } from 'date-fns';
 import { CalendarIcon, FilterIcon, XIcon, SearchIcon } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
@@ -80,13 +80,13 @@ function PortalSubContent({
   className,
   children,
   ...props
-}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>) {
+}: React.ComponentPropsWithoutRef<typeof DropdownMenuSubContent>) {
   return (
-    <DropdownMenuPrimitive.Portal>
-      <DropdownMenuPrimitive.SubContent className={cn(subContentClass, className)} {...props}>
+    <DropdownMenuPortal>
+      <DropdownMenuSubContent className={cn(subContentClass, className)} {...props}>
         {children}
-      </DropdownMenuPrimitive.SubContent>
-    </DropdownMenuPrimitive.Portal>
+      </DropdownMenuSubContent>
+    </DropdownMenuPortal>
   );
 }
 
