@@ -30,7 +30,7 @@ export function getLatestStepParts(parts: MastraDBMessage['content']['parts']): 
 }
 import { addRelativeTimeToObservations } from './date-utils';
 import { omDebug, omError } from './debug';
-import { createBufferingStartMarker, createThreadUpdateMarker } from './markers';
+import { createBufferingStartMarker, createActivationMarker } from './markers';
 import {
   findLastCompletedObservationBoundary,
   getUnobservedParts,
@@ -1542,11 +1542,21 @@ ${formattedMessages}
   /**
    * @internal Used by observation strategies. Do not call directly.
    */
-  wrapObservations(rawObservations: string, existingObservations: string, threadId: string, lastObservedAt?: Date): Promise<string> | string {
+  wrapObservations(
+    rawObservations: string,
+    existingObservations: string,
+    threadId: string,
+    lastObservedAt?: Date,
+  ): Promise<string> | string {
     if (this.scope === 'resource') {
       return (async () => {
         const threadSection = await this.wrapWithThreadTag(threadId, rawObservations);
-        return this.replaceOrAppendThreadSection(existingObservations, threadId, threadSection, lastObservedAt ?? new Date());
+        return this.replaceOrAppendThreadSection(
+          existingObservations,
+          threadId,
+          threadSection,
+          lastObservedAt ?? new Date(),
+        );
       })();
     }
     return existingObservations ? `${existingObservations}\n\n${rawObservations}` : rawObservations;
@@ -2673,6 +2683,10 @@ ${formattedMessages}
     checkThreshold?: boolean;
     /** Messages to use for threshold check (in-memory). If omitted, loads from storage. */
     messages?: MastraDBMessage[];
+    /** Stream writer for emitting activation markers to the UI. */
+    writer?: ProcessorStreamWriter;
+    /** MessageList for persisting activation markers on the last assistant message. */
+    messageList?: MessageList;
   }): Promise<{
     activated: boolean;
     record: ObservationalMemoryRecord;
@@ -2772,6 +2786,37 @@ ${formattedMessages}
     // Clear buffering flag
     await this.storage.setBufferingObservationFlag(freshRecord.id, false).catch(() => {});
     unregisterOp(freshRecord.id, 'bufferingObservation');
+
+    // Fetch updated record for marker emission
+    const postSwapRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+
+    // Emit activation markers for UI feedback — one per activated cycleId
+    if (opts.writer && postSwapRecord && activationResult.activatedCycleIds.length > 0) {
+      const perChunkMap = new Map(activationResult.perChunk?.map(c => [c.cycleId, c]));
+      for (const cycleId of activationResult.activatedCycleIds) {
+        const chunkData = perChunkMap.get(cycleId);
+        const activationMarker = createActivationMarker({
+          cycleId,
+          operationType: 'observation',
+          chunksActivated: 1,
+          tokensActivated: chunkData?.messageTokens ?? activationResult.messageTokensActivated,
+          observationTokens: chunkData?.observationTokens ?? activationResult.observationTokensActivated,
+          messagesActivated: chunkData?.messageCount ?? activationResult.messagesActivated,
+          recordId: postSwapRecord.id,
+          threadId: postSwapRecord.threadId ?? record.threadId ?? '',
+          generationCount: postSwapRecord.generationCount ?? 0,
+          observations: chunkData?.observations ?? activationResult.observations,
+          config: this.getObservationMarkerConfig(),
+        });
+        void opts.writer.custom(activationMarker).catch(() => {});
+        await this.persistMarkerToMessage(
+          activationMarker,
+          opts.messageList,
+          record.threadId ?? '',
+          record.resourceId ?? undefined,
+        );
+      }
+    }
 
     // Update thread metadata with continuation hints from activated chunks
     const thread = await this.storage.getThreadById({ threadId });

@@ -361,12 +361,34 @@ describe('Long session: observation and reflection lifecycle', () => {
     const baseTime = new Date('2025-01-01T09:00:00Z').getTime();
     let timeOffset = 0;
 
+    // ── Stream writer for capturing emitted parts ──
+    // In mastracode, these parts drive the TUI status bar (buffering animation,
+    // activation markers, observation progress). Without a writer, all marker
+    // emission is silently skipped.
+    const capturedParts: any[] = [];
+    const mockWriter = {
+      custom: async (part: any) => {
+        capturedParts.push(part);
+      },
+    };
+
     // Track lifecycle milestones
     let firstObservationAtTurn = -1;
     let firstReflectionAtTurn = -1;
     let observationCountAtFirstReflection = 0;
     let maxObservationTokens = 0;
     let observationTokensBeforeReflection = 0;
+
+    // ── Stream event tracking (mirrors mastracode harness state) ──
+    let totalStatusParts = 0;
+    const turnsWithBufferingStart = new Set<number>();
+    const turnsWithActivation = new Set<number>();
+    const turnsWithObservation = new Set<number>();
+    let firstBufferingAnimationTurn = -1;
+    // Collect all status parts for post-loop assertions
+    const allStatusParts: any[] = [];
+    // Track observation start/end pairing per turn
+    const observationPairsPerTurn = new Map<number, { starts: number; ends: number }>();
 
     async function waitForAsyncOps(timeoutMs = 5000) {
       const start = Date.now();
@@ -416,6 +438,7 @@ describe('Long session: observation and reflection lifecycle', () => {
         model: observerModel as any,
         retryCount: 0,
         abort,
+        writer: mockWriter as any,
       });
 
       // ── Tool steps (if any) ──
@@ -463,6 +486,7 @@ describe('Long session: observation and reflection lifecycle', () => {
           model: observerModel as any,
           retryCount: 0,
           abort,
+          writer: mockWriter as any,
         });
       }
 
@@ -496,6 +520,47 @@ describe('Long session: observation and reflection lifecycle', () => {
 
       // Wait for any async buffering to complete before checking state
       await waitForAsyncOps();
+
+      // ── Classify stream parts emitted this turn ──
+      const turnParts = [...capturedParts];
+      capturedParts.length = 0;
+
+      const turnStatus = turnParts.filter(p => p?.type === 'data-om-status');
+      const turnActivations = turnParts.filter(
+        p => p?.type === 'data-om-activation' && p?.data?.operationType === 'observation',
+      );
+      const turnBufferingStarts = turnParts.filter(p => p?.type === 'data-om-buffering-start');
+      const turnObsStarts = turnParts.filter(
+        p => p?.type === 'data-om-observation-start' || p?.type === 'data-om-sync-observation-start',
+      );
+      const turnObsEnds = turnParts.filter(
+        p => p?.type === 'data-om-observation-end' || p?.type === 'data-om-sync-observation-end',
+      );
+
+      totalStatusParts += turnStatus.length;
+      allStatusParts.push(...turnStatus);
+
+      if (turnBufferingStarts.length > 0) turnsWithBufferingStart.add(turnNum);
+      if (turnActivations.length > 0) turnsWithActivation.add(turnNum);
+      if (turnObsStarts.length > 0 || turnObsEnds.length > 0) turnsWithObservation.add(turnNum);
+
+      // Check for buffering animation in status parts
+      if (firstBufferingAnimationTurn === -1) {
+        for (const sp of turnStatus) {
+          if (sp?.data?.windows?.buffered?.observations?.status === 'running') {
+            firstBufferingAnimationTurn = turnNum;
+            break;
+          }
+        }
+      }
+
+      // Track observation start/end pairing
+      if (turnObsStarts.length > 0 || turnObsEnds.length > 0) {
+        observationPairsPerTurn.set(turnNum, {
+          starts: turnObsStarts.length,
+          ends: turnObsEnds.length,
+        });
+      }
 
       // ── Record milestones ──
       const record = await om.getRecord(threadId, resourceId);
@@ -566,6 +631,44 @@ describe('Long session: observation and reflection lifecycle', () => {
     const finalStatus = await om.getStatus({ threadId, resourceId });
     expect(finalStatus.bufferedChunkCount).toBe(0);
 
+    // ── Stream event: data-om-status ──
+    // At least one status part per turn (multi-step turns may emit more)
+    expect(totalStatusParts).toBeGreaterThanOrEqual(TURN_SCHEDULE.length);
+    // Thresholds should never be 0 — this was the original 0/0k bug where
+    // effectiveObservationTokensThreshold was hardcoded to 0 in processor.ts
+    for (const sp of allStatusParts) {
+      const msgThreshold = sp?.data?.windows?.active?.messages?.threshold ?? 0;
+      expect(msgThreshold).toBeGreaterThan(0);
+    }
+    // After the first observation, observation tokens should be reported
+    const statusWithObsTokens = allStatusParts.filter(sp => (sp?.data?.windows?.active?.observations?.tokens ?? 0) > 0);
+    expect(statusWithObsTokens.length).toBeGreaterThanOrEqual(1);
+    // Buffering animation should trigger at some point (stale-record fix)
+    const statusWithBufferingRunning = allStatusParts.filter(
+      sp => sp?.data?.windows?.buffered?.observations?.status === 'running',
+    );
+    expect(statusWithBufferingRunning.length).toBeGreaterThanOrEqual(1);
+
+    // ── Stream event: data-om-buffering-start ──
+    expect(turnsWithBufferingStart.size).toBeGreaterThanOrEqual(1);
+    // Buffering should start before the first observation
+    const firstBufferingTurn = Math.min(...turnsWithBufferingStart);
+    const firstObsTurn = turnsWithObservation.size > 0 ? Math.min(...turnsWithObservation) : Infinity;
+    expect(firstBufferingTurn).toBeLessThan(firstObsTurn);
+
+    // ── Stream event: data-om-activation ──
+    expect(turnsWithActivation.size).toBeGreaterThanOrEqual(1);
+    // Can't activate before buffering starts
+    const firstActivationTurn = Math.min(...turnsWithActivation);
+    expect(firstActivationTurn).toBeGreaterThanOrEqual(firstBufferingTurn);
+
+    // ── Stream event: observation start/end markers ──
+    expect(turnsWithObservation.size).toBeGreaterThanOrEqual(1);
+    // Every turn with observation markers should have paired start+end
+    for (const [, pair] of observationPairsPerTurn) {
+      expect(pair.ends).toBeGreaterThanOrEqual(pair.starts);
+    }
+
     // ── Summary log ──
     console.log(`Long session test completed:
   Turns: ${TURN_SCHEDULE.length}
@@ -578,6 +681,12 @@ describe('Long session: observation and reflection lifecycle', () => {
   Max observation tokens: ${maxObservationTokens}
   Total messages saved: ${allMessages.length}
   User messages: ${savedUserMessages.length}/${totalUserMessages}
-  Assistant messages: ${savedAssistantMessages.length}/${totalAssistantMessages + totalToolMessages}`);
+  Assistant messages: ${savedAssistantMessages.length}/${totalAssistantMessages + totalToolMessages}
+  --- Stream events ---
+  Status parts emitted: ${totalStatusParts}
+  Turns with buffering animation: ${firstBufferingAnimationTurn > 0 ? `first at turn ${firstBufferingAnimationTurn}` : 'none'}
+  Turns with buffering-start marker: ${[...turnsWithBufferingStart].sort((a, b) => a - b).join(', ') || 'none'}
+  Turns with activation marker: ${[...turnsWithActivation].sort((a, b) => a - b).join(', ') || 'none'}
+  Turns with observation markers: ${[...turnsWithObservation].sort((a, b) => a - b).join(', ') || 'none'}`);
   }, 60_000);
 });

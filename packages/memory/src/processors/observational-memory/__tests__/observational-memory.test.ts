@@ -3681,10 +3681,8 @@ describe('Resource Scope Observation Flow', () => {
   it('should include per-thread prior metadata in multi-thread observer prompt during resource-scoped observation', async () => {
     const storage = createInMemoryStorage();
 
-    let capturedPrompt: any = null;
     const mockModel = createStreamCapableMockModel({
-      doGenerate: async (options: any) => {
-        capturedPrompt = options.prompt;
+      doGenerate: async (_options: any) => {
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop' as const,
@@ -6502,9 +6500,7 @@ describe('Async Buffering Processor Logic', () => {
         },
       });
 
-      const bufferKey = om.buffering.getObservationBufferKey(
-        om.buffering.getLockKey(threadId, resourceId),
-      );
+      const bufferKey = om.buffering.getObservationBufferKey(om.buffering.getLockKey(threadId, resourceId));
 
       // Simulate that buffering set a boundary
       BufferingCoordinator.lastBufferedBoundary.set(bufferKey, 15000);
@@ -7420,15 +7416,14 @@ describe('Full Async Buffering Flow', () => {
     // is NOT configured, sync observation at step > 0 must still fire once pending tokens
     // exceed the threshold. Previously, the blockAfter gate had `if (!blockAfter) return false`
     // which silently disabled ALL sync observation when blockAfter was unset.
-    const { step, waitForAsyncOps, observerCalls, storage, threadId, resourceId } =
-      await setupAsyncBufferingScenario({
-        messageTokens: 2000, // Threshold that will be exceeded
-        bufferTokens: 500, // Async buffering enabled
-        bufferActivation: 1.0,
-        // blockAfter intentionally NOT set — this is the default and the bug trigger
-        reflectionObservationTokens: 50000,
-        messageCount: 20, // ~4000 tokens, well above the 2000 threshold
-      });
+    const { step, waitForAsyncOps, observerCalls, storage, threadId, resourceId } = await setupAsyncBufferingScenario({
+      messageTokens: 2000, // Threshold that will be exceeded
+      bufferTokens: 500, // Async buffering enabled
+      bufferActivation: 1.0,
+      // blockAfter intentionally NOT set — this is the default and the bug trigger
+      reflectionObservationTokens: 50000,
+      messageCount: 20, // ~4000 tokens, well above the 2000 threshold
+    });
 
     // Step 0: no observation (step 0 never does sync observation)
     await step(0);
@@ -11841,9 +11836,10 @@ describe('OM context loading with no prior observations', () => {
 
     // Verify chunks were created
     let record = await storage.getObservationalMemory(threadId, resourceId);
-    const chunks1 = typeof record?.bufferedObservationChunks === 'string'
-      ? JSON.parse(record.bufferedObservationChunks)
-      : (record?.bufferedObservationChunks ?? []);
+    const chunks1 =
+      typeof record?.bufferedObservationChunks === 'string'
+        ? JSON.parse(record.bufferedObservationChunks)
+        : (record?.bufferedObservationChunks ?? []);
     expect(chunks1.length).toBeGreaterThan(0);
 
     // Add more messages to cross the next buffer interval
@@ -12120,5 +12116,365 @@ describe('OM context loading with no prior observations', () => {
     expect(saved.length).toBeGreaterThanOrEqual(2);
     expect(saved.find(m => m.id === 'user-msg-1')).toBeDefined();
     expect(saved.find(m => m.id === 'assistant-msg-1')).toBeDefined();
+  });
+});
+
+describe('Processor stream events: buffering status and activation markers', () => {
+  it('should emit buffering status as running in data-om-status when async buffering fires', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'buffering-status-thread';
+    const resourceId = 'buffering-status-resource';
+
+    const mockModel = createStreamCapableMockModel({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [
+          {
+            type: 'text' as const,
+            text: '<observations>\n* Test observation\n</observations>',
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: {
+        model: mockModel as any,
+        messageTokens: 5_000,
+        bufferTokens: 500,
+        bufferActivation: 0.5,
+      },
+      reflection: { observationTokens: 200_000 },
+    });
+
+    // Patch getOrCreateRecord to clone the result, simulating real DB behavior.
+    // InMemoryStorage returns the same object reference, so mutations to the
+    // record (e.g. setBufferingObservationFlag) are visible everywhere. Real DBs
+    // return fresh rows on each query, so the cached record remains stale.
+    const originalGetOrCreate = om.getOrCreateRecord.bind(om);
+    om.getOrCreateRecord = async (...args: Parameters<typeof om.getOrCreateRecord>) => {
+      const record = await originalGetOrCreate(...args);
+      return JSON.parse(JSON.stringify(record));
+    };
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    // Pre-seed messages so we're above buffer threshold but below observation threshold
+    const filler = 'word '.repeat(600);
+    await storage.saveMessages({
+      messages: [
+        {
+          id: 'seed-user',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: `Tell me about ${filler}` }] },
+          createdAt: new Date('2025-01-01T09:00:00Z'),
+          threadId,
+          resourceId,
+          type: 'text',
+        } as any,
+        {
+          id: 'seed-assistant',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: `Here is info about ${filler}` }] },
+          createdAt: new Date('2025-01-01T09:00:01Z'),
+          threadId,
+          resourceId,
+          type: 'text',
+        } as any,
+      ],
+    });
+
+    const state: Record<string, unknown> = {};
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add(
+      {
+        id: 'new-user-msg',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: `Another question about ${filler}` }] },
+        createdAt: new Date('2025-01-01T09:01:00Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'input',
+    );
+
+    // Capture all data-om-status parts
+    const capturedStatusParts: any[] = [];
+    const mockWriter = {
+      custom: async (part: any) => {
+        if (part?.type === 'data-om-status') {
+          capturedStatusParts.push(part);
+        }
+      },
+    };
+
+    const makeCtx = () => {
+      const ctx = new RequestContext();
+      ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+      return ctx;
+    };
+
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+
+    // Run step 0 — this should trigger buffering (fire-and-forget)
+    // and emitProgress should show the buffering flag from a fresh record
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: makeCtx(),
+      stepNumber: 0,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      writer: mockWriter as any,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    // Wait for async ops to settle
+    const ops = BufferingCoordinator.asyncBufferingOps as Map<string, Promise<void>>;
+    if (ops.size > 0) {
+      await Promise.allSettled([...ops.values()]);
+      await new Promise(r => setTimeout(r, 50));
+    }
+
+    expect(capturedStatusParts.length).toBeGreaterThanOrEqual(1);
+
+    const lastStatus = capturedStatusParts[capturedStatusParts.length - 1];
+    // emitProgress should use a fresh record from storage (not the stale cached
+    // one from turn.start()). The fresh record reflects the isBufferingObservation
+    // flag set by buffer(), so the status should NOT be 'idle'.
+    expect(lastStatus.data.windows.buffered.observations.status).not.toBe('idle');
+  });
+
+  it('should emit data-om-activation marker when buffered observations are activated', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'activation-marker-thread';
+    const resourceId = 'activation-marker-resource';
+
+    const mockModel = createStreamCapableMockModel({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [
+          {
+            type: 'text' as const,
+            text: '<observations>\n* Test observation from buffering\n</observations>\n<current-task>\n- Working on tests\n</current-task>\n<suggested-response>\nContinue.\n</suggested-response>',
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: {
+        model: mockModel as any,
+        messageTokens: 3_000,
+        bufferTokens: 500,
+        bufferActivation: 0.5,
+      },
+      reflection: { observationTokens: 200_000 },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    // Seed enough messages so buffering triggers in turn 1 (pendingTokens < 3000
+    // observation threshold, above 500 bufferTokens). By turn 2, saved messages
+    // + turn 1 output push total above 3000 to trigger activation.
+    const filler = 'word '.repeat(800);
+    await storage.saveMessages({
+      messages: [
+        {
+          id: 'seed-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: `Question about ${filler}` }] },
+          createdAt: new Date('2025-01-01T09:00:00Z'),
+          threadId,
+          resourceId,
+          type: 'text',
+        } as any,
+        {
+          id: 'seed-2',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: `Answer about ${filler}` }] },
+          createdAt: new Date('2025-01-01T09:00:01Z'),
+          threadId,
+          resourceId,
+          type: 'text',
+        } as any,
+      ],
+    });
+
+    const state: Record<string, unknown> = {};
+    const makeCtx = () => {
+      const ctx = new RequestContext();
+      ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+      return ctx;
+    };
+    const abort = (() => {
+      throw new Error('aborted');
+    }) as any;
+
+    // Capture all stream parts
+    const capturedParts: any[] = [];
+    const mockWriter = {
+      custom: async (part: any) => {
+        capturedParts.push(part);
+      },
+    };
+
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+
+    // === Turn 1: Trigger buffering ===
+    const ml1 = new MessageList({ threadId, resourceId });
+    ml1.add(
+      {
+        id: 'turn1-user',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: `More about ${filler}` }] },
+        createdAt: new Date('2025-01-01T09:01:00Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'input',
+    );
+
+    await processor.processInputStep({
+      messageList: ml1,
+      messages: [],
+      requestContext: makeCtx(),
+      stepNumber: 0,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      writer: mockWriter as any,
+      abort,
+    });
+
+    // Wait for async buffering to complete
+    const ops1 = BufferingCoordinator.asyncBufferingOps as Map<string, Promise<void>>;
+    if (ops1.size > 0) {
+      await Promise.allSettled([...ops1.values()]);
+      await new Promise(r => setTimeout(r, 50));
+    }
+
+    // Finalize turn 1
+    const outputProcessor1 = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+    ml1.add(
+      {
+        id: 'turn1-assistant',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Response for turn 1' }] },
+        createdAt: new Date('2025-01-01T09:01:01Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'response',
+    );
+    await outputProcessor1.processOutputResult({
+      messageList: ml1,
+      messages: ml1.get.response.db(),
+      requestContext: makeCtx(),
+      state,
+      abort,
+      result: {} as any,
+      retryCount: 0,
+    });
+
+    // Verify buffered chunks exist after turn 1
+    const status1 = await om.getStatus({ threadId, resourceId, messages: ml1.get.all.db() });
+    expect(status1.bufferedChunkCount).toBeGreaterThanOrEqual(1);
+
+    // === Turn 2: New turn should activate buffered chunks at step 0 ===
+    // Reset state for new turn
+    Object.keys(state).forEach(k => delete state[k]);
+    capturedParts.length = 0; // clear captured parts
+
+    const ml2 = new MessageList({ threadId, resourceId });
+    ml2.add(
+      {
+        id: 'turn2-user',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: `Follow-up about ${filler}` }] },
+        createdAt: new Date('2025-01-01T09:02:00Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'input',
+    );
+
+    const processor2 = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+    await processor2.processInputStep({
+      messageList: ml2,
+      messages: [],
+      requestContext: makeCtx(),
+      stepNumber: 0,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      writer: mockWriter as any,
+      abort,
+    });
+
+    // Check that a data-om-activation part was emitted
+    const activationParts = capturedParts.filter(p => p?.type === 'data-om-activation');
+    expect(activationParts.length).toBeGreaterThanOrEqual(1);
+    expect(activationParts[0].data.operationType).toBe('observation');
+    expect(activationParts[0].data.chunksActivated).toBeGreaterThanOrEqual(1);
+
+    // Clean up async ops
+    const ops2 = BufferingCoordinator.asyncBufferingOps as Map<string, Promise<void>>;
+    if (ops2.size > 0) {
+      await Promise.allSettled([...ops2.values()]);
+    }
   });
 });

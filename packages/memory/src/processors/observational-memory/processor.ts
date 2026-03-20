@@ -150,21 +150,24 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         }
 
         // ── Progress emission (processor-specific) ──────────
-        const record = this.turn.record;
+        // Fetch a fresh record from storage so buffering flags (e.g.
+        // isBufferingObservation set by fire-and-forget buffer()) are visible.
+        // The cached this.turn.record is stale in production DBs where each
+        // query returns a new row object.
+        const freshRecord = await this.engine.getOrCreateRecord(threadId, resourceId);
         await this.engine.emitProgress({
-          record,
+          record: freshRecord,
           stepNumber,
           pendingTokens: ctx.status.pendingTokens,
           threshold: ctx.status.threshold,
           effectiveObservationTokensThreshold: ctx.status.effectiveObservationTokensThreshold,
-          currentObservationTokens: record.observationTokenCount ?? 0,
+          currentObservationTokens: freshRecord.observationTokenCount ?? 0,
           writer,
           threadId,
           resourceId,
         });
 
         // ── Token persistence (processor-specific) ──────────
-        const freshRecord = await this.engine.getOrCreateRecord(threadId, resourceId);
         const allDbMsgs = messageList.get.all.db();
         const tokenCounter = this.engine.getTokenCounter();
         const contextTokens = await tokenCounter.countMessagesAsync(allDbMsgs);

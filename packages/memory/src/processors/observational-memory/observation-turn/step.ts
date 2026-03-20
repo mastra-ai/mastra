@@ -63,6 +63,8 @@ export class ObservationStep {
         resourceId,
         checkThreshold: true,
         messages: step0Messages,
+        writer: this.turn.writer,
+        messageList,
       });
 
       if (activation.activated) {
@@ -274,6 +276,8 @@ export class ObservationStep {
         threadId,
         resourceId,
         messages: messageList.get.all.db(),
+        writer: this.turn.writer,
+        messageList,
       });
 
       if (activation.activated) {
