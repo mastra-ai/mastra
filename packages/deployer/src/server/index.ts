@@ -10,6 +10,7 @@ import { Tool } from '@mastra/core/tools';
 import { MastraServer } from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { preAuthenticateUser } from '@mastra/server/auth';
 import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
@@ -236,8 +237,34 @@ export async function createHonoServer(
   await honoServerAdapter.validateEELicense();
 
   // Register auth middleware (authentication and authorization)
-  // This is handled by the server adapter now
   honoServerAdapter.registerAuthMiddleware();
+
+  // Pre-authenticate requests so user-defined middleware can access requestContext.get('user')
+  const authConfig = server?.auth;
+  if (authConfig && typeof authConfig === 'object') {
+    const authenticateToken = 'authenticateToken' in authConfig ? authConfig.authenticateToken : undefined;
+    if (typeof authenticateToken === 'function') {
+      app.use('*', async (c, next) => {
+        const requestContext = c.get('requestContext');
+        if (requestContext) {
+          const authHeader = c.req.header('authorization');
+          let token: string | null = authHeader ? authHeader.replace('Bearer ', '') : null;
+          if (!token) {
+            token = c.req.query('apiKey') || null;
+          }
+
+          await preAuthenticateUser({
+            mastra,
+            authConfig: authConfig as any,
+            requestContext,
+            rawRequest: c.req.raw,
+            token,
+          });
+        }
+        await next();
+      });
+    }
+  }
 
   if (server?.middleware) {
     const normalizedMiddlewares = Array.isArray(server.middleware) ? server.middleware : [server.middleware];

@@ -240,6 +240,59 @@ export type AuthResult = { action: 'next' } | { action: 'error'; status: number;
 const pass: AuthResult = { action: 'next' };
 
 /**
+ * Pre-authenticate a request by validating the token and setting the user
+ * on requestContext. Runs before user-defined middleware so that
+ * `requestContext.get('user')` is available in `server.middleware` handlers.
+ *
+ * Never blocks — if authentication fails, per-route auth will reject later.
+ */
+export const preAuthenticateUser = async (ctx: {
+  mastra: Mastra;
+  authConfig: MastraAuthConfig;
+  requestContext: { get: (key: string) => unknown; set: (key: string, value: unknown) => void };
+  rawRequest: unknown;
+  token: string | null;
+}): Promise<void> => {
+  const { mastra, authConfig, requestContext, rawRequest, token } = ctx;
+
+  if (requestContext.get('user')) {
+    return;
+  }
+
+  if (!token || typeof authConfig.authenticateToken !== 'function') {
+    return;
+  }
+
+  try {
+    const user = await authConfig.authenticateToken(token, rawRequest as any);
+    if (!user) {
+      return;
+    }
+
+    requestContext.set('user', user);
+
+    try {
+      const serverConfig = mastra.getServer();
+      const rbacProvider = serverConfig?.rbac as IRBACProvider<EEUser> | undefined;
+
+      if (rbacProvider) {
+        if (user && typeof user === 'object' && 'id' in user) {
+          const permissions = await rbacProvider.getPermissions(user as EEUser);
+          requestContext.set('userPermissions', permissions);
+
+          const roles = await rbacProvider.getRoles(user as EEUser);
+          requestContext.set('userRoles', roles);
+        }
+      }
+    } catch {
+      // Non-fatal; coreAuthMiddleware will retry RBAC loading
+    }
+  } catch {
+    // Non-fatal; per-route auth will reject later
+  }
+};
+
+/**
  * Single auth middleware: authenticate → authorize.
  * Skip checks (dev playground, unprotected path, public path) are evaluated once.
  */
@@ -266,46 +319,50 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
 
   // ── Authentication ──
 
-  let user: unknown;
+  let user: unknown = requestContext.get('user');
 
-  try {
-    if (typeof authConfig.authenticateToken === 'function') {
-      user = await authConfig.authenticateToken(token ?? '', rawRequest as any);
-    } else {
-      throw new Error('No token verification method configured');
-    }
+  if (!user) {
+    try {
+      if (typeof authConfig.authenticateToken === 'function') {
+        user = await authConfig.authenticateToken(token ?? '', rawRequest as any);
+      } else {
+        throw new Error('No token verification method configured');
+      }
 
-    if (!user) {
+      if (!user) {
+        return { action: 'error', status: 401, body: { error: 'Invalid or expired token' } };
+      }
+
+      requestContext.set('user', user);
+    } catch (err) {
+      mastra.getLogger()?.error('Authentication error', {
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+      });
       return { action: 'error', status: 401, body: { error: 'Invalid or expired token' } };
     }
+  }
 
-    requestContext.set('user', user);
+  // Load RBAC permissions/roles if configured and not already loaded
+  // (handles both fresh auth and pre-authenticated requests where RBAC may have failed)
+  try {
+    const serverConfig = mastra.getServer();
+    const rbacProvider = serverConfig?.rbac as IRBACProvider<EEUser> | undefined;
 
-    try {
-      const serverConfig = mastra.getServer();
-      const rbacProvider = serverConfig?.rbac as IRBACProvider<EEUser> | undefined;
+    if (rbacProvider && !requestContext.get('userPermissions')) {
+      if (!user || typeof user !== 'object' || !('id' in user)) {
+        mastra.getLogger()?.warn('RBAC: authenticated user missing required "id" field, skipping permission loading');
+      } else {
+        const permissions = await rbacProvider.getPermissions(user as EEUser);
+        requestContext.set('userPermissions', permissions);
 
-      if (rbacProvider) {
-        if (!user || typeof user !== 'object' || !('id' in user)) {
-          mastra.getLogger()?.warn('RBAC: authenticated user missing required "id" field, skipping permission loading');
-        } else {
-          const permissions = await rbacProvider.getPermissions(user as EEUser);
-          requestContext.set('userPermissions', permissions);
-
-          const roles = await rbacProvider.getRoles(user as EEUser);
-          requestContext.set('userRoles', roles);
-        }
+        const roles = await rbacProvider.getRoles(user as EEUser);
+        requestContext.set('userRoles', roles);
       }
-    } catch (rbacError) {
-      mastra.getLogger()?.error('RBAC: failed to load user permissions/roles', {
-        error: rbacError instanceof Error ? { message: rbacError.message, stack: rbacError.stack } : rbacError,
-      });
     }
-  } catch (err) {
-    mastra.getLogger()?.error('Authentication error', {
-      error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+  } catch (rbacError) {
+    mastra.getLogger()?.error('RBAC: failed to load user permissions/roles', {
+      error: rbacError instanceof Error ? { message: rbacError.message, stack: rbacError.stack } : rbacError,
     });
-    return { action: 'error', status: 401, body: { error: 'Invalid or expired token' } };
   }
 
   // ── Authorization ──

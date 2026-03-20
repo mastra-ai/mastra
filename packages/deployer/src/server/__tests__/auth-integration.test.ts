@@ -420,4 +420,131 @@ describe('auth middleware integration tests', () => {
       expect(data.ok).toBe(true);
     });
   });
+
+  describe('Pre-authentication in server.middleware', () => {
+    it('should make user available in server.middleware before next() on built-in routes', async () => {
+      let userBeforeNext: any;
+      let userAfterNext: any;
+
+      const mastra = new Mastra({
+        server: {
+          auth: authConfig,
+          middleware: [
+            {
+              path: '/api/*',
+              handler: async (c: any, next: any) => {
+                const requestContext = c.get('requestContext');
+                userBeforeNext = requestContext.get('user');
+                await next();
+                userAfterNext = requestContext.get('user');
+              },
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra, { tools: {} });
+
+      const req = new Request('http://localhost/api/agents', {
+        headers: { Authorization: 'Bearer valid-token' },
+      });
+      await app.request(req);
+
+      expect(userBeforeNext).toEqual({ id: '123', name: 'Test User', role: 'user' });
+      expect(userAfterNext).toEqual({ id: '123', name: 'Test User', role: 'user' });
+    });
+
+    it('should make user available in server.middleware before next() on custom routes', async () => {
+      let userBeforeNext: any;
+
+      const routes = [
+        registerApiRoute('/custom/test', {
+          method: 'GET',
+          handler: (c: any) => c.json({ ok: true }),
+        }),
+      ];
+
+      const mastra = new Mastra({
+        server: {
+          auth: authConfig,
+          apiRoutes: routes,
+          middleware: [
+            {
+              path: '/custom/*',
+              handler: async (c: any, next: any) => {
+                const requestContext = c.get('requestContext');
+                userBeforeNext = requestContext.get('user');
+                await next();
+              },
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra, { tools: {} });
+
+      const req = new Request('http://localhost/custom/test', {
+        headers: { Authorization: 'Bearer valid-token' },
+      });
+      await app.request(req);
+
+      expect(userBeforeNext).toEqual({ id: '123', name: 'Test User', role: 'user' });
+    });
+
+    it('should leave user undefined in middleware when no token is provided', async () => {
+      let userBeforeNext: any = 'NOT_SET';
+
+      const mastra = new Mastra({
+        server: {
+          auth: authConfig,
+          middleware: [
+            {
+              path: '/api/*',
+              handler: async (c: any, next: any) => {
+                const requestContext = c.get('requestContext');
+                userBeforeNext = requestContext.get('user');
+                await next();
+              },
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra, { tools: {} });
+
+      const req = new Request('http://localhost/api/agents');
+      await app.request(req);
+
+      expect(userBeforeNext).toBeUndefined();
+    });
+
+    it('should leave user undefined in middleware when token is invalid', async () => {
+      let userBeforeNext: any = 'NOT_SET';
+
+      const mastra = new Mastra({
+        server: {
+          auth: authConfig,
+          middleware: [
+            {
+              path: '/api/*',
+              handler: async (c: any, next: any) => {
+                const requestContext = c.get('requestContext');
+                userBeforeNext = requestContext.get('user');
+                await next();
+              },
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra, { tools: {} });
+
+      const req = new Request('http://localhost/api/agents', {
+        headers: { Authorization: 'Bearer invalid-token' },
+      });
+      await app.request(req);
+
+      expect(userBeforeNext).toBeUndefined();
+    });
+  });
 });
