@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import type { Plugin, PluginContext } from 'rollup';
+import type { Plugin } from 'rollup';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('node:fs', () => ({
@@ -8,7 +8,6 @@ vi.mock('node:fs', () => ({
 
 describe('relativeExtensionResolver', () => {
   let plugin: Plugin;
-  let mockContext: PluginContext;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -16,12 +15,11 @@ describe('relativeExtensionResolver', () => {
 
     const mod = await import('./relative-extension-resolver');
     plugin = mod.relativeExtensionResolver();
-    mockContext = {} as PluginContext;
   });
 
   const resolveId = (id: string, importer?: string) => {
     const fn = plugin.resolveId as Function;
-    return fn.call(mockContext, id, importer, {});
+    return fn.call({}, id, importer, {});
   };
 
   describe('skips resolution for', () => {
