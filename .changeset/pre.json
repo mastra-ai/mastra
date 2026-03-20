@@ -120,5 +120,7 @@
     "@mastra/gcs": "0.2.0",
     "@mastra/s3": "0.3.0"
   },
-  "changesets": []
+  "changesets": [
+    "green-birds-knock"
+  ]
 }
