@@ -12,8 +12,8 @@ export interface TurnContext {
 
 /** Returned by `step.prepare()` — what the agent needs for this step. */
 export interface StepContext {
-  /** System message containing observations to inject into the agent's context. */
-  systemMessage: string | undefined;
+  /** System messages containing observations (one per cache-stable chunk). */
+  systemMessage: string[] | undefined;
   /** Whether buffered chunks were activated in this step. */
   activated: boolean;
   /** Whether a sync observation was triggered in this step. */

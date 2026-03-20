@@ -60,7 +60,7 @@ On Ubuntu/Debian the binary is called `fdfind` — mastracode detects both `fd` 
 
 ### Starting a conversation
 
-Type your message and press Enter. The agent responds with streaming text.
+Type your message and press Enter. If the agent is already working, Enter queues your next message and sends it after the current run finishes.
 
 ### `@` file references
 
@@ -74,43 +74,48 @@ Select a suggestion with arrow keys and press Tab to insert it.
 
 ### Slash commands
 
-| Command             | Description                                      |
-| ------------------- | ------------------------------------------------ |
-| `/new`              | Start a new conversation thread                  |
-| `/threads`          | List and switch between threads                  |
-| `/models`           | Switch/manage model packs (built-in/custom)      |
-| `/custom-providers` | Manage custom OpenAI-compatible providers/models |
-| `/mode`             | Switch agent mode                                |
-| `/subagents`        | Configure subagent model defaults                |
-| `/om`               | Configure Observational Memory models            |
-| `/think`            | Set thinking level (Anthropic)                   |
-| `/skills`           | List available skills                            |
-| `/diff`             | Show modified files or git diff                  |
-| `/name`             | Rename current thread                            |
-| `/cost`             | Show token usage and estimated costs             |
-| `/review`           | Review a GitHub pull request                     |
-| `/hooks`            | Show/reload configured hooks                     |
-| `/mcp`              | Show/reload MCP server connections               |
-| `/sandbox`          | Manage allowed paths (add/remove dirs)           |
-| `/permissions`      | View/manage tool approval permissions            |
-| `/settings`         | General settings (notifications, YOLO, etc.)     |
-| `/yolo`             | Toggle YOLO mode (auto-approve all tools)        |
-| `/resource`         | Show/switch resource ID (tag for sharing)        |
-| `/thread:tag-dir`   | Tag current thread with this directory           |
-| `/login`            | Authenticate with OAuth providers                |
-| `/logout`           | Log out from a provider                          |
-| `/setup`            | Re-run the interactive setup wizard              |
-| `/help`             | Show available commands                          |
-| `/exit`             | Exit the TUI                                     |
+| Command             | Description                                                                 |
+| ------------------- | --------------------------------------------------------------------------- |
+| `/new`              | Start a new conversation thread                                             |
+| `/threads`          | List and switch between threads with freshness-checked cached lazy previews |
+| `/models`           | Switch/manage model packs (built-in/custom)                                 |
+| `/custom-providers` | Manage custom OpenAI-compatible providers/models                            |
+| `/mode`             | Switch agent mode                                                           |
+| `/subagents`        | Configure subagent model defaults                                           |
+| `/om`               | Configure Observational Memory models                                       |
+| `/think`            | Set thinking level (Anthropic)                                              |
+| `/skills`           | List available skills                                                       |
+| `/diff`             | Show modified files or git diff                                             |
+| `/name`             | Rename current thread                                                       |
+| `/cost`             | Show token usage and estimated costs                                        |
+| `/review`           | Review a GitHub pull request                                                |
+| `/hooks`            | Show/reload configured hooks                                                |
+| `/mcp`              | Show/reload MCP server connections                                          |
+| `/sandbox`          | Manage allowed paths (add/remove dirs)                                      |
+| `/permissions`      | View/manage tool approval permissions                                       |
+| `/settings`         | General settings (notifications, YOLO, etc.)                                |
+| `/yolo`             | Toggle YOLO mode (auto-approve all tools)                                   |
+| `/resource`         | Show/switch resource ID (tag for sharing)                                   |
+| `/thread:tag-dir`   | Tag current thread with this directory                                      |
+| `/login`            | Authenticate with OAuth providers                                           |
+| `/logout`           | Log out from a provider                                                     |
+| `/setup`            | Re-run the interactive setup wizard                                         |
+| `/help`             | Show available commands                                                     |
+| `/exit`             | Exit the TUI                                                                |
 
 ### Keyboard shortcuts
 
-| Shortcut | Action                            |
-| -------- | --------------------------------- |
-| `Ctrl+C` | Interrupt current operation       |
-| `Ctrl+D` | Exit (when editor is empty)       |
-| `Ctrl+T` | Toggle thinking blocks visibility |
-| `Ctrl+E` | Expand/collapse all tool outputs  |
+| Shortcut    | Action                                                          |
+| ----------- | --------------------------------------------------------------- |
+| `Ctrl+C`    | Interrupt current operation or clear input                      |
+| `Ctrl+C` ×2 | Exit (double-tap)                                               |
+| `Ctrl+D`    | Exit (when editor is empty)                                     |
+| `Ctrl+Z`    | Suspend process (`fg` to resume)                                |
+| `Alt+Z`     | Undo last clear                                                 |
+| `Ctrl+T`    | Toggle thinking blocks visibility                               |
+| `Ctrl+E`    | Expand/collapse all tool outputs                                |
+| `Enter`     | Send a message, or queue a follow-up while the agent is running |
+| `Ctrl+Y`    | Toggle YOLO mode                                                |
 
 ## Configuration
 

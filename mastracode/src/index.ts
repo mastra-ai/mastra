@@ -23,6 +23,7 @@ import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
+import type { McpServerConfig } from './mcp/index.js';
 import type { ProviderAccess } from './onboarding/packs.js';
 import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs.js';
 import {
@@ -82,6 +83,8 @@ export interface MastraCodeConfig {
   heartbeatHandlers?: HeartbeatHandler[];
   /** Override the workspace. Default: local filesystem + local sandbox based on detected project */
   workspace?: HarnessConfig['workspace'];
+  /** Programmatic MCP server configurations, merged with (and overriding) file-based configs. */
+  mcpServers?: Record<string, McpServerConfig>;
   /** Disable MCP server discovery. Default: false */
   disableMcp?: boolean;
   /** Disable hooks. Default: false */
@@ -100,6 +103,20 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Auth storage (shared with Claude Max / OpenAI providers and Harness)
   const authStorage = createAuthStorage();
+
+  // Load user-entered API keys from auth.json into process.env
+  // (only sets env vars that aren't already present — env vars take precedence)
+  try {
+    const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
+    const providerEnvVars: Record<string, string | undefined> = {};
+    for (const [provider, cfg] of Object.entries(registry)) {
+      const envVars = cfg?.apiKeyEnvVar;
+      providerEnvVars[provider] = Array.isArray(envVars) ? envVars[0] : envVars;
+    }
+    authStorage.loadStoredApiKeysIntoEnv(providerEnvVars);
+  } catch {
+    // Non-fatal — provider registry may not be available
+  }
 
   // Project detection
   const project = detectProject(cwd);
@@ -122,7 +139,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const memory = getDynamicMemory(storage);
 
   // MCP
-  const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath);
+  const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, config?.mcpServers);
 
   // Hooks
   const hookManager = config?.disableHooks ? undefined : new HookManager(project.rootPath, 'session-init');
@@ -150,21 +167,21 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       name: 'Build',
       default: true,
       defaultModelId: 'anthropic/claude-opus-4-6',
-      color: mastra.purple,
+      color: mastra.green,
       agent: codeAgent,
     },
     {
       id: 'plan',
       name: 'Plan',
       defaultModelId: 'openai/gpt-5.2-codex',
-      color: mastra.blue,
+      color: mastra.purple,
       agent: codeAgent,
     },
     {
       id: 'fast',
       name: 'Fast',
       defaultModelId: 'cerebras/zai-glm-4.7',
-      color: mastra.green,
+      color: mastra.orange,
       agent: codeAgent,
     },
   ];
@@ -178,8 +195,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   ];
 
   // Build lightweight provider access for resolving built-in packs at startup.
-  // Anthropic/OpenAI use AuthStorage only; other providers use env API keys.
-  // Also scan the full provider registry so configured env API keys satisfy access checks.
+  // Anthropic/OpenAI use AuthStorage; other providers use env API keys.
+  // Also scan the full provider registry so configured API keys satisfy access checks.
   const anthropicCred = authStorage.get('anthropic');
   const openaiCred = authStorage.get('openai-codex');
   const startupAccess: ProviderAccess = {
@@ -296,6 +313,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       if (oauthId && authStorage.isLoggedIn(oauthId)) {
         return true;
       }
+      // Check for user-entered API keys stored in auth.json
+      if (authStorage.hasStoredApiKey(provider)) {
+        return true;
+      }
+      // Backward-compatible direct credential checks for Anthropic/OpenAI storage keys.
       if (provider === 'anthropic') {
         const cred = authStorage.get('anthropic');
         if (cred?.type === 'api_key' && cred.key.trim().length > 0) {

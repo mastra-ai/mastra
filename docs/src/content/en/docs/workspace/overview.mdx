@@ -63,7 +63,7 @@ const mastra = new Mastra({
 })
 ```
 
-### Agent-scoped workspace
+### Agent-level workspace
 
 Assign a workspace directly to an agent to override the global workspace:
 
@@ -77,7 +77,7 @@ const workspace = new Workspace({
 
 export const myAgent = new Agent({
   id: 'my-agent',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   workspace,
 })
 ```
@@ -276,7 +276,7 @@ const workspace = new Workspace({
 await workspace.init()
 ```
 
-### What init() does
+### What `init()` does
 
 Initialization runs setup logic for each configured provider:
 

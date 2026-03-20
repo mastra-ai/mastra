@@ -149,6 +149,24 @@ export class ObservationTurn {
     // Await any in-flight async buffering
     await this.om.waitForBuffering(this.threadId, this.resourceId);
 
+    // Trigger observation if threshold is exceeded but no step > 0 ran.
+    // This handles the agent.generate() path where processInputStep is only called
+    // for step 0 (which doesn't observe), and step 1+ never gets processInputStep.
+    const status = await this.om.getStatus({
+      threadId: this.threadId,
+      resourceId: this.resourceId,
+      messages: this.messageList.get.all.db(),
+    });
+    if (status.shouldObserve) {
+      await this.om.observe({
+        threadId: this.threadId,
+        resourceId: this.resourceId,
+        messages: this.messageList.get.all.db(),
+        requestContext: this.requestContext,
+        writer: this.writer,
+      });
+    }
+
     // Fetch final record state
     await this.refreshRecord();
 

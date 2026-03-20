@@ -233,7 +233,7 @@ describe('MCPClient', () => {
       expect(receivedUri).toBe(resourceUri);
 
       await mcp.resources.unsubscribe(serverName, resourceUri); // Cleanup
-    }, 5000);
+    }, 15_000);
 
     it('should receive resource list changed notification from a specific server', async () => {
       const serverName = 'weather';
@@ -301,48 +301,36 @@ describe('MCPClient', () => {
       expect(currentWeatherPrompt).toBeDefined();
       expect(currentWeatherPrompt).toMatchObject({
         name: 'current',
-        version: 'v1',
         description: expect.any(String),
-        mimeType: 'application/json',
       });
 
       const forecast = promptResources.find(r => r.name === 'forecast');
       expect(forecast).toBeDefined();
       expect(forecast).toMatchObject({
         name: 'forecast',
-        version: 'v1',
         description: expect.any(String),
-        mimeType: 'application/json',
       });
 
       const historical = promptResources.find(r => r.name === 'historical');
       expect(historical).toBeDefined();
       expect(historical).toMatchObject({
         name: 'historical',
-        version: 'v1',
         description: expect.any(String),
-        mimeType: 'application/json',
       });
     });
 
     it('should get a specific prompt from a server', async () => {
-      const { prompt, messages } = await mcp.prompts.get({ serverName: 'weather', name: 'current' });
-      expect(prompt).toBeDefined();
-      expect(prompt).toMatchObject({
-        name: 'current',
-        version: 'v1',
-        description: expect.any(String),
-        mimeType: 'application/json',
-      });
+      const { description, messages } = await mcp.prompts.get({ serverName: 'weather', name: 'current' });
+      expect(description).toBeDefined();
       expect(messages).toBeDefined();
       const messageItem = messages[0];
       let parsedText: any = {};
-      if (messageItem.content.text && typeof messageItem.content.text === 'string') {
+      const content = messageItem.content;
+      if ('text' in content && typeof content.text === 'string') {
         try {
-          parsedText = JSON.parse(messageItem.content.text);
+          parsedText = JSON.parse(content.text);
         } catch {
           // If parsing fails, parsedText remains an empty object
-          // console.error("Failed to parse resource content text:", _e);
         }
       }
       expect(parsedText).toHaveProperty('location');

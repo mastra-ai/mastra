@@ -121,10 +121,12 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           throw err;
         }
 
-        // Inject system message + continuation
+        // Inject system messages (one per cache-stable chunk) + continuation
         if (ctx.systemMessage) {
           messageList.clearSystemMessages('observational-memory');
-          messageList.addSystem(ctx.systemMessage, 'observational-memory');
+          for (const msg of ctx.systemMessage) {
+            messageList.addSystem(msg, 'observational-memory');
+          }
 
           const contMsg = this.turn.context.continuation ?? {
             id: 'om-continuation',

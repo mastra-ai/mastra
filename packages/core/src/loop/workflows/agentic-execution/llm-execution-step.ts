@@ -4,7 +4,7 @@ import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError, generateId } from '@internal/ai-sdk-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
-import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
+import type { MastraDBMessage, MastraMessagePart, MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { getErrorFromUnknown } from '../../../error/utils.js';
@@ -30,6 +30,7 @@ import type {
   TextStartPayload,
 } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
+import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { isMastraTool } from '../../../tools/toolchecks';
 import { makeCoreTool } from '../../../utils';
@@ -108,7 +109,6 @@ async function processOutputStream<OUTPUT = undefined>({
     // Streaming
     if (
       chunk.type !== 'text-delta' &&
-      chunk.type !== 'tool-call' &&
       // not 100% sure about this being the right fix.
       // basically for some llm providers they add response-metadata after each text-delta
       // we then flush the chunks by calling messageList.add (a few lines down)
@@ -162,6 +162,33 @@ async function processOutputStream<OUTPUT = undefined>({
       chunk.type !== 'text-start' &&
       runState.state.isReasoning
     ) {
+      // Flush reasoning deltas before clearing, same pattern as textDeltas above.
+      // Some providers (e.g., OpenAI-compatible reasoning models like kimi-k2.5, DeepSeek-R1)
+      // emit tool-input-start before reasoning-end (which arrives from flush()).
+      // Without this flush, reasoningDeltas are lost and reasoning_content becomes empty,
+      // causing 400 errors on subsequent turns that require reasoning_content echo-back.
+      // See: https://github.com/mastra-ai/mastra/issues/13635
+      if (runState.state.reasoningDeltas.length) {
+        const message: MastraDBMessage = {
+          id: messageId,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'reasoning' as const,
+                reasoning: '',
+                details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
+                providerMetadata: runState.state.providerOptions,
+              },
+            ],
+            ...buildResponseModelMetadata(runState),
+          },
+          createdAt: new Date(),
+        };
+        messageList.add(message, 'response');
+      }
+
       runState.setState({
         isReasoning: false,
         reasoningDeltas: [],
@@ -259,6 +286,11 @@ async function processOutputStream<OUTPUT = undefined>({
         break;
       }
 
+      case 'tool-call-input-streaming-end': {
+        safeEnqueue(controller, chunk);
+        break;
+      }
+
       case 'reasoning-start': {
         runState.setState({
           isReasoning: true,
@@ -305,6 +337,15 @@ async function processOutputStream<OUTPUT = undefined>({
       }
 
       case 'reasoning-end': {
+        // If reasoning was already flushed by the guard (e.g. tool-input-start arrived
+        // before reasoning-end from provider flush), skip the duplicate empty message.
+        // This only affects OpenAI-compatible providers; the native OpenAI Responses API
+        // sends reasoning-end in order, so the item_reference fix (#9005) is unaffected.
+        if (!runState.state.isReasoning) {
+          safeEnqueue(controller, chunk);
+          break;
+        }
+
         // Always store reasoning, even if empty - OpenAI requires item_reference for tool calls
         // See: https://github.com/mastra-ai/mastra/issues/9005
         const message: MastraDBMessage = {
@@ -430,6 +471,62 @@ async function processOutputStream<OUTPUT = undefined>({
         await options?.onError?.({ error });
         break;
 
+      // Provider-executed tool results (e.g. web_search). Client tool results
+      // are handled by llm-mapping-step after execution.
+      case 'tool-result': {
+        if (chunk.payload.result != null) {
+          const resultToolDef =
+            tools?.[chunk.payload.toolName] || findProviderToolByName(tools, chunk.payload.toolName);
+          messageList.updateToolInvocation({
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: chunk.payload.toolCallId,
+              toolName: chunk.payload.toolName,
+              args: chunk.payload.args,
+              result: chunk.payload.result,
+            },
+            providerMetadata: chunk.payload.providerMetadata,
+            // @ts-expect-error - providerExecuted is not in the type but is read by output-converter.ts (to keep deferred provider calls) and tool-call-step.ts (to skip client execution)
+            providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
+          });
+        }
+        safeEnqueue(controller, chunk);
+        break;
+      }
+
+      case 'tool-call': {
+        const toolDef = tools?.[chunk.payload.toolName] || findProviderToolByName(tools, chunk.payload.toolName);
+        const inferredProviderExecuted = inferProviderExecuted(chunk.payload.providerExecuted, toolDef);
+
+        const toolCallPart: MastraMessagePart = {
+          type: 'tool-invocation' as const,
+          toolInvocation: {
+            state: 'call' as const,
+            toolCallId: chunk.payload.toolCallId,
+            toolName: chunk.payload.toolName,
+            args: chunk.payload.args,
+          },
+          providerMetadata: chunk.payload.providerMetadata,
+          // @ts-expect-error - providerExecuted is not in the type but is read by output-converter.ts (to keep deferred provider calls) and tool-call-step.ts (to skip client execution)
+          providerExecuted: inferredProviderExecuted,
+        };
+
+        const message: MastraDBMessage = {
+          id: messageId,
+          role: 'assistant' as const,
+          content: {
+            format: 2,
+            parts: [toolCallPart],
+            ...buildResponseModelMetadata(runState),
+          },
+          createdAt: new Date(),
+        };
+        messageList.add(message, 'response');
+
+        safeEnqueue(controller, chunk);
+        break;
+      }
       default:
         safeEnqueue(controller, chunk);
     }
@@ -442,6 +539,7 @@ async function processOutputStream<OUTPUT = undefined>({
         'tool-call',
         'tool-call-input-streaming-start',
         'tool-call-delta',
+        'tool-call-input-streaming-end',
         'raw',
       ].includes(chunk.type)
     ) {
@@ -554,7 +652,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let warnings: any;
       let request: any;
       let rawResponse: any;
-
       const { outputStream, callBail, runState, stepTools, stepWorkspace } = await executeStreamWithFallbackModels<{
         outputStream: MastraModelOutput<OUTPUT>;
         runState: AgenticRunState;
@@ -1044,39 +1141,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         });
       }
 
-      /**
-       * Add tool calls to the message list
-       */
-
-      const toolCalls = outputStream._getImmediateToolCalls()?.map(chunk => {
-        return chunk.payload;
-      });
-
-      if (toolCalls.length > 0) {
-        const message: MastraDBMessage = {
-          id: outputStream.messageId,
-          role: 'assistant' as const,
-          content: {
-            format: 2,
-            parts: toolCalls.map(toolCall => {
-              return {
-                type: 'tool-invocation' as const,
-                toolInvocation: {
-                  state: 'call' as const,
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  args: toolCall.args,
-                },
-                providerMetadata: toolCall.providerMetadata,
-                providerExecuted: toolCall.providerExecuted,
-              };
-            }),
-            ...buildResponseModelMetadata(runState),
-          },
-          createdAt: new Date(),
+      // Tool calls are added to the message list inline during stream processing (case 'tool-call').
+      // Tool results (including deferred provider results) are handled inline (case 'tool-result').
+      const toolCalls = (outputStream._getImmediateToolCalls() ?? []).map(chunk => {
+        const tool = stepTools?.[chunk.payload.toolName] || findProviderToolByName(stepTools, chunk.payload.toolName);
+        return {
+          ...chunk.payload,
+          providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, tool),
         };
-        messageList.add(message, 'response');
-      }
+      });
 
       // Call processOutputStep for processors (runs AFTER LLM response, BEFORE tool execution)
       // This allows processors to validate/modify the response and trigger retries if needed
@@ -1231,8 +1304,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       // isContinued should be true if:
       // - shouldRetry is true (processor requested retry)
+      // - OR there are non-provider-executed tool calls to process (some LLMs return finishReason 'stop' even with tool calls)
       // - OR finishReason indicates more work (e.g., tool-use)
-      const shouldContinue = shouldRetry || (!tripwireTriggered && !['stop', 'error', 'length'].includes(finishReason));
+      // Provider-executed tools (e.g. web_search) are handled server-side — the response already
+      // contains both the tool execution and the text output, so no additional loop iteration is needed.
+      const hasPendingToolCalls = toolCalls && toolCalls.some(tc => !tc.providerExecuted);
+      const shouldContinue =
+        shouldRetry ||
+        (!tripwireTriggered && (hasPendingToolCalls || !['stop', 'error', 'length'].includes(finishReason)));
 
       // Increment processor retry count if we're retrying
       const nextProcessorRetryCount = shouldRetry ? currentProcessorRetryCount + 1 : currentProcessorRetryCount;

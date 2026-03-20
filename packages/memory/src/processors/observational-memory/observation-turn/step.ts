@@ -3,6 +3,7 @@ import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
 import { filterObservedMessages } from '../message-utils';
+import { getLatestStepParts } from '../observational-memory';
 import { resolveRetentionFloor } from '../thresholds';
 
 import type { ObservationTurn } from './turn';
@@ -77,18 +78,33 @@ export class ObservationStep {
         await this.turn.refreshRecord();
       }
 
-      // Check if reflection is needed (whether or not activation happened)
-      const reflectStatus = await om.getStatus({
+      // Check if reflection is needed (whether or not activation happened).
+      // maybeReflect handles both sync (above full threshold) and async buffered
+      // reflection (above bufferActivation point but below full threshold).
+      const record = this.turn.record;
+      const obsTokens = record.observationTokenCount ?? 0;
+      await om.reflector.maybeReflect({
+        record,
+        observationTokens: obsTokens,
         threadId,
-        resourceId,
-        messages: messageList.get.all.db(),
+        writer: this.turn.writer,
+        requestContext: this.turn.requestContext,
       });
-      if (reflectStatus.shouldReflect) {
-        await om.reflect(threadId, resourceId);
-        await this.turn.refreshRecord();
-        reflected = true;
-      }
+      await this.turn.refreshRecord();
     }
+
+    // ── Check for incomplete tool calls ────────────────────────
+    // Provider-executed tools (e.g. Anthropic web_search) may still be in state:'call'
+    // while the agent loop continues. We must not observe/buffer until they complete.
+    const allMsgsForToolCheck = messageList.get.all.db();
+    const lastMessage = allMsgsForToolCheck[allMsgsForToolCheck.length - 1];
+    const latestStepParts = getLatestStepParts(lastMessage?.content?.parts ?? []);
+    const hasIncompleteToolCalls = latestStepParts.some(
+      part => part?.type === 'tool-invocation' && (part as any).toolInvocation?.state === 'call',
+    );
+    omDebug(
+      `[OM:deferred-check] hasIncompleteToolCalls=${hasIncompleteToolCalls}, latestStepPartsCount=${latestStepParts.length}`,
+    );
 
     // ── Check thresholds + buffer trigger (all steps) ──────────
     let statusSnapshot = await om.getStatus({
@@ -98,7 +114,7 @@ export class ObservationStep {
     });
 
     // Trigger buffering if interval boundary crossed (fire-and-forget, all steps)
-    if (statusSnapshot.shouldBuffer) {
+    if (statusSnapshot.shouldBuffer && !hasIncompleteToolCalls) {
       const allMessages = messageList.get.all.db();
       const unobservedMessages = om.getUnobservedMessages(allMessages, statusSnapshot.record);
 
@@ -137,8 +153,8 @@ export class ObservationStep {
         }
       }
 
-      // Threshold observation (step > 0 only)
-      if (statusSnapshot.shouldObserve) {
+      // Threshold observation (step > 0 only, skip if tool calls pending)
+      if (statusSnapshot.shouldObserve && !hasIncompleteToolCalls) {
         const obsResult = await this.runThresholdObservation();
         if (obsResult.succeeded) {
           observed = true;
@@ -183,8 +199,8 @@ export class ObservationStep {
     // ── Refresh cross-thread context (resource scope) ──────────
     const otherThreadsContext = await this.turn.refreshOtherThreadsContext();
 
-    // ── Build system message ──────────────────────────────────
-    const systemMessage = await om.buildContextSystemMessage({
+    // ── Build system messages (one per cache-stable chunk) ────
+    const systemMessage = await om.buildContextSystemMessages({
       threadId,
       resourceId,
       record: this.turn.record,
@@ -296,6 +312,7 @@ export class ObservationStep {
       resourceId,
       messages: messageList.get.all.db(),
       requestContext: this.turn.requestContext,
+      writer: this.turn.writer,
     });
 
     return { succeeded: obsResult.observed, record: obsResult.record };

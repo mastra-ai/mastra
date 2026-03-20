@@ -33,7 +33,7 @@ export class ObserverRunner {
       this.observerAgent = new Agent({
         id: 'observational-memory-observer',
         name: 'Observer',
-        instructions: buildObserverSystemPrompt(false, this.observationConfig.instruction),
+        instructions: buildObserverSystemPrompt(false, this.observationConfig.instruction, this.observationConfig.threadTitle),
         model: this.observationConfig.model,
       });
     }
@@ -58,7 +58,14 @@ export class ObserverRunner {
     existingObservations: string | undefined,
     messagesToObserve: MastraDBMessage[],
     abortSignal?: AbortSignal,
-    options?: { skipContinuationHints?: boolean; requestContext?: RequestContext },
+    options?: {
+      skipContinuationHints?: boolean;
+      requestContext?: RequestContext;
+      priorCurrentTask?: string;
+      priorSuggestedResponse?: string;
+      priorThreadTitle?: string;
+      wasTruncated?: boolean;
+    },
   ): Promise<{
     observations: string;
     currentTask?: string;
@@ -68,7 +75,13 @@ export class ObserverRunner {
     const agent = this.getAgent();
 
     const observerMessages = [
-      { role: 'user' as const, content: buildObserverTaskPrompt(existingObservations, options) },
+      {
+        role: 'user' as const,
+        content: buildObserverTaskPrompt(existingObservations, {
+          ...options,
+          includeThreadTitle: this.observationConfig.threadTitle,
+        }),
+      },
       buildObserverHistoryMessage(messagesToObserve),
     ];
 
@@ -118,6 +131,7 @@ export class ObserverRunner {
     threadOrder: string[],
     abortSignal?: AbortSignal,
     requestContext?: RequestContext,
+    priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
   ): Promise<{
     results: Map<string, { observations: string; currentTask?: string; suggestedContinuation?: string }>;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -126,11 +140,20 @@ export class ObserverRunner {
       id: 'multi-thread-observer',
       name: 'multi-thread-observer',
       model: this.observationConfig.model,
-      instructions: buildObserverSystemPrompt(true, this.observationConfig.instruction),
+      instructions: buildObserverSystemPrompt(true, this.observationConfig.instruction, this.observationConfig.threadTitle),
     });
 
     const observerMessages = [
-      { role: 'user' as const, content: buildMultiThreadObserverTaskPrompt(existingObservations) },
+      {
+        role: 'user' as const,
+        content: buildMultiThreadObserverTaskPrompt(
+          existingObservations,
+          threadOrder,
+          priorMetadataByThread,
+          undefined,
+          this.observationConfig.threadTitle,
+        ),
+      },
       buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder),
     ];
 

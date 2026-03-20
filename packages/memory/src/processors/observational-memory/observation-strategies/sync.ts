@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { setThreadOMMetadata } from '@mastra/core/memory';
+import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
 import { createObservationEndMarker, createObservationFailedMarker, createObservationStartMarker } from '../markers';
@@ -84,8 +84,15 @@ export class SyncObservationStrategy extends ObservationStrategy {
   }
 
   async observe(existingObservations: string, messages: MastraDBMessage[]) {
+    // Fetch prior thread metadata for observer prompt continuity
+    const thread = await this.storage.getThreadById({ threadId: this.opts.threadId });
+    const omMeta = thread ? getThreadOMMetadata(thread.metadata) : undefined;
+
     const result = await this.deps.observer.call(existingObservations, messages, this.opts.abortSignal, {
       requestContext: this.opts.requestContext,
+      priorCurrentTask: omMeta?.currentTask,
+      priorSuggestedResponse: omMeta?.suggestedResponse,
+      priorThreadTitle: omMeta?.threadTitle,
     });
     this.observerResult = result;
     return result;
@@ -94,10 +101,10 @@ export class SyncObservationStrategy extends ObservationStrategy {
   async process(output: ObserverOutput, existingObservations: string): Promise<ProcessedObservation> {
     const { record, threadId, messages } = this.opts;
 
-    const newObservations = await this.wrapObservations(output.observations, existingObservations, threadId);
+    const lastObservedAt = this.getMaxMessageTimestamp(messages);
+    const newObservations = await this.wrapObservations(output.observations, existingObservations, threadId, lastObservedAt);
     const observationTokens = this.tokenCounter.countObservations(newObservations);
     const cycleObservationTokens = this.tokenCounter.countObservations(output.observations);
-    const lastObservedAt = this.getMaxMessageTimestamp(messages);
 
     const newMessageIds = messages.map(m => m.id);
     const existingIds = record.observedMessageIds ?? [];

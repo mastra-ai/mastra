@@ -1,5 +1,6 @@
 ---
 title: "Voice | Agents"
+description: "Learn how to add voice capabilities to your Mastra agents for text-to-speech and speech-to-text interactions."
 packages:
   - "@mastra/core"
   - "@mastra/node-audio"
@@ -38,7 +39,7 @@ export const agent = new Agent({
   id: 'voice-agent',
   name: 'Voice Agent',
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   voice,
 })
 
@@ -57,7 +58,7 @@ try {
 }
 ```
 
-## Working with Audio Streams
+## Working with audio streams
 
 The `speak()` and `listen()` methods work with Node.js streams. Here's how to save and load audio files:
 
@@ -105,7 +106,7 @@ try {
 }
 ```
 
-## Speech-to-Speech Voice Interactions
+## Speech-to-speech voice interactions
 
 For more dynamic and interactive voice experiences, you can use real-time voice providers that support speech-to-speech capabilities:
 
@@ -127,7 +128,7 @@ export const agent = new Agent({
   id: 'speech-to-speech-agent',
   name: 'Speech-to-Speech Agent',
   instructions: `You are a helpful assistant with speech-to-speech capabilities.`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   tools: {
     // Tools configured on Agent are passed to voice provider
     search,
@@ -227,7 +228,7 @@ export const convertToText = async (input: string | NodeJS.ReadableStream): Prom
 export const hybridVoiceAgent = new Agent({
   id: 'hybrid-voice-agent',
   name: 'Hybrid Voice Agent',
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   instructions: 'You can speak and listen using different providers.',
   voice: new CompositeVoice({
     input: new OpenAIVoice(),
@@ -239,7 +240,7 @@ export const unifiedVoiceAgent = new Agent({
   id: 'unified-voice-agent',
   name: 'Unified Voice Agent',
   instructions: 'You are an agent with both STT and TTS capabilities.',
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   voice: new OpenAIVoice(),
 })
 
@@ -281,7 +282,7 @@ export const agent = new Agent({
   id: 'voice-agent',
   name: 'Voice Agent',
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
 
   // Create a composite voice using OpenAI for listening and PlayAI for speaking
   voice: new CompositeVoice({
@@ -306,7 +307,7 @@ export const agent = new Agent({
   id: 'aisdk-voice-agent',
   name: 'AI SDK Voice Agent',
   instructions: `You are a helpful assistant with voice capabilities.`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
 
   // Pass AI SDK models directly to CompositeVoice
   voice: new CompositeVoice({
@@ -341,7 +342,7 @@ For the complete list of supported AI SDK providers and their capabilities:
 - [Transcription](https://ai-sdk.dev/docs/providers/openai/transcription)
 - [Speech](https://ai-sdk.dev/docs/providers/elevenlabs/speech)
 
-## Supported Voice Providers
+## Supported voice providers
 
 Mastra supports multiple voice providers for text-to-speech (TTS) and speech-to-text (STT) capabilities:
 
@@ -359,7 +360,7 @@ Mastra supports multiple voice providers for text-to-speech (TTS) and speech-to-
 | Azure | `@mastra/voice-azure` | TTS, STT | [Documentation](/reference/voice/mastra-voice) |
 | Cloudflare | `@mastra/voice-cloudflare` | TTS | [Documentation](/reference/voice/mastra-voice) |
 
-## Next Steps
+## Next steps
 
 - [Voice API Reference](/reference/voice/mastra-voice) - Detailed API documentation for voice capabilities
 - [Text to Speech Examples](https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech) - Interactive story generator and other TTS implementations

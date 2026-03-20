@@ -1,5 +1,59 @@
 # create-mastra
 
+## 1.3.14-alpha.1
+
+## 1.3.14-alpha.0
+
+## 1.3.13
+
+## 1.3.13-alpha.3
+
+## 1.3.13-alpha.2
+
+## 1.3.13-alpha.1
+
+## 1.3.13-alpha.0
+
+## 1.3.12
+
+## 1.3.12-alpha.0
+
+## 1.3.11
+
+## 1.3.10
+
+## 1.3.10-alpha.0
+
+## 1.3.9
+
+## 1.3.9-alpha.1
+
+## 1.3.9-alpha.0
+
+## 1.3.8
+
+### Patch Changes
+
+- dependencies updates: ([#14062](https://github.com/mastra-ai/mastra/pull/14062))
+  - Updated dependency [`prettier@^3.8.1` ↗︎](https://www.npmjs.com/package/prettier/v/3.8.1) (from `^3.7.4`, in `dependencies`)
+
+- dependencies updates: ([#14099](https://github.com/mastra-ai/mastra/pull/14099))
+  - Updated dependency [`fs-extra@^11.3.4` ↗︎](https://www.npmjs.com/package/fs-extra/v/11.3.4) (from `^11.3.3`, in `dependencies`)
+
+## 1.3.8-alpha.2
+
+## 1.3.8-alpha.1
+
+## 1.3.8-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#14062](https://github.com/mastra-ai/mastra/pull/14062))
+  - Updated dependency [`prettier@^3.8.1` ↗︎](https://www.npmjs.com/package/prettier/v/3.8.1) (from `^3.7.4`, in `dependencies`)
+
+- dependencies updates: ([#14099](https://github.com/mastra-ai/mastra/pull/14099))
+  - Updated dependency [`fs-extra@^11.3.4` ↗︎](https://www.npmjs.com/package/fs-extra/v/11.3.4) (from `^11.3.3`, in `dependencies`)
+
 ## 1.3.7
 
 ### Patch Changes

@@ -55,6 +55,8 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat<MyMes
 });
 ```
 
+`chatRoute()` forwards the incoming request `AbortSignal` to `agent.stream()`. If the client disconnects, Mastra aborts the in-flight generation. If you need generation to continue and persist server-side after disconnect, build a custom route around `agent.stream()`, avoid passing the request signal, and call `consumeStream()` on the returned `MastraModelOutput`.
+
 ### Workflow route
 
 Stream a workflow in AI SDK-compatible format.
@@ -95,7 +97,7 @@ export const mastra = new Mastra({
 
 ## Framework-agnostic handlers
 
-For use outside of the Mastra server (e.g., Next.js App Router, Express), you can use the standalone handler functions directly. These handlers return a `ReadableStream` that you can wrap with `createUIMessageStreamResponse`:
+For use outside the Mastra server (e.g., Next.js App Router, Express), you can use the standalone handler functions directly. These handlers return a compatibility `ReadableStream` that can be passed to AI SDK response helpers like `createUIMessageStreamResponse` and `pipeUIMessageStreamToResponse`:
 
 ### handleChatStream
 
@@ -135,16 +137,21 @@ export async function POST(req: Request) {
 
 ### handleNetworkStream
 
+Pass AI SDK `UIMessage[]` from your installed `ai` version so TypeScript can infer the correct stream overload.
+
+Handlers keep the existing v5/default behavior. If your app is typed against `ai@6`, pass `version: 'v6'`.
+
 ```typescript
 import { handleNetworkStream } from '@mastra/ai-sdk';
-import { createUIMessageStreamResponse } from 'ai';
+import { createUIMessageStreamResponse, type UIMessage } from 'ai';
 import { mastra } from '@/src/mastra';
 
 export async function POST(req: Request) {
-  const params = await req.json();
+  const params = (await req.json()) as { messages: UIMessage[] };
   const stream = await handleNetworkStream({
     mastra,
     agentId: 'routingAgent',
+    version: 'v6',
     params,
   });
   return createUIMessageStreamResponse({ stream });
@@ -155,8 +162,10 @@ export async function POST(req: Request) {
 
 If you have a raw Mastra `stream`, you can manually transform it to AI SDK UI message parts:
 
+Use `toAISdkStream` for both versions. If your app is typed against `ai@6`, pass `version: 'v6'`.
+
 ```typescript
-import { toAISdkFormat } from '@mastra/ai-sdk';
+import { toAISdkStream } from '@mastra/ai-sdk';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
 
 export async function POST(req: Request) {
@@ -168,7 +177,7 @@ export async function POST(req: Request) {
   const uiMessageStream = createUIMessageStream({
     originalMessages: messages,
     execute: async ({ writer }) => {
-      for await (const part of toAISdkFormat(stream, { from: 'agent' })!) {
+      for await (const part of toAISdkStream(stream, { from: 'agent' })) {
         writer.write(part);
       }
     },
@@ -176,4 +185,20 @@ export async function POST(req: Request) {
 
   return createUIMessageStreamResponse({ stream: uiMessageStream });
 }
+```
+
+For AI SDK v6, select the v6 stream contract explicitly:
+
+```typescript
+const uiMessageStream = createUIMessageStream({
+  originalMessages: messages,
+  execute: async ({ writer }) => {
+    for await (const part of toAISdkStream(stream, {
+      from: 'agent',
+      version: 'v6',
+    })) {
+      writer.write(part);
+    }
+  },
+});
 ```

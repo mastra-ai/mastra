@@ -26,6 +26,9 @@ export {
 export { ObservationalMemoryProcessor } from './processor';
 export type { MemoryContextProvider } from './processor';
 
+// Observation utilities
+export { getObservationsAsOf } from './observation-utils';
+
 // Types
 export type {
   ObservationalMemoryConfig,

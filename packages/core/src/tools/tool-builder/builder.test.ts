@@ -1,0 +1,211 @@
+import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
+import { SpanType } from '../../observability';
+import type { AnySpan } from '../../observability';
+import { RequestContext } from '../../request-context';
+import { createTool } from '../../tools';
+import { CoreToolBuilder } from './builder';
+
+describe('MCP Tool Tracing', () => {
+  it('should use MCP_TOOL_CALL span type when tool has mcpMetadata', async () => {
+    const testTool = createTool({
+      id: 'mcp-server_list-files',
+      description: 'List files in a directory',
+      inputSchema: z.object({ path: z.string() }),
+      mcpMetadata: {
+        serverName: 'filesystem-server',
+        serverVersion: '1.2.0',
+      },
+      execute: async inputData => ({ files: [inputData.path] }),
+    });
+
+    const mockToolSpan = {
+      end: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnySpan;
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'mcp-server_list-files',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        description: 'List files in a directory',
+        requestContext: new RequestContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!({ path: '/tmp' }, { toolCallId: 'test-call-id', messages: [] });
+
+    expect(mockAgentSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.MCP_TOOL_CALL,
+        name: "mcp_tool: 'mcp-server_list-files' on 'filesystem-server'",
+        input: { path: '/tmp' },
+        attributes: {
+          mcpServer: 'filesystem-server',
+          serverVersion: '1.2.0',
+          toolDescription: 'List files in a directory',
+        },
+      }),
+    );
+
+    expect(mockToolSpan.end).toHaveBeenCalledWith({ attributes: { success: true }, output: { files: ['/tmp'] } });
+  });
+
+  it('should use TOOL_CALL span type for tools without mcpMetadata', async () => {
+    const testTool = createTool({
+      id: 'regular-tool',
+      description: 'A regular tool',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async inputData => ({ result: inputData.value }),
+    });
+
+    const mockToolSpan = {
+      end: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnySpan;
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'regular-tool',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        description: 'A regular tool',
+        requestContext: new RequestContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!({ value: 'test' }, { toolCallId: 'test-call-id', messages: [] });
+
+    expect(mockAgentSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'regular-tool'",
+        input: { value: 'test' },
+        attributes: {
+          toolDescription: 'A regular tool',
+          toolType: 'tool',
+        },
+      }),
+    );
+  });
+
+  it('should handle mcpMetadata with missing serverVersion', async () => {
+    const testTool = createTool({
+      id: 'mcp_read-resource',
+      description: 'Read a resource',
+      inputSchema: z.object({ uri: z.string() }),
+      mcpMetadata: {
+        serverName: 'my-mcp-server',
+      },
+      execute: async inputData => ({ data: inputData.uri }),
+    });
+
+    const mockToolSpan = {
+      end: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnySpan;
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'mcp_read-resource',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        description: 'Read a resource',
+        requestContext: new RequestContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!({ uri: 'file:///test' }, { toolCallId: 'test-call-id', messages: [] });
+
+    const spanArgs = (mockAgentSpan.createChildSpan as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(spanArgs.type).toBe(SpanType.MCP_TOOL_CALL);
+    expect(spanArgs.attributes).toEqual({
+      mcpServer: 'my-mcp-server',
+      serverVersion: undefined,
+      toolDescription: 'Read a resource',
+    });
+    expect(spanArgs.name).toBe("mcp_tool: 'mcp_read-resource' on 'my-mcp-server'");
+  });
+
+  it('should not use MCP_TOOL_CALL for Vercel tools even with mcpMetadata-like properties', async () => {
+    const vercelTool = {
+      description: 'A vercel tool',
+      parameters: z.object({ input: z.string() }),
+      mcpMetadata: { serverName: 'fake' },
+      execute: async (args: any) => ({ output: args.input }),
+    };
+
+    const mockToolSpan = {
+      end: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnySpan;
+
+    const builder = new CoreToolBuilder({
+      originalTool: vercelTool as any,
+      options: {
+        name: 'vercel-tool',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        description: 'A vercel tool',
+        requestContext: new RequestContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!({ input: 'test' }, { toolCallId: 'test-call-id', messages: [] });
+
+    expect(mockAgentSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'vercel-tool'",
+      }),
+    );
+
+    const spanArgs = (mockAgentSpan.createChildSpan as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(spanArgs.attributes).not.toHaveProperty('mcpServer');
+    expect(spanArgs.attributes).not.toHaveProperty('serverVersion');
+  });
+});

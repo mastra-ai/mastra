@@ -12,7 +12,9 @@ import type {
  * Target mapping from Standard Schema targets to zod-to-json-schema targets.
  */
 const TARGET_MAP: Record<string, ZodToJsonSchemaTarget> = {
+  'draft-04': 'jsonSchema7',
   'draft-07': 'jsonSchema7',
+  'draft-2020-12': 'jsonSchema2019-09',
   'openapi-3.0': 'openApi3',
 };
 

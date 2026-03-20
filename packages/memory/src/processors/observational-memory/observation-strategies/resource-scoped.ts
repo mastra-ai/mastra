@@ -29,6 +29,10 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     threadMessages: MastraDBMessage[];
     result: { observations: string; currentTask?: string; suggestedContinuation?: string };
   }> = [];
+  private priorMetadataByThread = new Map<
+    string,
+    { currentTask?: string; suggestedResponse?: string; threadTitle?: string }
+  >();
 
   constructor(deps: StrategyDeps, opts: ObservationRunOpts) {
     super(deps, opts);
@@ -51,6 +55,13 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     for (const thread of allThreads) {
       const omMetadata = getThreadOMMetadata(thread.metadata);
       threadMetadataMap.set(thread.id, { lastObservedAt: omMetadata?.lastObservedAt });
+      if (omMetadata?.currentTask || omMetadata?.suggestedResponse || omMetadata?.threadTitle) {
+        this.priorMetadataByThread.set(thread.id, {
+          currentTask: omMetadata.currentTask,
+          suggestedResponse: omMetadata.suggestedResponse,
+          threadTitle: omMetadata.threadTitle,
+        });
+      }
     }
 
     for (const thread of allThreads) {
@@ -220,6 +231,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           batch.threadIds,
           this.opts.abortSignal,
           this.opts.requestContext,
+          this.priorMetadataByThread,
         );
       }),
     );
@@ -265,9 +277,8 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       cycleObservationTokens += this.tokenCounter.countObservations(result.observations);
 
       const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
-      currentObservations = this.replaceOrAppendThreadSection(currentObservations, threadId, threadSection);
-
       const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
+      currentObservations = this.replaceOrAppendThreadSection(currentObservations, threadId, threadSection, threadLastObservedAt);
       threadMetadataUpdates!.push({
         threadId,
         lastObservedAt: threadLastObservedAt.toISOString(),

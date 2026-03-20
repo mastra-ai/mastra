@@ -102,6 +102,19 @@ export abstract class ObservationStrategy {
       }
     } catch (error) {
       await this.emitFailedMarkers(cycleId, error);
+      // Persist the failed marker to storage so it survives page reloads
+      const failedMarkerForStorage = {
+        type: 'data-om-observation-failed',
+        data: {
+          cycleId,
+          operationType: 'observation',
+          startedAt: new Date().toISOString(),
+          error: error instanceof Error ? error.message : String(error),
+          recordId: record.id,
+          threadId,
+        },
+      };
+      await this.persistMarkerToStorage(failedMarkerForStorage, threadId, this.opts.resourceId).catch(() => {});
       if (abortSignal?.aborted) throw error;
       omError('[OM] Observation failed', error);
     }
@@ -157,27 +170,41 @@ export abstract class ObservationStrategy {
   }
 
   /**
+   * Create a message boundary delimiter with an ISO 8601 date.
+   * Used to separate observation chunks for cache stability.
+   */
+  protected static createMessageBoundary(date: Date): string {
+    return `\n\n--- message boundary (${date.toISOString()}) ---\n\n`;
+  }
+
+  /**
    * Wrap raw observations — in resource scope, wraps with thread tag and merges;
-   * in thread scope, simply appends.
+   * in thread scope, simply appends with a message boundary delimiter.
    */
   protected wrapObservations(
     rawObservations: string,
     existingObservations: string,
     threadId: string,
+    lastObservedAt?: Date,
   ): Promise<string> | string {
     if (this.scope === 'resource') {
       return (async () => {
         const threadSection = await this.wrapWithThreadTag(threadId, rawObservations);
-        return this.replaceOrAppendThreadSection(existingObservations, threadId, threadSection);
+        return this.replaceOrAppendThreadSection(existingObservations, threadId, threadSection, lastObservedAt);
       })();
     }
-    return existingObservations ? `${existingObservations}\n\n${rawObservations}` : rawObservations;
+    if (!existingObservations) return rawObservations;
+    const boundary = lastObservedAt
+      ? ObservationStrategy.createMessageBoundary(lastObservedAt)
+      : '\n\n';
+    return `${existingObservations}${boundary}${rawObservations}`;
   }
 
   protected replaceOrAppendThreadSection(
     existingObservations: string,
     _threadId: string,
     newThreadSection: string,
+    lastObservedAt?: Date,
   ): string {
     if (!existingObservations) {
       return newThreadSection;
@@ -187,7 +214,10 @@ export abstract class ObservationStrategy {
     const dateMatch = newThreadSection.match(/Date:\s*([A-Za-z]+\s+\d+,\s+\d+)/);
 
     if (!threadIdMatch || !dateMatch) {
-      return `${existingObservations}\n\n${newThreadSection}`;
+      const boundary = lastObservedAt
+        ? ObservationStrategy.createMessageBoundary(lastObservedAt)
+        : '\n\n';
+      return `${existingObservations}${boundary}${newThreadSection}`;
     }
 
     const newThreadId = threadIdMatch[1]!;
@@ -229,7 +259,10 @@ export abstract class ObservationStrategy {
       }
     }
 
-    return `${existingObservations}\n\n${newThreadSection}`;
+    const boundary = lastObservedAt
+      ? ObservationStrategy.createMessageBoundary(lastObservedAt)
+      : '\n\n';
+    return `${existingObservations}${boundary}${newThreadSection}`;
   }
 
   // ── Marker persistence ──────────────────────────────────────

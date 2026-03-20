@@ -20,7 +20,7 @@ Want to see more examples? Visit Mastra's [**UI Dojo**](https://ui-dojo.mastra.a
 
 :::
 
-## Getting Started
+## Getting started
 
 Use Mastra and AI SDK UI together by installing the `@mastra/ai-sdk` package. `@mastra/ai-sdk` provides custom API routes and utilities for streaming Mastra agents in AI SDK-compatible formats. This includes chat, workflow, and network route handlers, along with utilities and exported types for UI integrations.
 
@@ -34,7 +34,7 @@ npm install @mastra/ai-sdk@latest @ai-sdk/react ai
 
 You're now ready to follow the integration guides and recipes below!
 
-## Integration Guides
+## Integration guides
 
 Typically, you'll set up API routes that stream Mastra content in AI SDK-compatible format, and then use those routes in AI SDK UI hooks like `useChat()`. Below you'll find two main approaches to achieve this:
 
@@ -136,6 +136,12 @@ You can use [`chatRoute()`](/reference/ai-sdk/chat-route), [`workflowRoute()`](/
 If you don't want to run Mastra's server and instead use frameworks like Next.js or Express, you can use the [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream), [`handleWorkflowStream()`](/reference/ai-sdk/handle-workflow-stream), and [`handleNetworkStream()`](/reference/ai-sdk/handle-network-stream) functions in your own API route handlers.
 
 They return a `ReadableStream` that you can wrap with [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response).
+
+:::tip AI SDK v6 compatibility
+
+The framework-agnostic handlers keep the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'`. For best TypeScript inference with `handleChatStream()` and `handleNetworkStream()`, pass `messages` as `UIMessage[]` from your installed `ai` version.
+
+:::
 
 The examples below show you how to use them with Next.js App Router.
 
@@ -898,6 +904,15 @@ For live examples of Custom UI patterns, visit [Mastra's UI Dojo](https://ui-doj
 
 To manually transform Mastra's streams to AI SDK-compatible format, use the [`toAISdkStream()`](/reference/ai-sdk/to-ai-sdk-stream) utility. See the [examples](/reference/ai-sdk/to-ai-sdk-stream#examples) for concrete usage patterns.
 
+`toAISdkStream()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'`.
+
+```typescript
+import { toAISdkStream } from '@mastra/ai-sdk'
+
+const v5Stream = toAISdkStream(mastraStream, { from: 'agent' })
+const v6Stream = toAISdkStream(mastraStream, { from: 'agent', version: 'v6' })
+```
+
 ### Loading historical messages
 
 When loading messages from Mastra's memory to display in a chat UI, use [`toAISdkV5Messages()`](/reference/ai-sdk/to-ai-sdk-v5-messages) or [`toAISdkV4Messages()`](/reference/ai-sdk/to-ai-sdk-v4-messages) to convert them to the appropriate AI SDK format for `useChat()`'s `initialMessages`.
@@ -1279,7 +1294,7 @@ The pattern uses:
     export const forecastAgent = new Agent({
       id: 'forecast-agent',
       instructions: 'Use the nested-agent-stream tool when asked about weather.',
-      model: 'openai/gpt-4o-mini',
+      model: 'openai/gpt-5.4',
       tools: { nestedAgentTool },
     })
     ```

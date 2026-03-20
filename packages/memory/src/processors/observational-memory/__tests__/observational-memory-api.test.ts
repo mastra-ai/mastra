@@ -15,6 +15,7 @@ import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+import { BufferingCoordinator } from '../buffering-coordinator';
 import { ObservationalMemory } from '../observational-memory';
 
 // =============================================================================
@@ -146,6 +147,14 @@ function createOM(
     },
   });
 }
+
+// Clean up static maps between ALL tests to prevent ordering-dependent failures
+beforeEach(() => {
+  BufferingCoordinator.asyncBufferingOps.clear();
+  BufferingCoordinator.lastBufferedBoundary.clear();
+  BufferingCoordinator.lastBufferedAtTime.clear();
+  BufferingCoordinator.reflectionBufferCycleIds.clear();
+});
 
 // =============================================================================
 // getStatus()

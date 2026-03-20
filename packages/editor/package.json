@@ -1,6 +1,6 @@
 {
   "name": "@mastra/editor",
-  "version": "0.7.0",
+  "version": "0.7.7-alpha.1",
   "description": "Mastra Editor for agent management and instantiation",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
@@ -70,14 +70,14 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "dependencies": {
-    "@arcadeai/arcadejs": "^2.2.0",
-    "@composio/core": "^0.6.3",
-    "@composio/mastra": "^0.6.3",
+    "@arcadeai/arcadejs": "^2.3.0",
+    "@composio/core": "^0.6.5",
+    "@composio/mastra": "^0.6.5",
     "@mastra/memory": "workspace:*",
     "@mastra/schema-compat": "workspace:*"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.19.9",
+    "@hono/node-server": "^1.19.11",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/ai-v6": "workspace:*",
@@ -85,7 +85,7 @@
     "@mastra/hono": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/mcp": "workspace:*",
-    "hono": "^4.7.10",
+    "hono": "^4.12.8",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
