@@ -13,6 +13,7 @@ import { basicSuspend, parallelSuspend, loopSuspend } from './workflows/suspend-
 import { statefulWorkflow, initialStateWorkflow } from './workflows/state.js';
 import { innerWorkflow, outerWorkflow } from './workflows/nested.js';
 import { retryWorkflow, failureWorkflow, cancelableWorkflow } from './workflows/error-handling.js';
+import { sleepWorkflow } from './workflows/sleep.js';
 
 export const mastra = new Mastra({
   workflows: {
@@ -34,6 +35,7 @@ export const mastra = new Mastra({
     'retry-workflow': retryWorkflow,
     'failure-workflow': failureWorkflow,
     'cancelable-workflow': cancelableWorkflow,
+    'sleep-workflow': sleepWorkflow,
   },
   storage: new LibSQLStore({
     id: 'smoke-test',

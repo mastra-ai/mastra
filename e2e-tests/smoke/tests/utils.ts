@@ -96,16 +96,7 @@ export async function streamWorkflow(
   });
 
   const text = await res.text();
-  const chunks = text
-    .split('\x1E')
-    .filter(s => s.trim().length > 0)
-    .map(s => {
-      try {
-        return JSON.parse(s);
-      } catch {
-        return s;
-      }
-    });
+  const chunks = parseStreamChunks(text);
 
   return { runId: id, chunks };
 }
@@ -126,7 +117,112 @@ export async function streamResumeWorkflow(
   });
 
   const text = await res.text();
-  const chunks = text
+  const chunks = parseStreamChunks(text);
+
+  return { chunks };
+}
+
+/**
+ * Start a workflow using the sync /start endpoint (fire-and-forget).
+ * Requires a pre-created run via /create-run.
+ */
+export async function startWorkflowSync(
+  workflowId: string,
+  runId: string,
+  body: Record<string, unknown> = {},
+): Promise<{ status: number; data: any }> {
+  const res = await fetchApi(`/api/workflows/${workflowId}/start?runId=${runId}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  return { status: res.status, data };
+}
+
+/**
+ * Resume a workflow using the sync /resume endpoint (fire-and-forget).
+ */
+export async function resumeWorkflowSync(
+  workflowId: string,
+  runId: string,
+  body: Record<string, unknown> = {},
+): Promise<{ status: number; data: any }> {
+  const res = await fetchApi(`/api/workflows/${workflowId}/resume?runId=${runId}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  return { status: res.status, data };
+}
+
+/**
+ * Stream a workflow using the legacy /stream-legacy endpoint.
+ */
+export async function streamLegacyWorkflow(
+  workflowId: string,
+  body: Record<string, unknown> = {},
+  runId?: string,
+): Promise<{ runId: string; chunks: any[] }> {
+  const id = runId ?? crypto.randomUUID();
+  const baseUrl = getBaseUrl();
+  const res = await fetch(`${baseUrl}/api/workflows/${workflowId}/stream-legacy?runId=${id}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  const text = await res.text();
+  const chunks = parseStreamChunks(text);
+
+  return { runId: id, chunks };
+}
+
+/**
+ * Stream a time-travel execution via /time-travel-stream.
+ */
+export async function streamTimeTravelWorkflow(
+  workflowId: string,
+  runId: string,
+  body: Record<string, unknown> = {},
+): Promise<{ chunks: any[] }> {
+  const baseUrl = getBaseUrl();
+  const res = await fetch(`${baseUrl}/api/workflows/${workflowId}/time-travel-stream?runId=${runId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  const text = await res.text();
+  const chunks = parseStreamChunks(text);
+
+  return { chunks };
+}
+
+/**
+ * Poll a workflow run until it reaches one of the target statuses.
+ */
+export async function pollWorkflowRun(
+  workflowId: string,
+  runId: string,
+  targetStatuses: string[],
+  maxAttempts = 30,
+  intervalMs = 500,
+): Promise<any> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const { data } = await fetchJson<any>(`/api/workflows/${workflowId}/runs/${runId}`);
+    if (targetStatuses.includes(data.status)) {
+      return data;
+    }
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+  throw new Error(`Run ${runId} did not reach status [${targetStatuses.join(',')}] within ${maxAttempts * intervalMs}ms`);
+}
+
+/**
+ * Parse \x1E-delimited stream chunks.
+ */
+function parseStreamChunks(text: string): any[] {
+  return text
     .split('\x1E')
     .filter(s => s.trim().length > 0)
     .map(s => {
@@ -136,6 +232,4 @@ export async function streamResumeWorkflow(
         return s;
       }
     });
-
-  return { chunks };
 }
