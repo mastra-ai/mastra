@@ -9,3 +9,14 @@ Added datasets and experiments storage support to the MongoDB store.
 **Experiments** — Run and track experiments against datasets. Full CRUD for experiments and per-item experiment results, with pagination, filtering, and cascade deletion.
 
 Both domains are automatically available when using `MongoDBStore` — no additional configuration needed.
+
+```ts
+const store = new MongoDBStore({ uri: 'mongodb://localhost:27017', dbName: 'my-app' });
+
+// Datasets
+const dataset = await store.getStorage('datasets').createDataset({ name: 'my-dataset' });
+await store.getStorage('datasets').addItem({ datasetId: dataset.id, input: { prompt: 'hello' } });
+
+// Experiments
+const experiment = await store.getStorage('experiments').createExperiment({ name: 'run-1', datasetId: dataset.id });
+```
