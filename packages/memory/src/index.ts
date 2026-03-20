@@ -1193,6 +1193,168 @@ Notes:
     return Boolean(isMDWorkingMemory && isMDWorkingMemory.version === `vnext`);
   }
 
+  /**
+   * Search messages across threads by semantic similarity.
+   * Requires a vector store and embedder to be configured.
+   */
+  public async searchMessages({
+    query,
+    resourceId,
+    topK = 10,
+  }: {
+    query: string;
+    resourceId: string;
+    topK?: number;
+  }): Promise<{ results: Array<{ messageId: string; threadId: string; score: number }> }> {
+    if (!this.vector) {
+      throw new Error('searchMessages requires a vector store. Configure vector and embedder on your Memory instance.');
+    }
+
+    const { embeddings, dimension } = await this.embedMessageContent(query);
+    const { indexName } = await this.createEmbeddingIndex(dimension);
+
+    const queryResults: Array<{ messageId: string; threadId: string; score: number }> = [];
+
+    await Promise.all(
+      embeddings.map(async embedding => {
+        const results = await this.vector!.query({
+          indexName,
+          queryVector: embedding,
+          topK,
+          filter: { resource_id: resourceId },
+        });
+        for (const r of results) {
+          if (r.metadata?.message_id && r.metadata?.thread_id) {
+            queryResults.push({
+              messageId: r.metadata.message_id,
+              threadId: r.metadata.thread_id,
+              score: r.score,
+            });
+          }
+        }
+      }),
+    );
+
+    // Deduplicate by messageId (multiple chunks from same message), keep highest score
+    const byMessage = new Map<string, (typeof queryResults)[0]>();
+    for (const r of queryResults) {
+      const existing = byMessage.get(r.messageId);
+      if (!existing || r.score > existing.score) {
+        byMessage.set(r.messageId, r);
+      }
+    }
+
+    // Sort by score descending
+    const results = [...byMessage.values()].sort((a, b) => b.score - a.score);
+
+    return { results };
+  }
+
+  /**
+   * Index messages from a thread into the vector store for semantic search.
+   * Reuses the same embedding infrastructure as semanticRecall.
+   * Call this to backfill the vector index for threads that existed before search was enabled.
+   */
+  public async indexMessages({
+    threadId,
+    resourceId,
+    batchSize = 50,
+  }: {
+    threadId: string;
+    resourceId: string;
+    batchSize?: number;
+  }): Promise<{ indexed: number }> {
+    if (!this.vector) {
+      throw new Error('indexMessages requires a vector store. Configure vector and embedder on your Memory instance.');
+    }
+
+    const memoryStore = await this.getMemoryStore();
+    let page = 0;
+    let totalIndexed = 0;
+
+    while (true) {
+      const result = await memoryStore.listMessages({
+        threadId,
+        resourceId,
+        page,
+        perPage: batchSize,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+
+      if (result.messages.length === 0) break;
+
+      const embeddingData: Array<{
+        embeddings: number[][];
+        metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+      }> = [];
+      let dimension: number | undefined;
+
+      await Promise.all(
+        result.messages.map(async message => {
+          let textForEmbedding: string | null = null;
+
+          if (
+            message.content.content &&
+            typeof message.content.content === 'string' &&
+            message.content.content.trim() !== ''
+          ) {
+            textForEmbedding = message.content.content;
+          } else if (message.content.parts && message.content.parts.length > 0) {
+            const joined = message.content.parts
+              .filter((part: any) => part.type === 'text')
+              .map((part: any) => part.text)
+              .join(' ')
+              .trim();
+            if (joined) textForEmbedding = joined;
+          }
+
+          if (!textForEmbedding) return;
+
+          const embedResult = await this.embedMessageContent(textForEmbedding);
+          dimension = embedResult.dimension;
+
+          embeddingData.push({
+            embeddings: embedResult.embeddings,
+            metadata: embedResult.chunks.map(() => ({
+              message_id: message.id,
+              thread_id: message.threadId,
+              resource_id: message.resourceId,
+            })),
+          });
+        }),
+      );
+
+      if (embeddingData.length > 0 && dimension !== undefined) {
+        const { indexName } = await this.createEmbeddingIndex(dimension);
+
+        const allVectors: number[][] = [];
+        const allMetadata: Array<{
+          message_id: string;
+          thread_id: string | undefined;
+          resource_id: string | undefined;
+        }> = [];
+
+        for (const data of embeddingData) {
+          allVectors.push(...data.embeddings);
+          allMetadata.push(...data.metadata);
+        }
+
+        await this.vector.upsert({
+          indexName,
+          vectors: allVectors,
+          metadata: allMetadata,
+        });
+
+        totalIndexed += embeddingData.length;
+      }
+
+      if (!result.hasMore) break;
+      page++;
+    }
+
+    return { indexed: totalIndexed };
+  }
+
   public listTools(config?: MemoryConfigInternal): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
     const tools: Record<string, ToolAction<any, any, any>> = {};
