@@ -413,6 +413,20 @@ Low-detail results may include truncation hints like:
 
 **When you see these hints and need the full content, make the exact call described in the hint.** This is the normal workflow: first recall at low detail to scan, then drill into specific parts at high detail. Do not stop at the low-detail result if the user asked for exact content.
 
+### Searching across threads
+Use \`mode: "search"\` with a \`query\` string to find messages by semantic similarity across all threads for the current user. Results are grouped by thread with relevance scores and message previews. Each result includes a \`cursor\` you can use to browse into that thread.
+
+### Browsing other threads
+You can also browse past conversation threads within the same user/resource:
+
+1. Call \`recall\` with \`mode: "threads"\` to list all threads for the current user. Each thread shows its ID, title, and dates.
+2. Pick a thread ID, then call \`recall\` with \`threadId: "<id>"\` to start reading from the beginning. Omit \`cursor\` to start from page 1.
+3. Use \`page\` to paginate forward through the thread, or use a message ID from the results as \`cursor\` for cursor-based pagination.
+
+Use \`before\` and \`after\` (ISO 8601 dates) to narrow the thread list by creation date — e.g. \`after: "2026-03-01"\` to find threads from March onward, or \`before: "2026-03-15"\` to see only older threads.
+
+This is useful when the user references a past conversation by name, or when you need to look up plans, decisions, or context from a previous session.
+
 ### When recall is NOT needed
 - The user is asking for a high-level summary and your observations already cover it
 - The question is about general preferences or facts that don't require source text
