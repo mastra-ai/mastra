@@ -6,6 +6,8 @@ interface AgentExperiment {
   id: string;
   datasetId: string;
   datasetName: string;
+  datasetVersion?: number | null;
+  agentVersion?: string | null;
   targetType: string;
   targetId: string;
   status: string;
