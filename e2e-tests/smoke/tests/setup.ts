@@ -3,7 +3,7 @@ import { execa } from 'execa';
 import getPort from 'get-port';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { rm } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectDir = join(__dirname, '..');
@@ -36,7 +36,28 @@ export default async function setup(project: TestProject) {
   });
   console.log('[smoke] Build complete.');
 
-  // Step 2: Start server via mastra start
+  // Step 2: Create workspace fixture files (mastra start cwd = .mastra/output/)
+  const outputDir = join(projectDir, '.mastra', 'output');
+  const wsDir = join(outputDir, 'test-workspace');
+  const skillDir = join(wsDir, 'skills', 'test-skill');
+  const refDir = join(skillDir, 'references');
+  await mkdir(refDir, { recursive: true });
+  await writeFile(join(wsDir, 'hello.txt'), 'Hello from workspace!');
+  await writeFile(
+    join(skillDir, 'SKILL.md'),
+    [
+      '---',
+      'name: test-skill',
+      'description: A test skill for smoke tests',
+      '---',
+      '',
+      '# Test Skill',
+      '',
+      'This skill is used for smoke testing the workspace skills API.',
+    ].join('\n'),
+  );
+  await writeFile(join(refDir, 'example.md'), '# Example Reference\n\nSome reference content.');
+
   console.log(`[smoke] Starting mastra server on port ${port}...`);
   const serverProc = execa(mastraBin, ['start'], {
     cwd: projectDir,
@@ -78,14 +99,22 @@ export default async function setup(project: TestProject) {
     console.log('[smoke] Tearing down...');
     serverProc.kill('SIGTERM');
 
-    // Wait briefly for graceful shutdown
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Wait for the process to actually exit before cleaning up files
+    await new Promise<void>(resolve => {
+      const timeout = setTimeout(resolve, 5000);
+      serverProc.on('exit', () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+    });
 
     // Clean up database (may be in project root or .mastra/output depending on cwd)
     await rm(join(projectDir, 'test.db'), { force: true }).catch(() => {});
     await rm(join(projectDir, 'test.db-journal'), { force: true }).catch(() => {});
     await rm(join(projectDir, '.mastra', 'output', 'test.db'), { force: true }).catch(() => {});
     await rm(join(projectDir, '.mastra', 'output', 'test.db-journal'), { force: true }).catch(() => {});
+    // Clean up workspace test directory
+    await rm(wsDir, { recursive: true, force: true }).catch(() => {});
     // Note: we keep .mastra/output/ to avoid rebuilding on next run
   };
 }
