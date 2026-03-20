@@ -25,11 +25,18 @@ export function useTotalTokensKpiMetrics() {
         }),
       ]);
 
+      const hasCurrent = input.value != null || output.value != null;
+      const hasPrevious = input.previousValue != null || output.previousValue != null;
       const value = (input.value ?? 0) + (output.value ?? 0);
       const previousValue = (input.previousValue ?? 0) + (output.previousValue ?? 0);
-      const changePercent = previousValue > 0 ? ((value - previousValue) / previousValue) * 100 : null;
+      const changePercent =
+        hasPrevious && previousValue > 0 ? ((value - previousValue) / previousValue) * 100 : null;
 
-      return { value: value || null, previousValue: previousValue || null, changePercent };
+      return {
+        value: hasCurrent ? value : null,
+        previousValue: hasPrevious ? previousValue : null,
+        changePercent,
+      };
     },
   });
 }
