@@ -30,6 +30,7 @@ import { DatasetDetailView } from './dataset-detail-view';
 import { ScorerDetailView } from './scorer-detail-view';
 import { ExperimentResultsPanel } from './agent-playground-eval';
 import { useAgentVersions } from '../../hooks/use-agent-versions';
+import { formatVersionLabel } from './format-version-label';
 
 type EvaluateView =
   | { type: 'overview' }
@@ -277,10 +278,10 @@ export function AgentPlaygroundEvaluate({
                       const isActive = view.type === 'experiment' && view.id === exp.id;
                       const ds = allDatasets.find(d => d.id === exp.datasetId);
                       const versionParts: string[] = [];
-                      if (exp.datasetVersion != null) versionParts.push(`Data v${exp.datasetVersion}`);
+                      if (exp.datasetVersion != null) versionParts.push(formatVersionLabel('Dataset', exp.datasetVersion));
                       if (exp.agentVersion) {
                         const av = agentVersions.find(v => v.id === exp.agentVersion);
-                        versionParts.push(`Agent v${av ? av.versionNumber : exp.agentVersion}`);
+                        versionParts.push(formatVersionLabel('Agent', av ? av.versionNumber : exp.agentVersion));
                       }
                       return (
                         <NavItem
@@ -856,8 +857,8 @@ function ExperimentBadge({ experiment }: { experiment: AgentExperiment }) {
   const { status, succeededCount, totalItems } = experiment;
 
   const versionTags = [
-    experiment.datasetVersion != null ? `Dataset v${experiment.datasetVersion}` : null,
-    experiment.agentVersion ? `Agent v${experiment.agentVersion}` : null,
+    experiment.datasetVersion != null ? formatVersionLabel('Dataset', experiment.datasetVersion) : null,
+    experiment.agentVersion ? formatVersionLabel('Agent', experiment.agentVersion) : null,
   ].filter(Boolean);
 
   const versionLine =

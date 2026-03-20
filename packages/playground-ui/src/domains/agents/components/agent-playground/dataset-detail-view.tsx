@@ -20,6 +20,7 @@ import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
 
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useQueryClient } from '@tanstack/react-query';
+import { formatVersionLabel } from './format-version-label';
 
 interface DatasetDetailViewProps {
   agentId: string;
@@ -342,11 +343,11 @@ export function DatasetDetailView({
                         </Txt>
                         <Txt variant="ui-xs" className="text-neutral3">
                           {exp.succeededCount}/{exp.totalItems} passed
-                          {exp.datasetVersion != null && ` · Dataset v${exp.datasetVersion}`}
+                          {exp.datasetVersion != null && ` · ${formatVersionLabel('Dataset', exp.datasetVersion)}`}
                           {exp.agentVersion &&
                             (() => {
                               const av = agentVersions.find(v => v.id === exp.agentVersion);
-                              return ` · Agent v${av ? av.versionNumber : exp.agentVersion}`;
+                              return ` · ${formatVersionLabel('Agent', av ? av.versionNumber : exp.agentVersion)}`;
                             })()}
                         </Txt>
                       </div>

@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils';
 import { useDatasetExperimentResults, useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 import type { AgentExperiment } from '../../hooks/use-agent-experiments';
 import { useAgentVersions } from '../../hooks/use-agent-versions';
+import { formatVersionLabel } from './format-version-label';
 
 function formatTimestamp(dateStr: string | Date): string {
   const date = new Date(dateStr);
@@ -343,11 +344,11 @@ export function ExperimentResultsPanel({
         <ExperimentStatusBadge status={experiment.status} />
         <Txt variant="ui-xs" className="text-neutral2">
           {experiment.datasetName}
-          {experiment.datasetVersion != null && ` v${experiment.datasetVersion}`}
+          {experiment.datasetVersion != null && ` ${formatVersionLabel('Dataset', experiment.datasetVersion)}`}
           {experiment.agentVersion &&
             (() => {
               const av = agentVersions.find(v => v.id === experiment.agentVersion);
-              return ` · Agent v${av ? av.versionNumber : experiment.agentVersion}`;
+              return ` · ${formatVersionLabel('Agent', av ? av.versionNumber : experiment.agentVersion)}`;
             })()}
           {' · '}
           {experiment.startedAt ? formatTimestamp(experiment.startedAt) : '-'}
