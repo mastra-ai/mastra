@@ -91,7 +91,7 @@ describe('Workspace', () => {
   // Constructor
   // ===========================================================================
   describe('constructor', () => {
-    it('should create workspace with filesystem only', async () => {
+    it('should create workspace with filesystem only', () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({ filesystem });
 
@@ -102,7 +102,7 @@ describe('Workspace', () => {
       expect(workspace.sandbox).toBeUndefined();
     });
 
-    it('should create workspace with sandbox only', async () => {
+    it('should create workspace with sandbox only', () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({ sandbox });
 
@@ -110,7 +110,7 @@ describe('Workspace', () => {
       expect(workspace.filesystem).toBeUndefined();
     });
 
-    it('should create workspace with both filesystem and sandbox', async () => {
+    it('should create workspace with both filesystem and sandbox', () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({ filesystem, sandbox });
@@ -119,7 +119,7 @@ describe('Workspace', () => {
       expect(workspace.sandbox).toBe(sandbox);
     });
 
-    it('should accept custom id and name', async () => {
+    it('should accept custom id and name', () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({
         id: 'custom-id',
@@ -131,7 +131,7 @@ describe('Workspace', () => {
       expect(workspace.name).toBe('Custom Workspace');
     });
 
-    it('should throw when neither filesystem nor sandbox nor skills provided', async () => {
+    it('should throw when neither filesystem nor sandbox nor skills provided', () => {
       expect(() => new Workspace({})).toThrow('Workspace requires at least a filesystem, sandbox, or skills');
     });
   });

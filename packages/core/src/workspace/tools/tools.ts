@@ -60,7 +60,8 @@ async function resolveDynamicValue<TContext>(
   if (!context) return safeDefault;
   try {
     return await value(context);
-  } catch {
+  } catch (error) {
+    console.warn('[Workspace Tools] Dynamic config function threw, using safe default:', error);
     return safeDefault;
   }
 }
