@@ -20,13 +20,24 @@ export const searchTool = createTool({
     const workspace = requireWorkspace(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SEARCH.SEARCH);
 
+    // Resolve effective mode before searching — fall back gracefully if requested
+    // mode isn't supported (e.g. 'hybrid' requested but only BM25 configured)
+    const effectiveMode =
+      mode === 'hybrid' && !workspace.canHybrid
+        ? workspace.canVector
+          ? 'vector'
+          : 'bm25'
+        : mode === 'vector' && !workspace.canVector
+          ? workspace.canBM25
+            ? 'bm25'
+            : 'hybrid'
+          : (mode ?? (workspace.canHybrid ? 'hybrid' : workspace.canVector ? 'vector' : 'bm25'));
+
     const results = await workspace.search(query, {
       topK,
-      mode: mode as 'bm25' | 'vector' | 'hybrid' | undefined,
+      mode: effectiveMode as 'bm25' | 'vector' | 'hybrid' | undefined,
       minScore,
     });
-
-    const effectiveMode = mode ?? (workspace.canHybrid ? 'hybrid' : workspace.canVector ? 'vector' : 'bm25');
 
     const lines = results.map(r => {
       const lineInfo = r.lineRange ? `:${r.lineRange.start}-${r.lineRange.end}` : '';
