@@ -116,8 +116,16 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
       // Try explicit registeredTools first, then fallback to mastra
       if (registeredTools && Object.keys(registeredTools).length > 0) {
         tool = Object.values(registeredTools).find((t: any) => t.id === toolId);
-      } else {
-        tool = mastra.getToolById(toolId);
+      }
+      if (!tool) {
+        try {
+          tool = mastra.getToolById(toolId);
+        } catch (err: any) {
+          if (err?.message && !err.message.toLowerCase().includes('not found')) {
+            throw err;
+          }
+          // tool not found in global registry, continue to agent fallback
+        }
       }
 
       if (!tool) {
@@ -154,8 +162,33 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
       // Try explicit registeredTools first, then fallback to mastra
       if (registeredTools && Object.keys(registeredTools).length > 0) {
         tool = Object.values(registeredTools).find((t: any) => t.id === toolId);
-      } else {
-        tool = mastra.getToolById(toolId);
+      }
+      if (!tool) {
+        try {
+          tool = mastra.getToolById(toolId);
+        } catch (err: any) {
+          if (err?.message && !err.message.toLowerCase().includes('not found')) {
+            throw err;
+          }
+          // tool not found in global registry, continue to agent fallback
+        }
+      }
+
+      // Fallback: search dynamically-resolved agent tools (toolsResolver)
+      if (!tool) {
+        const agents = mastra.listAgents() || {};
+        for (const agent of Object.values(agents) as any[]) {
+          try {
+            const agentTools = await agent.listTools({ requestContext });
+            tool = Object.values(agentTools || {}).find((t: any) => t.id === toolId);
+            if (tool) break;
+          } catch (err: any) {
+            // log non-trivial errors but continue to next agent
+            if (err?.message && !err.message.toLowerCase().includes('not found')) {
+              console.warn(`[EXECUTE_TOOL_ROUTE] Error listing tools for agent: ${err.message}`);
+            }
+          }
+        }
       }
 
       if (!tool) {
