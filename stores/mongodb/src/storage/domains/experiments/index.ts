@@ -123,12 +123,12 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
     return [
       { collection: TABLE_EXPERIMENTS, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_EXPERIMENTS, keys: { datasetId: 1 } },
-      { collection: TABLE_EXPERIMENTS, keys: { createdAt: -1 } },
+      { collection: TABLE_EXPERIMENTS, keys: { createdAt: -1, id: 1 } },
       { collection: TABLE_EXPERIMENT_RESULTS, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_EXPERIMENT_RESULTS, keys: { experimentId: 1 } },
       { collection: TABLE_EXPERIMENT_RESULTS, keys: { experimentId: 1, itemId: 1 }, options: { unique: true } },
       { collection: TABLE_EXPERIMENT_RESULTS, keys: { createdAt: -1 } },
-      { collection: TABLE_EXPERIMENT_RESULTS, keys: { experimentId: 1, startedAt: 1 } },
+      { collection: TABLE_EXPERIMENT_RESULTS, keys: { experimentId: 1, startedAt: 1, id: 1 } },
     ];
   }
 
@@ -314,7 +314,12 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
       const limitValue = perPageInput === false ? total : normalizedPerPage;
 
-      const docs = await collection.find(filter).sort({ createdAt: -1 }).skip(offset).limit(limitValue).toArray();
+      const docs = await collection
+        .find(filter)
+        .sort({ createdAt: -1, id: 1 })
+        .skip(offset)
+        .limit(limitValue)
+        .toArray();
 
       return {
         experiments: docs.map(d => transformExperimentRow(d as unknown as Record<string, unknown>)),
@@ -513,7 +518,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
       const limitValue = perPageInput === false ? total : normalizedPerPage;
 
-      const docs = await collection.find(filter).sort({ startedAt: 1 }).skip(offset).limit(limitValue).toArray();
+      const docs = await collection.find(filter).sort({ startedAt: 1, id: 1 }).skip(offset).limit(limitValue).toArray();
 
       return {
         results: docs.map(d => transformExperimentResultRow(d as unknown as Record<string, unknown>)),
