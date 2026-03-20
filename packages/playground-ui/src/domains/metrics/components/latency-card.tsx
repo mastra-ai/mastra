@@ -34,7 +34,7 @@ function LatencyChart({ data }: { data: LatencyPoint[] }) {
 }
 
 export function LatencyCard() {
-  const { data, isLoading } = useLatencyMetrics();
+  const { data, isLoading, isError } = useLatencyMetrics();
 
   const hasData = !!data && (data.agentData.length > 0 || data.workflowData.length > 0 || data.toolData.length > 0);
   const avgP50 =
@@ -50,6 +50,8 @@ export function LatencyCard() {
       </MetricsCard.TopBar>
       {isLoading ? (
         <MetricsCard.Loading />
+      ) : isError ? (
+        <MetricsCard.Error message="Failed to load latency data" />
       ) : (
         <MetricsCard.Content>
           {!hasData ? (

@@ -5,7 +5,7 @@ import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 import { useTokenUsageByAgentMetrics } from '../hooks/use-token-usage-by-agent-metrics';
 
 export function TokenUsageByAgentCard() {
-  const { data, isLoading } = useTokenUsageByAgentMetrics();
+  const { data, isLoading, isError } = useTokenUsageByAgentMetrics();
 
   const hasData = !!data && data.length > 0;
   const totalTokens = data?.reduce((s, d) => s + d.total, 0) ?? 0;
@@ -21,6 +21,8 @@ export function TokenUsageByAgentCard() {
       </MetricsCard.TopBar>
       {isLoading ? (
         <MetricsCard.Loading />
+      ) : isError ? (
+        <MetricsCard.Error message="Failed to load token usage data" />
       ) : (
         <MetricsCard.Content>
           {!hasData ? (

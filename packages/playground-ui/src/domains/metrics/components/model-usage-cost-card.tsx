@@ -3,13 +3,13 @@ import { MetricsDataTable } from '@/ds/components/MetricsDataTable/metrics-data-
 import { useModelUsageCostMetrics } from '../hooks/use-model-usage-cost-metrics';
 
 export function ModelUsageCostCard() {
-  const { data: rows, isLoading } = useModelUsageCostMetrics();
+  const { data: rows, isLoading, isError } = useModelUsageCostMetrics();
   const hasData = !!rows && rows.length > 0;
 
   return (
     <MetricsCard>
       <MetricsCard.TopBar>
-        <MetricsCard.TitleAndDescription title="Model Usage & Cost" description="Token consumption by model." />
+        <MetricsCard.TitleAndDescription title="Model Usage" description="Token consumption by model." />
         {/* 
           Cost related metrics hidden for now
           {hasData && <MetricsCard.Summary value="—" label="Total cost" />} 
@@ -17,6 +17,8 @@ export function ModelUsageCostCard() {
       </MetricsCard.TopBar>
       {isLoading ? (
         <MetricsCard.Loading />
+      ) : isError ? (
+        <MetricsCard.Error message="Failed to load model usage data" />
       ) : (
         <MetricsCard.Content>
           {!hasData ? (

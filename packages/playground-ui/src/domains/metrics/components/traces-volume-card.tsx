@@ -20,7 +20,7 @@ function VolumeBars({ data }: { data: VolumeRow[] }) {
 }
 
 export function TracesVolumeCard() {
-  const { data, isLoading } = useTraceVolumeMetrics();
+  const { data, isLoading, isError } = useTraceVolumeMetrics();
 
   const hasData = !!data && (data.agentData.length > 0 || data.workflowData.length > 0 || data.toolData.length > 0);
   const total = data
@@ -35,6 +35,8 @@ export function TracesVolumeCard() {
       </MetricsCard.TopBar>
       {isLoading ? (
         <MetricsCard.Loading />
+      ) : isError ? (
+        <MetricsCard.Error message="Failed to load trace volume data" />
       ) : (
         <MetricsCard.Content>
           {!hasData ? (

@@ -16,7 +16,7 @@ const SERIES_COLORS = [
 ];
 
 export function ScoresCard() {
-  const { data, isLoading } = useScoresMetrics();
+  const { data, isLoading, isError } = useScoresMetrics();
   const hasData = !!data && data.summaryData.length > 0;
 
   const series = useMemo(() => {
@@ -48,6 +48,8 @@ export function ScoresCard() {
       </MetricsCard.TopBar>
       {isLoading ? (
         <MetricsCard.Loading />
+      ) : isError ? (
+        <MetricsCard.Error message="Failed to load scores data" />
       ) : (
         <MetricsCard.Content>
           {!hasData ? (

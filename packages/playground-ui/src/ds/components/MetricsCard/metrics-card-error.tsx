@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { CircleXIcon } from 'lucide-react';
 
 export function MetricsCardError({
   message = 'Failed to load data',
@@ -8,8 +9,8 @@ export function MetricsCardError({
   className?: string;
 }) {
   return (
-    <div className={cn('flex items-center justify-center', className)}>
-      <p className="text-ui-sm text-red-400">{message}</p>
+    <div className={cn('flex flex-col gap-3 items-center justify-center', className)}>
+      <p className="text-ui-sm text-red-600">{message}</p>
     </div>
   );
 }
