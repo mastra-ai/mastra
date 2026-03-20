@@ -331,6 +331,12 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      // Handle perPage = 0 edge case (MongoDB limit(0) disables limit)
+      if (perPage === 0) {
+        return { datasets: [], pagination: { total, page, perPage: perPageForResponse, hasMore: total > 0 } };
+      }
+
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await collection.find({}).sort({ createdAt: -1, id: 1 }).skip(offset).limit(limitValue).toArray();
@@ -870,6 +876,12 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      // Handle perPage = 0 edge case (MongoDB limit(0) disables limit)
+      if (perPage === 0) {
+        return { items: [], pagination: { total, page, perPage: perPageForResponse, hasMore: total > 0 } };
+      }
+
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await collection
@@ -937,6 +949,12 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      // Handle perPage = 0 edge case (MongoDB limit(0) disables limit)
+      if (perPage === 0) {
+        return { versions: [], pagination: { total, page, perPage: perPageForResponse, hasMore: total > 0 } };
+      }
+
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await collection.find(filter).sort({ version: -1 }).skip(offset).limit(limitValue).toArray();
