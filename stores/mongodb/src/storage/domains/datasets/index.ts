@@ -635,6 +635,11 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         });
       }
 
+      // No-op for empty batch — don't bump version
+      if (!input.items || input.items.length === 0) {
+        return [];
+      }
+
       const now = new Date();
       const versionId = randomUUID();
 
