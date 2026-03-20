@@ -203,9 +203,7 @@ export abstract class ObservationStrategy {
     const grouped =
       this.retrieval && messageRange ? wrapInObservationGroup(rawObservations, messageRange) : rawObservations;
     if (!existingObservations) return grouped;
-    const boundary = lastObservedAt
-      ? ObservationStrategy.createMessageBoundary(lastObservedAt)
-      : '\n\n';
+    const boundary = lastObservedAt ? ObservationStrategy.createMessageBoundary(lastObservedAt) : '\n\n';
     return `${existingObservations}${boundary}${grouped}`;
   }
 
@@ -223,9 +221,7 @@ export abstract class ObservationStrategy {
     const dateMatch = newThreadSection.match(/Date:\s*([A-Za-z]+\s+\d+,\s+\d+)/);
 
     if (!threadIdMatch || !dateMatch) {
-      const boundary = lastObservedAt
-        ? ObservationStrategy.createMessageBoundary(lastObservedAt)
-        : '\n\n';
+      const boundary = lastObservedAt ? ObservationStrategy.createMessageBoundary(lastObservedAt) : '\n\n';
       return `${existingObservations}${boundary}${newThreadSection}`;
     }
 
@@ -268,9 +264,7 @@ export abstract class ObservationStrategy {
       }
     }
 
-    const boundary = lastObservedAt
-      ? ObservationStrategy.createMessageBoundary(lastObservedAt)
-      : '\n\n';
+    const boundary = lastObservedAt ? ObservationStrategy.createMessageBoundary(lastObservedAt) : '\n\n';
     return `${existingObservations}${boundary}${newThreadSection}`;
   }
 

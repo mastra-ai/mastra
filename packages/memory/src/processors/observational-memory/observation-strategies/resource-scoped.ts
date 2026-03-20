@@ -280,7 +280,12 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       const messageRange = this.retrieval ? buildMessageRange(threadMessages) : undefined;
       const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
       const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
-      currentObservations = this.replaceOrAppendThreadSection(currentObservations, threadId, threadSection, threadLastObservedAt);
+      currentObservations = this.replaceOrAppendThreadSection(
+        currentObservations,
+        threadId,
+        threadSection,
+        threadLastObservedAt,
+      );
       threadMetadataUpdates!.push({
         threadId,
         lastObservedAt: threadLastObservedAt.toISOString(),

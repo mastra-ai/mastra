@@ -104,7 +104,13 @@ export class SyncObservationStrategy extends ObservationStrategy {
 
     const lastObservedAt = this.getMaxMessageTimestamp(messages);
     const messageRange = this.retrieval ? buildMessageRange(messages) : undefined;
-    const newObservations = await this.wrapObservations(output.observations, existingObservations, threadId, lastObservedAt, messageRange);
+    const newObservations = await this.wrapObservations(
+      output.observations,
+      existingObservations,
+      threadId,
+      lastObservedAt,
+      messageRange,
+    );
     const observationTokens = this.tokenCounter.countObservations(newObservations);
     const cycleObservationTokens = this.tokenCounter.countObservations(output.observations);
 

@@ -33,7 +33,11 @@ export class ObserverRunner {
       this.observerAgent = new Agent({
         id: 'observational-memory-observer',
         name: 'Observer',
-        instructions: buildObserverSystemPrompt(false, this.observationConfig.instruction, this.observationConfig.threadTitle),
+        instructions: buildObserverSystemPrompt(
+          false,
+          this.observationConfig.instruction,
+          this.observationConfig.threadTitle,
+        ),
         model: this.observationConfig.model,
       });
     }
@@ -140,7 +144,11 @@ export class ObserverRunner {
       id: 'multi-thread-observer',
       name: 'multi-thread-observer',
       model: this.observationConfig.model,
-      instructions: buildObserverSystemPrompt(true, this.observationConfig.instruction, this.observationConfig.threadTitle),
+      instructions: buildObserverSystemPrompt(
+        true,
+        this.observationConfig.instruction,
+        this.observationConfig.threadTitle,
+      ),
     });
 
     const observerMessages = [
