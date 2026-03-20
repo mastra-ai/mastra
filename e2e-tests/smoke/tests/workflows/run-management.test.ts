@@ -10,6 +10,7 @@ describe('run management', () => {
       expect(data).toHaveProperty('branch-workflow');
       expect(data).toHaveProperty('basic-suspend');
       expect(data).toHaveProperty('cancelable-workflow');
+      expect(data).toHaveProperty('sleep-workflow');
     });
 
     it('should get single workflow metadata', async () => {
