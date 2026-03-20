@@ -1,0 +1,74 @@
+{
+  "number": 12810,
+  "title": "feat(playground): propagate resourceId through component tree",
+  "url": "https://github.com/mastra-ai/mastra/pull/12810",
+  "author": {
+    "login": "oritwoen",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-07T20:49:53Z",
+    "lastUpdated": "2026-02-09T12:44:49Z",
+    "ageInDays": 31,
+    "daysSinceLastUpdate": 29
+  },
+  "size": {
+    "additions": 433,
+    "deletions": 43,
+    "changedFiles": 14,
+    "category": "L"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/resourceid-selection",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13082,
+        "title": "fix(playground): show custom-resourceId threads and use correct resourceId for memory",
+        "state": "MERGED",
+        "mergedAt": "2026-03-03T13:47:39Z",
+        "relationship": "partially-supersedes"
+      },
+      {
+        "number": 13789,
+        "title": "fix agent showing wrong threads in studio",
+        "state": "MERGED",
+        "mergedAt": "2026-03-04T17:46:06Z",
+        "relationship": "follow-up-to-13082"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 13079,
+        "title": "Custom resourceId threads not visible in studio",
+        "relationship": "related"
+      }
+    ]
+  },
+  "summary": "Adds a ResourceIdSelector component to the playground that lets users pick or create a resourceId instead of always hardcoding agentId. Propagates the selected resourceId through the component tree (sidebar, memory, working memory, runtime provider). Includes a new Popover-based selector with search/create, localStorage persistence, and e2e tests. Also fixes the underlying issue where threads created with custom resourceIds were invisible in studio.",
+  "maintainerNotes": "The core problem this PR addresses (hardcoded resourceId=agentId causing custom-resourceId threads to be invisible) was already fixed by PR #13082 (merged 2026-03-03) and further refined by PR #13789 (merged 2026-03-04). Both PRs touch the same files: use-memory.ts, agent-memory.tsx, and agent/index.tsx. This PR has merge conflicts (CONFLICTING state) and CI checks are stuck in PENDING. The unique value this PR adds beyond the merged fixes is the ResourceIdSelector UI component (new file) and e2e tests, but those would need significant rebasing. No changeset included. The PR has had no activity for 29 days. Recommend closing with a note thanking the author and pointing to the merged PRs, or asking the author to rebase if the selector UI is still desired.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

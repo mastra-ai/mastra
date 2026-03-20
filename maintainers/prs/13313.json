@@ -1,0 +1,59 @@
+{
+  "number": 13313,
+  "title": "refactor: extract shared BaseElasticFilterTranslator for Elasticsearch and OpenSearch stores",
+  "url": "https://github.com/mastra-ai/mastra/pull/13313",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-20T10:19:03Z",
+    "lastUpdated": "2026-03-06T22:35:42Z",
+    "ageInDays": 18,
+    "daysSinceLastUpdate": 3
+  },
+  "size": {
+    "additions": 347,
+    "deletions": 758,
+    "changedFiles": 6,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "refactor/extract-shared-elastic-filter-translator",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      {
+        "number": 13115,
+        "title": "[FEATURE] Extract shared filter translation logic from Elasticsearch and OpenSearch stores",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Extracts ~424 lines of near-identical filter translation logic shared between the Elasticsearch and OpenSearch vector stores into a new BaseElasticFilterTranslator base class in @mastra/core. Both store filter translators now extend this base, keeping only their divergent methods (translateLogicalOperator, translateFieldOperator). Also fixes minor bugs: OpenSearch wildcard not escaping literal * and ?, null passing through logical operator validation, and unreachable code removal. Net deletion of 411 lines. Includes 2 changesets. 6 files changed across core, elasticsearch store, and opensearch store.",
+  "maintainerNotes": "Community contributor (intojhanurag, also authored recently-merged #13286). Maintainer NikAiyer has commented that this approach requires bumping the core peerdep for @mastra/elasticsearch and @mastra/opensearch since they now depend on a new import from @mastra/core, and pinged wardpeet for guidance. Review is requested from DanielSLew, NikAiyer, and wardpeet. CI tests are still pending (setup steps passed, actual test runs not started — likely needs secrets/approval). Vercel deploy also needs authorization. CodeRabbit left several actionable nitpick comments across multiple reviews. No new tests were added, but author claims existing shared vector store tests cover the refactor. The peerdep question needs resolution before merge.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,60 @@
+{
+  "number": 12860,
+  "title": "Refactor foreach loop to use fastq for fluid concurrency",
+  "url": "https://github.com/mastra-ai/mastra/pull/12860",
+  "author": {
+    "login": "wardpeet",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-10T07:59:32Z",
+    "lastUpdated": "2026-02-10T12:18:21Z",
+    "ageInDays": 28,
+    "daysSinceLastUpdate": 28
+  },
+  "size": {
+    "additions": 496,
+    "deletions": 345,
+    "changedFiles": 3,
+    "category": "L"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "claude/fix-foreach-concurrency-6px0L",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": false,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12838,
+        "title": "feat: Foreach step progress is now visible in the workflow UI",
+        "state": "MERGED",
+        "relevance": "Touches related foreach/workflow code; was merged the day before this PR opened"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Refactors the executeForeach function in the workflow engine to use the fastq library instead of batch-based Promise.all for concurrency. This changes from processing items in fixed-size batches (waiting for all items in a batch to complete) to a fluid queue model where a new item starts as soon as any worker slot frees up. Adds fastq as a new dependency to @mastra/core. The branch name (claude/fix-foreach-concurrency-*) indicates this was AI-generated code. The actual code change is focused on a single file (control-flow.ts) plus package.json, though the lockfile inflates the diff size.",
+  "maintainerNotes": "This PR has multiple issues blocking merge: (1) merge conflicts with main, (2) CI failures in Core Package Tests, E2E Tests, Observability tests, and the Full Test Suite, (3) no changeset, (4) no new tests for the changed concurrency behavior. CodeRabbit flagged several code quality concerns: unsafe non-null assertions on .find() results, misleading type annotations (results typed as StepResult[] but storing outputs), and excessive 'as any' casts that bypass TypeScript strict checking. The recently merged PR #12838 (foreach step progress events) likely caused the merge conflicts since it touches the same workflow code. The branch name suggests this was Claude-generated. Wardpeet is an org member but hasn't addressed any feedback or conflicts in 28 days. Recommend requesting the author rebase, fix CI, add tests, add a changeset, and address CodeRabbit's type safety concerns.",
+  "suggestedAction": "request-changes",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,53 @@
+{
+  "number": 14044,
+  "title": "test(clickhouse): stop merges before TRUNCATE, use tmpfs and Docker healthcheck",
+  "url": "https://github.com/mastra-ai/mastra/pull/14044",
+  "author": {
+    "login": "app/starslingdev",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-09T23:49:29Z",
+    "lastUpdated": "2026-03-10T15:24:14Z",
+    "ageInDays": 1,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 16,
+    "deletions": 14,
+    "changedFiles": 3,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "starsling/clickhouse-test-optimizations",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "CI optimization PR from the StarSling bot that speeds up ClickHouse tests by ~82% (134s → 24s avg). Three changes: (1) Issues SYSTEM STOP MERGES before TRUNCATE TABLE in clearTable() to avoid lock contention from background ReplacingMergeTree merges, then restarts merges after. (2) Switches Docker data volume to tmpfs for in-memory I/O. (3) Pins the Docker image to 26.2.3.2, adds a native healthcheck, and simplifies the pretest script from a shell polling loop to `docker compose up -d --wait`. Estimated savings: ~6,490 CI min/month.",
+  "maintainerNotes": "Well-documented PR with A/B benchmark data (10 runs). CI failures (Observability Package Tests, Full Test Suite) are pre-existing on main and unrelated to this change. No changeset included, but this is test/CI infrastructure only so one may not be needed. The code change in clearTable() is production code (not just test infra) — verify that SYSTEM STOP/START MERGES is safe for production use and won't cause issues if clearTable() throws between stop and start (merges would remain paused). The author is a bot (StarSling CI optimization agent).",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

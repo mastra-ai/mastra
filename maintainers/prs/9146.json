@@ -1,0 +1,53 @@
+{
+  "number": 9146,
+  "title": "fix(client-js): add optional chaining for chunk.payload.stepResult",
+  "url": "https://github.com/mastra-ai/mastra/pull/9146",
+  "author": {
+    "login": "louis030195",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-10-22T20:55:18Z",
+    "lastUpdated": "2026-03-09T15:17:29Z",
+    "ageInDays": 140,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 3,
+    "deletions": 3,
+    "changedFiles": 1,
+    "category": "XS"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/client-js-stepresult-undefined",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "ready-to-merge",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds optional chaining (?.) to three property accesses in client-js agent.ts processDataStream method: chunk.payload.stepResult.isContinued, chunk.payload.stepResult.reason, and chunk.payload.usage. Prevents TypeError when chunk.payload is undefined during streaming, which can occur with certain chunk types like tool-input-available.",
+  "maintainerNotes": "Approved by abhiaiyer91 (org member). The fix is still needed — main branch still has the unsafe direct property access. CI checks are pending (recently rebased on 2026-03-09). Missing a changeset — a maintainer should either add one or merge without version bump. The Vercel deploy failures are expected for external contributors (authorization required). Very clean, minimal fix. Consider waiting for CI to finish before merging.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

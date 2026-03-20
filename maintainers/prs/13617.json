@@ -1,0 +1,66 @@
+{
+  "number": 13617,
+  "title": "fix: handle absent optional fields in OpenAI processed schemas",
+  "url": "https://github.com/mastra-ai/mastra/pull/13617",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-28T10:54:57Z",
+    "lastUpdated": "2026-03-03T12:34:55Z",
+    "ageInDays": 10,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 202,
+    "deletions": 5,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/validate-absent-nullable-fields",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13481,
+        "title": "fix: fallback to original schema when compat layer breaks optional fields (#13480)",
+        "state": "OPEN",
+        "relationship": "alternative-approach"
+      },
+      {
+        "number": 11469,
+        "title": "accept undefined values in optional fields for OpenAI compat layers",
+        "state": "MERGED",
+        "relationship": "prior-fix-same-area"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "When OpenAI compat layer converts .optional() to .nullable().transform(), LLMs may omit nested object fields entirely (sending {} instead of {\"field\": null}), causing validation failures and infinite tool-call retry loops. This PR makes convertUndefinedToNull schema-aware: it walks the Zod schema shape, detects absent fields with the .nullable() (but not .optional()) pattern, and fills them with null before validation. Includes helper functions (getObjectShape, hasNullableButNotOptionalInChain, getArrayItemSchema) and comprehensive tests covering nested objects, arrays, and deeply nested structures.",
+  "maintainerNotes": "1. PR has merge conflicts that need to be resolved before it can proceed. 2. CI checks are stuck in PENDING state (Core, E2E, Memory, RAG, MCP, Tool Builder tests never ran — likely blocked by the conflict or missing authorization). 3. There is a competing open PR #13481 that addresses the same underlying problem (OpenAI compat layer breaking optional fields) but with a different approach (fallback to original schema). Maintainers should decide which approach is preferred or if they can be combined. 4. CodeRabbit flagged one issue (ZodAny handling in hasNullableButNotOptionalInChain) which the author addressed in a follow-up commit. 5. The author pinged @TylerBarnes for review since this relates to PR #9258. Review was requested from NikAiyer and wardpeet but neither has reviewed yet. 6. The fix is well-scoped and the approach of making convertUndefinedToNull schema-aware is clean, but the merge conflicts and competing PR need resolution.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

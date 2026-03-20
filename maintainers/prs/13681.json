@@ -1,0 +1,55 @@
+{
+  "number": 13681,
+  "title": "feat(voice-hume)",
+  "url": "https://github.com/mastra-ai/mastra/pull/13681",
+  "author": {
+    "login": "ivaaan",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-02T16:33:05Z",
+    "lastUpdated": "2026-03-09T18:37:40Z",
+    "ageInDays": 8,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 1096,
+    "deletions": 0,
+    "changedFiles": 18,
+    "category": "XL"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "add-hume",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Community contribution from Hume adding @mastra/voice-hume as a new voice provider. Includes TTS support via Hume Octave API and realtime voice via EVI (Empathic Voice Interface) WebSocket. Package structure follows existing voice provider conventions (voice/hume/ directory with standard tsup/vitest/eslint config). Includes unit tests, README, docs updates (overview, TTS page, reference page, sidebar), and a changeset. STT is not supported — users need CompositeVoice with another provider. 12 commits across the PR.",
+  "maintainerNotes": "Well-structured community PR from the Hume team. LekoArts reviewed docs and left 4 inline comments (changeset formatting, remove pre.json change, remove auto-generated file, set version to 0.0.1) — all review threads are marked resolved. CodeRabbit flagged a potential null-deref in connect() error path and env var cleanup in tests — also resolved. No maintainer has reviewed the actual implementation code yet (LekoArts explicitly noted 'the code itself needs a check, too'). CI checks are stuck in PENDING state (Core, E2E, MCP, Memory, RAG tests never ran — likely needs maintainer authorization). Vercel deploy also requires team authorization. The pre.json modification adds @mastra/voice-hume at 0.12.0 which may need correction given LekoArts suggested version 0.0.1. Author is actively responsive and tagged maintainers for review.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

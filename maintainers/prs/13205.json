@@ -1,0 +1,77 @@
+{
+  "number": 13205,
+  "title": "fix(core): preserve reasoning items across multi-step tool calls for Azure OpenAI",
+  "url": "https://github.com/mastra-ai/mastra/pull/13205",
+  "author": {
+    "login": "roaminro",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-18T16:39:26Z",
+    "lastUpdated": "2026-03-03T12:35:56Z",
+    "ageInDays": 20,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 384,
+    "deletions": 24,
+    "changedFiles": 6,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "roamin/issue-12775",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11492,
+        "title": "fix(@mastra/core): resolve OpenAI reasoning model memory issue",
+        "state": "MERGED",
+        "relationship": "prior-fix-by-same-author"
+      },
+      {
+        "number": 10614,
+        "title": "fix(core): reasoning itemid merge",
+        "state": "MERGED",
+        "relationship": "related-reasoning-fix"
+      },
+      {
+        "number": 10585,
+        "title": "fix(core): store empty reasoning for OpenAI item_reference",
+        "state": "MERGED",
+        "relationship": "related-reasoning-fix"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 12775,
+        "state": "open"
+      }
+    ]
+  },
+  "summary": "Fixes Azure OpenAI rejecting multi-step tool call requests because reasoning items were being silently dropped after the first step. Two root causes: (1) CacheKeyGenerator.fromAIV4Part only checked `providerMetadata.openai.itemId` for dedup keys, so Azure's `providerMetadata.azure.itemId` was ignored and all empty reasoning items got the same key `reasoning0`, causing pushNewPart() to dedup them away. Fix: iterate all provider keys to find itemId. (2) AIV5Adapter dropped empty reasoning parts (no text, no details) even when they carried providerMetadata needed by the API. Fix: preserve parts that have providerMetadata. Includes 192-line test utility and integration into both loop and message-list test suites.",
+  "maintainerNotes": "High-quality bug fix from a repeat contributor (roaminro also authored #11492 for a related reasoning model issue). The PR is well-documented with clear before/after code snippets, has a changeset, and adds thorough tests. CI shows 'Core Package Tests' and 'Full Test Suite' failing, and 'Tool Builder Tests' pending — these failures need investigation to determine if they are related to this PR or are pre-existing flaky tests. Review is requested from DanielSLew. CodeRabbit flagged one potential issue: `fromAIV5Parts` in CacheKeyGenerator may also need the same provider-agnostic itemId fix applied to `fromAIV4Part` — worth verifying during review.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

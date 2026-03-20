@@ -1,0 +1,55 @@
+{
+  "number": 12557,
+  "title": "feat(core,inngest): durable agent architecture with resumable streams",
+  "url": "https://github.com/mastra-ai/mastra/pull/12557",
+  "author": {
+    "login": "rase-",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-01-31T18:02:06Z",
+    "lastUpdated": "2026-02-26T09:22:58Z",
+    "ageInDays": 38,
+    "daysSinceLastUpdate": 12
+  },
+  "size": {
+    "additions": 34005,
+    "deletions": 287,
+    "changedFiles": 169,
+    "category": "XL"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "durable-agent-poc",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "high",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": false
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Major feature PR introducing durable agents - resilient agent execution with resumable streams. Adds DurableAgent, EventedAgent, and InngestAgent class hierarchy that wraps existing Agent with durability. Key capabilities: (1) resumable streams via event caching with sequential indices so clients can reconnect and catch up on missed events, (2) durable execution via workflow engines (built-in evented or Inngest) so agent work survives connection drops/server restarts. Adds PubSub and Cache infrastructure (with Redis implementations), CachingPubSub decorator, model fallback support, and factory functions (createDurableAgent, createEventedAgent, createInngestAgent). Touches packages/core (agent, cache, events, stream, workflows), packages/server (handlers, schemas, routes), client-sdks, observability, stores/redis, docs, and examples. Includes 25+ test files with claimed 284 tests. 89 commits from rase- and taofeeq-deru.",
+  "maintainerNotes": "This is a very large (34K+ additions, 169 files) feature PR that has been approved by taofeeq-deru but still has outstanding review requests from NikAiyer and wardpeet. The PR now has merge conflicts that need to be resolved before it can be merged. Several CI test suites (Core, E2E, MCP, Memory, RAG, Tool Builder, Combined Store) are stuck in PENDING state - they appear to require secrets setup and haven't actually run. The PR quality is excellent: thorough description with usage examples, extensive test coverage (25+ dedicated test files), changesets included, and documentation added. However, the scope is massive - it spans core agent architecture, server handlers, client SDKs, observability, a new Redis store package, and examples. CodeRabbit skipped review because the PR exceeded its 150-file limit. Author's last comment (Feb 25) indicated they planned to add more tests. Key action needed: resolve merge conflicts and ensure CI tests actually run to completion.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

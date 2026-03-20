@@ -1,0 +1,53 @@
+{
+  "number": 13939,
+  "title": "fix(playground): route-level code splitting with Suspense fallback",
+  "url": "https://github.com/mastra-ai/mastra/pull/13939",
+  "author": {
+    "login": "rphansen91",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-06T20:36:29Z",
+    "lastUpdated": "2026-03-10T07:49:04Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 121,
+    "deletions": 51,
+    "changedFiles": 4,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/route-level-code-splitting",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Converts ~45 static page imports in the playground App.tsx to React.lazy() with a Suspense boundary inside the layout shell. Also lazy-loads prettier in formatting.ts with a memoized singleton pattern. Auth pages (Login, SignUp) remain eagerly loaded. Adds a PageLoader spinner component as the Suspense fallback. Claims a 712KB (12%) reduction in main bundle size.",
+  "maintainerNotes": "Approved by mfrachet, but has merge conflicts that need rebasing — likely from PR #13938 (agent playground) which merged shortly before this was opened. CI failures in Core, E2E, and Memory tests appear unrelated (playground-only changes). No new tests, but this is a straightforward code-splitting refactor with no behavioral changes. The prettier lazy-loading pattern with error recovery is well-implemented. Once conflicts are resolved, this should be ready to merge.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

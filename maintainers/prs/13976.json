@@ -1,0 +1,53 @@
+{
+  "number": 13976,
+  "title": "feat(mastracode): add codebase_search tool via Morph WarpGrep API",
+  "url": "https://github.com/mastra-ai/mastra/pull/13976",
+  "author": {
+    "login": "DhruvBhatia0",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-08T02:18:46Z",
+    "lastUpdated": "2026-03-08T02:19:11Z",
+    "ageInDays": 2,
+    "daysSinceLastUpdate": 2
+  },
+  "size": {
+    "additions": 422,
+    "deletions": 3,
+    "changedFiles": 7,
+    "category": "L"
+  },
+  "labels": [],
+  "isDraft": true,
+  "branch": {
+    "head": "feat/mastracode-codebase-search",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "draft-in-progress",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds a new codebase_search tool to mastracode that uses Morph's WarpGrep API for semantic code search. The tool is conditionally registered when MORPH_API_KEY is present, sends the repo file tree and query to the Morph API, executes local tool calls (ripgrep, file reads, dir listings) in a multi-turn loop (max 4 turns), and returns relevant code spans. Changes span 7 files: new tool implementation (codebase-search.ts), exports, conditional registration in agents/tools.ts, tool guidance prompts, permission classification as 'mcp', and wiring into readOnlyTools for subagents. The description mentions unit tests passing (11/11) but no test files are included in the diff.",
+  "maintainerNotes": "Draft PR from external contributor with merge conflicts. Well-structured PR description with security considerations documented (path validation, regex length caps, file tree truncation, permission classification). Key concerns: (1) No changeset included - bot flagged this. (2) Has merge conflicts that need resolving. (3) No test files in the diff despite description claiming 11 unit tests pass - tests may exist locally but weren't committed. (4) Introduces a third-party API dependency (morphllm.com) - needs architectural discussion on whether this external service should be integrated. (5) CI checks are stuck in PENDING state (Core, E2E, MCP, Memory, RAG tests) likely due to requiring secrets authorization for external contributor fork. (6) Single commit, single author - appears to be a complete first submission awaiting feedback before marking ready.",
+  "suggestedAction": "wait",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

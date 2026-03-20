@@ -1,0 +1,60 @@
+{
+  "number": 13845,
+  "title": "types(agent): infer requestContext from schema in dynamic model",
+  "url": "https://github.com/mastra-ai/mastra/pull/13845",
+  "author": {
+    "login": "AlfieJones",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-05T12:11:13Z",
+    "lastUpdated": "2026-03-06T06:39:13Z",
+    "ageInDays": 5,
+    "daysSinceLastUpdate": 4
+  },
+  "size": {
+    "additions": 14,
+    "deletions": 7,
+    "changedFiles": 3,
+    "category": "XS"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "alfiejones/type-dynamic-model-request-schema",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12259,
+        "title": "feat(playground, core): add request context schema support",
+        "state": "MERGED",
+        "relationship": "related-prior-work"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Adds generic TRequestContext type parameter to DynamicModel, ModelWithRetries, and related types in agent config so that requestContext is properly inferred from the agent's requestContextSchema. Pure type-level change across 3 files (types.ts, agent.ts, and a changeset). No runtime behavior changes.",
+  "maintainerNotes": "Clean, focused type improvement from an active contributor with multiple merged PRs. The change is type-only and low-risk. However, the PR currently has merge conflicts (mergeableState: CONFLICTING) and CI checks are stuck in pending state (Core, E2E, MCP, Memory, RAG, Combined store tests never ran — likely blocked by the Vercel authorization issue or conflicts). Author needs to rebase onto latest main to resolve conflicts before this can be reviewed and merged. No tests added, but reasonable for a type-only change.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,63 @@
+{
+  "number": 12602,
+  "title": "chore(deps-dev): bump fastify from 5.6.2 to 5.7.3",
+  "url": "https://github.com/mastra-ai/mastra/pull/12602",
+  "author": {
+    "login": "dependabot[bot]",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-03T00:13:44Z",
+    "lastUpdated": "2026-03-05T19:51:24Z",
+    "ageInDays": 35,
+    "daysSinceLastUpdate": 5
+  },
+  "size": {
+    "additions": 357,
+    "deletions": 239,
+    "changedFiles": 3,
+    "category": "L"
+  },
+  "labels": [
+    "dependencies",
+    "javascript"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "dependabot/npm_and_yarn/fastify-5.7.3",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13424,
+        "title": "[Aikido] Fix 8 security issues in systeminformation, fastify, pino and 3 more",
+        "state": "OPEN",
+        "relationship": "overlapping"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Dependabot bump of fastify from 5.6.2 to 5.7.3. This is a security update: v5.7.3 fixes CVE-2026-25224 (GHSA-mrq3-vjjr-p77c) and v5.7.2 adds stricter content-type header parsing per RFC 9110. Changes span 3 files: server-adapters/fastify/package.json, workflows/inngest/package.json, and pnpm-lock.yaml. The lockfile diff is large due to vitest resolution string normalization but the actual dependency change is minimal.",
+  "maintainerNotes": "Security fix (CVE-2026-25224) makes this higher priority than a typical dep bump. However, the PR has merge conflicts (CONFLICTING state) and CI is broadly failing — build, lint, and most test suites fail. The failures appear to be from lockfile drift against main rather than a fastify incompatibility. PR #13424 (Aikido) also targets fastify among other security fixes. A maintainer should either: (1) rebase this PR to resolve conflicts and re-run CI, or (2) address the fastify bump through PR #13424 or a manual update and close this one.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

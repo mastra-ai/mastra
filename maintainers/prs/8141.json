@@ -1,0 +1,60 @@
+{
+  "number": 8141,
+  "title": "fix: correct workflow chunk unwrapping and writer stream locking in network execution",
+  "url": "https://github.com/mastra-ai/mastra/pull/8141",
+  "author": {
+    "login": "AVVS",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-09-24T01:07:18Z",
+    "lastUpdated": "2025-09-25T20:12:47Z",
+    "ageInDays": 167,
+    "daysSinceLastUpdate": 166
+  },
+  "size": {
+    "additions": 283,
+    "deletions": 23,
+    "changedFiles": 7,
+    "category": "L"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/custom-parallel-network-workflow",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13967,
+        "title": "fix(network): forward memory context in validation stream calls",
+        "state": "open",
+        "relevance": "Related network stream fix, different scope"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Fixes two issues with agent.network() in parallel workflow execution: (1) WritableStream locking conflicts where watch-v2 event handlers write chunks asynchronously but Node.js EventEmitter calls listeners synchronously, causing concurrent write attempts on a locked stream; (2) MastraAgentNetworkStream not properly unwrapping workflow subchunks when there is no nested workflow. Adds a kWritableStreamUnlocked event symbol for coordination, replaces setImmediate-based retry with a draining loop that holds the writer lock until the buffer is empty, and adds queueMicrotask fallback when the stream is already locked. Includes comprehensive test for parallel workflow agent streaming. Maintainer rase- gave positive feedback and requested a revert of async->sync emit changes, which the author completed.",
+  "maintainerNotes": "This is a well-crafted community contribution with good description, tests, and changeset. However, it has been stale for 166 days with merge conflicts. Maintainer rase- expressed approval in comments ('this looks great!') but requested a change (revert async->sync emits) which the author addressed. The author followed up asking for a re-review bump but got no response. The underlying bug (stream locking errors in parallel workflow agent execution) may still be relevant. The codebase in workflows/workflow.ts and related files has likely changed significantly since September 2025, so conflicts need resolution. CI checks are stuck in PENDING state. Consider whether these fixes were addressed by other merged PRs (e.g., #13323 supervisor pattern, #13436 parallel agent fixes) or if the issues persist. If still relevant, either ask the author to rebase or cherry-pick the fix internally.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

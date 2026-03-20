@@ -1,0 +1,66 @@
+{
+  "number": 13602,
+  "title": "fix(core): improve structured output processor error handling and observability",
+  "url": "https://github.com/mastra-ai/mastra/pull/13602",
+  "author": {
+    "login": "roaminro",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-27T20:59:36Z",
+    "lastUpdated": "2026-03-02T18:37:02Z",
+    "ageInDays": 11,
+    "daysSinceLastUpdate": 8
+  },
+  "size": {
+    "additions": 646,
+    "deletions": 5,
+    "changedFiles": 7,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": true,
+  "branch": {
+    "head": "roamin/structure-output-issue",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "draft-in-progress",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13857,
+        "title": "fix(core): route LLM errors through Mastra logger",
+        "state": "MERGED",
+        "relevance": "Related - improves LLM error logging, partially overlapping concern with onFailedAttempt logging added here"
+      },
+      {
+        "number": 12835,
+        "title": "fix(core): prevent trailing assistant message with structured output",
+        "state": "MERGED",
+        "relevance": "Related - previous structured output fix in the same area"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Improves error handling and observability in StructuredOutputProcessor mode (structuredOutput.model). Key changes: (1) Forward errorStrategy/fallbackValue to inner structuring agent so it doesn't always default to strict mode, (2) Add TripWire guard in catch block to prevent double error handling, (3) Add maxRetries option to StructuredOutputOptionsBase for user control over inner agent p-retry count, (4) Add onFailedAttempt logging so LLM call retries are no longer silent, (5) Detect and surface silent failures when inner agent produces no output, (6) Reject result.object with meaningful error instead of returning undefined on TripWire. Touches 7 files across types, processors, stream execution, and output handling. Includes extensive unit tests and integration repro tests with MockLanguageModelV2.",
+  "maintainerNotes": "Draft PR from maintainer roaminro, created to help debug a user-reported issue where result.object is always undefined with custom OpenAI-compatible providers. CI is failing on Core, E2E, Memory, Observability, and Full Test Suite checks. Has merge conflicts that need rebasing. No changeset included yet. The PR description mentions this is a draft for the user to test, with retry logs intended to reveal the root cause. Despite being XL in size, most additions are comprehensive tests (a new 265-line repro test file plus ~310 lines of unit tests). The actual implementation changes are well-scoped to the structured output processor pipeline. Merged PR #13857 (route LLM errors through Mastra logger) may have caused the merge conflicts and could overlap with the onFailedAttempt logging added here. Author needs to rebase, fix CI, add changeset, and mark as ready for review when done.",
+  "suggestedAction": "wait",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,66 @@
+{
+  "number": 13447,
+  "title": "feat(server): add stored MCP servers CRUD API and playground UI",
+  "url": "https://github.com/mastra-ai/mastra/pull/13447",
+  "author": {
+    "login": "mfrachet",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-24T09:27:41Z",
+    "lastUpdated": "2026-02-25T08:08:51Z",
+    "ageInDays": 14,
+    "daysSinceLastUpdate": 13
+  },
+  "size": {
+    "additions": 1860,
+    "deletions": 65,
+    "changedFiles": 45,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "mcp-servers-cms",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "high",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13285,
+        "title": "feat(editor): add MCP server storage domain and editor namespace with hydration",
+        "state": "MERGED",
+        "relationship": "foundational-predecessor"
+      },
+      {
+        "number": 13093,
+        "title": "feat(playground-ui): add MCP clients management UI to agent CMS tools page",
+        "state": "MERGED",
+        "relationship": "related-feature"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Adds full CRUD API endpoints for stored MCP servers at /api/stored/mcp-servers with versioning, deduplication (409 on duplicate names), and tool configuration support. Extends the client SDK with listStoredMCPServers, createStoredMCPServer, and getStoredMCPServer methods. In the playground UI, adds a 'Create MCP server' button and edit dialog with name/version fields and tool toggles. Modifies storage layer across all backends (in-memory, libsql, mongodb, pg) to make status filter optional instead of defaulting to 'published'. Includes comprehensive Playwright E2E tests for create and edit flows, plus 5 changesets.",
+  "maintainerNotes": "High-quality PR from a maintainer (mfrachet, co-authored with Claude). Well-structured with good description, video demo, E2E tests, and changesets. However, it has merge conflicts (CONFLICTING state) and some CI checks are failing (Core Package Tests, Full Test Suite, Memory Tests — though these may be flaky/unrelated). The Tool Builder Tests check is still pending. The PR touches 45 files across server handlers, client SDK, playground UI, core storage types, and all 4 storage backends (in-memory, libsql, mongodb, pg). The storage change to make status filter optional is a behavioral change that affects all store implementations. Review requested from DanielSLew. Author needs to rebase to resolve merge conflicts before this can be reviewed/merged.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

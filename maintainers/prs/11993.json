@@ -1,0 +1,68 @@
+{
+  "number": 11993,
+  "title": "Fix/11913 usechat message history by thread and resolve network messages",
+  "url": "https://github.com/mastra-ai/mastra/pull/11993",
+  "author": {
+    "login": "graysonhicks",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-01-15T21:40:59Z",
+    "lastUpdated": "2026-03-09T15:30:20Z",
+    "ageInDays": 54,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 498,
+    "deletions": 1,
+    "changedFiles": 4,
+    "category": "L"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/11913--usechat-message-history-by-thread-id",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13881,
+        "title": "fix(core): prevent supervisor messages from leaking into sub-agent thread",
+        "state": "OPEN",
+        "relevance": "Related - addresses similar message duplication in sub-agent threads"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 11913,
+        "title": "Problem with Conversation Recovery in Mastra Beta: Duplicated Messages and Loss of Agent Steps",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Fixes message duplication when using AI SDK's useChat hook with Mastra memory. When memory is configured (threadId/resourceId present), only the latest user message is sent to the agent instead of the full history, since memory provides conversation context. Also adds resolveNetworkMessages utility to @mastra/ai-sdk that transforms Agent Network raw JSON metadata into displayable dynamic-tool UI parts, applied automatically via toAISdkV5Messages(). Changes span 4 files: new test file (241 lines), chat-route.ts memory-aware message filtering, convert-messages.ts resolveNetworkMessages utility (~230 lines), and docs update for the new memory param.",
+  "maintainerNotes": "PR has merge conflicts (CONFLICTING) and 8 CI checks are failing (Build, Lint docs, Agent Builder Tests, Core Package Tests, E2E Tests, MCP Package Tests, Memory Tests, Validate build outputs). Missing changeset. wardpeet commented but only as COMMENTED state (no approval/changes-requested). Author acknowledges code duplication between resolveNetworkMessages (@mastra/ai-sdk) and resolveInitialMessages (@mastra/react) and suggests consolidation. The build failure and conflicts need to be resolved before this can be reviewed. Despite the age (54 days), CI was re-run recently (March 9) suggesting the PR was rebased, but conflicts remain.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

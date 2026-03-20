@@ -1,0 +1,62 @@
+{
+  "number": 14073,
+  "title": "chore(deps): update dependency @microsoft/api-extractor to ^7.57.6",
+  "url": "https://github.com/mastra-ai/mastra/pull/14073",
+  "author": {
+    "login": "daneatmastra",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-10T12:24:00Z",
+    "lastUpdated": "2026-03-10T14:45:24Z",
+    "ageInDays": 0,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 44,
+    "deletions": 44,
+    "changedFiles": 3,
+    "category": "S"
+  },
+  "labels": [
+    "automation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "renovate/microsoft-api-extractor-7.x",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12748,
+        "title": "chore(deps): update dependency @microsoft/api-extractor to ^7.56.3",
+        "state": "MERGED",
+        "relationship": "previous-version"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Renovate bot patch bump of @microsoft/api-extractor from ^7.56.3 to ^7.57.6 in the pnpm workspace catalog. Changes span package.json, pnpm-workspace.yaml, and pnpm-lock.yaml. The lockfile also picks up a transitive @ast-grep/napi bump from 0.41.0 to 0.41.1. Build passes; changeset check fails as expected for automated dep bumps. Full Test Suite and Observability tests show failures that appear unrelated (pre-existing/flaky). Approved by github-actions bot only — no human review yet.",
+  "maintainerNotes": "Straightforward Renovate patch bump. CI build passes, and the test failures (Full Test Suite, Observability) are likely pre-existing and unrelated to a lockfile-only change. The changeset check failure is expected for automated dep updates. A pending 7.57.7 version is already noted by Renovate but this PR targets 7.57.6. No human review has been done — only github-actions bot approved. Safe to merge after a quick sanity check.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

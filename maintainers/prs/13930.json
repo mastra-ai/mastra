@@ -1,0 +1,59 @@
+{
+  "number": 13930,
+  "title": "fix(server): correct OpenAPI spec for custom routes and restore root endpoint",
+  "url": "https://github.com/mastra-ai/mastra/pull/13930",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-06T17:33:01Z",
+    "lastUpdated": "2026-03-10T08:54:46Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 229,
+    "deletions": 31,
+    "changedFiles": 8,
+    "category": "M"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/openapi-spec-custom-routes-and-root-endpoint",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "ready-to-merge",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      "#12847 - fix(server): add servers field to OpenAPI spec for Swagger UI (MERGED)",
+      "#11786 - feat: add custom API routes to OpenAPI documentation (MERGED)",
+      "#12960 - Fix custom API routes 404 on non-Hono server adapters (MERGED)"
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Fixes two OpenAPI spec bugs in @mastra/server: (1) Custom routes registered via registerApiRoute are served at root (/) but the spec incorrectly listed them under the /api server prefix, causing clients using the spec to resolve wrong URLs (e.g. /api/health → 404). Fixed by adding per-path `servers: [{url: '/'}]` overrides on custom route path items per OpenAPI 3.1. (2) Restores the OpenAPI spec at the root /openapi.json path (in addition to /api/openapi.json) for backward compatibility. Refactors the spec generation into a dedicated buildOpenAPISpec method. Adds 4 new test cases for OpenAPI spec behavior. Updates docs for mastra-server deployment and migration guides.",
+  "maintainerNotes": "Approved by LekoArts (maintainer). CI failures are unrelated: Observability Package Tests (unrelated package), Vercel deploys (authorization needed for external contributor), E2E/Memory tests still pending. All relevant checks (Build, Lint, Full Test Suite, Core, MCP, RAG, Combined Store, Workspace Cloud) pass. CodeRabbit flagged that the migration docs still say the spec 'moved' to /api/openapi.json rather than documenting both URLs are available — this should ideally be addressed but is a minor docs wording issue. The code changes are well-scoped, the new buildOpenAPISpec method is a clean refactor, and tests cover the key scenarios (prefixed spec, per-path server overrides, no-prefix case, enforcement over user-provided servers).",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

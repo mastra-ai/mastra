@@ -1,0 +1,55 @@
+{
+  "number": 14050,
+  "title": "feat(mastracode): support dynamic auth for HTTP MCP servers via headerCommand",
+  "url": "https://github.com/mastra-ai/mastra/pull/14050",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-10T06:18:29Z",
+    "lastUpdated": "2026-03-10T13:53:54Z",
+    "ageInDays": 0,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 338,
+    "deletions": 20,
+    "changedFiles": 7,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": true,
+  "branch": {
+    "head": "feat/mastracode-dynamic-mcp-auth",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "draft-in-progress",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "#13997"
+    ]
+  },
+  "summary": "Adds a `headerCommand` option to HTTP MCP server config in mastracode. When set, the shell command is executed before each HTTP request via `child_process.exec` (10s timeout), and its JSON stdout is parsed as headers. Dynamic headers are merged with static `headers`, with `headerCommand` values taking precedence. Changes span 7 files: types (new optional field), config validation, manager (new `runHeaderCommand`, `createDynamicFetch`, refactored `buildServerDefs`), TUI help text, changeset, and comprehensive tests for both config and manager (config validation, wiring, header merging precedence, error cases for invalid JSON/non-object/non-string values/exec failures).",
+  "maintainerNotes": "Well-structured community contribution addressing issue #13997. The approach uses `child_process.exec` to run arbitrary shell commands from user config, which is acceptable since mastracode already runs stdio MCP servers via child_process. Security note: the command comes from the user's own `mcp.json` config file, so this is user-controlled input similar to existing stdio server `command` field — not an escalation of trust. Tests are thorough with good coverage of error paths. CodeRabbit left minor style nits (implicit return in forEach). CI checks are still pending (core, E2E, MCP, memory, RAG tests). PR is still in draft status — wait for author to mark ready before reviewing. Vercel deploy checks fail due to authorization (expected for external contributors).",
+  "suggestedAction": "wait",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

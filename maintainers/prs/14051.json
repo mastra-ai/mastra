@@ -1,0 +1,62 @@
+{
+  "number": 14051,
+  "title": "fix(harness): Defer tool approval resume until suspended stream finishes",
+  "url": "https://github.com/mastra-ai/mastra/pull/14051",
+  "author": {
+    "login": "AlfieJones",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-10T06:24:33Z",
+    "lastUpdated": "2026-03-10T08:58:52Z",
+    "ageInDays": 0,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 161,
+    "deletions": 28,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "alfiejones/harness-snapshot-race-fix",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13519,
+        "title": "fix: tool approval resume failing for standalone agents",
+        "state": "MERGED",
+        "relationship": "related-prior-fix"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Fixes a race condition in Harness tool approval handling where auto-approved tool calls could resume execution before the suspended workflow snapshot was persisted to storage (e.g., Postgres). This caused 'No snapshot found for this workflow run' errors. The fix defers tool approval/decline handling (both auto and manual) until the source stream has fully finished, using a deferredToolApproval pattern that captures the decision as a Promise and processes it after the stream loop completes. Includes 108-line test file with two tests covering both auto-approval and manual approval ordering.",
+  "maintainerNotes": "High-quality bug fix from a trusted repeat contributor (7 merged PRs on the harness feature). The approach is clean: instead of immediately calling handleToolApprove/handleToolDecline inside the stream loop, it stores the decision in a deferredToolApproval object and breaks out of the loop, then processes the approval after the stream is fully consumed. This ensures workflow snapshot persistence completes before resume. CI is still pending (setup steps passed, core tests queued). The 'Documentation' label appears auto-applied but no doc files are changed; only harness.ts, a new test file, and a changeset. No merge conflicts. Author tested on Postgres and LibSQL storage adapters.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

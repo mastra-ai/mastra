@@ -1,0 +1,62 @@
+{
+  "number": 13591,
+  "title": "feat(core): support string PIDs in ProcessHandle [COR-741]",
+  "url": "https://github.com/mastra-ai/mastra/pull/13591",
+  "author": {
+    "login": "NikAiyer",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-27T17:49:15Z",
+    "lastUpdated": "2026-02-27T21:03:17Z",
+    "ageInDays": 11,
+    "daysSinceLastUpdate": 11
+  },
+  "size": {
+    "additions": 145,
+    "deletions": 74,
+    "changedFiles": 14,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat-process-handle-pid",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13293,
+        "title": "feat(workspace): add SandboxProcessManager for background processes",
+        "state": "MERGED",
+        "relationship": "parent-feature"
+      }
+    ],
+    "relatedIssues": [
+      "COR-741"
+    ]
+  },
+  "summary": "Widens ProcessHandle.pid from `number` to `string | number` to support sandbox providers (Blaxel, Daytona) that use non-numeric process identifiers. Introduces a `pidKey()` normalizer in the base SandboxProcessManager to consistently stringify PIDs for map/set lookups. Updates all four process manager implementations (Local, E2B, Blaxel, Daytona), the tool schemas (get-process-output, kill-process), and adds test coverage for string PID workflows. Daytona now uses session IDs directly as PIDs instead of a synthetic counter, and Blaxel removes its parseInt workaround.",
+  "maintainerNotes": "Well-structured PR from a maintainer with clear description, changesets, and tests. However, it has merge conflicts (mergeStateStatus: DIRTY) and several CI checks are failing (Core tests, E2E tests, Memory tests, Observability tests). The failures may be flaky or caused by the conflicts. CodeRabbit provided two rounds of review comments suggesting improvements to the E2B numeric-string PID handling, which the author addressed. Author needs to rebase/resolve conflicts and get CI green before this can be reviewed for merge.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

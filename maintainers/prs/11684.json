@@ -1,0 +1,64 @@
+{
+  "number": 11684,
+  "title": "chore(deps): bump @modelcontextprotocol/sdk from 1.20.1 to 1.25.2",
+  "url": "https://github.com/mastra-ai/mastra/pull/11684",
+  "author": {
+    "login": "dependabot[bot]",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-01-07T16:50:28Z",
+    "lastUpdated": "2026-02-10T21:02:57Z",
+    "ageInDays": 62,
+    "daysSinceLastUpdate": 27
+  },
+  "size": {
+    "additions": 575,
+    "deletions": 250,
+    "changedFiles": 5,
+    "category": "XL"
+  },
+  "labels": [
+    "dependencies",
+    "javascript"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "dependabot/npm_and_yarn/modelcontextprotocol/sdk-1.25.2",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "close-candidate",
+    "priority": "low",
+    "quality": "poor",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": false
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11663,
+        "title": "Update modelcontextprotocol/sdk",
+        "state": "MERGED",
+        "mergedAt": "2026-01-06T21:45:56Z",
+        "note": "Manual update to 1.24.0 merged the day before this PR was opened"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Dependabot PR to bump @modelcontextprotocol/sdk from 1.20.1 to 1.25.2 in packages/core and packages/mcp. Changes the version specifier to ^1.26.0 and updates pnpm-lock.yaml. The lockfile diff also includes unrelated zod version resolution changes (3.25.76 -> 4.3.6) which inflates the diff size and may cause issues.",
+  "maintainerNotes": "This PR should be closed. It has merge conflicts, all CI checks are failing, and dependabot itself reported it cannot update due to private registry auth issues. The lockfile diff includes suspicious unrelated changes (zod 3 -> 4 resolution shifts). A manual update (PR #11663) was already merged before this PR was created. If the MCP SDK needs updating further, a fresh manual PR would be cleaner than trying to salvage this conflicting dependabot branch.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,53 @@
+{
+  "number": 14031,
+  "title": "fix: prevent experiments from getting stuck in pending on empty datasets",
+  "url": "https://github.com/mastra-ai/mastra/pull/14031",
+  "author": {
+    "login": "YujohnNattrass",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-09T19:07:12Z",
+    "lastUpdated": "2026-03-10T04:37:15Z",
+    "ageInDays": 1,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 345,
+    "deletions": 89,
+    "changedFiles": 9,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "yj/fix-empty-experiments",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Fixes experiments getting permanently stuck in 'pending' status when triggered on empty datasets. The fire-and-forget `.catch(() => {})` in startExperimentAsync was silently swallowing errors. Three-layer fix: (1) Core validates item count before creating experiment record, throws EXPERIMENT_NO_ITEMS on empty datasets, and the catch handler now marks experiments as failed instead of silently discarding errors. (2) Server maps the new error to HTTP 400 and returns actual totalItems instead of hardcoded 0. (3) UI disables the Run Experiment button with a tooltip when the dataset has no items, using a separate unfiltered query to avoid false disabling during search. Includes tests for both dataset.test.ts and runExperiment.test.ts covering the empty dataset paths.",
+  "maintainerNotes": "Well-structured bug fix from a maintainer with clean separation across core, server, and UI layers. Has 2 changesets (core+server patch, playground-ui patch). All completed CI checks pass; some checks (Full Test Suite, E2E, Memory Tests, Combined Store Tests) are still pending/running. CodeRabbit left comments but no human reviews yet. The additional unfiltered useDatasetItems query in dataset-page-content.tsx is a minor concern for extra network calls, but the comment explains the rationale (avoid false disable during search). Ready for human maintainer review.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

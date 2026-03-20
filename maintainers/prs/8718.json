@@ -1,0 +1,73 @@
+{
+  "number": 8718,
+  "title": "resolve WritableStream locked error in agent streaming (#8302)",
+  "url": "https://github.com/mastra-ai/mastra/pull/8718",
+  "author": {
+    "login": "willydouhard",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-10-10T13:44:28Z",
+    "lastUpdated": "2026-03-03T12:42:43Z",
+    "ageInDays": 151,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 28,
+    "deletions": 8,
+    "changedFiles": 1,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "twill/mastra-ENG-5",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 8346,
+        "title": "fix(client-js): WritableStream locked error",
+        "state": "MERGED",
+        "relationship": "Previous fix for same issue, was reverted in #8378"
+      },
+      {
+        "number": 8378,
+        "title": "Revert \"fix(client-js): WritableStream locked error\"",
+        "state": "MERGED",
+        "relationship": "Reverted the first fix attempt (#8346)"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 8302,
+        "title": "[BUG] WritableStream is locked when using mastra/client-js inside nestjs service",
+        "state": "CLOSED",
+        "relationship": "Fixes this issue. Issue was closed with a comment saying it was fixed in latest versions, but on main the setTimeout-based close pattern still exists."
+      }
+    ]
+  },
+  "summary": "Fixes a race condition in client-js agent streaming where writable.close() was called while the stream was still locked by a concurrent pipeTo() operation, causing 'WritableStream is locked' errors in Node.js. This is the second attempt at fixing issue #8302 — the first fix (#8346) was merged then reverted (#8378). The approach uses pipeFinished/shouldCloseAfterPipe state flags to coordinate between the async pipeTo and onFinish callback, replacing the fragile setTimeout-based close pattern. Only modifies client-sdks/client-js/src/resources/agent.ts.",
+  "maintainerNotes": "This PR has merge conflicts and needs rebasing. The underlying bug (setTimeout-based writable.close() racing with pipeTo lock) still appears to exist on main. Issue #8302 was closed with a maintainer saying it was fixed, but examining main shows the old setTimeout pattern is still in place — the first fix was reverted and no replacement landed. Greptile's automated review flagged a potential issue: the pipeFinished/shouldCloseAfterPipe flags are function-scoped, so recursive calls (client tool execution) create new flag instances, potentially causing double-close or unclosed streams. No tests or changeset included. The PR is 5 months old with conflicts — author needs to rebase, add tests for the recursive case, and add a changeset.",
+  "suggestedAction": "request-changes",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

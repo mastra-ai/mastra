@@ -1,0 +1,62 @@
+{
+  "number": 13797,
+  "title": "chore(deps): update dependency @uiw/codemirror-theme-github to ^4.25.7",
+  "url": "https://github.com/mastra-ai/mastra/pull/13797",
+  "author": {
+    "login": "daneatmastra",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-04T18:32:36Z",
+    "lastUpdated": "2026-03-10T12:24:03Z",
+    "ageInDays": 6,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 22,
+    "deletions": 17,
+    "changedFiles": 3,
+    "category": "S"
+  },
+  "labels": [
+    "automation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "renovate/uiw-codemirror-theme-github-4.x",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12782,
+        "title": "chore(deps): update dependency @uiw/codemirror-theme-github to ^4.25.4",
+        "state": "MERGED",
+        "relevance": "Previous version bump of the same package"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Renovate Bot patch bump of @uiw/codemirror-theme-github from ^4.25.4 to ^4.25.7 in @mastra/playground-ui. Changes are lockfile-only (pnpm-lock.yaml) plus a changeset. Upstream releases include bug fixes for unused imports, explicit dependency declarations, hyperlink trailing slash fix, and a package publish failure fix.",
+  "maintainerNotes": "PR has merge conflicts (CONFLICTING state) and needs a rebase. CI shows failures in 'Full Test Suite' and 'Observability Package Tests' which appear unrelated to this dependency change. Only github-actions bot has approved — no human review. The Renovate description notes the installed version resolved to 4.25.8 (beyond the requested ^4.25.7 range target). Tick the rebase checkbox in the PR description or manually rebase to resolve conflicts, then verify CI passes.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

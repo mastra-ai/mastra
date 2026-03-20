@@ -1,0 +1,57 @@
+{
+  "number": 11795,
+  "title": "feat(storage): redis package",
+  "url": "https://github.com/mastra-ai/mastra/pull/11795",
+  "author": {
+    "login": "mauroerta",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-01-11T16:01:11Z",
+    "lastUpdated": "2026-03-03T12:41:14Z",
+    "ageInDays": 58,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 5471,
+    "deletions": 4,
+    "changedFiles": 33,
+    "category": "XL"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "mauroerta:main",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "#11792"
+    ]
+  },
+  "summary": "New @mastra/redis package providing Redis-based storage using the official node-redis client. Covers memory, workflows, and scores storage domains. Includes full domain implementation in stores/redis/, integration tests, documentation (reference + memory/storage page update), a memory-with-redis example, and a changeset. The package supports connection strings, host/port config, and pre-configured client injection (Sentinel/Cluster). 33 files changed across the new package, docs, example, and workspace config.",
+  "maintainerNotes": "Well-structured community contribution from an external contributor with a real use case (can't use Upstash). Has merge conflicts with main that need rebasing. CI checks are stuck in PENDING state — likely need a maintainer to trigger the workflow for this external fork PR. Maintainer roaminro engaged early (Jan 21-Feb 3) and triggered CI, but no human code review has been done yet. Review requests are pending for NikAiyer and TylerBarnes. CodeRabbit left 14 actionable comments. The bulk of the line count is the pnpm-lock.yaml in the example; actual implementation code is reasonable in scope. Author has been responsive and eager to get this merged. Needs: (1) author to rebase and resolve conflicts, (2) maintainer to re-trigger CI, (3) human code review.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

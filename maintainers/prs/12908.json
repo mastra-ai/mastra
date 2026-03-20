@@ -1,0 +1,63 @@
+{
+  "number": 12908,
+  "title": "chore(deps): bump langsmith from 0.3.81 to 0.4.6",
+  "url": "https://github.com/mastra-ai/mastra/pull/12908",
+  "author": {
+    "login": "dependabot[bot]",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-10T23:03:51Z",
+    "lastUpdated": "2026-03-10T12:21:18Z",
+    "ageInDays": 28,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 61,
+    "deletions": 87,
+    "changedFiles": 2,
+    "category": "M"
+  },
+  "labels": [
+    "dependencies",
+    "javascript"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "dependabot/npm_and_yarn/langsmith-0.4.6",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "medium",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13720,
+        "title": "Fix LangSmith exporter flush to drain pending trace batches",
+        "state": "OPEN",
+        "relationship": "related (touches langsmith package)"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Dependabot PR bumping langsmith from 0.3.81 to 0.4.6 in the @mastra/langsmith observability package. Changes the dependency specifier from >=0.3.79 to >=0.4.6 in observability/langsmith/package.json, plus lockfile updates. The 0.3→0.4 bump is a minor version change in 0.x semver which can include breaking changes. The lockfile diff also shows collateral resolution changes (braintrust resolving against zod@4.3.6 instead of zod@3.25.76, removal of p-retry dependency from langsmith).",
+  "maintainerNotes": "CI is failing: Build and Validate build outputs fail, cascading to Agent Builder, Core, MCP, Observability, and RAG test failures. Memory, E2E, and Full Test Suite are pending/blocked on the build. The 0.3→0.4 version bump may introduce breaking API changes that need verification — the lockfile shows p-retry was dropped from langsmith's dependencies. The minimum specifier change from >=0.3.79 to >=0.4.6 is also a breaking change for downstream consumers who may be on langsmith 0.3.x. A maintainer should verify the langsmith 0.4.x API is compatible, fix the build failure, and consider whether the minimum version floor should be more permissive (e.g., >=0.3.79 || >=0.4.0).",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

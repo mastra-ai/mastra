@@ -1,0 +1,53 @@
+{
+  "number": 13524,
+  "title": "feat(tui): add command palette (Ctrl+K) and SearchableListOverlay base class",
+  "url": "https://github.com/mastra-ai/mastra/pull/13524",
+  "author": {
+    "login": "abhiaiyer91",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-26T05:08:37Z",
+    "lastUpdated": "2026-02-26T05:15:15Z",
+    "ageInDays": 12,
+    "daysSinceLastUpdate": 12
+  },
+  "size": {
+    "additions": 707,
+    "deletions": 351,
+    "changedFiles": 11,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "mastracode-tui",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds a fuzzy-searchable Command Palette (Ctrl+K) to the Mastra Code TUI and extracts a reusable SearchableListOverlay base class from ModelSelectorComponent and ThreadSelectorComponent, eliminating ~70 lines of duplicated overlay boilerplate. The base class provides focusable implementation, search input with fuzzy filtering, scrollable list with wrap-around navigation, and empty state messaging. Three new files (searchable-list-overlay.ts, command-palette component, command-palette command handler) plus refactoring of model-selector and thread-selector to extend the base class.",
+  "maintainerNotes": "PR has merge conflicts and CI failures (Core tests, Memory tests, Lint). The CI failures in Core and Memory tests may be pre-existing/unrelated to TUI changes, but Lint failure likely needs attention. No automated tests are included — the test plan is manual only. The refactoring is well-structured: extracting a clean base class pattern. Author is a maintainer but hasn't updated the PR in 12 days. Needs conflict resolution and CI fixes before review.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

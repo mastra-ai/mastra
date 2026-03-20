@@ -1,0 +1,53 @@
+{
+  "number": 13604,
+  "title": "feat(harness): add Quorem parallel agent feature",
+  "url": "https://github.com/mastra-ai/mastra/pull/13604",
+  "author": {
+    "login": "DanielSLew",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-27T22:46:57Z",
+    "lastUpdated": "2026-02-28T00:04:42Z",
+    "ageInDays": 11,
+    "daysSinceLastUpdate": 10
+  },
+  "size": {
+    "additions": 1933,
+    "deletions": 4,
+    "changedFiles": 19,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/mastracode/harness/quorem",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds Quorem feature allowing the main Harness agent to spawn N parallel agents in isolated environments (git worktrees), each with cloned threads. After all agents complete, the main agent reviews results, picks a winner, and merges changes back. Core orchestration (types, Harness methods, tools, events, display state) lives in @mastra/core; app layer in mastracode provides /quorem slash command, TUI components, event handlers, and git worktree-based environment config. 19 files changed across packages/core/src/harness and mastracode/src/tui, with a new e2e test file and 3 changesets.",
+  "maintainerNotes": "Well-structured PR with clean separation between core orchestration and app-layer implementation. Has merge conflicts that need rebasing. CI is partially failing (CodeQL failed, several test suites stuck at PENDING likely due to conflicts). TylerBarnes commented but did not approve or request changes. CodeRabbit flagged several minor issues (unused params, flaky setTimeout in test, empty if blocks). Author needs to rebase onto main to resolve conflicts, address review feedback, and get CI green before this can be reviewed for merge.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

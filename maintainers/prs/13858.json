@@ -1,0 +1,59 @@
+{
+  "number": 13858,
+  "title": "fix(deployer): use export * for workspace packages to fix missing transitive exports",
+  "url": "https://github.com/mastra-ai/mastra/pull/13858",
+  "author": {
+    "login": "gourine",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-05T15:23:21Z",
+    "lastUpdated": "2026-03-06T11:56:57Z",
+    "ageInDays": 5,
+    "daysSinceLastUpdate": 4
+  },
+  "size": {
+    "additions": 29,
+    "deletions": 18,
+    "changedFiles": 2,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/deployer-workspace-export-star",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12645,
+        "title": "fix(deployer): Fix monorepo workspace dependency resolution",
+        "relationship": "related-prior-fix"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Fixes a runtime crash during `mastra dev` where workspace packages with transitive exports (e.g. InMemoryStore from @mastra/core/storage referenced via shared rollup chunks) are missed by static analysis. The fix emits `export * from 'pkg'` for workspace packages in the virtual dependency cache instead of explicit named exports, ensuring all named exports are available. Non-workspace (third-party) packages retain the existing named-export optimization for tree-shaking. Two existing unit tests are updated to match the new behavior.",
+  "maintainerNotes": "High-quality community contribution. The fix is well-scoped (2 files, only touches bundleExternals logic), has a clear problem description with a concrete reproduction scenario, and updates existing tests. The approach is sound: workspace packages don't need tree-shaking optimization since they're local, so `export *` is safe and avoids the transitive export gap. Missing a changeset — maintainer should request one or add it before merge. CI test suites are stuck in PENDING (likely needs approval to run for external contributor). The `isWorkspace` property is already part of the existing type/interface, so no new plumbing was needed.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

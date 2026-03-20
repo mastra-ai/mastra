@@ -1,0 +1,53 @@
+{
+  "number": 13580,
+  "title": "fix(schema-compat): add ZodIntersection support for MCP tools using allOf",
+  "url": "https://github.com/mastra-ai/mastra/pull/13580",
+  "author": {
+    "login": "ChrisCindy",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-27T10:29:48Z",
+    "lastUpdated": "2026-03-02T09:52:58Z",
+    "ageInDays": 11,
+    "daysSinceLastUpdate": 8
+  },
+  "size": {
+    "additions": 543,
+    "deletions": 11,
+    "changedFiles": 18,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/schema-compat-zod-intersection",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds ZodIntersection (`.and()`) support to all 6 provider compat layers in @mastra/schema-compat. MCP tools like Playwright produce JSON Schema with `allOf`, which converts to ZodIntersection. Without this fix, all providers throw 'does not support zod type: ZodIntersection'. The fix adds: `isIntersection` type guard in zodTypes.ts, `collectIntersectionLeaves` + `defaultZodIntersectionHandler` to v3/v4 compat layers (flattens intersection tree and merges object shapes), `isAllOfSchema` util + `defaultAllOfHandler` for JSON Schema path, and handler integration in all 6 providers (Anthropic, Google, OpenAI, OpenAI Reasoning, DeepSeek, Meta). Includes tests for simple, chained, nested, and optional intersections across all providers.",
+  "maintainerNotes": "Well-structured community contribution that follows existing patterns closely. The approach is sound: flatten intersection trees and merge object shapes, falling back to z.any() for non-object intersections. CodeRabbit review suggests strengthening test assertions to verify merged schema structure (not just non-throwing). Main blocker: PR has merge conflicts that need resolution. CI checks are stuck in pending state (likely due to conflicts). No human reviewer has looked at this yet. The 18 changed files are justified since the fix touches shared base classes plus all 6 provider compat layers with their tests. Worth reviewing — this fixes a real issue blocking MCP tool usage with allOf schemas.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

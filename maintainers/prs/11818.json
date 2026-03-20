@@ -1,0 +1,53 @@
+{
+  "number": 11818,
+  "title": "Voyage integration",
+  "url": "https://github.com/mastra-ai/mastra/pull/11818",
+  "author": {
+    "login": "fzowl",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-01-12T14:55:53Z",
+    "lastUpdated": "2026-01-18T12:29:38Z",
+    "ageInDays": 57,
+    "daysSinceLastUpdate": 51
+  },
+  "size": {
+    "additions": 3186,
+    "deletions": 1,
+    "changedFiles": 25,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "voyage_integration",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "low",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": false,
+      "hasChangesets": false,
+      "followsConventions": false,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds a new @mastra/voyageai package under packages/voyageai with text, multimodal, and contextualized chunk embeddings plus reranker support using the official VoyageAI TypeScript SDK. Also integrates Voyage as a provider in core's embedding router (embedding-router.ts) and provider-registry.json, adds documentation (voyage.mdx), and includes unit tests. Author (zoltan@voyageai.com) appears to be from VoyageAI. The PR accidentally includes committed binary test output files (.mp3). PR description uses the template but lacks any actual description of the changes.",
+  "maintainerNotes": "Maintainer abhiaiyer91 commented on Jan 13 requesting the package be moved to an 'embedders/' folder instead of 'packages/' to establish a new organizational pattern (and eventually move fastembed there too). The author has not responded to this feedback — last activity was Jan 18 (a merge from main). The PR has merge conflicts, no changeset, and several CI checks stuck in PENDING. CodeRabbit left actionable review comments about ESM compatibility (since addressed with createRequire), optional response types, and missing model entries. The core integration uses a lazy require() with try/catch fallback which is fragile. Binary .mp3 test output files were accidentally committed. If the concept is still desired, the author needs to: (1) respond to the folder structure feedback, (2) rebase to resolve conflicts, (3) add a changeset, (4) remove the accidentally committed binary files, and (5) address remaining CodeRabbit suggestions.",
+  "suggestedAction": "ping-author",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

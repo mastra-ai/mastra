@@ -1,0 +1,66 @@
+{
+  "number": 12276,
+  "title": "fix(workflows): persist tracing context during suspend/resume for span continuity",
+  "url": "https://github.com/mastra-ai/mastra/pull/12276",
+  "author": {
+    "login": "dev-vishnu",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-01-24T12:16:28Z",
+    "lastUpdated": "2026-01-24T12:55:41Z",
+    "ageInDays": 45,
+    "daysSinceLastUpdate": 45
+  },
+  "size": {
+    "additions": 132,
+    "deletions": 4,
+    "changedFiles": 8,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/workflow-suspend-resume-tracing",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11885,
+        "title": "Inngest observability fixes",
+        "state": "MERGED",
+        "relevance": "Related observability work for inngest engine but does not cover default engine suspend/resume tracing"
+      },
+      {
+        "number": 11973,
+        "title": "Real time trace collection for inngest engine",
+        "state": "MERGED",
+        "relevance": "Related inngest tracing improvements but does not address default workflow suspend/resume span continuity"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "When workflows suspend (e.g., for human-in-the-loop approval), observability spans were broken: the original span stayed open indefinitely and resumed workflows created disconnected spans with no parent relationship. This PR persists tracing context (traceId, spanId, parentSpanId) to storage on suspend, then uses it on resume to create a child span linked to the original. Changes span 8 files across @mastra/core: adds tracingContext to WorkflowRunState and UpdateWorkflowStateOptions types, captures span context in DefaultExecutionEngine on suspend, restores it in Run.resume() with careful cross-trace parentage prevention, passes tracingContext through the evented step executor, and adds a test verifying the field persists in snapshots.",
+  "maintainerNotes": "Well-structured community contribution with good description, changeset, and test. However: (1) Has merge conflicts (CONFLICTING state) — likely due to 45 days of drift on main. (2) CI checks are stuck in PENDING state (never ran to completion, probably due to fork authorization). (3) CodeRabbit review suggested 3 actionable improvements: reuse Partial<TracingContext> type instead of inline shape to prevent drift, avoid defaulting tracingContext to {} which changes truthiness checks, and strengthen the test to validate actual tracing data. (4) The test only checks that the 'tracingContext' key exists in the snapshot but doesn't verify actual tracing values are populated. (5) No similar fix has been merged — this addresses a genuine gap. The author would need to rebase, address CodeRabbit feedback, and get CI passing before this can be reviewed.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,63 @@
+{
+  "number": 11904,
+  "title": "chore(deps): bump hono from 4.11.3 to 4.11.4 in /observability/_examples/otel-bridge/hono-multi",
+  "url": "https://github.com/mastra-ai/mastra/pull/11904",
+  "author": {
+    "login": "dependabot[bot]",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-01-13T22:21:19Z",
+    "lastUpdated": "2026-02-18T07:59:37Z",
+    "ageInDays": 56,
+    "daysSinceLastUpdate": 20
+  },
+  "size": {
+    "additions": 27,
+    "deletions": 40,
+    "changedFiles": 4,
+    "category": "S"
+  },
+  "labels": [
+    "dependencies",
+    "javascript"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "dependabot/npm_and_yarn/observability/_examples/otel-bridge/hono-multi/hono-4.11.4",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "blocked"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11903,
+        "title": "chore(deps): bump hono from 4.11.3 to 4.11.4",
+        "state": "OPEN",
+        "relation": "related — same hono bump but scoped to root"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Dependabot bumps hono from 4.11.3 to 4.11.7 (resolved version) in the observability examples directory (otel-bridge/hono-multi). Changes span 3 package.json files and the pnpm-lock.yaml. The hono 4.11.4 release includes a security fix for JWT algorithm confusion in JWT and JWK/JWKS middleware (GHSA-f67f-6cw9-8mq4, GHSA-3vhc-576x-3qv4). This only affects example code, not published packages.",
+  "maintainerNotes": "Low-risk automated dependency bump in an examples-only directory. The 'Full Test Suite' check shows fail but all individual checks pass — likely a flaky or unrelated failure. PR #11903 is a related open dependabot PR bumping hono in the root scope. No merge conflicts. Consider merging both hono bump PRs together or closing this one if #11903 covers the same lockfile changes. Since this is examples-only code, no changeset is needed.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

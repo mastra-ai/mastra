@@ -1,0 +1,57 @@
+{
+  "number": 13860,
+  "title": "fix(core): persist provider-executed tool calls in stream order",
+  "url": "https://github.com/mastra-ai/mastra/pull/13860",
+  "author": {
+    "login": "TheIsrael1",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-05T15:58:31Z",
+    "lastUpdated": "2026-03-10T09:15:49Z",
+    "ageInDays": 5,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 124,
+    "deletions": 6,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "addition",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "#13762"
+    ]
+  },
+  "summary": "Fixes provider-executed tool calls (e.g. Anthropic PTC) being persisted out of stream order in memory. Previously, tool-call chunks were batched and written at the end of the stream via _getImmediateToolCalls(), causing them to appear at the bottom on memory replay instead of in their natural stream position. The fix adds a 'tool-call' case in processOutputStream to persist tool calls inline during streaming, tracks already-persisted IDs via a Set to avoid double-writes, and enriches the post-stream batch with tool-result data (args, output, providerMetadata). Includes two regression tests and a changeset. Changes span 3 files in packages/core: llm-execution-step.ts (core fix), tools.ts (test utils), and loop.test.ts (new tests).",
+  "maintainerNotes": "Well-structured bug fix with clear description, regression tests, and changeset. However, PR has merge conflicts (CONFLICTING state) and several CI checks are failing (Core Package Tests, Agent Builder Tests, Combined Store Tests, Observability Tests, Full Test Suite). E2E and Memory tests are still pending. CodeRabbit flagged a minor nitpick about an unnecessary spread-with-type-cast for providerExecuted and a potential duplicate persistence issue in the tool-call handler (no idempotency check against persistedToolCallIds during streaming). Author needs to resolve merge conflicts and ensure CI passes before this can be reviewed for merge. The linked issue #13762 ('Provider tools do not get persisted correctly') is still open.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

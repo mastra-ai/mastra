@@ -1,0 +1,59 @@
+{
+  "number": 12692,
+  "title": "fix(workflows): surface agent tool calls in streams",
+  "url": "https://github.com/mastra-ai/mastra/pull/12692",
+  "author": {
+    "login": "skylarkoo7",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-04T22:03:16Z",
+    "lastUpdated": "2026-02-04T22:10:41Z",
+    "ageInDays": 34,
+    "daysSinceLastUpdate": 34
+  },
+  "size": {
+    "additions": 42,
+    "deletions": 4,
+    "changedFiles": 5,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix-12660-workflow-tool-calls",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "medium",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      {
+        "number": 12660,
+        "title": "Agent Tool Calls Not Visible When Agent Is Used Inside Workflow",
+        "state": "CLOSED"
+      }
+    ]
+  },
+  "summary": "Community PR fixing #12660: when an agent runs inside a workflow step, its internal tool call chunks were not forwarded to the workflow output stream. The fix propagates the stream format (legacy vs vnext) through the evented executor, adds a shared `forwardAgentStreamChunk` helper in a new `stream-utils.ts`, and calls it from both the evented and default workflow engines so that vnext streams include agent tool-call chunks while legacy behavior is unchanged.",
+  "maintainerNotes": "The fix is well-scoped and addresses a real user-reported issue (#12660, now closed). However: (1) the PR has merge conflicts, (2) CI checks are stuck in pending state (likely due to fork restrictions), (3) no tests are included (author notes 'not run (not requested)'), (4) no changeset was added, and (5) CodeRabbit flagged a critical gap: the stream format is not propagated to nested workflow events (workflow.start/workflow.resume) at lines ~815, 867, 897, which would cause nested runs to lose the format. The related issue #12660 is closed, so it's unclear if this was fixed another way or just closed. The PR has had no human review or activity in 34 days.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

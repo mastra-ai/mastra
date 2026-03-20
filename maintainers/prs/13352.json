@@ -1,0 +1,53 @@
+{
+  "number": 13352,
+  "title": "feat(core,server,playground-ui): add agent version pinning for experiments",
+  "url": "https://github.com/mastra-ai/mastra/pull/13352",
+  "author": {
+    "login": "YujohnNattrass",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-20T23:01:23Z",
+    "lastUpdated": "2026-02-25T23:39:24Z",
+    "ageInDays": 17,
+    "daysSinceLastUpdate": 12
+  },
+  "size": {
+    "additions": 351,
+    "deletions": 10,
+    "changedFiles": 12,
+    "category": "L"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "yj/experiment-version-pinning",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds optional `targetVersionId` field to experiment config, allowing experiments to be pinned to a specific agent version snapshot. When set for agent targets, the experiment resolves the agent via the editor (CMS) first, falling back to the registry if unavailable. The field is ignored for workflow/scorer targets. UI adds a version selector to the experiment trigger dialog, gated behind CMS availability — enabled for stored agents, disabled with tooltip for code-defined agents. Changes span core experiment logic, server handler/schema, client-js types, and playground-ui components across 12 files with 4 changesets.",
+  "maintainerNotes": "Well-structured PR with good description, demo video, tests (6 new test cases covering version-pinned resolution, editor lookup, registry fallback, and ignored-for-non-agent targets), and changesets for all 4 affected packages. However, the PR has merge conflicts (CONFLICTING state) and 2 CI failures (Core Package Tests, Memory Tests) that need resolution. CodeRabbit left review comments with actionable suggestions. The author (YujohnNattrass) is an active contributor with many recently merged PRs. No documentation updates are included — docs should be added for the new `targetVersionId` option. The PR has been sitting for 12 days since last update; author needs to rebase, fix CI, and address review comments.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

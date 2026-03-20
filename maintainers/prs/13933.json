@@ -1,0 +1,68 @@
+{
+  "number": 13933,
+  "title": "chore(deps): update build tools",
+  "url": "https://github.com/mastra-ai/mastra/pull/13933",
+  "author": {
+    "login": "daneatmastra",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-06T18:20:48Z",
+    "lastUpdated": "2026-03-10T12:20:03Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 1336,
+    "deletions": 1712,
+    "changedFiles": 104,
+    "category": "XL"
+  },
+  "labels": [
+    "automation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "renovate/build-tools",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": false,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12532,
+        "title": "chore(deps): update build tools",
+        "state": "MERGED",
+        "date": "2026-01-30"
+      },
+      {
+        "number": 12241,
+        "title": "chore(deps): update build tools",
+        "state": "MERGED",
+        "date": "2026-01-23"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Automated Renovate PR bumping @types/node from 22.19.13 to 22.19.15 across 104 package.json files and associated pnpm-lock.yaml files. This is a recurring pattern of build tool dependency updates managed by Renovate.",
+  "maintainerNotes": "PR has merge conflicts and CI failures (Agent Builder, Core, Observability tests failing; E2E and Memory tests still pending). The approval is only from github-actions bot, not a human reviewer. Renovate has flagged that it won't auto-rebase because it detected non-Renovate commits. Needs a rebase to resolve conflicts before it can proceed. Previous identical Renovate build-tools PRs have been regularly merged without issues.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

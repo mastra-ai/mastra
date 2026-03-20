@@ -1,0 +1,53 @@
+{
+  "number": 13859,
+  "title": "draft: added metrics plan",
+  "url": "https://github.com/mastra-ai/mastra/pull/13859",
+  "author": {
+    "login": "epinzur",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-05T15:57:20Z",
+    "lastUpdated": "2026-03-10T15:30:19Z",
+    "ageInDays": 5,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 8887,
+    "deletions": 1259,
+    "changedFiles": 53,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "esp/obs_api",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": false,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": false
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Major observability architecture redesign adding OLAP-backed metrics, logs, scores, and feedback support. Introduces a new DuckDB storage adapter for observability, refactors the DefaultExporter to use a unified EventBuffer for all event types (tracing, metrics, logs, scores, feedback), adds OLAP query methods (aggregate, breakdown, time-series, histogram, percentiles, usage report) to the ObservabilityStorage base class, and includes extensive design documentation in .notion/. The PR touches core schemas (packages/core), the observability package (observability/mastra), DuckDB store (stores/duckdb), and server handlers (packages/server). 14 of 53 changed files are test files with substantial coverage.",
+  "maintainerNotes": "Despite the title saying 'draft', the PR is NOT marked as a GitHub draft. This is an XL PR (8887+/1259-) from maintainer epinzur (Eric Pinzur) that is actively being worked on (last updated today). CI is failing on multiple checks including Build, Lint, Combined store tests, Observability tests, and docs validation. No changesets included. The PR description is empty (just the template with no checkboxes filled). The scope is very large — it spans core schemas, a new DuckDB observability adapter, exporter refactoring, server handler changes, and design docs. No human reviews yet (only CodeRabbit). The PR includes detailed implementation plans in .notion/ docs. Given the scope and failing CI, this likely needs to be split or at minimum needs CI fixes, a proper description, and changesets before review.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,55 @@
+{
+  "number": 14072,
+  "title": "chore(deps): update dependency @hono/node-server to ^1.19.11",
+  "url": "https://github.com/mastra-ai/mastra/pull/14072",
+  "author": {
+    "login": "daneatmastra",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-10T12:22:57Z",
+    "lastUpdated": "2026-03-10T15:09:31Z",
+    "ageInDays": 0,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 65,
+    "deletions": 65,
+    "changedFiles": 8,
+    "category": "M"
+  },
+  "labels": [
+    "automation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "renovate/hono-node-server-1.x",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Renovate Bot patch bump of @hono/node-server from 1.19.9 to 1.19.11. Includes a security fix (GHSA-wc8c-qw6v-h7f6: authorization bypass in Serve Static Middleware via inconsistent %2F URL decoding) in v1.19.10 and a Content-Length bug fix in v1.19.11. Changes are limited to 2 package.json files (server-adapters/hono, workflows/inngest) and the pnpm lockfile (which also picked up @ast-grep/napi 0.41.0 -> 0.41.1).",
+  "maintainerNotes": "Security-relevant patch update — v1.19.10 fixes an authorization bypass in Serve Static Middleware. Already approved and mergeable with no conflicts. CI shows 2 failures (Full Test Suite, Observability Package Tests) but E2E and Memory tests are still pending; the failures are likely unrelated to this lockfile-only change. Build, lint, and validation checks all pass. Recommend merging once pending checks complete or confirming the failures are pre-existing/flaky.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,64 @@
+{
+  "number": 11357,
+  "title": "Upgrade npm validator",
+  "url": "https://github.com/mastra-ai/mastra/pull/11357",
+  "author": {
+    "login": "alliehowe29",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2025-12-22T22:17:18Z",
+    "lastUpdated": "2025-12-22T22:34:44Z",
+    "ageInDays": 78,
+    "daysSinceLastUpdate": 78
+  },
+  "size": {
+    "additions": 5375,
+    "deletions": 4940,
+    "changedFiles": 12,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "allie/patch-npm-validator",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "medium",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": false,
+      "scopeIsReasonable": false
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11589,
+        "title": "chore(deps): update e2e tests",
+        "relevance": "May have already updated some of the same test/example dependencies"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "url": "https://github.com/mastra-ai/mastra/security/dependabot/452",
+        "description": "Dependabot security advisory for validator package"
+      }
+    ]
+  },
+  "summary": "Updates the `validator` npm package to 13.15.20 to address Dependabot security advisory #452. Changes span 12 files — mostly package.json and pnpm-lock.yaml files in e2e-tests, examples, explorations, and integration-tests directories. The bulk of the diff (XL size) is lockfile churn. Also includes unrelated dependency bumps (Vite, rollup, esbuild, etc.) that came along with the lockfile refresh. CodeRabbit flagged several issues: unrelated Vite bumps, a workspace:* protocol change to a pinned version in mcp-registry-client, and Vite placed in dependencies instead of devDependencies.",
+  "maintainerNotes": "This PR has merge conflicts and has been inactive for 78 days. CI was failing (E2E tests, validate redirects, Vercel assistant-ui deploy) even before going stale. The scope goes beyond the stated validator upgrade — includes unrelated dependency bumps and a questionable workspace:* to pinned version change. The underlying security vulnerability (dependabot/452) should be checked to see if it was addressed by other means. If still needed, a fresh PR with a cleaner scope (only the validator bump) would be preferable to resolving conflicts on this one.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

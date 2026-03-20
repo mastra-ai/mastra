@@ -1,0 +1,53 @@
+{
+  "number": 13090,
+  "title": "feat(pi): add Observational Memory integration for Pi agent framework",
+  "url": "https://github.com/mastra-ai/mastra/pull/13090",
+  "author": {
+    "login": "abhiaiyer91",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-16T05:55:44Z",
+    "lastUpdated": "2026-02-22T02:16:15Z",
+    "ageInDays": 22,
+    "daysSinceLastUpdate": 16
+  },
+  "size": {
+    "additions": 7975,
+    "deletions": 1214,
+    "changedFiles": 47,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "pi-agent",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds @mastra/pi package (integrations/pi/) providing Observational Memory (OM) integration for the Pi agent framework (pi-agent-core and pi-coding-agent). Includes createMastraOM() for core usage and a full pi-coding-agent extension with lifecycle hooks and diagnostic tools. Also adds a shared OM integration layer in @mastra/memory/integration (new entry point). Deletes the examples/assistant-ui example and adds examples/pi. 61 tests with InMemoryMemory and mock observer models (no API keys). Modifies packages/memory (new integration subpath export), integrations/opencode (refactored to use shared integration), and e2e bundle test config.",
+  "maintainerNotes": "PR has merge conflicts (CONFLICTING state) and CI is failing (Full Test Suite + MCP Package Tests fail, Tool Builder Tests pending). Changeset check was skipped — no changeset file included. A non-member (zackleman) requested changes asking about compatibility with Pi's tree storage format — the comment is substantive but the reviewer is not an org member. Maintainer DanielSLew approved on Feb 17. The PR touches @mastra/memory by adding a new 'integration' subpath export with shared OM helpers — this is a cross-package change that warrants careful review. The assistant-ui example deletion appears unrelated to the Pi integration and should be verified as intentional. Author needs to rebase to resolve conflicts, fix CI failures, and add a changeset.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

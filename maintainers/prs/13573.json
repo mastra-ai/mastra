@@ -1,0 +1,74 @@
+{
+  "number": 13573,
+  "title": "feat: prompt for API keys in mastracode TUI",
+  "url": "https://github.com/mastra-ai/mastra/pull/13573",
+  "author": {
+    "login": "smthomas",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-27T07:27:36Z",
+    "lastUpdated": "2026-03-08T02:24:51Z",
+    "ageInDays": 11,
+    "daysSinceLastUpdate": 2
+  },
+  "size": {
+    "additions": 224,
+    "deletions": 4,
+    "changedFiles": 11,
+    "category": "M"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "mastra-code-key-input",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "blocked"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13500,
+        "title": "fix(mastracode): allow onboarding to proceed with API keys only",
+        "state": "MERGED",
+        "relationship": "related-predecessor"
+      },
+      {
+        "number": 13566,
+        "title": "fix(mastracode): detect API keys for all registry providers in setup flow",
+        "state": "MERGED",
+        "relationship": "related-predecessor"
+      },
+      {
+        "number": 13611,
+        "title": "feat(mastracode): auth routing fix, tool injection, and auth storage init",
+        "state": "MERGED",
+        "relationship": "related"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Adds an interactive API key prompt dialog to the mastracode TUI. When a user selects a model (via /models or subagent model selection) that doesn't have an API key configured, a dialog prompts them to enter one. Keys are stored in auth.json and loaded into process.env on startup, with environment variables taking priority over stored keys. Includes a new ApiKeyDialogComponent, a shared promptForApiKeyIfNeeded helper, and new AuthStorage methods (hasStoredApiKey, getStoredApiKey, setStoredApiKey, loadStoredApiKeysIntoEnv). Also updates docs for configuration and modes pages.",
+  "maintainerNotes": "Approved by abhiaiyer91 and reviewed by CodeRabbit (bot). Lint CI check is failing, which blocks merge. No tests added for the new auth storage methods or the prompt flow. The PR is well-structured with proper changesets (patch for mastracode) and documentation updates. CodeRabbit flagged a few issues: incorrect docblock (claims function returns model ID but returns void), missing try/catch around authStorage.setStoredApiKey in onSubmit, and duplicate provider registry scanning logic across 3 files. Author needs to fix the lint failure before this can merge.",
+  "suggestedAction": "ping-author",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,53 @@
+{
+  "number": 13116,
+  "title": "fix(braintrust): use resolved model ID for accurate cost estimation",
+  "url": "https://github.com/mastra-ai/mastra/pull/13116",
+  "author": {
+    "login": "tomaswitek",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-16T18:46:39Z",
+    "lastUpdated": "2026-02-16T18:50:10Z",
+    "ageInDays": 22,
+    "daysSinceLastUpdate": 22
+  },
+  "size": {
+    "additions": 13,
+    "deletions": 1,
+    "changedFiles": 1,
+    "category": "XS"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/braintrust-model-name-cost-estimation",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "When using AI gateways (e.g. Vercel AI Gateway), the Braintrust exporter sets metadata.model to the gateway alias (e.g. 'claude-sonnet-4.5') instead of the resolved provider model ID (e.g. 'claude-sonnet-4-5-20250929'). Braintrust can't match aliases to its pricing database, so cost estimation fails. This PR prefers the already-available `responseModel` attribute (populated from `response.modelId`) over the request-time `model` value, and adds `responseModel` to the `omitKeys` list to avoid duplication in metadata.",
+  "maintainerNotes": "Very clean, minimal fix. The `responseModel` attribute is well-established in the codebase — it's already used by the Laminar and OTel exporters for the same purpose (see laminar/src/tracing.ts:520, otel-exporter/src/gen-ai-semantics.ts:261). The type `ModelGenerationAttributes.responseModel` is defined in core (observability/types/tracing.ts:186) and populated from `response.modelId` in the model loop. No tests added but the change is straightforward conditional assignment. Missing a changeset. CI checks are stuck in pending state (likely needs secrets authorization for the external contributor fork). CodeRabbit approved with one optional nitpick about `provider` not being in the omitKeys list (pre-existing issue).",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

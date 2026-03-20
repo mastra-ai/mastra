@@ -1,0 +1,59 @@
+{
+  "number": 13050,
+  "title": "feat(core): add video media type detection for prompt support",
+  "url": "https://github.com/mastra-ai/mastra/pull/13050",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-13T17:56:53Z",
+    "lastUpdated": "2026-03-06T22:31:30Z",
+    "ageInDays": 25,
+    "daysSinceLastUpdate": 4
+  },
+  "size": {
+    "additions": 428,
+    "deletions": 3,
+    "changedFiles": 6,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/video-prompt-support",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      {
+        "number": 11743,
+        "title": "[FEATURE] Prompt supports type video",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Adds video media type detection via magic byte signatures for mp4, webm, flv, mpeg, quicktime, and 3gpp formats. Extends the existing detectMediaType utility with a new videoMediaTypeSignatures array and updates convert-file.ts to auto-detect video mediaType (with image fallback chain) when not explicitly provided. Also adds gs:// URL handling for video attachments. Includes comprehensive unit tests for detection, attachment conversion, and file part conversion. Changeset included. Closes #11743.",
+  "maintainerNotes": "Well-structured community contribution. CodeRabbit reviewed and flagged a valid concern about EBML signature ambiguity (WebM audio vs video share the same magic bytes) — author addressed the feedback by adding documentation comments about detection limitations and implementing the image-first fallback chain as suggested. CI 'Setup' jobs pass but the actual test suites (Core, E2E, MCP, Memory, RAG, Combined stores) are stuck in PENDING — likely need maintainer secrets/approval to run. Vercel deploy checks fail due to authorization (expected for external forks). The 4 commits include: initial implementation, CodeRabbit feedback fixes, changeset, and a recent merge from main. No merge conflicts. Needs a maintainer to approve CI runs and perform a human review.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,68 @@
+{
+  "number": 13077,
+  "title": "feat(observability): update JsonExporter to support all signals (T/M/L/S/F)",
+  "url": "https://github.com/mastra-ai/mastra/pull/13077",
+  "author": {
+    "login": "epinzur",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-14T12:30:22Z",
+    "lastUpdated": "2026-02-26T05:22:40Z",
+    "ageInDays": 24,
+    "daysSinceLastUpdate": 12
+  },
+  "size": {
+    "additions": 3416,
+    "deletions": 1215,
+    "changedFiles": 69,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "claude/add-notion-folder-oVXPw",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13612,
+        "title": "feat(observability): add ObservabilityBus, metrics, and structured logging",
+        "state": "MERGED",
+        "mergedAt": "2026-03-03T01:01:26Z",
+        "relationship": "supersedes — renames JsonExporter to TestExporter and extends it to support all signal types, directly replacing the work in this PR"
+      },
+      {
+        "number": 13058,
+        "title": "feat(core): Add unified observability type system and context propagation",
+        "state": "MERGED",
+        "mergedAt": "2026-02-13T20:37:39Z",
+        "relationship": "predecessor — added the type system this PR builds on, also by same author"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Phase 2.2 of the observability implementation: extends JsonExporter to handle logs, metrics, scores, and feedback events alongside tracing spans. Adds onLogEvent/onMetricEvent/onScoreEvent/onFeedbackEvent handlers, cross-signal query methods (getByTraceId, getLogsByLevel, getMetricsByName), updated getStatistics() with signal breakdowns, internal metrics collection, and 32 new tests. Created by maintainer epinzur with Claude Code assistance.",
+  "maintainerNotes": "This PR is almost certainly superseded by #13612 (merged March 3), which was also authored by epinzur and explicitly renames JsonExporter → TestExporter while extending it to support all signal types — the same goal as this PR. The branch has merge conflicts (CONFLICTING state) and the Vercel assistant-ui check is failing. No human reviews were requested or submitted. The PR has been inactive since Feb 26. Recommend closing as superseded by #13612.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

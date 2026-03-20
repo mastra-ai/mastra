@@ -1,0 +1,69 @@
+{
+  "number": 13485,
+  "title": "feat(playground-ui): add processor graph builder to agent CMS",
+  "url": "https://github.com/mastra-ai/mastra/pull/13485",
+  "author": {
+    "login": "mfrachet",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-25T12:55:13Z",
+    "lastUpdated": "2026-02-27T07:57:31Z",
+    "ageInDays": 13,
+    "daysSinceLastUpdate": 11
+  },
+  "size": {
+    "additions": 2474,
+    "deletions": 3,
+    "changedFiles": 38,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "processors-layer-cms",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13219,
+        "title": "feat(editor): processor providers and stored processor graphs",
+        "relationship": "predecessor - merged foundational processor provider support"
+      },
+      {
+        "number": 13292,
+        "title": "fix(editor): agent publish flow and recursive processor graph schema",
+        "relationship": "predecessor - fixes to processor graph schema, already merged"
+      },
+      {
+        "number": 12059,
+        "title": "feat(playground): new processors Studio UI behaviour",
+        "relationship": "predecessor - earlier processors UI work, already merged"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Adds a visual processor graph builder to the agent CMS in the playground UI. Introduces a drag-and-drop interface for configuring input/output processor pipelines with three layer types (step, parallel, conditional). Includes 38 new/modified files across playground-ui and playground packages: React components for the graph canvas, provider list, layer types, config dialogs; a useReducer-based state management hook; serialization/validation utilities; and comprehensive unit tests for serialization round-trips and reducer actions. CodeRabbit reviewed with minor suggestions (type safety, lazy initialization, defensive bounds checking). All changes are scoped to playground-ui/playground packages only.",
+  "maintainerNotes": "Merge conflicts need to be resolved by the author before this can proceed. Two CI checks are failing (E2E Tests and Observability Package Tests) — these may be flaky/pre-existing since the PR only touches playground-ui and playground packages. The PR has a thorough description, a changeset, and good test coverage (2 test files covering serialization round-trips and reducer logic). CodeRabbit left actionable but non-blocking suggestions. No human reviewer has reviewed yet. This is part of a series of processor-related PRs (builds on #13219 and #13292). The XL size is justified as it introduces a self-contained new feature module.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

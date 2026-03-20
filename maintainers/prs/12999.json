@@ -1,0 +1,62 @@
+{
+  "number": 12999,
+  "title": "chore(deps): update ai sdk (major)",
+  "url": "https://github.com/mastra-ai/mastra/pull/12999",
+  "author": {
+    "login": "daneatmastra",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-12T12:30:47Z",
+    "lastUpdated": "2026-02-12T18:29:47Z",
+    "ageInDays": 26,
+    "daysSinceLastUpdate": 26
+  },
+  "size": {
+    "additions": 372,
+    "deletions": 402,
+    "changedFiles": 25,
+    "category": "L"
+  },
+  "labels": [
+    "automation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "renovate/major-ai-sdk",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "high",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12920,
+        "title": "chore(deps): update ai sdk",
+        "state": "OPEN",
+        "relationship": "related minor AI SDK update"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Renovate-generated major version bump of the AI SDK ecosystem: ai v5→v6, @ai-sdk/provider v1-2→v3, @ai-sdk/provider-utils v2-3→v4, @ai-sdk/react v1-2→v3, @ai-sdk/anthropic v1-2→v3, @ai-sdk/google v1→v3, @ai-sdk/openai v2→v3, @ai-sdk/gateway v2→v3, @ai-sdk/groq v1-2→v3, @ai-sdk/xai v1-2→v3, and other AI SDK packages. Changes are almost entirely in package.json version specifiers and pnpm-lock.yaml.",
+  "maintainerNotes": "This PR has merge conflicts and all CI checks are failing (build, core tests, agent builder tests, memory tests, RAG tests, MCP tests, E2E tests, etc.). The approval is only from github-actions automation, not a human reviewer. This is a major version bump that likely requires code changes to adapt to breaking API changes in AI SDK v6. PR #12920 (minor AI SDK update) is also open and may need to be coordinated. Given the scope of failures, this needs a rebase to resolve conflicts and likely manual code fixes to address breaking changes before it can be merged.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

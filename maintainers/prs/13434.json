@@ -1,0 +1,62 @@
+{
+  "number": 13434,
+  "title": "chore(deps): update assistant ui",
+  "url": "https://github.com/mastra-ai/mastra/pull/13434",
+  "author": {
+    "login": "daneatmastra",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-24T00:37:32Z",
+    "lastUpdated": "2026-02-24T06:30:14Z",
+    "ageInDays": 14,
+    "daysSinceLastUpdate": 14
+  },
+  "size": {
+    "additions": 214,
+    "deletions": 303,
+    "changedFiles": 4,
+    "category": "L"
+  },
+  "labels": [
+    "automation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "renovate/assistant-ui",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12921,
+        "title": "chore(deps): update assistant ui",
+        "state": "MERGED",
+        "relevance": "Previous iteration of the same recurring Renovate update, merged 2026-02-11"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Renovate bot patch update of @assistant-ui packages: @assistant-ui/react 0.12.10→0.12.11, @assistant-ui/react-markdown 0.12.3→0.12.4, @assistant-ui/react-syntax-highlighter 0.12.3→0.12.4. Changes span playground-ui/package.json, client-sdks/react/package.json, a changeset file, and pnpm-lock.yaml.",
+  "maintainerNotes": "PR is approved but has merge conflicts and CI failures (Core, E2E, Memory, Full Test Suite). The conflicts are likely due to lockfile drift since this was opened 14 days ago. Needs a rebase against main to resolve conflicts and re-run CI. The test failures may also be pre-existing/flaky rather than caused by these patch bumps. A newer Renovate PR may supersede this one if the branch is rebased.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}
