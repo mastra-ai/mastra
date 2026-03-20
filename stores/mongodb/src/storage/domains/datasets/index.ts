@@ -927,7 +927,14 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       if (args.search) {
         const escaped = args.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const regex = new RegExp(escaped, 'i');
-        const searchCondition = [{ $expr: { $regexMatch: { input: { $toString: '$input' }, regex } } }];
+        // Use $convert with onError/onNull to safely handle any BSON type.
+        // $toString crashes on objects/arrays; $convert falls back to '' for unsupported types.
+        // This means search only matches string-valued input fields; for object inputs,
+        // a text index or materialized field would be needed for deeper search.
+        const safeStr = (field: string) => ({
+          $convert: { input: field, to: 'string', onError: '', onNull: '' },
+        });
+        const searchCondition = [{ $expr: { $regexMatch: { input: safeStr('$input'), regex } } }];
         if (filter.$or) {
           filter.$and = [{ $or: filter.$or }, { $or: searchCondition }];
           delete filter.$or;
