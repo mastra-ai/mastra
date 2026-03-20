@@ -277,6 +277,57 @@ describe('mapInstructionBlocksFromApi', () => {
       expect(instructionBlocks[0].content).toBe('');
     }
   });
+
+  it('normalizes legacy { content, role } object in prompt_block content', () => {
+    const raw = [
+      { type: 'prompt_block' as const, content: { content: 'You are a chef.', role: 'system' } as unknown as string },
+    ];
+    const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi(raw);
+    expect(instructionsString).toBe('You are a chef.');
+    expect(instructionBlocks).toHaveLength(1);
+    expect(instructionBlocks[0].type).toBe('prompt_block');
+    if (instructionBlocks[0].type === 'prompt_block') {
+      expect(instructionBlocks[0].content).toBe('You are a chef.');
+    }
+  });
+
+  it('handles CoreSystemMessage object as top-level instructions', () => {
+    // When agent.instructions is { role: 'system', content: '...' }
+    const raw = { role: 'system', content: 'You are a chef.' } as unknown as string;
+    const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi(raw);
+    expect(instructionsString).toBe('You are a chef.');
+    expect(instructionBlocks).toHaveLength(1);
+    expect(instructionBlocks[0].type).toBe('prompt_block');
+    if (instructionBlocks[0].type === 'prompt_block') {
+      expect(instructionBlocks[0].content).toBe('You are a chef.');
+    }
+  });
+
+  it('handles CoreSystemMessage[] array as top-level instructions', () => {
+    // When agent.instructions is [{ role: 'system', content: '...' }, ...]
+    const raw = [
+      { role: 'system', content: 'First instruction.' },
+      { role: 'system', content: 'Second instruction.' },
+    ] as unknown as string;
+    const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi(raw);
+    expect(instructionsString).toBe('First instruction.\n\nSecond instruction.');
+    expect(instructionBlocks).toHaveLength(1);
+    expect(instructionBlocks[0].type).toBe('prompt_block');
+    if (instructionBlocks[0].type === 'prompt_block') {
+      expect(instructionBlocks[0].content).toBe('First instruction.\n\nSecond instruction.');
+    }
+  });
+
+  it('handles string[] array as top-level instructions', () => {
+    const raw = ['First part.', 'Second part.'] as unknown as string;
+    const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi(raw);
+    expect(instructionsString).toBe('First part.\n\nSecond part.');
+    expect(instructionBlocks).toHaveLength(1);
+    expect(instructionBlocks[0].type).toBe('prompt_block');
+    if (instructionBlocks[0].type === 'prompt_block') {
+      expect(instructionBlocks[0].content).toBe('First part.\n\nSecond part.');
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

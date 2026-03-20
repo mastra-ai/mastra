@@ -18,6 +18,7 @@ import type {
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
+  UpdateExperimentResultInput,
   ListExperimentsInput,
   ListExperimentsOutput,
   ListExperimentResultsInput,
@@ -140,6 +141,8 @@ export class ExperimentsPG extends ExperimentsStorage {
       completedAt: ensureDate(row.completedAtZ || row.completedAt)!,
       retryCount: row.retryCount as number,
       traceId: (row.traceId as string | null) ?? null,
+      status: (row.status as ExperimentResult['status']) ?? null,
+      tags: row.tags ? safelyParseJSON(row.tags) : null,
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
     };
   }
@@ -408,6 +411,8 @@ export class ExperimentsPG extends ExperimentsStorage {
           completedAt: input.completedAt.toISOString(),
           retryCount: input.retryCount,
           traceId: input.traceId ?? null,
+          status: input.status ?? null,
+          tags: input.tags ?? null,
           createdAt: nowIso,
         },
       });
@@ -425,12 +430,78 @@ export class ExperimentsPG extends ExperimentsStorage {
         completedAt: input.completedAt,
         retryCount: input.retryCount,
         traceId: input.traceId ?? null,
+        status: input.status ?? null,
+        tags: input.tags ?? null,
         createdAt: now,
       };
     } catch (error) {
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'ADD_EXPERIMENT_RESULT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async updateExperimentResult(input: UpdateExperimentResultInput): Promise<ExperimentResult> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
+      const setClauses: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (input.status !== undefined) {
+        setClauses.push(`"status" = $${paramIndex++}`);
+        values.push(input.status);
+      }
+      if (input.tags !== undefined) {
+        setClauses.push(`"tags" = $${paramIndex++}`);
+        values.push(JSON.stringify(input.tags));
+      }
+
+      if (setClauses.length === 0) {
+        const existing = await this.getExperimentResultById({ id: input.id });
+        if (!existing) {
+          throw new MastraError({
+            id: createStorageErrorId('PG', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { resultId: input.id },
+          });
+        }
+        return existing;
+      }
+
+      values.push(input.id);
+      let whereClause = `"id" = $${paramIndex}`;
+      if (input.experimentId) {
+        paramIndex++;
+        values.push(input.experimentId);
+        whereClause += ` AND "experimentId" = $${paramIndex}`;
+      }
+      const row = await this.#db.client.oneOrNone(
+        `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE ${whereClause} RETURNING *`,
+        values,
+      );
+
+      if (!row) {
+        throw new MastraError({
+          id: createStorageErrorId('PG', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { resultId: input.id },
+        });
+      }
+
+      return this.transformExperimentResultRow(row);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'UPDATE_EXPERIMENT_RESULT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
