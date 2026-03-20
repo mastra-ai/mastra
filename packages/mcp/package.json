@@ -49,6 +49,8 @@
   "devDependencies": {
     "@hono/node-server": "^1.19.11",
     "@internal/lint": "workspace:*",
+    "@internal/llm-recorder": "workspace:*",
+    "@internal/test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
