@@ -10,6 +10,7 @@
  */
 
 import { createTool } from '../../tools';
+import { createError } from '../errors';
 import { navigateInputSchema } from '../schemas';
 import { requireBrowser } from './helpers';
 
@@ -24,7 +25,32 @@ export const browserNavigateTool = createTool({
   inputSchema: navigateInputSchema,
   execute: async (input, context) => {
     const browser = requireBrowser(context);
-    // Type assertion safe because schema defaults are applied before execute
-    return browser.navigate(input as Parameters<typeof browser.navigate>[0]);
+
+    try {
+      return await browser.navigate(input as Parameters<typeof browser.navigate>[0]);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+
+      // Timeout
+      if (msg.includes('timeout') || msg.includes('Timeout') || msg.includes('aborted')) {
+        return createError('timeout', 'Navigation timed out.', 'Try a different URL or check your network connection.');
+      }
+
+      // Browser not launched
+      if (msg.includes('not launched') || msg.includes('Browser is not launched')) {
+        return createError(
+          'browser_error',
+          'Browser was not initialized.',
+          'This is an internal error - please try again.',
+        );
+      }
+
+      // Generic error
+      return createError(
+        'browser_error',
+        `Navigation failed: ${msg}`,
+        'Check that the URL is valid and the site is accessible.',
+      );
+    }
   },
 });

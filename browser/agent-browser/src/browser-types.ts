@@ -32,7 +32,7 @@ export interface BrowserLocator {
   inputValue(options?: { timeout?: number }): Promise<string>;
   textContent(options?: { timeout?: number }): Promise<string | null>;
   innerText(options?: { timeout?: number }): Promise<string>;
-  screenshot(options?: { type?: string; timeout?: number }): Promise<Buffer>;
+  screenshot(options?: { type?: string; quality?: number; timeout?: number }): Promise<Buffer>;
   selectOption(
     values: { value?: string; label?: string; index?: number },
     options?: { timeout?: number },
@@ -98,6 +98,8 @@ export interface BrowserPage {
 
 export interface EnhancedSnapshot {
   tree: string;
+  elementCount?: number;
+  truncated?: boolean;
 }
 
 export interface ScreencastOptions {
@@ -166,9 +168,13 @@ export interface BrowserManagerLike {
   getCDPSession(): Promise<BrowserCDPSession>;
   getSnapshot(options?: {
     interactive?: boolean;
+    interactiveOnly?: boolean;
     compact?: boolean;
     maxDepth?: number;
+    maxElements?: number;
     selector?: string;
+    offset?: number;
+    includeCursorElements?: boolean;
   }): Promise<EnhancedSnapshot>;
   startScreencast(callback: (frame: ScreencastFrame) => void, options?: ScreencastOptions): Promise<void>;
   stopScreencast(): Promise<void>;
@@ -221,6 +227,9 @@ export interface BrowserManagerLike {
   startErrorTracking?(): void;
   getPageErrors?(): PageError[];
   clearPageErrors?(): void;
+
+  // Device emulation (optional)
+  getDevice?(name: string): { viewport: { width: number; height: number } } | undefined;
 }
 
 /** Frame interface */
