@@ -4,14 +4,28 @@ import type { BrowserManagerLike } from './browser-types.js';
 
 import { ScreencastStream } from './screencast/index.js';
 import type { ScreencastOptions } from './screencast/index.js';
+import { createCheckTool } from './tools/check.js';
 import { createClickTool } from './tools/click.js';
 import { createCloseTool } from './tools/close.js';
+import { createClearCookiesTool, createGetCookiesTool, createSetCookieTool } from './tools/cookies.js';
+import { createDoubleClickTool } from './tools/double-click.js';
+import { createDragTool } from './tools/drag.js';
+import { createEvaluateTool } from './tools/evaluate.js';
+import { createFillTool } from './tools/fill.js';
+import { createFocusTool } from './tools/focus.js';
+import { createGetTextTool } from './tools/get-text.js';
+import { createHoverTool } from './tools/hover.js';
 import { createNavigateTool } from './tools/navigate.js';
+import { createGoBackTool, createGoForwardTool, createReloadTool } from './tools/navigation.js';
+import { createPressTool } from './tools/press.js';
 import { createScreenshotTool } from './tools/screenshot.js';
+import { createScrollIntoViewTool } from './tools/scroll-into-view.js';
 import { createScrollTool } from './tools/scroll.js';
 import { createSelectTool } from './tools/select.js';
+import { createSetViewportTool } from './tools/set-viewport.js';
 import { createSnapshotTool } from './tools/snapshot.js';
 import { createTypeTool } from './tools/type.js';
+import { createWaitTool } from './tools/wait.js';
 import type { BrowserConfig } from './types.js';
 
 /**
@@ -60,14 +74,49 @@ export class Browser {
     const timeout = this.config.timeout;
 
     this.tools = {
+      // Core navigation & inspection
       browser_navigate: createNavigateTool(getBrowser, timeout),
       browser_snapshot: createSnapshotTool(getBrowser),
-      browser_click: createClickTool(getBrowser, timeout),
-      browser_type: createTypeTool(getBrowser, timeout),
-      browser_select: createSelectTool(getBrowser, timeout),
-      browser_scroll: createScrollTool(getBrowser),
       browser_screenshot: createScreenshotTool(getBrowser, 30_000),
       browser_close: createCloseTool(() => this.close()),
+
+      // Click & interaction
+      browser_click: createClickTool(getBrowser, timeout),
+      browser_double_click: createDoubleClickTool(getBrowser, timeout),
+      browser_hover: createHoverTool(getBrowser, timeout),
+      browser_focus: createFocusTool(getBrowser, timeout),
+      browser_drag: createDragTool(getBrowser, timeout),
+
+      // Text input
+      browser_type: createTypeTool(getBrowser, timeout),
+      browser_fill: createFillTool(getBrowser, timeout),
+      browser_press: createPressTool(getBrowser),
+
+      // Form controls
+      browser_select: createSelectTool(getBrowser, timeout),
+      browser_check: createCheckTool(getBrowser, timeout),
+
+      // Scrolling
+      browser_scroll: createScrollTool(getBrowser),
+      browser_scroll_into_view: createScrollIntoViewTool(getBrowser, timeout),
+
+      // Data extraction
+      browser_get_text: createGetTextTool(getBrowser, timeout),
+      browser_evaluate: createEvaluateTool(getBrowser),
+
+      // Navigation history
+      browser_go_back: createGoBackTool(getBrowser, timeout),
+      browser_go_forward: createGoForwardTool(getBrowser, timeout),
+      browser_reload: createReloadTool(getBrowser, timeout),
+
+      // Browser state
+      browser_set_viewport: createSetViewportTool(getBrowser),
+      browser_get_cookies: createGetCookiesTool(getBrowser),
+      browser_set_cookie: createSetCookieTool(getBrowser),
+      browser_clear_cookies: createClearCookiesTool(getBrowser),
+
+      // Waiting
+      browser_wait: createWaitTool(getBrowser, timeout),
     };
   }
 
