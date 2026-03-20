@@ -59,6 +59,7 @@ import { ChunkFrom } from '../stream';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
+import { normalizeToMastraTool } from '../tools/normalize';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
@@ -2051,6 +2052,9 @@ export class Agent<
       );
       for (const [toolName, tool] of Object.entries(memoryTools)) {
         const toolObj = tool;
+        // Normalize Vercel tools to Mastra format first
+        const normalizedTool = normalizeToMastraTool(toolObj);
+
         const options: ToolOptions = {
           name: toolName,
           runId,
@@ -2066,7 +2070,7 @@ export class Agent<
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
         };
-        const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
+        const convertedToCoreTool = makeCoreTool(normalizedTool, options, undefined, autoResumeSuspendedTools);
         convertedMemoryTools[toolName] = convertedToCoreTool;
       }
     }
@@ -2118,6 +2122,9 @@ export class Agent<
 
       for (const [toolName, tool] of Object.entries(workspaceTools)) {
         const toolObj = tool;
+        // Normalize Vercel tools to Mastra format first
+        const normalizedTool = normalizeToMastraTool(toolObj);
+
         const options: ToolOptions = {
           name: toolName,
           runId,
@@ -2133,7 +2140,7 @@ export class Agent<
           requireApproval: (toolObj as any).requireApproval,
           workspace,
         };
-        const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
+        const convertedToCoreTool = makeCoreTool(normalizedTool, options, undefined, autoResumeSuspendedTools);
         convertedWorkspaceTools[toolName] = convertedToCoreTool;
       }
     }
@@ -2185,6 +2192,9 @@ export class Agent<
 
       for (const [toolName, tool] of Object.entries(skillTools)) {
         const toolObj = tool;
+        // Normalize Vercel tools to Mastra format first
+        const normalizedTool = normalizeToMastraTool(toolObj);
+
         const options: ToolOptions = {
           name: toolName,
           runId,
@@ -2200,7 +2210,7 @@ export class Agent<
           requireApproval: false, // Skill tools never require approval
           workspace,
         };
-        const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
+        const convertedToCoreTool = makeCoreTool(normalizedTool, options, undefined, autoResumeSuspendedTools);
         convertedSkillTools[toolName] = convertedToCoreTool;
       }
     }
@@ -2483,6 +2493,9 @@ export class Agent<
           return;
         }
 
+        // Normalize Vercel tools to Mastra format first
+        const normalizedTool = normalizeToMastraTool(tool);
+
         const options: ToolOptions = {
           name: k,
           runId,
@@ -2499,7 +2512,7 @@ export class Agent<
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
         };
-        return [k, makeCoreTool(tool, options, undefined, autoResumeSuspendedTools)];
+        return [k, makeCoreTool(normalizedTool, options, undefined, autoResumeSuspendedTools)];
       }),
     );
 
@@ -2549,6 +2562,9 @@ export class Agent<
       for (const toolset of toolsFromToolsets) {
         for (const [toolName, tool] of Object.entries(toolset)) {
           const toolObj = tool;
+          // Normalize Vercel tools to Mastra format first
+          const normalizedTool = normalizeToMastraTool(toolObj);
+
           const options: ToolOptions = {
             name: toolName,
             runId,
@@ -2564,7 +2580,7 @@ export class Agent<
             tracingPolicy: this.#options?.tracingPolicy,
             requireApproval: (toolObj as any).requireApproval,
           };
-          const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset', autoResumeSuspendedTools);
+          const convertedToCoreTool = makeCoreTool(normalizedTool, options, 'toolset', autoResumeSuspendedTools);
           toolsForRequest[toolName] = convertedToCoreTool;
         }
       }
@@ -2606,6 +2622,9 @@ export class Agent<
       });
       for (const [toolName, tool] of clientToolsForInput) {
         const { execute, ...toolRest } = tool;
+        // Normalize Vercel tools to Mastra format first
+        const normalizedTool = normalizeToMastraTool(toolRest);
+
         const options: ToolOptions = {
           name: toolName,
           runId,
@@ -2621,7 +2640,7 @@ export class Agent<
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
         };
-        const convertedToCoreTool = makeCoreTool(toolRest, options, 'client-tool', autoResumeSuspendedTools);
+        const convertedToCoreTool = makeCoreTool(normalizedTool, options, 'client-tool', autoResumeSuspendedTools);
         toolsForRequest[toolName] = convertedToCoreTool;
       }
     }
