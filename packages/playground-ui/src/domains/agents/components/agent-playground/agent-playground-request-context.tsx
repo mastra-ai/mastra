@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 import { RequestContext } from '../request-context';
 import { RequestContextSchemaForm } from '@/domains/request-context/components/request-context-schema-form';
 import { useSchemaRequestContext } from '@/domains/request-context/context/schema-request-context';
-import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { useOptionalAgentEditFormContext } from '../../context/agent-edit-form-context';
 
 interface AgentPlaygroundRequestContextProps {
   requestContextSchema?: string;
@@ -102,8 +102,8 @@ function ModeSwitcher({ mode, onModeChange }: { mode: InputMode; onModeChange: (
 }
 
 export function AgentPlaygroundRequestContext({ requestContextSchema }: AgentPlaygroundRequestContextProps) {
-  const { form } = useAgentEditFormContext();
-  const variables = form.watch('variables') as Record<string, unknown> | undefined;
+  const formCtx = useOptionalAgentEditFormContext();
+  const variables = formCtx?.form.watch('variables') as Record<string, unknown> | undefined;
   const [mode, setMode] = useState<InputMode>('form');
 
   // Check if variables define any properties (i.e. there's an actual schema)

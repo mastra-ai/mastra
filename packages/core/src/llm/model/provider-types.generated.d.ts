@@ -47,7 +47,6 @@ export type ProviderModelsMap = {
   ];
   readonly zenmux: readonly [
     'anthropic/claude-3.5-haiku',
-    'anthropic/claude-3.5-sonnet',
     'anthropic/claude-3.7-sonnet',
     'anthropic/claude-haiku-4.5',
     'anthropic/claude-opus-4',
@@ -65,7 +64,9 @@ export type ProviderModelsMap = {
     'google/gemini-2.5-flash-lite',
     'google/gemini-2.5-pro',
     'google/gemini-3-flash-preview',
+    'google/gemini-3-pro-image-preview',
     'google/gemini-3-pro-preview',
+    'google/gemini-3.1-flash-lite-preview',
     'google/gemini-3.1-pro-preview',
     'inclusionai/ling-1t',
     'inclusionai/ring-1t',
@@ -75,6 +76,8 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2.1',
     'minimax/minimax-m2.5',
     'minimax/minimax-m2.5-lightning',
+    'minimax/minimax-m2.7',
+    'minimax/minimax-m2.7-highspeed',
     'moonshotai/kimi-k2-0905',
     'moonshotai/kimi-k2-thinking',
     'moonshotai/kimi-k2-thinking-turbo',
@@ -88,12 +91,21 @@ export type ProviderModelsMap = {
     'openai/gpt-5.2',
     'openai/gpt-5.2-codex',
     'openai/gpt-5.2-pro',
+    'openai/gpt-5.3-chat',
+    'openai/gpt-5.3-codex',
+    'openai/gpt-5.4',
+    'openai/gpt-5.4-mini',
+    'openai/gpt-5.4-nano',
+    'openai/gpt-5.4-pro',
     'qwen/qwen3-coder-plus',
     'qwen/qwen3-max',
+    'qwen/qwen3.5-flash',
+    'qwen/qwen3.5-plus',
     'stepfun/step-3',
     'stepfun/step-3.5-flash',
     'stepfun/step-3.5-flash-free',
     'volcengine/doubao-seed-1.8',
+    'volcengine/doubao-seed-2.0-code',
     'volcengine/doubao-seed-2.0-lite',
     'volcengine/doubao-seed-2.0-mini',
     'volcengine/doubao-seed-2.0-pro',
@@ -102,9 +114,13 @@ export type ProviderModelsMap = {
     'x-ai/grok-4-fast',
     'x-ai/grok-4.1-fast',
     'x-ai/grok-4.1-fast-non-reasoning',
+    'x-ai/grok-4.2-fast',
+    'x-ai/grok-4.2-fast-non-reasoning',
     'x-ai/grok-code-fast-1',
     'xiaomi/mimo-v2-flash',
     'xiaomi/mimo-v2-flash-free',
+    'xiaomi/mimo-v2-omni',
+    'xiaomi/mimo-v2-pro',
     'z-ai/glm-4.5',
     'z-ai/glm-4.5-air',
     'z-ai/glm-4.6',
@@ -115,6 +131,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.7-flash-free',
     'z-ai/glm-4.7-flashx',
     'z-ai/glm-5',
+    'z-ai/glm-5-turbo',
   ];
   readonly 'io-net': readonly [
     'Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar',
@@ -318,7 +335,7 @@ export type ProviderModelsMap = {
     'perplexity/sonar',
     'xai/grok-4-1-fast-non-reasoning',
   ];
-  readonly xiaomi: readonly ['mimo-v2-flash'];
+  readonly xiaomi: readonly ['mimo-v2-flash', 'mimo-v2-omni', 'mimo-v2-pro'];
   readonly synthetic: readonly [
     'hf:MiniMaxAI/MiniMax-M2',
     'hf:MiniMaxAI/MiniMax-M2.1',
@@ -514,6 +531,7 @@ export type ProviderModelsMap = {
     'minimax-m2',
     'minimax-m2.1',
     'minimax-m2.5',
+    'minimax-m2.7',
     'ministral-3:14b',
     'ministral-3:3b',
     'ministral-3:8b',
@@ -684,7 +702,8 @@ export type ProviderModelsMap = {
     'gpt-5.4-nano',
     'gpt-5.4-pro',
     'kimi-k2.5',
-    'mimo-v2-flash-free',
+    'mimo-v2-omni-free',
+    'mimo-v2-pro-free',
     'minimax-m2.5',
     'minimax-m2.5-free',
     'nemotron-3-super-free',
@@ -904,7 +923,9 @@ export type ProviderModelsMap = {
     '@cf/meta/m2m100-1.2b',
     '@cf/mistral/mistral-7b-instruct-v0.1',
     '@cf/mistralai/mistral-small-3.1-24b-instruct',
+    '@cf/moonshotai/kimi-k2.5',
     '@cf/myshell-ai/melotts',
+    '@cf/nvidia/nemotron-3-120b-a12b',
     '@cf/openai/gpt-oss-120b',
     '@cf/openai/gpt-oss-20b',
     '@cf/pfnet/plamo-embedding-1b',
@@ -1240,6 +1261,7 @@ export type ProviderModelsMap = {
     'glm-4.6v-flash',
     'glm-4.7',
     'glm-5',
+    'glm-5-turbo',
   ];
   readonly deepseek: readonly ['deepseek-chat', 'deepseek-reasoner'];
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
@@ -1319,6 +1341,7 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2',
     'minimax/minimax-m2.1',
     'minimax/minimax-m2.5',
+    'minimax/minimax-m2.7',
     'mistralai/codestral-2508',
     'mistralai/devstral-2512',
     'mistralai/devstral-2512:free',
@@ -1369,6 +1392,8 @@ export type ProviderModelsMap = {
     'openai/gpt-5.2-pro',
     'openai/gpt-5.3-codex',
     'openai/gpt-5.4',
+    'openai/gpt-5.4-mini',
+    'openai/gpt-5.4-nano',
     'openai/gpt-5.4-pro',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-120b:exacto',
@@ -1433,6 +1458,8 @@ export type ProviderModelsMap = {
     'x-ai/grok-4.20-multi-agent-beta',
     'x-ai/grok-code-fast-1',
     'xiaomi/mimo-v2-flash',
+    'xiaomi/mimo-v2-omni',
+    'xiaomi/mimo-v2-pro',
     'z-ai/glm-4.5',
     'z-ai/glm-4.5-air',
     'z-ai/glm-4.5-air:free',
@@ -1656,7 +1683,7 @@ export type ProviderModelsMap = {
     'glm-5',
     'glm-5-turbo',
   ];
-  readonly 'opencode-go': readonly ['glm-5', 'kimi-k2.5', 'minimax-m2.5'];
+  readonly 'opencode-go': readonly ['glm-5', 'kimi-k2.5', 'minimax-m2.5', 'minimax-m2.7'];
   readonly drun: readonly ['public/deepseek-r1', 'public/deepseek-v3', 'public/minimax-m25'];
   readonly firmware: readonly [
     'claude-haiku-4-5',
@@ -2149,6 +2176,7 @@ export type ProviderModelsMap = {
     'xai/grok-imagine-image',
     'xai/grok-imagine-image-pro',
     'xiaomi/mimo-v2-flash',
+    'xiaomi/mimo-v2-pro',
     'zai/glm-4.5',
     'zai/glm-4.5-air',
     'zai/glm-4.5v',
