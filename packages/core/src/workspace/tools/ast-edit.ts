@@ -400,7 +400,11 @@ Transforms:
 Pattern replace (for everything else):
   { pattern: "console.log($ARG)", replacement: "logger.debug($ARG)" }`,
   inputSchema: z.object({
-    path: z.string().describe('The path to the file to edit'),
+    path: z
+      .string()
+      .describe(
+        'The relative path to the file to edit (e.g., "src/index.ts"). Always use relative paths — never start with "/".',
+      ),
     pattern: z
       .string()
       .optional()

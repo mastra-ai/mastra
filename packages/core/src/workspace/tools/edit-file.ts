@@ -15,7 +15,11 @@ Usage:
 - Include enough surrounding context (multiple lines) to make old_string unique. If it still isn't unique, include more lines.
 - Use replace_all only when intentionally replacing all occurrences.`,
   inputSchema: z.object({
-    path: z.string().describe('The path to the file to edit'),
+    path: z
+      .string()
+      .describe(
+        'The relative path to the file to edit (e.g., "src/index.ts"). Always use relative paths — never start with "/".',
+      ),
     old_string: z.string().describe('The exact text to find and replace. Must be unique in the file.'),
     new_string: z.string().describe('The text to replace old_string with'),
     replace_all: z
