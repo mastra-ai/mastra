@@ -11,6 +11,7 @@ import {
   Pencil,
   Check,
   CheckCircle,
+  GaugeIcon,
 } from 'lucide-react';
 import { useMastraClient } from '@mastra/react';
 
@@ -546,7 +547,10 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                         );
                       }}
                     >
-                      Create Scorer ({filteredItems.length})
+                      <Icon size="sm">
+                        <GaugeIcon />
+                      </Icon>
+                      Create Scorer
                     </Button>
                   )}
                   <Txt variant="ui-xs" className="text-neutral3">
