@@ -21,10 +21,82 @@ export function throwApiError(message: string, status: number, detail?: string):
   throw new Error(`${message}: ${status}`);
 }
 
+// Shared mutable token state — updated by refreshes so all callers see the latest.
+let _currentToken: string | null = null;
+let _currentOrgId: string | null = null;
+let _refreshInFlight: Promise<string> | null = null;
+
+/**
+ * Set the current token/orgId used by authenticated fetch.
+ * Call this after login or getToken().
+ */
+export function setCurrentAuth(token: string, orgId?: string) {
+  _currentToken = token;
+  if (orgId !== undefined) _currentOrgId = orgId;
+}
+
+/**
+ * Get the current token, if one has been set.
+ */
+export function getCurrentToken(): string | null {
+  return _currentToken;
+}
+
+/**
+ * A fetch wrapper that auto-refreshes the token on 401 and retries once.
+ * Used by both createApiClient (openapi-fetch) and raw fetch calls.
+ */
+async function authenticatedFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+  const response = await fetch(input, init);
+
+  if (response.status !== 401 || !_currentToken) {
+    return response;
+  }
+
+  // Avoid multiple concurrent refreshes
+  if (!_refreshInFlight) {
+    _refreshInFlight = (async () => {
+      try {
+        // Dynamic import to avoid circular dependency
+        const { tryRefreshToken, loadCredentials } = await import('./credentials.js');
+        const creds = await loadCredentials();
+        if (!creds) throw new Error('No credentials');
+
+        const newToken = await tryRefreshToken(creds);
+        if (!newToken) throw new Error('Refresh failed');
+
+        _currentToken = newToken;
+        return newToken;
+      } finally {
+        _refreshInFlight = null;
+      }
+    })();
+  }
+
+  let newToken: string;
+  try {
+    newToken = await _refreshInFlight;
+  } catch {
+    // Refresh failed — return the original 401 response
+    return response;
+  }
+
+  // Retry the request with the new token
+  const retryInit = { ...init };
+  const retryHeaders = new Headers(retryInit.headers);
+  retryHeaders.set('Authorization', `Bearer ${newToken}`);
+  retryInit.headers = retryHeaders;
+
+  return fetch(input, retryInit);
+}
+
 /**
  * Create a typed API client with Bearer token + org ID headers.
+ * Uses authenticatedFetch for automatic 401 retry.
  */
 export function createApiClient(token: string, orgId?: string) {
+  setCurrentAuth(token, orgId);
+
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
   };
@@ -35,6 +107,7 @@ export function createApiClient(token: string, orgId?: string) {
   return createClient<paths>({
     baseUrl: MASTRA_PLATFORM_API_URL,
     headers,
+    fetch: authenticatedFetch,
   });
 }
 
@@ -49,4 +122,12 @@ export function authHeaders(token: string, orgId?: string): Record<string, strin
     headers['x-organization-id'] = orgId;
   }
   return headers;
+}
+
+/**
+ * Make an authenticated fetch call that auto-refreshes on 401.
+ * Use this instead of raw fetch() for platform API calls.
+ */
+export function platformFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+  return authenticatedFetch(input, init);
 }

@@ -1,4 +1,4 @@
-import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL } from '../auth/client.js';
+import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL, platformFetch } from '../auth/client.js';
 import { getToken, getCurrentOrgId, validateOrgAccess } from '../auth/credentials.js';
 
 async function getLogs(deployId: string, tail: string | undefined, token: string, orgId: string) {
@@ -24,7 +24,7 @@ async function getLogs(deployId: string, tail: string | undefined, token: string
 async function streamLogs(deployId: string, token: string, orgId: string) {
   const url = `${MASTRA_PLATFORM_API_URL}/v1/studio/deploys/${deployId}/logs/stream`;
 
-  const resp = await fetch(url, {
+  const resp = await platformFetch(url, {
     headers: {
       ...authHeaders(token, orgId),
       Accept: 'text/event-stream',
