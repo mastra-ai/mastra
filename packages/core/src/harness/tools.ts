@@ -419,7 +419,16 @@ Use this tool when:
       // Compute the full set of workspace tool names (after renames) so
       // prepareStep can selectively hide workspace tools not listed in
       // allowedWorkspaceTools while leaving all other tools untouched.
-      const allWorkspaceToolNames = workspace ? new Set(Object.keys(createWorkspaceTools(workspace))) : undefined;
+      const allWorkspaceToolNames = workspace
+        ? new Set(
+            Object.keys(
+              await createWorkspaceTools(workspace, {
+                requestContext: context?.requestContext ?? {},
+                workspace,
+              }),
+            ),
+          )
+        : undefined;
       const allowedWs = definition.allowedWorkspaceTools ? new Set(definition.allowedWorkspaceTools) : undefined;
 
       const startTime = Date.now();
