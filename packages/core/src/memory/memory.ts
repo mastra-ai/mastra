@@ -939,6 +939,7 @@ https://mastra.ai/en/docs/memory/overview`,
     const result: SerializedObservationalMemoryConfig = {
       scope: om.scope,
       shareTokenBudget: om.shareTokenBudget,
+      retrieval: om.retrieval,
     };
 
     // Extract model ID string from the top-level model

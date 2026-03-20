@@ -11,6 +11,10 @@ on:
       - 'packages/core/**'
       - '.github/workflows/test-workspaces.yml'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   setup:
     if: ${{ github.repository == 'mastra-ai/mastra' }}

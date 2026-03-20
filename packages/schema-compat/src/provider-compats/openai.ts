@@ -6,13 +6,13 @@ import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import type { Schema } from '../json-schema';
 import { jsonSchema } from '../json-schema';
-import { isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
+import { isAllOfSchema, isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
 import { transformNullToUndefined } from '../null-to-undefined';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ZodType } from '../schema.types';
 import type { ModelInformation } from '../types';
 import { ensureAllPropertiesRequired, zodToJsonSchema } from '../zod-to-json';
-import { isOptional, isObj, isUnion, isArr, isString, isNullable, isDefault } from '../zodTypes';
+import { isOptional, isObj, isUnion, isArr, isString, isNullable, isDefault, isIntersection } from '../zodTypes';
 
 export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
@@ -120,6 +120,10 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
       return this.defaultZodStringHandler(value, checks);
     }
 
+    if (isIntersection(z)(value)) {
+      return this.defaultZodIntersectionHandler(value);
+    }
+
     return this.defaultUnsupportedZodTypeHandler(value as ZodObjectV4<any> | ZodObjectV3<any>, [
       'ZodNever',
       'ZodUndefined',
@@ -177,6 +181,10 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   }
 
   preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
+    if (isAllOfSchema(schema)) {
+      this.defaultAllOfHandler(schema);
+    }
+
     if (isObjectSchema(schema)) {
       this.defaultObjectHandler(schema);
     } else if (isArraySchema(schema)) {

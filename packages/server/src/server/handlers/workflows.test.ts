@@ -24,28 +24,6 @@ import {
   STREAM_WORKFLOW_ROUTE,
 } from './workflows';
 
-vi.mock('zod', async importOriginal => {
-  const actual = (await importOriginal()) as { z?: Record<string, unknown> };
-
-  const object = vi.fn(() => ({
-    parse: vi.fn(input => input),
-    safeParse: vi.fn(input => ({ success: true, data: input })),
-  }));
-
-  const string = vi.fn(() => ({
-    parse: vi.fn(input => input),
-  }));
-
-  return {
-    ...actual,
-    z: {
-      ...(actual.z ?? {}),
-      object,
-      string,
-    },
-  };
-});
-
 function createMockWorkflow(name: string) {
   const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
   const stepA = createStep({

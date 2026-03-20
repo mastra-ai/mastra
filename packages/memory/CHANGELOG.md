@@ -1,5 +1,172 @@
 # @mastra/memory
 
+## 1.9.0
+
+### Minor Changes
+
+- Added experimental retrieval-mode recall tooling for observational memory. ([#14437](https://github.com/mastra-ai/mastra/pull/14437))
+
+  When `observationalMemory.retrieval` is enabled with `scope: 'thread'`, observation groups store colon-delimited message ranges (`startId:endId`) pointing back to the raw messages they were derived from. A `recall` tool is registered that lets agents retrieve those source messages via cursor-based pagination.
+
+  The recall tool supports:
+  - **Detail levels**: `detail: 'low'` (default) returns truncated text with part indices; `detail: 'high'` returns full content clamped to one part per call with continuation hints
+  - **Part-level fetch**: `partIndex` targets a single message part at full detail
+  - **Pagination flags**: `hasNextPage` and `hasPrevPage` in results
+  - **Token limiting**: results are capped at a token budget with `truncated` and `tokenOffset` reporting
+  - **Smart range detection**: passing a range as a cursor returns a helpful hint explaining how to extract individual IDs
+
+- Added opt-in Observational Memory thread titles. ([#14436](https://github.com/mastra-ai/mastra/pull/14436))
+
+  When enabled, the Observer suggests a short thread title and updates it as the conversation topic changes. Harness consumers can detect these updates via the new `om_thread_title_updated` event.
+
+  **Example**
+
+  ```ts
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        observation: {
+          threadTitle: true,
+        },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Improved observational memory so completed tasks and answered questions are explicitly tracked and retained, reducing repeated follow-up on resolved topics. ([#14419](https://github.com/mastra-ai/mastra/pull/14419))
+
+- Updated dependencies [[`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5), [`da93115`](https://github.com/mastra-ai/mastra/commit/da931155c1a9bc63d455d3d86b4ec984db5991fe), [`b71bce1`](https://github.com/mastra-ai/mastra/commit/b71bce144912ed33f76c52a94e594988a649c3e1), [`62d1d3c`](https://github.com/mastra-ai/mastra/commit/62d1d3cc08fe8182e7080237fd975de862ec8c91), [`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`8681ecb`](https://github.com/mastra-ai/mastra/commit/8681ecb86184d5907267000e4576cc442a9a83fc), [`28d0249`](https://github.com/mastra-ai/mastra/commit/28d0249295782277040ad1e0d243e695b7ab1ce4), [`cd7b568`](https://github.com/mastra-ai/mastra/commit/cd7b568fe427b1b4838abe744fa5367a47539db3), [`681ee1c`](https://github.com/mastra-ai/mastra/commit/681ee1c811359efd1b8bebc4bce35b9bb7b14bec), [`bb0f09d`](https://github.com/mastra-ai/mastra/commit/bb0f09dbac58401b36069f483acf5673202db5b5), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8), [`5f7e9d0`](https://github.com/mastra-ai/mastra/commit/5f7e9d0db664020e1f3d97d7d18c6b0b9d4843d0), [`d7f14c3`](https://github.com/mastra-ai/mastra/commit/d7f14c3285cd253ecdd5f58139b7b6cbdf3678b5), [`0efe12a`](https://github.com/mastra-ai/mastra/commit/0efe12a5f008a939a1aac71699486ba40138054e)]:
+  - @mastra/core@1.15.0
+  - @mastra/schema-compat@1.2.6
+
+## 1.9.0-alpha.2
+
+### Minor Changes
+
+- Added experimental retrieval-mode recall tooling for observational memory. ([#14437](https://github.com/mastra-ai/mastra/pull/14437))
+
+  When `observationalMemory.retrieval` is enabled with `scope: 'thread'`, observation groups store colon-delimited message ranges (`startId:endId`) pointing back to the raw messages they were derived from. A `recall` tool is registered that lets agents retrieve those source messages via cursor-based pagination.
+
+  The recall tool supports:
+  - **Detail levels**: `detail: 'low'` (default) returns truncated text with part indices; `detail: 'high'` returns full content clamped to one part per call with continuation hints
+  - **Part-level fetch**: `partIndex` targets a single message part at full detail
+  - **Pagination flags**: `hasNextPage` and `hasPrevPage` in results
+  - **Token limiting**: results are capped at a token budget with `truncated` and `tokenOffset` reporting
+  - **Smart range detection**: passing a range as a cursor returns a helpful hint explaining how to extract individual IDs
+
+### Patch Changes
+
+- Updated dependencies [[`da93115`](https://github.com/mastra-ai/mastra/commit/da931155c1a9bc63d455d3d86b4ec984db5991fe), [`0efe12a`](https://github.com/mastra-ai/mastra/commit/0efe12a5f008a939a1aac71699486ba40138054e)]:
+  - @mastra/core@1.15.0-alpha.4
+
+## 1.9.0-alpha.1
+
+### Minor Changes
+
+- Added opt-in Observational Memory thread titles. ([#14436](https://github.com/mastra-ai/mastra/pull/14436))
+
+  When enabled, the Observer suggests a short thread title and updates it as the conversation topic changes. Harness consumers can detect these updates via the new `om_thread_title_updated` event.
+
+  **Example**
+
+  ```ts
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        observation: {
+          threadTitle: true,
+        },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Improved observational memory so completed tasks and answered questions are explicitly tracked and retained, reducing repeated follow-up on resolved topics. ([#14419](https://github.com/mastra-ai/mastra/pull/14419))
+
+- Updated dependencies [[`cd7b568`](https://github.com/mastra-ai/mastra/commit/cd7b568fe427b1b4838abe744fa5367a47539db3), [`681ee1c`](https://github.com/mastra-ai/mastra/commit/681ee1c811359efd1b8bebc4bce35b9bb7b14bec)]:
+  - @mastra/schema-compat@1.2.6-alpha.1
+  - @mastra/core@1.15.0-alpha.1
+
+## 1.8.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5), [`b71bce1`](https://github.com/mastra-ai/mastra/commit/b71bce144912ed33f76c52a94e594988a649c3e1), [`62d1d3c`](https://github.com/mastra-ai/mastra/commit/62d1d3cc08fe8182e7080237fd975de862ec8c91), [`8681ecb`](https://github.com/mastra-ai/mastra/commit/8681ecb86184d5907267000e4576cc442a9a83fc), [`28d0249`](https://github.com/mastra-ai/mastra/commit/28d0249295782277040ad1e0d243e695b7ab1ce4), [`bb0f09d`](https://github.com/mastra-ai/mastra/commit/bb0f09dbac58401b36069f483acf5673202db5b5), [`5f7e9d0`](https://github.com/mastra-ai/mastra/commit/5f7e9d0db664020e1f3d97d7d18c6b0b9d4843d0)]:
+  - @mastra/core@1.15.0-alpha.0
+  - @mastra/schema-compat@1.2.6-alpha.0
+
+## 1.8.3
+
+### Patch Changes
+
+- Fixed observational memory triggering observation while provider-executed tool calls are still pending, which could split messages and cause errors on follow-up turns. ([#14282](https://github.com/mastra-ai/mastra/pull/14282))
+
+- Fixed working memory tool description to accurately reflect merge behavior. The previous description incorrectly stated "Set a field to null to remove it" but null values are stripped by validation before reaching the merge logic. The updated description clarifies: omit fields to preserve existing data, and pass complete arrays or omit them since arrays are replaced entirely. ([#14424](https://github.com/mastra-ai/mastra/pull/14424))
+
+- Limit oversized observational-memory tool results before they reach the observer. ([#14344](https://github.com/mastra-ai/mastra/pull/14344))
+
+  This strips large `encryptedContent` blobs and truncates remaining tool result payloads to keep observer prompts and token estimates aligned with what the model actually sees.
+
+- Improved observational memory cache stability by splitting persisted observations into separate prompt chunks using dated message boundary delimiters. ([#14367](https://github.com/mastra-ai/mastra/pull/14367))
+
+  Added `getObservationsAsOf()` utility to retrieve the observations that were active at a specific point in time. This enables filtering observation history by message creation date.
+
+  ```ts
+  import { getObservationsAsOf } from '@mastra/memory';
+
+  // Get observations that existed when a specific message was created
+  const observations = getObservationsAsOf(record.activeObservations, message.createdAt);
+  ```
+
+- Updated dependencies [[`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`4a7ce05`](https://github.com/mastra-ai/mastra/commit/4a7ce05125b8d3d260f68f1fc4a6c6866d22ba24), [`085e371`](https://github.com/mastra-ai/mastra/commit/085e3718a7d0fe9a210fe7dd1c867b9bdfe8d16b), [`b77aa19`](https://github.com/mastra-ai/mastra/commit/b77aa1981361c021f2c881bee8f0c703687f00da), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8b4ce84`](https://github.com/mastra-ai/mastra/commit/8b4ce84aed0808b9805cc4fd7147c1f8a2ef7a36), [`8d4cfe6`](https://github.com/mastra-ai/mastra/commit/8d4cfe6b9a7157d3876206227ec9f04cde6dbc4a), [`dd6ca1c`](https://github.com/mastra-ai/mastra/commit/dd6ca1cdea3b8b6182f4cf61df41070ba0cc0deb), [`ce26fe2`](https://github.com/mastra-ai/mastra/commit/ce26fe2166dd90254f8bee5776e55977143e97de), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`4cb4edf`](https://github.com/mastra-ai/mastra/commit/4cb4edf3c909d197ec356c1790d13270514ffef6), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a)]:
+  - @mastra/core@1.14.0
+  - @mastra/schema-compat@1.2.5
+
+## 1.8.3-alpha.2
+
+### Patch Changes
+
+- Fixed working memory tool description to accurately reflect merge behavior. The previous description incorrectly stated "Set a field to null to remove it" but null values are stripped by validation before reaching the merge logic. The updated description clarifies: omit fields to preserve existing data, and pass complete arrays or omit them since arrays are replaced entirely. ([#14424](https://github.com/mastra-ai/mastra/pull/14424))
+
+- Updated dependencies [[`8b4ce84`](https://github.com/mastra-ai/mastra/commit/8b4ce84aed0808b9805cc4fd7147c1f8a2ef7a36), [`8d4cfe6`](https://github.com/mastra-ai/mastra/commit/8d4cfe6b9a7157d3876206227ec9f04cde6dbc4a), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a)]:
+  - @mastra/core@1.14.0-alpha.3
+
+## 1.8.3-alpha.1
+
+### Patch Changes
+
+- Fixed observational memory triggering observation while provider-executed tool calls are still pending, which could split messages and cause errors on follow-up turns. ([#14282](https://github.com/mastra-ai/mastra/pull/14282))
+
+- Limit oversized observational-memory tool results before they reach the observer. ([#14344](https://github.com/mastra-ai/mastra/pull/14344))
+
+  This strips large `encryptedContent` blobs and truncates remaining tool result payloads to keep observer prompts and token estimates aligned with what the model actually sees.
+
+- Improved observational memory cache stability by splitting persisted observations into separate prompt chunks using dated message boundary delimiters. ([#14367](https://github.com/mastra-ai/mastra/pull/14367))
+
+  Added `getObservationsAsOf()` utility to retrieve the observations that were active at a specific point in time. This enables filtering observation history by message creation date.
+
+  ```ts
+  import { getObservationsAsOf } from '@mastra/memory';
+
+  // Get observations that existed when a specific message was created
+  const observations = getObservationsAsOf(record.activeObservations, message.createdAt);
+  ```
+
+- Updated dependencies [[`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f)]:
+  - @mastra/core@1.14.0-alpha.2
+
+## 1.8.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`4a7ce05`](https://github.com/mastra-ai/mastra/commit/4a7ce05125b8d3d260f68f1fc4a6c6866d22ba24), [`085e371`](https://github.com/mastra-ai/mastra/commit/085e3718a7d0fe9a210fe7dd1c867b9bdfe8d16b), [`ce26fe2`](https://github.com/mastra-ai/mastra/commit/ce26fe2166dd90254f8bee5776e55977143e97de), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1)]:
+  - @mastra/core@1.13.3-alpha.0
+  - @mastra/schema-compat@1.2.5-alpha.0
+
 ## 1.8.2
 
 ### Patch Changes

@@ -138,6 +138,21 @@ function compressJsonSchema(schema: any, depth: number = 0): any {
     return schema.type || 'object';
   }
 
+  const compositionKeys = ['oneOf', 'anyOf', 'allOf'].filter(key => Array.isArray(schema[key]));
+  if (compositionKeys.length > 0) {
+    const compressed: Record<string, any> = {};
+
+    for (const key of compositionKeys) {
+      compressed[key] = schema[key].map((entry: any) => compressJsonSchema(entry, depth + 1));
+    }
+
+    if (typeof schema.type === 'string') {
+      compressed.type = schema.type;
+    }
+
+    return compressed;
+  }
+
   if (schema.type !== 'object' || !schema.properties) {
     // For non-object schemas, just return the type
     return schema.type || schema;
@@ -204,7 +219,11 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
       ? keysToStrip
       : new Set(Array.isArray(keysToStrip) ? keysToStrip : Object.keys(keysToStrip));
 
-  const seen = new WeakSet<any>();
+  // Track objects on the current ancestor path to detect true circular
+  // references (A → B → A) without false-flagging shared references
+  // (A → X, B → X).  A shared (non-circular) reference is simply
+  // serialized again in each location where it appears.
+  const ancestors = new WeakSet<any>();
 
   function helper(val: any, depth: number): any {
     if (depth > maxDepth) {
@@ -248,79 +267,111 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
       };
     }
 
-    // Handle circular references
+    // Handle circular references — only flag when the same object is an
+    // ancestor of the current node (true cycle), not merely seen elsewhere.
     if (typeof val === 'object') {
-      if (seen.has(val)) {
+      if (ancestors.has(val)) {
         return '[Circular]';
       }
-      seen.add(val);
+      ancestors.add(val);
     }
 
-    // Handle arrays - enforce length limit
-    if (Array.isArray(val)) {
-      const limitedArray = val.slice(0, maxArrayLength);
-      const cleaned = limitedArray.map(item => helper(item, depth + 1));
-      if (val.length > maxArrayLength) {
-        cleaned.push(`[…${val.length - maxArrayLength} more items]`);
+    try {
+      // Handle arrays - enforce length limit
+      if (Array.isArray(val)) {
+        const cleaned = [];
+
+        for (let i = 0; i < Math.min(val.length, maxArrayLength); i++) {
+          try {
+            cleaned.push(helper(val[i], depth + 1));
+          } catch (error) {
+            cleaned.push(`[${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`);
+          }
+        }
+
+        if (val.length > maxArrayLength) {
+          cleaned.push(`[…${val.length - maxArrayLength} more items]`);
+        }
+        return cleaned;
       }
-      return cleaned;
-    }
 
-    // Handle Buffer and typed arrays - don't serialize large binary data
-    if (typeof Buffer !== 'undefined' && Buffer.isBuffer(val)) {
-      return `[Buffer length=${val.length}]`;
-    }
+      // Handle Buffer and typed arrays - don't serialize large binary data
+      if (typeof Buffer !== 'undefined' && Buffer.isBuffer(val)) {
+        return `[Buffer length=${val.length}]`;
+      }
 
-    if (ArrayBuffer.isView(val)) {
-      const ctor = (val as any).constructor?.name ?? 'TypedArray';
-      const byteLength = (val as any).byteLength ?? '?';
-      return `[${ctor} byteLength=${byteLength}]`;
-    }
+      if (ArrayBuffer.isView(val)) {
+        const ctor = (val as any).constructor?.name ?? 'TypedArray';
+        const byteLength = (val as any).byteLength ?? '?';
+        return `[${ctor} byteLength=${byteLength}]`;
+      }
 
-    if (val instanceof ArrayBuffer) {
-      return `[ArrayBuffer byteLength=${val.byteLength}]`;
-    }
+      if (val instanceof ArrayBuffer) {
+        return `[ArrayBuffer byteLength=${val.byteLength}]`;
+      }
 
-    // Handle objects with serializeForSpan() method - use their custom trace serialization
-    if (typeof val.serializeForSpan === 'function') {
+      // Handle objects with serializeForSpan() method - use their custom trace serialization
+      let serializeForSpan;
       try {
-        return helper(val.serializeForSpan(), depth);
-      } catch {
-        // If serializeForSpan() fails, fall through to default object handling
-      }
-    }
-
-    // Handle JSON Schema objects - compress to a more readable format
-    // Pass the compressed result back through helper to apply size limits
-    if (isJsonSchema(val)) {
-      return helper(compressJsonSchema(val), depth);
-    }
-
-    // Handle objects - enforce key limit
-    const cleaned: Record<string, any> = {};
-    const entries = Object.entries(val);
-    let keyCount = 0;
-
-    for (const [key, v] of entries) {
-      if (stripSet.has(key)) {
-        continue;
-      }
-
-      if (keyCount >= maxObjectKeys) {
-        cleaned['__truncated'] = `${entries.length - keyCount} more keys omitted`;
-        break;
-      }
-
-      try {
-        cleaned[key] = helper(v, depth + 1);
-        keyCount++;
+        serializeForSpan = val.serializeForSpan;
       } catch (error) {
-        cleaned[key] = `[${error instanceof Error ? error.message : String(error)}]`;
-        keyCount++;
+        return `[serializeForSpan failed: ${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`;
+      }
+
+      if (typeof serializeForSpan === 'function') {
+        try {
+          return helper(serializeForSpan.call(val), depth);
+        } catch (error) {
+          return `[serializeForSpan failed: ${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`;
+        }
+      }
+
+      // Handle JSON Schema objects - compress to a more readable format
+      // Pass the compressed result back through helper to apply size limits
+      let looksLikeJsonSchema = false;
+      try {
+        looksLikeJsonSchema = isJsonSchema(val);
+      } catch {
+        looksLikeJsonSchema = false;
+      }
+
+      if (looksLikeJsonSchema) {
+        try {
+          const compressed = compressJsonSchema(val);
+          return compressed === val ? '[JSONSchema]' : helper(compressed, depth);
+        } catch {
+          // Fall back to guarded object traversal below.
+        }
+      }
+
+      // Handle objects - enforce key limit
+      const cleaned: Record<string, any> = {};
+      const keys = Object.keys(val).filter(key => !stripSet.has(key));
+      let keyCount = 0;
+
+      for (const key of keys) {
+        if (keyCount >= maxObjectKeys) {
+          cleaned['__truncated'] = `${keys.length - keyCount} more keys omitted`;
+          break;
+        }
+
+        try {
+          cleaned[key] = helper((val as Record<string, unknown>)[key], depth + 1);
+          keyCount++;
+        } catch (error) {
+          cleaned[key] = `[${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`;
+          keyCount++;
+        }
+      }
+
+      return cleaned;
+    } finally {
+      // Remove from ancestor set when leaving this node so parallel
+      // branches can serialize the same shared reference independently.
+      if (typeof val === 'object' && val !== null) {
+        ancestors.delete(val);
       }
     }
-
-    return cleaned;
   }
 
   return helper(value, 0);
