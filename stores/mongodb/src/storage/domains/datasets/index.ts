@@ -283,7 +283,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
   async deleteDataset({ id }: { id: string }): Promise<void> {
     try {
-      // Detach experiments — wrapped in try/catch because experiment collections may not exist
+      // Detach experiments — tolerate missing collections (NamespaceNotFound)
+      // but rethrow real operational failures
       try {
         const experimentsCollection = await this.getCollection(TABLE_EXPERIMENTS);
         const experimentIds = await experimentsCollection.find({ datasetId: id }, { projection: { id: 1 } }).toArray();
@@ -295,8 +296,10 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
           });
         }
         await experimentsCollection.updateMany({ datasetId: id }, { $set: { datasetId: null, datasetVersion: null } });
-      } catch {
-        /* experiment collections may not exist */
+      } catch (e: unknown) {
+        // Only swallow NamespaceNotFound (code 26) — collection doesn't exist yet
+        const isNamespaceNotFound = e instanceof Error && 'code' in e && (e as { code: number }).code === 26;
+        if (!isNamespaceNotFound) throw e;
       }
 
       // Cascade delete
