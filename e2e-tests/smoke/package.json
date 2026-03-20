@@ -1,0 +1,22 @@
+{
+  "name": "e2e-smoke-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npx mastra build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mastra/core": "alpha",
+    "@mastra/libsql": "alpha"
+  },
+  "devDependencies": {
+    "mastra": "alpha",
+    "vitest": "^4.1.0",
+    "typescript": "^5.8.0",
+    "zod": "^3.24.0",
+    "get-port": "^7.1.0",
+    "execa": "^9.6.1"
+  }
+}
