@@ -1,5 +1,22 @@
 # @mastra/core
 
+## 1.15.0-alpha.4
+
+### Patch Changes
+
+- Added experimental retrieval-mode recall tooling for observational memory. ([#14437](https://github.com/mastra-ai/mastra/pull/14437))
+
+  When `observationalMemory.retrieval` is enabled with `scope: 'thread'`, observation groups store colon-delimited message ranges (`startId:endId`) pointing back to the raw messages they were derived from. A `recall` tool is registered that lets agents retrieve those source messages via cursor-based pagination.
+
+  The recall tool supports:
+  - **Detail levels**: `detail: 'low'` (default) returns truncated text with part indices; `detail: 'high'` returns full content clamped to one part per call with continuation hints
+  - **Part-level fetch**: `partIndex` targets a single message part at full detail
+  - **Pagination flags**: `hasNextPage` and `hasPrevPage` in results
+  - **Token limiting**: results are capped at a token budget with `truncated` and `tokenOffset` reporting
+  - **Smart range detection**: passing a range as a cursor returns a helpful hint explaining how to extract individual IDs
+
+- Fixed a bug where workflow-based processor execution would pass null stream parts to subsequent processors. When a processor's processOutputStream returns null (e.g., a guardrail filtering a part), the next processor in the chain would receive null as the part, causing potential errors. The null guard now matches the inline processor path behavior, skipping processors when the part is null. ([#14514](https://github.com/mastra-ai/mastra/pull/14514))
+
 ## 1.15.0-alpha.3
 
 ### Minor Changes

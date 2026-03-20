@@ -1,3 +1,5 @@
+import { injectAnchorIds, stripEphemeralAnchorIds } from './anchor-ids';
+import { reconcileObservationGroupsFromReflection, renderObservationGroupsForReflection } from './observation-groups';
 import {
   OBSERVER_EXTRACTION_INSTRUCTIONS,
   OBSERVER_OUTPUT_FORMAT_BASE,
@@ -207,10 +209,12 @@ export function buildReflectorPrompt(
 ): string {
   // Normalize: boolean `true` maps to level 1 for backwards compat
   const level: 0 | 1 | 2 | 3 = typeof compressionLevel === 'number' ? compressionLevel : compressionLevel ? 1 : 0;
+  const reflectionView = renderObservationGroupsForReflection(observations) ?? observations;
+  const anchoredObservations = injectAnchorIds(reflectionView);
 
   let prompt = `## OBSERVATIONS TO REFLECT ON
 
-${observations}
+${anchoredObservations}
 
 ---
 
@@ -242,7 +246,7 @@ ${guidance}`;
  * Parse the Reflector's output to extract observations, current task, and suggested response.
  * Uses XML tag parsing for structured extraction.
  */
-export function parseReflectorOutput(output: string): ReflectorResult {
+export function parseReflectorOutput(output: string, sourceObservations?: string): ReflectorResult {
   // Check for degenerate repetition before parsing
   if (detectDegenerateRepetition(output)) {
     return {
@@ -252,13 +256,13 @@ export function parseReflectorOutput(output: string): ReflectorResult {
   }
 
   const parsed = parseReflectorSectionXml(output);
-
-  // Return observations WITHOUT current-task/suggested-response tags
-  // Those are stored separately in thread metadata and injected dynamically
-  const observations = sanitizeObservationLines(parsed.observations || '');
+  const sanitizedObservations = sanitizeObservationLines(stripEphemeralAnchorIds(parsed.observations || ''));
+  const reconciledObservations = sourceObservations
+    ? reconcileObservationGroupsFromReflection(sanitizedObservations, sourceObservations)
+    : null;
 
   return {
-    observations,
+    observations: reconciledObservations ?? sanitizedObservations,
     suggestedContinuation: parsed.suggestedResponse || undefined,
     // Note: Reflector's currentTask is not used - thread metadata preserves per-thread tasks
   };

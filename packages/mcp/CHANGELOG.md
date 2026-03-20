@@ -1,5 +1,14 @@
 # @mastra/mcp
 
+## 1.3.1-alpha.1
+
+### Patch Changes
+
+- Fixed MCP tool results to preserve the standard CallToolResult envelope shape. Previously, content was extracted from the envelope which broke consumers expecting the standard MCP result format. Output schema validation is now handled internally by the MCP SDK's AJV validator instead of Zod, preventing unrecognized keys from being stripped. ([#14519](https://github.com/mastra-ai/mastra/pull/14519))
+
+- Updated dependencies [[`da93115`](https://github.com/mastra-ai/mastra/commit/da931155c1a9bc63d455d3d86b4ec984db5991fe), [`0efe12a`](https://github.com/mastra-ai/mastra/commit/0efe12a5f008a939a1aac71699486ba40138054e)]:
+  - @mastra/core@1.15.0-alpha.4
+
 ## 1.3.1-alpha.0
 
 ### Patch Changes
