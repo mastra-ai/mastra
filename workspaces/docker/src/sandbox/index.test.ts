@@ -26,7 +26,7 @@ import { DockerSandbox } from './index';
 // Mock Setup
 // =============================================================================
 
-const { mockContainer, mockExec, mockStream, mockDocker, resetMockDefaults } = vi.hoisted(() => {
+const { mockContainer, mockExec, mockDocker, resetMockDefaults } = vi.hoisted(() => {
   const mockStream = {
     on: vi.fn(),
     write: vi.fn(),

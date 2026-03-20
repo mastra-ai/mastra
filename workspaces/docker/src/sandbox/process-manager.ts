@@ -101,7 +101,7 @@ class DockerProcessHandle extends ProcessHandle {
       const msg = error instanceof Error ? error.message.toLowerCase() : '';
       if (!msg.includes('no such process') && !msg.includes('esrch')) {
         // Unexpected error — not fatal but worth noting for debugging
-        console.debug(`[DockerProcessManager] kill(${this.pid}) failed unexpectedly:`, error);
+        console.warn(`[DockerProcessManager] kill(${this.pid}) failed unexpectedly:`, error);
       }
       return false;
     }
@@ -253,9 +253,10 @@ export class DockerProcessManager extends SandboxProcessManager {
     return handle;
   }
 
-  /** Clear all tracked process handles (e.g., after container stop/destroy) */
+  /** Clear all tracked process handles and release the container reference (e.g., after container stop/destroy) */
   reset(): void {
     this._tracked.clear();
+    this._container = null;
   }
 
   async list(): Promise<ProcessInfo[]> {
