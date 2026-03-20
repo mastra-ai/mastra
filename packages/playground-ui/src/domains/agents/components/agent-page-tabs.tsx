@@ -74,7 +74,7 @@ export function AgentPageTabs({
           href={`/agents/${agentId}/playground`}
           active={activeTab === 'versions'}
           icon={<GitBranch />}
-          label="Versions"
+          label="Editor"
         />
       )}
       {showObservability && (
