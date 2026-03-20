@@ -1,11 +1,16 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { setupDummyApiKeys } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest';
 import { allTools, mcpServerName } from '../__fixtures__/fire-crawl-complex-schema';
 import type { LogHandler, LogMessage } from './client';
+
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['openai']);
 import { MCPClient } from './configuration';
 
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
