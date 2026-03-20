@@ -383,6 +383,7 @@ describe('Long session: observation and reflection lifecycle', () => {
     let totalStatusParts = 0;
     const turnsWithBufferingStart = new Set<number>();
     const turnsWithActivation = new Set<number>();
+    const turnsWithReflectionActivation = new Set<number>();
     const turnsWithObservation = new Set<number>();
     let firstBufferingAnimationTurn = -1;
     // Collect all status parts for post-loop assertions
@@ -409,6 +410,17 @@ describe('Long session: observation and reflection lifecycle', () => {
       // Reset shared state for new turn (processor creates a new turn)
       Object.keys(state).forEach(k => delete state[k]);
 
+      // Production creates one RequestContext per invocation and reuses it
+      // across all processInputStep calls and processOutputResult within the turn
+      const turnCtx = makeCtx();
+
+      // Production always has system messages in the messageList (agent instructions).
+      // These contribute to context token counting and affect threshold calculations.
+      messageList.addSystem(
+        'You are Mastra Code, an AI coding assistant. Help the user with software engineering tasks. You have access to tools for reading files, searching code, editing files, and running commands.',
+        'system',
+      );
+
       // ── Add user message ──
       const userMsgId = `user-${turnNum}`;
       const userText = generateFiller(spec.tokensPerMessage, `Turn ${turnNum} user question`);
@@ -430,7 +442,7 @@ describe('Long session: observation and reflection lifecycle', () => {
       await inputProcessor.processInputStep({
         messageList,
         messages: [],
-        requestContext: makeCtx(),
+        requestContext: turnCtx,
         stepNumber: 0,
         state,
         steps: [],
@@ -478,7 +490,7 @@ describe('Long session: observation and reflection lifecycle', () => {
         await inputProcessor.processInputStep({
           messageList,
           messages: [],
-          requestContext: makeCtx(),
+          requestContext: turnCtx,
           stepNumber: step,
           state,
           steps: [],
@@ -511,7 +523,7 @@ describe('Long session: observation and reflection lifecycle', () => {
       await outputProcessor.processOutputResult({
         messageList,
         messages: messageList.get.response.db(),
-        requestContext: makeCtx(),
+        requestContext: turnCtx,
         state,
         abort,
         result: {} as any,
@@ -529,6 +541,9 @@ describe('Long session: observation and reflection lifecycle', () => {
       const turnActivations = turnParts.filter(
         p => p?.type === 'data-om-activation' && p?.data?.operationType === 'observation',
       );
+      const turnReflectionActivations = turnParts.filter(
+        p => p?.type === 'data-om-activation' && p?.data?.operationType === 'reflection',
+      );
       const turnBufferingStarts = turnParts.filter(p => p?.type === 'data-om-buffering-start');
       const turnObsStarts = turnParts.filter(
         p => p?.type === 'data-om-observation-start' || p?.type === 'data-om-sync-observation-start',
@@ -542,6 +557,7 @@ describe('Long session: observation and reflection lifecycle', () => {
 
       if (turnBufferingStarts.length > 0) turnsWithBufferingStart.add(turnNum);
       if (turnActivations.length > 0) turnsWithActivation.add(turnNum);
+      if (turnReflectionActivations.length > 0) turnsWithReflectionActivation.add(turnNum);
       if (turnObsStarts.length > 0 || turnObsEnds.length > 0) turnsWithObservation.add(turnNum);
 
       // Check for buffering animation in status parts
@@ -656,11 +672,19 @@ describe('Long session: observation and reflection lifecycle', () => {
     const firstObsTurn = turnsWithObservation.size > 0 ? Math.min(...turnsWithObservation) : Infinity;
     expect(firstBufferingTurn).toBeLessThan(firstObsTurn);
 
-    // ── Stream event: data-om-activation ──
+    // ── Stream event: data-om-activation (observation) ──
     expect(turnsWithActivation.size).toBeGreaterThanOrEqual(1);
     // Can't activate before buffering starts
     const firstActivationTurn = Math.min(...turnsWithActivation);
     expect(firstActivationTurn).toBeGreaterThanOrEqual(firstBufferingTurn);
+
+    // ── Stream event: data-om-activation (reflection) ──
+    // Reflections happened (9+ reflector calls), so at least one should have been
+    // an async buffered reflection that got activated with a marker.
+    expect(turnsWithReflectionActivation.size).toBeGreaterThan(0);
+    // Reflection activations should not happen before observations start
+    const firstReflectionActivationTurn = Math.min(...turnsWithReflectionActivation);
+    expect(firstReflectionActivationTurn).toBeGreaterThanOrEqual(firstObservationAtTurn);
 
     // ── Stream event: observation start/end markers ──
     expect(turnsWithObservation.size).toBeGreaterThanOrEqual(1);
@@ -686,7 +710,9 @@ describe('Long session: observation and reflection lifecycle', () => {
   Status parts emitted: ${totalStatusParts}
   Turns with buffering animation: ${firstBufferingAnimationTurn > 0 ? `first at turn ${firstBufferingAnimationTurn}` : 'none'}
   Turns with buffering-start marker: ${[...turnsWithBufferingStart].sort((a, b) => a - b).join(', ') || 'none'}
-  Turns with activation marker: ${[...turnsWithActivation].sort((a, b) => a - b).join(', ') || 'none'}
+  Turns with obs activation marker: ${[...turnsWithActivation].sort((a, b) => a - b).join(', ') || 'none'}
+  First reflection activation at turn: ${firstReflectionActivationTurn}
+  Turns with refl activation marker: ${[...turnsWithReflectionActivation].sort((a, b) => a - b).join(', ') || 'none'}
   Turns with observation markers: ${[...turnsWithObservation].sort((a, b) => a - b).join(', ') || 'none'}`);
   }, 60_000);
 });
