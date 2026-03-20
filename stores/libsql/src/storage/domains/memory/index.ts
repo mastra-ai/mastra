@@ -959,13 +959,24 @@ export class MemoryLibSQL extends MemoryStorage {
     return updatedResource;
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     try {
+      const keys: Record<string, any> = { id: threadId };
+      if (resourceId) {
+        keys.resourceId = resourceId;
+      }
+
       const result = await this.#db.select<
         Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }
       >({
         tableName: TABLE_THREADS,
-        keys: { id: threadId },
+        keys,
       });
 
       if (!result) {

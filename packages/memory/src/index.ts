@@ -137,7 +137,7 @@ export class Memory extends MastraMemory {
       (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
       config.semanticRecall === true;
 
-    const thread = await this.getThreadById({ threadId });
+    const thread = await this.getThreadById({ threadId, resourceId });
 
     // For resource-scoped semantic recall, we don't need to validate that the specific thread exists
     // because we're searching across all threads for the resource
@@ -316,9 +316,15 @@ export class Memory extends MastraMemory {
     return { messages, usage, total, page: resultPage, perPage: resultPerPage, hasMore };
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     const memoryStore = await this.getMemoryStore();
-    return memoryStore.getThreadById({ threadId });
+    return memoryStore.getThreadById({ threadId, resourceId });
   }
 
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
