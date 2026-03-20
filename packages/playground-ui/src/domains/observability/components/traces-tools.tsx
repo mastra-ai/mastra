@@ -1,4 +1,4 @@
-import { DateTimePicker } from '@/ds/components/DateTimePicker';
+import { DatePicker, TimePicker } from '@/ds/components/DateTimePicker';
 import { Button } from '@/ds/components/Button/Button';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
@@ -6,8 +6,9 @@ import { Searchbar } from '@/ds/components/Searchbar/searchbar';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/ds/components/Switch/switch';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
+import { format, isValid } from 'date-fns';
 import { CalendarIcon, FilterIcon, XIcon, SearchIcon } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { EntityType } from '@mastra/core/observability';
 
 // UI-specific entity options that map to API EntityType values
@@ -19,7 +20,7 @@ export type EntityOptions =
 
 export type MetadataFilter = { key: string; value: string };
 
-export type DatePreset = 'last-24h' | 'last-3d' | 'last-7d' | 'last-14d' | 'last-30d' | 'custom';
+export type DatePreset = 'all' | 'last-24h' | 'last-3d' | 'last-7d' | 'last-14d' | 'last-30d' | 'custom';
 
 /** All string-valued filter fields from tracesFilterSchema (beyond entity/status/tags/metadata) */
 const CONTEXT_FILTER_CATEGORIES: { id: string; label: string; group: string }[] = [
@@ -52,6 +53,7 @@ const CONTEXT_FILTER_CATEGORIES: { id: string; label: string; group: string }[] 
 ];
 
 const DATE_PRESETS: { value: DatePreset; label: string; ms?: number }[] = [
+  { value: 'all', label: 'All' },
   { value: 'last-24h', label: 'Last 24 hours', ms: 24 * 60 * 60 * 1000 },
   { value: 'last-3d', label: 'Last 3 days', ms: 3 * 24 * 60 * 60 * 1000 },
   { value: 'last-7d', label: 'Last 7 days', ms: 7 * 24 * 60 * 60 * 1000 },
@@ -59,6 +61,12 @@ const DATE_PRESETS: { value: DatePreset; label: string; ms?: number }[] = [
   { value: 'last-30d', label: 'Last 30 days', ms: 30 * 24 * 60 * 60 * 1000 },
   { value: 'custom', label: 'Custom range...' },
 ];
+
+function buildDateWithTime(date: Date, timeStr: string): Date | null {
+  const dateStr = format(date, 'yyyy-MM-dd');
+  const combined = new Date(`${dateStr} ${timeStr}`);
+  return isValid(combined) ? combined : null;
+}
 
 /** SubContent that renders via Portal so it escapes parent overflow/backdrop-filter */
 const subContentClass = cn(
@@ -79,6 +87,32 @@ function PortalSubContent({
         {children}
       </DropdownMenuPrimitive.SubContent>
     </DropdownMenuPrimitive.Portal>
+  );
+}
+
+/** Minimum items before showing a search bar in a submenu */
+const SUBMENU_SEARCH_THRESHOLD = 6;
+
+function SubMenuSearch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className={cn('px-2 pb-2')}>
+      <div
+        className={cn(
+          'flex items-center gap-2 border border-border1 rounded-md px-2 py-1',
+          'focus-within:border-neutral2',
+        )}
+      >
+        <SearchIcon className={cn('text-neutral3 h-3.5 w-3.5 shrink-0')} />
+        <input
+          type="text"
+          placeholder="Search..."
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          onKeyDown={e => e.stopPropagation()}
+          className={cn('bg-transparent text-ui-sm text-neutral4 placeholder:text-neutral3 outline-none w-full')}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -123,7 +157,7 @@ export function TracesTools({
   onGroupByThreadChange,
   searchQuery,
   onSearchChange,
-  datePreset = 'last-24h',
+  datePreset = 'all',
   onDatePresetChange,
   selectedTags,
   availableTags,
@@ -139,12 +173,29 @@ export function TracesTools({
 }: TracesToolsProps) {
   const [filterSearch, setFilterSearch] = useState('');
   const [customRangeOpen, setCustomRangeOpen] = useState(false);
+  const [draftDateFrom, setDraftDateFrom] = useState<Date | undefined>(selectedDateFrom);
+  const [draftDateTo, setDraftDateTo] = useState<Date | undefined>(selectedDateTo);
+  const [draftTimeFrom, setDraftTimeFrom] = useState('12:00 AM');
+  const [draftTimeTo, setDraftTimeTo] = useState('11:59 PM');
+  const [entitySearch, setEntitySearch] = useState('');
+  const [tagSearch, setTagSearch] = useState('');
+  const [metadataKeySearch, setMetadataKeySearch] = useState('');
+  const [subValueSearch, setSubValueSearch] = useState('');
+  const [contextFieldSearch, setContextFieldSearch] = useState('');
 
-  const datePresetLabel = DATE_PRESETS.find(p => p.value === datePreset)?.label ?? 'Last 24 hours';
+  const resetSubSearch = useCallback((setter: (v: string) => void) => (open: boolean) => {
+    if (!open) setter('');
+  }, []);
+
+  const datePresetLabel = DATE_PRESETS.find(p => p.value === datePreset)?.label ?? 'All';
 
   const handleDatePresetSelect = (preset: DatePreset) => {
     onDatePresetChange?.(preset);
     if (preset === 'custom') {
+      setDraftDateFrom(selectedDateFrom);
+      setDraftDateTo(selectedDateTo);
+      setDraftTimeFrom('12:00 AM');
+      setDraftTimeTo('11:59 PM');
       setCustomRangeOpen(true);
       return;
     }
@@ -152,7 +203,23 @@ export function TracesTools({
     if (entry?.ms) {
       onDateChange?.(new Date(Date.now() - entry.ms), 'from');
       onDateChange?.(undefined, 'to');
+    } else {
+      // "All" — no date filtering
+      onDateChange?.(undefined, 'from');
+      onDateChange?.(undefined, 'to');
     }
+  };
+
+  const applyCustomRange = () => {
+    const fromDate = draftDateFrom
+      ? buildDateWithTime(draftDateFrom, draftTimeFrom) ?? draftDateFrom
+      : undefined;
+    const toDate = draftDateTo
+      ? buildDateWithTime(draftDateTo, draftTimeTo) ?? draftDateTo
+      : undefined;
+    onDateChange?.(fromDate, 'from');
+    onDateChange?.(toDate, 'to');
+    setCustomRangeOpen(false);
   };
 
   const metadataCount = Object.keys(selectedMetadata ?? {}).length;
@@ -219,72 +286,83 @@ export function TracesTools({
           </div>
         )}
 
-        {/* Date Preset Dropdown */}
-        <DropdownMenu>
-          <DropdownMenu.Trigger asChild>
-            <Button variant="outline" size="md" disabled={isLoading}>
-              <CalendarIcon />
-              {datePresetLabel}
-            </Button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="start">
-            {DATE_PRESETS.map(preset => (
-              <DropdownMenu.Item key={preset.value} onSelect={() => handleDatePresetSelect(preset.value)}>
-                {preset.label}
-              </DropdownMenu.Item>
-            ))}
-          </DropdownMenu.Content>
-        </DropdownMenu>
-
-        {/* Custom Range Popover */}
-        {datePreset === 'custom' && (
+        {/* Date Preset / Custom Range */}
+        {datePreset === 'custom' ? (
           <Popover open={customRangeOpen} onOpenChange={setCustomRangeOpen}>
             <PopoverTrigger asChild>
               <Button variant="outline" size="md" disabled={isLoading}>
+                <CalendarIcon />
                 {selectedDateFrom ? selectedDateFrom.toLocaleDateString() : 'Start'} {' \u2013 '}
                 {selectedDateTo ? selectedDateTo.toLocaleDateString() : 'End'}
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="start" className={cn('w-auto p-4')}>
-              <div className={cn('grid gap-3')}>
-                <span className={cn('text-ui-sm text-neutral3 font-medium')}>Custom date range</span>
-                <div className={cn('flex items-center gap-3')}>
-                  <DateTimePicker
-                    placeholder="Start"
-                    value={selectedDateFrom}
-                    maxValue={selectedDateTo}
-                    onValueChange={date => onDateChange?.(date, 'from')}
-                    defaultTimeStrValue="12:00 AM"
+            <PopoverContent align="start" className={cn('w-auto p-0')}>
+              <div className={cn('flex')}>
+                <div className={cn('border-r border-border1')}>
+                  <span className={cn('text-ui-sm text-neutral3 font-medium px-4 pt-3 block')}>Start</span>
+                  <DatePicker
+                    mode="single"
+                    selected={draftDateFrom}
+                    month={draftDateFrom}
+                    onSelect={setDraftDateFrom}
                     disabled={isLoading}
+                    toDate={draftDateTo}
                   />
-                  <span className={cn('text-neutral3')}>&ndash;</span>
-                  <DateTimePicker
-                    placeholder="End"
-                    value={selectedDateTo}
-                    minValue={selectedDateFrom}
-                    onValueChange={date => onDateChange?.(date, 'to')}
-                    defaultTimeStrValue="11:59 PM"
-                    disabled={isLoading}
+                  <TimePicker
+                    className="mx-4 mb-3 w-auto"
+                    defaultValue={draftTimeFrom}
+                    onValueChange={setDraftTimeFrom}
                   />
                 </div>
-                <div className={cn('flex justify-between items-center')}>
-                  <button
-                    type="button"
-                    className={cn('text-ui-sm text-neutral3 hover:text-neutral4')}
-                    onClick={() => {
-                      setCustomRangeOpen(false);
-                      handleDatePresetSelect('last-24h');
-                    }}
-                  >
-                    &larr; Presets
-                  </button>
-                  <Button variant="primary" size="sm" onClick={() => setCustomRangeOpen(false)}>
-                    Apply
-                  </Button>
+                <div>
+                  <span className={cn('text-ui-sm text-neutral3 font-medium px-4 pt-3 block')}>End</span>
+                  <DatePicker
+                    mode="single"
+                    selected={draftDateTo}
+                    month={draftDateTo}
+                    onSelect={setDraftDateTo}
+                    disabled={isLoading}
+                    fromDate={draftDateFrom}
+                  />
+                  <TimePicker
+                    className="mx-4 mb-3 w-auto"
+                    defaultValue={draftTimeTo}
+                    onValueChange={setDraftTimeTo}
+                  />
                 </div>
+              </div>
+              <div className={cn('flex justify-between items-center px-4 pb-3')}>
+                <button
+                  type="button"
+                  className={cn('text-ui-sm text-neutral3 hover:text-neutral4')}
+                  onClick={() => {
+                    handleDatePresetSelect('all');
+                  }}
+                >
+                  &larr; Presets
+                </button>
+                <Button variant="primary" size="sm" onClick={applyCustomRange}>
+                  Apply
+                </Button>
               </div>
             </PopoverContent>
           </Popover>
+        ) : (
+          <DropdownMenu>
+            <DropdownMenu.Trigger asChild>
+              <Button variant="outline" size="md" disabled={isLoading}>
+                <CalendarIcon />
+                {datePresetLabel}
+              </Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="start">
+              {DATE_PRESETS.map(preset => (
+                <DropdownMenu.Item key={preset.value} onSelect={() => handleDatePresetSelect(preset.value)}>
+                  {preset.label}
+                </DropdownMenu.Item>
+              ))}
+            </DropdownMenu.Content>
+          </DropdownMenu>
         )}
 
         {/* Filter Dropdown */}
@@ -355,7 +433,7 @@ export function TracesTools({
 
             {/* Entity Type */}
             {filterCategories.some(c => c.id === 'entity-type') && entityOptions && (
-              <DropdownMenu.Sub>
+              <DropdownMenu.Sub onOpenChange={resetSubSearch(setEntitySearch)}>
                 <DropdownMenu.SubTrigger>
                   Entity Type
                   {selectedEntity?.value !== 'all' && (
@@ -363,6 +441,9 @@ export function TracesTools({
                   )}
                 </DropdownMenu.SubTrigger>
                 <PortalSubContent>
+                  {entityOptions.length >= SUBMENU_SEARCH_THRESHOLD && (
+                    <SubMenuSearch value={entitySearch} onChange={setEntitySearch} />
+                  )}
                   <DropdownMenu.RadioGroup
                     value={selectedEntity?.value ?? 'all'}
                     onValueChange={val => {
@@ -370,11 +451,13 @@ export function TracesTools({
                       if (entity) onEntityChange(entity);
                     }}
                   >
-                    {entityOptions.map(option => (
-                      <DropdownMenu.RadioItem key={option.value} value={option.value}>
-                        {option.label}
-                      </DropdownMenu.RadioItem>
-                    ))}
+                    {entityOptions
+                      .filter(option => !entitySearch || option.label.toLowerCase().includes(entitySearch.toLowerCase()))
+                      .map(option => (
+                        <DropdownMenu.RadioItem key={option.value} value={option.value}>
+                          {option.label}
+                        </DropdownMenu.RadioItem>
+                      ))}
                   </DropdownMenu.RadioGroup>
                 </PortalSubContent>
               </DropdownMenu.Sub>
@@ -382,7 +465,7 @@ export function TracesTools({
 
             {/* Tags */}
             {filterCategories.some(c => c.id === 'tags') && onTagsChange && (availableTags ?? []).length > 0 && (
-              <DropdownMenu.Sub>
+              <DropdownMenu.Sub onOpenChange={resetSubSearch(setTagSearch)}>
                 <DropdownMenu.SubTrigger>
                   Tags
                   {(selectedTags ?? []).length > 0 && (
@@ -390,29 +473,34 @@ export function TracesTools({
                   )}
                 </DropdownMenu.SubTrigger>
                 <PortalSubContent>
-                  {(availableTags ?? []).map(tag => (
-                    <DropdownMenu.CheckboxItem
-                      key={tag}
-                      checked={(selectedTags ?? []).includes(tag)}
-                      onCheckedChange={checked => {
-                        if (checked) {
-                          onTagsChange([...(selectedTags ?? []), tag]);
-                        } else {
-                          onTagsChange((selectedTags ?? []).filter(t => t !== tag));
-                        }
-                      }}
-                      onSelect={e => e.preventDefault()}
-                    >
-                      {tag}
-                    </DropdownMenu.CheckboxItem>
-                  ))}
+                  {(availableTags ?? []).length >= SUBMENU_SEARCH_THRESHOLD && (
+                    <SubMenuSearch value={tagSearch} onChange={setTagSearch} />
+                  )}
+                  {(availableTags ?? [])
+                    .filter(tag => !tagSearch || tag.toLowerCase().includes(tagSearch.toLowerCase()))
+                    .map(tag => (
+                      <DropdownMenu.CheckboxItem
+                        key={tag}
+                        checked={(selectedTags ?? []).includes(tag)}
+                        onCheckedChange={checked => {
+                          if (checked) {
+                            onTagsChange([...(selectedTags ?? []), tag]);
+                          } else {
+                            onTagsChange((selectedTags ?? []).filter(t => t !== tag));
+                          }
+                        }}
+                        onSelect={e => e.preventDefault()}
+                      >
+                        {tag}
+                      </DropdownMenu.CheckboxItem>
+                    ))}
                 </PortalSubContent>
               </DropdownMenu.Sub>
             )}
 
             {/* Metadata */}
             {filterCategories.some(c => c.id === 'metadata') && onMetadataChange && metadataKeys.length > 0 && (
-              <DropdownMenu.Sub>
+              <DropdownMenu.Sub onOpenChange={resetSubSearch(setMetadataKeySearch)}>
                 <DropdownMenu.SubTrigger>
                   Metadata
                   {metadataCount > 0 && (
@@ -420,51 +508,61 @@ export function TracesTools({
                   )}
                 </DropdownMenu.SubTrigger>
                 <PortalSubContent className={cn('max-h-[20rem]')}>
-                  {metadataKeys.map(key => {
-                    const values = availableMetadata?.[key] ?? [];
-                    const selectedValue = selectedMetadata?.[key];
-                    return (
-                      <DropdownMenu.Sub key={key}>
-                        <DropdownMenu.SubTrigger>
-                          <span className={cn('truncate')}>{key}</span>
-                          {selectedValue && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
-                        </DropdownMenu.SubTrigger>
-                        <PortalSubContent className={cn('max-h-[20rem]')}>
-                          {/* "Any" option to clear the selection for this key */}
-                          <DropdownMenu.CheckboxItem
-                            checked={!selectedValue}
-                            onCheckedChange={() => {
-                              const next = { ...selectedMetadata };
-                              delete next[key];
-                              onMetadataChange(next);
-                            }}
-                            onSelect={e => e.preventDefault()}
-                          >
-                            Any
-                          </DropdownMenu.CheckboxItem>
-                          <DropdownMenu.Separator />
-                          {values.map(value => (
+                  {metadataKeys.length >= SUBMENU_SEARCH_THRESHOLD && (
+                    <SubMenuSearch value={metadataKeySearch} onChange={setMetadataKeySearch} />
+                  )}
+                  {metadataKeys
+                    .filter(key => !metadataKeySearch || key.toLowerCase().includes(metadataKeySearch.toLowerCase()))
+                    .map(key => {
+                      const values = availableMetadata?.[key] ?? [];
+                      const selectedValue = selectedMetadata?.[key];
+                      return (
+                        <DropdownMenu.Sub key={key} onOpenChange={resetSubSearch(setSubValueSearch)}>
+                          <DropdownMenu.SubTrigger>
+                            <span className={cn('truncate')}>{key}</span>
+                            {selectedValue && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
+                          </DropdownMenu.SubTrigger>
+                          <PortalSubContent className={cn('max-h-[20rem]')}>
+                            {values.length >= SUBMENU_SEARCH_THRESHOLD && (
+                              <SubMenuSearch value={subValueSearch} onChange={setSubValueSearch} />
+                            )}
+                            {/* "Any" option to clear the selection for this key */}
                             <DropdownMenu.CheckboxItem
-                              key={value}
-                              checked={selectedValue === value}
-                              onCheckedChange={checked => {
+                              checked={!selectedValue}
+                              onCheckedChange={() => {
                                 const next = { ...selectedMetadata };
-                                if (checked) {
-                                  next[key] = value;
-                                } else {
-                                  delete next[key];
-                                }
+                                delete next[key];
                                 onMetadataChange(next);
                               }}
                               onSelect={e => e.preventDefault()}
                             >
-                              <span className={cn('truncate')}>{value}</span>
+                              Any
                             </DropdownMenu.CheckboxItem>
-                          ))}
-                        </PortalSubContent>
-                      </DropdownMenu.Sub>
-                    );
-                  })}
+                            <DropdownMenu.Separator />
+                            {values
+                              .filter(value => !subValueSearch || value.toLowerCase().includes(subValueSearch.toLowerCase()))
+                              .map(value => (
+                                <DropdownMenu.CheckboxItem
+                                  key={value}
+                                  checked={selectedValue === value}
+                                  onCheckedChange={checked => {
+                                    const next = { ...selectedMetadata };
+                                    if (checked) {
+                                      next[key] = value;
+                                    } else {
+                                      delete next[key];
+                                    }
+                                    onMetadataChange(next);
+                                  }}
+                                  onSelect={e => e.preventDefault()}
+                                >
+                                  <span className={cn('truncate')}>{value}</span>
+                                </DropdownMenu.CheckboxItem>
+                              ))}
+                          </PortalSubContent>
+                        </DropdownMenu.Sub>
+                      );
+                    })}
                 </PortalSubContent>
               </DropdownMenu.Sub>
             )}
@@ -484,59 +582,75 @@ export function TracesTools({
                 if (fieldsWithValues.length === 0) return null;
                 const activeInGroup = fieldsWithValues.filter(f => contextFilters?.[f.id]?.trim()).length;
                 return (
-                  <DropdownMenu.Sub key={group}>
+                  <DropdownMenu.Sub key={group} onOpenChange={resetSubSearch(setContextFieldSearch)}>
                     <DropdownMenu.SubTrigger>
                       {group}
                       {activeInGroup > 0 && (
                         <span className={cn('ml-auto text-ui-sm text-accent1')}>{activeInGroup}</span>
                       )}
                     </DropdownMenu.SubTrigger>
-                    <PortalSubContent>
-                      {fieldsWithValues.map(field => {
-                        const values = availableContextValues?.[field.id] ?? [];
-                        const selectedValue = contextFilters?.[field.id];
-                        return (
-                          <DropdownMenu.Sub key={field.id}>
-                            <DropdownMenu.SubTrigger>
-                              <span className={cn('truncate')}>{field.label}</span>
-                              {selectedValue && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
-                            </DropdownMenu.SubTrigger>
-                            <PortalSubContent className={cn('max-h-[20rem]')}>
-                              {/* "Any" option to clear the selection for this field */}
-                              <DropdownMenu.CheckboxItem
-                                checked={!selectedValue}
-                                onCheckedChange={() => {
-                                  const next = { ...contextFilters };
-                                  delete next[field.id];
-                                  onContextFiltersChange(next);
-                                }}
-                                onSelect={e => e.preventDefault()}
-                              >
-                                Any
-                              </DropdownMenu.CheckboxItem>
-                              <DropdownMenu.Separator />
-                              {values.map(value => (
+                    <PortalSubContent className={cn('max-h-[20rem]')}>
+                      {fieldsWithValues.length >= SUBMENU_SEARCH_THRESHOLD && (
+                        <SubMenuSearch value={contextFieldSearch} onChange={setContextFieldSearch} />
+                      )}
+                      {fieldsWithValues
+                        .filter(
+                          field =>
+                            !contextFieldSearch || field.label.toLowerCase().includes(contextFieldSearch.toLowerCase()),
+                        )
+                        .map(field => {
+                          const values = availableContextValues?.[field.id] ?? [];
+                          const selectedValue = contextFilters?.[field.id];
+                          return (
+                            <DropdownMenu.Sub key={field.id} onOpenChange={resetSubSearch(setSubValueSearch)}>
+                              <DropdownMenu.SubTrigger>
+                                <span className={cn('truncate')}>{field.label}</span>
+                                {selectedValue && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
+                              </DropdownMenu.SubTrigger>
+                              <PortalSubContent className={cn('max-h-[20rem]')}>
+                                {values.length >= SUBMENU_SEARCH_THRESHOLD && (
+                                  <SubMenuSearch value={subValueSearch} onChange={setSubValueSearch} />
+                                )}
+                                {/* "Any" option to clear the selection for this field */}
                                 <DropdownMenu.CheckboxItem
-                                  key={value}
-                                  checked={selectedValue === value}
-                                  onCheckedChange={checked => {
+                                  checked={!selectedValue}
+                                  onCheckedChange={() => {
                                     const next = { ...contextFilters };
-                                    if (checked) {
-                                      next[field.id] = value;
-                                    } else {
-                                      delete next[field.id];
-                                    }
+                                    delete next[field.id];
                                     onContextFiltersChange(next);
                                   }}
                                   onSelect={e => e.preventDefault()}
                                 >
-                                  <span className={cn('truncate')}>{value}</span>
+                                  Any
                                 </DropdownMenu.CheckboxItem>
-                              ))}
-                            </PortalSubContent>
-                          </DropdownMenu.Sub>
-                        );
-                      })}
+                                <DropdownMenu.Separator />
+                                {values
+                                  .filter(
+                                    value =>
+                                      !subValueSearch || value.toLowerCase().includes(subValueSearch.toLowerCase()),
+                                  )
+                                  .map(value => (
+                                    <DropdownMenu.CheckboxItem
+                                      key={value}
+                                      checked={selectedValue === value}
+                                      onCheckedChange={checked => {
+                                        const next = { ...contextFilters };
+                                        if (checked) {
+                                          next[field.id] = value;
+                                        } else {
+                                          delete next[field.id];
+                                        }
+                                        onContextFiltersChange(next);
+                                      }}
+                                      onSelect={e => e.preventDefault()}
+                                    >
+                                      <span className={cn('truncate')}>{value}</span>
+                                    </DropdownMenu.CheckboxItem>
+                                  ))}
+                              </PortalSubContent>
+                            </DropdownMenu.Sub>
+                          );
+                        })}
                     </PortalSubContent>
                   </DropdownMenu.Sub>
                 );
