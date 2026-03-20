@@ -62,6 +62,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
   getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
     return [
+      { collection: TABLE_DATASETS, keys: { id: 1 }, options: { name: 'idx_datasets_id', unique: true } },
+      { collection: TABLE_DATASETS, keys: { createdAt: -1, id: 1 }, options: { name: 'idx_datasets_createdat_id' } },
       { collection: TABLE_DATASET_ITEMS, keys: { datasetId: 1 }, options: { name: 'idx_dataset_items_datasetid' } },
       {
         collection: TABLE_DATASET_ITEMS,
