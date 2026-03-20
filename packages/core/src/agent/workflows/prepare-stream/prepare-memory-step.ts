@@ -96,7 +96,10 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         });
         return {
           threadExists: false,
-          thread: undefined,
+          // Preserve threadFromArgs even without local memory so that threadId
+          // flows to _internal and can be forwarded as x-thread-id header to
+          // remote memory providers (e.g. Memory Gateway).
+          thread: thread?.id ? ({ id: thread.id } as StorageThreadType) : undefined,
           messageList,
           processorStates,
           tripwire,
