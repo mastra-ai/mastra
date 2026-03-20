@@ -2045,4 +2045,232 @@ describe('ProcessorRunner', () => {
       expect(stateInOutputResult.errorInfo).toEqual({ toolName: 'myTool', error: 'something broke' });
     });
   });
+
+  describe('runProcessAPIError', () => {
+    it('should call processAPIError on processors that implement it', async () => {
+      const processAPIError = vi.fn().mockReturnValue({ retry: true, feedback: 'Fixed the issue' });
+      const processor: Processor = {
+        id: 'error-handler',
+        name: 'Error Handler',
+        processAPIError,
+      };
+
+      runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add(createMessage('hello', 'user'), 'user');
+      const error = new Error('Some API error');
+
+      const result = await runner.runProcessAPIError({
+        error,
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        retryCount: 0,
+      });
+
+      expect(processAPIError).toHaveBeenCalledTimes(1);
+      expect(processAPIError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error,
+          stepNumber: 0,
+          retryCount: 0,
+        }),
+      );
+      expect(result).toEqual({ retry: true, feedback: 'Fixed the issue' });
+    });
+
+    it('should skip processors that do not implement processAPIError', async () => {
+      const processAPIError = vi.fn().mockReturnValue({ retry: true });
+      const skippedProcessor: Processor = {
+        id: 'input-only',
+        name: 'Input Only',
+        processInput: vi.fn(),
+      };
+      const errorProcessor: Processor = {
+        id: 'error-handler',
+        name: 'Error Handler',
+        processAPIError,
+      };
+
+      runner = new ProcessorRunner({
+        inputProcessors: [skippedProcessor, errorProcessor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add(createMessage('hello', 'user'), 'user');
+
+      const result = await runner.runProcessAPIError({
+        error: new Error('API error'),
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        retryCount: 0,
+      });
+
+      expect(processAPIError).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ retry: true });
+    });
+
+    it('should return { retry: false } when no processors handle the error', async () => {
+      const processAPIError = vi.fn().mockReturnValue(undefined);
+      const processor: Processor = {
+        id: 'noop-handler',
+        name: 'Noop Handler',
+        processAPIError,
+      };
+
+      runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add(createMessage('hello', 'user'), 'user');
+
+      const result = await runner.runProcessAPIError({
+        error: new Error('API error'),
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        retryCount: 0,
+      });
+
+      expect(result).toEqual({ retry: false });
+    });
+
+    it('should stop at the first processor that signals retry', async () => {
+      const processAPIError1 = vi.fn().mockReturnValue({ retry: true, feedback: 'First' });
+      const processAPIError2 = vi.fn().mockReturnValue({ retry: true, feedback: 'Second' });
+
+      runner = new ProcessorRunner({
+        inputProcessors: [
+          { id: 'handler1', processAPIError: processAPIError1 },
+          { id: 'handler2', processAPIError: processAPIError2 },
+        ],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add(createMessage('hello', 'user'), 'user');
+
+      const result = await runner.runProcessAPIError({
+        error: new Error('API error'),
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        retryCount: 0,
+      });
+
+      expect(processAPIError1).toHaveBeenCalledTimes(1);
+      expect(processAPIError2).not.toHaveBeenCalled();
+      expect(result).toEqual({ retry: true, feedback: 'First' });
+    });
+
+    it('should check both input and output processors', async () => {
+      const inputHandler = vi.fn().mockReturnValue(undefined);
+      const outputHandler = vi.fn().mockReturnValue({ retry: true });
+
+      runner = new ProcessorRunner({
+        inputProcessors: [{ id: 'input-handler', processAPIError: inputHandler }],
+        outputProcessors: [{ id: 'output-handler', processAPIError: outputHandler }],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add(createMessage('hello', 'user'), 'user');
+
+      const result = await runner.runProcessAPIError({
+        error: new Error('API error'),
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        retryCount: 0,
+      });
+
+      expect(inputHandler).toHaveBeenCalledTimes(1);
+      expect(outputHandler).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ retry: true });
+    });
+
+    it('should not throw if a processAPIError handler itself fails', async () => {
+      const failingHandler = vi.fn().mockRejectedValue(new Error('Handler crashed'));
+
+      runner = new ProcessorRunner({
+        inputProcessors: [{ id: 'failing-handler', processAPIError: failingHandler }],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add(createMessage('hello', 'user'), 'user');
+
+      const result = await runner.runProcessAPIError({
+        error: new Error('API error'),
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        retryCount: 0,
+      });
+
+      // Should swallow the error and return retry: false
+      expect(result).toEqual({ retry: false });
+      expect(mockLogger.error).toHaveBeenCalled();
+    });
+
+    it('should auto-inject PrefillErrorHandler when no user-defined handler exists', async () => {
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      // Set up a message list with a trailing assistant message
+      messageList.add(createMessage('hello', 'user'), 'user');
+      messageList.add(createMessage('hi there', 'assistant'), 'response');
+
+      // Create a prefill error
+      const { APICallError } = await import('@internal/ai-sdk-v5');
+      const prefillError = new APICallError({
+        message: 'This model does not support assistant message prefill.',
+        url: 'https://api.anthropic.com/v1/messages',
+        requestBodyValues: {},
+        statusCode: 400,
+        responseBody: '{}',
+        isRetryable: false,
+      });
+
+      const result = await runner.runProcessAPIError({
+        error: prefillError,
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        retryCount: 0,
+      });
+
+      expect(result).toEqual({ retry: true });
+
+      // Verify a <continue> message was appended
+      const messages = messageList.get.all.db();
+      const lastMessage = messages[messages.length - 1]!;
+      expect(lastMessage.role).toBe('user');
+      expect(lastMessage.content.parts).toEqual([{ type: 'text', text: '<continue>' }]);
+    });
+  });
 });

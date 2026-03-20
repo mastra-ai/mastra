@@ -260,6 +260,34 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
 }
 
 /**
+ * Arguments for processAPIError method.
+ * Called when the LLM API call fails with a non-retryable error (API rejection).
+ * This is distinct from network errors or retryable server errors (which are handled by p-retry).
+ */
+export interface ProcessAPIErrorArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
+  /** The error that occurred during the LLM API call */
+  error: unknown;
+  /** The current step number (0-indexed) */
+  stepNumber: number;
+  /** All completed steps so far */
+  steps: Array<StepResult<any>>;
+  /** Per-processor state that persists across all method calls within this request */
+  state: Record<string, unknown>;
+  /** The current retry count for this error handler */
+  retryCount: number;
+}
+
+/**
+ * Result from processAPIError method.
+ */
+export type ProcessAPIErrorResult = {
+  /** Whether to retry the LLM call after applying modifications */
+  retry: boolean;
+  /** Optional feedback message to include as system context on retry */
+  feedback?: string;
+};
+
+/**
  * Processor interface for transforming messages and stream chunks.
  *
  * @template TId - The processor's unique identifier type
@@ -337,6 +365,22 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
   processOutputStep?(args: ProcessOutputStepArgs<TTripwireMetadata>): ProcessorMessageResult;
 
   /**
+   * Process an LLM API rejection error before it's surfaced as a final error.
+   * Only called for non-retryable API rejections (e.g., 400/422 status codes),
+   * NOT for network errors or retryable server errors (which are handled by p-retry).
+   *
+   * This allows processors to inspect the error, modify the request (e.g., append messages),
+   * and signal a retry. Unlike processOutputStep which runs after successful responses,
+   * this runs when the API call is rejected.
+   *
+   * @returns ProcessAPIErrorResult indicating whether to retry with the modified state,
+   *          or void/undefined to not handle the error
+   */
+  processAPIError?(
+    args: ProcessAPIErrorArgs<TTripwireMetadata>,
+  ): Promise<ProcessAPIErrorResult | void> | ProcessAPIErrorResult | void;
+
+  /**
    * Internal method called when the processor is registered with a Mastra instance.
    * This allows processors to access Mastra services like knowledge, storage, etc.
    * @internal
@@ -401,9 +445,17 @@ export type OutputProcessor<TTripwireMetadata = unknown> =
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processOutputStep'> &
       Processor<string, TTripwireMetadata>);
 
+// ErrorProcessor requires processAPIError
+export type ErrorProcessor<TTripwireMetadata = unknown> = WithRequired<
+  Processor<string, TTripwireMetadata>,
+  'id' | 'processAPIError'
+> &
+  Processor<string, TTripwireMetadata>;
+
 export type ProcessorTypes<TTripwireMetadata = unknown> =
   | InputProcessor<TTripwireMetadata>
-  | OutputProcessor<TTripwireMetadata>;
+  | OutputProcessor<TTripwireMetadata>
+  | ErrorProcessor<TTripwireMetadata>;
 
 /**
  * A Workflow that can be used as a processor.
@@ -444,11 +496,13 @@ export function isProcessorWorkflow(obj: unknown): obj is ProcessorWorkflow {
     !('processInputStep' in obj) &&
     !('processOutputStream' in obj) &&
     !('processOutputResult' in obj) &&
-    !('processOutputStep' in obj)
+    !('processOutputStep' in obj) &&
+    !('processAPIError' in obj)
   );
 }
 
 export * from './processors';
+export { PrefillErrorHandler } from './prefill-error-handler';
 export { ProcessorState, ProcessorRunner } from './runner';
 export * from './memory';
 export type { TripWireOptions } from '../agent/trip-wire';
