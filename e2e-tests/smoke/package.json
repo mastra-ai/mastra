@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "npx mastra build",
-    "test": "vitest run"
+    "test": "vitest run --reporter=verbose"
   },
   "dependencies": {
     "@mastra/core": "alpha",
