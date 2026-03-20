@@ -15,9 +15,10 @@ import {
   writeAPIKey,
   writeClaudeMarkdown,
   writeCodeSample,
+  writeGatewaySharedFile,
   writeIndexFile,
 } from './utils';
-import type { Component, LLMProvider } from './utils';
+import type { Component, ConnectionMethod, LLMProvider } from './utils';
 
 const s = p.spinner();
 
@@ -43,6 +44,7 @@ export const init = async ({
   mcpServer,
   versionTag,
   initGit = false,
+  connectionMethod = 'direct',
 }: {
   directory?: string;
   components: Component[];
@@ -53,6 +55,7 @@ export const init = async ({
   mcpServer?: Editor;
   versionTag?: string;
   initGit?: boolean;
+  connectionMethod?: ConnectionMethod;
 }) => {
   s.start('Initializing Mastra');
   const packageVersionTag = versionTag ? `@${versionTag}` : '';
@@ -67,7 +70,7 @@ export const init = async ({
 
     const dirPath = result.dirPath;
 
-    await Promise.all([
+    const initTasks: Promise<unknown>[] = [
       writeIndexFile({
         dirPath,
         addExample,
@@ -76,13 +79,22 @@ export const init = async ({
         addScorers: components.includes('scorers'),
       }),
       ...components.map(component => createComponentsDir(dirPath, component)),
-      writeAPIKey({ provider: llmProvider, apiKey: llmApiKey }),
-    ]);
+    ];
+
+    if (connectionMethod !== 'gateway') {
+      initTasks.push(writeAPIKey({ provider: llmProvider, apiKey: llmApiKey }));
+    }
+
+    if (connectionMethod === 'gateway') {
+      initTasks.push(writeGatewaySharedFile(dirPath));
+    }
+
+    await Promise.all(initTasks);
 
     if (addExample) {
       await Promise.all([
         ...components.map(component =>
-          writeCodeSample(dirPath, component as Component, llmProvider, components as Component[]),
+          writeCodeSample(dirPath, component as Component, llmProvider, components as Component[], connectionMethod),
         ),
       ]);
 
@@ -92,10 +104,12 @@ export const init = async ({
       if (needsLibsql) {
         await installWithFallback(depService, '@mastra/libsql', packageVersionTag);
       }
-      const needsMemory =
-        components.includes(`agents`) && (await depService.checkDependencies(['@mastra/memory'])) !== `ok`;
-      if (needsMemory) {
-        await installWithFallback(depService, '@mastra/memory', packageVersionTag);
+      if (connectionMethod !== 'gateway') {
+        const needsMemory =
+          components.includes(`agents`) && (await depService.checkDependencies(['@mastra/memory'])) !== `ok`;
+        if (needsMemory) {
+          await installWithFallback(depService, '@mastra/memory', packageVersionTag);
+        }
       }
 
       const needsLoggers = (await depService.checkDependencies(['@mastra/loggers'])) !== `ok`;
@@ -113,9 +127,14 @@ export const init = async ({
       if (needsEvals) {
         await installWithFallback(depService, '@mastra/evals', packageVersionTag);
       }
-    }
 
-    const key = await getAPIKey(llmProvider || 'openai');
+      if (connectionMethod === 'gateway') {
+        const needsOpenAICompat = (await depService.checkDependencies(['@ai-sdk/openai-compatible'])) !== `ok`;
+        if (needsOpenAICompat) {
+          await depService.installPackages(['@ai-sdk/openai-compatible']);
+        }
+      }
+    }
 
     s.stop('Mastra initialized');
 
@@ -189,7 +208,14 @@ export const init = async ({
       }
     }
 
-    if (!llmApiKey) {
+    if (connectionMethod === 'gateway') {
+      p.note(`
+      ${color.green('Mastra initialized successfully!')}
+
+      ${color.cyan('GATEWAY_URL')} and ${color.cyan('GATEWAY_API_KEY')} have been written to your ${color.cyan('.env')} file
+      `);
+    } else if (!llmApiKey) {
+      const key = await getAPIKey(llmProvider || 'openai');
       p.note(`
       ${color.green('Mastra initialized successfully!')}
 

@@ -12,10 +12,10 @@ import { cloneTemplate, installDependencies } from '../../utils/clone-template';
 import { loadTemplates, selectTemplate, findTemplateByName, getDefaultProjectName } from '../../utils/template-utils';
 import type { Template } from '../../utils/template-utils';
 import { login } from '../auth/credentials.js';
-import { createToken } from '../auth/tokens.js';
+import { provisionGatewayProject } from '../gateway/platform-api.js';
 import { init } from '../init/init';
 import type { Editor } from '../init/mcp-docs-server-install';
-import type { Component, LLMProvider } from '../init/utils';
+import type { Component, ConnectionMethod, LLMProvider } from '../init/utils';
 import { LLM_PROVIDERS } from '../init/utils';
 import { getPackageManager, gitInit } from '../utils.js';
 
@@ -78,6 +78,13 @@ export const create = async (args: {
       });
     }
 
+    const connectionMethod = (result as { connectionMethod?: ConnectionMethod })?.connectionMethod ?? 'direct';
+
+    // If gateway selected, provision project and write env vars before init
+    if (connectionMethod === 'gateway') {
+      await setupGateway(projectName);
+    }
+
     await init({
       ...result,
       llmApiKey: result?.llmApiKey as string | undefined,
@@ -86,11 +93,8 @@ export const create = async (args: {
       skills: result?.skills || args.skills,
       mcpServer: result?.mcpServer || args.mcpServer,
       versionTag: args.createVersionTag,
+      connectionMethod,
     });
-
-    if (result?.setupObservability === 'yes') {
-      await provisionObservabilityToken();
-    }
 
     postCreate({ projectName });
     return;
@@ -131,17 +135,26 @@ const postCreate = ({ projectName }: { projectName: string }) => {
   `);
 };
 
-async function provisionObservabilityToken() {
+async function setupGateway(projectName: string) {
   try {
+    p.log.step('Setting up Memory Gateway...');
     const creds = await login();
     const orgId = creds.currentOrgId ?? creds.organizationId;
-    const { secret } = await createToken(creds.token, orgId, 'mastra-observability');
-    const escapedSecret = shellQuote.quote([secret]);
-    await exec(`echo MASTRA_CLOUD_ACCESS_TOKEN=${escapedSecret} >> .env`);
-    p.log.success('Observability configured — traces will be sent to Mastra Cloud');
+
+    const result = await provisionGatewayProject(creds.token, orgId, projectName);
+
+    const gatewayUrl = process.env.MASTRA_GATEWAY_URL || 'https://gateway.mastra.ai/v1';
+    const escapedKey = shellQuote.quote([result.apiKey]);
+    const escapedUrl = shellQuote.quote([gatewayUrl]);
+
+    await exec(`echo GATEWAY_URL=${escapedUrl} >> .env`);
+    await exec(`echo GATEWAY_API_KEY=${escapedKey} >> .env`);
+
+    p.log.success(`Gateway project "${result.project.name}" provisioned`);
+    p.log.info(`API key written to .env`);
   } catch (err) {
-    p.log.warning(`Could not set up observability: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    p.log.info('You can set this up later by running: mastra auth login');
+    p.log.warning(`Could not set up gateway: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    p.log.info('You can set this up later by running: mastra gateway setup');
   }
 }
 

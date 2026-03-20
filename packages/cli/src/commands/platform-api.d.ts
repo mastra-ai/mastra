@@ -276,6 +276,46 @@ export interface paths {
     patch: operations['patchV1OrgMembersById'];
     trace?: never;
   };
+  '/v1/gateway/projects': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List gateway projects
+     * @description List all gateway projects for the current organization
+     */
+    get: operations['getV1GatewayProjects'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/gateway/projects/provision': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Provision gateway project
+     * @description Create a new gateway project with an API key
+     */
+    post: operations['postV1GatewayProjectsProvision'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/v1/gateway/projects/{id}/usage/activity': {
     parameters: {
       query?: never;
@@ -1604,6 +1644,111 @@ export interface operations {
       };
       /** @description Forbidden — admin role required */
       403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+    };
+  };
+  getV1GatewayProjects: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description List of gateway projects */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            projects: {
+              id: string;
+              name: string;
+              organizationId: string;
+              memoryConfig?: {
+                observationTokens?: number;
+                reflectionTokens?: number;
+                model?: string;
+                /** @enum {string} */
+                scope?: 'thread' | 'resource';
+              } | null;
+              gatewayTools?: 'web_search'[] | null;
+              createdAt: string;
+            }[];
+          };
+        };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+            instance?: string;
+            errors?: {
+              field: string;
+              message: string;
+            }[];
+          };
+        };
+      };
+    };
+  };
+  postV1GatewayProjectsProvision: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': {
+          name?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Provisioned project with API key */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            project: {
+              id: string;
+              name: string;
+            };
+            apiKey: string;
+          };
+        };
+      };
+      /** @description Not authenticated */
+      401: {
         headers: {
           [name: string]: unknown;
         };

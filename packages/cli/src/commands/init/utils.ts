@@ -64,8 +64,10 @@ export async function writeAgentSample(
   destPath: string,
   addExampleTool: boolean,
   addScorers: boolean,
+  connectionMethod: ConnectionMethod = 'direct',
 ) {
   const modelString = getModelIdentifier(llmProvider);
+  const [, modelName] = modelString.split('/');
 
   const instructions = `
       You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
@@ -81,17 +83,22 @@ export async function writeAgentSample(
 
       ${addExampleTool ? 'Use the weatherTool to fetch current weather data.' : ''}
 `;
+
+  const gatewayImport = connectionMethod === 'gateway' ? `import { gateway } from '../shared';\n` : '';
+  const modelValue = connectionMethod === 'gateway' ? `gateway.chatModel('${modelName}')` : `'${modelString}'`;
+
+  const memoryImport = connectionMethod !== 'gateway' ? `import { Memory } from '@mastra/memory';\n` : '';
+
   const content = `
 import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
-${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
+${memoryImport}${gatewayImport}${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
 ${addScorers ? `import { scorers } from '../scorers/weather-scorer';` : ''}
 
 export const weatherAgent = new Agent({
   id: 'weather-agent',
   name: 'Weather Agent',
   instructions: \`${instructions}\`,
-  model: '${modelString}',
+  model: ${modelValue},
   ${addExampleTool ? 'tools: { weatherTool },' : ''}
   ${
     addScorers
@@ -120,7 +127,7 @@ export const weatherAgent = new Agent({
   },`
       : ''
   }
-  memory: new Memory()
+  ${connectionMethod !== 'gateway' ? 'memory: new Memory()' : ''}
 });
     `;
   const formattedContent = await prettier.format(content, {
@@ -129,6 +136,33 @@ export const weatherAgent = new Agent({
   });
 
   await fs.writeFile(destPath, '');
+  await fs.writeFile(destPath, formattedContent);
+}
+
+export async function writeGatewayShared(dirPath: string) {
+  const content = `import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+
+/**
+ * Memory Gateway provider — an OpenAI-compatible proxy with built-in
+ * observational memory.  Configure GATEWAY_URL and GATEWAY_API_KEY in .env.
+ *
+ * Usage:
+ *   import { gateway } from './shared';
+ *   const model = gateway.chatModel('gpt-5-mini');
+ */
+export const gateway = createOpenAICompatible({
+  name: 'mastra-gateway',
+  baseURL: process.env.GATEWAY_URL!,
+  apiKey: process.env.GATEWAY_API_KEY ?? '',
+});
+`;
+
+  const formattedContent = await prettier.format(content, {
+    parser: 'typescript',
+    singleQuote: true,
+  });
+
+  const destPath = path.join(dirPath, 'shared.ts');
   await fs.writeFile(destPath, formattedContent);
 }
 
@@ -429,6 +463,7 @@ export async function writeCodeSampleForComponents(
   component: Component,
   destPath: string,
   importComponents: Component[],
+  connectionMethod: ConnectionMethod = 'direct',
 ) {
   switch (component) {
     case 'agents':
@@ -437,6 +472,7 @@ export async function writeCodeSampleForComponents(
         destPath,
         importComponents.includes('tools'),
         importComponents.includes('scorers'),
+        connectionMethod,
       );
     case 'tools':
       return writeToolSample(destPath);
@@ -453,6 +489,19 @@ export const createComponentsDir = async (dirPath: string, component: string) =>
   const componentPath = dirPath + `/${component}`;
 
   await fsExtra.ensureDir(componentPath);
+};
+
+export const writeGatewaySharedFile = async (dirPath: string) => {
+  const sharedPath = path.join(dirPath, 'shared.ts');
+  const content = `import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+
+export const gateway = createOpenAICompatible({
+  name: 'mastra-gateway',
+  baseURL: process.env.GATEWAY_URL!,
+  apiKey: process.env.GATEWAY_API_KEY!,
+});
+`;
+  await fs.writeFile(sharedPath, content);
 };
 
 export const writeIndexFile = async ({
@@ -642,11 +691,12 @@ export const writeCodeSample = async (
   component: Component,
   llmProvider: LLMProvider,
   importComponents: Component[],
+  connectionMethod: ConnectionMethod = 'direct',
 ) => {
   const destPath = dirPath + `/${component}/weather-${component.slice(0, -1)}.ts`;
 
   try {
-    await writeCodeSampleForComponents(llmProvider, component, destPath, importComponents);
+    await writeCodeSampleForComponents(llmProvider, component, destPath, importComponents, connectionMethod);
   } catch (err) {
     throw err;
   }
@@ -661,11 +711,14 @@ export const LLM_PROVIDERS: { value: LLMProvider; label: string; hint?: string }
   { value: 'mistral', label: 'Mistral' },
 ];
 
+export type ConnectionMethod = 'direct' | 'gateway';
+
 interface InteractivePromptArgs {
   options?: {
     showBanner?: boolean;
   };
   skip?: {
+    connectionMethod?: boolean;
     llmProvider?: boolean;
     llmApiKey?: boolean;
     gitInit?: boolean;
@@ -689,15 +742,31 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
           placeholder: 'src/',
           defaultValue: 'src/',
         }),
+      connectionMethod: () =>
+        skip?.connectionMethod
+          ? undefined
+          : p.select({
+              message: 'How do you want to connect to AI models?',
+              options: [
+                {
+                  value: 'gateway',
+                  label: 'Memory Gateway',
+                  hint: 'recommended — managed proxy with observational memory',
+                },
+                { value: 'direct', label: 'Direct (API key)', hint: 'bring your own provider key' },
+              ] as const,
+              initialValue: 'gateway' as ConnectionMethod,
+            }),
       llmProvider: () =>
         skip?.llmProvider
           ? undefined
           : p.select({
-              message: 'Select a default provider:',
+              message: 'Select a default model:',
               options: LLM_PROVIDERS,
             }),
-      llmApiKey: async ({ results: { llmProvider } }) => {
-        if (skip?.llmApiKey) return undefined;
+      llmApiKey: async ({ results: { llmProvider, connectionMethod } }) => {
+        // Skip API key when using gateway — credentials are provisioned automatically
+        if (skip?.llmApiKey || connectionMethod === 'gateway') return undefined;
 
         const llmName = LLM_PROVIDERS.find(p => p.value === llmProvider)?.label || 'provider';
         const keyChoice = await p.select({
@@ -905,21 +974,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
 
         return { skills: undefined, mcpServer: undefined };
       },
-      setupObservability: async () => {
-        if (skip?.observability) return undefined;
-
-        const choice = await p.select({
-          message: 'Set up observability? (sends traces to Mastra Cloud)',
-          options: [
-            { value: 'yes', label: 'Yes', hint: 'log in and create an access token' },
-            { value: 'skip', label: 'Skip for now' },
-          ],
-          initialValue: 'skip',
-        });
-
-        if (p.isCancel(choice) || choice === 'skip') return undefined;
-        return 'yes' as const;
-      },
+      setupObservability: async () => undefined,
       initGit: async () => {
         if (skip?.gitInit) return false;
 
@@ -938,9 +993,10 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
   );
 
   // Flatten the configureMastraToolingForAgents return value
-  const { configureMastraToolingForAgents, setupObservability, ...rest } = mastraProject;
+  const { configureMastraToolingForAgents, setupObservability, connectionMethod, ...rest } = mastraProject;
   return {
     ...rest,
+    connectionMethod: (connectionMethod ?? 'direct') as ConnectionMethod,
     skills: configureMastraToolingForAgents?.skills as string[] | undefined,
     mcpServer: configureMastraToolingForAgents?.mcpServer as Editor | undefined,
     setupObservability: setupObservability as 'yes' | undefined,
