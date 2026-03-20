@@ -4,7 +4,7 @@ import { Agent } from '@mastra/core/agent';
 import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { resolveModelConfig } from '@mastra/core/llm';
+import { resolveModelConfig, OM_INPUT_TOKENS_KEY } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, parseMemoryRequestContext, setThreadOMMetadata } from '@mastra/core/memory';
 import type {
@@ -15,7 +15,7 @@ import type {
   ProcessorStreamWriter,
 } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, BufferedObservationChunk } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
@@ -2021,6 +2021,19 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       buildObserverHistoryMessage(messagesToObserve),
     ];
 
+    // Count input tokens for token-tiered model selection (ModelByInputTokens)
+    const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
+
+    // Build requestContext with input token count for ModelByInputTokens
+    const existingContext = options?.requestContext;
+    const contextWithTokens = new RequestContext();
+    if (existingContext) {
+      for (const [key, value] of existingContext.entries()) {
+        contextWithTokens.set(key, value);
+      }
+    }
+    contextWithTokens.set(OM_INPUT_TOKENS_KEY, inputTokens);
+
     const doGenerate = async () => {
       const result = await this.withAbortCheck(async () => {
         const streamResult = await agent.stream(observerMessages, {
@@ -2029,7 +2042,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           },
           providerOptions: this.observationConfig.providerOptions as any,
           ...(abortSignal ? { abortSignal } : {}),
-          ...(options?.requestContext ? { requestContext: options.requestContext } : {}),
+          requestContext: contextWithTokens,
         });
 
         return streamResult.getFullOutput();
@@ -2134,6 +2147,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       this.observedMessageIds.add(msg.id);
     }
 
+    // Count input tokens for token-tiered model selection (ModelByInputTokens)
+    const inputTokens = this.tokenCounter.countMessages(allMessages);
+
+    // Build requestContext with input token count for ModelByInputTokens
+    const contextWithTokens = new RequestContext();
+    if (requestContext) {
+      for (const [key, value] of requestContext.entries()) {
+        contextWithTokens.set(key, value);
+      }
+    }
+    contextWithTokens.set(OM_INPUT_TOKENS_KEY, inputTokens);
+
     const doGenerate = async () => {
       const result = await this.withAbortCheck(async () => {
         const streamResult = await agent.stream(observerMessages, {
@@ -2142,7 +2167,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           },
           providerOptions: this.observationConfig.providerOptions as any,
           ...(abortSignal ? { abortSignal } : {}),
-          ...(requestContext ? { requestContext } : {}),
+          requestContext: contextWithTokens,
         });
 
         return streamResult.getFullOutput();
@@ -2236,6 +2261,15 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     const originalTokens = this.tokenCounter.countObservations(observations);
 
+    // Build requestContext with input token count for token-tiered model selection (ModelByInputTokens)
+    const contextWithTokens = new RequestContext();
+    if (requestContext) {
+      for (const [key, value] of requestContext.entries()) {
+        contextWithTokens.set(key, value);
+      }
+    }
+    contextWithTokens.set(OM_INPUT_TOKENS_KEY, originalTokens);
+
     // Get the target threshold - use provided value or fall back to config
     const targetThreshold = observationTokensThreshold ?? getMaxThreshold(this.reflectionConfig.observationTokens);
 
@@ -2267,7 +2301,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           },
           providerOptions: this.reflectionConfig.providerOptions as any,
           ...(abortSignal ? { abortSignal } : {}),
-          ...(requestContext ? { requestContext } : {}),
+          requestContext: contextWithTokens,
           ...(attemptNumber === 1
             ? {
                 onChunk(chunk: any) {
@@ -4448,18 +4482,15 @@ ${formattedMessages}
         // Stream the failed marker to the UI first - this adds the part via stream handler
         if (writer) {
           await writer.custom(failedMarker).catch(() => {
-            // Ignore errors from streaming - observation should continue
+            // Ignore errors from streaming
           });
         }
 
         // Then seal the message (skipPush since writer.custom already added the part)
       }
-      // If aborted, re-throw so the main agent loop can handle cancellation
-      if (abortSignal?.aborted) {
-        throw error;
-      }
-      // Log the error but don't re-throw - observation failure should not crash the agent
-      omError('[OM] Observation failed', error);
+      // Re-throw the error - observation failure should crash the agent
+      // (the FAILED marker was already emitted above for debugging)
+      throw error;
     } finally {
       await this.storage.setObservingFlag(record.id, false);
       unregisterOp(record.id, 'observing');
@@ -5839,19 +5870,16 @@ ${formattedMessages}
           // Stream the failed marker to the UI first - this adds the part via stream handler
           if (writer) {
             await writer.custom(failedMarker).catch(() => {
-              // Ignore errors from streaming - observation should continue
+              // Ignore errors from streaming
             });
           }
 
           // Then seal the message (skipPush since writer.custom already added the part)
         }
       }
-      // If aborted, re-throw so the main agent loop can handle cancellation
-      if (abortSignal?.aborted) {
-        throw error;
-      }
-      // Log the error but don't re-throw - observation failure should not crash the agent
-      omError('[OM] Resource-scoped observation failed', error);
+      // Re-throw the error - observation failure should crash the agent
+      // (the FAILED marker was already emitted above for debugging)
+      throw error;
     } finally {
       await this.storage.setObservingFlag(record.id, false);
       unregisterOp(record.id, 'observing');
@@ -6095,12 +6123,9 @@ ${formattedMessages}
         });
         await writer.custom(failedMarker).catch(() => {});
       }
-      // If aborted, re-throw so the main agent loop can handle cancellation
-      if (abortSignal?.aborted) {
-        throw error;
-      }
-      // Log the error but don't re-throw - reflection failure should not crash the agent
-      omError('[OM] Reflection failed', error);
+      // Re-throw the error - reflection failure should crash the agent
+      // (the FAILED marker was already emitted above for debugging)
+      throw error;
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
       reflectionHooks?.onReflectionEnd?.();
