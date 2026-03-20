@@ -17,11 +17,11 @@ type PropsWithChildren = {
 };
 
 export function MetricsCardTitleAndDescription(props: PropsWithTitleDescription | PropsWithChildren) {
-  if (props.children) {
+  if ('children' in props) {
     return <div className={props.className}>{props.children}</div>;
   }
 
-  const { title, description } = props as PropsWithTitleDescription;
+  const { title, description } = props;
 
   return (
     <div className={props.className}>

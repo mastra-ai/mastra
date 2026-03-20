@@ -369,7 +369,7 @@ function FilterPills() {
 export function MetricsFilterBar() {
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2 border border-red-500">
+      <div className="flex flex-wrap items-center gap-2">
         <UnifiedFilterDropdown />
         <DateRangePickerButton />
       </div>

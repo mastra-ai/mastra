@@ -11,7 +11,11 @@ export function MetricsDashboard() {
     <div className="grid gap-8 content-start pb-10">
       <MetricsFlexGrid>
         <AgentRunsKpiCard />
-        <ModelCostKpiCard />
+
+        {/* 
+          hidden for now
+          <ModelCostKpiCard /> 
+        */}
         <TotalTokensKpiCard />
         <AvgScoreKpiCard />
       </MetricsFlexGrid>

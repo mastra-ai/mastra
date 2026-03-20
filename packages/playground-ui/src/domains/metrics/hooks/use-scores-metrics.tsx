@@ -32,6 +32,7 @@ export function useScoresMetrics() {
 
       // Fetch scores for each scorer in parallel
       const allResults = await Promise.all(
+        // Limited to 100 most recent scores per scorer; pagination not yet implemented
         scorerIds.map(scorerId => client.listScoresByScorerId({ scorerId, perPage: 100 })),
       );
 

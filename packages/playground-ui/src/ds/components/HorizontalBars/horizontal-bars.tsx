@@ -31,12 +31,12 @@ export function HorizontalBars({
         <div className="flex-1 flex items-center gap-4">
           {segments.map(seg => (
             <div key={seg.label} className="flex items-center gap-2">
-              <div className="h-0.5 w-3 rounded-full" style={{ backgroundColor: seg.color }} />
-              <span className="text-ui-xs text-neutral3 uppercase">{seg.label}</span>
+              <div className="size-2 rounded-full" style={{ backgroundColor: seg.color }} />
+              <span className="text-ui-sm text-neutral3">{seg.label}</span>
             </div>
           ))}
         </div>
-        <span className="shrink-0 text-ui-xs text-neutral2 uppercase pr-2">Total</span>
+        <span className="shrink-0 text-ui-sm text-neutral2 pr-2">Total</span>
       </div>
       <div className="grid gap-4">
         {sorted.map(d => {

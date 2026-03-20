@@ -24,7 +24,7 @@ export const Tab = ({ children, value, size = 'default', onClick, onClose, class
         focusRing.visible,
         'hover:text-neutral4',
         'after:absolute after:bottom-[-1px] after:left-0 after:right-0 after:h-[1px] after:bg-transparent',
-        `after:${transitions.colors}`,
+        'after:transition-colors after:duration-normal after:ease-out-custom',
         'hover:after:bg-white/20',
         'data-[state=active]:text-neutral4 data-[state=active]:after:bg-white/50',
         className,

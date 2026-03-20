@@ -21,7 +21,7 @@ export function DashboardLineChart({
   yDomain?: [number, number];
 }) {
   return (
-    <div className="border border-red-500">
+    <div>
       <div className="flex flex-wrap items-end gap-4 mb-4">
         {series.map(s => {
           const aggregated = s.aggregate?.(data);

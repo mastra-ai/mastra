@@ -30,7 +30,7 @@ export const OBSERVABILITY_ROUTES = [
   GET_TRACE_ROUTE,
   SCORE_TRACES_ROUTE,
   LIST_SCORES_BY_SPAN_ROUTE,
-  // New (18 routes)
+  // New (17 routes)
   LIST_LOGS,
   LIST_SCORES,
   CREATE_SCORE,

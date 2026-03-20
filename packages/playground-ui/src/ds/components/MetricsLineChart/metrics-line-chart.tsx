@@ -23,15 +23,15 @@ export function MetricsLineChart({
 }) {
   return (
     <div>
-      <div className="flex flex-wrap items-end gap-4 mb-4">
+      <div className="flex flex-wrap w-full items-end gap-4 gap-y-1 mb-4">
         {series.map(s => {
           const aggregated = s.aggregate?.(data);
           return (
-            <div key={s.dataKey} className="flex items-baseline gap-2">
+            <div key={s.dataKey} className="inline-flex items-baseline gap-2  LABEL">
               <div className="h-0.5 w-3 rounded-full -translate-y-0.5" style={{ backgroundColor: s.color }} />
-              <span className="text-ui-sm text-neutral3 uppercase truncate max-w-25">{s.label}</span>
+              <span className="text-ui-sm text-neutral3 truncate max-w-24">{s.label}</span>
               {aggregated && (
-                <span className="text-ui-sm text-neutral4">
+                <span className="text-ui-md text-neutral4">
                   {aggregated.value}
                   {aggregated.suffix && <span className="text-ui-sm text-neutral2"> {aggregated.suffix}</span>}
                 </span>

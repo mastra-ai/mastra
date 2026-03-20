@@ -31,9 +31,12 @@ export function TokenUsageByAgentCard() {
                 <Tab value="tokens" size="smaller">
                   Tokens
                 </Tab>
-                <Tab value="cost" size="smaller">
-                  Cost
-                </Tab>
+                {/* 
+                  Cost related metrics hidden for now
+                  <Tab value="cost" size="smaller">
+                    Cost
+                  </Tab> 
+                */}
               </TabList>
               <TabContent value="tokens">
                 <HorizontalBars
@@ -46,9 +49,9 @@ export function TokenUsageByAgentCard() {
                   fmt={formatCompact}
                 />
               </TabContent>
-              <TabContent value="cost">
+              {/* <TabContent value="cost">
                 <MetricsCard.NoData message="No cost data yet" />
-              </TabContent>
+              </TabContent> */}
             </Tabs>
           )}
         </MetricsCard.Content>

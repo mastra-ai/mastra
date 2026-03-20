@@ -74,7 +74,7 @@ export function StackedRunsBars({ data }: { data: Array<{ name: string; complete
       <div className="space-y-2.5">
         {sorted.map(d => {
           const total = d.completed + d.errors;
-          const successPct = ((d.completed / total) * 100).toFixed(1);
+          const successPct = total > 0 ? ((d.completed / total) * 100).toFixed(1) : '0.0';
           const completedWidth = maxTotal > 0 ? (d.completed / maxTotal) * 100 : 0;
           const errorsWidth = maxTotal > 0 ? (d.errors / maxTotal) * 100 : 0;
           return (

@@ -23,7 +23,9 @@ export function TracesVolumeCard() {
   const { data, isLoading } = useTraceVolumeMetrics();
 
   const hasData = !!data && (data.agentData.length > 0 || data.workflowData.length > 0 || data.toolData.length > 0);
-  const total = data?.agentData.reduce((s, d) => s + d.completed + d.errors, 0) ?? 0;
+  const total = data
+    ? [...data.agentData, ...data.workflowData, ...data.toolData].reduce((s, d) => s + d.completed + d.errors, 0)
+    : 0;
 
   return (
     <MetricsCard>
