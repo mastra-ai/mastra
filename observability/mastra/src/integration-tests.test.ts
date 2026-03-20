@@ -823,6 +823,12 @@ describe('Tracing Integration Tests', () => {
         expect(llmGenerationSpan?.endTime).toBeDefined();
         expect(agentRunSpan?.endTime).toBeDefined();
         expect(llmGenerationSpan?.endTime!.getTime()).toBeLessThanOrEqual(agentRunSpan?.endTime!.getTime());
+
+        // Verify availableTools is populated on the AGENT_RUN span
+        expect(agentRunSpan?.attributes?.availableTools).toBeDefined();
+        expect(agentRunSpan?.attributes?.availableTools).toEqual(
+          expect.arrayContaining(['calculator', 'apiCall', 'workflowExecutor']),
+        );
       });
     },
   );
