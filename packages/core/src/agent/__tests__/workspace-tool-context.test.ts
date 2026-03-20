@@ -472,6 +472,41 @@ function workspaceToolContextTest(version: 'v2' | 'v3') {
         const fileContent = await fs.readFile(filePath, 'utf-8');
         expect(fileContent).toBe('Hello from tool!');
       });
+
+      it('should provide fallback workspace to converted built-in workspace tools', async () => {
+        const workspace = createWorkspace(`built-in-workspace-${version}`);
+
+        const agent = new Agent({
+          id: `workspace-built-in-tools-${version}`,
+          name: 'Workspace Built-in Tools Agent',
+          instructions: 'Tests built-in workspace tool execution context.',
+          model: mockModel,
+          workspace,
+        });
+
+        // listWorkspaceTools is an internal method; call it directly to reproduce
+        // the converted workspace-tool execution path where exec-time workspace is absent.
+        const workspaceTools = await (agent as any).listWorkspaceTools({
+          runId: 'workspace-tool-context-regression',
+          requestContext: new RequestContext(),
+        });
+
+        const writeFileTool = workspaceTools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
+        expect(writeFileTool).toBeDefined();
+
+        await writeFileTool.execute(
+          {
+            path: 'hello.txt',
+            content: 'hello\n',
+            overwrite: true,
+          },
+          { requestContext: new RequestContext() } as any,
+        );
+
+        const filePath = path.join(tempDir, 'hello.txt');
+        const fileContent = await fs.readFile(filePath, 'utf-8');
+        expect(fileContent).toBe('hello\n');
+      });
     });
   });
 }
