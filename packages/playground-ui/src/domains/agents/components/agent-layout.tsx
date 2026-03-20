@@ -1,16 +1,25 @@
-import { Panel, useDefaultLayout, Group, PanelImperativeHandle } from 'react-resizable-panels';
+import { Panel, useDefaultLayout, Group } from 'react-resizable-panels';
 import { getMainContentContentClassName } from '@/ds/components/MainContent';
 import { PanelSeparator } from '@/lib/resize/separator';
-import { CollapsiblePanel } from '@/lib/resize/collapsible-panel';
+import { CollapsiblePanel, CollapsiblePanelTriggerProps } from '@/lib/resize/collapsible-panel';
 
 export interface AgentLayoutProps {
   agentId: string;
   children: React.ReactNode;
   leftSlot?: React.ReactNode;
   rightSlot?: React.ReactNode;
+  rightDefaultCollapsed?: boolean;
+  rightCollapsedTrigger?: CollapsiblePanelTriggerProps;
 }
 
-export const AgentLayout = ({ agentId, children, leftSlot, rightSlot }: AgentLayoutProps) => {
+export const AgentLayout = ({
+  agentId,
+  children,
+  leftSlot,
+  rightSlot,
+  rightDefaultCollapsed = false,
+  rightCollapsedTrigger,
+}: AgentLayoutProps) => {
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
     id: `agent-layout-${agentId}`,
     storage: localStorage,
@@ -51,9 +60,10 @@ export const AgentLayout = ({ agentId, children, leftSlot, rightSlot }: AgentLay
             id="right-slot"
             minSize={300}
             maxSize={'50%'}
-            defaultSize="30%"
+            defaultSize={rightDefaultCollapsed ? 60 : '30%'}
             collapsedSize={60}
             collapsible={true}
+            collapsedTrigger={rightCollapsedTrigger}
           >
             {rightSlot}
           </CollapsiblePanel>

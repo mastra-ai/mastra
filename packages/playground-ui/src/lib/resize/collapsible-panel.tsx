@@ -5,11 +5,24 @@ import { Icon } from '@/ds/icons';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
-export interface CollapsiblePanelProps extends PanelProps {
-  direction: 'left' | 'right';
+export interface CollapsiblePanelTriggerProps {
+  tooltip?: string;
+  label?: string;
+  icon?: React.ReactNode;
 }
 
-export const CollapsiblePanel = ({ collapsedSize, children, direction, ...props }: CollapsiblePanelProps) => {
+export interface CollapsiblePanelProps extends PanelProps {
+  direction: 'left' | 'right';
+  collapsedTrigger?: CollapsiblePanelTriggerProps;
+}
+
+export const CollapsiblePanel = ({
+  collapsedSize,
+  children,
+  direction,
+  collapsedTrigger,
+  ...props
+}: CollapsiblePanelProps) => {
   const [collapsed, setCollapsed] = useState(false);
   const panelRef = usePanelRef();
 
@@ -17,6 +30,8 @@ export const CollapsiblePanel = ({ collapsedSize, children, direction, ...props 
     if (!panelRef.current) return;
     panelRef.current.expand();
   };
+
+  const defaultIcon = direction === 'left' ? <ArrowRight /> : <ArrowLeft />;
 
   return (
     <Panel
@@ -39,12 +54,12 @@ export const CollapsiblePanel = ({ collapsedSize, children, direction, ...props 
           <div className="flex items-center justify-center h-full">
             <TooltipTrigger asChild>
               <Button onClick={expand} className="!h-48 border-none">
-                <Icon>{direction === 'left' ? <ArrowRight /> : <ArrowLeft />}</Icon>
+                <Icon>{collapsedTrigger?.icon ?? defaultIcon}</Icon>
               </Button>
             </TooltipTrigger>
           </div>
 
-          <TooltipContent>Expand</TooltipContent>
+          <TooltipContent>{collapsedTrigger?.tooltip ?? 'Expand'}</TooltipContent>
         </Tooltip>
       ) : (
         children

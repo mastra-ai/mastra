@@ -5,9 +5,16 @@ import { ChatProps } from '@/types';
 import { useAgentSettings } from '../context/agent-context';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { MastraUIMessage } from '@mastra/react';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toAISdkV4Messages, toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { IconButton } from '@/ds/components/IconButton';
+import { SlidersHorizontal } from 'lucide-react';
+import { AgentChatSettingsDialog } from './agent-chat-settings-dialog';
+import { useAgent } from '../hooks/use-agent';
+import { defaultSettings as fallbackAgentSettings } from '../hooks/use-agent-settings-state';
+import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
+import { cn } from '@/lib/utils';
 
 export const AgentChat = ({
   agentId,
@@ -26,7 +33,32 @@ export const AgentChat = ({
   hideModelSwitcher?: boolean;
 }) => {
   const { settings } = useAgentSettings();
+  const { data: agent } = useAgent(agentId);
+  const { settings: tracingSettings } = useTracingSettings();
   const requestContext = useMergedRequestContext();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  const hasSettingsOverride = useMemo(() => {
+    if (!agent) {
+      return false;
+    }
+
+    const defaultModelSettings = {
+      ...fallbackAgentSettings.modelSettings,
+      ...(agent.defaultOptions ?? {}),
+    };
+
+    const currentModelSettings = {
+      ...defaultModelSettings,
+      ...(settings?.modelSettings ?? {}),
+    };
+
+    const hasModelOverrides = JSON.stringify(currentModelSettings) !== JSON.stringify(defaultModelSettings);
+    const hasTracingOverrides = Boolean(tracingSettings?.tracingOptions);
+    const hasRequestContextOverrides = Object.keys(requestContext ?? {}).length > 0;
+
+    return hasModelOverrides || hasTracingOverrides || hasRequestContextOverrides;
+  }, [agent, requestContext, settings?.modelSettings, tracingSettings?.tracingOptions]);
 
   const { data, isLoading: isMessagesLoading } = useAgentMessages({
     agentId: agentId,
@@ -79,7 +111,21 @@ export const AgentChat = ({
         agentId={agentId}
         hasModelList={Boolean(modelList)}
         hideModelSwitcher={hideModelSwitcher}
+        composerControls={
+          <IconButton
+            tooltip={hasSettingsOverride ? 'Chat Settings (overridden)' : 'Chat Settings'}
+            size="sm"
+            variant="outline"
+            className={cn(hasSettingsOverride && 'border-accent1 text-accent1 hover:border-accent1 hover:text-accent1')}
+            onClick={() => setIsSettingsOpen(true)}
+            data-testid="chat-settings-button"
+            data-has-overrides={hasSettingsOverride}
+          >
+            <SlidersHorizontal className={cn(hasSettingsOverride && 'text-accent1')} />
+          </IconButton>
+        }
       />
+      <AgentChatSettingsDialog agentId={agentId} open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
     </MastraRuntimeProvider>
   );
 };

@@ -1,7 +1,8 @@
 import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from '@/ds/components/Threads';
 import { Icon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
-import { Plus } from 'lucide-react';
+import { Copy, Plus } from 'lucide-react';
+import { IconButton } from '@/ds/components/IconButton';
 import { StorageThreadType } from '@mastra/core/memory';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { useState } from 'react';
@@ -14,11 +15,22 @@ export interface ChatThreadsProps {
   isLoading: boolean;
   threadId: string;
   onDelete: (threadId: string) => void;
+  onClone?: (threadId: string) => void;
+  isCloningThreadId?: string | null;
   resourceId: string;
   resourceType: 'agent' | 'network';
 }
 
-export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId, resourceType }: ChatThreadsProps) => {
+export const ChatThreads = ({
+  threads,
+  isLoading,
+  threadId,
+  onDelete,
+  onClone,
+  isCloningThreadId,
+  resourceId,
+  resourceType,
+}: ChatThreadsProps) => {
   const { Link, paths } = useLinkComponent();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const { canDelete } = usePermissions();
@@ -69,7 +81,28 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
                   <span>{formatDay(thread.createdAt)}</span>
                 </ThreadLink>
 
-                {canDeleteThread && <ThreadDeleteButton onClick={() => setDeleteId(thread.id)} />}
+                <div className="flex items-center gap-1">
+                  {onClone && (
+                    <IconButton
+                      tooltip="Clone conversation memory"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 shrink-0 p-0 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-surface4"
+                      onClick={() => onClone(thread.id)}
+                      disabled={isCloningThreadId === thread.id}
+                      aria-label="clone thread"
+                    >
+                      <Copy className="h-4 w-4 text-neutral3 transition-colors" />
+                    </IconButton>
+                  )}
+                  {canDeleteThread && (
+                    <ThreadDeleteButton
+                      tooltip="Delete conversation"
+                      className="h-7 w-7 p-0"
+                      onClick={() => setDeleteId(thread.id)}
+                    />
+                  )}
+                </div>
               </ThreadItem>
             );
           })}

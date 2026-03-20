@@ -142,7 +142,7 @@ const EmptyToolsTable = () => (
           className="w-full"
           variant="light"
           as="a"
-          href="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
+          href="https://mastra.ai/docs/agents/using-tools"
           target="_blank"
         >
           <Icon>

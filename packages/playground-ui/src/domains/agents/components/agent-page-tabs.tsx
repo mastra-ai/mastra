@@ -11,6 +11,7 @@ interface AgentPageTabsProps {
   agentId: string;
   activeTab: AgentPageTab;
   showPlayground?: boolean;
+  rightActions?: React.ReactNode;
 }
 
 function TabLink({
@@ -43,7 +44,7 @@ function TabLink({
   );
 }
 
-export function AgentPageTabs({ agentId, activeTab, showPlayground = false }: AgentPageTabsProps) {
+export function AgentPageTabs({ agentId, activeTab, showPlayground = false, rightActions }: AgentPageTabsProps) {
   return (
     <div className="flex items-center border-b border-border1 px-4 bg-surface2">
       <TabLink
@@ -61,6 +62,7 @@ export function AgentPageTabs({ agentId, activeTab, showPlayground = false }: Ag
         />
       )}
       <TabLink href={`/agents/${agentId}/traces`} active={activeTab === 'traces'} icon={<EyeIcon />} label="Traces" />
+      {rightActions}
     </div>
   );
 }

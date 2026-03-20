@@ -3,18 +3,11 @@ import { AgentMemoryConfig } from './agent-memory-config';
 import { AgentObservationalMemory } from './agent-observational-memory';
 import { useCallback } from 'react';
 import { cn } from '@/lib/utils';
-import { ExternalLink, Copy } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 import { useThreadInput } from '@/domains/conversation';
-import {
-  useMemoryConfig,
-  useMemorySearch,
-  useCloneThread,
-  useMemoryWithOMStatus,
-  useThread,
-} from '@/domains/memory/hooks';
+import { useMemoryConfig, useMemorySearch, useMemoryWithOMStatus, useThread } from '@/domains/memory/hooks';
 import { MemorySearch } from '@/lib/ai-ui/memory-search';
-import { Button } from '@/ds/components/Button/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
 
 interface AgentMemoryProps {
@@ -53,19 +46,6 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
     threadId,
   });
 
-  // Get clone thread hook
-  const { mutateAsync: cloneThread, isPending: isCloning } = useCloneThread();
-
-  // Handle cloning the current thread
-  const handleCloneThread = useCallback(async () => {
-    if (!threadId || !agentId) return;
-
-    const result = await cloneThread({ threadId, agentId });
-    // Navigate to the cloned thread
-    if (result?.thread?.id) {
-      navigate(paths.agentThreadLink(agentId, result.thread.id));
-    }
-  }, [threadId, agentId, cloneThread, navigate, paths]);
 
   // Handle clicking on a search result to scroll to the message
   const handleResultClick = useCallback(
@@ -102,23 +82,7 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   }
 
   return (
-    <div className="flex flex-col h-full min-w-0 overflow-hidden">
-      {/* Clone Thread Section */}
-      {threadId && (
-        <div className="p-4 border-b border-border1">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-medium text-neutral5">Clone Thread</h3>
-              <p className="text-xs text-neutral3 mt-1">Create a copy of this conversation</p>
-            </div>
-            <Button onClick={handleCloneThread} disabled={isCloning}>
-              <Copy className="w-4 h-4 mr-2" />
-              {isCloning ? 'Cloning...' : 'Clone'}
-            </Button>
-          </div>
-        </div>
-      )}
-
+    <div className="flex flex-col h-full min-w-0 overflow-y-auto">
       {/* Observational Memory Section - moved above Semantic Recall */}
       {isOMEnabled && (
         <div className="border-b border-border1 min-w-0 overflow-hidden">
@@ -173,11 +137,9 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
       </div>
 
       {/* Working Memory Section */}
-      <div className="flex-1 overflow-y-auto">
-        <AgentWorkingMemory agentId={agentId} />
-        <div className="border-t border-border1">
-          <AgentMemoryConfig agentId={agentId} />
-        </div>
+      <AgentWorkingMemory agentId={agentId} />
+      <div className="border-t border-border1">
+        <AgentMemoryConfig agentId={agentId} />
       </div>
     </div>
   );

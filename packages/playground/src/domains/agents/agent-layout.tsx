@@ -1,5 +1,5 @@
 import { coreFeatures } from '@mastra/core/features';
-import { MainContentLayout, AgentPageTabs, useIsCmsAvailable } from '@mastra/playground-ui';
+import { MainContentLayout, AgentPageTabs, AgentTabActions, useIsCmsAvailable } from '@mastra/playground-ui';
 import type { AgentPageTab } from '@mastra/playground-ui';
 import { useParams, useLocation } from 'react-router';
 
@@ -22,7 +22,12 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   return (
     <MainContentLayout className="grid-rows-[auto_auto_1fr]">
       <AgentHeader agentId={agentId!} />
-      <AgentPageTabs agentId={agentId!} activeTab={activeTab} showPlayground={showPlayground} />
+      <AgentPageTabs
+        agentId={agentId!}
+        activeTab={activeTab}
+        showPlayground={showPlayground}
+        rightActions={<AgentTabActions agentId={agentId!} />}
+      />
       {children}
     </MainContentLayout>
   );
