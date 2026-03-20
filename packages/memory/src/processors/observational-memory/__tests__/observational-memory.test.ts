@@ -11988,4 +11988,137 @@ describe('OM context loading with no prior observations', () => {
     const obsThreshold = capturedStatusPart.data.windows.active.observations.threshold;
     expect(obsThreshold).toBe(reflectionThreshold);
   });
+
+  it('should persist messages when processInputStep and processOutputResult run on separate processor instances', async () => {
+    // In production, Memory.getInputProcessors() and Memory.getOutputProcessors() each call
+    // createOMProcessor(), creating two separate ObservationalMemoryProcessor instances.
+    // The input instance creates a Turn in processInputStep, and the output instance must
+    // be able to end the turn in processOutputResult to persist messages.
+    // The two instances share state only through the processorStates map (customState).
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'two-instance-thread';
+    const resourceId = 'two-instance-resource';
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: 500000 },
+      reflection: { observationTokens: 200000 },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    // Shared state — this is what ProcessorRunner.processorStates provides
+    const sharedState: Record<string, unknown> = {};
+    const messageList = new MessageList({ threadId, resourceId });
+    const memoryProvider = createMemoryProvider(om);
+
+    const makeCtx = () => {
+      const ctx = new RequestContext();
+      ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+      return ctx;
+    };
+
+    const abort = (() => {
+      throw new Error('aborted');
+    }) as any;
+
+    // Add a user message
+    messageList.add(
+      {
+        id: 'user-msg-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Hello from user' }] },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'input',
+    );
+
+    // --- Input processor instance (created by getInputProcessors) ---
+    const inputProcessor = new ObservationalMemoryProcessor(om, memoryProvider);
+    await inputProcessor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: makeCtx(),
+      stepNumber: 0,
+      state: sharedState,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort,
+    });
+
+    // Simulate LLM generating a response (this happens between input and output processing)
+    messageList.add(
+      {
+        id: 'assistant-msg-1',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Hello from assistant' }] },
+        createdAt: new Date('2025-01-01T10:00:01Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'response',
+    );
+
+    // --- Output processor instance (created by getOutputProcessors) ---
+    // This is a DIFFERENT instance, simulating what happens in production
+    const outputProcessor = new ObservationalMemoryProcessor(om, memoryProvider);
+    await outputProcessor.processOutputResult({
+      messageList,
+      messages: messageList.get.response.db(),
+      requestContext: makeCtx(),
+      state: sharedState,
+      abort,
+      result: {
+        text: 'Hello from assistant',
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        finishReason: 'stop',
+        steps: [],
+      } as any,
+      retryCount: 0,
+    });
+
+    // Verify messages were persisted to storage
+    const { messages: saved } = await storage.listMessages({
+      threadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+
+    expect(saved.length).toBeGreaterThanOrEqual(2);
+    expect(saved.find(m => m.id === 'user-msg-1')).toBeDefined();
+    expect(saved.find(m => m.id === 'assistant-msg-1')).toBeDefined();
+  });
 });

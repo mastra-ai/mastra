@@ -91,6 +91,11 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         : null;
 
       // ── Create turn on first step (or when state is reset) ──
+      // The turn is stashed in customState so that the output processor instance
+      // (which is a separate ObservationalMemoryProcessor) can retrieve it in
+      // processOutputResult. In production, getInputProcessors() and
+      // getOutputProcessors() each call createOMProcessor(), producing two
+      // different instances that share only the processorStates map.
       if (!this.turn || !state.__omTurn) {
         // End previous turn if state was reset mid-flow
         if (this.turn && !state.__omTurn) {
@@ -100,7 +105,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         this.turn.writer = writer;
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory);
-        state.__omTurn = true;
+        state.__omTurn = this.turn;
       }
 
       // ── Run step preparation (activation, threshold, observation, filtering) ──
@@ -210,10 +215,13 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         const memoryContext = parseMemoryRequestContext(requestContext);
         if (memoryContext?.memoryConfig?.readOnly) return messageList;
 
-        // End the turn — saves unsaved messages, awaits buffering
-        if (this.turn) {
-          await this.turn.end();
+        // Retrieve the turn from shared processor state — in production, the input
+        // and output processors are separate instances (see comment in processInputStep).
+        const turn = (state.__omTurn as ObservationTurn | undefined) ?? this.turn;
+        if (turn) {
+          await turn.end();
           this.turn = undefined;
+          state.__omTurn = undefined;
         }
 
         return messageList;
