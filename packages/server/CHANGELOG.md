@@ -1,5 +1,34 @@
 # @mastra/server
 
+## 1.15.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`da93115`](https://github.com/mastra-ai/mastra/commit/da931155c1a9bc63d455d3d86b4ec984db5991fe), [`0efe12a`](https://github.com/mastra-ai/mastra/commit/0efe12a5f008a939a1aac71699486ba40138054e)]:
+  - @mastra/core@1.15.0-alpha.4
+
+## 1.15.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`d7f14c3`](https://github.com/mastra-ai/mastra/commit/d7f14c3285cd253ecdd5f58139b7b6cbdf3678b5)]:
+  - @mastra/core@1.15.0-alpha.3
+
+## 1.15.0-alpha.2
+
+### Patch Changes
+
+- fix: remove explicit Transfer-Encoding header to prevent duplicate headers in Bun runtime ([#11545](https://github.com/mastra-ai/mastra/pull/11545))
+
+  Removes explicit `Transfer-Encoding: chunked` header from `toTextStreamResponse()` and `toDataStreamResponse()` calls in agent streaming handlers. When deploying with Bun, the runtime automatically adds this header for `ReadableStream` responses. Setting it explicitly caused duplicate headers, which broke HTTP protocol compliance and resulted in 502 errors.
+
+  Node.js runtimes will continue to automatically add the `Transfer-Encoding` header for chunked responses, so this change has no impact on Node.js deployments.
+
+  Fixes #11510
+
+- Updated dependencies [[`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8)]:
+  - @mastra/core@1.15.0-alpha.2
+
 ## 1.15.0-alpha.1
 
 ### Patch Changes

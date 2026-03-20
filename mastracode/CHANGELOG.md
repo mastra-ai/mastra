@@ -1,5 +1,35 @@
 # mastracode
 
+## 0.9.1-alpha.5
+
+### Patch Changes
+
+- Fixed mastracode dependency ranges to use explicit semver constraints instead of latest. ([#14541](https://github.com/mastra-ai/mastra/pull/14541))
+
+## 0.9.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`da93115`](https://github.com/mastra-ai/mastra/commit/da931155c1a9bc63d455d3d86b4ec984db5991fe), [`44df54a`](https://github.com/mastra-ai/mastra/commit/44df54a28e6315d9699cf437e4f3e8c7c7d10217), [`0efe12a`](https://github.com/mastra-ai/mastra/commit/0efe12a5f008a939a1aac71699486ba40138054e)]:
+  - @mastra/memory@1.9.0-alpha.2
+  - @mastra/core@1.15.0-alpha.4
+  - @mastra/mcp@1.3.1-alpha.1
+
+## 0.9.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`888c512`](https://github.com/mastra-ai/mastra/commit/888c5121e370289713d560a99bce58814e2fbb69), [`d7f14c3`](https://github.com/mastra-ai/mastra/commit/d7f14c3285cd253ecdd5f58139b7b6cbdf3678b5)]:
+  - @mastra/pg@1.8.2-alpha.0
+  - @mastra/core@1.15.0-alpha.3
+
+## 0.9.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8)]:
+  - @mastra/core@1.15.0-alpha.2
+
 ## 0.9.1-alpha.1
 
 ### Patch Changes

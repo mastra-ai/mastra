@@ -260,6 +260,21 @@ When `requireReadBeforeWrite` is enabled on write tools, agents must read a file
 - **Existing files**: Must be read first
 - **Externally modified files**: If a file changed since the agent read it, the write fails
 
+File write safety is enforced at two layers:
+
+1. **Tool layer**: Before a write tool runs, the read tracker checks whether the file was modified since it was last read. If it was, the tool throws a `FileReadRequiredError`.
+1. **Filesystem layer**: At write time, `writeFile()` compares the file's current modification time against the expected value (passed via `expectedMtime` in write options). If they don't match, it throws a `StaleFileError`. This catches external modifications (for example, an editor saving the file) that happen between the tool-level check and the actual write.
+
+When `requireReadBeforeWrite` is enabled, workspace tools pass the recorded modification time through automatically. You can also use `expectedMtime` directly when calling `filesystem.writeFile()` outside of tools:
+
+```typescript
+const stat = await filesystem.stat('/docs/file.md')
+// ... later ...
+await filesystem.writeFile('/docs/file.md', newContent, {
+  expectedMtime: stat.modifiedAt,
+})
+```
+
 ## Initialization
 
 Calling `init()` is optional in most cases—some providers initialize on first operation. Call `init()` manually when using a workspace outside of Mastra (standalone scripts, tests) or when you need to pre-provision resources before the first agent interaction.

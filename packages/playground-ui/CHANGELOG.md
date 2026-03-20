@@ -1,5 +1,36 @@
 # @mastra/playground-ui
 
+## 18.0.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`da93115`](https://github.com/mastra-ai/mastra/commit/da931155c1a9bc63d455d3d86b4ec984db5991fe), [`0efe12a`](https://github.com/mastra-ai/mastra/commit/0efe12a5f008a939a1aac71699486ba40138054e)]:
+  - @mastra/core@1.15.0-alpha.4
+  - @mastra/ai-sdk@1.2.0-alpha.1
+  - @mastra/client-js@1.9.1-alpha.4
+  - @mastra/react@0.2.16-alpha.4
+
+## 18.0.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`d7f14c3`](https://github.com/mastra-ai/mastra/commit/d7f14c3285cd253ecdd5f58139b7b6cbdf3678b5)]:
+  - @mastra/core@1.15.0-alpha.3
+  - @mastra/client-js@1.9.1-alpha.3
+  - @mastra/react@0.2.16-alpha.3
+
+## 18.0.0-alpha.2
+
+### Patch Changes
+
+- Fixed blank page crash when clicking "Add Header" while using `npx mastra studio` ([#14482](https://github.com/mastra-ai/mastra/pull/14482))
+
+- Updated dependencies [[`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`413fe2c`](https://github.com/mastra-ai/mastra/commit/413fe2c23548a3b1324b5d7939c98418246e903c), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8), [`631d9d9`](https://github.com/mastra-ai/mastra/commit/631d9d9ce2b96169d8cdd12bdc45d4f3a0f3b530)]:
+  - @mastra/core@1.15.0-alpha.2
+  - @mastra/ai-sdk@1.2.0-alpha.1
+  - @mastra/client-js@1.9.1-alpha.2
+  - @mastra/react@0.2.16-alpha.2
+
 ## 17.0.1-alpha.1
 
 ### Patch Changes
