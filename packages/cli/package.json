@@ -91,6 +91,7 @@
     "eslint": "^9.39.4",
     "openapi-typescript": "^7.13.0",
     "memfs": "^4.56.11",
+    "openapi-typescript": "^7.13.0",
     "rollup": "^4.59.0",
     "tsup": "^8.5.1",
     "type-fest": "^5.4.4",

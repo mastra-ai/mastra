@@ -727,6 +727,7 @@ interface InteractivePromptArgs {
   skip?: {
     connectionMethod?: boolean;
     directory?: boolean;
+    connectionMethod?: boolean;
     llmProvider?: boolean;
     llmApiKey?: boolean;
     gitInit?: boolean;
