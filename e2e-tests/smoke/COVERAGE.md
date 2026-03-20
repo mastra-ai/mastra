@@ -1,6 +1,6 @@
 # Smoke Test Coverage
 
-> 116 tests across 25 test files — last updated 2026-03-20
+> 131 tests across 27 test files — last updated 2026-03-20
 
 ## What's Tested
 
@@ -160,6 +160,29 @@
 
 ---
 
+### MCP (15 tests, 2 files)
+
+#### REST API (`rest.test.ts` — 10 tests)
+- [x] List registered MCP servers (name, version, is_latest)
+- [x] Get server details by ID
+- [x] 404 for non-existent server
+- [x] List tools on MCP server (calculator, string-transform)
+- [x] Get tool details with input schema
+- [x] 404 for non-existent tool on valid server
+- [x] 404 for tool on non-existent server
+- [x] Execute calculator via MCP REST endpoint (exact result)
+- [x] Execute string-transform via MCP REST endpoint (exact result)
+- [x] 500 when executing non-existent tool
+
+#### Client Transport (`client.test.ts` — 5 tests)
+- [x] Connect and list tools via Streamable HTTP transport
+- [x] Execute calculator tool via Streamable HTTP
+- [x] Execute string-transform tool via Streamable HTTP
+- [x] Connect and list tools via SSE fallback transport
+- [x] Execute calculator tool via SSE transport
+
+---
+
 ### Memory (14 tests, 3 files)
 
 #### Threads (`threads.test.ts` — 6 tests)
@@ -249,18 +272,13 @@
 |----------|-------|----------|
 | `GET /system/packages` | Installed package info | Low |
 
-### MCP — Model Context Protocol (0 coverage)
+### MCP — Untested Endpoints
 
 | Endpoint | Notes | Priority |
 |----------|-------|----------|
-| `GET /mcp/v0/servers` | List MCP servers | Medium |
-| `GET /mcp/v0/servers/:id` | Get server details | Medium |
-| `GET /mcp/:serverId/tools` | List MCP tools | Medium |
-| `POST /mcp/:serverId/tools/:toolId/execute` | Execute MCP tool | Medium |
-| `ALL /mcp/:serverId/mcp` | MCP HTTP transport | Low |
-| `ALL /mcp/:serverId/sse` | MCP SSE transport | Low |
-
-**Requires:** MCP server configuration.
+| `POST /mcp/:serverId/messages` | SSE message forwarding | Low |
+| MCP resources (list, read, subscribe) | Requires resource configuration | Medium |
+| MCP prompts (list, get) | Requires prompt configuration | Medium |
 
 ### Auth (0 coverage)
 
@@ -335,5 +353,5 @@
 2. **Logs** — 3 endpoints, minimal setup, validates telemetry plumbing
 3. **Memory search + clone** — 2 endpoints, extends existing memory coverage
 4. **Agent structured output** — Uses existing agent, adds schema-based output verification
-5. **MCP** — 6 endpoints, requires MCP server config but validates protocol support
-6. **A2A Protocol** — 2 endpoints, validates agent interoperability
+5. **A2A Protocol** — 2 endpoints, validates agent interoperability
+6. **MCP resources/prompts** — Extends MCP coverage with resource and prompt features

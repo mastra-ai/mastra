@@ -10,6 +10,7 @@
   "dependencies": {
     "@mastra/core": "alpha",
     "@mastra/libsql": "alpha",
+    "@mastra/mcp": "alpha",
     "@mastra/memory": "alpha"
   },
   "devDependencies": {
