@@ -1595,7 +1595,7 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
     };
 
     const textContentById = new Map<string, { index: number; text: string }>();
-    const thinkingContentById = new Map<string, { index: number; text: string }>();
+    const thinkingContentById = new Map<string, { index: number; text: string; signature?: string }>();
     const abortForOmFailure = ({
       operationType,
       stage,
@@ -1654,6 +1654,19 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
             const thinkingContent = currentMessage.content[thinkingState.index];
             if (thinkingContent && thinkingContent.type === 'thinking') {
               thinkingContent.thinking = thinkingState.text;
+            }
+            this.emit({ type: 'message_update', message: { ...currentMessage } });
+          }
+          break;
+        }
+
+        case 'reasoning-signature': {
+          const thinkingState = thinkingContentById.get(chunk.payload.id);
+          if (thinkingState) {
+            thinkingState.signature = chunk.payload.signature;
+            const thinkingContent = currentMessage.content[thinkingState.index];
+            if (thinkingContent && thinkingContent.type === 'thinking') {
+              (thinkingContent as any).signature = chunk.payload.signature;
             }
             this.emit({ type: 'message_update', message: { ...currentMessage } });
           }

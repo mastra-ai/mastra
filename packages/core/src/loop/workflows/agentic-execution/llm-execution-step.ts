@@ -178,7 +178,13 @@ async function processOutputStream<OUTPUT = undefined>({
               {
                 type: 'reasoning' as const,
                 reasoning: '',
-                details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
+                details: [
+                  {
+                    type: 'text' as const,
+                    text: runState.state.reasoningDeltas.join(''),
+                    ...(runState.state.reasoningSignature ? { signature: runState.state.reasoningSignature } : {}),
+                  },
+                ],
                 providerMetadata: runState.state.providerOptions,
               },
             ],
@@ -192,6 +198,7 @@ async function processOutputStream<OUTPUT = undefined>({
       runState.setState({
         isReasoning: false,
         reasoningDeltas: [],
+        reasoningSignature: undefined,
       });
     }
 
@@ -336,6 +343,14 @@ async function processOutputStream<OUTPUT = undefined>({
         break;
       }
 
+      case 'reasoning-signature': {
+        runState.setState({
+          reasoningSignature: chunk.payload.signature,
+        });
+        safeEnqueue(controller, chunk);
+        break;
+      }
+
       case 'reasoning-end': {
         // If reasoning was already flushed by the guard (e.g. tool-input-start arrived
         // before reasoning-end from provider flush), skip the duplicate empty message.
@@ -357,7 +372,13 @@ async function processOutputStream<OUTPUT = undefined>({
               {
                 type: 'reasoning' as const,
                 reasoning: '',
-                details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
+                details: [
+                  {
+                    type: 'text' as const,
+                    text: runState.state.reasoningDeltas.join(''),
+                    ...(runState.state.reasoningSignature ? { signature: runState.state.reasoningSignature } : {}),
+                  },
+                ],
                 providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
               },
             ],
@@ -373,6 +394,7 @@ async function processOutputStream<OUTPUT = undefined>({
         runState.setState({
           isReasoning: false,
           reasoningDeltas: [],
+          reasoningSignature: undefined,
           providerOptions: undefined,
         });
 

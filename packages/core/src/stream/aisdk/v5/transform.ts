@@ -107,6 +107,11 @@ export type StreamPart =
         user: ModelMessage[];
         nonUser: AIV5ResponseMessage[];
       };
+    }
+  | {
+      type: 'reasoning-signature';
+      id?: string;
+      signature: string;
     };
 
 export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: string }): ChunkType | undefined {
@@ -182,6 +187,17 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         payload: {
           id: value.id,
           providerMetadata: value.providerMetadata,
+        },
+      };
+
+    case 'reasoning-signature':
+      return {
+        type: 'reasoning-signature',
+        runId: ctx.runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: value.id ?? '',
+          signature: value.signature,
         },
       };
 
@@ -397,8 +413,6 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         text: chunk.payload.text,
         providerMetadata: chunk.payload.providerMetadata,
       };
-    case 'reasoning-signature':
-      throw new Error('AISDKv5 chunk type "reasoning-signature" not supported');
     case 'redacted-reasoning':
       throw new Error('AISDKv5 chunk type "redacted-reasoning" not supported');
 
