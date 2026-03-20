@@ -29,6 +29,7 @@ import {
   useStudioConfig,
 } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
+import type { RouteObject } from 'react-router';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
@@ -85,6 +86,7 @@ import { MinimalLayout } from '@/components/minimal-layout';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import { Processors } from '@/pages/processors';
 import { Processor } from '@/pages/processors/processor';
+import { RouteError } from '@/pages/route-error';
 import Tools from '@/pages/tools';
 
 const paths: LinkComponentProviderProps['paths'] = {
@@ -172,116 +174,120 @@ const agentCmsChildRoutes = [
   { path: 'variables', element: <CmsAgentVariablesPage /> },
 ];
 
-const routes = [
-  // Auth pages - no layout
-  { path: '/login', element: <Login /> },
-  { path: '/signup', element: <SignUp /> },
+const routes: RouteObject[] = [
   {
-    element: <MinimalRootLayout />,
+    errorElement: <RouteError />,
     children: [
-      { path: '/agents/:agentId/session', element: <AgentSession /> },
-      { path: '/agents/:agentId/session/:threadId', element: <AgentSession /> },
-    ],
-  },
-  {
-    element: <RootLayout />,
-    children: [
-      // Conditional routes (non-platform only)
-      ...(isMastraPlatform
-        ? []
-        : [
-            { path: '/settings', element: <StudioSettingsPage /> },
-            { path: '/templates', element: <Templates /> },
-            { path: '/templates/:templateSlug', element: <Template /> },
-          ]),
-
-      { path: '/scorers', element: <Scorers /> },
-      { path: '/scorers/:scorerId', element: <Scorer /> },
-      { path: '/observability', element: <Observability /> },
-      { path: '/agents', element: <Agents /> },
+      // Auth pages - no layout
+      { path: '/login', element: <Login /> },
+      { path: '/signup', element: <SignUp /> },
       {
-        path: '/cms/agents/create',
-        element: <CreateLayoutWrapper />,
-        children: agentCmsChildRoutes,
-      },
-      {
-        path: '/cms/agents/:agentId/edit',
-        element: <EditLayoutWrapper />,
-        children: agentCmsChildRoutes,
-      },
-      { path: '/cms/scorers/create', element: <CmsScorersCreatePage /> },
-      { path: '/cms/scorers/:scorerId/edit', element: <CmsScorersEditPage /> },
-      { path: '/prompts', element: <PromptBlocks /> },
-      { path: '/cms/prompts/create', element: <CmsPromptBlocksCreatePage /> },
-      { path: '/cms/prompts/:promptBlockId/edit', element: <CmsPromptBlocksEditPage /> },
-      { path: '/agents/:agentId/tools/:toolId', element: <AgentTool /> },
-      {
-        path: '/agents/:agentId',
-        element: (
-          <AgentLayout>
-            <Outlet />
-          </AgentLayout>
-        ),
+        element: <MinimalRootLayout />,
         children: [
-          {
-            index: true,
-            loader: ({ params }: { params: { agentId: string } }) => redirect(`/agents/${params.agentId}/chat`),
-          },
-          { path: 'chat', element: <Agent /> },
-          { path: 'chat/:threadId', element: <Agent /> },
-          ...(isExperimentalFeatures ? [{ path: 'playground', element: <AgentPlayground /> }] : []),
-          { path: 'traces', element: <AgentTraces /> },
+          { path: '/agents/:agentId/session', element: <AgentSession /> },
+          { path: '/agents/:agentId/session/:threadId', element: <AgentSession /> },
         ],
       },
-
-      { path: '/tools', element: <Tools /> },
-      { path: '/tools/:toolId', element: <Tool /> },
-
-      { path: '/processors', element: <Processors /> },
-      { path: '/processors/:processorId', element: <Processor /> },
-
-      { path: '/mcps', element: <MCPs /> },
-      { path: '/mcps/:serverId', element: <McpServerPage /> },
-      { path: '/mcps/:serverId/tools/:toolId', element: <MCPServerToolExecutor /> },
-
-      { path: '/workspaces', element: <Workspace /> },
-      { path: '/workspaces/:workspaceId', element: <Workspace /> },
-      { path: '/workspaces/:workspaceId/skills/:skillName', element: <WorkspaceSkillDetailPage /> },
-
-      { path: '/workflows', element: <Workflows /> },
       {
-        path: '/workflows/:workflowId',
-        element: (
-          <WorkflowLayout>
-            <Outlet />
-          </WorkflowLayout>
-        ),
+        element: <RootLayout />,
         children: [
+          // Conditional routes (non-platform only)
+          ...(isMastraPlatform
+            ? []
+            : [
+                { path: '/settings', element: <StudioSettingsPage /> },
+                { path: '/templates', element: <Templates /> },
+                { path: '/templates/:templateSlug', element: <Template /> },
+              ]),
+
+          { path: '/scorers', element: <Scorers /> },
+          { path: '/scorers/:scorerId', element: <Scorer /> },
+          { path: '/observability', element: <Observability /> },
+          { path: '/agents', element: <Agents /> },
           {
-            index: true,
-            loader: ({ params }: { params: { workflowId: string } }) =>
-              redirect(`/workflows/${params.workflowId}/graph`),
+            path: '/cms/agents/create',
+            element: <CreateLayoutWrapper />,
+            children: agentCmsChildRoutes,
           },
-          { path: 'graph', element: <Workflow /> },
-          { path: 'graph/:runId', element: <Workflow /> },
+          {
+            path: '/cms/agents/:agentId/edit',
+            element: <EditLayoutWrapper />,
+            children: agentCmsChildRoutes,
+          },
+          { path: '/cms/scorers/create', element: <CmsScorersCreatePage /> },
+          { path: '/cms/scorers/:scorerId/edit', element: <CmsScorersEditPage /> },
+          { path: '/prompts', element: <PromptBlocks /> },
+          { path: '/cms/prompts/create', element: <CmsPromptBlocksCreatePage /> },
+          { path: '/cms/prompts/:promptBlockId/edit', element: <CmsPromptBlocksEditPage /> },
+          { path: '/agents/:agentId/tools/:toolId', element: <AgentTool /> },
+          {
+            path: '/agents/:agentId',
+            element: (
+              <AgentLayout>
+                <Outlet />
+              </AgentLayout>
+            ),
+            children: [
+              {
+                index: true,
+                loader: ({ params }) => redirect(`/agents/${params.agentId}/chat`),
+              },
+              { path: 'chat', element: <Agent /> },
+              { path: 'chat/:threadId', element: <Agent /> },
+              ...(isExperimentalFeatures ? [{ path: 'playground', element: <AgentPlayground /> }] : []),
+              { path: 'traces', element: <AgentTraces /> },
+            ],
+          },
+
+          { path: '/tools', element: <Tools /> },
+          { path: '/tools/:toolId', element: <Tool /> },
+
+          { path: '/processors', element: <Processors /> },
+          { path: '/processors/:processorId', element: <Processor /> },
+
+          { path: '/mcps', element: <MCPs /> },
+          { path: '/mcps/:serverId', element: <McpServerPage /> },
+          { path: '/mcps/:serverId/tools/:toolId', element: <MCPServerToolExecutor /> },
+
+          { path: '/workspaces', element: <Workspace /> },
+          { path: '/workspaces/:workspaceId', element: <Workspace /> },
+          { path: '/workspaces/:workspaceId/skills/:skillName', element: <WorkspaceSkillDetailPage /> },
+
+          { path: '/workflows', element: <Workflows /> },
+          {
+            path: '/workflows/:workflowId',
+            element: (
+              <WorkflowLayout>
+                <Outlet />
+              </WorkflowLayout>
+            ),
+            children: [
+              {
+                index: true,
+                loader: ({ params }) => redirect(`/workflows/${params.workflowId}/graph`),
+              },
+              { path: 'graph', element: <Workflow /> },
+              { path: 'graph/:runId', element: <Workflow /> },
+            ],
+          },
+
+          ...(isExperimentalFeatures
+            ? [
+                { path: '/datasets', element: <Datasets /> },
+                { path: '/datasets/:datasetId', element: <DatasetPage /> },
+                { path: '/datasets/:datasetId/items/:itemId', element: <DatasetItemPage /> },
+                { path: '/datasets/:datasetId/items/:itemId/versions', element: <DatasetItemVersionsComparePage /> },
+                { path: '/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
+                { path: '/datasets/:datasetId/experiments', element: <CompareDatasetExperimentsPage /> },
+                { path: '/datasets/:datasetId/items', element: <DatasetItemsComparePage /> },
+                { path: '/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },
+              ]
+            : []),
+
+          { index: true, loader: () => redirect('/agents') },
+          { path: '/request-context', element: <RequestContext /> },
         ],
       },
-
-      ...(isExperimentalFeatures
-        ? [
-            { path: '/datasets', element: <Datasets /> },
-            { path: '/datasets/:datasetId', element: <DatasetPage /> },
-            { path: '/datasets/:datasetId/items/:itemId', element: <DatasetItemPage /> },
-            { path: '/datasets/:datasetId/items/:itemId/versions', element: <DatasetItemVersionsComparePage /> },
-            { path: '/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
-            { path: '/datasets/:datasetId/experiments', element: <CompareDatasetExperimentsPage /> },
-            { path: '/datasets/:datasetId/items', element: <DatasetItemsComparePage /> },
-            { path: '/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },
-          ]
-        : []),
-
-      { index: true, loader: () => redirect('/agents') },
-      { path: '/request-context', element: <RequestContext /> },
     ],
   },
 ];

@@ -1,3 +1,4 @@
+import { ErrorBoundary } from '@mastra/playground-ui';
 import { StrictMode } from 'react';
 
 import '@/index.css';
@@ -9,6 +10,8 @@ import './index.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 );

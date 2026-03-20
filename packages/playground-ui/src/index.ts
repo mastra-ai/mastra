@@ -14,6 +14,7 @@ export * from './ds/components/Threads';
 export * from './types';
 
 // DS Components - Existing
+export * from './ds/components/ErrorBoundary/index';
 export * from './ds/components/Alert';
 export * from './ds/components/Avatar';
 export * from './ds/components/Badge/index';
