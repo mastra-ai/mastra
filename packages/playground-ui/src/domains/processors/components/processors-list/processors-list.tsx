@@ -1,5 +1,5 @@
 import { EntityList } from '@/ds/components/EntityList';
-import { Spinner } from '@/ds/components/Spinner';
+import { EntityListSkeleton } from '@/ds/components/EntityList';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
@@ -9,16 +9,10 @@ import { is403ForbiddenError } from '@/lib/query-utils';
 import { useLinkComponent } from '@/lib/framework';
 import { truncateString } from '@/lib/truncate-string';
 import { useMemo, useState } from 'react';
-import { Cpu } from 'lucide-react';
-import type { ProcessorInfo } from '../../hooks/use-processors';
+import { CheckIcon, Cpu, FileInput, FileOutput } from 'lucide-react';
+import type { ProcessorInfo, ProcessorPhase } from '../../hooks/use-processors';
 
-const phaseLabels: Record<string, string> = {
-  input: 'Input',
-  inputStep: 'Input Step',
-  outputStream: 'Output Stream',
-  outputResult: 'Output Result',
-  outputStep: 'Output Step',
-};
+const phaseKeys: ProcessorPhase[] = ['input', 'inputStep', 'outputStep', 'outputStream', 'outputResult'];
 
 export interface ProcessorsListProps {
   processors: Record<string, ProcessorInfo>;
@@ -28,13 +22,7 @@ export interface ProcessorsListProps {
   onSearch?: (search: string) => void;
 }
 
-export function ProcessorsList({
-  processors,
-  isLoading,
-  error,
-  search: externalSearch,
-  onSearch: externalOnSearch,
-}: ProcessorsListProps) {
+export function ProcessorsList({ processors, isLoading, error, search: externalSearch }: ProcessorsListProps) {
   const { paths } = useLinkComponent();
   const [internalSearch, setInternalSearch] = useState('');
   const search = externalSearch ?? internalSearch;
@@ -46,9 +34,7 @@ export function ProcessorsList({
 
   const filteredData = useMemo(() => {
     const term = search.toLowerCase();
-    return processorData.filter(
-      p => p.id.toLowerCase().includes(term) || (p.name || '').toLowerCase().includes(term),
-    );
+    return processorData.filter(p => p.id.toLowerCase().includes(term) || (p.name || '').toLowerCase().includes(term));
   }, [processorData, search]);
 
   if (error && is403ForbiddenError(error)) {
@@ -63,7 +49,14 @@ export function ProcessorsList({
           titleSlot="Configure Processors"
           descriptionSlot="No processors are configured yet. Add input or output processors to your agents to transform messages."
           actionSlot={
-            <Button size="lg" className="w-full" variant="light" as="a" href="https://mastra.ai/docs/agents/processors" target="_blank">
+            <Button
+              size="lg"
+              className="w-full"
+              variant="light"
+              as="a"
+              href="https://mastra.ai/docs/agents/processors"
+              target="_blank"
+            >
               <Icon>
                 <Cpu />
               </Icon>
@@ -76,27 +69,63 @@ export function ProcessorsList({
   }
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Spinner />
-      </div>
-    );
+    return <EntityListSkeleton columns="auto 1fr auto auto auto auto auto auto" />;
   }
 
   return (
-    <EntityList columns="auto 1fr auto auto">
+    <EntityList columns="auto 1fr auto auto auto auto auto auto">
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>
-        <EntityList.TopCell>Phases</EntityList.TopCell>
-        <EntityList.TopCellSmart label="Agents" icon={<AgentIcon />} tooltip="Attached Agents" className="text-center" />
+        <EntityList.TopCellSmart long="Input" short="Input" tooltip="Contains Input phase" className="text-center" />
+        <EntityList.TopCellSmart
+          long="Input Step"
+          short={
+            <>
+              <FileInput /> Step
+            </>
+          }
+          tooltip="Contains Input Step phase"
+          className="text-center"
+        />
+        <EntityList.TopCellSmart
+          long="Output Step"
+          short={
+            <>
+              <FileOutput /> Step
+            </>
+          }
+          tooltip="Contains Output Step phase"
+          className="text-center"
+        />
+        <EntityList.TopCellSmart
+          long="Output Stream"
+          short={
+            <>
+              <FileOutput /> Stream
+            </>
+          }
+          tooltip="Contains Output Stream phase"
+          className="text-center"
+        />
+        <EntityList.TopCellSmart
+          long="Output Result"
+          short={
+            <>
+              <FileOutput /> Result
+            </>
+          }
+          tooltip="Contains Output Result phase"
+          className="text-center"
+        />
+        <EntityList.TopCellSmart short="Used by" long="Used by Agents" className="text-center" />
       </EntityList.Top>
 
       {filteredData.map(processor => {
         const name = truncateString(processor.name || processor.id, 50);
         const description = truncateString(processor.description ?? '', 200);
-        const phases = (processor.phases || []).map(p => phaseLabels[p] || p).join(', ');
         const agentsCount = processor.agentIds?.length ?? 0;
+        const phaseSet = new Set(processor.phases || []);
 
         const linkTo = processor.isWorkflow
           ? paths.workflowLink(processor.id) + '/graph'
@@ -104,11 +133,15 @@ export function ProcessorsList({
 
         return (
           <EntityList.RowLink key={processor.id} to={linkTo}>
-              <EntityList.NameCell>{name}</EntityList.NameCell>
-              <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
-              <EntityList.TextCell>{phases}</EntityList.TextCell>
-              <EntityList.TextCell className="text-center">{agentsCount || ''}</EntityList.TextCell>
-            </EntityList.RowLink>
+            <EntityList.NameCell>{name}</EntityList.NameCell>
+            <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
+            {phaseKeys.map(key => (
+              <EntityList.TextCell key={key} className="text-center">
+                {phaseSet.has(key) && <CheckIcon className="size-4 mx-auto" />}
+              </EntityList.TextCell>
+            ))}
+            <EntityList.TextCell className="text-center">{agentsCount || ''}</EntityList.TextCell>
+          </EntityList.RowLink>
         );
       })}
     </EntityList>

@@ -7,7 +7,7 @@ export interface NoAgentsInfoProps {
 }
 
 export const NoAgentsInfo = ({ onCreateClick }: NoAgentsInfoProps) => (
-  <div className="flex h-full items-center justify-center">
+  <div className="flex h-full items-center justify-center ">
     <EmptyState
       iconSlot={<CircleSlashIcon />}
       titleSlot="No Agents yet"

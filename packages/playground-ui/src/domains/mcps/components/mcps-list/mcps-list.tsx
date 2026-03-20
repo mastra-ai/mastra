@@ -1,6 +1,6 @@
 import type { McpServerListResponse } from '@mastra/client-js';
 import { EntityList } from '@/ds/components/EntityList';
-import { Spinner } from '@/ds/components/Spinner';
+import { EntityListSkeleton } from '@/ds/components/EntityList';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Button } from '@/ds/components/Button';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
@@ -83,9 +83,9 @@ export function McpServersList({ mcpServers, isLoading, error, search: externalS
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Spinner />
-      </div>
+      <EntityListSkeleton
+        columns="auto 1fr auto auto auto"
+      />
     );
   }
 
@@ -94,9 +94,9 @@ export function McpServersList({ mcpServers, isLoading, error, search: externalS
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>URL</EntityList.TopCell>
-        <EntityList.TopCellSmart label="Agents" icon={<AgentIcon />} tooltip="Agent Tools" className="text-center" />
-        <EntityList.TopCellSmart label="Tools" icon={<ToolsIcon />} tooltip="Tools" className="text-center" />
-        <EntityList.TopCellSmart label="Workflows" icon={<WorkflowIcon />} tooltip="Workflow Tools" className="text-center" />
+        <EntityList.TopCellSmart long="Agents" short={<AgentIcon />} tooltip="Agent Tools" className="text-center" />
+        <EntityList.TopCellSmart long="Tools" short={<ToolsIcon />} tooltip="Tools" className="text-center" />
+        <EntityList.TopCellSmart long="Workflows" short={<WorkflowIcon />} tooltip="Workflow Tools" className="text-center" />
       </EntityList.Top>
 
       {filteredData.map(server => (

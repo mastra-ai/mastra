@@ -59,7 +59,7 @@ export const ProviderLogo = ({ providerId, className = '', size = 20, noStyle = 
       alt={`${providerId} logo`}
       width={size}
       height={size}
-      className={className}
+      className={`dark:invert ${className}`}
       onError={() => setImageError(true)}
       loading="lazy"
       style={{

@@ -1,6 +1,6 @@
 import type { DatasetRecord } from '@mastra/client-js';
 import { EntityList } from '@/ds/components/EntityList';
-import { Spinner } from '@/ds/components/Spinner';
+import { EntityListSkeleton } from '@/ds/components/EntityList';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { useLinkComponent } from '@/lib/framework';
@@ -45,9 +45,9 @@ export function DatasetsList({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Spinner />
-      </div>
+      <EntityListSkeleton
+        columns="auto 1fr auto auto"
+      />
     );
   }
 

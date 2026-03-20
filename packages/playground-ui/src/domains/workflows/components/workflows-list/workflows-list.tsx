@@ -1,6 +1,6 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { EntityList } from '@/ds/components/EntityList';
-import { Spinner } from '@/ds/components/Spinner';
+import { EntityListSkeleton } from '@/ds/components/EntityList';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
@@ -73,9 +73,9 @@ export function WorkflowsList({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Spinner />
-      </div>
+      <EntityListSkeleton
+        columns="auto 1fr auto"
+      />
     );
   }
 

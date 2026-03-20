@@ -1,6 +1,6 @@
 import type { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
 import { EntityList } from '@/ds/components/EntityList';
-import { Spinner } from '@/ds/components/Spinner';
+import { EntityListSkeleton } from '@/ds/components/EntityList';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
@@ -68,9 +68,9 @@ export function ToolsList({ tools, agents, isLoading, error, search: externalSea
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Spinner />
-      </div>
+      <EntityListSkeleton
+        columns="auto 1fr auto"
+      />
     );
   }
 
@@ -80,8 +80,8 @@ export function ToolsList({ tools, agents, isLoading, error, search: externalSea
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>
         <EntityList.TopCellSmart
-          label="Agents"
-          icon={<AgentIcon />}
+          long="Agents"
+          short={<AgentIcon />}
           tooltip="Attached Agents"
           className="text-center"
         />

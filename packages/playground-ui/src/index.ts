@@ -88,6 +88,7 @@ export * from './ds/components/Notice';
 export * from './ds/components/Chip';
 export * from './ds/components/Tree';
 export * from './ds/components/EntityList';
+export * from './ds/components/EntityListPageLayout';
 export * from './ds/components/PageContent';
 export * from './ds/components/ListSearch';
 export * from './ds/components/ErrorState';

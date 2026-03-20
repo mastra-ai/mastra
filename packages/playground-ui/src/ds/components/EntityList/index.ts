@@ -1,2 +1,2 @@
 export * from './entity-list';
-export * from '../EntityListPageLayout';
+export * from './entity-list-skeleton';

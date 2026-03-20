@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, forwardRef } from 'react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
 
@@ -7,9 +7,10 @@ export type EntityListTopCellProps = {
   className?: string;
 };
 
-export function EntityListTopCell({ children, className }: EntityListTopCellProps) {
+export const EntityListTopCell = forwardRef<HTMLSpanElement, EntityListTopCellProps>(({ children, className }, ref) => {
   return (
     <span
+      ref={ref}
       className={cn(
         'h-8 py-1 flex items-center uppercase whitespace-nowrap text-neutral2 tracking-widest text-ui-xs',
         className,
@@ -18,7 +19,7 @@ export function EntityListTopCell({ children, className }: EntityListTopCellProp
       {children}
     </span>
   );
-}
+});
 
 export type EntityListTopCellWithTooltipProps = {
   children: ReactNode;
@@ -28,45 +29,62 @@ export type EntityListTopCellWithTooltipProps = {
 
 export function EntityListTopCellWithTooltip({ children, tooltip, className }: EntityListTopCellWithTooltipProps) {
   return (
-    <EntityListTopCell className={className}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex justify-center">{children}</span>
-        </TooltipTrigger>
-        <TooltipContent>{tooltip}</TooltipContent>
-      </Tooltip>
-    </EntityListTopCell>
+    <Tooltip>
+      <TooltipTrigger>
+        <EntityListTopCell className={className}>{children}</EntityListTopCell>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 
 export type EntityListTopCellSmartProps = {
-  label: string;
-  icon: ReactNode;
+  long: ReactNode;
+  short: ReactNode;
   tooltip?: string;
   breakpoint?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   className?: string;
 };
 
 const breakpointClasses: Record<string, { show: string; hide: string }> = {
-  sm: { show: 'hidden sm:inline', hide: 'sm:hidden' },
-  md: { show: 'hidden md:inline', hide: 'md:hidden' },
-  lg: { show: 'hidden lg:inline', hide: 'lg:hidden' },
-  xl: { show: 'hidden xl:inline', hide: 'xl:hidden' },
-  '2xl': { show: 'hidden 2xl:inline', hide: '2xl:hidden' },
+  sm: { show: 'hidden sm:inline-flex', hide: 'inline-flex sm:hidden' },
+  md: { show: 'hidden md:inline-flex', hide: 'inline-flex md:hidden' },
+  lg: { show: 'hidden lg:inline-flex', hide: 'inline-flex lg:hidden' },
+  xl: { show: 'hidden xl:inline-flex', hide: 'inline-flex xl:hidden' },
+  '2xl': { show: 'hidden 2xl:inline-flex', hide: 'inline-flex 2xl:hidden' },
 };
 
 export function EntityListTopCellSmart({
-  label,
-  icon,
+  long,
+  short,
   tooltip,
   breakpoint = '2xl',
   className,
 }: EntityListTopCellSmartProps) {
+  const tooltipText = tooltip ?? (typeof long === 'string' ? long : undefined);
   const bp = breakpointClasses[breakpoint];
+
+  const content = (
+    <>
+      <span className={cn('items-center gap-1', bp.show)}>{long}</span>
+      <span className={cn('items-center gap-1', bp.hide)}>{short}</span>
+    </>
+  );
+
+  if (tooltipText) {
+    return (
+      <EntityListTopCellWithTooltip
+        tooltip={tooltipText}
+        className={cn('flex [&_svg]:w-[1.3em] [&_svg]:h-[1.3em]', className)}
+      >
+        {content}
+      </EntityListTopCellWithTooltip>
+    );
+  }
+
   return (
-    <EntityListTopCellWithTooltip tooltip={tooltip ?? label} className={className}>
-      <span className={bp.show}>{label}</span>
-      <span className={bp.hide}>{icon}</span>
-    </EntityListTopCellWithTooltip>
+    <EntityListTopCell className={cn('flex [&_svg]:w-[1.3em] [&_svg]:h-[1.3em]', className)}>
+      {content}
+    </EntityListTopCell>
   );
 }
