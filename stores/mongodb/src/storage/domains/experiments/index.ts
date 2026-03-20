@@ -128,6 +128,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       { collection: TABLE_EXPERIMENT_RESULTS, keys: { experimentId: 1 } },
       { collection: TABLE_EXPERIMENT_RESULTS, keys: { experimentId: 1, itemId: 1 }, options: { unique: true } },
       { collection: TABLE_EXPERIMENT_RESULTS, keys: { createdAt: -1 } },
+      { collection: TABLE_EXPERIMENT_RESULTS, keys: { experimentId: 1, startedAt: 1 } },
     ];
   }
 
