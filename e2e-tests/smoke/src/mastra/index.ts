@@ -1,4 +1,5 @@
 import { Mastra } from '@mastra/core/mastra';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter } from '@mastra/observability';
 
@@ -28,7 +29,23 @@ import {
 import { foreachErrorWorkflow, foreachRetryWorkflow } from './workflows/foreach-errors.js';
 import { testMcpServer } from './mcp/index.js';
 
+const testWorkspace = new Workspace({
+  id: 'test-workspace',
+  name: 'Test Workspace',
+  filesystem: new LocalFilesystem({ basePath: './test-workspace' }),
+  skills: ['skills'],
+});
+
+// Initialize the workspace so filesystem and skills are ready.
+// Wrapped in try/catch so a missing basePath doesn't crash the entire server.
+try {
+  await testWorkspace.init();
+} catch (err) {
+  console.error('[workspace] Failed to initialize:', err);
+}
+
 export const mastra = new Mastra({
+  workspace: testWorkspace,
   agents: {
     'test-agent': testAgent,
     'approval-agent': approvalAgent,
