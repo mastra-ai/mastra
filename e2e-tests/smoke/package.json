@@ -11,7 +11,8 @@
     "@mastra/core": "alpha",
     "@mastra/libsql": "alpha",
     "@mastra/mcp": "alpha",
-    "@mastra/memory": "alpha"
+    "@mastra/memory": "alpha",
+    "@mastra/observability": "alpha"
   },
   "devDependencies": {
     "mastra": "alpha",

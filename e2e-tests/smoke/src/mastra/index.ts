@@ -1,5 +1,6 @@
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
+import { Observability, DefaultExporter } from '@mastra/observability';
 
 import { testAgent, approvalAgent } from './agents/index.js';
 import { calculatorTool, stringTool, failingTool, noInputTool, approvalTool } from './tools/index.js';
@@ -76,5 +77,13 @@ export const mastra = new Mastra({
   storage: new LibSQLStore({
     id: 'smoke-test',
     url: 'file:test.db',
+  }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'smoke-test',
+        exporters: [new DefaultExporter()],
+      },
+    },
   }),
 });
