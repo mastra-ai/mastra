@@ -16,8 +16,8 @@ import {
   ListSearch,
   MainHeader,
   EntityListPageLayout,
-  useExperimentalUI,
 } from '@mastra/playground-ui';
+import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
 import { BookIcon, GaugeIcon, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -26,7 +26,7 @@ export default function Scorers() {
   const { Link: FrameworkLink } = useLinkComponent();
   const { data: scorers = {}, isLoading, error } = useScorers();
   const { isCmsAvailable } = useIsCmsAvailable();
-  const { variant } = useExperimentalUI('agent-list');
+  const { variant } = useExperimentalUI('entity-list-page');
   const [search, setSearch] = useState('');
 
   if (variant === 'new-proposal') {

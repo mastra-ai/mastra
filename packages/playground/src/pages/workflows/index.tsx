@@ -15,15 +15,15 @@ import {
   MainHeader,
   EntityListPageLayout,
   useWorkflows,
-  useExperimentalUI,
 } from '@mastra/playground-ui';
+import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
 import { BookIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
 function Workflows() {
   const { data: workflows, isLoading, error } = useWorkflows();
-  const { variant } = useExperimentalUI('agent-list');
+  const { variant } = useExperimentalUI('entity-list-page');
   const [search, setSearch] = useState('');
 
   const isEmpty = !isLoading && Object.keys(workflows || {}).length === 0;

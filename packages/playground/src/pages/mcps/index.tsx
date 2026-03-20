@@ -14,16 +14,16 @@ import {
   MainHeader,
   EntityListPageLayout,
   useMCPServers,
-  useExperimentalUI,
   HeaderTitle,
 } from '@mastra/playground-ui';
+import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
 import { BookIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
 const MCPs = () => {
   const { data: mcpServers = [], isLoading, error } = useMCPServers();
-  const { variant } = useExperimentalUI('agent-list');
+  const { variant } = useExperimentalUI('entity-list-page');
   const [search, setSearch] = useState('');
 
   const isEmpty = !isLoading && mcpServers.length === 0;

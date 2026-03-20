@@ -1,8 +1,8 @@
-import type { ExperimentConfig } from '@mastra/playground-ui';
+import type { UIExperimentConfig } from './experimental-ui-context';
 
-export const EXPERIMENTS: ExperimentConfig[] = [
+export const UI_EXPERIMENTS: UIExperimentConfig[] = [
   {
-    key: 'agent-list',
+    key: 'entity-list-page',
     name: 'Entity List page UI',
     path: ['/agents', '/prompts', '/tools', '/datasets', '/scorers', '/mcps', '/workflows', '/processors'],
     variants: [

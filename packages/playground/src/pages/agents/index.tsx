@@ -16,10 +16,10 @@ import {
   ListSearch,
   useIsCmsAvailable,
   usePermissions,
-  useExperimentalUI,
   MainHeader,
   EntityListPageLayout,
 } from '@mastra/playground-ui';
+import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
 import { BookIcon, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -29,7 +29,7 @@ function Agents() {
   const { data: agents = {}, isLoading, error } = useAgents();
   const { isCmsAvailable } = useIsCmsAvailable();
   const { canEdit } = usePermissions();
-  const { variant } = useExperimentalUI('agent-list');
+  const { variant } = useExperimentalUI('entity-list-page');
   const [search, setSearch] = useState('');
 
   const canCreateAgent = isCmsAvailable && canEdit('stored-agents');

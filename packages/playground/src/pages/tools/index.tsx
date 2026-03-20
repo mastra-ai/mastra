@@ -16,8 +16,8 @@ import {
   EntityListPageLayout,
   useAgents,
   useTools,
-  useExperimentalUI,
 } from '@mastra/playground-ui';
+import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
 import { BookIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -25,7 +25,7 @@ import { Link } from 'react-router';
 export default function Tools() {
   const { data: agentsRecord = {}, isLoading: isLoadingAgents } = useAgents();
   const { data: tools = {}, isLoading: isLoadingTools, error } = useTools();
-  const { variant } = useExperimentalUI('agent-list');
+  const { variant } = useExperimentalUI('entity-list-page');
   const [search, setSearch] = useState('');
 
   const isLoading = isLoadingAgents || isLoadingTools;

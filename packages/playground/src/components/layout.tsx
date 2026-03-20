@@ -1,6 +1,5 @@
 import {
   AuthRequired,
-  ExperimentalUIProvider,
   MainSidebarProvider,
   NavigationCommand,
   Toaster,
@@ -8,44 +7,58 @@ import {
   useAuthCapabilities,
   isAuthenticated,
 } from '@mastra/playground-ui';
+import { ExperimentalUIProvider, useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
+import { cn } from '@/lib/utils';
+import { useLocation } from 'react-router';
 import { AppSidebar } from './ui/app-sidebar';
 import { ThemeProvider } from './ui/theme-provider';
-import { EXPERIMENTS } from '@/domains/experimental-ui/experiments';
+import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
+import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
 
 function LayoutContent({ children }: { children: React.ReactNode }) {
+  const { data: authCapabilities, isFetched } = useAuthCapabilities();
+  const shouldHideSidebar = isFetched && authCapabilities?.enabled && !isAuthenticated(authCapabilities);
+  const shouldShowSidebar = isFetched && !shouldHideSidebar;
+
+  const { variant } = useExperimentalUI('entity-list-page');
+  const { pathname } = useLocation();
+  const agentListExperiment = UI_EXPERIMENTS.find(e => e.key === 'entity-list-page');
+  const experimentPaths: string[] = Array.isArray(agentListExperiment?.path)
+    ? agentListExperiment.path
+    : agentListExperiment?.path
+      ? [agentListExperiment.path]
+      : [];
+  const isPageListNewUIProposal = variant === 'new-proposal' && experimentPaths.includes(pathname);
+
   return (
-    <div className="grid grid-cols-[auto_1fr] h-full">
-      <AppSidebar />
-      <div className="border-l border-border1 overflow-y-auto">
-        <AuthRequired>{children}</AuthRequired>
+    <>
+      <NavigationCommand />
+      <div className={shouldShowSidebar ? 'grid h-full grid-cols-[auto_1fr]' : 'h-full'}>
+        {shouldShowSidebar && <AppSidebar />}
+        <div
+          className={cn('bg-surface2 my-3 rounded-lg border border-border1 overflow-y-auto mr-3', {
+            'h-[calc(100%-1.5rem)] mx-3': shouldHideSidebar,
+            'bg-transparent my-0 mr-0': isPageListNewUIProposal,
+          })}
+        >
+          <AuthRequired>{children}</AuthRequired>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
-  const { data: authCapabilities, isFetched } = useAuthCapabilities();
-  const shouldHideSidebar = isFetched && authCapabilities?.enabled && !isAuthenticated(authCapabilities);
-  const shouldShowSidebar = isFetched && !shouldHideSidebar;
+  const { experimentalUIEnabled } = useExperimentalUIEnabled();
 
   return (
     <div className="bg-surface1 font-sans h-screen">
       <Toaster position="bottom-right" />
       <ThemeProvider defaultTheme="dark" attribute="class">
         <TooltipProvider delayDuration={0}>
-          <ExperimentalUIProvider experiments={EXPERIMENTS}>
+          <ExperimentalUIProvider experiments={experimentalUIEnabled ? UI_EXPERIMENTS : []}>
             <MainSidebarProvider>
-              <NavigationCommand />
-              <div className={shouldShowSidebar ? 'grid h-full grid-cols-[auto_1fr]' : 'h-full'}>
-                {shouldShowSidebar && <AppSidebar />}
-                <div
-                  className={`bg-surface2 my-3 rounded-lg border border-border1 overflow-y-auto ${
-                    shouldHideSidebar ? 'h-[calc(100%-1.5rem)] mx-3' : 'mr-3'
-                  }`}
-                >
-                  <AuthRequired>{children}</AuthRequired>
-                </div>
-              </div>
+              <LayoutContent>{children}</LayoutContent>
             </MainSidebarProvider>
           </ExperimentalUIProvider>
         </TooltipProvider>

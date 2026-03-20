@@ -16,8 +16,8 @@ import {
   ListSearch,
   MainHeader,
   EntityListPageLayout,
-  useExperimentalUI,
 } from '@mastra/playground-ui';
+import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
 import { BookIcon, Database, Plus } from 'lucide-react';
 import { useState } from 'react';
 
@@ -26,7 +26,7 @@ function Datasets() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { navigate, paths } = useLinkComponent();
   const { data, isLoading, error } = useDatasets();
-  const { variant } = useExperimentalUI('agent-list');
+  const { variant } = useExperimentalUI('entity-list-page');
   const [search, setSearch] = useState('');
   const datasets = data?.datasets ?? [];
 

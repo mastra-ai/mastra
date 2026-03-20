@@ -3,17 +3,17 @@ import React from 'react';
 const STORAGE_PREFIX = 'experimental-ui:';
 const DEFAULT_VARIANT = 'current';
 
-export type ExperimentVariantOption = { value: string; label: string };
+export type UIExperimentVariantOption = { value: string; label: string };
 
-export type ExperimentConfig = {
+export type UIExperimentConfig = {
   key: string;
   name: string;
   path?: string | string[];
-  variants: ExperimentVariantOption[];
+  variants: UIExperimentVariantOption[];
 };
 
 type ExperimentalUIContextValue = {
-  experiments: ExperimentConfig[];
+  experiments: UIExperimentConfig[];
   getVariant: (key: string) => string;
   setVariant: (key: string, variant: string) => void;
 };
@@ -47,7 +47,7 @@ export function ExperimentalUIProvider({
   experiments,
   children,
 }: {
-  experiments: ExperimentConfig[];
+  experiments: UIExperimentConfig[];
   children: React.ReactNode;
 }) {
   const validVariantsMap = React.useMemo(

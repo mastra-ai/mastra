@@ -1,13 +1,6 @@
 import { FlaskConicalIcon } from 'lucide-react';
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-  RadioGroup,
-  RadioGroupItem,
-  useMaybeExperimentalUI,
-  Button,
-} from '@mastra/playground-ui';
+import { Popover, PopoverTrigger, PopoverContent, RadioGroup, RadioGroupItem, Button } from '@mastra/playground-ui';
+import { useMaybeExperimentalUI } from './experimental-ui-context';
 
 export function ExperimentalUIManager({ pathname }: { pathname?: string }) {
   const context = useMaybeExperimentalUI();
@@ -24,7 +17,7 @@ export function ExperimentalUIManager({ pathname }: { pathname?: string }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button aria-label="Experimental UI" size="sm" className="mr-auto ml-3 bg-blue-800">
+        <Button aria-label="Experimental UI" size="sm" className="mr-auto ml-3 bg-blue-600 text-white">
           <FlaskConicalIcon /> UI
         </Button>
       </PopoverTrigger>
@@ -40,10 +33,7 @@ export function ExperimentalUIManager({ pathname }: { pathname?: string }) {
                 className="mt-2"
               >
                 {experiment.variants.map(option => (
-                  <label
-                    key={option.value}
-                    className="flex items-center gap-3 text-ui-md text-neutral3 cursor-pointer"
-                  >
+                  <label key={option.value} className="flex items-center gap-3 text-ui-md text-neutral3 cursor-pointer">
                     <RadioGroupItem value={option.value} />
                     {option.label}
                   </label>
