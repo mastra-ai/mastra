@@ -30,4 +30,4 @@ const memory = new Memory({
 
 The `upTo` keys are inclusive upper bounds. OM sets the input token count in the request context automatically before resolving the model. If the input exceeds the largest configured threshold, an error is thrown.
 
-**Breaking change:** Observation and reflection failures now propagate as errors instead of being silently swallowed. Previously, if observation failed (e.g., due to ModelByInputTokens misconfiguration), OM would log the error and continue. Now, such failures will throw and crash the agent, ensuring configuration issues are caught early.
+**Behavior note:** When observation fails (e.g., due to ModelByInputTokens threshold exceeded), OM calls `abort()` which triggers a TripWire. The agent returns an empty text result with `tripwire` metadata containing the error reason. This allows the agent to gracefully handle observation failures while still surfacing the error through the tripwire mechanism.
