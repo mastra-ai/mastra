@@ -277,15 +277,18 @@ export class ObservationStep {
       });
 
       if (activation.activated) {
-        // Check reflection after activation
-        const postActivationStatus = await om.getStatus({
+        // Check reflection after activation — use maybeReflect so that a
+        // completed buffered reflection is activated instantly instead of
+        // running a redundant sync reflection from scratch.
+        const postActivationRecord = activation.record;
+        await om.reflector.maybeReflect({
+          record: postActivationRecord,
+          observationTokens: postActivationRecord.observationTokenCount ?? 0,
           threadId,
-          resourceId,
-          messages: messageList.get.all.db(),
+          writer: this.turn.writer,
+          messageList,
+          requestContext: this.turn.requestContext,
         });
-        if (postActivationStatus.shouldReflect) {
-          await om.reflect(threadId, resourceId);
-        }
 
         return {
           succeeded: true,
