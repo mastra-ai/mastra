@@ -1,11 +1,8 @@
 import { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
-import {
-  //MastraCompositeStore, FilesystemStore,
-  InMemoryStore,
-} from '@mastra/core/storage';
+import { MastraCompositeStore, FilesystemStore } from '@mastra/core/storage';
 import { MastraEditor } from '@mastra/editor';
-// import { LibSQLStore } from '@mastra/libsql';
+import { LibSQLStore } from '@mastra/libsql';
 
 import { mastraAuth, rbacProvider } from './auth';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
@@ -52,18 +49,16 @@ import {
   stepLoggerProcessor,
 } from './processors/index';
 
-// const libsqlStore = new LibSQLStore({
-//   id: 'mastra-storage',
-//   url: 'file:./mastra.db',
-// });
+const libsqlStore = new LibSQLStore({
+  id: 'mastra-storage',
+  url: 'file:./mastra.db',
+});
 
-// const storage = new MastraCompositeStore({
-//   id: 'composite-storage',
-//   default: libsqlStore,
-//   // editor: new FilesystemStore({ dir: '.mastra-storage' }),
-// });
-
-const storage = new InMemoryStore();
+const storage = new MastraCompositeStore({
+  id: 'composite-storage',
+  default: libsqlStore,
+  // editor: new FilesystemStore({ dir: '.mastra-storage' }),
+});
 
 const config = {
   agents: {
