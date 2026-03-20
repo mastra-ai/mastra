@@ -21,9 +21,13 @@ import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 
 export default function WorkspaceSkillDetailPage() {
-  const { skillPath, workspaceId } = useParams<{ skillPath: string; workspaceId: string }>();
+  const { skillName, workspaceId } = useParams<{ skillName: string; workspaceId: string }>();
   const [searchParams] = useSearchParams();
-  const decodedSkillPath = skillPath ? decodeURIComponent(skillPath) : '';
+  const decodedSkillName = skillName ? decodeURIComponent(skillName) : '';
+
+  // Optional path query param for disambiguation when multiple skills share the same name
+  const skillPath = searchParams.get('path');
+  const decodedSkillPath = skillPath ? decodeURIComponent(skillPath) : undefined;
 
   // Check if we came from an agent page (for breadcrumb context)
   const agentId = searchParams.get('agentId');
@@ -39,7 +43,11 @@ export default function WorkspaceSkillDetailPage() {
   const [viewingReference, setViewingReference] = useState<string | null>(null);
 
   // Fetch skill details - pass workspaceId to fetch from correct workspace
-  const { data: skill, isLoading, error } = useWorkspaceSkill(decodedSkillPath, { workspaceId });
+  const {
+    data: skill,
+    isLoading,
+    error,
+  } = useWorkspaceSkill(decodedSkillName, { workspaceId, path: decodedSkillPath });
 
   // Fetch raw SKILL.md file for "Source" view
   const { data: rawSkillMdData } = useWorkspaceFile(skill?.path ? `${skill.path}/SKILL.md` : '', {
@@ -49,11 +57,12 @@ export default function WorkspaceSkillDetailPage() {
 
   // Fetch reference content when viewing
   const { data: referenceData, isLoading: isLoadingReference } = useWorkspaceSkillReference(
-    decodedSkillPath,
+    decodedSkillName,
     viewingReference ?? '',
     {
       enabled: !!viewingReference,
       workspaceId,
+      path: decodedSkillPath,
     },
   );
 

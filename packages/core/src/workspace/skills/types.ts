@@ -180,6 +180,8 @@ export interface Skill extends SkillMetadata {
 export interface SkillSearchResult extends BaseSearchResult {
   /** Skill name */
   skillName: string;
+  /** Skill path for disambiguation */
+  skillPath: string;
   /** Source file (SKILL.md or reference path) */
   source: string;
 }

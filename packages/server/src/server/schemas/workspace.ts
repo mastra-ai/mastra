@@ -257,12 +257,17 @@ export const listWorkspacesResponseSchema = z.object({
 // Skills Path Parameter Schemas
 // =============================================================================
 
-export const skillPathPathParams = workspaceIdPathParams.extend({
-  skillPath: z.string().describe('Skill path identifier (URL encoded)'),
+export const skillNamePathParams = workspaceIdPathParams.extend({
+  skillName: z.string().describe('Skill name identifier'),
 });
 
-export const skillReferencePathParams = skillPathPathParams.extend({
+export const skillReferencePathParams = skillNamePathParams.extend({
   referencePath: z.string().describe('Reference file path (URL encoded)'),
+});
+
+// Optional query param for disambiguating same-named skills
+export const skillDisambiguationQuerySchema = z.object({
+  path: z.string().optional().describe('Skill path for disambiguation when multiple skills share the same name'),
 });
 
 // =============================================================================
@@ -352,6 +357,7 @@ export const listReferencesResponseSchema = z.object({
 
 export const skillSearchResultSchema = z.object({
   skillName: z.string(),
+  skillPath: z.string(),
   source: z.string(),
   content: z.string(),
   score: z.number(),

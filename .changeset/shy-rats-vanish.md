@@ -5,20 +5,12 @@
 '@mastra/playground-ui': patch
 ---
 
-Use skill path as the unique identifier instead of name throughout workspace skills APIs.
+Add optional `?path=` query param to workspace skill routes for disambiguating same-named skills.
 
-**Breaking change:** `WorkspaceSkills` methods and server routes now use `skillPath` (the filesystem path) instead of `skillName` as the key for skill lookup.
+Skill routes continue to use `:skillName` in the URL path (no breaking change). When two skills share the same name (e.g. from different directories), pass the optional `?path=` query parameter to select the exact skill:
 
-Before:
-```ts
-const skill = await workspaceSkills.get('my-skill');
-await client.searchSkills({ skillNames: ['my-skill'] });
+```
+GET /workspaces/:workspaceId/skills/:skillName?path=skills/brand-guidelines
 ```
 
-After:
-```ts
-const skill = await workspaceSkills.get('/path/to/my-skill');
-await client.searchSkills({ skillPaths: ['/path/to/my-skill'] });
-```
-
-This prevents same-named skills from different directories from overwriting each other. `SkillMetadata` now includes a `path` field, and agent skill tools disambiguate duplicate names by prompting for the specific skill path when needed.
+`SkillMetadata` now includes a `path` field, and the `list()` method returns all same-named skills for disambiguation. The client SDK's `getSkill()` accepts an optional `skillPath` parameter for disambiguation.

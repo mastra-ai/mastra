@@ -17,7 +17,7 @@ type LinkComponentPaths = {
   agentLink: (agentId: string) => string;
   agentsLink: () => string;
   agentToolLink: (agentId: string, toolId: string) => string;
-  agentSkillLink: (agentId: string, skillPath: string, workspaceId?: string) => string;
+  agentSkillLink: (agentId: string, skillName: string, skillPath?: string, workspaceId?: string) => string;
   agentThreadLink: (agentId: string, threadId: string, messageId?: string) => string;
   agentNewThreadLink: (agentId: string) => string;
 
@@ -41,10 +41,10 @@ type LinkComponentPaths = {
   cmsPromptBlockEditLink: (promptBlockId: string) => string;
 
   toolLink: (toolId: string) => string;
-  skillLink: (skillPath: string, workspaceId?: string) => string;
+  skillLink: (skillName: string, skillPath?: string, workspaceId?: string) => string;
   workspacesLink: () => string;
   workspaceLink: (workspaceId?: string) => string;
-  workspaceSkillLink: (skillPath: string, workspaceId?: string) => string;
+  workspaceSkillLink: (skillName: string, skillPath?: string, workspaceId?: string) => string;
   processorsLink: () => string;
   processorLink: (processorId: string) => string;
 

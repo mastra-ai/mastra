@@ -348,7 +348,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Link href={paths.agentSkillLink(agentId, skill.path, workspaceId)} data-testid="skill-badge">
+                    <Link href={paths.agentSkillLink(agentId, skill.name, skill.path, workspaceId)} data-testid="skill-badge">
                       {badge}
                     </Link>
                   </TooltipTrigger>
@@ -356,7 +356,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
                 </Tooltip>
               </TooltipProvider>
             ) : (
-              <Link href={paths.agentSkillLink(agentId, skill.path, workspaceId)} data-testid="skill-badge">
+              <Link href={paths.agentSkillLink(agentId, skill.name, skill.path, workspaceId)} data-testid="skill-badge">
                 {badge}
               </Link>
             )}

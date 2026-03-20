@@ -420,6 +420,7 @@ describe('WorkspaceSkillsImpl', () => {
       const results = await skills.search('API');
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]?.skillName).toBe('api-skill');
+      expect(results[0]?.skillPath).toBe('skills/api-skill');
     });
 
     it('should use search engine when configured', async () => {
@@ -1188,6 +1189,7 @@ Instructions for the new skill.`;
       const results = await skills.search('API');
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]?.skillName).toBe('api-skill');
+      expect(results[0]?.skillPath).toBe('skills/api-skill');
     });
   });
 

@@ -40,11 +40,14 @@ export const useWorkspaceSkills = (options?: { workspaceId?: string }) => {
 /**
  * Hook to get a specific skill's full details via workspace
  */
-export const useWorkspaceSkill = (skillPath: string, options?: { enabled?: boolean; workspaceId?: string }) => {
+export const useWorkspaceSkill = (
+  skillName: string,
+  options?: { enabled?: boolean; workspaceId?: string; path?: string },
+) => {
   const client = useMastraClient();
 
   return useQuery({
-    queryKey: ['workspace', 'skills', skillPath, options?.workspaceId],
+    queryKey: ['workspace', 'skills', skillName, options?.path, options?.workspaceId],
     queryFn: async (): Promise<Skill> => {
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
@@ -53,10 +56,10 @@ export const useWorkspaceSkill = (skillPath: string, options?: { enabled?: boole
         throw new Error('workspaceId is required');
       }
       const workspace = (client as any).getWorkspace(options.workspaceId);
-      const skill = workspace.getSkill(skillPath);
+      const skill = workspace.getSkill(skillName, options?.path);
       return skill.details();
     },
-    enabled: options?.enabled !== false && !!skillPath && !!options?.workspaceId && isWorkspaceV1Supported(client),
+    enabled: options?.enabled !== false && !!skillName && !!options?.workspaceId && isWorkspaceV1Supported(client),
     retry: shouldRetryWorkspaceQuery,
   });
 };
@@ -65,13 +68,13 @@ export const useWorkspaceSkill = (skillPath: string, options?: { enabled?: boole
  * Hook to list references for a skill via workspace
  */
 export const useWorkspaceSkillReferences = (
-  skillPath: string,
-  options?: { enabled?: boolean; workspaceId?: string },
+  skillName: string,
+  options?: { enabled?: boolean; workspaceId?: string; path?: string },
 ) => {
   const client = useMastraClient();
 
   return useQuery({
-    queryKey: ['workspace', 'skills', skillPath, 'references', options?.workspaceId],
+    queryKey: ['workspace', 'skills', skillName, options?.path, 'references', options?.workspaceId],
     queryFn: async (): Promise<ListReferencesResponse> => {
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
@@ -80,10 +83,10 @@ export const useWorkspaceSkillReferences = (
         throw new Error('workspaceId is required');
       }
       const workspace = (client as any).getWorkspace(options.workspaceId);
-      const skill = workspace.getSkill(skillPath);
+      const skill = workspace.getSkill(skillName, options?.path);
       return skill.listReferences();
     },
-    enabled: options?.enabled !== false && !!skillPath && !!options?.workspaceId && isWorkspaceV1Supported(client),
+    enabled: options?.enabled !== false && !!skillName && !!options?.workspaceId && isWorkspaceV1Supported(client),
     retry: shouldRetryWorkspaceQuery,
   });
 };
@@ -92,14 +95,14 @@ export const useWorkspaceSkillReferences = (
  * Hook to get a specific reference file content via workspace
  */
 export const useWorkspaceSkillReference = (
-  skillPath: string,
+  skillName: string,
   referencePath: string,
-  options?: { enabled?: boolean; workspaceId?: string },
+  options?: { enabled?: boolean; workspaceId?: string; path?: string },
 ) => {
   const client = useMastraClient();
 
   return useQuery({
-    queryKey: ['workspace', 'skills', skillPath, 'references', referencePath, options?.workspaceId],
+    queryKey: ['workspace', 'skills', skillName, options?.path, 'references', referencePath, options?.workspaceId],
     queryFn: async (): Promise<GetReferenceResponse> => {
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
@@ -108,12 +111,12 @@ export const useWorkspaceSkillReference = (
         throw new Error('workspaceId is required');
       }
       const workspace = (client as any).getWorkspace(options.workspaceId);
-      const skill = workspace.getSkill(skillPath);
+      const skill = workspace.getSkill(skillName, options?.path);
       return skill.getReference(referencePath);
     },
     enabled:
       options?.enabled !== false &&
-      !!skillPath &&
+      !!skillName &&
       !!referencePath &&
       !!options?.workspaceId &&
       isWorkspaceV1Supported(client),
@@ -150,13 +153,13 @@ export const useSearchWorkspaceSkills = () => {
  */
 export const useAgentSkill = (
   agentId: string,
-  skillPath: string,
-  options?: { enabled?: boolean; workspaceId?: string },
+  skillName: string,
+  options?: { enabled?: boolean; workspaceId?: string; path?: string },
 ) => {
   const client = useMastraClient();
 
   return useQuery({
-    queryKey: ['agents', agentId, 'skills', skillPath, options?.workspaceId],
+    queryKey: ['agents', agentId, 'skills', skillName, options?.path, options?.workspaceId],
     queryFn: async (): Promise<Skill> => {
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');
@@ -165,13 +168,13 @@ export const useAgentSkill = (
         throw new Error('workspaceId is required');
       }
       const workspace = (client as any).getWorkspace(options.workspaceId);
-      const skill = workspace.getSkill(skillPath);
+      const skill = workspace.getSkill(skillName, options?.path);
       return skill.details();
     },
     enabled:
       options?.enabled !== false &&
       !!agentId &&
-      !!skillPath &&
+      !!skillName &&
       !!options?.workspaceId &&
       isWorkspaceV1Supported(client),
     retry: shouldRetryWorkspaceQuery,

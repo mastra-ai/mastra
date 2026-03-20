@@ -181,7 +181,8 @@ function createMockFilesystem(
 // Mock Skills Factory
 // =============================================================================
 
-interface SkillSearchResult {
+interface MockSkillSearchResult {
+  skillName: string;
   skillPath: string;
   source: string;
   content: string;
@@ -204,7 +205,7 @@ function createMockSkills(skillsData: Map<string, any> = new Map()) {
     ),
     get: vi.fn(async (skillPath: string) => skillsData.get(skillPath) ?? null),
     has: vi.fn(async (skillPath: string) => skillsData.has(skillPath)),
-    search: vi.fn(async (): Promise<SkillSearchResult[]> => []),
+    search: vi.fn(async (): Promise<MockSkillSearchResult[]> => []),
     listReferences: vi.fn(async () => ['api.md', 'guide.md']),
     getReference: vi.fn(async (): Promise<string | null> => 'Reference content'),
     listScripts: vi.fn(async () => []),
@@ -1000,6 +1001,32 @@ describe('Workspace Handlers', () => {
         scripts: [],
         assets: [],
       };
+      const skillsData = new Map([['my-skill', skill]]);
+      const skills = createMockSkills(skillsData);
+      const workspace = createWorkspace('test-workspace', { skills });
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_GET_SKILL_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        skillName: 'my-skill',
+      });
+
+      expect(result.name).toBe('my-skill');
+      expect(result.instructions).toBe('Do things');
+    });
+
+    it('should get skill details using path query param for disambiguation', async () => {
+      const skill = {
+        name: 'my-skill',
+        description: 'My skill',
+        instructions: 'Do things',
+        path: '/skills/my-skill',
+        source: { type: 'local', path: '/skills/my-skill' },
+        references: ['api.md'],
+        scripts: [],
+        assets: [],
+      };
       const skillsData = new Map([['/skills/my-skill', skill]]);
       const skills = createMockSkills(skillsData);
       const workspace = createWorkspace('test-workspace', { skills });
@@ -1008,11 +1035,12 @@ describe('Workspace Handlers', () => {
       const result = await WORKSPACE_GET_SKILL_ROUTE.handler({
         ...createTestServerContext({ mastra }),
         workspaceId: 'test-workspace',
-        skillPath: '/skills/my-skill',
+        skillName: 'my-skill',
+        path: '/skills/my-skill',
       });
 
       expect(result.name).toBe('my-skill');
-      expect(result.instructions).toBe('Do things');
+      expect(skills.get).toHaveBeenCalledWith('/skills/my-skill');
     });
 
     it('should throw 404 for non-existent skill', async () => {
@@ -1024,7 +1052,7 @@ describe('Workspace Handlers', () => {
         WORKSPACE_GET_SKILL_ROUTE.handler({
           ...createTestServerContext({ mastra }),
           workspaceId: 'test-workspace',
-          skillPath: 'nonexistent',
+          skillName: 'nonexistent',
         }),
       ).rejects.toThrow(HTTPException);
 
@@ -1032,7 +1060,7 @@ describe('Workspace Handlers', () => {
         await WORKSPACE_GET_SKILL_ROUTE.handler({
           ...createTestServerContext({ mastra }),
           workspaceId: 'test-workspace',
-          skillPath: 'nonexistent',
+          skillName: 'nonexistent',
         });
       } catch (e) {
         expect((e as HTTPException).status).toBe(404);
@@ -1046,7 +1074,7 @@ describe('Workspace Handlers', () => {
         WORKSPACE_GET_SKILL_ROUTE.handler({
           ...createTestServerContext({ mastra }),
           workspaceId: 'nonexistent',
-          skillPath: '/skills/my-skill',
+          skillName: 'my-skill',
         }),
       ).rejects.toThrow(HTTPException);
 
@@ -1054,7 +1082,7 @@ describe('Workspace Handlers', () => {
         await WORKSPACE_GET_SKILL_ROUTE.handler({
           ...createTestServerContext({ mastra }),
           workspaceId: 'nonexistent',
-          skillPath: '/skills/my-skill',
+          skillName: 'my-skill',
         });
       } catch (e) {
         expect((e as HTTPException).status).toBe(404);
@@ -1064,7 +1092,7 @@ describe('Workspace Handlers', () => {
 
   describe('WORKSPACE_LIST_SKILL_REFERENCES_ROUTE', () => {
     it('should list skill references', async () => {
-      const skillsData = new Map([['/skills/my-skill', { name: 'my-skill', path: '/skills/my-skill' }]]);
+      const skillsData = new Map([['my-skill', { name: 'my-skill', path: '/skills/my-skill' }]]);
       const skills = createMockSkills(skillsData);
       const workspace = createWorkspace('test-workspace', { skills });
       const mastra = createMastra(workspace);
@@ -1072,10 +1100,10 @@ describe('Workspace Handlers', () => {
       const result = await WORKSPACE_LIST_SKILL_REFERENCES_ROUTE.handler({
         ...createTestServerContext({ mastra }),
         workspaceId: 'test-workspace',
-        skillPath: '/skills/my-skill',
+        skillName: 'my-skill',
       });
 
-      expect(result.skillPath).toBe('/skills/my-skill');
+      expect(result.skillName).toBe('my-skill');
       expect(result.references).toContain('api.md');
     });
 
@@ -1088,7 +1116,7 @@ describe('Workspace Handlers', () => {
         WORKSPACE_LIST_SKILL_REFERENCES_ROUTE.handler({
           ...createTestServerContext({ mastra }),
           workspaceId: 'test-workspace',
-          skillPath: 'nonexistent',
+          skillName: 'nonexistent',
         }),
       ).rejects.toThrow(HTTPException);
 
@@ -1096,7 +1124,7 @@ describe('Workspace Handlers', () => {
         await WORKSPACE_LIST_SKILL_REFERENCES_ROUTE.handler({
           ...createTestServerContext({ mastra }),
           workspaceId: 'test-workspace',
-          skillPath: 'nonexistent',
+          skillName: 'nonexistent',
         });
       } catch (e) {
         expect((e as HTTPException).status).toBe(404);
@@ -1106,7 +1134,7 @@ describe('Workspace Handlers', () => {
 
   describe('WORKSPACE_GET_SKILL_REFERENCE_ROUTE', () => {
     it('should get reference content', async () => {
-      const skillsData = new Map([['/skills/my-skill', { name: 'my-skill', path: '/skills/my-skill' }]]);
+      const skillsData = new Map([['my-skill', { name: 'my-skill', path: '/skills/my-skill' }]]);
       const skills = createMockSkills(skillsData);
       const workspace = createWorkspace('test-workspace', { skills });
       const mastra = createMastra(workspace);
@@ -1114,16 +1142,16 @@ describe('Workspace Handlers', () => {
       const result = await WORKSPACE_GET_SKILL_REFERENCE_ROUTE.handler({
         ...createTestServerContext({ mastra }),
         workspaceId: 'test-workspace',
-        skillPath: '/skills/my-skill',
+        skillName: 'my-skill',
         referencePath: 'api.md',
       });
 
-      expect(result.skillPath).toBe('/skills/my-skill');
+      expect(result.skillName).toBe('my-skill');
       expect(result.content).toBe('Reference content');
     });
 
     it('should throw 404 when reference not found', async () => {
-      const skillsData = new Map([['/skills/my-skill', { name: 'my-skill', path: '/skills/my-skill' }]]);
+      const skillsData = new Map([['my-skill', { name: 'my-skill', path: '/skills/my-skill' }]]);
       const skills = createMockSkills(skillsData);
       skills.getReference = vi.fn(async (): Promise<string | null> => null);
       const workspace = createWorkspace('test-workspace', { skills });
@@ -1133,7 +1161,7 @@ describe('Workspace Handlers', () => {
         WORKSPACE_GET_SKILL_REFERENCE_ROUTE.handler({
           ...createTestServerContext({ mastra }),
           workspaceId: 'test-workspace',
-          skillPath: '/skills/my-skill',
+          skillName: 'my-skill',
           referencePath: 'nonexistent.md',
         }),
       ).rejects.toThrow(HTTPException);
@@ -1142,7 +1170,7 @@ describe('Workspace Handlers', () => {
         await WORKSPACE_GET_SKILL_REFERENCE_ROUTE.handler({
           ...createTestServerContext({ mastra }),
           workspaceId: 'test-workspace',
-          skillPath: '/skills/my-skill',
+          skillName: 'my-skill',
           referencePath: 'nonexistent.md',
         });
       } catch (e) {
@@ -1169,7 +1197,7 @@ describe('Workspace Handlers', () => {
     it('should search skills', async () => {
       const skills = createMockSkills();
       skills.search = vi.fn(async () => [
-        { skillPath: 'skills/skill1', source: 'instructions', content: 'match', score: 0.9 },
+        { skillName: 'skill1', skillPath: 'skills/skill1', source: 'instructions', content: 'match', score: 0.9 },
       ]);
       const workspace = createWorkspace('test-workspace', { skills });
       const mastra = createMastra(workspace);
@@ -1183,10 +1211,11 @@ describe('Workspace Handlers', () => {
       });
 
       expect(result.results).toHaveLength(1);
+      expect(result.results[0].skillName).toBe('skill1');
       expect(result.results[0].skillPath).toBe('skills/skill1');
     });
 
-    it('should parse comma-separated skill paths', async () => {
+    it('should parse comma-separated skill names', async () => {
       const skills = createMockSkills();
       skills.search = vi.fn(async () => []);
       const workspace = createWorkspace('test-workspace', { skills });
@@ -1198,13 +1227,13 @@ describe('Workspace Handlers', () => {
         query: 'test',
         topK: 10,
         includeReferences: false,
-        skillPaths: 'skills/skill1,skills/skill2',
+        skillNames: 'skill1,skill2',
       });
 
       expect(skills.search).toHaveBeenCalledWith(
         'test',
         expect.objectContaining({
-          skillPaths: ['skills/skill1', 'skills/skill2'],
+          skillNames: ['skill1', 'skill2'],
         }),
       );
     });
@@ -1245,7 +1274,7 @@ describe('Workspace Handlers', () => {
         scripts: [],
         assets: [],
       };
-      const skillsData = new Map([['/skills/my-skill', skill]]);
+      const skillsData = new Map([['my-skill', skill]]);
       const skills = createMockSkills(skillsData);
       const workspace = createWorkspace('test-workspace', { skills });
       const mastra = createMastra(workspace);
@@ -1255,16 +1284,16 @@ describe('Workspace Handlers', () => {
       await WORKSPACE_GET_SKILL_ROUTE.handler({
         ...createTestServerContext({ mastra }),
         workspaceId: 'test-workspace',
-        skillPath: '/skills/my-skill',
+        skillName: 'my-skill',
         requestContext: mockRequestContext,
       });
 
       expect(skills.maybeRefresh).toHaveBeenCalledWith({ requestContext: mockRequestContext });
-      expect(skills.get).toHaveBeenCalledWith('/skills/my-skill');
+      expect(skills.get).toHaveBeenCalledWith('my-skill');
     });
 
     it('WORKSPACE_LIST_SKILL_REFERENCES_ROUTE should call maybeRefresh with requestContext', async () => {
-      const skillsData = new Map([['/skills/my-skill', { name: 'my-skill', path: '/skills/my-skill' }]]);
+      const skillsData = new Map([['my-skill', { name: 'my-skill', path: '/skills/my-skill' }]]);
       const skills = createMockSkills(skillsData);
       const workspace = createWorkspace('test-workspace', { skills });
       const mastra = createMastra(workspace);
@@ -1274,16 +1303,16 @@ describe('Workspace Handlers', () => {
       await WORKSPACE_LIST_SKILL_REFERENCES_ROUTE.handler({
         ...createTestServerContext({ mastra }),
         workspaceId: 'test-workspace',
-        skillPath: '/skills/my-skill',
+        skillName: 'my-skill',
         requestContext: mockRequestContext,
       });
 
       expect(skills.maybeRefresh).toHaveBeenCalledWith({ requestContext: mockRequestContext });
-      expect(skills.has).toHaveBeenCalledWith('/skills/my-skill');
+      expect(skills.get).toHaveBeenCalledWith('my-skill');
     });
 
     it('WORKSPACE_GET_SKILL_REFERENCE_ROUTE should call maybeRefresh with requestContext', async () => {
-      const skillsData = new Map([['/skills/my-skill', { name: 'my-skill', path: '/skills/my-skill' }]]);
+      const skillsData = new Map([['my-skill', { name: 'my-skill', path: '/skills/my-skill' }]]);
       const skills = createMockSkills(skillsData);
       const workspace = createWorkspace('test-workspace', { skills });
       const mastra = createMastra(workspace);
@@ -1293,13 +1322,13 @@ describe('Workspace Handlers', () => {
       await WORKSPACE_GET_SKILL_REFERENCE_ROUTE.handler({
         ...createTestServerContext({ mastra }),
         workspaceId: 'test-workspace',
-        skillPath: '/skills/my-skill',
+        skillName: 'my-skill',
         referencePath: 'api.md',
         requestContext: mockRequestContext,
       });
 
       expect(skills.maybeRefresh).toHaveBeenCalledWith({ requestContext: mockRequestContext });
-      expect(skills.getReference).toHaveBeenCalledWith('/skills/my-skill', 'references/api.md');
+      expect(skills.getReference).toHaveBeenCalledWith('my-skill', 'references/api.md');
     });
 
     it('WORKSPACE_SEARCH_SKILLS_ROUTE should call maybeRefresh with requestContext', async () => {

@@ -135,7 +135,7 @@ export function SkillsTable({
                     entry={entry}
                     columns={effectiveColumns}
                     onClick={() => {
-                      const url = `${basePath}/${encodeURIComponent(skill.path)}`;
+                      const url = `${basePath}/${encodeURIComponent(skill.name)}?path=${encodeURIComponent(skill.path)}`;
                       navigate(url);
                     }}
                   >

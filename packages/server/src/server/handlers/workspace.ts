@@ -35,7 +35,8 @@ import {
   indexBodySchema,
   indexResponseSchema,
   // Skills schemas
-  skillPathPathParams,
+  skillNamePathParams,
+  skillDisambiguationQuerySchema,
   skillReferencePathParams,
   searchSkillsQuerySchema,
   listSkillsResponseSchema,
@@ -940,27 +941,24 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
 
 export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
   method: 'GET',
-  path: '/workspaces/:workspaceId/skills/:skillPath',
+  path: '/workspaces/:workspaceId/skills/:skillName',
   responseType: 'json',
-  pathParamSchema: skillPathPathParams,
+  pathParamSchema: skillNamePathParams,
+  queryParamSchema: skillDisambiguationQuerySchema,
   responseSchema: getSkillResponseSchema,
   summary: 'Get skill details',
   description: 'Returns the full details of a specific skill including instructions and file lists',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, skillPath, workspaceId, requestContext }) => {
+  handler: async ({ mastra, skillName, path, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
 
-      if (!skillPath) {
-        throw new HTTPException(400, { message: 'Skill path is required' });
+      if (!skillName) {
+        throw new HTTPException(400, { message: 'Skill name is required' });
       }
 
-      let decodedSkillPath: string;
-      try {
-        decodedSkillPath = decodeURIComponent(skillPath);
-      } catch {
-        throw new HTTPException(400, { message: 'Malformed skillPath' });
-      }
+      // Use the optional ?path= query param for disambiguation, otherwise fall back to name
+      const identifier = path ? decodeURIComponent(path) : skillName;
 
       const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
@@ -970,9 +968,9 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
       // Refresh skills with request context (handles dynamic skill resolvers)
       await skills.maybeRefresh({ requestContext });
 
-      const skill = await skills.get(decodedSkillPath);
+      const skill = await skills.get(identifier);
       if (!skill) {
-        throw new HTTPException(404, { message: `Skill "${decodedSkillPath}" not found` });
+        throw new HTTPException(404, { message: `Skill "${identifier}" not found` });
       }
 
       return {
@@ -996,27 +994,24 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
 
 export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
   method: 'GET',
-  path: '/workspaces/:workspaceId/skills/:skillPath/references',
+  path: '/workspaces/:workspaceId/skills/:skillName/references',
   responseType: 'json',
-  pathParamSchema: skillPathPathParams,
+  pathParamSchema: skillNamePathParams,
+  queryParamSchema: skillDisambiguationQuerySchema,
   responseSchema: listReferencesResponseSchema,
   summary: 'List skill references',
   description: 'Returns a list of all reference file paths for a skill',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, skillPath, workspaceId, requestContext }) => {
+  handler: async ({ mastra, skillName, path, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
 
-      if (!skillPath) {
-        throw new HTTPException(400, { message: 'Skill path is required' });
+      if (!skillName) {
+        throw new HTTPException(400, { message: 'Skill name is required' });
       }
 
-      let decodedSkillPath: string;
-      try {
-        decodedSkillPath = decodeURIComponent(skillPath);
-      } catch {
-        throw new HTTPException(400, { message: 'Malformed skillPath' });
-      }
+      // Use the optional ?path= query param for disambiguation, otherwise fall back to name
+      const identifier = path ? decodeURIComponent(path) : skillName;
 
       const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
@@ -1026,18 +1021,12 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
       // Refresh skills with request context (handles dynamic skill resolvers)
       await skills.maybeRefresh({ requestContext });
 
-      const hasSkill = await skills.has(decodedSkillPath);
-      if (!hasSkill) {
-        throw new HTTPException(404, { message: `Skill "${decodedSkillPath}" not found` });
-      }
-
-      // Resolve the skill to get its name for the response
-      const skill = await skills.get(decodedSkillPath);
+      const skill = await skills.get(identifier);
       if (!skill) {
-        throw new HTTPException(404, { message: `Skill "${decodedSkillPath}" not found` });
+        throw new HTTPException(404, { message: `Skill "${identifier}" not found` });
       }
 
-      const references = await skills.listReferences(decodedSkillPath);
+      const references = await skills.listReferences(identifier);
 
       return {
         skillName: skill.name,
@@ -1051,27 +1040,24 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
 
 export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
   method: 'GET',
-  path: '/workspaces/:workspaceId/skills/:skillPath/references/:referencePath',
+  path: '/workspaces/:workspaceId/skills/:skillName/references/:referencePath',
   responseType: 'json',
   pathParamSchema: skillReferencePathParams,
+  queryParamSchema: skillDisambiguationQuerySchema,
   responseSchema: skillReferenceResponseSchema,
   summary: 'Get skill reference content',
   description: 'Returns the content of a specific reference file from a skill',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, skillPath, referencePath, workspaceId, requestContext }) => {
+  handler: async ({ mastra, skillName, path: skillPath, referencePath, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
 
-      if (!skillPath || !referencePath) {
-        throw new HTTPException(400, { message: 'Skill path and reference path are required' });
+      if (!skillName || !referencePath) {
+        throw new HTTPException(400, { message: 'Skill name and reference path are required' });
       }
 
-      let decodedSkillPath: string;
-      try {
-        decodedSkillPath = decodeURIComponent(skillPath);
-      } catch {
-        throw new HTTPException(400, { message: 'Malformed skillPath' });
-      }
+      // Use the optional ?path= query param for disambiguation, otherwise fall back to name
+      const identifier = skillPath ? decodeURIComponent(skillPath) : skillName;
 
       const skills = await getSkillsById(mastra, workspaceId);
       if (!skills) {
@@ -1082,9 +1068,9 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
       await skills.maybeRefresh({ requestContext });
 
       // Resolve skill to get its name for the response
-      const skill = await skills.get(decodedSkillPath);
+      const skill = await skills.get(identifier);
       if (!skill) {
-        throw new HTTPException(404, { message: `Skill "${decodedSkillPath}" not found` });
+        throw new HTTPException(404, { message: `Skill "${identifier}" not found` });
       }
 
       // Decode the reference path (it may be URL encoded)
@@ -1100,10 +1086,10 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
 
       // getReference expects a path relative to skill.path, so prepend 'references/'
       // since the URL path already contains the literal /references/ segment
-      const content = await skills.getReference(decodedSkillPath, `references/${decodedPath}`);
+      const content = await skills.getReference(identifier, `references/${decodedPath}`);
       if (content === null) {
         throw new HTTPException(404, {
-          message: `Reference "${decodedPath}" not found in skill "${decodedSkillPath}"`,
+          message: `Reference "${decodedPath}" not found in skill "${identifier}"`,
         });
       }
 
@@ -1160,6 +1146,7 @@ export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
       return {
         results: results.map(r => ({
           skillName: r.skillName,
+          skillPath: r.skillPath,
           source: r.source,
           content: r.content,
           score: r.score,
@@ -1814,7 +1801,7 @@ export const WORKSPACE_FS_ROUTES = [
 export const WORKSPACE_SEARCH_ROUTES = [WORKSPACE_SEARCH_ROUTE, WORKSPACE_INDEX_ROUTE];
 
 // IMPORTANT: Search route must come before the parameterized routes
-// to avoid /api/workspace/skills/search being matched as /api/workspace/skills/:skillPath
+// to avoid /api/workspace/skills/search being matched as /api/workspace/skills/:skillName
 export const WORKSPACE_SKILLS_ROUTES = [
   WORKSPACE_SEARCH_SKILLS_ROUTE,
   WORKSPACE_LIST_SKILLS_ROUTE,

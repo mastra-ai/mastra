@@ -384,6 +384,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
       results.push({
         skillName: skill.name,
+        skillPath: skill.path,
         source,
         content: result.content,
         score: result.score,
@@ -1045,6 +1046,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       if (skill.instructions.toLowerCase().includes(queryLower)) {
         results.push({
           skillName: skill.name,
+          skillPath: skill.path,
           source: 'SKILL.md',
           content: skill.instructions.substring(0, 200),
           score: 1,
@@ -1059,6 +1061,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
           if (content && content.toLowerCase().includes(queryLower)) {
             results.push({
               skillName: skill.name,
+              skillPath: skill.path,
               source: `references/${refPath}`,
               content: content.substring(0, 200),
               score: 0.8,

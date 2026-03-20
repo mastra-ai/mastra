@@ -195,6 +195,7 @@ export interface ListSkillsResponse {
 
 export interface SkillSearchResult {
   skillName: string;
+  skillPath: string;
   source: string;
   content: string;
   score: number;
