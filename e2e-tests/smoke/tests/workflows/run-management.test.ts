@@ -120,6 +120,36 @@ describe('run management', () => {
   });
 
   describe('restart', () => {
-    it.todo('should restart an active run — requires a long-running workflow in an active state');
+    it('should restart an active workflow run', async () => {
+      // cancelable-workflow has a 60s sleep, keeping it in an active state.
+      // Use create-run + fire-and-forget /start so we don't block.
+      const runId = crypto.randomUUID();
+
+      // Create the run
+      const createRes = await fetchApi(`/api/workflows/cancelable-workflow/create-run?runId=${runId}`, {
+        method: 'POST',
+      });
+      expect(createRes.status).toBe(200);
+
+      // Fire-and-forget start
+      const startRes = await fetchApi(`/api/workflows/cancelable-workflow/start?runId=${runId}`, {
+        method: 'POST',
+        body: JSON.stringify({ inputData: { label: 'restart-test' } }),
+      });
+      expect(startRes.status).toBe(200);
+
+      // Give it a moment to enter the sleep step (becomes "active")
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Restart (fire-and-forget) — the run should be re-created and started fresh
+      const restartRes = await fetchApi(`/api/workflows/cancelable-workflow/restart?runId=${runId}`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      expect(restartRes.status).toBe(200);
+
+      const restartBody = await restartRes.json();
+      expect(restartBody).toHaveProperty('message', 'Workflow run restarted');
+    });
   });
 });
