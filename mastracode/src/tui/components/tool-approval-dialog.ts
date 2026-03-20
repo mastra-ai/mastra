@@ -8,7 +8,7 @@
  *   a       — always allow this category for the session
  *   Y       — switch to YOLO mode (approve all)
  */
-import { Box, getEditorKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, getKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 import { theme } from '../theme.js';
@@ -126,10 +126,10 @@ export class ToolApprovalDialogComponent extends Box implements Focusable {
   }
 
   handleInput(data: string): void {
-    const kb = getEditorKeybindings();
+    const kb = getKeybindings();
 
     // Escape to decline
-    if (kb.matches(data, 'selectCancel')) {
+    if (kb.matches(data, 'tui.select.cancel')) {
       this.onAction({ type: 'decline' });
       return;
     }

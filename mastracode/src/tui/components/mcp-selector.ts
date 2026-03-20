@@ -3,7 +3,7 @@
  * Uses pi-tui overlay pattern with navigation.
  */
 
-import { Box, Container, getEditorKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, Container, getKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, TUI } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 import type { McpServerStatus, McpSkippedServer } from '../../mcp/types.js';
@@ -256,11 +256,11 @@ export class McpSelectorComponent extends Box implements Focusable {
   }
 
   handleInput(data: string): void {
-    const kb = getEditorKeybindings();
+    const kb = getKeybindings();
 
     // During reload, only allow closing the selector
     if (this._reloading) {
-      if (kb.matches(data, 'selectCancel')) {
+      if (kb.matches(data, 'tui.select.cancel')) {
         this.onCloseCallback();
       }
       return;
@@ -269,7 +269,7 @@ export class McpSelectorComponent extends Box implements Focusable {
 
     // Detail view (tool list or error) — Esc goes back to server list
     if (this._detailView) {
-      if (kb.matches(data, 'selectCancel')) {
+      if (kb.matches(data, 'tui.select.cancel')) {
         this._detailView = false;
         this.updateList();
       }
@@ -282,19 +282,19 @@ export class McpSelectorComponent extends Box implements Focusable {
     }
 
     // Up arrow
-    if (kb.matches(data, 'selectUp')) {
+    if (kb.matches(data, 'tui.select.up')) {
       if (totalItems === 0) return;
       this.selectedIndex = this.selectedIndex === 0 ? totalItems - 1 : this.selectedIndex - 1;
       this.updateList();
     }
     // Down arrow
-    else if (kb.matches(data, 'selectDown')) {
+    else if (kb.matches(data, 'tui.select.down')) {
       if (totalItems === 0) return;
       this.selectedIndex = this.selectedIndex === totalItems - 1 ? 0 : this.selectedIndex + 1;
       this.updateList();
     }
     // Enter — open sub-menu for the selected server
-    else if (kb.matches(data, 'selectConfirm')) {
+    else if (kb.matches(data, 'tui.select.confirm')) {
       if (this.selectedIndex < this.statuses.length) {
         this.openSubMenu();
       }
@@ -305,7 +305,7 @@ export class McpSelectorComponent extends Box implements Focusable {
       this.doReloadAll();
     }
     // Escape or Ctrl+C
-    else if (kb.matches(data, 'selectCancel')) {
+    else if (kb.matches(data, 'tui.select.cancel')) {
       this.stopPolling();
       this.onCloseCallback();
     }
@@ -328,25 +328,25 @@ export class McpSelectorComponent extends Box implements Focusable {
     this.updateList();
   }
 
-  private handleSubMenuInput(data: string, kb: ReturnType<typeof getEditorKeybindings>): void {
+  private handleSubMenuInput(data: string, kb: ReturnType<typeof getKeybindings>): void {
     // Up arrow
-    if (kb.matches(data, 'selectUp')) {
+    if (kb.matches(data, 'tui.select.up')) {
       this.subMenuIndex = this.subMenuIndex === 0 ? this.subMenuActions.length - 1 : this.subMenuIndex - 1;
       this.updateList();
     }
     // Down arrow
-    else if (kb.matches(data, 'selectDown')) {
+    else if (kb.matches(data, 'tui.select.down')) {
       this.subMenuIndex = this.subMenuIndex === this.subMenuActions.length - 1 ? 0 : this.subMenuIndex + 1;
       this.updateList();
     }
     // Enter — execute action
-    else if (kb.matches(data, 'selectConfirm')) {
+    else if (kb.matches(data, 'tui.select.confirm')) {
       const action = this.subMenuActions[this.subMenuIndex];
       if (!action || action.key === 'none') return;
       this.executeAction(action.key);
     }
     // Escape — close sub-menu
-    else if (kb.matches(data, 'selectCancel')) {
+    else if (kb.matches(data, 'tui.select.cancel')) {
       this.subMenuOpen = false;
       this.updateList();
     }

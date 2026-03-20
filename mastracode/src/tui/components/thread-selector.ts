@@ -3,7 +3,7 @@
  * Uses pi-tui overlay pattern with search and navigation.
  */
 
-import { Box, Container, fuzzyFilter, getEditorKeybindings, Input, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, Container, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, TUI } from '@mariozechner/pi-tui';
 import type { HarnessThread } from '@mastra/core/harness';
 import { theme } from '../theme.js';
@@ -329,26 +329,26 @@ export class ThreadSelectorComponent extends Box implements Focusable {
   }
 
   handleInput(keyData: string): void {
-    const kb = getEditorKeybindings();
+    const kb = getKeybindings();
 
-    if (kb.matches(keyData, 'selectUp')) {
+    if (kb.matches(keyData, 'tui.select.up')) {
       if (this.filteredThreads.length === 0) return;
       this.selectedIndex = this.selectedIndex === 0 ? this.filteredThreads.length - 1 : this.selectedIndex - 1;
       this.updateList();
       this.tui.requestRender();
       this.scheduleMessagePreviewLoad({ delayMs: INTERACTION_PREVIEW_LOAD_DELAY_MS });
-    } else if (kb.matches(keyData, 'selectDown')) {
+    } else if (kb.matches(keyData, 'tui.select.down')) {
       if (this.filteredThreads.length === 0) return;
       this.selectedIndex = this.selectedIndex === this.filteredThreads.length - 1 ? 0 : this.selectedIndex + 1;
       this.updateList();
       this.tui.requestRender();
       this.scheduleMessagePreviewLoad({ delayMs: INTERACTION_PREVIEW_LOAD_DELAY_MS });
-    } else if (kb.matches(keyData, 'selectConfirm')) {
+    } else if (kb.matches(keyData, 'tui.select.confirm')) {
       const selected = this.filteredThreads[this.selectedIndex];
       if (selected) {
         this.onSelectCallback(selected);
       }
-    } else if (kb.matches(keyData, 'selectCancel')) {
+    } else if (kb.matches(keyData, 'tui.select.cancel')) {
       this.onCancelCallback();
     } else if (keyData === 'c' && this.onCloneCallback && !this.searchInput.getValue()) {
       const selected = this.filteredThreads[this.selectedIndex];

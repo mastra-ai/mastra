@@ -2,7 +2,7 @@
  * OAuth provider selector component for /login and /logout commands
  */
 
-import { Box, Container, getEditorKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, Container, getKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
 import type { OAuthProviderInterface } from '../../auth/types.js';
 import { theme } from '../theme.js';
 
@@ -93,27 +93,27 @@ export class LoginSelectorComponent extends Box {
   }
 
   handleInput(keyData: string): void {
-    const kb = getEditorKeybindings();
+    const kb = getKeybindings();
 
     // Up arrow
-    if (kb.matches(keyData, 'selectUp')) {
+    if (kb.matches(keyData, 'tui.select.up')) {
       this.selectedIndex = Math.max(0, this.selectedIndex - 1);
       this.updateList();
     }
     // Down arrow
-    else if (kb.matches(keyData, 'selectDown')) {
+    else if (kb.matches(keyData, 'tui.select.down')) {
       this.selectedIndex = Math.min(this.allProviders.length - 1, this.selectedIndex + 1);
       this.updateList();
     }
     // Enter
-    else if (kb.matches(keyData, 'selectConfirm')) {
+    else if (kb.matches(keyData, 'tui.select.confirm')) {
       const selectedProvider = this.allProviders[this.selectedIndex];
       if (selectedProvider) {
         this.onSelectCallback(selectedProvider.id);
       }
     }
     // Escape or Ctrl+C
-    else if (kb.matches(keyData, 'selectCancel')) {
+    else if (kb.matches(keyData, 'tui.select.cancel')) {
       this.onCancelCallback();
     }
   }

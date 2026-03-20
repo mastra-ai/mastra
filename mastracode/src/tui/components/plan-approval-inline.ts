@@ -4,7 +4,7 @@
  * directly in the conversation flow.
  */
 
-import { Box, Container, getEditorKeybindings, Input, Markdown, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, Container, getKeybindings, Input, Markdown, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
 import { BOX_INDENT, theme, getSelectListTheme, getMarkdownTheme } from '../theme.js';
 
@@ -181,8 +181,8 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     if (this.resolved) return;
 
     if (this.mode === 'feedback' && this.feedbackInput) {
-      const kb = getEditorKeybindings();
-      if (kb.matches(data, 'selectCancel')) {
+      const kb = getKeybindings();
+      if (kb.matches(data, 'tui.select.cancel')) {
         this.handleReject();
         return;
       }
