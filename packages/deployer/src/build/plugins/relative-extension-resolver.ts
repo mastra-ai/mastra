@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { dirname, extname, join, resolve } from 'node:path';
 import type { Plugin } from 'rollup';
+import { slash } from '../utils';
 
 const EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
 
@@ -28,14 +29,14 @@ export function relativeExtensionResolver(): Plugin {
       for (const ext of EXTENSIONS) {
         const candidate = resolved + ext;
         if (existsSync(candidate)) {
-          return candidate;
+          return slash(candidate);
         }
       }
 
       for (const ext of EXTENSIONS) {
         const candidate = join(resolved, `index${ext}`);
         if (existsSync(candidate)) {
-          return candidate;
+          return slash(candidate);
         }
       }
 
