@@ -56,6 +56,9 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, schema }: RefBlockC
     updateStoredPromptBlock.mutate({ content });
   }, 500);
 
+  // Cancel pending save on unmount
+  useEffect(() => () => debouncedSave.cancel(), [debouncedSave]);
+
   const handleContentChange = useCallback(
     (content: string) => {
       setLocalContent(content);
