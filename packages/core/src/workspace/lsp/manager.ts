@@ -221,7 +221,9 @@ export class LSPManager {
 
     client.notifyOpen(filePath, content, languageId);
 
-    const uri = `file://${filePath}`;
+    // Use the same URI format as notifyOpen (pathToFileURL for proper encoding)
+    const { pathToFileURL } = await import('node:url');
+    const uri = pathToFileURL(filePath).toString();
     return { client, uri, languageId, serverName: client.serverName };
   }
 
