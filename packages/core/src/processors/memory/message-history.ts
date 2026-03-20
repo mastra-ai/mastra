@@ -248,14 +248,9 @@ export class MessageHistory implements Processor {
       return messageList;
     }
 
-    const span = this.createMemorySpan(
-      'save',
-      observabilityContext,
-      { messageCount: messagesToSave.length },
-      {
-        messageCount: messagesToSave.length,
-      },
-    );
+    const span = this.createMemorySpan('save', observabilityContext, undefined, {
+      messageCount: messagesToSave.length,
+    });
 
     try {
       await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
@@ -263,7 +258,7 @@ export class MessageHistory implements Processor {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       span?.end({
-        attributes: { success: true, messageCount: messagesToSave.length },
+        attributes: { success: true },
       });
 
       return messageList;
