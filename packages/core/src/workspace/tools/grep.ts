@@ -7,6 +7,7 @@ import type { GlobMatcher } from '../glob';
 import { createGlobMatcher, extractGlobBase, isGlobPattern } from '../glob';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
 import { applyTokenLimit } from './output-helpers';
+import { startWorkspaceSpan } from './tracing';
 
 export const grepTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.GREP,
@@ -63,9 +64,17 @@ Usage:
     const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.GREP);
 
+    const span = startWorkspaceSpan(context, workspace, {
+      category: 'filesystem',
+      operation: 'grep',
+      input: { pattern, path: inputPath, contextLines, maxCount },
+      attributes: { filePath: inputPath, query: pattern, filesystemProvider: filesystem.provider },
+    });
+
     // Guard against excessively long patterns as a cheap ReDoS heuristic
     const MAX_PATTERN_LENGTH = 1000;
     if (pattern.length > MAX_PATTERN_LENGTH) {
+      span.end({ success: false, resultCount: 0 });
       return `Error: Pattern too long (${pattern.length} chars, max ${MAX_PATTERN_LENGTH}). Use a shorter pattern.`;
     }
 
@@ -74,6 +83,7 @@ Usage:
     try {
       regex = new RegExp(pattern, caseSensitive ? 'g' : 'gi');
     } catch (e) {
+      span.end({ success: false, resultCount: 0 });
       return `Error: Invalid regex pattern: ${(e as Error).message}`;
     }
 
@@ -229,10 +239,12 @@ Usage:
     const summary = summaryParts.join(' ');
     outputLines.unshift(summary, '---');
 
-    return await applyTokenLimit(
+    const output = await applyTokenLimit(
       outputLines.join('\n'),
       workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.GREP]?.maxOutputTokens,
       'end',
     );
+    span.end({ resultCount: totalMatchCount });
+    return output;
   },
 });

@@ -56,6 +56,8 @@ export enum SpanType {
   WORKFLOW_SLEEP = 'workflow_sleep',
   /** Workflow wait for event operation */
   WORKFLOW_WAIT_EVENT = 'workflow_wait_event',
+  /** Workspace action (filesystem, sandbox, search, skill, mount operations) */
+  WORKSPACE_ACTION = 'workspace_action',
 }
 
 export { EntityType };
@@ -353,6 +355,42 @@ export interface WorkflowWaitEventAttributes extends AIBaseAttributes {
 }
 
 /**
+ * Workspace Action attributes
+ */
+export interface WorkspaceActionAttributes extends AIBaseAttributes {
+  /** Workspace identifier */
+  workspaceId?: string;
+  /** Human-readable workspace name */
+  workspaceName?: string;
+  /** Action category */
+  category: 'filesystem' | 'sandbox' | 'search' | 'skill' | 'mount';
+  /** Specific operation within the category (e.g. 'readFile', 'executeCommand') */
+  operation: string;
+  /** File path involved in the operation */
+  filePath?: string;
+  /** Shell command executed (sandbox operations) */
+  command?: string;
+  /** Sandbox provider name (e.g. 'e2b', 'docker', 'local') */
+  sandboxProvider?: string;
+  /** Filesystem provider name (e.g. 'local', 'agentfs', 's3') */
+  filesystemProvider?: string;
+  /** Whether the operation succeeded */
+  success?: boolean;
+  /** Bytes read or written */
+  bytesTransferred?: number;
+  /** Process exit code (sandbox command execution) */
+  exitCode?: number;
+  /** Duration of the workspace operation in milliseconds */
+  durationMs?: number;
+  /** Search query string */
+  query?: string;
+  /** Number of results returned (search operations) */
+  resultCount?: number;
+  /** Process ID (background sandbox operations) */
+  pid?: number;
+}
+
+/**
  * AI-specific span types mapped to their attributes
  */
 export interface SpanTypeMap {
@@ -371,6 +409,7 @@ export interface SpanTypeMap {
   [SpanType.WORKFLOW_LOOP]: WorkflowLoopAttributes;
   [SpanType.WORKFLOW_SLEEP]: WorkflowSleepAttributes;
   [SpanType.WORKFLOW_WAIT_EVENT]: WorkflowWaitEventAttributes;
+  [SpanType.WORKSPACE_ACTION]: WorkspaceActionAttributes;
   [SpanType.GENERIC]: AIBaseAttributes;
 }
 
