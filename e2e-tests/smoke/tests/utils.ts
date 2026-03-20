@@ -197,6 +197,63 @@ export async function pollWorkflowRun(
 }
 
 /**
+ * Generate a response from an agent (synchronous).
+ */
+export async function generateAgent(
+  agentId: string,
+  body: Record<string, unknown>,
+): Promise<{ status: number; data: any }> {
+  return fetchJson(`/api/agents/${agentId}/generate`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * Stream a response from an agent and collect all SSE events.
+ * The stream endpoint returns Server-Sent Events (SSE) format.
+ */
+export async function streamAgent(
+  agentId: string,
+  body: Record<string, unknown>,
+): Promise<{ status: number; events: any[] }> {
+  const res = await fetchApi(`/api/agents/${agentId}/stream`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+  const text = await res.text();
+  const events = parseSSEEvents(text);
+
+  return { status: res.status, events };
+}
+
+/**
+ * Parse Server-Sent Events (SSE) text into structured events.
+ * Mastra streams use standard SSE format: "data: {JSON}" lines.
+ * Each parsed event has { type, runId, from, payload }.
+ */
+function parseSSEEvents(text: string): any[] {
+  const events: any[] = [];
+  const lines = text.split('\n');
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    // SSE data lines start with "data: "
+    if (!trimmed.startsWith('data: ')) continue;
+
+    const payload = trimmed.slice(6); // strip "data: "
+    if (payload === '[DONE]') continue;
+
+    events.push(JSON.parse(payload));
+  }
+
+  return events;
+}
+
+/**
  * Parse \x1E-delimited stream chunks.
  * Throws on malformed JSON rather than silently returning raw strings.
  */
