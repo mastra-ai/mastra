@@ -1,6 +1,8 @@
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
+import type { MastraVector } from '@mastra/core/vector';
+import { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants';
 import type { stateSchema } from '../schema';
@@ -47,7 +49,7 @@ function getReflectorModel({ requestContext }: { requestContext: RequestContext 
  * Reads OM thresholds from harness state via requestContext.
  * Model functions also read from requestContext (no mutable bridge needed).
  */
-export function getDynamicMemory(storage: MastraCompositeStore) {
+export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector) {
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const state = getHarnessState(requestContext);
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
@@ -66,6 +68,8 @@ export function getDynamicMemory(storage: MastraCompositeStore) {
 
     cachedMemory = new Memory({
       storage,
+      vector: vector || false,
+      embedder: vector ? fastembed.small : undefined,
       options: {
         observationalMemory: {
           enabled: true,
