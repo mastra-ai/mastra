@@ -213,31 +213,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
       options: {
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
         onFinish: async (payload: any) => {
-          if (payload.finishReason === 'error') {
-            const provider = payload.model?.provider;
-            const modelId = payload.model?.modelId;
-            const isUpstreamError = APICallError.isInstance(payload.error);
-
-            if (isUpstreamError) {
-              const providerInfo = provider ? ` from ${provider}` : '';
-              const modelInfo = modelId ? ` (model: ${modelId})` : '';
-              capabilities.logger.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
-                error: payload.error,
-                runId,
-                ...(provider && { provider }),
-                ...(modelId && { modelId }),
-              });
-            } else {
-              capabilities.logger.error('Error in agent stream', {
-                error: payload.error,
-                runId,
-                ...(provider && { provider }),
-                ...(modelId && { modelId }),
-              });
-            }
-            return;
-          }
-
           // Skip memory persistence when the abort signal has fired.
           // The LLM response may have continued after the caller disconnected,
           // and we should not persist a partial or full response for an aborted request.
@@ -284,7 +259,31 @@ export function createMapResultsStep<OUTPUT = undefined>({
         },
         onStepFinish: result.onStepFinish,
         onChunk: options.onChunk,
-        onError: options.onError,
+        onError: async (error: Error) => {
+          const provider = (error as any)?.data?.provider;
+          const modelId = (error as any)?.data?.modelId;
+          const isUpstreamError = APICallError.isInstance(error);
+
+          if (isUpstreamError) {
+            const providerInfo = provider ? ` from ${provider}` : '';
+            const modelInfo = modelId ? ` (model: ${modelId})` : '';
+            capabilities.logger.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
+              error,
+              runId,
+              ...(provider && { provider }),
+              ...(modelId && { modelId }),
+            });
+          } else {
+            capabilities.logger.error('Error in agent stream', {
+              error,
+              runId,
+              ...(provider && { provider }),
+              ...(modelId && { modelId }),
+            });
+          }
+
+          await options.onError?.(error);
+        },
         onAbort: options.onAbort,
         abortSignal: options.abortSignal,
       },
