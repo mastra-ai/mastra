@@ -8,9 +8,12 @@ import { Spinner } from '@/ds/components/Spinner';
 import { Input } from '@/ds/components/Input';
 import { Textarea } from '@/ds/components/Textarea';
 import { Label } from '@/ds/components/Label';
+import { Txt } from '@/ds/components/Txt';
 import { SectionHeader } from '@/domains/cms';
 import { JSONSchemaForm, type SchemaField, jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
 import type { JsonSchema } from '@/lib/json-schema';
+import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
+import { useLinkComponent } from '@/lib/framework';
 
 import type { PromptBlockFormValues } from './utils/form-validation';
 
@@ -74,6 +77,8 @@ interface PromptBlockEditSidebarProps {
   mode?: 'create' | 'edit';
   /** Key that changes when form is reset with new data, forces JSONSchemaForm to remount */
   formResetKey?: number;
+  /** Block ID, used to show "Used by" agents section in edit mode */
+  blockId?: string;
 }
 
 export function PromptBlockEditSidebar({
@@ -86,6 +91,7 @@ export function PromptBlockEditSidebar({
   hasDraft = false,
   mode = 'create',
   formResetKey = 0,
+  blockId,
 }: PromptBlockEditSidebarProps) {
   const {
     register,
@@ -103,6 +109,19 @@ export function PromptBlockEditSidebar({
   );
 
   const initialFields = useMemo(() => jsonSchemaToFields(watchedVariables), [watchedVariables]);
+
+  const { data: storedAgentsData } = useStoredAgents();
+  const { navigate, paths } = useLinkComponent();
+
+  const usedByAgents = useMemo(() => {
+    if (!blockId || !storedAgentsData?.agents) return [];
+    return storedAgentsData.agents.filter(agent => {
+      if (!Array.isArray(agent.instructions)) return false;
+      return agent.instructions.some(
+        instr => instr.type === 'prompt_block_ref' && instr.id === blockId,
+      );
+    });
+  }, [blockId, storedAgentsData]);
 
   return (
     <div className="h-full flex flex-col">
@@ -173,6 +192,33 @@ export function PromptBlockEditSidebar({
             </div>
           </JSONSchemaForm.Root>
         </div>
+
+        {/* Used by */}
+        {mode === 'edit' && blockId && (
+          <div className="flex flex-col gap-3 p-4 border-t border-border1">
+            <SectionHeader title="Used by" subtitle="Agents that reference this prompt block." />
+            {usedByAgents.length > 0 ? (
+              <div className="flex flex-col gap-1.5">
+                {usedByAgents.map(agent => (
+                  <button
+                    key={agent.id}
+                    type="button"
+                    onClick={() => navigate(paths.agentLink(agent.id))}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md text-left hover:bg-surface3 transition-colors"
+                  >
+                    <Txt variant="ui-sm" className="text-neutral5 truncate">
+                      {agent.name || agent.id}
+                    </Txt>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <Txt variant="ui-sm" className="text-neutral3">
+                Not referenced by any agents yet.
+              </Txt>
+            )}
+          </div>
+        )}
       </ScrollArea>
 
       {/* Sticky footer */}

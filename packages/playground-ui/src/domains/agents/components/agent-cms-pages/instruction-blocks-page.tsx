@@ -12,19 +12,21 @@ export function InstructionBlocksPage() {
 
   return (
     <ScrollArea className="h-full">
-      <Controller
-        name="instructionBlocks"
-        control={form.control}
-        defaultValue={[]}
-        render={({ field }) => (
-          <AgentCMSBlocks
-            items={field.value ?? []}
-            onChange={field.onChange}
-            placeholder="Enter content..."
-            schema={schema}
-          />
-        )}
-      />
+      <div className="py-6 px-2">
+        <Controller
+          name="instructionBlocks"
+          control={form.control}
+          defaultValue={[]}
+          render={({ field }) => (
+            <AgentCMSBlocks
+              items={field.value ?? []}
+              onChange={field.onChange}
+              placeholder="Enter content..."
+              schema={schema}
+            />
+          )}
+        />
+      </div>
     </ScrollArea>
   );
 }
