@@ -3297,6 +3297,7 @@ export type ProviderModelsMap = {
     'llama-3.1-405b-instruct',
     'minimax-m2',
     'minimax-m2.1',
+    'minimax-m2.5',
     'nova-pro-v1',
     'qwen3-32b',
     'qwen3-coder-480b-a35b-instruct',
