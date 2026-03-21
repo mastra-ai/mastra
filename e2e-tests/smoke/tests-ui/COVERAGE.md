@@ -17,7 +17,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 | Agents        | ✅✅✅✅✅✅✅✅✅✅✅✅ | 12   | 0    | 0       |
 | Tools         | ✅✅✅✅✅✅✅🚫      | 7    | 0    | 1       |
 | Workflows     | ✅✅✅✅✅✅✅✅✅✅✅✅ | 12   | 0    | 0       |
-| MCP Servers   | ⬜⬜⬜                | 0    | 3    | 0       |
+| MCP Servers   | ✅✅✅                | 3    | 0    | 0       |
 | Observability | ⬜⬜⬜⬜⬜⬜          | 0    | 6    | 0       |
 | Memory        | ⬜⬜⬜⬜              | 0    | 4    | 0       |
 | Datasets      | ⬜⬜⬜⬜⬜⬜⬜        | 0    | 7    | 0       |
@@ -26,7 +26,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 | Workspaces    | ⬜⬜⬜⬜⬜            | 0    | 5    | 0       |
 | CMS           | ⬜⬜⬜⬜              | 0    | 4    | 0       |
 | Settings      | ⬜                    | 0    | 1    | 0       |
-| **Total**     |                       | **31** | **34** | **1** |
+| **Total**     |                       | **34** | **31** | **1** |
 
 ---
 
@@ -108,13 +108,13 @@ Tracking document for Studio/Playground E2E smoke tests.
 | 7 | Needs-approval tool: executes without gate  | ✅     |
 | 8 | Always-fails tool: error display            | 🚫     |
 
-### MCP Servers — `tests-ui/mcp/` (0/3)
+### ✅ MCP Servers — `tests-ui/mcp/mcp-servers.spec.ts` (3/3)
 
 |   | Test                                        | Status |
 |---|---------------------------------------------|--------|
-| 1 | MCP servers list page                       | ⬜     |
-| 2 | MCP server detail shows available tools     | ⬜     |
-| 3 | Execute MCP tool from UI                    | ⬜     |
+| 1 | MCP servers list page shows registered servers | ✅  |
+| 2 | MCP server detail shows available tools     | ✅     |
+| 3 | Execute MCP tool from UI                    | ✅     |
 
 ### Observability — `tests-ui/observability/` (0/6)
 
