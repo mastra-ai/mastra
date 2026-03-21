@@ -1,0 +1,30 @@
+{
+  "name": "template-slack-coding-agent",
+  "version": "1.0.0",
+  "description": "A Slack-based coding agent powered by MastraCode Harness and E2B cloud sandboxes",
+  "main": "index.js",
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "dev": "tsx --watch src/server.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/deployer": "latest",
+    "@mastra/e2b": "latest",
+    "@slack/web-api": "^7.13.0",
+    "mastracode": "latest",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
