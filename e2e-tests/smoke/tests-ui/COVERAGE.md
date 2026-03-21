@@ -82,7 +82,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 | 9 | Retry-workflow: succeeds after retries         | Done   |
 | 10 | Step detail: click step to view output        | Done   |
 | 11 | Failure-workflow: failed status and error     | Done   |
-| 12 | Run history: navigate to past run             | N/A (no run history UI in current studio) |
+| 12 | Run history: expand panel, view past runs     | Done   |
 
 ### MCP Servers — `tests-ui/mcp/` (not started)
 
@@ -172,7 +172,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 |----------------|------|------|---------|
 | Agents         | 6    | 6    | 0       |
 | Tools          | 5    | 2    | 1       |
-| Workflows      | 11   | 0    | 0       |
+| Workflows      | 12   | 0    | 0       |
 | MCP Servers    | 0    | 3    | 0       |
 | Observability  | 0    | 6    | 0       |
 | Memory         | 0    | 4    | 0       |
@@ -182,7 +182,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 | Workspaces     | 0    | 5    | 0       |
 | CMS            | 0    | 4    | 0       |
 | Settings       | 0    | 1    | 0       |
-| **Total**      | **22** | **43** | **1** |
+| **Total**      | **23** | **42** | **1** |
 
 ## Known Issues
 

@@ -232,6 +232,42 @@ test.describe('Workflow Execution', () => {
     await expect(page.getByText('Intentional failure for smoke test')).toBeVisible({ timeout: 5_000 });
   });
 
+  test('run history: shows past runs and navigates to them', async ({ page }) => {
+    // Use wider viewport so the left run-history panel isn't clipped
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.goto('/workflows/sequential-steps/graph');
+
+    // Run a workflow to create a run entry
+    await page.getByRole('textbox', { name: 'Name' }).fill('history-run');
+    await page.getByRole('button', { name: 'Run' }).click();
+    const lastNode = page.locator('[data-workflow-node]').last();
+    await expect(lastNode).toHaveAttribute('data-workflow-step-status', 'success', { timeout: 10_000 });
+
+    // The left panel (run history) starts collapsed in fresh browsers.
+    // Expand it by clicking the button inside the collapsed left-slot panel.
+    const leftPanel = page.locator('#left-slot');
+    await leftPanel.locator('button').first().click();
+
+    // Wait for the run list to render after expanding
+    const newRunLink = page.getByText('New workflow run');
+    await expect(newRunLink).toBeVisible({ timeout: 10_000 });
+
+    // Verify run history shows at least one past run with "success" badge
+    const runLinks = page.getByRole('link').filter({ hasText: /success/ }).filter({ hasText: /[0-9a-f]{8}/ });
+    await expect(runLinks.first()).toBeVisible({ timeout: 10_000 });
+
+    // Click a past run — URL should include the run ID
+    await runLinks.first().click();
+    await expect(page).toHaveURL(/\/graph\/[0-9a-f-]+/, { timeout: 5_000 });
+
+    // The graph still renders step nodes for the historical run
+    await expect(page.locator('[data-workflow-node]').first()).toBeVisible({ timeout: 5_000 });
+
+    // "New workflow run" link navigates back to the fresh state
+    await newRunLink.click();
+    await expect(page).toHaveURL(/\/sequential-steps\/graph$/);
+  });
+
   test('basic-suspend: suspend and resume', async ({ page }) => {
     // This test involves suspend + resume with real async processing
     test.slow();
