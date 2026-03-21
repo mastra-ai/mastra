@@ -15,7 +15,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 | Section       | Progress              | Done | Todo | Blocked |
 |---------------|-----------------------|------|------|---------|
 | Agents        | ✅✅✅✅✅✅✅✅✅✅✅✅ | 12   | 0    | 0       |
-| Tools         | ✅✅✅✅✅⬜⬜🚫      | 5    | 2    | 1       |
+| Tools         | ✅✅✅✅✅✅✅🚫      | 7    | 0    | 1       |
 | Workflows     | ✅✅✅✅✅✅✅✅✅✅✅✅ | 12   | 0    | 0       |
 | MCP Servers   | ⬜⬜⬜                | 0    | 3    | 0       |
 | Observability | ⬜⬜⬜⬜⬜⬜          | 0    | 6    | 0       |
@@ -26,7 +26,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 | Workspaces    | ⬜⬜⬜⬜⬜            | 0    | 5    | 0       |
 | CMS           | ⬜⬜⬜⬜              | 0    | 4    | 0       |
 | Settings      | ⬜                    | 0    | 1    | 0       |
-| **Total**     |                       | **29** | **36** | **1** |
+| **Total**     |                       | **31** | **34** | **1** |
 
 ---
 
@@ -95,7 +95,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 | 11 | Failure-workflow: failed status and error     | ✅     |
 | 12 | Run history: expand panel, view past runs     | ✅     |
 
-### Tools — `tests-ui/tools/tool-execution.spec.ts` (5/8)
+### Tools — `tests-ui/tools/tool-execution.spec.ts` (7/8)
 
 |   | Test                                        | Status |
 |---|---------------------------------------------|--------|
@@ -104,8 +104,8 @@ Tracking document for Studio/Playground E2E smoke tests.
 | 3 | Calculator tool: multiply 7 * 6 = 42       | ✅     |
 | 4 | String-transform tool: uppercase            | ✅     |
 | 5 | Timestamp tool: no input required           | ✅     |
-| 6 | String-transform tool: reverse              | ⬜     |
-| 7 | Needs-approval tool: approval flow          | ⬜     |
+| 6 | String-transform tool: reverse              | ✅     |
+| 7 | Needs-approval tool: executes without gate  | ✅     |
 | 8 | Always-fails tool: error display            | 🚫     |
 
 ### MCP Servers — `tests-ui/mcp/` (0/3)
