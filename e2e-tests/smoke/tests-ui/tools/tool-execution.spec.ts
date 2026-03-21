@@ -84,6 +84,32 @@ test.describe('Tool Execution', () => {
     expect(result.iso).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
+  test('string-transform tool: reverse', async ({ page }) => {
+    await page.goto('/tools/string-transform');
+
+    await page.getByRole('combobox', { name: 'Transform' }).click();
+    await page.getByRole('option', { name: 'reverse' }).click();
+
+    await page.getByRole('textbox', { name: 'Text' }).fill('abcdef');
+    await page.getByRole('button', { name: 'Submit' }).click();
+
+    const result = await waitForToolResult(page, 'result');
+    expect(result).toEqual({ result: 'fedcba' });
+  });
+
+  test('needs-approval tool: executes in playground without approval gate', async ({ page }) => {
+    await page.goto('/tools/needs-approval');
+
+    await expect(page.locator('h2')).toHaveText('needs-approval');
+
+    await page.getByRole('textbox', { name: 'Name' }).fill('SmokeTest');
+    await page.getByRole('button', { name: 'Submit' }).click();
+
+    // In the tool playground, requireApproval is bypassed — tool executes directly
+    const result = await waitForToolResult(page, 'greeting');
+    expect(result).toEqual({ greeting: 'Hello, SmokeTest!' });
+  });
+
   // NOTE: The always-fails tool error is not surfaced in the UI result panel
   // (the JSON output stays "{}"). Skipping until the playground renders tool errors.
 });
