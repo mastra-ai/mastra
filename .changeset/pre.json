@@ -121,6 +121,15 @@
     "@mastra/s3": "0.3.0"
   },
   "changesets": [
-    "green-birds-knock"
+    "automated-provider-registry-20260320-182256",
+    "evaluate-backend-support",
+    "evaluate-client-sdk",
+    "evaluate-storage-support",
+    "green-birds-knock",
+    "happy-walls-follow",
+    "hip-paths-remain",
+    "late-swans-greet",
+    "real-rockets-melt",
+    "slow-clouds-occur"
   ]
 }
