@@ -6,6 +6,30 @@ Tracking document for Studio/Playground E2E smoke tests.
 **Test dir:** `e2e-tests/smoke/tests-ui/`
 **Config:** `e2e-tests/smoke/playwright.config.ts`
 
+> **Legend:** &ensp; ✅ Done &ensp; ⬜ Todo &ensp; 🚫 Blocked
+
+---
+
+## Summary
+
+| Section       | Progress              | Done | Todo | Blocked |
+|---------------|-----------------------|------|------|---------|
+| Agents        | ✅✅✅✅✅✅✅✅✅✅✅✅ | 12   | 0    | 0       |
+| Tools         | ✅✅✅✅✅⬜⬜🚫      | 5    | 2    | 1       |
+| Workflows     | ✅✅✅✅✅✅✅✅✅✅✅✅ | 12   | 0    | 0       |
+| MCP Servers   | ⬜⬜⬜                | 0    | 3    | 0       |
+| Observability | ⬜⬜⬜⬜⬜⬜          | 0    | 6    | 0       |
+| Memory        | ⬜⬜⬜⬜              | 0    | 4    | 0       |
+| Datasets      | ⬜⬜⬜⬜⬜⬜⬜        | 0    | 7    | 0       |
+| Scorers       | ⬜⬜⬜                | 0    | 3    | 0       |
+| Processors    | ⬜⬜                  | 0    | 2    | 0       |
+| Workspaces    | ⬜⬜⬜⬜⬜            | 0    | 5    | 0       |
+| CMS           | ⬜⬜⬜⬜              | 0    | 4    | 0       |
+| Settings      | ⬜                    | 0    | 1    | 0       |
+| **Total**     |                       | **29** | **36** | **1** |
+
+---
+
 ## Available Fixtures
 
 | Type       | Name                  | Notes                              |
@@ -37,156 +61,138 @@ Tracking document for Studio/Playground E2E smoke tests.
 
 ## Test Coverage
 
-### Agents — `tests-ui/agents/agent-chat.spec.ts`
+### ✅ Agents — `tests-ui/agents/agent-chat.spec.ts` (12/12)
 
-| # | Test                                        | Status |
+|   | Test                                        | Status |
 |---|---------------------------------------------|--------|
-| 1 | Agents list page shows registered agents    | Done   |
-| 2 | Agent chat page shows overview panel        | Done   |
-| 3 | Send message and receive streamed response  | Done   |
-| 4 | Send message with generate mode             | Done   |
-| 5 | Model settings persist after reload         | Done   |
-| 6 | New chat button navigates to fresh thread   | Done   |
-| 7 | Thread sidebar lists previous conversations | Todo   |
-| 8 | Click previous thread to reload it          | Todo   |
-| 9 | Tool call displayed in chat message         | Todo   |
-| 10 | Memory tab shows working memory            | Todo   |
-| 11 | Approval agent triggers tool approval flow | Todo   |
-| 12 | Agent overview shows correct tools list    | Todo   |
+| 1 | Agents list page shows registered agents    | ✅     |
+| 2 | Agent chat page shows overview panel        | ✅     |
+| 3 | Send message and receive streamed response  | ✅     |
+| 4 | Send message with generate mode             | ✅     |
+| 5 | Model settings persist after reload         | ✅     |
+| 6 | New chat button navigates to fresh thread   | ✅     |
+| 7 | Thread sidebar lists previous conversations | ✅     |
+| 8 | Click previous thread to reload it          | ✅     |
+| 9 | Tool call displayed in chat message         | ✅     |
+| 10 | Memory tab shows working memory            | ✅     |
+| 11 | Approval agent triggers tool approval flow | ✅     |
+| 12 | Agent overview shows correct tools list    | ✅     |
 
-### Tools — `tests-ui/tools/tool-execution.spec.ts`
+### ✅ Workflows — `tests-ui/workflows/workflow-run.spec.ts` (12/12)
 
-| # | Test                                        | Status |
-|---|---------------------------------------------|--------|
-| 1 | Tools list page shows registered tools      | Done   |
-| 2 | Calculator tool: add 5 + 3 = 8             | Done   |
-| 3 | Calculator tool: multiply 7 * 6 = 42       | Done   |
-| 4 | String-transform tool: uppercase            | Done   |
-| 5 | Timestamp tool: no input required           | Done   |
-| 6 | String-transform tool: reverse              | Todo   |
-| 7 | Needs-approval tool: approval flow          | Todo   |
-| 8 | Always-fails tool: error display            | Todo (blocked — UI shows `{}`) |
-
-### Workflows — `tests-ui/workflows/workflow-run.spec.ts`
-
-| # | Test                                           | Status |
+|   | Test                                           | Status |
 |---|------------------------------------------------|--------|
-| 1 | Workflows list page shows registered workflows | Done   |
-| 2 | Sequential-steps: run to completion            | Done   |
-| 3 | Sequential-steps: run via JSON input           | Done   |
-| 4 | Basic-suspend: suspend and resume              | Done   |
-| 5 | Branch-workflow: positive branch               | Done   |
-| 6 | Branch-workflow: negative branch               | Done   |
-| 7 | Parallel-workflow: all parallel steps succeed  | Done   |
-| 8 | Foreach-workflow: processes items via JSON      | Done   |
-| 9 | Retry-workflow: succeeds after retries         | Done   |
-| 10 | Step detail: click step to view output        | Done   |
-| 11 | Failure-workflow: failed status and error     | Done   |
-| 12 | Run history: expand panel, view past runs     | Done   |
+| 1 | Workflows list page shows registered workflows | ✅     |
+| 2 | Sequential-steps: run to completion            | ✅     |
+| 3 | Sequential-steps: run via JSON input           | ✅     |
+| 4 | Basic-suspend: suspend and resume              | ✅     |
+| 5 | Branch-workflow: positive branch               | ✅     |
+| 6 | Branch-workflow: negative branch               | ✅     |
+| 7 | Parallel-workflow: all parallel steps succeed  | ✅     |
+| 8 | Foreach-workflow: processes items via JSON      | ✅     |
+| 9 | Retry-workflow: succeeds after retries         | ✅     |
+| 10 | Step detail: click step to view output        | ✅     |
+| 11 | Failure-workflow: failed status and error     | ✅     |
+| 12 | Run history: expand panel, view past runs     | ✅     |
 
-### MCP Servers — `tests-ui/mcp/` (not started)
+### Tools — `tests-ui/tools/tool-execution.spec.ts` (5/8)
 
-| # | Test                                        | Status |
+|   | Test                                        | Status |
 |---|---------------------------------------------|--------|
-| 1 | MCP servers list page                       | Todo   |
-| 2 | MCP server detail shows available tools     | Todo   |
-| 3 | Execute MCP tool from UI                    | Todo   |
+| 1 | Tools list page shows registered tools      | ✅     |
+| 2 | Calculator tool: add 5 + 3 = 8             | ✅     |
+| 3 | Calculator tool: multiply 7 * 6 = 42       | ✅     |
+| 4 | String-transform tool: uppercase            | ✅     |
+| 5 | Timestamp tool: no input required           | ✅     |
+| 6 | String-transform tool: reverse              | ⬜     |
+| 7 | Needs-approval tool: approval flow          | ⬜     |
+| 8 | Always-fails tool: error display            | 🚫     |
 
-### Observability — `tests-ui/observability/` (not started)
+### MCP Servers — `tests-ui/mcp/` (0/3)
 
-| # | Test                                        | Status |
+|   | Test                                        | Status |
 |---|---------------------------------------------|--------|
-| 1 | Traces list page loads                      | Todo   |
-| 2 | Filter traces by entity type                | Todo   |
-| 3 | Click trace to open detail modal            | Todo   |
-| 4 | Span inspection within trace                | Todo   |
-| 5 | Traces appear after agent chat              | Todo   |
-| 6 | Traces appear after workflow run             | Todo   |
+| 1 | MCP servers list page                       | ⬜     |
+| 2 | MCP server detail shows available tools     | ⬜     |
+| 3 | Execute MCP tool from UI                    | ⬜     |
 
-### Memory & Threads — `tests-ui/memory/` (not started)
+### Observability — `tests-ui/observability/` (0/6)
 
-| # | Test                                        | Status |
+|   | Test                                        | Status |
 |---|---------------------------------------------|--------|
-| 1 | Thread list shows threads after chat        | Todo   |
-| 2 | Delete a thread                             | Todo   |
-| 3 | Working memory display                      | Todo   |
-| 4 | Working memory editing                      | Todo   |
+| 1 | Traces list page loads                      | ⬜     |
+| 2 | Filter traces by entity type                | ⬜     |
+| 3 | Click trace to open detail modal            | ⬜     |
+| 4 | Span inspection within trace                | ⬜     |
+| 5 | Traces appear after agent chat              | ⬜     |
+| 6 | Traces appear after workflow run             | ⬜     |
 
-### Datasets — `tests-ui/datasets/` (not started, experimental)
+### Memory & Threads — `tests-ui/memory/` (0/4)
 
-| # | Test                                        | Status |
+|   | Test                                        | Status |
 |---|---------------------------------------------|--------|
-| 1 | Datasets list page (empty state)            | Todo   |
-| 2 | Create dataset with schema                  | Todo   |
-| 3 | Add items to dataset                        | Todo   |
-| 4 | CSV import flow                             | Todo   |
-| 5 | JSON import flow                            | Todo   |
-| 6 | Trigger experiment with scorer              | Todo   |
-| 7 | View experiment results                     | Todo   |
+| 1 | Thread list shows threads after chat        | ⬜     |
+| 2 | Delete a thread                             | ⬜     |
+| 3 | Working memory display                      | ⬜     |
+| 4 | Working memory editing                      | ⬜     |
 
-### Scorers — `tests-ui/scorers/` (not started)
+### Datasets — `tests-ui/datasets/` (0/7)
 
-| # | Test                                        | Status |
+|   | Test                                        | Status |
 |---|---------------------------------------------|--------|
-| 1 | Scorers list page                           | Todo   |
-| 2 | Scorer detail view                          | Todo   |
-| 3 | Create scorer via CMS                       | Todo   |
+| 1 | Datasets list page (empty state)            | ⬜     |
+| 2 | Create dataset with schema                  | ⬜     |
+| 3 | Add items to dataset                        | ⬜     |
+| 4 | CSV import flow                             | ⬜     |
+| 5 | JSON import flow                            | ⬜     |
+| 6 | Trigger experiment with scorer              | ⬜     |
+| 7 | View experiment results                     | ⬜     |
 
-### Processors — `tests-ui/processors/` (not started)
+### Scorers — `tests-ui/scorers/` (0/3)
 
-| # | Test                                        | Status |
+|   | Test                                        | Status |
 |---|---------------------------------------------|--------|
-| 1 | Processors list page                        | Todo   |
-| 2 | Processor detail view                       | Todo   |
+| 1 | Scorers list page                           | ⬜     |
+| 2 | Scorer detail view                          | ⬜     |
+| 3 | Create scorer via CMS                       | ⬜     |
 
-### Workspaces — `tests-ui/workspaces/` (not started)
+### Processors — `tests-ui/processors/` (0/2)
 
-| # | Test                                        | Status |
+|   | Test                                        | Status |
 |---|---------------------------------------------|--------|
-| 1 | File browser navigation                     | Todo   |
-| 2 | File viewer with syntax highlighting        | Todo   |
-| 3 | Skills tab: list installed skills           | Todo   |
-| 4 | Search: BM25 keyword search                 | Todo   |
-| 5 | Search: vector/semantic search              | Todo   |
+| 1 | Processors list page                        | ⬜     |
+| 2 | Processor detail view                       | ⬜     |
 
-### CMS — `tests-ui/cms/` (not started)
+### Workspaces — `tests-ui/workspaces/` (0/5)
 
-| # | Test                                        | Status |
+|   | Test                                        | Status |
 |---|---------------------------------------------|--------|
-| 1 | Create agent wizard                         | Todo   |
-| 2 | Edit agent                                  | Todo   |
-| 3 | Create prompt block                         | Todo   |
-| 4 | Edit prompt block                           | Todo   |
+| 1 | File browser navigation                     | ⬜     |
+| 2 | File viewer with syntax highlighting        | ⬜     |
+| 3 | Skills tab: list installed skills           | ⬜     |
+| 4 | Search: BM25 keyword search                 | ⬜     |
+| 5 | Search: vector/semantic search              | ⬜     |
 
-### Settings — `tests-ui/settings/` (not started)
+### CMS — `tests-ui/cms/` (0/4)
 
-| # | Test                                        | Status |
+|   | Test                                        | Status |
 |---|---------------------------------------------|--------|
-| 1 | Settings page loads                         | Todo   |
+| 1 | Create agent wizard                         | ⬜     |
+| 2 | Edit agent                                  | ⬜     |
+| 3 | Create prompt block                         | ⬜     |
+| 4 | Edit prompt block                           | ⬜     |
+
+### Settings — `tests-ui/settings/` (0/1)
+
+|   | Test                                        | Status |
+|---|---------------------------------------------|--------|
+| 1 | Settings page loads                         | ⬜     |
 
 ---
 
-## Summary
-
-| Section        | Done | Todo | Blocked |
-|----------------|------|------|---------|
-| Agents         | 6    | 6    | 0       |
-| Tools          | 5    | 2    | 1       |
-| Workflows      | 12   | 0    | 0       |
-| MCP Servers    | 0    | 3    | 0       |
-| Observability  | 0    | 6    | 0       |
-| Memory         | 0    | 4    | 0       |
-| Datasets       | 0    | 7    | 0       |
-| Scorers        | 0    | 3    | 0       |
-| Processors     | 0    | 2    | 0       |
-| Workspaces     | 0    | 5    | 0       |
-| CMS            | 0    | 4    | 0       |
-| Settings       | 0    | 1    | 0       |
-| **Total**      | **23** | **42** | **1** |
-
 ## Known Issues
 
-- `always-fails` tool error is not surfaced in the UI result panel (JSON output stays `{}`). Blocked until playground renders tool errors.
+- 🚫 `always-fails` tool error is not surfaced in the UI result panel (JSON output stays `{}`). Blocked until playground renders tool errors.
 
 ## Notes
 

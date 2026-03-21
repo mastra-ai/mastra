@@ -25,6 +25,22 @@ async function waitForAssistantMessage(page: Page, timeout = 30_000) {
   return assistantMsg;
 }
 
+/**
+ * Expand the left-slot collapsible panel if it's collapsed.
+ * When collapsed, the panel renders only an expand button.
+ * When already expanded, thread list content is visible.
+ */
+async function expandLeftPanel(page: Page) {
+  const leftPanel = page.locator('#left-slot');
+  const newChatText = leftPanel.getByText('New Chat');
+  const isExpanded = await newChatText.isVisible().catch(() => false);
+  if (!isExpanded) {
+    // Panel is collapsed — the only button inside is the expand arrow
+    await leftPanel.locator('button').first().click();
+  }
+  await expect(newChatText).toBeVisible({ timeout: 10_000 });
+}
+
 test.describe('Agent Chat', () => {
   test('agents list page shows registered agents', async ({ page }) => {
     await page.goto('/agents');
@@ -131,5 +147,147 @@ test.describe('Agent Chat', () => {
     // Verify the chat input is empty and ready
     await expect(page.getByPlaceholder('Enter your message...')).toBeVisible();
     await expect(page.getByPlaceholder('Enter your message...')).toBeEmpty();
+  });
+
+  test('thread sidebar lists previous conversations', async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.goto('/agents/test-agent/chat/new');
+
+    // Send a message to create a thread
+    await fillAndSend(page, 'Hello from thread sidebar test');
+    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 20_000 });
+    await waitForAssistantMessage(page);
+
+    // Expand the thread sidebar if collapsed
+    await expandLeftPanel(page);
+
+    // At least one thread entry should appear (the one we just created)
+    // Thread entries are links inside ThreadItem components that are NOT "New Chat"
+    const leftPanel = page.locator('#left-slot');
+    const threadEntries = leftPanel.locator('a').filter({ hasNotText: 'New Chat' });
+    await expect(threadEntries.first()).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('click previous thread to reload it', async ({ page }) => {
+    test.slow();
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.goto('/agents/test-agent/chat/new');
+
+    // Send a message to create the first thread
+    await fillAndSend(page, 'First thread message for reload test');
+    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 20_000 });
+    await waitForAssistantMessage(page);
+    const firstThreadUrl = page.url();
+
+    // Start a new chat to create a second context
+    await page.getByRole('link', { name: 'New Chat' }).click();
+    await expect(page).toHaveURL(/\/chat\/new/);
+
+    // Expand the thread sidebar if collapsed
+    await expandLeftPanel(page);
+
+    // Click the first previous thread entry (not "New Chat")
+    const leftPanel = page.locator('#left-slot');
+    const threadEntries = leftPanel.locator('a').filter({ hasNotText: 'New Chat' });
+    await expect(threadEntries.first()).toBeVisible({ timeout: 10_000 });
+    await threadEntries.first().click();
+
+    // Should navigate back to the exact same thread URL
+    await expect(page).toHaveURL(firstThreadUrl, { timeout: 10_000 });
+
+    // The previous message should be visible in the reloaded thread
+    const thread = page.getByTestId('thread-wrapper');
+    await expect(thread.getByText('First thread message for reload test')).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('tool call displayed in chat message', async ({ page }) => {
+    test.slow();
+    await page.goto('/agents/test-agent/chat/new');
+
+    // Ask the agent to use the calculator tool explicitly
+    await fillAndSend(page, 'Use the calculator tool to add 5 and 3. You must call the calculator tool.');
+
+    // Wait for navigation to thread
+    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 20_000 });
+
+    // Wait for the tool badge to appear in the chat
+    const toolBadge = page.getByTestId('tool-badge');
+    await expect(toolBadge.first()).toBeVisible({ timeout: 30_000 });
+
+    // Verify the tool badge shows the calculator tool name
+    await expect(toolBadge.first()).toContainText('calculator');
+
+    // Click the tool badge to expand it and check for tool arguments
+    await toolBadge.first().locator('button').first().click();
+    await expect(page.getByText('Tool arguments')).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('memory tab shows working memory', async ({ page }) => {
+    await page.goto('/agents/test-agent/chat/new');
+
+    // Switch to the Memory tab
+    await page.getByRole('tab', { name: 'Memory' }).click();
+
+    // Working Memory heading should be visible
+    await expect(page.getByRole('heading', { name: 'Working Memory' })).toBeVisible({ timeout: 5_000 });
+
+    // Before a thread exists, the edit button should be disabled with a hint
+    await expect(page.getByText('Edit Working Memory')).toBeVisible();
+
+    // The hint text for no thread should be shown
+    await expect(page.getByText('Send a message to the agent to enable working memory.')).toBeVisible();
+  });
+
+  test('approval agent triggers tool approval flow', async ({ page }) => {
+    test.slow();
+    await page.goto('/agents/approval-agent/chat/new');
+
+    // Verify we're on the approval agent page
+    await expect(page.locator('h2:has-text("Approval Agent")')).toBeVisible();
+
+    // Ask the agent to greet someone — this should trigger the needs-approval tool
+    await fillAndSend(page, 'Please greet John');
+
+    // The tool badge for needs-approval should appear, auto-expanded because of approval metadata.
+    // Wait for the tool badge first — URL navigation may happen before or after.
+    const toolBadge = page.getByTestId('tool-badge');
+    await expect(toolBadge.first()).toBeVisible({ timeout: 30_000 });
+    await expect(toolBadge.first()).toContainText('needs-approval');
+
+    // "Approval required" text should be visible (badge auto-expands for approval tools)
+    await expect(page.getByText('Approval required')).toBeVisible({ timeout: 5_000 });
+
+    // Approve and Decline buttons should be visible
+    await expect(page.getByRole('button', { name: 'Approve' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Decline' })).toBeVisible();
+
+    // Click Approve
+    await page.getByRole('button', { name: 'Approve' }).click();
+
+    // After approval, the tool should execute and show the greeting result
+    await expect(page.getByText('Tool result')).toBeVisible({ timeout: 30_000 });
+    // The tool returns { greeting: "Hello, John!" } — verify the result contains the name
+    await expect(page.getByTestId('tool-result')).toContainText('John');
+  });
+
+  test('agent overview shows correct tools list', async ({ page }) => {
+    // Verify test-agent tools
+    await page.goto('/agents/test-agent/chat/new');
+    await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+
+    // Tools section should list exactly calculator and string-transform
+    const toolBadges = page.locator('[data-testid="tool-badge"]');
+    await expect(toolBadges).toHaveCount(2);
+    await expect(page.getByRole('link', { name: 'calculator' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'string-transform' })).toBeVisible();
+
+    // Verify approval-agent tools
+    await page.goto('/agents/approval-agent/chat/new');
+    await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+
+    // Should show exactly one tool: needs-approval
+    const approvalToolBadges = page.locator('[data-testid="tool-badge"]');
+    await expect(approvalToolBadges).toHaveCount(1);
+    await expect(page.getByRole('link', { name: 'needs-approval' })).toBeVisible();
   });
 });
