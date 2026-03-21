@@ -1,2 +1,3 @@
 test-results/
+playwright-report/
 .env

@@ -5,6 +5,7 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 export default defineConfig({
   testDir: './tests-ui',
+  globalSetup: './tests-ui/global-setup.ts',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -25,7 +26,7 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: `if [ -f .env ]; then set -a && . ./.env && set +a; fi && npx mastra build --studio && MASTRA_STUDIO_PATH=.mastra/output/studio PORT=${PORT} MASTRA_HOST=0.0.0.0 node .mastra/output/index.mjs`,
+    command: `MASTRA_STUDIO_PATH=.mastra/output/studio PORT=${PORT} MASTRA_HOST=0.0.0.0 node --env-file=.env .mastra/output/index.mjs`,
     url: `${BASE_URL}/api/workflows`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
