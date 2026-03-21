@@ -45,81 +45,86 @@ Use this after starting a background command with execute_command (background: t
 
     const toolCallId = context?.agent?.toolCallId;
 
-    const handle = await sandbox.processes.get(pid);
-    if (!handle) {
-      span.end({ success: false });
-      return `No background process found with PID ${pid}.`;
-    }
+    try {
+      const handle = await sandbox.processes.get(pid);
+      if (!handle) {
+        span.end({ success: false });
+        return `No background process found with PID ${pid}.`;
+      }
 
-    // Emit process info so the UI can display the command
-    if (handle.command) {
-      await context?.writer?.custom({
-        type: 'data-sandbox-command',
-        data: { command: handle.command, pid, toolCallId },
-      });
-    }
+      // Emit process info so the UI can display the command
+      if (handle.command) {
+        await context?.writer?.custom({
+          type: 'data-sandbox-command',
+          data: { command: handle.command, pid, toolCallId },
+        });
+      }
 
-    // If wait requested, block until process exits with streaming callbacks
-    if (shouldWait && handle.exitCode === undefined) {
-      const result = await handle.wait({
-        onStdout: context?.writer
-          ? async (data: string) => {
-              await context.writer!.custom({
-                type: 'data-sandbox-stdout',
-                data: { output: data, timestamp: Date.now(), toolCallId },
-                transient: true,
-              });
-            }
-          : undefined,
-        onStderr: context?.writer
-          ? async (data: string) => {
-              await context.writer!.custom({
-                type: 'data-sandbox-stderr',
-                data: { output: data, timestamp: Date.now(), toolCallId },
-                transient: true,
-              });
-            }
-          : undefined,
-      });
+      // If wait requested, block until process exits with streaming callbacks
+      if (shouldWait && handle.exitCode === undefined) {
+        const result = await handle.wait({
+          onStdout: context?.writer
+            ? async (data: string) => {
+                await context.writer!.custom({
+                  type: 'data-sandbox-stdout',
+                  data: { output: data, timestamp: Date.now(), toolCallId },
+                  transient: true,
+                });
+              }
+            : undefined,
+          onStderr: context?.writer
+            ? async (data: string) => {
+                await context.writer!.custom({
+                  type: 'data-sandbox-stderr',
+                  data: { output: data, timestamp: Date.now(), toolCallId },
+                  transient: true,
+                });
+              }
+            : undefined,
+        });
 
-      await context?.writer?.custom({
-        type: 'data-sandbox-exit',
-        data: {
-          exitCode: result.exitCode,
-          success: result.success,
-          executionTimeMs: result.executionTimeMs,
-          toolCallId,
-        },
-      });
-    }
+        await context?.writer?.custom({
+          type: 'data-sandbox-exit',
+          data: {
+            exitCode: result.exitCode,
+            success: result.success,
+            executionTimeMs: result.executionTimeMs,
+            toolCallId,
+          },
+        });
+      }
 
-    const running = handle.exitCode === undefined;
+      const running = handle.exitCode === undefined;
 
-    const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT]?.maxOutputTokens;
-    const stdout = await truncateOutput(handle.stdout, tail, tokenLimit, 'sandwich');
-    const stderr = await truncateOutput(handle.stderr, tail, tokenLimit, 'sandwich');
+      const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT]?.maxOutputTokens;
+      const stdout = await truncateOutput(handle.stdout, tail, tokenLimit, 'sandwich');
+      const stderr = await truncateOutput(handle.stderr, tail, tokenLimit, 'sandwich');
 
-    if (!stdout && !stderr) {
+      if (!stdout && !stderr) {
+        span.end({ exitCode: handle.exitCode });
+        return '(no output yet)';
+      }
+
+      const parts: string[] = [];
+
+      // Only label stdout/stderr when both are present
+      if (stdout && stderr) {
+        parts.push('stdout:', stdout, '', 'stderr:', stderr);
+      } else if (stdout) {
+        parts.push(stdout);
+      } else {
+        parts.push('stderr:', stderr);
+      }
+
+      if (!running) {
+        parts.push('', `Exit code: ${handle.exitCode}`);
+      }
+
       span.end({ exitCode: handle.exitCode });
-      return '(no output yet)';
+      return parts.join('\n');
+    } catch (err) {
+      span.error(err);
+      throw err;
     }
-
-    const parts: string[] = [];
-
-    // Only label stdout/stderr when both are present
-    if (stdout && stderr) {
-      parts.push('stdout:', stdout, '', 'stderr:', stderr);
-    } else if (stdout) {
-      parts.push(stdout);
-    } else {
-      parts.push('stderr:', stderr);
-    }
-
-    if (!running) {
-      parts.push('', `Exit code: ${handle.exitCode}`);
-    }
-
-    span.end({ exitCode: handle.exitCode });
-    return parts.join('\n');
   },
 });
