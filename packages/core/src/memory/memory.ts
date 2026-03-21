@@ -955,7 +955,7 @@ https://mastra.ai/en/docs/memory/overview`,
     const result: SerializedObservationalMemoryConfig = {
       scope: om.scope,
       shareTokenBudget: om.shareTokenBudget,
-      retrieval: om.retrieval,
+      retrieval: this.serializeRetrievalConfig(om.retrieval),
     };
 
     // Extract model ID string from the top-level model
@@ -1000,5 +1000,14 @@ https://mastra.ai/en/docs/memory/overview`,
     }
 
     return result;
+  }
+
+  /**
+   * Serialize the retrieval config for JSON storage.
+   */
+  private serializeRetrievalConfig(
+    retrieval: ObservationalMemoryOptions['retrieval'],
+  ): SerializedObservationalMemoryConfig['retrieval'] {
+    return retrieval;
   }
 }

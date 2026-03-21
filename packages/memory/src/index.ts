@@ -53,7 +53,7 @@ import {
  * Inlined here to avoid importing runtime exports that don't exist on older @mastra/core versions.
  */
 type NormalizedObservationalMemoryConfig = ObservationalMemoryOptions & {
-  retrieval?: boolean;
+  retrieval?: boolean | { vector?: boolean };
 };
 
 function normalizeObservationalMemoryConfig(
@@ -95,6 +95,21 @@ export class Memory extends MastraMemory {
       observationalMemory: config.options?.observationalMemory,
     });
     this.threadConfig = mergedConfig;
+
+    // Validate retrieval vector config at construction time
+    const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
+    if (omConfig?.retrieval && typeof omConfig.retrieval === 'object' && omConfig.retrieval.vector) {
+      if (!this.vector) {
+        throw new Error(
+          '`retrieval: { vector: true }` requires a vector store. Pass a `vector` option to your Memory instance.',
+        );
+      }
+      if (!this.embedder) {
+        throw new Error(
+          '`retrieval: { vector: true }` requires an embedder. Pass an `embedder` option to your Memory instance.',
+        );
+      }
+    }
   }
 
   /**
@@ -1355,6 +1370,86 @@ Notes:
     return { indexed: totalIndexed };
   }
 
+  /**
+   * Index a list of messages directly (without querying storage).
+   * Used by observe-time indexing to vectorize newly-observed messages.
+   */
+  private async indexMessagesList(messages: MastraDBMessage[]): Promise<void> {
+    if (!this.vector || !this.embedder) return;
+
+    const embeddingData: Array<{
+      embeddings: number[][];
+      metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+    }> = [];
+    let dimension: number | undefined;
+
+    await Promise.all(
+      messages.map(async message => {
+        let textForEmbedding: string | null = null;
+
+        if (
+          message.content.content &&
+          typeof message.content.content === 'string' &&
+          message.content.content.trim() !== ''
+        ) {
+          textForEmbedding = message.content.content;
+        } else if (message.content.parts && message.content.parts.length > 0) {
+          const joined = message.content.parts
+            .filter((part: any) => part.type === 'text')
+            .map((part: any) => part.text)
+            .join(' ')
+            .trim();
+          if (joined) textForEmbedding = joined;
+        }
+
+        if (!textForEmbedding) return;
+
+        const embedResult = await this.embedMessageContent(textForEmbedding);
+        dimension = embedResult.dimension;
+
+        embeddingData.push({
+          embeddings: embedResult.embeddings,
+          metadata: embedResult.chunks.map(() => ({
+            message_id: message.id,
+            thread_id: message.threadId,
+            resource_id: message.resourceId,
+          })),
+        });
+      }),
+    );
+
+    if (embeddingData.length > 0 && dimension !== undefined) {
+      const { indexName } = await this.createEmbeddingIndex(dimension);
+
+      const allVectors: number[][] = [];
+      const allMetadata: Array<{
+        message_id: string;
+        thread_id: string | undefined;
+        resource_id: string | undefined;
+      }> = [];
+
+      for (const data of embeddingData) {
+        allVectors.push(...data.embeddings);
+        allMetadata.push(...data.metadata);
+      }
+
+      await this.vector.upsert({
+        indexName,
+        vectors: allVectors,
+        metadata: allMetadata,
+      });
+    }
+  }
+
+  /**
+   * Check whether retrieval search (vector-based) is enabled.
+   * Returns true when `retrieval: { vector: true }` and Memory has vector + embedder configured.
+   */
+  hasRetrievalSearch(retrieval: ObservationalMemoryOptions['retrieval']): boolean {
+    if (!retrieval || retrieval === true) return false;
+    return !!retrieval.vector && !!this.vector && !!this.embedder;
+  }
+
   public listTools(config?: MemoryConfigInternal): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
     const tools: Record<string, ToolAction<any, any, any>> = {};
@@ -1367,7 +1462,9 @@ Notes:
 
     const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
     if (omConfig?.retrieval && (omConfig.scope ?? 'thread') === 'thread') {
-      tools.recall = recallTool(mergedConfig);
+      const retrievalScope =
+        typeof omConfig.retrieval === 'object' ? (omConfig.retrieval.scope ?? 'resource') : 'resource';
+      tools.recall = recallTool(mergedConfig, { retrievalScope });
     }
 
     return tools;
@@ -2172,12 +2269,20 @@ Notes:
     // import errors when paired with an older @mastra/core version
     const { ObservationalMemory } = await import('./processors/observational-memory');
 
+    // Build onIndexMessages callback if vector search is configured
+    const onIndexMessages = this.hasRetrievalSearch(omConfig.retrieval)
+      ? async (messages: MastraDBMessage[]) => {
+          await this.indexMessagesList(messages);
+        }
+      : undefined;
+
     return new ObservationalMemory({
       storage: memoryStore,
       scope: omConfig.scope,
-      retrieval: omConfig.retrieval,
+      retrieval: !!omConfig.retrieval,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
+      onIndexMessages,
       observation: omConfig.observation
         ? {
             model: omConfig.observation.model,

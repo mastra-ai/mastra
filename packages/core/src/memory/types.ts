@@ -742,10 +742,18 @@ export interface ObservationalMemoryOptions {
    * metadata visible in context and a `recall` tool is registered so the actor
    * can inspect raw messages behind a stored observation summary.
    *
+   * - `true` — recall tool with browsing/paging within the current thread only
+   * - `{ vector: true }` — also enables semantic search using Memory-level vector/embedder
+   * - `{ scope: 'resource' }` — enables cross-thread browsing (list threads, browse other threads)
+   * - `{ vector: true, scope: 'resource' }` — cross-thread browsing + semantic search
+   *
+   * `scope` defaults to `'thread'` (current thread only). Set to `'resource'`
+   * for cross-thread access.
+   *
    * @experimental
    * @default false
    */
-  retrieval?: boolean;
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
 }
 
 /**
@@ -1157,7 +1165,7 @@ export type SerializedObservationalMemoryConfig = {
    * **Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history.
    * @experimental
    */
-  retrieval?: boolean;
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
 
   /** Observation step configuration */
   observation?: SerializedObservationalMemoryObservationConfig;

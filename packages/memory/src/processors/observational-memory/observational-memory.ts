@@ -200,7 +200,7 @@ export interface ObservationalMemoryConfig {
 
   /**
    * **Experimental.** Enable retrieval-mode observation group metadata.
-   * When true, observation groups are treated as durable pointers to raw
+   * When truthy, observation groups are treated as durable pointers to raw
    * message history and a `recall` tool is registered so the actor can
    * inspect raw messages behind a stored observation summary.
    *
@@ -208,6 +208,13 @@ export interface ObservationalMemoryConfig {
    * @default false
    */
   retrieval?: boolean;
+
+  /**
+   * Callback invoked after observation completes to index observed messages
+   * for semantic search. Called fire-and-forget — errors are logged but don't
+   * block observation.
+   */
+  onIndexMessages?: (messages: MastraDBMessage[]) => Promise<void>;
 
   /**
    * Model for both Observer and Reflector agents.
@@ -488,6 +495,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private tokenCounter: TokenCounter;
   private scope: 'resource' | 'thread';
   private retrieval: boolean = false;
+  private onIndexMessages?: (messages: MastraDBMessage[]) => Promise<void>;
   private observationConfig: ResolvedObservationConfig;
   private reflectionConfig: ResolvedReflectionConfig;
   private onDebugEvent?: (event: ObservationDebugEvent) => void;
@@ -891,7 +899,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
-    this.retrieval = this.scope === 'thread' && (config.retrieval ?? OBSERVATIONAL_MEMORY_DEFAULTS.retrieval);
+
+    // Resolve retrieval config — just a boolean flag
+    this.retrieval = this.scope === 'thread' && !!(config.retrieval ?? OBSERVATIONAL_MEMORY_DEFAULTS.retrieval);
+
+    // Store indexing callback for observe-time vectorization
+    this.onIndexMessages = config.onIndexMessages;
 
     // Resolve "default" to the default model
     const resolveModel = (m: typeof config.model) =>
@@ -4391,6 +4404,13 @@ ${formattedMessages}
         observedMessageIds: allObservedIds,
       });
 
+      // Fire-and-forget: index observed messages for semantic search
+      if (this.onIndexMessages) {
+        this.onIndexMessages(messagesToObserve).catch(err => {
+          omError('[OM] Observe-time indexing failed (non-fatal)', err);
+        });
+      }
+
       // ════════════════════════════════════════════════════════════════════════
       // INSERT END MARKER after successful observation
       // This marks the boundary between observed and unobserved parts
@@ -5788,6 +5808,13 @@ ${formattedMessages}
         lastObservedAt,
         observedMessageIds: allObservedIds,
       });
+
+      // Fire-and-forget: index observed messages for semantic search
+      if (this.onIndexMessages && observedMessages.length > 0) {
+        this.onIndexMessages(observedMessages).catch(err => {
+          omError('[OM] Observe-time indexing failed (non-fatal)', err);
+        });
+      }
 
       // ════════════════════════════════════════════════════════════════════════
       // INSERT END MARKERS into each thread's last message
