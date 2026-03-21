@@ -92,6 +92,7 @@ function parseRangeFormat(cursor: string): { startId: string; endId: string } | 
 async function resolveCursorMessage(
   memory: RecallMemory,
   cursor: string,
+  access?: { resourceId?: string; threadScope?: string },
 ): Promise<MastraDBMessage | { hint: string; startId: string; endId: string }> {
   const normalized = cursor.trim();
 
@@ -112,6 +113,16 @@ async function resolveCursorMessage(
   const message = result.messages.find(message => message.id === normalized);
 
   if (!message) {
+    throw new Error(`Could not resolve cursor message: ${cursor}`);
+  }
+
+  // Verify the cursor message belongs to the current resource
+  if (access?.resourceId && message.resourceId && message.resourceId !== access.resourceId) {
+    throw new Error(`Could not resolve cursor message: ${cursor}`);
+  }
+
+  // In thread scope, verify the cursor belongs to the current thread
+  if (access?.threadScope && message.threadId && message.threadId !== access.threadScope) {
     throw new Error(`Could not resolve cursor message: ${cursor}`);
   }
 
@@ -218,27 +229,37 @@ export async function searchMessagesForResource({
   currentThreadId,
   query,
   topK = 10,
+  maxTokens = DEFAULT_MAX_RESULT_TOKENS,
   before,
   after,
+  threadScope,
 }: {
   memory: RecallMemory;
   resourceId: string;
   currentThreadId?: string;
   query: string;
   topK?: number;
+  maxTokens?: number;
   before?: string;
   after?: string;
+  /** When set, restrict search results to only this thread */
+  threadScope?: string;
 }): Promise<{
   results: string;
   count: number;
 }> {
   if (!memory.searchMessages) {
-    throw new Error(
-      'Search requires a vector store and embedder. Configure vector and embedder on your Memory instance.',
-    );
+    return {
+      results:
+        'Search is not configured. Enable it with `retrieval: { vector: true }` and configure a vector store and embedder on your Memory instance.',
+      count: 0,
+    };
   }
 
-  const { results } = await memory.searchMessages({ query, resourceId, topK });
+  const MAX_TOPK = 20;
+  const clampedTopK = Math.min(Math.max(topK, 1), MAX_TOPK);
+
+  const { results } = await memory.searchMessages({ query, resourceId, topK: clampedTopK });
 
   if (results.length === 0) {
     return {
@@ -247,7 +268,7 @@ export async function searchMessagesForResource({
     };
   }
 
-  // Fetch actual message content for previews
+  // Fetch actual message content
   const memoryStore = await memory.getMemoryStore();
   const messageIds = results.map(r => r.messageId);
   const { messages } = await memoryStore.listMessagesById({ messageIds });
@@ -280,64 +301,68 @@ export async function searchMessagesForResource({
   );
 
   // Group results by thread (filtered)
-  const byThread = new Map<string, Array<{ messageId: string; score: number; message?: MastraDBMessage }>>();
+  const byThread = new Map<string, Array<{ messageId: string; score: number; message: MastraDBMessage }>>();
   for (const r of results) {
+    if (threadScope && r.threadId !== threadScope) continue;
     if (!dateFilteredThreadIds.has(r.threadId)) continue;
+    const msg = messageMap.get(r.messageId);
+    if (!msg) continue;
     const group = byThread.get(r.threadId) || [];
-    group.push({ messageId: r.messageId, score: r.score, message: messageMap.get(r.messageId) });
+    group.push({ messageId: r.messageId, score: r.score, message: msg });
     byThread.set(r.threadId, group);
   }
 
-  const lines: string[] = [];
+  const filteredCount = [...byThread.values()].reduce((sum, matches) => sum + matches.length, 0);
+
+  if (filteredCount === 0) {
+    return { results: 'No matching messages found.', count: 0 };
+  }
+
+  // Render each thread group using the same format as cursor-based recall
+  const threadCount = byThread.size;
+  const perThreadBudget = Math.floor(maxTokens / threadCount);
+  const sections: string[] = [];
+
   for (const [threadId, matches] of byThread) {
     const thread = threadMap.get(threadId);
     const title = thread?.title || '(untitled)';
     const isCurrent = threadId === currentThreadId;
     const marker = isCurrent ? ' ← current' : '';
     const date = thread ? formatTimestamp(thread.updatedAt) : '';
-    lines.push(`**${title}**${marker}`);
-    lines.push(`  thread: ${threadId}${date ? ` | updated: ${date}` : ''}`);
 
+    // Format messages using the standard pipeline
+    const parts: FormattedPart[] = [];
+    const timestamps = new Map<string, Date>();
     for (const match of matches) {
-      const preview = getMessagePreview(match.message);
-      lines.push(`  - [${match.score.toFixed(2)}] ${preview}`);
-      lines.push(`    cursor: ${match.messageId}`);
-    }
-    lines.push('');
-  }
-
-  const filteredCount = [...byThread.values()].reduce((sum, matches) => sum + matches.length, 0);
-
-  return {
-    results: filteredCount === 0 ? 'No matching messages found.' : lines.join('\n').trim(),
-    count: filteredCount,
-  };
-}
-
-function getMessagePreview(message?: MastraDBMessage): string {
-  if (!message) return '(message not found)';
-
-  // Extract text from message parts
-  if (message.content?.parts) {
-    for (const part of message.content.parts) {
-      if (part.type === 'text' && part.text) {
-        const text = part.text.trim();
-        if (text) {
-          return text.length > 120 ? text.slice(0, 117) + '...' : text;
-        }
+      const msgParts = formatMessageParts(match.message, 'low');
+      // Prepend score to first visible part
+      const first = msgParts[0];
+      if (first) {
+        msgParts[0] = {
+          ...first,
+          text: `[${match.score.toFixed(2)}] ${first.text}`,
+          fullText: `[${match.score.toFixed(2)}] ${first.fullText}`,
+        };
+      }
+      parts.push(...msgParts);
+      if (match.message.createdAt) {
+        timestamps.set(match.messageId, new Date(match.message.createdAt));
       }
     }
+
+    const { text: rendered } = renderFormattedParts(parts, timestamps, {
+      detail: 'low',
+      maxTokens: perThreadBudget,
+    });
+
+    const header = `**${title}**${marker}\n  thread: ${threadId}${date ? ` | updated: ${date}` : ''}`;
+    sections.push(`${header}\n${rendered}`);
   }
 
-  // Fallback to content string
-  if (typeof message.content?.content === 'string') {
-    const text = message.content.content.trim();
-    if (text) {
-      return text.length > 120 ? text.slice(0, 117) + '...' : text;
-    }
-  }
-
-  return `(${message.role} message)`;
+  return {
+    results: sections.join('\n\n'),
+    count: filteredCount,
+  };
 }
 
 // ── Per-part formatting ─────────────────────────────────────────────
@@ -560,14 +585,18 @@ function renderFormattedParts(
 export async function recallPart({
   memory,
   threadId,
+  resourceId,
   cursor,
   partIndex,
+  threadScope,
   maxTokens = DEFAULT_MAX_RESULT_TOKENS,
 }: {
   memory: RecallMemory;
   threadId: string;
+  resourceId?: string;
   cursor: string;
   partIndex: number;
+  threadScope?: string;
   maxTokens?: number;
 }): Promise<{ text: string; messageId: string; partIndex: number; role: string; type: string; truncated: boolean }> {
   if (!memory || typeof memory.getMemoryStore !== 'function') {
@@ -578,7 +607,7 @@ export async function recallPart({
     throw new Error('Thread ID is required for recall');
   }
 
-  const resolved = await resolveCursorMessage(memory, cursor);
+  const resolved = await resolveCursorMessage(memory, cursor, { resourceId, threadScope });
 
   if ('hint' in resolved) {
     throw new Error(resolved.hint);
@@ -636,6 +665,7 @@ export async function recallMessages({
   page = 1,
   limit = 20,
   detail = 'low',
+  threadScope,
   maxTokens = DEFAULT_MAX_RESULT_TOKENS,
 }: {
   memory: RecallMemory;
@@ -645,6 +675,7 @@ export async function recallMessages({
   page?: number;
   limit?: number;
   detail?: RecallDetail;
+  threadScope?: string;
   maxTokens?: number;
 }): Promise<RecallResult> {
   if (!memory) {
@@ -665,7 +696,7 @@ export async function recallMessages({
   const normalizedPage = Math.max(Math.min(rawPage, MAX_PAGE), -MAX_PAGE);
   const normalizedLimit = Math.min(limit, MAX_LIMIT);
 
-  const resolved = await resolveCursorMessage(memory, cursor);
+  const resolved = await resolveCursorMessage(memory, cursor, { resourceId, threadScope });
 
   if ('hint' in resolved) {
     return {
@@ -829,6 +860,14 @@ export async function recallThreadFromStart({
     throw new Error('Thread ID is required for recall');
   }
 
+  // Verify the thread belongs to the current resource
+  if (resourceId && memory.getThreadById) {
+    const thread = await memory.getThreadById({ threadId });
+    if (!thread || thread.resourceId !== resourceId) {
+      throw new Error('Thread not found');
+    }
+  }
+
   const MAX_PAGE = 50;
   const MAX_LIMIT = 20;
   const normalizedPage = Math.max(Math.min(page, MAX_PAGE), 1);
@@ -875,25 +914,60 @@ export async function recallThreadFromStart({
   };
 }
 
-export const recallTool = (_memoryConfig?: MemoryConfigInternal) => {
+export const recallTool = (
+  _memoryConfig?: MemoryConfigInternal,
+  options?: { retrievalScope?: 'thread' | 'resource' },
+) => {
+  const retrievalScope = options?.retrievalScope ?? 'thread';
+  const isResourceScope = retrievalScope === 'resource';
+
+  const description = isResourceScope
+    ? 'Browse conversation history. Use mode="threads" to list all threads for the current user. Use mode="messages" (default) to page through messages near a cursor. Pass threadId to browse a different thread. Use mode="search" to find messages by content across all threads.'
+    : 'Browse conversation history in the current thread. Use mode="messages" (default) to page through messages near a cursor. Use mode="search" to find messages by content in this thread. Use mode="threads" to get the current thread\'s ID and title.';
+
   return createTool({
     id: 'recall',
-    description:
-      'Browse conversation history. Use mode="threads" to list all threads for the current user. Use mode="messages" (default) to page through messages near a cursor. Pass threadId to browse a different thread. Use mode="search" to find messages by content across all threads.',
+    description,
     inputSchema: z.object({
-      mode: z
-        .enum(['messages', 'threads', 'search'])
-        .optional()
-        .describe(
-          'What to retrieve. "messages" (default) pages through message history. "threads" lists all threads for the current user. "search" finds messages by semantic similarity across all threads.',
-        ),
+      ...(isResourceScope
+        ? {
+            mode: z
+              .enum(['messages', 'threads', 'search'])
+              .optional()
+              .describe(
+                'What to retrieve. "messages" (default) pages through message history. "threads" lists all threads for the current user. "search" finds messages by semantic similarity across all threads.',
+              ),
+            threadId: z
+              .string()
+              .min(1)
+              .optional()
+              .describe('Browse a different thread. Use mode="threads" first to discover thread IDs.'),
+            before: z
+              .string()
+              .optional()
+              .describe(
+                'For mode="threads": only show threads created before this date. ISO 8601 or natural date string (e.g. "2026-03-15", "2026-03-10T00:00:00Z").',
+              ),
+            after: z
+              .string()
+              .optional()
+              .describe(
+                'For mode="threads": only show threads created after this date. ISO 8601 or natural date string (e.g. "2026-03-01", "2026-03-10T00:00:00Z").',
+              ),
+          }
+        : {
+            mode: z
+              .enum(['messages', 'threads', 'search'])
+              .optional()
+              .describe(
+                'What to retrieve. "messages" (default) pages through message history. "threads" returns info about the current thread. "search" finds messages by semantic similarity in this thread.',
+              ),
+          }),
       query: z
         .string()
         .min(1)
         .optional()
-        .describe(
-          'Search query for mode="search". Finds messages semantically similar to this text across all threads.',
-        ),
+        .describe('Search query for mode="search". Finds messages semantically similar to this text.'),
       cursor: z
         .string()
         .min(1)
@@ -901,11 +975,6 @@ export const recallTool = (_memoryConfig?: MemoryConfigInternal) => {
         .describe(
           'A message ID to use as the pagination cursor. Required for mode="messages". Extract it from the start or end of an observation group range.',
         ),
-      threadId: z
-        .string()
-        .min(1)
-        .optional()
-        .describe('Browse a different thread. Use mode="threads" first to discover thread IDs.'),
       page: z
         .number()
         .int()
@@ -935,18 +1004,6 @@ export const recallTool = (_memoryConfig?: MemoryConfigInternal) => {
         .optional()
         .describe(
           'Fetch a single part from the cursor message by its positional index. When provided, returns only that part at high detail. Indices are shown as [p0], [p1], etc. in recall results.',
-        ),
-      before: z
-        .string()
-        .optional()
-        .describe(
-          'For mode="threads": only show threads created before this date. ISO 8601 or natural date string (e.g. "2026-03-15", "2026-03-10T00:00:00Z").',
-        ),
-      after: z
-        .string()
-        .optional()
-        .describe(
-          'For mode="threads": only show threads created after this date. ISO 8601 or natural date string (e.g. "2026-03-01", "2026-03-10T00:00:00Z").',
         ),
     }),
     execute: async (
@@ -999,11 +1056,28 @@ export const recallTool = (_memoryConfig?: MemoryConfigInternal) => {
           topK: limit ?? 10,
           before,
           after,
+          threadScope: !isResourceScope ? currentThreadId || undefined : undefined,
         });
       }
 
       // Thread listing mode
       if (mode === 'threads') {
+        // Thread scope: return current thread info only
+        if (!isResourceScope) {
+          if (!currentThreadId || !memory.getThreadById) {
+            return { error: 'Could not resolve current thread.' };
+          }
+          const thread = await memory.getThreadById({ threadId: currentThreadId });
+          if (!thread) {
+            return { error: 'Could not resolve current thread.' };
+          }
+          return {
+            threads: `- **${thread.title || '(untitled)'}** ← current\n  id: ${thread.id}\n  updated: ${formatTimestamp(thread.updatedAt)} | created: ${formatTimestamp(thread.createdAt)}`,
+            count: 1,
+            page: 0,
+            hasMore: false,
+          };
+        }
         if (!resourceId) {
           throw new Error('Resource ID is required to list threads');
         }
@@ -1019,10 +1093,15 @@ export const recallTool = (_memoryConfig?: MemoryConfigInternal) => {
       }
 
       // Use explicit threadId if provided, otherwise fall back to current thread
-      const targetThreadId = explicitThreadId || currentThreadId;
+      // Thread scope: ignore explicit threadId — always use current thread
+      const targetThreadId = isResourceScope ? explicitThreadId || currentThreadId : currentThreadId;
       if (!targetThreadId) {
         throw new Error('Thread ID is required for recall');
       }
+
+      // In thread scope, the cursor must belong to the current thread.
+      // In resource scope, the cursor must belong to the current resource.
+      const threadScope = !isResourceScope ? currentThreadId || undefined : undefined;
 
       // No cursor — read from the start of the thread
       if (!cursor) {
@@ -1041,8 +1120,10 @@ export const recallTool = (_memoryConfig?: MemoryConfigInternal) => {
         return recallPart({
           memory,
           threadId: targetThreadId,
+          resourceId,
           cursor,
           partIndex,
+          threadScope,
         });
       }
 
@@ -1054,6 +1135,7 @@ export const recallTool = (_memoryConfig?: MemoryConfigInternal) => {
         page,
         limit,
         detail: detail ?? 'low',
+        threadScope,
       });
     },
   });
