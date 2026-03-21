@@ -36,8 +36,8 @@ import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
   server: {
-    port: 3000, // Defaults to 4111
-    host: '0.0.0.0', // Defaults to 'localhost'
+    port: 3000, // Defaults to PORT env var or 4111
+    host: '0.0.0.0', // Defaults to MASTRA_HOST env var or 'localhost'
   },
 })
 ```

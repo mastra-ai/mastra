@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "alibaba-cn/MiniMax/MiniMax-M2.5"
+  model: "alibaba-cn/MiniMax-M2.5"
 });
 
 // Generate a response
@@ -226,7 +226,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3
   },
   {
-    "model": "alibaba-cn/minimax-m2.5",
+    "model": "alibaba-cn/MiniMax-M2.5",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -946,7 +946,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    id: "alibaba-cn/MiniMax/MiniMax-M2.5",
+    id: "alibaba-cn/MiniMax-M2.5",
     apiKey: process.env.DASHSCOPE_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -965,7 +965,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "alibaba-cn/tongyi-intent-detect-v3"
-      : "alibaba-cn/MiniMax/MiniMax-M2.5";
+      : "alibaba-cn/MiniMax-M2.5";
   }
 });
 ```

@@ -307,6 +307,29 @@ describe('convertFullStreamChunkToMastra', () => {
       }
     });
 
+    it('should repair JSON with unquoted date values in tool args (issue #14230)', () => {
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-repair-dates',
+        toolName: 'edit_milestone',
+        input: '{"milestoneId": "abc123", "name": "Sprint 1", "dueStart": 2026-04-15, "dueEnd": 2026-06-30}',
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result).toBeDefined();
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toEqual({
+          milestoneId: 'abc123',
+          name: 'Sprint 1',
+          dueStart: '2026-04-15',
+          dueEnd: '2026-06-30',
+        });
+      }
+    });
+
     it('should repair JSON with trailing commas', () => {
       const chunk: StreamPart = {
         type: 'tool-call',
@@ -467,6 +490,31 @@ describe('convertFullStreamChunkToMastra', () => {
     it('should fix property names with _ prefix', () => {
       const result = tryRepairJson('{_id:"123",_type:"user"}');
       expect(result).toEqual({ _id: '123', _type: 'user' });
+    });
+
+    it('should quote unquoted date values like YYYY-MM-DD (issue #14230)', () => {
+      const result = tryRepairJson(
+        '{"milestoneId": "abc123", "name": "Sprint 1", "dueStart": 2026-04-15, "dueEnd": 2026-06-30}',
+      );
+      expect(result).toEqual({
+        milestoneId: 'abc123',
+        name: 'Sprint 1',
+        dueStart: '2026-04-15',
+        dueEnd: '2026-06-30',
+      });
+    });
+
+    it('should quote unquoted date value before closing brace (issue #14230)', () => {
+      const result = tryRepairJson('{"date": 2026-04-15}');
+      expect(result).toEqual({ date: '2026-04-15' });
+    });
+
+    it('should quote unquoted datetime values with time component (issue #14230)', () => {
+      const result = tryRepairJson('{"start": 2026-04-15T09:00:00, "end": 2026-04-15T17:00:00}');
+      expect(result).toEqual({
+        start: '2026-04-15T09:00:00',
+        end: '2026-04-15T17:00:00',
+      });
     });
   });
 

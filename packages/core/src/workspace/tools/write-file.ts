@@ -20,7 +20,10 @@ export const writeFileTool = createTool({
       throw new WorkspaceReadOnlyError('write_file');
     }
 
-    await filesystem.writeFile(path, content, { overwrite });
+    await filesystem.writeFile(path, content, {
+      overwrite,
+      expectedMtime: (context as any)?.__expectedMtime,
+    });
 
     const size = Buffer.byteLength(content, 'utf-8');
     let output = `Wrote ${size} bytes to ${path}`;

@@ -1,5 +1,177 @@
 # @internal/playground
 
+## 1.3.14
+
+### Patch Changes
+
+- Updated dependencies [[`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5), [`da93115`](https://github.com/mastra-ai/mastra/commit/da931155c1a9bc63d455d3d86b4ec984db5991fe), [`62d1d3c`](https://github.com/mastra-ai/mastra/commit/62d1d3cc08fe8182e7080237fd975de862ec8c91), [`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`8681ecb`](https://github.com/mastra-ai/mastra/commit/8681ecb86184d5907267000e4576cc442a9a83fc), [`28d0249`](https://github.com/mastra-ai/mastra/commit/28d0249295782277040ad1e0d243e695b7ab1ce4), [`681ee1c`](https://github.com/mastra-ai/mastra/commit/681ee1c811359efd1b8bebc4bce35b9bb7b14bec), [`8dbbb55`](https://github.com/mastra-ai/mastra/commit/8dbbb559c56d35cc9b7cb350f2e64bf0bed8abf3), [`bb0f09d`](https://github.com/mastra-ai/mastra/commit/bb0f09dbac58401b36069f483acf5673202db5b5), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8), [`5f7e9d0`](https://github.com/mastra-ai/mastra/commit/5f7e9d0db664020e1f3d97d7d18c6b0b9d4843d0), [`d7f14c3`](https://github.com/mastra-ai/mastra/commit/d7f14c3285cd253ecdd5f58139b7b6cbdf3678b5), [`0efe12a`](https://github.com/mastra-ai/mastra/commit/0efe12a5f008a939a1aac71699486ba40138054e)]:
+  - @mastra/core@1.15.0
+  - @mastra/playground-ui@18.0.0
+  - @mastra/client-js@1.9.1
+  - @mastra/react@0.2.16
+
+## 1.3.14-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`da93115`](https://github.com/mastra-ai/mastra/commit/da931155c1a9bc63d455d3d86b4ec984db5991fe), [`0efe12a`](https://github.com/mastra-ai/mastra/commit/0efe12a5f008a939a1aac71699486ba40138054e)]:
+  - @mastra/core@1.15.0-alpha.4
+  - @mastra/client-js@1.9.1-alpha.4
+  - @mastra/react@0.2.16-alpha.4
+  - @mastra/playground-ui@18.0.0-alpha.4
+
+## 1.3.14-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`d7f14c3`](https://github.com/mastra-ai/mastra/commit/d7f14c3285cd253ecdd5f58139b7b6cbdf3678b5)]:
+  - @mastra/core@1.15.0-alpha.3
+  - @mastra/client-js@1.9.1-alpha.3
+  - @mastra/react@0.2.16-alpha.3
+  - @mastra/playground-ui@18.0.0-alpha.3
+
+## 1.3.14-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`8dbbb55`](https://github.com/mastra-ai/mastra/commit/8dbbb559c56d35cc9b7cb350f2e64bf0bed8abf3), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8)]:
+  - @mastra/core@1.15.0-alpha.2
+  - @mastra/playground-ui@18.0.0-alpha.2
+  - @mastra/client-js@1.9.1-alpha.2
+  - @mastra/react@0.2.16-alpha.2
+
+## 1.3.14-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`681ee1c`](https://github.com/mastra-ai/mastra/commit/681ee1c811359efd1b8bebc4bce35b9bb7b14bec)]:
+  - @mastra/core@1.15.0-alpha.1
+  - @mastra/client-js@1.9.1-alpha.1
+  - @mastra/playground-ui@17.0.1-alpha.1
+  - @mastra/react@0.2.16-alpha.1
+
+## 1.3.14-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5), [`62d1d3c`](https://github.com/mastra-ai/mastra/commit/62d1d3cc08fe8182e7080237fd975de862ec8c91), [`8681ecb`](https://github.com/mastra-ai/mastra/commit/8681ecb86184d5907267000e4576cc442a9a83fc), [`28d0249`](https://github.com/mastra-ai/mastra/commit/28d0249295782277040ad1e0d243e695b7ab1ce4), [`bb0f09d`](https://github.com/mastra-ai/mastra/commit/bb0f09dbac58401b36069f483acf5673202db5b5), [`5f7e9d0`](https://github.com/mastra-ai/mastra/commit/5f7e9d0db664020e1f3d97d7d18c6b0b9d4843d0)]:
+  - @mastra/core@1.15.0-alpha.0
+  - @mastra/client-js@1.9.1-alpha.0
+  - @mastra/playground-ui@17.0.1-alpha.0
+  - @mastra/react@0.2.16-alpha.0
+
+## 1.3.13
+
+### Patch Changes
+
+- Improved Studio reconnect behavior after dev server restarts by spreading retry attempts over time to prevent many clients reconnecting at once. Also fixed a memory leak from repeated event handler registration during reconnects. ([#14284](https://github.com/mastra-ai/mastra/pull/14284))
+
+- Fixed Studio protected-route layout behavior so unauthenticated users no longer see the left sidebar. The auth prompt remains centered, and sidebar navigation is restored immediately after authentication. ([#14317](https://github.com/mastra-ai/mastra/pull/14317))
+
+- Studio sidebar navigation now respects RBAC read permissions for key resources. When RBAC is enabled, users only see links they can read (`agents`, `workflows`, `tools`, `mcps`, `processors`, `scorers`, and `datasets`), while admin and wildcard permissions continue to see all links. When RBAC is disabled, sidebar permission filtering is bypassed and existing platform/CMS link gating behavior remains unchanged. ([#14381](https://github.com/mastra-ai/mastra/pull/14381))
+
+- Updated dependencies [[`98da95f`](https://github.com/mastra-ai/mastra/commit/98da95fb0d1d50a55c9cd5bd2ce942a0278fa17e), [`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`3c00651`](https://github.com/mastra-ai/mastra/commit/3c0065144aa2ff1ce31ab9274a6326d6e7defd4d), [`3c00651`](https://github.com/mastra-ai/mastra/commit/3c0065144aa2ff1ce31ab9274a6326d6e7defd4d), [`085e371`](https://github.com/mastra-ai/mastra/commit/085e3718a7d0fe9a210fe7dd1c867b9bdfe8d16b), [`b77aa19`](https://github.com/mastra-ai/mastra/commit/b77aa1981361c021f2c881bee8f0c703687f00da), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8b4ce84`](https://github.com/mastra-ai/mastra/commit/8b4ce84aed0808b9805cc4fd7147c1f8a2ef7a36), [`8d4cfe6`](https://github.com/mastra-ai/mastra/commit/8d4cfe6b9a7157d3876206227ec9f04cde6dbc4a), [`dd6ca1c`](https://github.com/mastra-ai/mastra/commit/dd6ca1cdea3b8b6182f4cf61df41070ba0cc0deb), [`ce26fe2`](https://github.com/mastra-ai/mastra/commit/ce26fe2166dd90254f8bee5776e55977143e97de), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`4cb4edf`](https://github.com/mastra-ai/mastra/commit/4cb4edf3c909d197ec356c1790d13270514ffef6), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f)]:
+  - @mastra/playground-ui@17.0.0
+  - @mastra/core@1.14.0
+  - @mastra/client-js@1.9.0
+  - @mastra/react@0.2.15
+
+## 1.3.13-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`8b4ce84`](https://github.com/mastra-ai/mastra/commit/8b4ce84aed0808b9805cc4fd7147c1f8a2ef7a36), [`8d4cfe6`](https://github.com/mastra-ai/mastra/commit/8d4cfe6b9a7157d3876206227ec9f04cde6dbc4a), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a)]:
+  - @mastra/core@1.14.0-alpha.3
+  - @mastra/client-js@1.9.0-alpha.3
+  - @mastra/react@0.2.15-alpha.3
+  - @mastra/playground-ui@17.0.0-alpha.3
+
+## 1.3.13-alpha.2
+
+### Patch Changes
+
+- Improved Studio reconnect behavior after dev server restarts by spreading retry attempts over time to prevent many clients reconnecting at once. Also fixed a memory leak from repeated event handler registration during reconnects. ([#14284](https://github.com/mastra-ai/mastra/pull/14284))
+
+- Fixed Studio protected-route layout behavior so unauthenticated users no longer see the left sidebar. The auth prompt remains centered, and sidebar navigation is restored immediately after authentication. ([#14317](https://github.com/mastra-ai/mastra/pull/14317))
+
+- Studio sidebar navigation now respects RBAC read permissions for key resources. When RBAC is enabled, users only see links they can read (`agents`, `workflows`, `tools`, `mcps`, `processors`, `scorers`, and `datasets`), while admin and wildcard permissions continue to see all links. When RBAC is disabled, sidebar permission filtering is bypassed and existing platform/CMS link gating behavior remains unchanged. ([#14381](https://github.com/mastra-ai/mastra/pull/14381))
+
+- Updated dependencies [[`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f)]:
+  - @mastra/core@1.14.0-alpha.2
+  - @mastra/client-js@1.9.0-alpha.2
+  - @mastra/react@0.2.15-alpha.2
+  - @mastra/playground-ui@17.0.0-alpha.2
+
+## 1.3.13-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`98da95f`](https://github.com/mastra-ai/mastra/commit/98da95fb0d1d50a55c9cd5bd2ce942a0278fa17e), [`b77aa19`](https://github.com/mastra-ai/mastra/commit/b77aa1981361c021f2c881bee8f0c703687f00da), [`dd6ca1c`](https://github.com/mastra-ai/mastra/commit/dd6ca1cdea3b8b6182f4cf61df41070ba0cc0deb), [`4cb4edf`](https://github.com/mastra-ai/mastra/commit/4cb4edf3c909d197ec356c1790d13270514ffef6)]:
+  - @mastra/playground-ui@16.2.0-alpha.1
+  - @mastra/core@1.13.3-alpha.1
+  - @mastra/client-js@1.8.5-alpha.1
+  - @mastra/react@0.2.15-alpha.1
+
+## 1.3.13-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`3c00651`](https://github.com/mastra-ai/mastra/commit/3c0065144aa2ff1ce31ab9274a6326d6e7defd4d), [`3c00651`](https://github.com/mastra-ai/mastra/commit/3c0065144aa2ff1ce31ab9274a6326d6e7defd4d), [`085e371`](https://github.com/mastra-ai/mastra/commit/085e3718a7d0fe9a210fe7dd1c867b9bdfe8d16b), [`ce26fe2`](https://github.com/mastra-ai/mastra/commit/ce26fe2166dd90254f8bee5776e55977143e97de), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1)]:
+  - @mastra/core@1.13.3-alpha.0
+  - @mastra/playground-ui@16.1.3-alpha.0
+  - @mastra/client-js@1.8.5-alpha.0
+  - @mastra/react@0.2.15-alpha.0
+
+## 1.3.12
+
+### Patch Changes
+
+- Updated dependencies [[`42c585b`](https://github.com/mastra-ai/mastra/commit/42c585bf863ab0a5081e7445f24a821f32b31c91), [`0ce6035`](https://github.com/mastra-ai/mastra/commit/0ce603591189f547397704e53f23c77bc5630071), [`8565cab`](https://github.com/mastra-ai/mastra/commit/8565cab0f832a41ecd24abd9069a2491ef96db5d)]:
+  - @mastra/client-js@1.8.4
+  - @mastra/core@1.13.2
+  - @mastra/playground-ui@16.1.2
+  - @mastra/react@0.2.14
+
+## 1.3.12-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`0ce6035`](https://github.com/mastra-ai/mastra/commit/0ce603591189f547397704e53f23c77bc5630071), [`8565cab`](https://github.com/mastra-ai/mastra/commit/8565cab0f832a41ecd24abd9069a2491ef96db5d)]:
+  - @mastra/core@1.13.2-alpha.0
+  - @mastra/playground-ui@16.1.2-alpha.0
+  - @mastra/client-js@1.8.4-alpha.0
+  - @mastra/react@0.2.14-alpha.0
+
+## 1.3.11
+
+### Patch Changes
+
+- Updated dependencies [[`205e76c`](https://github.com/mastra-ai/mastra/commit/205e76c3ba652205dafb037f50a4a8eea73f6736)]:
+  - @mastra/core@1.13.1
+  - @mastra/client-js@1.8.3
+  - @mastra/playground-ui@16.1.1
+  - @mastra/react@0.2.13
+
+## 1.3.10
+
+### Patch Changes
+
+- Updated dependencies [[`ea86967`](https://github.com/mastra-ai/mastra/commit/ea86967449426e0a3673253bd1c2c052a99d970d), [`db21c21`](https://github.com/mastra-ai/mastra/commit/db21c21a6ae5f33539262cc535342fa8757eb359), [`d6b066b`](https://github.com/mastra-ai/mastra/commit/d6b066b4dc593f63e768e9ab4146fd43fd7c0b9f), [`11f5dbe`](https://github.com/mastra-ai/mastra/commit/11f5dbe9a1e7ad8ef3b1ea34fb4a9fa3631d1587), [`41532ce`](https://github.com/mastra-ai/mastra/commit/41532ce6acd801921e2540657e76a97484ab72ae), [`6751354`](https://github.com/mastra-ai/mastra/commit/67513544d1a64be891d9de7624d40aadc895d56e), [`c958cd3`](https://github.com/mastra-ai/mastra/commit/c958cd36627c1eea122ec241b2b15492977a263a), [`86f2426`](https://github.com/mastra-ai/mastra/commit/86f242631d252a172d2f9f9a2ea0feb8647a76b0), [`950eb07`](https://github.com/mastra-ai/mastra/commit/950eb07b7e7354629630e218d49550fdd299c452), [`d440d21`](https://github.com/mastra-ai/mastra/commit/d440d21b185df61df9cdc111f84018f59077c59c), [`e11b0d2`](https://github.com/mastra-ai/mastra/commit/e11b0d29160eb6969ea576f14c23c36feb9e8a6d), [`70cd016`](https://github.com/mastra-ai/mastra/commit/70cd0165b51c849968dbeeb92085c94af283c63a)]:
+  - @mastra/core@1.13.0
+  - @mastra/playground-ui@16.1.0
+  - @mastra/client-js@1.8.2
+  - @mastra/react@0.2.12
+
+## 1.3.10-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`ea86967`](https://github.com/mastra-ai/mastra/commit/ea86967449426e0a3673253bd1c2c052a99d970d), [`db21c21`](https://github.com/mastra-ai/mastra/commit/db21c21a6ae5f33539262cc535342fa8757eb359), [`d6b066b`](https://github.com/mastra-ai/mastra/commit/d6b066b4dc593f63e768e9ab4146fd43fd7c0b9f), [`11f5dbe`](https://github.com/mastra-ai/mastra/commit/11f5dbe9a1e7ad8ef3b1ea34fb4a9fa3631d1587), [`41532ce`](https://github.com/mastra-ai/mastra/commit/41532ce6acd801921e2540657e76a97484ab72ae), [`6751354`](https://github.com/mastra-ai/mastra/commit/67513544d1a64be891d9de7624d40aadc895d56e), [`c958cd3`](https://github.com/mastra-ai/mastra/commit/c958cd36627c1eea122ec241b2b15492977a263a), [`86f2426`](https://github.com/mastra-ai/mastra/commit/86f242631d252a172d2f9f9a2ea0feb8647a76b0), [`950eb07`](https://github.com/mastra-ai/mastra/commit/950eb07b7e7354629630e218d49550fdd299c452), [`d440d21`](https://github.com/mastra-ai/mastra/commit/d440d21b185df61df9cdc111f84018f59077c59c), [`e11b0d2`](https://github.com/mastra-ai/mastra/commit/e11b0d29160eb6969ea576f14c23c36feb9e8a6d), [`70cd016`](https://github.com/mastra-ai/mastra/commit/70cd0165b51c849968dbeeb92085c94af283c63a)]:
+  - @mastra/core@1.13.0-alpha.0
+  - @mastra/playground-ui@16.1.0-alpha.0
+  - @mastra/client-js@1.8.2-alpha.0
+  - @mastra/react@0.2.12-alpha.0
+
 ## 1.3.9
 
 ### Patch Changes

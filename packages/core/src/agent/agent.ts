@@ -61,7 +61,7 @@ import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { makeCoreTool, createMastraProxy, ensureToolProperties, isZodType, deepMerge } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
 import type { ToolOptions } from '../utils';
 import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
@@ -174,7 +174,7 @@ export class Agent<
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
-  #requestContextSchema?: ZodSchema<TRequestContext>;
+  #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
 
@@ -314,7 +314,7 @@ export class Agent<
     }
 
     if (config.requestContextSchema) {
-      this.#requestContextSchema = config.requestContextSchema;
+      this.#requestContextSchema = toStandardSchema(config.requestContextSchema);
     }
 
     // @ts-expect-error Flag for agent network messages
@@ -380,13 +380,18 @@ export class Agent<
    * Throws an error if validation fails.
    */
   async #validateRequestContext(requestContext?: RequestContext) {
-    if (this.#requestContextSchema && isZodType(this.#requestContextSchema)) {
+    if (this.#requestContextSchema) {
       const contextValues = requestContext?.all ?? {};
-      const validatedRequestContext = await this.#requestContextSchema.safeParseAsync(contextValues);
+      const validation = await this.#requestContextSchema['~standard'].validate(contextValues);
 
-      if (!validatedRequestContext.success) {
-        const errors = validatedRequestContext.error.issues;
-        const errorMessages = errors.map((e: any) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+      if (validation.issues) {
+        const errors = validation.issues;
+        const errorMessages = errors
+          .map(e => {
+            const pathStr = e.path?.map((p: any) => (typeof p === 'object' ? p.key : p)).join('.');
+            return `- ${pathStr}: ${e.message}`;
+          })
+          .join('\n');
         throw new MastraError({
           id: 'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
           domain: ErrorDomain.AGENT,
@@ -2126,6 +2131,7 @@ export class Agent<
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
+          workspace,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
         convertedWorkspaceTools[toolName] = convertedToCoreTool;
@@ -2192,6 +2198,7 @@ export class Agent<
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: false, // Skill tools never require approval
+          workspace,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
         convertedSkillTools[toolName] = convertedToCoreTool;
@@ -4118,14 +4125,13 @@ export class Agent<
     const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
     const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
 
-    const threadFromArgs = threadIdFromContext
-      ? { id: threadIdFromContext }
-      : resolveThreadIdFromArgs({
-          memory: {
-            ...options.memory,
-            thread: options.memory?.thread || snapshotMemoryInfo?.threadId,
-          },
-        });
+    const threadFromArgs = resolveThreadIdFromArgs({
+      memory: {
+        ...options.memory,
+        thread: options.memory?.thread || snapshotMemoryInfo?.threadId,
+      },
+      overrideId: threadIdFromContext,
+    });
 
     const resourceId = resourceIdFromContext || options.memory?.resource || snapshotMemoryInfo?.resourceId;
     const memoryConfig = options.memory?.options;

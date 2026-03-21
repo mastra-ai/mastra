@@ -148,10 +148,27 @@ export interface ObservationConfig {
   blockAfter?: number;
 
   /**
+   * Optional token budget for observer context.
+   * When set, "Previous Observations" is tail-truncated to preserve the most recent entries,
+   * and pending buffered reflections replace the raw observations they summarized.
+   * Set to `0` for full truncation (omit previous observations entirely), or `false` to disable.
+   */
+  previousObserverTokens?: number | false;
+
+  /**
    * Custom instructions to append to the Observer's system prompt.
    * Use this to customize observation behavior for specific use cases.
    */
   instruction?: string;
+
+  /**
+   * Whether the Observer should suggest thread titles.
+   * When enabled, the Observer will analyze conversation context and
+   * suggest a short, descriptive title for the thread.
+   *
+   * @default false
+   */
+  threadTitle?: boolean;
 }
 
 /**
@@ -602,13 +619,37 @@ export interface DataOmActivationPart {
 }
 
 /**
+ * Marker emitted when thread title is updated by the observer.
+ */
+export interface DataOmThreadUpdatePart {
+  type: 'data-om-thread-update';
+  data: {
+    /** Unique ID for this observation cycle - shared with observation markers */
+    cycleId: string;
+
+    /** The thread ID that was updated */
+    threadId: string;
+
+    /** The previous thread title (undefined if thread had no title) */
+    oldTitle?: string;
+
+    /** The new thread title */
+    newTitle: string;
+
+    /** When this update occurred */
+    timestamp: string;
+  };
+}
+
+/**
  * Union of all observation marker types.
  */
 export type DataOmObservationPart =
   | DataOmObservationStartPart
   | DataOmObservationEndPart
   | DataOmObservationFailedPart
-  | DataOmStatusPart;
+  | DataOmStatusPart
+  | DataOmThreadUpdatePart;
 
 /**
  * Union of all OM data parts (observation, buffering, status, activation).

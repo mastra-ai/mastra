@@ -1,27 +1,20 @@
-import child_process from 'node:child_process';
 import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
-import util from 'node:util';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
-import shellQuote from 'shell-quote';
 import pkgJson from '../../../package.json';
 import type { PosthogAnalytics } from '../../analytics/index';
 import { getAnalytics } from '../../analytics/index';
 import { cloneTemplate, installDependencies } from '../../utils/clone-template';
 import { loadTemplates, selectTemplate, findTemplateByName, getDefaultProjectName } from '../../utils/template-utils';
 import type { Template } from '../../utils/template-utils';
-import { login } from '../auth/credentials.js';
-import { provisionGatewayProject } from '../gateway/platform-api.js';
 import { init } from '../init/init';
 import type { Editor } from '../init/mcp-docs-server-install';
-import type { Component, ConnectionMethod, LLMProvider } from '../init/utils';
+import type { Component, LLMProvider } from '../init/utils';
 import { LLM_PROVIDERS } from '../init/utils';
 import { getPackageManager, gitInit } from '../utils.js';
 
 import { createMastraProject } from './utils';
-
-const exec = util.promisify(child_process.exec);
 
 const version = pkgJson.version;
 
@@ -78,24 +71,24 @@ export const create = async (args: {
       });
     }
 
-    const connectionMethod = (result as { connectionMethod?: ConnectionMethod })?.connectionMethod ?? 'direct';
+    const interactiveComponents: Component[] = ['agents', 'tools', 'workflows', 'scorers'];
 
-    // If gateway selected, provision project and write env vars before init
-    if (connectionMethod === 'gateway') {
-      await setupGateway(projectName);
+    if (analytics) {
+      analytics.trackEvent('cli_components_selected', {
+        components: interactiveComponents,
+        selection_method: 'interactive',
+      });
     }
 
     await init({
       ...result,
       llmApiKey: result?.llmApiKey as string | undefined,
-      components: ['agents', 'tools', 'workflows', 'scorers'],
+      components: interactiveComponents,
       addExample: true,
       skills: result?.skills || args.skills,
       mcpServer: result?.mcpServer || args.mcpServer,
       versionTag: args.createVersionTag,
-      connectionMethod,
     });
-
     postCreate({ projectName });
     return;
   }
@@ -103,10 +96,19 @@ export const create = async (args: {
   const { components = [], llmProvider = 'openai', addExample = false, llmApiKey } = args;
 
   // Track model provider selection from CLI args
-  const analytics = getAnalytics();
-  if (analytics) {
-    analytics.trackEvent('cli_model_provider_selected', {
+  const cliAnalytics = getAnalytics();
+  if (cliAnalytics) {
+    cliAnalytics.trackEvent('cli_model_provider_selected', {
       provider: llmProvider,
+      selection_method: 'cli_args',
+    });
+
+    cliAnalytics.trackEvent('cli_components_selected', {
+      components,
+      has_agents: components.includes('agents'),
+      has_tools: components.includes('tools'),
+      has_workflows: components.includes('workflows'),
+      has_scorers: components.includes('scorers'),
       selection_method: 'cli_args',
     });
   }
@@ -134,29 +136,6 @@ const postCreate = ({ projectName }: { projectName: string }) => {
     ${color.cyan(`${packageManager} run dev`)}
   `);
 };
-
-async function setupGateway(projectName: string) {
-  try {
-    p.log.step('Setting up Memory Gateway...');
-    const creds = await login();
-    const orgId = creds.currentOrgId ?? creds.organizationId;
-
-    const result = await provisionGatewayProject(creds.token, orgId, projectName);
-
-    const gatewayUrl = process.env.MASTRA_GATEWAY_URL || 'https://gateway.mastra.ai/v1';
-    const escapedKey = shellQuote.quote([result.apiKey]);
-    const escapedUrl = shellQuote.quote([gatewayUrl]);
-
-    await exec(`echo GATEWAY_URL=${escapedUrl} >> .env`);
-    await exec(`echo GATEWAY_API_KEY=${escapedKey} >> .env`);
-
-    p.log.success(`Gateway project "${result.project.name}" provisioned`);
-    p.log.info(`API key written to .env`);
-  } catch (err) {
-    p.log.warning(`Could not set up gateway: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    p.log.info('You can set this up later by running: mastra gateway setup');
-  }
-}
 
 function isGitHubUrl(url: string): boolean {
   try {

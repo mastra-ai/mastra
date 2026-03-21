@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { v4 as uuid } from '@lukeed/uuid';
 
-import { Txt } from '@/ds/components/Txt';
 import { AgentChat } from '../agent-chat';
 import { AgentSettingsProvider } from '../../context/agent-context';
 import { DatasetSaveProvider } from '@/lib/ai-ui/context/dataset-save-context';
@@ -29,12 +28,6 @@ export function AgentPlaygroundTestChat({ agentId, agentName, modelVersion, hasM
         requestContext={hasRequestContext ? mergedRequestContext : undefined}
       >
         <div className="flex flex-col h-full">
-          <div className="px-4 py-3 border-b border-border1">
-            <Txt variant="ui-sm" className="text-neutral3">
-              Chat with your agent to test configuration changes in real time. Each session uses a fresh thread with the
-              latest saved draft. Any request context values you've set will be included automatically.
-            </Txt>
-          </div>
           <div className="flex-1 min-h-0">
             <AgentChat
               key={testThreadId}

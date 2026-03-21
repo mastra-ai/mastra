@@ -5,20 +5,16 @@ import {
   Icon,
   MainContentContent,
   useScorers,
-  useLinkComponent,
-  useIsCmsAvailable,
   Header,
   HeaderTitle,
   MainContentLayout,
   ScorersTable,
 } from '@mastra/playground-ui';
-import { GaugeIcon, Plus } from 'lucide-react';
+import { GaugeIcon } from 'lucide-react';
 import { Link } from 'react-router';
 
 export default function Scorers() {
-  const { Link: FrameworkLink } = useLinkComponent();
   const { data: scorers = {}, isLoading, error } = useScorers();
-  const { isCmsAvailable } = useIsCmsAvailable();
 
   return (
     <MainContentLayout>
@@ -31,14 +27,6 @@ export default function Scorers() {
         </HeaderTitle>
 
         <HeaderAction>
-          {isCmsAvailable && (
-            <Button variant="light" as={FrameworkLink} to="/cms/scorers/create">
-              <Icon>
-                <Plus />
-              </Icon>
-              Create Scorer
-            </Button>
-          )}
           <Button as={Link} to="https://mastra.ai/en/docs/evals/overview" target="_blank" variant="ghost" size="md">
             <DocsIcon />
             Scorers documentation
