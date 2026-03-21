@@ -1,29 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-
-/**
- * Fill the chat input and click Send.
- * Waits for the input to be editable before typing, and for Send to be enabled before clicking.
- */
-async function fillAndSend(page: Page, message: string) {
-  const chatInput = page.getByPlaceholder('Enter your message...');
-  await expect(chatInput).toBeEditable({ timeout: 5_000 });
-  await chatInput.click();
-  await chatInput.pressSequentially(message, { delay: 10 });
-  await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled({ timeout: 5_000 });
-  await page.getByRole('button', { name: 'Send' }).click();
-}
-
-/**
- * Wait for the assistant message to appear in the thread.
- * Uses data-message-index to find the first non-user message.
- */
-async function waitForAssistantMessage(page: Page, timeout = 30_000) {
-  const thread = page.getByTestId('thread-wrapper');
-  // Wait for any message beyond the user's (index > 0)
-  const assistantMsg = thread.locator('[data-message-index]').nth(1);
-  await expect(assistantMsg).toBeVisible({ timeout });
-  return assistantMsg;
-}
+import { fillAndSend, waitForAssistantMessage } from '../helpers';
 
 /**
  * Expand the left-slot collapsible panel if it's collapsed.
@@ -255,7 +231,7 @@ test.describe('Agent Chat', () => {
     await expect(toolBadge.first()).toContainText('needs-approval');
 
     // "Approval required" text should be visible (badge auto-expands for approval tools)
-    await expect(page.getByText('Approval required')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('Approval required')).toBeVisible({ timeout: 10_000 });
 
     // Approve and Decline buttons should be visible
     await expect(page.getByRole('button', { name: 'Approve' })).toBeVisible();

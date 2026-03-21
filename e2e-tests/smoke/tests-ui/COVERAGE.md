@@ -18,7 +18,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 | Tools         | ✅✅✅✅✅✅✅🚫      | 7    | 0    | 1       |
 | Workflows     | ✅✅✅✅✅✅✅✅✅✅✅✅ | 12   | 0    | 0       |
 | MCP Servers   | ✅✅✅                | 3    | 0    | 0       |
-| Observability | ⬜⬜⬜⬜⬜⬜          | 0    | 6    | 0       |
+| Observability | ✅✅✅✅✅✅          | 6    | 0    | 0       |
 | Memory        | ⬜⬜⬜⬜              | 0    | 4    | 0       |
 | Datasets      | ⬜⬜⬜⬜⬜⬜⬜        | 0    | 7    | 0       |
 | Scorers       | ⬜⬜⬜                | 0    | 3    | 0       |
@@ -26,7 +26,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 | Workspaces    | ⬜⬜⬜⬜⬜            | 0    | 5    | 0       |
 | CMS           | ⬜⬜⬜⬜              | 0    | 4    | 0       |
 | Settings      | ⬜                    | 0    | 1    | 0       |
-| **Total**     |                       | **34** | **31** | **1** |
+| **Total**     |                       | **40** | **25** | **1** |
 
 ---
 
@@ -116,16 +116,16 @@ Tracking document for Studio/Playground E2E smoke tests.
 | 2 | MCP server detail shows available tools     | ✅     |
 | 3 | Execute MCP tool from UI                    | ✅     |
 
-### Observability — `tests-ui/observability/` (0/6)
+### ✅ Observability — `tests-ui/observability/traces.spec.ts` (6/6)
 
 |   | Test                                        | Status |
 |---|---------------------------------------------|--------|
-| 1 | Traces list page loads                      | ⬜     |
-| 2 | Filter traces by entity type                | ⬜     |
-| 3 | Click trace to open detail modal            | ⬜     |
-| 4 | Span inspection within trace                | ⬜     |
-| 5 | Traces appear after agent chat              | ⬜     |
-| 6 | Traces appear after workflow run             | ⬜     |
+| 1 | Traces list page loads with trace entries    | ✅     |
+| 2 | Filter traces by entity type                | ✅     |
+| 3 | Click trace to open detail dialog            | ✅     |
+| 4 | Span inspection within trace                | ✅     |
+| 5 | Traces appear after workflow run             | ✅     |
+| 6 | Traces appear after agent chat              | ✅     |
 
 ### Memory & Threads — `tests-ui/memory/` (0/4)
 
