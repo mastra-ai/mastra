@@ -1,5 +1,23 @@
 # @mastra/server
 
+## 1.16.0-alpha.0
+
+### Minor Changes
+
+- Added dataset-agent association and experiment status tracking for the Evaluate workflow. ([#14470](https://github.com/mastra-ai/mastra/pull/14470))
+  - **Dataset targeting**: Added `targetType` and `targetIds` fields to datasets, enabling association with agents, scorers, or workflows. Datasets can now be linked to multiple entities.
+  - **Experiment status**: Added `status` field to experiment results (`'needs-review'`, `'reviewed'`, `'complete'`) for review queue workflow.
+  - **Dataset experiment routes**: Added API endpoints for triggering experiments from a dataset with configurable target type and target ID.
+  - **LLM data generation**: Added endpoint for generating dataset items using an LLM with configurable count and prompt.
+  - **Failure analysis**: Added endpoint for clustering experiment failures and proposing tags using LLM analysis.
+
+- Added new observability API endpoints and client methods for logs, scores, feedback, metrics (aggregate, breakdown, time series, percentiles), and discovery (metric names, label keys/values, entity types/names, service names, environments, tags) ([#14470](https://github.com/mastra-ai/mastra/pull/14470))
+
+### Patch Changes
+
+- Updated dependencies [[`68ed4e9`](https://github.com/mastra-ai/mastra/commit/68ed4e9f118e8646b60a6112dabe854d0ef53902), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c), [`4a75e10`](https://github.com/mastra-ai/mastra/commit/4a75e106bd31c283a1b3fe74c923610dcc46415b), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c)]:
+  - @mastra/core@1.16.0-alpha.0
+
 ## 1.15.0
 
 ### Minor Changes
