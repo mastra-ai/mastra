@@ -210,6 +210,13 @@ export interface ObservationalMemoryConfig {
   retrieval?: boolean;
 
   /**
+   * Retrieval scope — controls what the recall tool can access.
+   * - `'resource'` (default): browse/search across all threads for the user
+   * - `'thread'`: restrict to the current thread only
+   */
+  retrievalScope?: 'thread' | 'resource';
+
+  /**
    * Callback invoked after observation completes to index observed messages
    * for semantic search. Called fire-and-forget — errors are logged but don't
    * block observation.
@@ -385,7 +392,30 @@ PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm goi
 
 MOST RECENT USER INPUT: Treat the most recent user message as the highest-priority signal for what to do next. Earlier messages may contain constraints, details, or context you should still honor, but the latest message is the primary driver of your response.`;
 
-export const OBSERVATION_RETRIEVAL_INSTRUCTIONS = `## Recall — looking up source messages
+export function getRetrievalInstructions(retrievalScope: 'thread' | 'resource' = 'resource'): string {
+  const isResource = retrievalScope === 'resource';
+
+  const searchSection = isResource
+    ? `### Searching across threads
+Use \`mode: "search"\` with a \`query\` string to find messages by semantic similarity across all threads for the current user. Results are grouped by thread with relevance scores and message previews. Each result includes a \`cursor\` you can use to browse into that thread.`
+    : `### Searching messages
+Use \`mode: "search"\` with a \`query\` string to find messages by semantic similarity within the current thread. Results include relevance scores and message previews.`;
+
+  const browsingSection = isResource
+    ? `### Browsing other threads
+You can also browse past conversation threads within the same user/resource:
+
+1. Call \`recall\` with \`mode: "threads"\` to list all threads for the current user. Each thread shows its ID, title, and dates.
+2. Pick a thread ID, then call \`recall\` with \`threadId: "<id>"\` to start reading from the beginning. Omit \`cursor\` to start from page 1.
+3. Use \`page\` to paginate forward through the thread, or use a message ID from the results as \`cursor\` for cursor-based pagination.
+
+Use \`before\` and \`after\` (ISO 8601 dates) to narrow the thread list by creation date — e.g. \`after: "2026-03-01"\` to find threads from March onward, or \`before: "2026-03-15"\` to see only older threads.
+
+This is useful when the user references a past conversation by name, or when you need to look up plans, decisions, or context from a previous session.`
+    : `### Current thread info
+Use \`mode: "threads"\` to get the current thread's ID, title, and dates.`;
+
+  return `## Recall — looking up source messages
 
 Your memory is comprised of observations which are sometimes wrapped in <observation-group> xml tags containing ranges like <observation-group range="startId:endId">. These ranges point back to the raw messages that each observation group was derived from. The original messages are still available — use the **recall** tool to retrieve them.
 
@@ -420,19 +450,9 @@ Low-detail results may include truncation hints like:
 
 **When you see these hints and need the full content, make the exact call described in the hint.** This is the normal workflow: first recall at low detail to scan, then drill into specific parts at high detail. Do not stop at the low-detail result if the user asked for exact content.
 
-### Searching across threads
-Use \`mode: "search"\` with a \`query\` string to find messages by semantic similarity across all threads for the current user. Results are grouped by thread with relevance scores and message previews. Each result includes a \`cursor\` you can use to browse into that thread.
+${searchSection}
 
-### Browsing other threads
-You can also browse past conversation threads within the same user/resource:
-
-1. Call \`recall\` with \`mode: "threads"\` to list all threads for the current user. Each thread shows its ID, title, and dates.
-2. Pick a thread ID, then call \`recall\` with \`threadId: "<id>"\` to start reading from the beginning. Omit \`cursor\` to start from page 1.
-3. Use \`page\` to paginate forward through the thread, or use a message ID from the results as \`cursor\` for cursor-based pagination.
-
-Use \`before\` and \`after\` (ISO 8601 dates) to narrow the thread list by creation date — e.g. \`after: "2026-03-01"\` to find threads from March onward, or \`before: "2026-03-15"\` to see only older threads.
-
-This is useful when the user references a past conversation by name, or when you need to look up plans, decisions, or context from a previous session.
+${browsingSection}
 
 ### When recall is NOT needed
 - The user is asking for a high-level summary and your observations already cover it
@@ -440,6 +460,7 @@ This is useful when the user references a past conversation by name, or when you
 - There is no relevant range in your observations for the topic
 
 Observation groups with range IDs and your recall tool allows you to think back and remember details you're fuzzy on.`;
+}
 
 /**
  * ObservationalMemory - A three-agent memory system for long conversations.
@@ -495,6 +516,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private tokenCounter: TokenCounter;
   private scope: 'resource' | 'thread';
   private retrieval: boolean = false;
+  private retrievalScope: 'thread' | 'resource' = 'resource';
   private onIndexMessages?: (messages: MastraDBMessage[]) => Promise<void>;
   private observationConfig: ResolvedObservationConfig;
   private reflectionConfig: ResolvedReflectionConfig;
@@ -901,7 +923,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.scope = config.scope ?? 'thread';
 
     // Resolve retrieval config — just a boolean flag
-    this.retrieval = this.scope === 'thread' && !!(config.retrieval ?? OBSERVATIONAL_MEMORY_DEFAULTS.retrieval);
+    this.retrieval = !!(config.retrieval ?? OBSERVATIONAL_MEMORY_DEFAULTS.retrieval);
+    this.retrievalScope = config.retrievalScope ?? 'resource';
 
     // Store indexing callback for observe-time vectorization
     this.onIndexMessages = config.onIndexMessages;
@@ -2437,7 +2460,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     const messages = [
-      `${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${OBSERVATION_RETRIEVAL_INSTRUCTIONS}` : ''}`,
+      `${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${getRetrievalInstructions(this.retrievalScope)}` : ''}`,
     ];
 
     // Add unobserved context from other threads (resource scope only)

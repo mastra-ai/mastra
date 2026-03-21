@@ -1304,7 +1304,7 @@ describe('om-tools', () => {
       expect(memory.listTools()).toHaveProperty('recall');
     });
 
-    it('should not register recall when retrieval mode is enabled for resource scope', () => {
+    it('should register recall when retrieval mode is enabled for resource scope', () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
         options: {
@@ -1316,7 +1316,7 @@ describe('om-tools', () => {
         } as any,
       });
 
-      expect(memory.listTools()).not.toHaveProperty('recall');
+      expect(memory.listTools()).toHaveProperty('recall');
     });
 
     it('should throw when retrieval has vector: true but no vector store', () => {

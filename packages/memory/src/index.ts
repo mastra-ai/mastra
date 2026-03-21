@@ -1461,7 +1461,7 @@ Notes:
     }
 
     const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
-    if (omConfig?.retrieval && (omConfig.scope ?? 'thread') === 'thread') {
+    if (omConfig?.retrieval) {
       const retrievalScope =
         typeof omConfig.retrieval === 'object' ? (omConfig.retrieval.scope ?? 'resource') : 'resource';
       tools.recall = recallTool(mergedConfig, { retrievalScope });
@@ -2276,10 +2276,14 @@ Notes:
         }
       : undefined;
 
+    const retrievalScope =
+      typeof omConfig.retrieval === 'object' ? (omConfig.retrieval.scope ?? 'resource') : 'resource';
+
     return new ObservationalMemory({
       storage: memoryStore,
       scope: omConfig.scope,
       retrieval: !!omConfig.retrieval,
+      retrievalScope,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
       onIndexMessages,
