@@ -243,18 +243,20 @@ test.describe('Workflow Execution', () => {
     const lastNode = page.locator('[data-workflow-node]').last();
     await expect(lastNode).toHaveAttribute('data-workflow-step-status', 'success', { timeout: 10_000 });
 
-    // The left panel (run history) starts collapsed in fresh browsers.
-    // Expand it by clicking the button inside the collapsed left-slot panel.
+    // Expand the left panel (run history) if it's collapsed.
+    // In fresh browsers without localStorage, the CollapsiblePanel renders only an expand button.
     const leftPanel = page.locator('#left-slot');
-    await leftPanel.locator('button').first().click();
-
-    // Wait for the run list to render after expanding
     const newRunLink = page.getByText('New workflow run');
+    const isExpanded = await newRunLink.isVisible().catch(() => false);
+    if (!isExpanded) {
+      await leftPanel.locator('button').first().click();
+    }
     await expect(newRunLink).toBeVisible({ timeout: 10_000 });
 
-    // Verify run history shows at least one past run with "success" badge
+    // Verify run history shows at least one past run with "success" badge.
+    // The run list polls for updates, so allow extra time for the status to appear.
     const runLinks = page.getByRole('link').filter({ hasText: /success/ }).filter({ hasText: /[0-9a-f]{8}/ });
-    await expect(runLinks.first()).toBeVisible({ timeout: 10_000 });
+    await expect(runLinks.first()).toBeVisible({ timeout: 15_000 });
 
     // Click a past run — URL should include the run ID
     await runLinks.first().click();
