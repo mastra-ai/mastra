@@ -113,14 +113,13 @@ Normal OM compresses messages into observations, which is great for staying on t
 
 #### Browsing only
 
-Set `retrieval: true` to enable the recall tool for browsing raw messages. No vector store needed.
+Set `retrieval: true` to enable the recall tool for browsing raw messages. No vector store needed. By default, the recall tool can browse across all threads for the current resource.
 
 ```typescript
 const memory = new Memory({
   options: {
     observationalMemory: {
       model: 'google/gemini-2.5-flash',
-      scope: 'thread',
       retrieval: true,
     },
   },
@@ -129,25 +128,7 @@ const memory = new Memory({
 
 #### With semantic search
 
-#### With cross-thread browsing
-
-Set `retrieval: { scope: 'resource' }` to enable cross-thread browsing — listing threads, browsing other threads, and navigating across conversations:
-
-```typescript
-const memory = new Memory({
-  options: {
-    observationalMemory: {
-      model: 'google/gemini-2.5-flash',
-      scope: 'thread',
-      retrieval: { scope: 'resource' },
-    },
-  },
-})
-```
-
-#### With semantic search
-
-Set `retrieval: { vector: true }` to also enable semantic search. This reuses the vector store and embedder already configured on your Memory instance. Combine with `scope: 'resource'` for cross-thread search:
+Set `retrieval: { vector: true }` to also enable semantic search. This reuses the vector store and embedder already configured on your Memory instance:
 
 ```typescript
 const memory = new Memory({
@@ -157,16 +138,28 @@ const memory = new Memory({
   options: {
     observationalMemory: {
       model: 'google/gemini-2.5-flash',
-      scope: 'thread',
-      retrieval: { vector: true, scope: 'resource' },
+      retrieval: { vector: true },
     },
   },
 })
 ```
 
-When vector search is configured, new messages are automatically indexed after each observation completes (fire-and-forget, non-blocking).
+When vector search is configured, new messages are automatically indexed at buffer time and during synchronous observation (fire-and-forget, non-blocking).
 
-By default, `retrieval: true` and `retrieval: { vector: true }` scope the recall tool to the current thread only. Set `scope: 'resource'` to enable cross-thread access.
+#### Restricting to the current thread
+
+By default, the recall tool scope is `'resource'` — the agent can list threads, browse other threads, and search across all conversations. Set `scope: 'thread'` to restrict the agent to only the current thread:
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      retrieval: { vector: true, scope: 'thread' },
+    },
+  },
+})
+```
 
 #### What retrieval enables
 
@@ -177,9 +170,8 @@ With retrieval mode enabled, OM:
 - Registers a `recall` tool the agent can call to:
   - Page through the raw messages behind any observation group range
   - Search by semantic similarity (`mode: "search"` with a `query` string) — requires `vector: true`
-  - With `scope: 'resource'`: list all threads (`mode: "threads"`), browse other threads (`threadId`), and search across all threads
-
-Retrieval mode is only active for thread-scoped OM (`observationalMemory.scope: 'thread'`). Setting `retrieval` with OM `scope: 'resource'` has no effect.
+  - List all threads (`mode: "threads"`), browse other threads (`threadId`), and search across all threads (default `scope: 'resource'`)
+  - When `scope: 'thread'`: restrict browsing and search to the current thread only
 
 See the [recall tool reference](/reference/memory/observational-memory#recall-tool) for the full API (detail levels, part indexing, pagination, cross-thread browsing, and token limiting).
 

@@ -76,7 +76,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     name: 'retrieval',
     type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource' }",
     description:
-      "**Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history. `true` enables current-thread browsing only. `{ vector: true }` also enables semantic search using Memory's vector store and embedder. `{ scope: 'resource' }` enables cross-thread browsing (list threads, browse other threads). Defaults to thread-scoped (current thread only). Only active when OM `scope` is `'thread'`.",
+      "**Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history. `true` enables cross-thread browsing by default. `{ vector: true }` also enables semantic search using Memory's vector store and embedder. `{ scope: 'thread' }` restricts the recall tool to the current thread only. Default scope is `'resource'`.",
     isOptional: true,
     defaultValue: 'false',
   },
@@ -794,7 +794,7 @@ The standalone `ObservationalMemory` class accepts all the same options as the `
 
 ## Recall tool
 
-When `retrieval` is set (any truthy value) with OM `scope: 'thread'`, a `recall` tool is registered so the agent can page through raw messages behind observation group ranges. With `retrieval: { scope: 'resource' }`, the tool also supports listing threads (`mode: "threads"`), browsing other threads (`threadId`), and cross-thread search. With `retrieval: { vector: true }`, semantic search is available (`mode: "search"`). The tool is automatically added to the agent's tool list — no manual registration is needed.
+When `retrieval` is set (any truthy value), a `recall` tool is registered so the agent can page through raw messages behind observation group ranges. By default (scope `'resource'`), the tool supports listing threads (`mode: "threads"`), browsing other threads (`threadId`), and cross-thread search. With `retrieval: { vector: true }`, semantic search is available (`mode: "search"`). Set `scope: 'thread'` to restrict the tool to the current thread only. The tool is automatically added to the agent's tool list — no manual registration is needed.
 
 ### Parameters
 
