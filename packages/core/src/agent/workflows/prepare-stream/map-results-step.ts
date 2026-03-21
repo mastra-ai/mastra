@@ -259,30 +259,25 @@ export function createMapResultsStep<OUTPUT = undefined>({
         },
         onStepFinish: result.onStepFinish,
         onChunk: options.onChunk,
-        onError: async (error: Error) => {
-          const provider = (error as any)?.data?.provider;
-          const modelId = (error as any)?.data?.modelId;
+        onError: async ({ error }: { error: Error }) => {
           const isUpstreamError = APICallError.isInstance(error);
+          const provider = isUpstreamError ? (error as APICallError).url : undefined;
+          const modelId = undefined;
 
           if (isUpstreamError) {
             const providerInfo = provider ? ` from ${provider}` : '';
-            const modelInfo = modelId ? ` (model: ${modelId})` : '';
-            capabilities.logger.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
+            capabilities.logger.error(`Upstream LLM API error${providerInfo}`, {
               error,
               runId,
-              ...(provider && { provider }),
-              ...(modelId && { modelId }),
             });
           } else {
             capabilities.logger.error('Error in agent stream', {
               error,
               runId,
-              ...(provider && { provider }),
-              ...(modelId && { modelId }),
             });
           }
 
-          await options.onError?.(error);
+          await options.onError?.({ error });
         },
         onAbort: options.onAbort,
         abortSignal: options.abortSignal,
