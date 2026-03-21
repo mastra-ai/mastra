@@ -44,7 +44,7 @@ Usage:
       const content = await filesystem.readFile(path, { encoding: 'utf-8' });
 
       if (typeof content !== 'string') {
-        span.end();
+        span.end({ success: false });
         return `Cannot edit binary files. Use the write file tool instead.`;
       }
 
