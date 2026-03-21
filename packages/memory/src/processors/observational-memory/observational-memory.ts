@@ -4847,6 +4847,13 @@ ${formattedMessages}
       lastBufferedAtTime: lastObservedAt,
     });
 
+    // Fire-and-forget: index buffered messages for semantic search
+    if (this.onIndexMessages) {
+      this.onIndexMessages(messagesToBuffer).catch(err => {
+        omError('[OM] Buffer-time indexing failed (non-fatal)', err);
+      });
+    }
+
     // Emit buffering end marker
     if (writer) {
       const tokensBuffered = await this.tokenCounter.countMessagesAsync(messagesToBuffer);
