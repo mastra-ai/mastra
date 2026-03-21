@@ -214,6 +214,24 @@ test.describe('Workflow Execution', () => {
     await expect(page.getByText('Positive: 10')).toBeVisible({ timeout: 5_000 });
   });
 
+  test('failure-workflow: step shows failed status and error detail', async ({ page }) => {
+    await page.goto('/workflows/failure-workflow/graph');
+    await expect(page.locator('h2')).toHaveText('failure-workflow');
+
+    await page.getByRole('textbox', { name: 'Input' }).fill('test');
+    await page.getByRole('button', { name: 'Run' }).click();
+
+    // Wait for the step to fail
+    await expect(page.locator('[data-workflow-step-status="failed"]').first()).toBeVisible({ timeout: 10_000 });
+
+    const steps = await getStepStatuses(page);
+    expect(expectStep(steps, 'always-fails').status).toBe('failed');
+
+    // Click step to see error detail in inline panel
+    await page.getByRole('button', { name: 'Always-fails' }).click();
+    await expect(page.getByText('Intentional failure for smoke test')).toBeVisible({ timeout: 5_000 });
+  });
+
   test('basic-suspend: suspend and resume', async ({ page }) => {
     // This test involves suspend + resume with real async processing
     test.slow();
