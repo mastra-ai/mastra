@@ -31,7 +31,7 @@ export function DatePicker({ className, classNames, showOutsideDays = true, ...p
         day_range_start: 'day-range-start',
         day_range_end: 'day-range-end',
         day_selected:
-          '!bg-neutral6/50 !text-surface2 hover:bg-neutral6 rounded-md hover:text-surface2 focus:bg-neutral6 focus:text-surface2',
+          '!bg-accent1 !text-white hover:!bg-accent1/80 rounded-md focus:!bg-accent1/80 focus:!text-white',
         day_today: 'bg-neutral6/10 text-neutral5',
         day_outside:
           'day-outside text-neutral3 opacity-50  aria-selected:bg-surface5/50 aria-selected:text-neutral3 aria-selected:opacity-30',

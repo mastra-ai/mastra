@@ -1,5 +1,5 @@
 import { EntityType } from '@mastra/core/observability';
-import type { EntityOptions } from '@mastra/playground-ui';
+import type { EntityOptions, DatePreset } from '@mastra/playground-ui';
 import {
   HeaderTitle,
   Header,
@@ -21,17 +21,43 @@ import {
   useAgents,
   useWorkflows,
   useScorers,
+  useTags,
+  useEnvironments,
+  useServiceNames,
   PermissionDenied,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
 
 import { EyeIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useTrace } from '@/domains/observability/hooks/use-trace';
 import { useTraces } from '@/domains/observability/hooks/use-traces';
 
 import { cn } from '@/lib/utils';
+
+/** Context field IDs that we extract distinct values from on loaded traces */
+const CONTEXT_FIELD_IDS = [
+  'environment',
+  'serviceName',
+  'source',
+  'userId',
+  'organizationId',
+  'resourceId',
+  'runId',
+  'sessionId',
+  'threadId',
+  'requestId',
+  'experimentId',
+  'spanType',
+  'entityName',
+  'parentEntityType',
+  'parentEntityId',
+  'parentEntityName',
+  'rootEntityType',
+  'rootEntityId',
+  'rootEntityName',
+] as const;
 
 export default function Observability() {
   const navigate = useNavigate();
@@ -46,9 +72,18 @@ export default function Observability() {
   const [selectedDateTo, setSelectedDateTo] = useState<Date | undefined>(undefined);
   const [groupByThread, setGroupByThread] = useState<boolean>(false);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [errorOnly, setErrorOnly] = useState<boolean>(false);
+  const [selectedMetadata, setSelectedMetadata] = useState<Record<string, string>>({});
+  const [datePreset, setDatePreset] = useState<DatePreset>('last-24h');
+  const [contextFilters, setContextFilters] = useState<Record<string, string>>({});
   const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
   const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
   const { data: scorers = {}, isLoading: isLoadingScorers } = useScorers();
+  const { data: availableTags = [] } = useTags();
+  const { data: discoveredEnvironments = [] } = useEnvironments();
+  const { data: discoveredServiceNames = [] } = useServiceNames();
 
   const { data: Trace, isLoading: isLoadingTrace } = useTrace(selectedTraceId, { enabled: !!selectedTraceId });
 
@@ -56,6 +91,11 @@ export default function Observability() {
   const spanId = searchParams.get('spanId');
   const spanTab = searchParams.get('tab');
   const scoreId = searchParams.get('scoreId');
+
+  const metadataFilterObj = useMemo(() => {
+    if (Object.keys(selectedMetadata).length === 0) return undefined;
+    return selectedMetadata;
+  }, [selectedMetadata]);
 
   const {
     data: tracesData,
@@ -81,11 +121,113 @@ export default function Observability() {
           end: selectedDateTo,
         },
       }),
+      ...(selectedTags.length > 0 && { tags: selectedTags }),
+      ...(errorOnly && { status: 'error' }),
+      ...(metadataFilterObj && { metadata: metadataFilterObj }),
+      ...Object.fromEntries(Object.entries(contextFilters).filter(([, v]) => v.trim())),
     },
   });
 
-  const traces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
+  const allTraces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
+
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const traces = useMemo(() => {
+    if (!deferredSearchQuery.trim()) return allTraces;
+    const q = deferredSearchQuery.trim().toLowerCase();
+    return allTraces.filter(t => {
+      if (t.name?.toLowerCase().includes(q)) return true;
+      if (t.entityId?.toLowerCase().includes(q)) return true;
+      if (t.entityName?.toLowerCase().includes(q)) return true;
+      const meta = (t as any).metadata;
+      if (meta && typeof meta === 'object') {
+        for (const val of Object.values(meta)) {
+          if (String(val).toLowerCase().includes(q)) return true;
+        }
+      }
+      return false;
+    });
+  }, [allTraces, deferredSearchQuery]);
   const threadTitles = tracesData?.threadTitles ?? {};
+
+  // Accumulate available metadata keys/values across all loaded trace batches.
+  // Values only grow (never shrink when filters narrow results) so pickers stay populated.
+  // Uses useRef + useMemo to avoid the extra render cycle that useEffect+useState causes.
+  const metadataAccRef = useRef<Record<string, Set<string>>>({});
+  const prevMetadataResultRef = useRef<Record<string, string[]>>({});
+
+  const availableMetadata = useMemo(() => {
+    let changed = false;
+    const acc = metadataAccRef.current;
+    for (const trace of allTraces) {
+      const meta = (trace as any).metadata;
+      if (meta && typeof meta === 'object') {
+        for (const [key, value] of Object.entries(meta)) {
+          if (value == null) continue;
+          if (!acc[key]) {
+            acc[key] = new Set();
+            changed = true;
+          }
+          const str = String(value);
+          if (!acc[key].has(str)) {
+            acc[key].add(str);
+            changed = true;
+          }
+        }
+      }
+    }
+    if (!changed) return prevMetadataResultRef.current;
+    const result = Object.fromEntries(Object.entries(acc).map(([k, v]) => [k, [...v].sort()]));
+    prevMetadataResultRef.current = result;
+    return result;
+  }, [allTraces]);
+
+  const contextAccRef = useRef<Record<string, Set<string>>>({});
+  const prevContextResultRef = useRef<Record<string, string[]>>({});
+
+  const availableContextValues = useMemo(() => {
+    let changed = false;
+    const acc = contextAccRef.current;
+    for (const trace of allTraces) {
+      for (const field of CONTEXT_FIELD_IDS) {
+        const value = (trace as any)[field];
+        if (value != null && typeof value === 'string' && value.trim()) {
+          if (!acc[field]) {
+            acc[field] = new Set();
+            changed = true;
+          }
+          if (!acc[field].has(value)) {
+            acc[field].add(value);
+            changed = true;
+          }
+        }
+      }
+    }
+    // Merge in discovery API results
+    for (const env of discoveredEnvironments) {
+      if (!acc['environment']) {
+        acc['environment'] = new Set();
+        changed = true;
+      }
+      if (!acc['environment'].has(env)) {
+        acc['environment'].add(env);
+        changed = true;
+      }
+    }
+    for (const sn of discoveredServiceNames) {
+      if (!acc['serviceName']) {
+        acc['serviceName'] = new Set();
+        changed = true;
+      }
+      if (!acc['serviceName'].has(sn)) {
+        acc['serviceName'].add(sn);
+        changed = true;
+      }
+    }
+    if (!changed) return prevContextResultRef.current;
+    const result = Object.fromEntries(Object.entries(acc).map(([k, v]) => [k, [...v].sort()]));
+    prevContextResultRef.current = result;
+    return result;
+  }, [allTraces, discoveredEnvironments, discoveredServiceNames]);
 
   // Sync URL traceId to state
   if (traceId && traceId !== selectedTraceId) {
@@ -132,6 +274,16 @@ export default function Observability() {
     setSelectedDateFrom(undefined);
     setSelectedDateTo(undefined);
     setGroupByThread(false);
+    setSearchQuery('');
+    setSelectedTags([]);
+    setErrorOnly(false);
+    setSelectedMetadata({});
+    setDatePreset('last-24h');
+    setContextFilters({});
+    metadataAccRef.current = {};
+    prevMetadataResultRef.current = {};
+    contextAccRef.current = {};
+    prevContextResultRef.current = {};
   };
 
   const handleDataChange = (value: Date | undefined, type: 'from' | 'to') => {
@@ -206,7 +358,15 @@ export default function Observability() {
     );
   }
 
-  const filtersApplied = selectedEntityOption?.value !== 'all' || selectedDateFrom || selectedDateTo;
+  const filtersApplied =
+    selectedEntityOption?.value !== 'all' ||
+    selectedDateFrom ||
+    selectedDateTo ||
+    searchQuery.trim() ||
+    selectedTags.length > 0 ||
+    errorOnly ||
+    Object.keys(selectedMetadata).length > 0 ||
+    Object.values(contextFilters).some(v => v.trim());
 
   const toNextTrace = getToNextEntryFn({
     entries: orderedTraceEntries,
@@ -244,8 +404,8 @@ export default function Observability() {
           </HeaderAction>
         </Header>
 
-        <div className={cn(`grid overflow-y-auto h-full`)}>
-          <div className={cn('max-w-[100rem] px-12 mx-auto grid content-start gap-8 h-full')}>
+        <div className={cn(`grid overflow-y-scroll h-full`)}>
+          <div className={cn('w-full max-w-[100rem] px-12 mx-auto grid grid-rows-[auto_auto_1fr] gap-8 h-full')}>
             <PageHeader
               title="Observability"
               description="Explore observability traces for your entities"
@@ -263,6 +423,21 @@ export default function Observability() {
               isLoading={isTracesLoading || isLoadingAgents || isLoadingWorkflows}
               groupByThread={groupByThread}
               onGroupByThreadChange={setGroupByThread}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              selectedTags={selectedTags}
+              availableTags={availableTags}
+              onTagsChange={setSelectedTags}
+              errorOnly={errorOnly}
+              onErrorOnlyChange={setErrorOnly}
+              selectedMetadata={selectedMetadata}
+              availableMetadata={availableMetadata}
+              onMetadataChange={setSelectedMetadata}
+              datePreset={datePreset}
+              onDatePresetChange={setDatePreset}
+              contextFilters={contextFilters}
+              availableContextValues={availableContextValues}
+              onContextFiltersChange={setContextFilters}
             />
 
             {isTracesLoading ? (
