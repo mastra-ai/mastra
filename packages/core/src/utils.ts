@@ -644,12 +644,33 @@ export async function fetchWithRetry(
       const response = await fetch(url, options);
 
       if (!response.ok) {
-        throw new Error(`Request failed with status: ${response.status} ${response.statusText}`);
+        // Client errors (4xx) are not retryable — the request itself is invalid.
+        // Only server errors (5xx) and transient network failures warrant a retry.
+        if (response.status >= 400 && response.status < 500) {
+          throw new Error(`Request failed with status: ${response.status} ${response.statusText}`);
+        }
+
+        lastError = new Error(`Request failed with status: ${response.status} ${response.statusText}`);
+        retryCount++;
+
+        if (retryCount >= maxRetries) {
+          throw lastError;
+        }
+
+        const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
       }
 
       return response;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
+
+      // If it's a client error (4xx), propagate immediately without retrying.
+      if (lastError.message.includes('status: 4')) {
+        throw lastError;
+      }
+
       retryCount++;
 
       if (retryCount >= maxRetries) {
