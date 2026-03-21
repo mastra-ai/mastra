@@ -99,7 +99,9 @@ async function main() {
     }
   }
 
-  console.log(`\nDone! Indexed ${totalIndexed} messages across ${toIndex.length} threads (${indexedThreadIds.size} skipped).`);
+  console.log(
+    `\nDone! Indexed ${totalIndexed} messages across ${toIndex.length} threads (${indexedThreadIds.size} skipped).`,
+  );
   process.exit(0);
 }
 

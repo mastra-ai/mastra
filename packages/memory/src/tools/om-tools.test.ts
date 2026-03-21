@@ -595,6 +595,127 @@ describe('om-tools', () => {
     });
   });
 
+  describe('access control', () => {
+    let memory: Memory;
+    const threadId = 'thread-owner';
+    const resourceId = 'resource-owner';
+    const otherThreadId = 'thread-other';
+    const otherResourceId = 'resource-other';
+
+    beforeEach(async () => {
+      memory = new Memory({ storage: new InMemoryStore() });
+
+      // Thread belonging to the current resource
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Owner thread',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+          updatedAt: new Date('2024-01-01T10:00:00Z'),
+        },
+      });
+
+      // Thread belonging to a different resource
+      await memory.saveThread({
+        thread: {
+          id: otherThreadId,
+          resourceId: otherResourceId,
+          title: 'Other user thread',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+          updatedAt: new Date('2024-01-01T10:00:00Z'),
+        },
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'owner-msg-1',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'Owner message' }] },
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+          },
+          {
+            id: 'other-msg-1',
+            threadId: otherThreadId,
+            resourceId: otherResourceId,
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'Other user message' }] },
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+          },
+        ],
+      });
+    });
+
+    it('should reject cursor from a different resource in recallMessages', async () => {
+      await expect(
+        recallMessages({
+          memory: memory as any,
+          threadId: otherThreadId,
+          resourceId,
+          cursor: 'other-msg-1',
+        }),
+      ).rejects.toThrow('Could not resolve cursor message');
+    });
+
+    it('should reject cursor from a different thread in thread scope', async () => {
+      await expect(
+        recallMessages({
+          memory: memory as any,
+          threadId,
+          resourceId,
+          cursor: 'owner-msg-1',
+          threadScope: 'different-thread',
+        }),
+      ).rejects.toThrow('Could not resolve cursor message');
+    });
+
+    it('should allow cursor from same resource in resource scope', async () => {
+      const result = await recallMessages({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'owner-msg-1',
+        // no threadScope = resource scope
+      });
+      expect(result.count).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should reject recallPart cursor from a different resource', async () => {
+      await expect(
+        recallPart({
+          memory: memory as any,
+          threadId: otherThreadId,
+          resourceId,
+          cursor: 'other-msg-1',
+          partIndex: 0,
+        }),
+      ).rejects.toThrow('Could not resolve cursor message');
+    });
+
+    it('should reject recallThreadFromStart for a thread from another resource', async () => {
+      await expect(
+        recallThreadFromStart({
+          memory: memory as any,
+          threadId: otherThreadId,
+          resourceId,
+        }),
+      ).rejects.toThrow('Thread not found');
+    });
+
+    it('should allow recallThreadFromStart for own thread', async () => {
+      const result = await recallThreadFromStart({
+        memory: memory as any,
+        threadId,
+        resourceId,
+      });
+      expect(result.count).toBe(1);
+      expect(result.messages).toContain('Owner message');
+    });
+  });
+
   describe('recallPart', () => {
     let memory: Memory;
     const threadId = 'thread-om-tools';
@@ -1198,6 +1319,39 @@ describe('om-tools', () => {
       expect(memory.listTools()).not.toHaveProperty('recall');
     });
 
+    it('should throw when retrieval has vector: true but no vector store', () => {
+      expect(
+        () =>
+          new Memory({
+            storage: new InMemoryStore(),
+            options: {
+              observationalMemory: {
+                model: 'test-model',
+                scope: 'thread',
+                retrieval: { vector: true },
+              },
+            } as any,
+          }),
+      ).toThrow('requires a vector store');
+    });
+
+    it('should throw when retrieval has vector: true but no embedder', () => {
+      expect(
+        () =>
+          new Memory({
+            storage: new InMemoryStore(),
+            vector: { id: 'test' } as any,
+            options: {
+              observationalMemory: {
+                model: 'test-model',
+                scope: 'thread',
+                retrieval: { vector: true },
+              },
+            } as any,
+          }),
+      ).toThrow('requires an embedder');
+    });
+
     it('should not register recall when retrieval mode is disabled', () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
@@ -1315,20 +1469,22 @@ describe('om-tools', () => {
       expect(result.results).toBe('No matching messages found.');
     });
 
-    it('should throw when searchMessages is not available', async () => {
+    it('should return helpful message when searchMessages is not available', async () => {
       const memory = {
         recall: async () => ({ messages: [] }),
         getMemoryStore: async () => ({ listMessagesById: async () => ({ messages: [] }) }),
         listThreads: async () => ({ threads: [], total: 0, hasMore: false, page: 0 }),
       };
 
-      await expect(
-        searchMessagesForResource({
-          memory,
-          resourceId: 'res',
-          query: 'test',
-        }),
-      ).rejects.toThrow('vector store and embedder');
+      const result = await searchMessagesForResource({
+        memory,
+        resourceId: 'res',
+        query: 'test',
+      });
+
+      expect(result.count).toBe(0);
+      expect(result.results).toContain('Search is not configured');
+      expect(result.results).toContain('retrieval: { vector: true }');
     });
 
     it('should handle messages with no text parts', async () => {
@@ -1354,19 +1510,19 @@ describe('om-tools', () => {
         query: 'test',
       });
 
+      // data-observation parts are invisible — message still counted but no content rendered
       expect(result.count).toBe(1);
-      expect(result.results).toContain('assistant message');
+      expect(result.results).toContain('thread-a');
     });
 
-    it('should truncate long message previews', async () => {
-      const longText = 'A'.repeat(200);
+    it('should render search results using the standard message format', async () => {
       const messages: MastraDBMessage[] = [
         {
           id: 'msg-long',
           threadId: 'thread-a',
           resourceId: 'res',
           role: 'user',
-          content: { format: 2, parts: [{ type: 'text', text: longText }] },
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello world' }] },
           createdAt: new Date('2024-01-01'),
         },
       ];
@@ -1382,8 +1538,67 @@ describe('om-tools', () => {
         query: 'test',
       });
 
-      expect(result.results).toContain('...');
-      expect(result.results.length).toBeLessThan(longText.length);
+      // Should use standard format: role header with message ID, part indices, score prefix
+      expect(result.results).toContain('[msg-long]');
+      expect(result.results).toContain('[p0]');
+      expect(result.results).toContain('[0.90]');
+      expect(result.results).toContain('Hello world');
+    });
+
+    it('should return helpful message when search is not configured', async () => {
+      const memory = {
+        recall: async () => ({ messages: [] }),
+        getMemoryStore: async () => ({
+          listMessagesById: async () => ({ messages: [] }),
+        }),
+        listThreads: async () => ({ threads: [], total: 0, hasMore: false, page: 0 }),
+        // no searchMessages — simulates retrieval: true without search
+      };
+
+      const result = await searchMessagesForResource({
+        memory,
+        resourceId: 'res',
+        query: 'test',
+      });
+
+      expect(result.count).toBe(0);
+      expect(result.results).toContain('Search is not configured');
+      expect(result.results).toContain('retrieval: { vector: true }');
+    });
+  });
+
+  describe('Memory.listTools with retrieval config shapes', () => {
+    it('should register recall with retrieval: true (boolean)', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          observationalMemory: {
+            model: 'test-model',
+            scope: 'thread',
+            retrieval: true, // backward compat boolean
+          },
+        } as any,
+      });
+
+      expect(memory.listTools()).toHaveProperty('recall');
+    });
+
+    it('should register recall with retrieval object config', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        vector: { id: 'test' } as any,
+        embedder: { specificationVersion: 'v3', modelId: 'test', doEmbed: async () => ({ embeddings: [] }) } as any,
+        options: {
+          observationalMemory: {
+            model: 'test-model',
+            scope: 'thread',
+            retrieval: { vector: true }, // object config with vector search
+          },
+        } as any,
+      });
+
+      // recall tool should still be registered
+      expect(memory.listTools()).toHaveProperty('recall');
     });
   });
 });
