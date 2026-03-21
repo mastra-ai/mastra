@@ -1,6 +1,6 @@
 # Smoke Test Coverage
 
-> 199 tests across 37 test files — last updated 2026-03-20
+> 218 tests across 38 test files — last updated 2026-03-20
 
 ## What's Tested
 
@@ -311,6 +311,31 @@
 
 ---
 
+### Datasets (19 tests, 1 file)
+
+#### Datasets (`datasets.test.ts` — 19 tests)
+- [x] Create a dataset (name, description, metadata, version 0)
+- [x] List datasets with pagination
+- [x] Get dataset by ID
+- [x] 404 for non-existent dataset
+- [x] Update dataset metadata (PATCH)
+- [x] Add item to dataset (input, groundTruth, metadata)
+- [x] Add a second item
+- [x] List items with exact pagination total
+- [x] Get item by ID
+- [x] Update item (PATCH groundTruth)
+- [x] SCD-2 item history after update (≥2 versions)
+- [x] Get item at specific dataset version
+- [x] 404 for item at non-existent version
+- [x] Batch insert items (2 items, single version)
+- [x] Batch delete items (verify removal)
+- [x] Delete single item (verify absent from list)
+- [x] List dataset versions with shape assertions
+- [x] List experiments (empty initially)
+- [x] Delete dataset (+ verify 404 after)
+
+---
+
 ## What's NOT Tested
 
 ### Agents — Untested Endpoints
@@ -419,13 +444,16 @@
 
 **Requires:** Vector store + embedder for search; external API for skills.sh.
 
-### Datasets (0 coverage)
+### Dataset Experiments (0 coverage)
 
-| Category | Endpoints | Notes | Priority |
-|----------|-----------|-------|----------|
-| Dataset CRUD | 5 routes | Create, list, get, update, delete | Low |
-| Dataset Items | 6 routes | Add, batch, update, delete items | Low |
-| Experiments | 4 routes | Trigger, compare | Low |
+| Endpoint | Notes | Priority |
+|----------|-------|----------|
+| `POST /datasets/:datasetId/experiments` | Trigger experiment (requires async agent/scorer execution) | Medium |
+| `GET /datasets/:datasetId/experiments/:experimentId` | Get experiment details | Medium |
+| `GET /datasets/:datasetId/experiments/:experimentId/results` | List experiment results | Medium |
+| `POST /datasets/:datasetId/compare` | Compare two experiments | Medium |
+
+**Requires:** Running agents/scorers against dataset items asynchronously.
 
 ### A2A Protocol (0 coverage)
 
