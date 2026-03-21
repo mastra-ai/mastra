@@ -521,9 +521,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const distanceExpr = `embedding ${ops.distanceOperator} '${vectorStr}'::${qualifiedVectorType}`;
       const scoreExpr = ops.scoreExpr(distanceExpr);
 
-      // Place ORDER BY and LIMIT inside the CTE when using HNSW indexes without
-      // filters so PostgreSQL can leverage the index for approximate nearest neighbor
-      // search instead of scanning all rows.
+      // Move ORDER BY and LIMIT inside the CTE for HNSW indexes without filters to enable index usage
       const hasFilter = filterQuery.trim().length > 0;
       const useIndexedOrder = indexInfo.type === 'hnsw' && !hasFilter;
 
@@ -558,7 +556,6 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         WHERE score > $1
         ORDER BY score DESC
         LIMIT $2`;
-
       const result = await client.query(query, filterValues);
       await client.query('COMMIT');
 
