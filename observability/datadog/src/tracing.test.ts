@@ -344,10 +344,8 @@ describe('DatadogExporter', () => {
             production: true,
             critical: true,
             error: true,
-            errorInfo: {
-              message: 'Something failed',
-              category: 'runtime',
-            },
+            'error.message': 'Something failed',
+            'error.category': 'runtime',
           },
         }),
       );
