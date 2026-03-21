@@ -1,6 +1,6 @@
 # Smoke Test Coverage
 
-> 188 tests across 36 test files — last updated 2026-03-20
+> 199 tests across 37 test files — last updated 2026-03-20
 
 ## What's Tested
 
@@ -294,6 +294,23 @@
 
 ---
 
+### Scores (11 tests, 1 file)
+
+#### Scores (`scores.test.ts` — 11 tests)
+- [x] List registered scorers (config shape, isRegistered flag)
+- [x] Get scorer details by ID (config, isRegistered)
+- [x] Non-existent scorer returns null (200)
+- [x] Save a score record (scorerId, entityId, score, reason round-trip)
+- [x] Save a second score for the same run
+- [x] List scores by run ID (exact pagination total, both scorerIds present)
+- [x] Empty scores for unknown run
+- [x] List scores by scorer ID (exact pagination total, score value)
+- [x] Empty scores for unknown scorer
+- [x] List scores by entity (exact pagination total, all entityIds match)
+- [x] 404 for unknown entity
+
+---
+
 ## What's NOT Tested
 
 ### Agents — Untested Endpoints
@@ -426,13 +443,14 @@
 
 **Requires:** Editor configuration (`mastra.getEditor()`).
 
-### Scores / Scorers (0 coverage)
+### Stored Scorers (0 coverage)
 
 | Endpoint | Notes | Priority |
 |----------|-------|----------|
-| `POST /scores` | Submit scores | Low |
-| `GET /scores/scorers` | List scorers | Low |
-| `GET /scores/run/:runId` | Scores for a run | Low |
+| `GET/POST/PATCH/DELETE /stored/scorers` | CRUD for stored scorer definitions | Low |
+| `GET/POST/DELETE /stored/scorers/:id/versions` | Scorer version management | Low |
+
+**Requires:** EE license / stored entity infrastructure.
 
 ---
 
