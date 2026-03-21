@@ -75,12 +75,14 @@ Tracking document for Studio/Playground E2E smoke tests.
 | 2 | Sequential-steps: run to completion            | Done   |
 | 3 | Sequential-steps: run via JSON input           | Done   |
 | 4 | Basic-suspend: suspend and resume              | Done   |
-| 5 | Branch-workflow: correct path taken            | Todo   |
-| 6 | Parallel-workflow: parallel execution          | Todo   |
-| 7 | Foreach-workflow: iterates over items          | Todo   |
-| 8 | Step detail panel: click step, view I/O        | Todo   |
-| 9 | Run history: navigate to past run              | Todo   |
-| 10 | Retry-workflow: retries on failure            | Todo   |
+| 5 | Branch-workflow: positive branch               | Done   |
+| 6 | Branch-workflow: negative branch               | Done   |
+| 7 | Parallel-workflow: all parallel steps succeed  | Done   |
+| 8 | Foreach-workflow: processes items via JSON      | Done   |
+| 9 | Retry-workflow: succeeds after retries         | Done   |
+| 10 | Step detail: click step to view output        | Done   |
+| 11 | Run history: navigate to past run             | Todo   |
+| 12 | Failure-workflow: shows failed status         | Todo   |
 
 ### MCP Servers — `tests-ui/mcp/` (not started)
 
@@ -170,7 +172,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 |----------------|------|------|---------|
 | Agents         | 6    | 6    | 0       |
 | Tools          | 5    | 2    | 1       |
-| Workflows      | 4    | 6    | 0       |
+| Workflows      | 10   | 2    | 0       |
 | MCP Servers    | 0    | 3    | 0       |
 | Observability  | 0    | 6    | 0       |
 | Memory         | 0    | 4    | 0       |
@@ -180,7 +182,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 | Workspaces     | 0    | 5    | 0       |
 | CMS            | 0    | 4    | 0       |
 | Settings       | 0    | 1    | 0       |
-| **Total**      | **15** | **49** | **1** |
+| **Total**      | **21** | **45** | **1** |
 
 ## Known Issues
 
