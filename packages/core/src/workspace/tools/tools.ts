@@ -7,6 +7,7 @@
  * into the tool execution context.
  */
 
+import { z } from 'zod/v4';
 import type { WorkspaceToolName } from '../constants';
 import { WORKSPACE_TOOLS } from '../constants';
 import { FileNotFoundError, FileReadRequiredError } from '../errors';
@@ -272,7 +273,25 @@ export function createWorkspaceTools(workspace: Workspace) {
 
   // Search tools
   if (workspace.canBM25 || workspace.canVector) {
-    addTool(WORKSPACE_TOOLS.SEARCH.SEARCH, searchTool);
+    // Build a dynamic search tool that only exposes modes the workspace supports.
+    // This prevents the LLM from picking an unsupported mode (e.g. 'hybrid' when
+    // only BM25 is configured), rather than relying solely on runtime fallback.
+    const availableModes = [
+      workspace.canBM25 ? 'bm25' : null,
+      workspace.canVector ? 'vector' : null,
+      workspace.canHybrid ? 'hybrid' : null,
+    ].filter((m): m is 'bm25' | 'vector' | 'hybrid' => m !== null);
+
+    const dynamicSearchTool = {
+      ...searchTool,
+      inputSchema: searchTool.inputSchema.extend({
+        mode: z
+          .enum(availableModes as ['bm25' | 'vector' | 'hybrid', ...('bm25' | 'vector' | 'hybrid')[]])
+          .optional()
+          .describe(`Search mode: ${availableModes.join(', ')}`),
+      }),
+    };
+    addTool(WORKSPACE_TOOLS.SEARCH.SEARCH, dynamicSearchTool);
     addTool(WORKSPACE_TOOLS.SEARCH.INDEX, indexContentTool, { requireWrite: true });
   }
 
