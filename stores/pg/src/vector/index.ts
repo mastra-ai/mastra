@@ -237,6 +237,32 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   }
 
   /**
+   * Sets search_path on the client connection so that vector operators (e.g. <=>, vector_cosine_ops)
+   * are resolvable when the pgvector extension is installed in a non-default schema.
+   *
+   * PostgreSQL's default search_path is ("$user", public). If the extension lives in a custom schema
+   * (e.g. "myapp"), operator classes and distance operators won't resolve without this.
+   */
+  private async ensureSearchPath(client: pg.PoolClient) {
+    // Lazily detect extension schema if not yet known
+    if (!this.vectorExtensionSchema) {
+      await this.detectVectorExtensionSchema(client);
+    }
+
+    if (
+      this.vectorExtensionSchema &&
+      this.vectorExtensionSchema !== 'public' &&
+      this.vectorExtensionSchema !== 'pg_catalog'
+    ) {
+      const schemas = new Set<string>();
+      schemas.add(this.vectorExtensionSchema);
+      if (this.schema) schemas.add(this.schema);
+      schemas.add('public');
+      await client.query(`SET search_path TO ${[...schemas].map(s => `"${s}"`).join(', ')}`);
+    }
+  }
+
+  /**
    * Checks if the installed pgvector version supports halfvec type.
    * halfvec was introduced in pgvector 0.7.0.
    */
@@ -487,6 +513,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     // Vector similarity query
     const client = await this.pool.connect();
     try {
+      // Set search path so vector operators (e.g. <=>) resolve correctly
+      await this.ensureSearchPath(client);
       await client.query('BEGIN');
       const translatedFilter = this.transformFilter(filter);
       const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter, minScore, topK);
@@ -895,15 +923,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             });
           }
 
-          // Set search path to include both schemas if needed
-          if (
-            this.schema &&
-            this.vectorExtensionSchema &&
-            this.schema !== this.vectorExtensionSchema &&
-            this.vectorExtensionSchema !== 'pg_catalog'
-          ) {
-            await client.query(`SET search_path TO ${this.getSchemaName()}, "${this.vectorExtensionSchema}"`);
-          }
+          // Set search path so vector types and operators resolve correctly
+          await this.ensureSearchPath(client);
 
           // Use the properly qualified vector type (vector or halfvec)
           const qualifiedVectorType = this.getVectorTypeName(vectorType);
@@ -1085,6 +1106,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         this.describeIndexCache.delete(indexName);
         return;
       }
+
+      // Set search path so vector operator classes (e.g. vector_cosine_ops) resolve correctly
+      await this.ensureSearchPath(client);
 
       // Get the operator class based on vector type and metric
       // pgvector uses different operator classes for vector vs halfvec
