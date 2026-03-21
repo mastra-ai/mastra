@@ -742,13 +742,13 @@ export interface ObservationalMemoryOptions {
    * metadata visible in context and a `recall` tool is registered so the actor
    * can inspect raw messages behind a stored observation summary.
    *
-   * - `true` — recall tool with browsing/paging within the current thread only
+   * - `true` — recall tool with cross-thread browsing by default
    * - `{ vector: true }` — also enables semantic search using Memory-level vector/embedder
-   * - `{ scope: 'resource' }` — enables cross-thread browsing (list threads, browse other threads)
-   * - `{ vector: true, scope: 'resource' }` — cross-thread browsing + semantic search
+   * - `{ scope: 'thread' }` — restricts the recall tool to the current thread only
+   * - `{ vector: true, scope: 'thread' }` — current-thread browsing + semantic search
    *
-   * `scope` defaults to `'thread'` (current thread only). Set to `'resource'`
-   * for cross-thread access.
+   * `scope` defaults to `'resource'` (cross-thread browsing, thread listing, and search).
+   * Set to `'thread'` to restrict to the current thread only.
    *
    * @experimental
    * @default false
