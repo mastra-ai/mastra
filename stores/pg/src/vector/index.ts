@@ -530,12 +530,13 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             ${includeVector ? ', embedding' : ''}
           FROM ${tableName}
           ${filterQuery}
+          ORDER BY ${distanceExpr}
+          LIMIT $2
         )
         SELECT *
         FROM vector_scores
         WHERE score > $1
-        ORDER BY score DESC
-        LIMIT $2`;
+        ORDER BY score DESC`;
       const result = await client.query(query, filterValues);
       await client.query('COMMIT');
 
