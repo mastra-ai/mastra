@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Add missing `destroy()` method to Harness class. This method was documented but not implemented after a refactor split it into `stopHeartbeats()` and `destroyWorkspace()`. The new `destroy()` calls both to provide a single cleanup entrypoint.
+Fixed `Harness.destroy()` to properly clean up heartbeats and workspace on teardown.
