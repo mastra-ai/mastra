@@ -117,12 +117,12 @@ async function resolveCursorMessage(
   }
 
   // Verify the cursor message belongs to the current resource
-  if (access?.resourceId && message.resourceId && message.resourceId !== access.resourceId) {
+  if (access?.resourceId && message.resourceId !== access.resourceId) {
     throw new Error(`Could not resolve cursor message: ${cursor}`);
   }
 
   // In thread scope, verify the cursor belongs to the current thread
-  if (access?.threadScope && message.threadId && message.threadId !== access.threadScope) {
+  if (access?.threadScope && message.threadId !== access.threadScope) {
     throw new Error(`Could not resolve cursor message: ${cursor}`);
   }
 
@@ -1039,14 +1039,14 @@ export const recallTool = (
       if (!memory) {
         throw new Error('Memory instance is required for recall');
       }
+      if (!resourceId) {
+        throw new Error('Resource ID is required for recall');
+      }
 
       // Search mode
       if (mode === 'search') {
         if (!query) {
           throw new Error('query is required for mode="search"');
-        }
-        if (!resourceId) {
-          throw new Error('Resource ID is required for search');
         }
         return searchMessagesForResource({
           memory,
@@ -1077,9 +1077,6 @@ export const recallTool = (
             page: 0,
             hasMore: false,
           };
-        }
-        if (!resourceId) {
-          throw new Error('Resource ID is required to list threads');
         }
         return listThreadsForResource({
           memory,
