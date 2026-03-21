@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "build": "npx mastra build",
-    "test": "vitest run --reporter=verbose"
+    "build:studio": "npx mastra build --studio",
+    "test": "vitest run --reporter=verbose",
+    "test:ui": "playwright test",
+    "test:all": "vitest run --reporter=verbose && playwright test"
   },
   "dependencies": {
     "@mastra/core": "alpha",
@@ -15,11 +18,12 @@
     "@mastra/observability": "alpha"
   },
   "devDependencies": {
-    "mastra": "alpha",
-    "vitest": "^4.1.0",
-    "typescript": "^5.8.0",
-    "zod": "^3.24.0",
+    "@playwright/test": "^1.58.2",
+    "execa": "^9.6.1",
     "get-port": "^7.1.0",
-    "execa": "^9.6.1"
+    "mastra": "alpha",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.0",
+    "zod": "^3.24.0"
   }
 }
