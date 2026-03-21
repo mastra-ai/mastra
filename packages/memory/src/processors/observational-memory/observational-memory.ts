@@ -4428,7 +4428,8 @@ ${formattedMessages}
       });
 
       // Fire-and-forget: index observed messages for semantic search
-      if (this.onIndexMessages) {
+      // Skip when async buffering is enabled — messages were already indexed at buffer time.
+      if (this.onIndexMessages && !this.isAsyncObservationEnabled()) {
         this.onIndexMessages(messagesToObserve).catch(err => {
           omError('[OM] Observe-time indexing failed (non-fatal)', err);
         });
