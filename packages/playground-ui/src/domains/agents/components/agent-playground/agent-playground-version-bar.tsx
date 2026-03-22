@@ -7,6 +7,7 @@ import { Spinner } from '@/ds/components/Spinner';
 import { Badge } from '@/ds/components/Badge';
 import { Txt } from '@/ds/components/Txt';
 import { Combobox } from '@/ds/components/Combobox';
+import { CopyButton } from '@/ds/components/CopyButton';
 import { Input } from '@/ds/components/Input';
 import {
   Dialog,
@@ -126,6 +127,10 @@ export function AgentPlaygroundVersionBar({
           <Txt variant="ui-xs" className="text-neutral3">
             No versions yet
           </Txt>
+        )}
+
+        {currentValue && (
+          <CopyButton content={currentValue} tooltip="Copy version ID" size="sm" />
         )}
 
         <HoverPopover>

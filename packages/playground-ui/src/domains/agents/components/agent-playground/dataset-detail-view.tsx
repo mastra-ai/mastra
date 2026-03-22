@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { Play, Sparkles, Clock, ChevronRight, ChevronDown, Pencil, Save, X, Trash2 } from 'lucide-react';
 
 import { Button } from '@/ds/components/Button';
+import { Combobox } from '@/ds/components/Combobox';
 import { Icon } from '@/ds/icons/Icon';
 import { Txt } from '@/ds/components/Txt';
 import { ScrollArea } from '@/ds/components/ScrollArea';
@@ -14,9 +15,12 @@ import { toast } from '@/lib/toast';
 import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasetExperiments } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { useDatasetVersions } from '@/domains/datasets/hooks/use-dataset-versions';
+import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
 
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useQueryClient } from '@tanstack/react-query';
+import { formatVersionLabel } from './format-version-label';
 
 interface DatasetDetailViewProps {
   agentId: string;
@@ -74,10 +78,19 @@ export function DatasetDetailView({
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [itemsCollapsed, setItemsCollapsed] = useState(false);
   const [runsCollapsed, setRunsCollapsed] = useState(false);
+  const [selectedDatasetVersion, setSelectedDatasetVersion] = useState<string>('');
+  const [selectedAgentVersion, setSelectedAgentVersion] = useState<string>('');
 
   const { data: items = [], setEndOfListElement, isFetchingNextPage } = useDatasetItems(datasetId);
   const { data: experimentsData, refetch: refetchExperiments } = useDatasetExperiments(datasetId);
   const datasetExperiments = experimentsData?.experiments ?? [];
+
+  const datasetVersionsQuery = useDatasetVersions(datasetId);
+  const datasetVersions = datasetVersionsQuery.data ?? [];
+
+  const isAgentTarget = !datasetTargetType || datasetTargetType === 'agent';
+  const agentVersionsQuery = useAgentVersions({ agentId: isAgentTarget ? agentId : '' });
+  const agentVersions = agentVersionsQuery.data?.versions ?? [];
 
   const mergedRequestContext = useMergedRequestContext();
   const queryClient = useQueryClient();
@@ -112,6 +125,8 @@ export function DatasetDetailView({
         targetId: expTargetId,
         ...(activeScorers.length > 0 ? { scorerIds: activeScorers } : {}),
         ...(hasRequestContext ? { requestContext: mergedRequestContext } : {}),
+        ...(selectedDatasetVersion ? { version: Number(selectedDatasetVersion) } : {}),
+        ...(selectedAgentVersion ? { agentVersion: selectedAgentVersion } : {}),
       });
       queryClient.invalidateQueries({ queryKey: ['agent-experiments', agentId] });
       refetchExperiments();
@@ -134,6 +149,8 @@ export function DatasetDetailView({
     triggerExperiment,
     mergedRequestContext,
     queryClient,
+    selectedDatasetVersion,
+    selectedAgentVersion,
   ]);
 
   return (
@@ -182,6 +199,49 @@ export function DatasetDetailView({
               )}
             </Button>
           </div>
+        </div>
+        {/* Version selectors */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <Txt variant="ui-xs" className="text-neutral3 mb-1 block">
+              Dataset version
+            </Txt>
+            <Combobox
+              options={[
+                { label: 'Latest', value: '' },
+                ...datasetVersions.map(v => ({
+                  label: `v${v.version}`,
+                  value: String(v.version),
+                  description: v.isCurrent ? 'Current' : undefined,
+                })),
+              ]}
+              value={selectedDatasetVersion}
+              onValueChange={setSelectedDatasetVersion}
+              placeholder="Latest"
+              size="sm"
+            />
+          </div>
+          {isAgentTarget && (
+            <div className="flex-1 min-w-0">
+              <Txt variant="ui-xs" className="text-neutral3 mb-1 block">
+                Agent version
+              </Txt>
+              <Combobox
+                options={[
+                  { label: 'Current', value: '' },
+                  ...agentVersions.map(v => ({
+                    label: `v${v.versionNumber}`,
+                    value: v.id,
+                    description: v.changeMessage ?? undefined,
+                  })),
+                ]}
+                value={selectedAgentVersion}
+                onValueChange={setSelectedAgentVersion}
+                placeholder="Current"
+                size="sm"
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -283,6 +343,12 @@ export function DatasetDetailView({
                         </Txt>
                         <Txt variant="ui-xs" className="text-neutral3">
                           {exp.succeededCount}/{exp.totalItems} passed
+                          {exp.datasetVersion != null && ` · ${formatVersionLabel('Dataset', exp.datasetVersion)}`}
+                          {exp.agentVersion &&
+                            (() => {
+                              const av = agentVersions.find(v => v.id === exp.agentVersion);
+                              return ` · ${formatVersionLabel('Agent', av ? av.versionNumber : exp.agentVersion)}`;
+                            })()}
                         </Txt>
                       </div>
                       <Icon size="sm" className="text-neutral3">
