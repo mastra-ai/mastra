@@ -45,7 +45,7 @@ import {
   declineNetworkToolCallBodySchema,
 } from '../schemas/agents';
 import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
-import { getAgentSkillResponseSchema } from '../schemas/workspace';
+import { getAgentSkillResponseSchema, skillDisambiguationQuerySchema } from '../schemas/workspace';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
@@ -121,6 +121,7 @@ export interface SerializedSkill {
   name: string;
   description: string;
   license?: string;
+  path: string;
 }
 
 export interface SerializedTool {
@@ -286,6 +287,7 @@ export async function getSerializedSkillsFromAgent(
       name: skill.name,
       description: skill.description,
       license: skill.license,
+      path: skill.path,
     }));
   } catch {
     return [];
@@ -1894,11 +1896,12 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
   path: '/agents/:agentId/skills/:skillName',
   responseType: 'json',
   pathParamSchema: agentSkillPathParams,
+  queryParamSchema: skillDisambiguationQuerySchema,
   responseSchema: getAgentSkillResponseSchema,
   summary: 'Get agent skill',
   description: 'Returns details for a specific skill available to the agent via its workspace',
   tags: ['Agents', 'Skills'],
-  handler: async ({ mastra, agentId, skillName, requestContext }) => {
+  handler: async ({ mastra, agentId, skillName, path, requestContext }) => {
     try {
       const agent = agentId ? mastra.getAgentById(agentId) : null;
       if (!agent) {
@@ -1911,10 +1914,13 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Agent does not have skills configured' });
       }
 
+      // Use the optional ?path= query param for disambiguation, otherwise fall back to name
+      const identifier = path ? decodeURIComponent(path) : skillName;
+
       // Get the skill from the workspace
-      const skill = await workspace.skills.get(skillName);
+      const skill = await workspace.skills.get(identifier);
       if (!skill) {
-        throw new HTTPException(404, { message: `Skill "${skillName}" not found` });
+        throw new HTTPException(404, { message: `Skill "${identifier}" not found` });
       }
 
       return {

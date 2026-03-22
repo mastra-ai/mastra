@@ -1544,13 +1544,13 @@ export interface SkillMetadata {
   license?: string;
   compatibility?: string;
   metadata?: Record<string, string>;
+  path: string;
 }
 
 /**
  * Full skill data including instructions and file paths
  */
 export interface Skill extends SkillMetadata {
-  path: string;
   instructions: string;
   source: SkillSource;
   references: string[];

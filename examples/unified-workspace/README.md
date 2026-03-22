@@ -11,6 +11,10 @@ pnpm mastra:dev
 
 Open <http://localhost:4111> to use the Playground UI.
 
+The example resolves its workspace root from `src/mastra/workspaces.ts`, so
+`pnpm mastra:dev` works even though the CLI starts the server from `.mastra/output`.
+Set `WORKSPACE_PATH` only if you need to override that default.
+
 ## Structure
 
 ```text
