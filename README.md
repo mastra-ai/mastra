@@ -7,6 +7,7 @@
 [![Twitter Follow](https://img.shields.io/twitter/follow/mastra?style=social)](https://x.com/mastra)
 [![NPM Downloads](https://img.shields.io/npm/dm/%40mastra%252Fcore)](https://www.npmjs.com/package/@mastra/core)
 [![Static Badge](https://img.shields.io/badge/Y%20Combinator-W25-orange)](https://www.ycombinator.com/companies?batch=W25)
+[![gitcgr](https://gitcgr.com/badge/mastra-ai/mastra.svg)](https://gitcgr.com/mastra-ai/mastra)
 
 Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
 
