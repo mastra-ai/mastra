@@ -25,8 +25,8 @@ Tracking document for Studio/Playground E2E smoke tests.
 | Processors    | ⬜⬜                  | 0    | 2    | 0       |
 | Workspaces    | ⬜⬜⬜⬜⬜            | 0    | 5    | 0       |
 | CMS           | ⬜⬜⬜⬜              | 0    | 4    | 0       |
-| Settings      | ⬜                    | 0    | 1    | 0       |
-| **Total**     |                       | **46** | **18** | **1** |
+| Settings      | ✅                    | 1    | 0    | 0       |
+| **Total**     |                       | **47** | **17** | **1** |
 
 ---
 
@@ -181,11 +181,11 @@ Tracking document for Studio/Playground E2E smoke tests.
 | 3 | Create prompt block                         | ⬜     |
 | 4 | Edit prompt block                           | ⬜     |
 
-### Settings — `tests-ui/settings/` (0/1)
+### Settings — `tests-ui/settings/` (1/1)
 
 |   | Test                                        | Status |
 |---|---------------------------------------------|--------|
-| 1 | Settings page loads                         | ⬜     |
+| 1 | Settings page displays configuration form   | ✅     |
 
 ---
 
