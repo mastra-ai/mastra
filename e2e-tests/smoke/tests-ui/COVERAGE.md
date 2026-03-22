@@ -19,14 +19,14 @@ Tracking document for Studio/Playground E2E smoke tests.
 | Workflows     | ✅✅✅✅✅✅✅✅✅✅✅✅ | 12   | 0    | 0       |
 | MCP Servers   | ✅✅✅                | 3    | 0    | 0       |
 | Observability | ✅✅✅✅✅✅          | 6    | 0    | 0       |
-| Memory        | ⬜⬜⬜⬜              | 0    | 4    | 0       |
+| Memory        | ✅✅✅✅              | 4    | 0    | 0       |
 | Datasets      | ⬜⬜⬜⬜⬜⬜⬜        | 0    | 7    | 0       |
 | Scorers       | ⬜⬜⬜                | 0    | 3    | 0       |
 | Processors    | ⬜⬜                  | 0    | 2    | 0       |
 | Workspaces    | ⬜⬜⬜⬜⬜            | 0    | 5    | 0       |
 | CMS           | ⬜⬜⬜⬜              | 0    | 4    | 0       |
 | Settings      | ⬜                    | 0    | 1    | 0       |
-| **Total**     |                       | **40** | **25** | **1** |
+| **Total**     |                       | **44** | **21** | **1** |
 
 ---
 
@@ -127,14 +127,14 @@ Tracking document for Studio/Playground E2E smoke tests.
 | 5 | Traces appear after workflow run             | ✅     |
 | 6 | Traces appear after agent chat              | ✅     |
 
-### Memory & Threads — `tests-ui/memory/` (0/4)
+### Memory & Threads — `tests-ui/memory/memory-threads.spec.ts` (4/4)
 
 |   | Test                                        | Status |
 |---|---------------------------------------------|--------|
-| 1 | Thread list shows threads after chat        | ⬜     |
-| 2 | Delete a thread                             | ⬜     |
-| 3 | Working memory display                      | ⬜     |
-| 4 | Working memory editing                      | ⬜     |
+| 1 | Thread list shows threads after chat        | ✅     |
+| 2 | Delete a thread                             | ✅     |
+| 3 | Working memory display                      | ✅     |
+| 4 | Working memory editing                      | ✅     |
 
 ### Datasets — `tests-ui/datasets/` (0/7)
 
