@@ -3,7 +3,7 @@ import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter } from '@mastra/observability';
 
-import { testAgent, approvalAgent } from './agents/index.js';
+import { testAgent, approvalAgent, helperAgent, networkAgent } from './agents/index.js';
 import { calculatorTool, stringTool, failingTool, noInputTool, approvalTool } from './tools/index.js';
 import { sequentialSteps, schemaValidation, mapBetweenSteps } from './workflows/basic.js';
 import {
@@ -52,6 +52,8 @@ export const mastra = new Mastra({
   agents: {
     'test-agent': testAgent,
     'approval-agent': approvalAgent,
+    'helper-agent': helperAgent,
+    'network-agent': networkAgent,
   },
   mcpServers: {
     'test-mcp': testMcpServer,

@@ -21,6 +21,24 @@ export const testAgent = new Agent({
   memory,
 });
 
+export const helperAgent = new Agent({
+  id: 'helper-agent',
+  name: 'Helper Agent',
+  instructions: 'You are a helper sub-agent. Answer concisely.',
+  model: 'openai/gpt-4o-mini',
+  tools: { 'string-transform': stringTool },
+});
+
+export const networkAgent = new Agent({
+  id: 'network-agent',
+  name: 'Network Agent',
+  instructions:
+    'You are an orchestrator agent. When the user asks you to delegate or ask your helper, you MUST call the helper-agent sub-agent tool. Never answer directly when delegation is requested.',
+  model: 'openai/gpt-4o-mini',
+  agents: { 'helper-agent': helperAgent },
+  memory,
+});
+
 export const approvalAgent = new Agent({
   id: 'approval-agent',
   name: 'Approval Agent',

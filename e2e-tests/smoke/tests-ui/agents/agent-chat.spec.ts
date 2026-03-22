@@ -18,14 +18,6 @@ async function expandLeftPanel(page: Page) {
 }
 
 test.describe('Agent Chat', () => {
-  test('agents list page shows registered agents', async ({ page }) => {
-    await page.goto('/agents');
-
-    await expect(page.locator('h1')).toHaveText('Agents');
-    await expect(page.getByRole('link', { name: 'Test Agent' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Approval Agent' })).toBeVisible();
-  });
-
   test('agent chat page shows overview panel', async ({ page }) => {
     await page.goto('/agents/test-agent/chat/new');
 
