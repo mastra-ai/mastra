@@ -205,7 +205,7 @@ test.describe('Agent Chat', () => {
     await page.getByRole('tab', { name: 'Memory' }).click();
 
     // Working Memory heading should be visible
-    await expect(page.getByRole('heading', { name: 'Working Memory' })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('heading', { name: 'Working Memory', exact: true })).toBeVisible({ timeout: 5_000 });
 
     // Before a thread exists, the edit button should be disabled with a hint
     await expect(page.getByText('Edit Working Memory')).toBeVisible();
