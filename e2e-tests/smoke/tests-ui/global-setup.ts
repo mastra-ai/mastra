@@ -1,6 +1,6 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { rm } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { execa } from 'execa';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -19,8 +19,24 @@ async function cleanDatabase() {
   }
 }
 
+/**
+ * Wipe the workspace directory so tests start with a clean slate.
+ *
+ * Must match the basePath in src/mastra/index.ts:
+ *   new LocalFilesystem({ basePath: './test-workspace' })
+ *
+ * LocalFilesystem resolves relative paths against process.cwd(),
+ * which is projectDir when the Playwright webServer starts.
+ */
+async function cleanWorkspace() {
+  const wsDir = join(projectDir, 'test-workspace');
+  await rm(wsDir, { recursive: true, force: true }).catch(() => {});
+  await mkdir(wsDir, { recursive: true });
+}
+
 export default async function globalSetup() {
   await cleanDatabase();
+  await cleanWorkspace();
 
   const mastraBin = join(projectDir, 'node_modules', '.bin', 'mastra');
   console.log('[smoke:ui] Running mastra build --studio...');
