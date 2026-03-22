@@ -1900,6 +1900,10 @@ export class Agent extends BaseResource {
     const processedParams = {
       ...options,
       resumeData,
+      // Provide an empty messages seed so that processStreamResponse's stateless
+      // client-tool continuation path (which spreads processedParams.messages)
+      // starts from an empty array rather than undefined.
+      messages: [] as any[],
       requestContext: parseClientRequestContext(options.requestContext),
       clientTools: processClientTools(options.clientTools),
       structuredOutput: options.structuredOutput
