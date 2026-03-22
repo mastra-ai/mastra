@@ -272,10 +272,33 @@ describe('SystemPromptScrubber', () => {
       expect(result).toEqual(part);
     });
 
-    it('should redact system prompts in streaming chunks', async () => {
+    it('should not run detection on streaming chunks', async () => {
+      processor = new SystemPromptScrubber({ model: mockModel });
+      const generateSpy = vi.spyOn(mockModel, 'doGenerate');
+
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'You are an AI. Hello there!', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
+
+      const result = await processor.processOutputStream({
+        part,
+        streamParts: [part],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toEqual(part);
+      expect(generateSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('processOutputStep', () => {
+    it('should redact system prompts after the step completes', async () => {
       processor = new SystemPromptScrubber({ model: mockModel });
 
-      // Mock the model to return detection results
       vi.spyOn(mockModel, 'doGenerate').mockResolvedValueOnce({
         rawCall: { rawPrompt: null, rawSettings: {} },
         text: JSON.stringify({
@@ -296,25 +319,16 @@ describe('SystemPromptScrubber', () => {
         usage: { completionTokens: 10, promptTokens: 5 },
       });
 
-      const part: ChunkType = {
-        type: 'text-delta',
-        payload: { text: 'You are an AI. Hello there!', id: 'test-id' },
-        runId: 'test-run-id',
-        from: ChunkFrom.AGENT,
-      };
+      const messages = [createTestMessage('You are an AI. Hello there!')];
 
-      const result = await processor.processOutputStream({
-        part,
-        streamParts: [part],
-        state: {},
+      const result = await processor.processOutputStep({
+        messages,
         abort: vi.fn() as any,
-      });
+      } as any);
 
-      expect(result).toEqual({
-        type: 'text-delta',
-        payload: { text: '*** [SYSTEM] ***. Hello there!', id: 'test-id' },
-        runId: 'test-run-id',
-        from: ChunkFrom.AGENT,
+      expect(result[0].content.parts[0]).toEqual({
+        type: 'text',
+        text: '*** [SYSTEM] ***. Hello there!',
       });
     });
   });
