@@ -25,19 +25,69 @@ test.describe('Settings', () => {
 
     // Save button
     await expect(page.getByRole('button', { name: 'Save Configuration' })).toBeVisible();
+  });
 
-    // Add a header and verify the name/value fields appear
-    await addHeaderBtn.click();
+  test('custom header is sent in API requests after saving', async ({ page }) => {
+    await page.goto('/settings');
+
+    // Add a custom header
+    await page.getByRole('button', { name: 'Add Header' }).click();
     const headerNameInput = page.getByPlaceholder('e.g. Authorization');
     const headerValueInput = page.getByPlaceholder('e.g. Bearer <token>');
-    await expect(headerNameInput).toBeVisible();
-    await expect(headerValueInput).toBeVisible();
-    // "No header yet" text disappears once a header row exists
-    await expect(page.getByText('No header yet')).not.toBeVisible();
+    await headerNameInput.fill('X-Smoke-Test');
+    await headerValueInput.fill('header-value-42');
 
-    // Remove the header via the trash button
+    // Save configuration
+    await page.getByRole('button', { name: 'Save Configuration' }).click();
+
+    // Verify the header row is still visible after save
+    await expect(headerNameInput).toHaveValue('X-Smoke-Test');
+    await expect(headerValueInput).toHaveValue('header-value-42');
+
+    // Intercept API requests to verify the custom header is included
+    const capturedHeaders: Record<string, string>[] = [];
+    await page.route('**/api/**', async route => {
+      capturedHeaders.push(Object.fromEntries(
+        Object.entries(route.request().headers()).map(([k, v]) => [k.toLowerCase(), v]),
+      ));
+      await route.continue();
+    });
+
+    // Navigate to agents page — this triggers API calls (e.g. list agents)
+    await page.goto('/agents');
+    await expect(page.locator('h1')).toHaveText('Agents');
+
+    // Wait for at least one API request to be captured
+    await expect(() => expect(capturedHeaders.length).toBeGreaterThan(0)).toPass({ timeout: 5_000 });
+
+    // Verify the custom header was sent
+    const headerSent = capturedHeaders.some(h => h['x-smoke-test'] === 'header-value-42');
+    expect(headerSent).toBeTruthy();
+
+    // Go back to settings and remove the header
+    await page.goto('/settings');
+    await expect(page.getByPlaceholder('e.g. Authorization')).toHaveValue('X-Smoke-Test');
     await page.getByRole('button', { name: 'Remove header' }).click();
-    await expect(headerNameInput).not.toBeVisible();
     await expect(page.getByText('No header yet')).toBeVisible();
+
+    // Save to persist the removal
+    await page.getByRole('button', { name: 'Save Configuration' }).click();
+
+    // Intercept again to verify the header is no longer sent
+    const headersAfterRemoval: Record<string, string>[] = [];
+    await page.route('**/api/**', async route => {
+      headersAfterRemoval.push(Object.fromEntries(
+        Object.entries(route.request().headers()).map(([k, v]) => [k.toLowerCase(), v]),
+      ));
+      await route.continue();
+    });
+
+    await page.goto('/agents');
+    await expect(page.locator('h1')).toHaveText('Agents');
+    await expect(() => expect(headersAfterRemoval.length).toBeGreaterThan(0)).toPass({ timeout: 5_000 });
+
+    // Custom header should no longer be present
+    const headerStillSent = headersAfterRemoval.some(h => 'x-smoke-test' in h);
+    expect(headerStillSent).toBeFalsy();
   });
 });
