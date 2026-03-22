@@ -71,6 +71,23 @@ export function sanitizeV5UIMessages(
             'openai' in (p.providerMetadata as Record<string, unknown>),
         );
 
+      // When building a prompt TO the LLM (filterIncompleteToolCalls=true),
+      // check if this message contains Anthropic reasoning parts (thinking blocks with signatures).
+      // Anthropic thinking block signatures are cryptographic and model-specific. Replaying them
+      // from thread history causes 'Invalid signature in thinking block' errors.
+      // Reasoning data is preserved in the database — only stripped from LLM input.
+      // See: https://github.com/mastra-ai/mastra/issues/14559
+      const hasAnthropicReasoning =
+        filterIncompleteToolCalls &&
+        m.parts.some(
+          p =>
+            p.type === 'reasoning' &&
+            'providerMetadata' in p &&
+            p.providerMetadata &&
+            typeof p.providerMetadata === 'object' &&
+            'anthropic' in (p.providerMetadata as Record<string, unknown>),
+        );
+
       // Filter out streaming states and optionally input-available (which aren't supported by convertToModelMessages)
       const safeParts = m.parts.filter(p => {
         // Filter out data-* parts (custom streaming data from writer.custom())
@@ -90,6 +107,15 @@ export function sanitizeV5UIMessages(
         // Reasoning data is preserved in the database — only stripped from LLM input.
         // See: https://github.com/mastra-ai/mastra/issues/12980
         if (p.type === 'reasoning' && hasOpenAIReasoning) {
+          return false;
+        }
+
+        // Strip Anthropic reasoning parts (thinking blocks with signatures) when building a prompt TO the LLM.
+        // Anthropic thinking block signatures are cryptographic and model-specific. Replaying them from
+        // thread history causes 'Invalid signature in thinking block' errors, especially after model changes.
+        // Reasoning data is preserved in the database — only stripped from LLM input.
+        // See: https://github.com/mastra-ai/mastra/issues/14559
+        if (p.type === 'reasoning' && hasAnthropicReasoning) {
           return false;
         }
 
