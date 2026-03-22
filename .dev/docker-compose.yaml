@@ -27,6 +27,13 @@ services:
     volumes:
       - redis_data:/data
 
+  pubsub-emulator:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    container_name: 'pubsub-emulator'
+    command: gcloud beta emulators pubsub start --host-port=0.0.0.0:8085
+    ports:
+      - '8085:8085'
+
 volumes:
   pgdata:
   qdrant_data:

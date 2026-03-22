@@ -6,6 +6,7 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema, z as z3 } from 'zod/v3';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
+import type { AgentBackgroundConfig } from '../background-tasks';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
@@ -175,6 +176,7 @@ export class Agent<
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
   #requestContextSchema?: ZodSchema<TRequestContext>;
+  #backgroundTasks?: AgentBackgroundConfig;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
 
@@ -315,6 +317,10 @@ export class Agent<
 
     if (config.requestContextSchema) {
       this.#requestContextSchema = config.requestContextSchema;
+    }
+
+    if (config.backgroundTasks) {
+      this.#backgroundTasks = config.backgroundTasks;
     }
 
     // @ts-expect-error Flag for agent network messages
@@ -4262,6 +4268,8 @@ export class Agent<
       agentName: this.name,
       toolCallId: options.toolCallId,
       workspace,
+      backgroundTaskManager: this.#mastra?.backgroundTaskManager,
+      agentBackgroundConfig: this.#backgroundTasks,
     });
 
     const run = await executionWorkflow.createRun();

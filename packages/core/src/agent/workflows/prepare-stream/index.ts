@@ -1,4 +1,6 @@
 import { z } from 'zod/v4';
+import type { BackgroundTaskManager } from '../../../background-tasks';
+import type { BackgroundTaskManagerConfig, AgentBackgroundConfig } from '../../../background-tasks/types';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
@@ -41,6 +43,9 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   agentName?: string;
   toolCallId?: string;
   workspace?: Workspace;
+  backgroundTaskManager?: BackgroundTaskManager;
+  agentBackgroundConfig?: AgentBackgroundConfig;
+  backgroundTaskManagerConfig?: BackgroundTaskManagerConfig;
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({
@@ -64,6 +69,9 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   agentName,
   toolCallId,
   workspace,
+  backgroundTaskManager,
+  agentBackgroundConfig,
+  backgroundTaskManagerConfig,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -88,6 +96,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     instructions,
     memoryConfig,
     memory,
+    agentBackgroundConfig,
   });
 
   const streamStep = createStreamStep({
@@ -107,6 +116,9 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     resourceId,
     autoResumeSuspendedTools: options.autoResumeSuspendedTools,
     workspace,
+    backgroundTaskManager,
+    agentBackgroundConfig,
+    backgroundTaskManagerConfig,
   });
 
   const mapResultsStep = createMapResultsStep({

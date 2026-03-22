@@ -683,7 +683,19 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
   | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload })
-  | (BaseChunkType & { type: 'is-task-complete'; payload: IsTaskCompletePayload });
+  | (BaseChunkType & { type: 'is-task-complete'; payload: IsTaskCompletePayload })
+  | (BaseChunkType & {
+      type: 'background-task-started';
+      payload: { taskId: string; toolName: string; toolCallId: string };
+    })
+  | (BaseChunkType & {
+      type: 'background-task-completed';
+      payload: { taskId: string; toolName: string; toolCallId: string; result: unknown };
+    })
+  | (BaseChunkType & {
+      type: 'background-task-failed';
+      payload: { taskId: string; toolName: string; toolCallId: string; error: { message: string } };
+    });
 
 export type WorkflowStreamEvent =
   | (BaseChunkType & {

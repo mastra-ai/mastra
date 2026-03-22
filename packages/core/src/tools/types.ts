@@ -11,6 +11,7 @@ import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/proto
 import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/types.js';
 
 import type { MastraUnion } from '../action';
+import type { ToolBackgroundConfig } from '../background-tasks';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
@@ -220,6 +221,8 @@ export type CoreTool = {
   onOutput?: (
     options: { output: any; toolName: string } & Omit<ToolCallOptions, 'messages'>,
   ) => void | PromiseLike<void>;
+  /** Background task configuration for this tool. */
+  background?: ToolBackgroundConfig;
 } & (
   | {
       type?: 'function' | undefined;
@@ -271,6 +274,8 @@ export type InternalCoreTool = {
   onOutput?: (
     options: { output: any; toolName: string } & Omit<ToolCallOptions, 'messages'>,
   ) => void | PromiseLike<void>;
+  /** Background task configuration for this tool. */
+  background?: ToolBackgroundConfig;
 } & (
   | {
       type?: 'function' | undefined;
@@ -398,4 +403,9 @@ export interface ToolAction<
       toolName: string;
     } & Omit<ToolCallOptions, 'messages'>,
   ) => void | PromiseLike<void>;
+  /**
+   * Background task configuration for this tool.
+   * When enabled, the tool can be executed in the background while the agent conversation continues.
+   */
+  background?: ToolBackgroundConfig;
 }

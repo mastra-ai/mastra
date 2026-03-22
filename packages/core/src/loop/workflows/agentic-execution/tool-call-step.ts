@@ -1,5 +1,7 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import z from 'zod/v4';
+import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
+import type { ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { ChunkFrom } from '../../../stream/types';
@@ -38,6 +40,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   modelSpanTracker,
   _internal,
   logger,
+  agentId,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -542,6 +545,117 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           if (typeof args === 'object' && args !== null && 'prompt' in args) {
             args.threadId = _internal?.threadId;
             args.resourceId = _internal?.resourceId;
+          }
+        }
+
+        // --- Background task dispatch ---
+        const backgroundTaskManager = _internal?.backgroundTaskManager;
+        if (backgroundTaskManager && typeof args === 'object' && args !== null) {
+          // Wire all three hooks using the closure context:
+          // 1. Stream chunk emitter — background task chunks appear on the active stream
+          backgroundTaskManager.setStreamChunkEmitter((_agentId, chunk) => {
+            try {
+              controller.enqueue({
+                ...(chunk as any),
+                runId,
+                from: ChunkFrom.AGENT,
+              });
+            } catch {
+              // Controller may be closed if stream ended — ignore
+            }
+          });
+
+          // 2. Tool resolver — uses the tool object from the current closure
+          backgroundTaskManager.setToolResolver((toolName_: string) => {
+            const stepTools = (_internal?.stepTools as Tools) || tools;
+            const resolvedTool =
+              stepTools?.[toolName_] ||
+              Object.values(stepTools || {})?.find((t: any) => 'id' in t && t.id === toolName_);
+            if (!resolvedTool?.execute) {
+              throw new Error(`Tool "${toolName_}" not found for background execution`);
+            }
+            return {
+              execute: (bgArgs: Record<string, unknown>, opts?: { abortSignal?: AbortSignal }) =>
+                resolvedTool.execute!(bgArgs, { ...toolOptions, abortSignal: opts?.abortSignal } as any),
+            };
+          });
+
+          // 3. Result injector — injects completed/failed results into the message list
+          backgroundTaskManager.setResultInjector(async params => {
+            const content =
+              params.status === 'completed'
+                ? typeof params.result === 'string'
+                  ? params.result
+                  : JSON.stringify(params.result ?? '')
+                : `Background task failed: ${params.error?.message ?? 'Unknown error'}`;
+
+            messageList.add(
+              [
+                {
+                  role: 'tool' as const,
+                  content: [
+                    {
+                      type: 'tool-result' as const,
+                      toolCallId: params.toolCallId,
+                      toolName: params.toolName,
+                      result: content,
+                    },
+                  ],
+                },
+              ],
+              'response',
+            );
+
+            // Flush to memory if available
+            if (_internal?.saveQueueManager && _internal?.threadId) {
+              await _internal.saveQueueManager.flushMessages(messageList, _internal.threadId, _internal.memoryConfig);
+            }
+          });
+
+          const toolBgConfig = (tool as any).background as ToolBackgroundConfig | undefined;
+          const agentBgConfig = _internal?.agentBackgroundConfig;
+          const managerConfig = _internal?.backgroundTaskManagerConfig;
+
+          const bgResolved = resolveBackgroundConfig({
+            args: args as Record<string, unknown>,
+            toolName: inputData.toolName,
+            toolConfig: toolBgConfig,
+            agentConfig: agentBgConfig,
+            managerConfig,
+          });
+
+          if (bgResolved.runInBackground) {
+            const { task, fallbackToSync } = await backgroundTaskManager.enqueue({
+              toolName: inputData.toolName,
+              toolCallId: inputData.toolCallId,
+              args: args as Record<string, unknown>,
+              agentId,
+              threadId: _internal?.threadId,
+              resourceId: _internal?.resourceId,
+              timeoutMs: bgResolved.timeoutMs,
+              maxRetries: bgResolved.maxRetries,
+            });
+
+            if (!fallbackToSync) {
+              // Emit background-task-started chunk
+              controller.enqueue({
+                type: 'background-task-started' as any,
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  taskId: task.id,
+                  toolName: inputData.toolName,
+                  toolCallId: inputData.toolCallId,
+                },
+              });
+
+              // Return placeholder result so the LLM can continue
+              return {
+                result: `Background task started. Task ID: ${task.id}. The tool "${inputData.toolName}" is running in the background. You will be notified when it completes.`,
+                ...inputData,
+              };
+            }
+            // fallbackToSync: concurrency limit hit, fall through to synchronous execution
           }
         }
 

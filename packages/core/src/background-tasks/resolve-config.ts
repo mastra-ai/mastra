@@ -1,0 +1,78 @@
+import type {
+  AgentBackgroundConfig,
+  AgentBackgroundToolConfig,
+  BackgroundTaskManagerConfig,
+  LLMBackgroundOverride,
+  ToolBackgroundConfig,
+} from './types';
+
+export interface ResolvedBackgroundConfig {
+  runInBackground: boolean;
+  timeoutMs: number;
+  maxRetries: number;
+}
+
+/**
+ * Resolves whether a tool call should run in the background, and with what config.
+ *
+ * Resolution order (highest to lowest priority):
+ * 1. LLM per-call override (`_background` field in tool args)
+ * 2. Agent-level backgroundTasks.tools config
+ * 3. Tool-level background config
+ * 4. Default: foreground
+ *
+ * Strips the `_background` field from args (mutates the args object).
+ */
+export function resolveBackgroundConfig({
+  args,
+  toolName,
+  toolConfig,
+  agentConfig,
+  managerConfig,
+}: {
+  args: Record<string, unknown>;
+  toolName: string;
+  toolConfig?: ToolBackgroundConfig;
+  agentConfig?: AgentBackgroundConfig;
+  managerConfig?: BackgroundTaskManagerConfig;
+}): ResolvedBackgroundConfig {
+  // Extract and strip the LLM override from args
+  const llmOverride = args._background as LLMBackgroundOverride | undefined;
+  delete args._background;
+
+  // Resolve agent-level config for this specific tool
+  const agentToolConfig = resolveAgentToolConfig(toolName, agentConfig);
+
+  // --- enabled ---
+  const enabled = llmOverride?.enabled ?? agentToolConfig?.enabled ?? toolConfig?.enabled ?? false;
+
+  // --- timeoutMs ---
+  const timeoutMs =
+    llmOverride?.timeoutMs ??
+    agentToolConfig?.timeoutMs ??
+    toolConfig?.timeoutMs ??
+    managerConfig?.defaultTimeoutMs ??
+    300_000;
+
+  // --- maxRetries ---
+  const maxRetries =
+    llmOverride?.maxRetries ?? toolConfig?.retries?.maxRetries ?? managerConfig?.defaultRetries?.maxRetries ?? 0;
+
+  return { runInBackground: enabled, timeoutMs, maxRetries };
+}
+
+function resolveAgentToolConfig(
+  toolName: string,
+  agentConfig?: AgentBackgroundConfig,
+): { enabled: boolean; timeoutMs?: number } | undefined {
+  if (!agentConfig?.tools) return undefined;
+
+  if (agentConfig.tools === 'all') {
+    return { enabled: true };
+  }
+
+  const entry: AgentBackgroundToolConfig | undefined = agentConfig.tools[toolName];
+  if (entry === undefined) return undefined;
+  if (typeof entry === 'boolean') return { enabled: entry };
+  return entry;
+}

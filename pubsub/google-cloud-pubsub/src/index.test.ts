@@ -3,7 +3,7 @@ import path from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
-import { TABLE_WORKFLOW_SNAPSHOT, MockStore } from '@mastra/core/storage';
+import { MockStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import type { StreamEvent } from '@mastra/core/workflows';
 import { mapVariable } from '@mastra/core/workflows';
@@ -23,7 +23,10 @@ describe.sequential(
   () => {
     beforeEach(async () => {
       vi.resetAllMocks();
-      testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+      const workflowStore = await testStorage.getStore('workflows');
+      if (workflowStore) {
+        await workflowStore.dangerouslyClearAll();
+      }
     });
 
     describe.sequential('Streaming', () => {

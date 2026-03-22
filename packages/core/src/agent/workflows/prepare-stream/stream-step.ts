@@ -1,4 +1,6 @@
 import { z } from 'zod/v4';
+import type { BackgroundTaskManager } from '../../../background-tasks';
+import type { BackgroundTaskManagerConfig, AgentBackgroundConfig } from '../../../background-tasks/types';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
@@ -32,6 +34,9 @@ interface StreamStepOptions {
   resourceId?: string;
   autoResumeSuspendedTools?: boolean;
   workspace?: Workspace;
+  backgroundTaskManager?: BackgroundTaskManager;
+  agentBackgroundConfig?: AgentBackgroundConfig;
+  backgroundTaskManagerConfig?: BackgroundTaskManagerConfig;
 }
 
 export function createStreamStep<OUTPUT = undefined>({
@@ -51,6 +56,9 @@ export function createStreamStep<OUTPUT = undefined>({
   resourceId,
   autoResumeSuspendedTools,
   workspace,
+  backgroundTaskManager,
+  agentBackgroundConfig,
+  backgroundTaskManagerConfig,
 }: StreamStepOptions) {
   return createStep({
     id: 'stream-text-step',
@@ -91,6 +99,9 @@ export function createStreamStep<OUTPUT = undefined>({
           threadId: validatedInputData.threadId,
           resourceId,
           memory,
+          backgroundTaskManager,
+          agentBackgroundConfig,
+          backgroundTaskManagerConfig,
         },
         agentId,
         agentName,

@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
+import { BackgroundTaskManager } from '../background-tasks';
+import type { BackgroundTaskManagerConfig } from '../background-tasks/types';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
@@ -254,6 +256,13 @@ export interface Config<
    * The editor handles complex instantiation logic including memory resolution.
    */
   editor?: IMastraEditor;
+
+  /**
+   * Background task configuration for running tool calls asynchronously.
+   * When configured, agents can dispatch tool executions to run in the background
+   * while the conversation continues.
+   */
+  backgroundTasks?: BackgroundTaskManagerConfig;
 }
 
 /**
@@ -331,6 +340,7 @@ export class Mastra<
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
   #pubsub: PubSub;
+  #backgroundTaskManager?: BackgroundTaskManager;
   #gateways?: Record<string, MastraModelGateway>;
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
@@ -350,6 +360,10 @@ export class Mastra<
 
   get pubsub() {
     return this.#pubsub;
+  }
+
+  get backgroundTaskManager() {
+    return this.#backgroundTaskManager;
   }
 
   get datasets(): DatasetsManager {
@@ -527,6 +541,13 @@ export class Mastra<
       this.#pubsub = config.pubsub;
     } else {
       this.#pubsub = new EventEmitterPubSub();
+    }
+
+    if (config?.backgroundTasks) {
+      // Sync creation, async init is fire-and-forget but manager is available immediately
+      const bgManager = new BackgroundTaskManager(config.backgroundTasks);
+      this.#backgroundTaskManager = bgManager;
+      void bgManager.init(this.#pubsub);
     }
 
     this.#events = {};
@@ -710,6 +731,17 @@ export class Mastra<
     this.#observability.setMastraContext({ mastra: this });
 
     this.setLogger({ logger });
+  }
+
+  private async initializeBackgroundTaskManager(
+    backgroundTaskManagerConfig: BackgroundTaskManagerConfig,
+  ): Promise<void> {
+    if (this.#backgroundTaskManager) {
+      return;
+    }
+    const manager = new BackgroundTaskManager(backgroundTaskManagerConfig);
+    await manager.init(this.#pubsub);
+    this.#backgroundTaskManager = manager;
   }
 
   /**
