@@ -20,13 +20,13 @@ Tracking document for Studio/Playground E2E smoke tests.
 | MCP Servers   | ✅✅✅                | 3    | 0    | 0       |
 | Observability | ✅✅✅✅✅✅          | 6    | 0    | 0       |
 | Memory        | ✅✅✅✅              | 4    | 0    | 0       |
-| Datasets      | ⬜⬜⬜⬜⬜⬜⬜        | 0    | 7    | 0       |
+| Datasets      | ✅✅✅✅✅✅✅✅✅✅✅  | 11   | 0    | 0       |
 | Scorers       | ✅✅                  | 2    | 0    | 0       |
 | Processors    | ✅✅✅                | 3    | 0    | 0       |
 | Workspaces    | ⬜⬜⬜⬜⬜            | 0    | 5    | 0       |
 | CMS           | ⬜⬜⬜⬜              | 0    | 4    | 0       |
 | Settings      | ✅✅                  | 2    | 0    | 0       |
-| **Total**     |                       | **51** | **13** | **1** |
+| **Total**     |                       | **62** | **9** | **1** |
 
 ---
 
@@ -136,17 +136,21 @@ Tracking document for Studio/Playground E2E smoke tests.
 | 3 | Working memory display                      | ✅     |
 | 4 | Working memory editing                      | ✅     |
 
-### Datasets — `tests-ui/datasets/` (0/7)
+### Datasets — `tests-ui/datasets/datasets.spec.ts` (11/11)
 
-|   | Test                                        | Status |
-|---|---------------------------------------------|--------|
-| 1 | Datasets list page (empty state)            | ⬜     |
-| 2 | Create dataset with schema                  | ⬜     |
-| 3 | Add items to dataset                        | ⬜     |
-| 4 | CSV import flow                             | ⬜     |
-| 5 | JSON import flow                            | ⬜     |
-| 6 | Trigger experiment with scorer              | ⬜     |
-| 7 | View experiment results                     | ⬜     |
+|    | Test                                             | Status |
+|----|--------------------------------------------------|--------|
+|  1 | Datasets list page shows heading & create        | ✅     |
+|  2 | Create dataset and verify it appears             | ✅     |
+|  3 | Add item to dataset and view its detail          | ✅     |
+|  4 | Edit dataset name and description                | ✅     |
+|  5 | Edit item input and verify update                | ✅     |
+|  6 | Delete item from detail panel                    | ✅     |
+|  7 | Experiments tab shows empty state                | ✅     |
+|  8 | Delete dataset removes it from list              | ✅     |
+|  9 | JSON import: upload file and import items        | ✅     |
+| 10 | CSV import: upload file and reach mapping        | ✅     |
+| 11 | Trigger experiment with scorer and view results  | ✅     |
 
 ### Scorers — `tests-ui/scorers/` (2/2)
 
