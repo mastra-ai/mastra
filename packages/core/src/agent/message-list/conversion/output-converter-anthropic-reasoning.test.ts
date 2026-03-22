@@ -91,6 +91,32 @@ describe('sanitizeV5UIMessages — Anthropic reasoning stripping', () => {
     expect(result[0].parts[1].type).toBe('text');
   });
 
+  it('should strip both OpenAI and Anthropic reasoning parts from same message', () => {
+    const msg = makeMessage([
+      {
+        type: 'reasoning',
+        reasoning: 'anthropic thinking',
+        providerMetadata: {
+          anthropic: { signature: 'sig_abc' },
+        },
+      } as AIV5Type.UIMessage['parts'][number],
+      {
+        type: 'reasoning',
+        reasoning: 'openai reasoning',
+        providerMetadata: {
+          openai: { itemId: 'rs_123' },
+        },
+      } as AIV5Type.UIMessage['parts'][number],
+      { type: 'text', text: 'final response' },
+    ]);
+
+    const result = sanitizeV5UIMessages([msg], true);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].parts).toHaveLength(1);
+    expect(result[0].parts[0].type).toBe('text');
+  });
+
   it('should preserve Anthropic reasoning parts for UI display (filterIncompleteToolCalls=false)', () => {
     const msg = makeMessage([
       {
