@@ -12,21 +12,22 @@ Tracking document for Studio/Playground E2E smoke tests.
 
 ## Summary
 
-| Section       | Progress              | Done | Todo | Blocked |
-|---------------|-----------------------|------|------|---------|
-| Agents        | ✅✅✅✅✅✅✅✅✅✅✅✅ | 12   | 0    | 0       |
-| Tools         | ✅✅✅✅✅✅✅🚫      | 7    | 0    | 1       |
-| Workflows     | ✅✅✅✅✅✅✅✅✅✅✅✅ | 12   | 0    | 0       |
-| MCP Servers   | ✅✅✅                | 3    | 0    | 0       |
-| Observability | ✅✅✅✅✅✅          | 6    | 0    | 0       |
-| Memory        | ✅✅✅✅              | 4    | 0    | 0       |
-| Datasets      | ✅✅✅✅✅✅✅✅✅✅✅  | 11   | 0    | 0       |
-| Scorers       | ✅✅                  | 2    | 0    | 0       |
-| Processors    | ✅✅✅                | 3    | 0    | 0       |
-| Workspaces    | ✅✅✅✅✅            | 5    | 2    | 0       |
-| CMS           | ⬜⬜⬜⬜              | 0    | 4    | 0       |
-| Settings      | ✅✅                  | 2    | 0    | 0       |
-| **Total**     |                       | **67** | **6** | **1** |
+| Section         | Progress                    | Done | Todo | Blocked |
+|-----------------|-----------------------------|------|------|---------|
+| Agents          | ✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅ | 19   | 0    | 0       |
+| Tools           | ✅✅✅✅✅✅✅🚫              | 7    | 0    | 1       |
+| Workflows       | ✅✅✅✅✅✅✅✅✅✅✅✅         | 12   | 0    | 0       |
+| MCP Servers     | ✅✅✅                        | 3    | 0    | 0       |
+| Observability   | ✅✅✅✅✅✅                  | 6    | 0    | 0       |
+| Memory          | ✅✅✅✅                      | 4    | 0    | 0       |
+| Datasets        | ✅✅✅✅✅✅✅✅✅✅✅          | 11   | 0    | 0       |
+| Scorers         | ✅✅                          | 2    | 0    | 0       |
+| Processors      | ✅✅✅                        | 3    | 0    | 0       |
+| Workspaces      | ✅✅✅✅✅                    | 5    | 2    | 0       |
+| CMS             | ⬜⬜⬜⬜                      | 0    | 4    | 0       |
+| Settings        | ✅✅                          | 2    | 0    | 0       |
+| Request Context | ✅✅                          | 2    | 0    | 0       |
+| **Total**       |                               | **76** | **6** | **1** |
 
 ---
 
@@ -34,8 +35,10 @@ Tracking document for Studio/Playground E2E smoke tests.
 
 | Type       | Name                  | Notes                              |
 |------------|-----------------------|------------------------------------|
-| Agent      | test-agent            | Has calculator + string-transform  |
+| Agent      | test-agent            | Has calculator + string-transform, memory |
 | Agent      | approval-agent        | Uses needs-approval tool           |
+| Agent      | helper-agent          | Sub-agent of network-agent, has string-transform |
+| Agent      | network-agent         | Has memory + helper-agent sub-agent, Network mode enabled |
 | Tool       | calculator            | add/subtract/multiply/divide       |
 | Tool       | string-transform      | upper/lower/reverse/length         |
 | Tool       | always-fails          | Throws error                       |
@@ -62,22 +65,36 @@ Tracking document for Studio/Playground E2E smoke tests.
 
 ## Test Coverage
 
-### ✅ Agents — `tests-ui/agents/agent-chat.spec.ts` (12/12)
+### ✅ Agents — `tests-ui/agents/` (19/19)
+
+#### `agent-chat.spec.ts` (11/11)
 
 |   | Test                                        | Status |
 |---|---------------------------------------------|--------|
-| 1 | Agents list page shows registered agents    | ✅     |
-| 2 | Agent chat page shows overview panel        | ✅     |
-| 3 | Send message and receive streamed response  | ✅     |
-| 4 | Send message with generate mode             | ✅     |
-| 5 | Model settings persist after reload         | ✅     |
-| 6 | New chat button navigates to fresh thread   | ✅     |
-| 7 | Thread sidebar lists previous conversations | ✅     |
-| 8 | Click previous thread to reload it          | ✅     |
-| 9 | Tool call displayed in chat message         | ✅     |
-| 10 | Memory tab shows working memory            | ✅     |
-| 11 | Approval agent triggers tool approval flow | ✅     |
-| 12 | Agent overview shows correct tools list    | ✅     |
+| 1 | Agent chat page shows overview panel        | ✅     |
+| 2 | Send message and receive streamed response  | ✅     |
+| 3 | Send message with generate mode             | ✅     |
+| 4 | Model settings persist after reload         | ✅     |
+| 5 | New chat button navigates to fresh thread   | ✅     |
+| 6 | Thread sidebar lists previous conversations | ✅     |
+| 7 | Click previous thread to reload it          | ✅     |
+| 8 | Tool call displayed in chat message         | ✅     |
+| 9 | Memory tab shows working memory             | ✅     |
+| 10 | Approval agent triggers tool approval flow | ✅     |
+| 11 | Agent overview shows correct tools list    | ✅     |
+
+#### `agent-features.spec.ts` (8/8)
+
+|   | Test                                                        | Status |
+|---|-------------------------------------------------------------|--------|
+| 1 | Model settings tab shows controls and persists chat method   | ✅     |
+| 2 | Tracing options tab shows JSON editor                        | ✅     |
+| 3 | Network mode enabled only with sub-agents and memory         | ✅     |
+| 4 | Advanced settings expand and show fields                     | ✅     |
+| 5 | Agent selector switches between agents                       | ✅     |
+| 6 | Network-agent overview shows sub-agents section              | ✅     |
+| 7 | Agents list shows all agents with correct attached entities  | ✅     |
+| 8 | Network-agent delegates to helper-agent via sub-agent call   | ✅     |
 
 ### ✅ Workflows — `tests-ui/workflows/workflow-run.spec.ts` (12/12)
 
@@ -188,6 +205,13 @@ Tracking document for Studio/Playground E2E smoke tests.
 | 2 | Edit agent                                  | ⬜     |
 | 3 | Create prompt block                         | ⬜     |
 | 4 | Edit prompt block                           | ⬜     |
+
+### Request Context — `tests-ui/request-context/request-context.spec.ts` (2/2)
+
+|   | Test                                            | Status |
+|---|--------------------------------------------------|--------|
+| 1 | Request context page displays editor and saves JSON | ✅     |
+| 2 | Request context is included in agent chat and cleared to empty after removal | ✅     |
 
 ### Settings — `tests-ui/settings/` (2/2)
 
