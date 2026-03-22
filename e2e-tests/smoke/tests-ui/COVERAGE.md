@@ -21,12 +21,12 @@ Tracking document for Studio/Playground E2E smoke tests.
 | Observability | ✅✅✅✅✅✅          | 6    | 0    | 0       |
 | Memory        | ✅✅✅✅              | 4    | 0    | 0       |
 | Datasets      | ⬜⬜⬜⬜⬜⬜⬜        | 0    | 7    | 0       |
-| Scorers       | ⬜⬜⬜                | 0    | 3    | 0       |
+| Scorers       | ✅✅                  | 2    | 0    | 0       |
 | Processors    | ⬜⬜                  | 0    | 2    | 0       |
 | Workspaces    | ⬜⬜⬜⬜⬜            | 0    | 5    | 0       |
 | CMS           | ⬜⬜⬜⬜              | 0    | 4    | 0       |
 | Settings      | ⬜                    | 0    | 1    | 0       |
-| **Total**     |                       | **44** | **21** | **1** |
+| **Total**     |                       | **46** | **18** | **1** |
 
 ---
 
@@ -148,13 +148,12 @@ Tracking document for Studio/Playground E2E smoke tests.
 | 6 | Trigger experiment with scorer              | ⬜     |
 | 7 | View experiment results                     | ⬜     |
 
-### Scorers — `tests-ui/scorers/` (0/3)
+### Scorers — `tests-ui/scorers/` (2/2)
 
 |   | Test                                        | Status |
 |---|---------------------------------------------|--------|
-| 1 | Scorers list page                           | ⬜     |
-| 2 | Scorer detail view                          | ⬜     |
-| 3 | Create scorer via CMS                       | ⬜     |
+| 1 | Scorers list page                           | ✅     |
+| 2 | Scorer detail view                          | ✅     |
 
 ### Processors — `tests-ui/processors/` (0/2)
 
