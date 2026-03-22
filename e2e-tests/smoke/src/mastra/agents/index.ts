@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 
 import { calculatorTool, stringTool, approvalTool } from '../tools/index.js';
+import { sequentialSteps } from '../workflows/basic.js';
 
 export const memory = new Memory({
   options: {
@@ -37,6 +38,15 @@ export const networkAgent = new Agent({
   model: 'openai/gpt-4o-mini',
   agents: { 'helper-agent': helperAgent },
   memory,
+});
+
+export const workflowAgent = new Agent({
+  id: 'workflow-agent',
+  name: 'Workflow Agent',
+  instructions:
+    'You are an agent with a workflow. When the user asks you to greet someone, you MUST call the sequential-steps workflow with their name. Never answer directly — always use the workflow.',
+  model: 'openai/gpt-4o-mini',
+  workflows: { 'sequential-steps': sequentialSteps },
 });
 
 export const approvalAgent = new Agent({

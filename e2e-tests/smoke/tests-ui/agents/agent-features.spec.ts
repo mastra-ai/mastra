@@ -94,6 +94,7 @@ test.describe('Agent Features', () => {
     await expect(page.getByRole('option', { name: 'Approval Agent' })).toBeVisible();
     await expect(page.getByRole('option', { name: 'Helper Agent' })).toBeVisible();
     await expect(page.getByRole('option', { name: 'Network Agent' })).toBeVisible();
+    await expect(page.getByRole('option', { name: 'Workflow Agent' })).toBeVisible();
 
     // Select Helper Agent
     await page.getByRole('option', { name: 'Helper Agent' }).click();
@@ -124,11 +125,12 @@ test.describe('Agent Features', () => {
   test('agents list shows all agents with correct attached entities', async ({ page }) => {
     await page.goto('/agents');
 
-    // All four agents should appear
+    // All five agents should appear
     await expect(page.getByRole('link', { name: 'Test Agent' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Helper Agent' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Network Agent' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Approval Agent' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Workflow Agent' })).toBeVisible();
 
     // Network Agent row shows 1 agent (helperAgent)
     const networkRow = page.getByRole('row').filter({ has: page.getByRole('link', { name: 'Network Agent' }) });
@@ -138,6 +140,10 @@ test.describe('Agent Features', () => {
     const helperRow = page.getByRole('row').filter({ has: page.getByRole('link', { name: 'Helper Agent' }) });
     await expect(helperRow.getByText('0 agents')).toBeVisible();
     await expect(helperRow.getByText('1 tool')).toBeVisible();
+
+    // Workflow Agent row shows 1 workflow
+    const workflowRow = page.getByRole('row').filter({ has: page.getByRole('link', { name: 'Workflow Agent' }) });
+    await expect(workflowRow.getByText('1 workflow')).toBeVisible();
   });
 
   test('network-agent delegates to helper-agent via sub-agent call', async ({ page }) => {
@@ -159,16 +165,51 @@ test.describe('Agent Features', () => {
 
     // Expand the badge to reveal its inner content
     await agentBadge.getByRole('button').first().click();
-    const badgeContent = agentBadge.locator('.bg-surface2');
-    await expect(badgeContent).toBeVisible();
 
-    // The expanded content should have meaningful sub-agent output (not be empty)
-    await expect(badgeContent).not.toBeEmpty();
-    await expect(badgeContent).toContainText(/mango/i);
+    // The expanded content should contain the sub-agent's response about mangoes
+    await expect(agentBadge).toContainText(/mango/i);
 
     // The final assistant response should contain the delegated result
     const assistantMsg = await waitForAssistantMessage(page);
     await expect(assistantMsg).toBeVisible({ timeout: 30_000 });
     await expect(assistantMsg).toContainText(/mango/i);
+  });
+
+  test('workflow-agent triggers workflow and workflow badge renders in chat', async ({ page }) => {
+    await page.goto('/agents/workflow-agent/chat/new');
+
+    // Verify the overview shows the workflow is attached
+    await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('link', { name: 'sequential-steps' })).toBeVisible();
+
+    // Send a message that triggers the workflow
+    await fillAndSend(page, 'Greet someone named Alice');
+
+    // Wait for navigation to thread URL
+    await expect(page).toHaveURL(/\/chat\/(?!new)/, { timeout: 20_000 });
+
+    // The workflow call should render as a WorkflowBadge in the chat thread
+    const thread = page.getByTestId('thread-wrapper');
+    const workflowBadge = thread.getByTestId('workflow-badge');
+    await expect(workflowBadge).toBeVisible({ timeout: 30_000 });
+
+    // The badge title should show the workflow name
+    await expect(workflowBadge).toContainText(/sequential/i);
+
+    // Workflow badge starts expanded — verify navigation links and the workflow graph
+    await expect(workflowBadge.getByRole('link', { name: 'Go to workflow' })).toBeVisible();
+
+    // The graph should render step nodes from the sequential-steps workflow
+    await expect(workflowBadge.getByText('add-greeting')).toBeVisible();
+    await expect(workflowBadge.getByText('add-farewell')).toBeVisible();
+    await expect(workflowBadge.getByText('combine-messages')).toBeVisible();
+
+    // The final assistant response should contain the workflow's combined output.
+    // sequential-steps produces "Hello, <name>! Goodbye, <name>!" — assert both
+    // halves to prove the result came from the workflow, not a generic LLM response.
+    const assistantMsg = await waitForAssistantMessage(page);
+    await expect(assistantMsg).toBeVisible({ timeout: 30_000 });
+    await expect(assistantMsg).toContainText(/Hello,?\s*Alice/i);
+    await expect(assistantMsg).toContainText(/Goodbye,?\s*Alice/i);
   });
 });
