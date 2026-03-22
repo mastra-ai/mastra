@@ -83,6 +83,19 @@ export class MessageMerger {
     // Update timestamp
     latestMessage.createdAt = incomingMessage.createdAt || latestMessage.createdAt;
 
+    // Insert a step-start boundary when tool calls from a separate LLM turn are
+    // being merged into an existing assistant message that already has tool invocations.
+    // Without this, convertToModelMessages treats consecutive tool parts as parallel calls.
+    if (
+      latestMessage.id &&
+      incomingMessage.id &&
+      latestMessage.id !== incomingMessage.id &&
+      incomingMessage.content?.parts?.some(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'call') &&
+      latestMessage.content.parts.some(p => p.type === 'tool-invocation')
+    ) {
+      latestMessage.content.parts.push({ type: 'step-start' });
+    }
+
     // Used for mapping indexes for incomingMessage parts to corresponding indexes in latestMessage
     const toolResultAnchorMap = new Map<number, number>();
     const partsToAdd = new Map<number, MastraMessageContentV2['parts'][number]>();
