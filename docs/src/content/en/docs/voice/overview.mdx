@@ -16,6 +16,7 @@ packages:
   - "@mastra/voice-playai"
   - "@mastra/voice-sarvam"
   - "@mastra/voice-speechify"
+  - "@mastra/voice-hume"
 ---
 
 import { AudioPlayback } from "@site/src/components/AudioPlayback";
@@ -270,6 +271,33 @@ For detailed configuration options and advanced features, check out our [Text-to
     ```
 
     Visit the [Speechify Voice Reference](/reference/voice/speechify) for more information on the Speechify voice provider.
+  </TabItem>
+
+  <TabItem value="hume" label="Hume">
+    ```typescript
+    import { Agent } from '@mastra/core/agent'
+    import { HumeVoice } from '@mastra/voice-hume'
+    import { playAudio } from '@mastra/node-audio'
+
+    const voiceAgent = new Agent({
+      id: 'voice-agent',
+      name: 'Voice Agent',
+      instructions: 'You are a voice assistant that can help users with their tasks.',
+      model: 'openai/gpt-5.1',
+      voice: new HumeVoice({ speaker: 'your-voice-name' }),
+    })
+
+    const { text } = await voiceAgent.generate('What color is the sky?')
+
+    // Convert text to speech to an Audio Stream
+    const audioStream = await voiceAgent.voice.speak(text, {
+      speaker: 'your-voice-name', // Optional: specify a speaker
+    })
+
+    playAudio(audioStream)
+    ```
+
+    Visit the [Hume Voice Reference](/reference/voice/hume) for more information on the Hume voice provider.
   </TabItem>
 
   <TabItem value="sarvam" label="Sarvam">
@@ -787,6 +815,20 @@ Each voice provider can be configured with different models and options. Below a
     ```
 
     Visit the [Speechify Voice Reference](/reference/voice/speechify) for more information on the Speechify voice provider.
+  </TabItem>
+
+  <TabItem value="hume" label="Hume">
+    ```typescript
+    // Hume Voice Configuration
+    const voice = new HumeVoice({
+      speechModel: {
+        apiKey: process.env.HUME_API_KEY,
+      },
+      speaker: 'your-voice-name', // Voice from Hume Voice Library or custom voice
+    })
+    ```
+
+    Visit the [Hume Voice Reference](/reference/voice/hume) for more information on the Hume voice provider.
   </TabItem>
 
   <TabItem value="sarvam" label="Sarvam">
