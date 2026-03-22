@@ -93,7 +93,7 @@ test.describe('Memory & Threads', () => {
 
     // Before a thread exists, the Memory tab should show a hint
     await page.getByRole('tab', { name: 'Memory' }).click();
-    await expect(page.getByRole('heading', { name: 'Working Memory' })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('heading', { name: 'Working Memory', exact: true })).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText('Send a message to the agent to enable working memory.')).toBeVisible();
 
     // Send a message that gives the agent user information to store in working memory
@@ -126,7 +126,7 @@ test.describe('Memory & Threads', () => {
 
     // Switch to Memory tab
     await page.getByRole('tab', { name: 'Memory' }).click();
-    await expect(page.getByRole('heading', { name: 'Working Memory' })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('heading', { name: 'Working Memory', exact: true })).toBeVisible({ timeout: 5_000 });
 
     // Click Edit Working Memory
     const editButton = page.getByRole('button', { name: 'Edit Working Memory' });

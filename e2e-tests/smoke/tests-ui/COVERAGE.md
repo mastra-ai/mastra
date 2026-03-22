@@ -22,11 +22,11 @@ Tracking document for Studio/Playground E2E smoke tests.
 | Memory        | ✅✅✅✅              | 4    | 0    | 0       |
 | Datasets      | ⬜⬜⬜⬜⬜⬜⬜        | 0    | 7    | 0       |
 | Scorers       | ✅✅                  | 2    | 0    | 0       |
-| Processors    | ⬜⬜                  | 0    | 2    | 0       |
+| Processors    | ✅✅✅                | 3    | 0    | 0       |
 | Workspaces    | ⬜⬜⬜⬜⬜            | 0    | 5    | 0       |
 | CMS           | ⬜⬜⬜⬜              | 0    | 4    | 0       |
 | Settings      | ✅✅                  | 2    | 0    | 0       |
-| **Total**     |                       | **48** | **16** | **1** |
+| **Total**     |                       | **51** | **13** | **1** |
 
 ---
 
@@ -155,12 +155,13 @@ Tracking document for Studio/Playground E2E smoke tests.
 | 1 | Scorers list page                           | ✅     |
 | 2 | Scorer detail view                          | ✅     |
 
-### Processors — `tests-ui/processors/` (0/2)
+### Processors — `tests-ui/processors/` (3/3)
 
 |   | Test                                        | Status |
 |---|---------------------------------------------|--------|
-| 1 | Processors list page                        | ⬜     |
-| 2 | Processor detail view                       | ⬜     |
+| 1 | Processors list page                        | ✅     |
+| 2 | Processor detail: run and verify result      | ✅     |
+| 3 | Processor detail: tripwire triggered         | ✅     |
 
 ### Workspaces — `tests-ui/workspaces/` (0/5)
 
