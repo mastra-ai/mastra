@@ -1388,3 +1388,364 @@ describe('requireApproval property preservation', () => {
     }
   });
 });
+
+describe('client tools without execute should not cause infinite loop', () => {
+  it('should stop the dowhile loop when a tool has no execute function (stream)', async () => {
+    let doStreamCallCount = 0;
+
+    const model = new MockLanguageModelV3({
+      doGenerate: async () => ({
+        finishReason: 'tool-calls' as const,
+        usage: {
+          inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+          outputTokens: { total: 20, text: 20, reasoning: undefined },
+        },
+        content: [
+          {
+            type: 'tool-call' as const,
+            toolCallId: 'call-client-1',
+            toolName: 'clientAction',
+            input: '{"value":"test"}',
+          },
+        ],
+        warnings: [],
+      }),
+      doStream: async () => {
+        doStreamCallCount++;
+        return {
+          stream: convertArrayToReadableStreamV3([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'response-metadata',
+              id: `id-${doStreamCallCount}`,
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            {
+              type: 'tool-call',
+              toolCallId: `call-client-${doStreamCallCount}`,
+              toolName: 'clientAction',
+              input: '{"value":"test"}',
+              providerExecuted: false,
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: {
+                inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 20, text: 20, reasoning: undefined },
+              },
+            },
+          ]),
+        };
+      },
+    });
+
+    // Create a tool WITHOUT an execute function (client-side tool)
+    const clientAction = createTool({
+      id: 'clientAction',
+      description: 'A client-side tool with no execute function',
+      inputSchema: z.object({
+        value: z.string(),
+      }),
+      // No execute function!
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for client tools',
+      model,
+      tools: { clientAction },
+    });
+
+    const result = await agent.stream('Use the client action tool', {
+      maxSteps: 5,
+    });
+
+    for await (const _ of result.fullStream) {
+      // consume the stream
+    }
+
+    // The model should only be called ONCE. If the dowhile loop doesn't stop,
+    // it would be called multiple times (up to maxSteps).
+    expect(doStreamCallCount).toBe(1);
+  });
+
+  it('should stop the dowhile loop when a tool has no execute function (generate)', async () => {
+    let doGenerateCallCount = 0;
+
+    const model = new MockLanguageModelV3({
+      doGenerate: async () => {
+        doGenerateCallCount++;
+        return {
+          finishReason: 'tool-calls' as const,
+          usage: {
+            inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 20, text: 20, reasoning: undefined },
+          },
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: `call-client-${doGenerateCallCount}`,
+              toolName: 'clientAction',
+              input: '{"value":"test"}',
+            },
+          ],
+          warnings: [],
+        };
+      },
+      doStream: async () => ({
+        stream: convertArrayToReadableStreamV3([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          {
+            type: 'tool-call',
+            toolCallId: 'call-client-1',
+            toolName: 'clientAction',
+            input: '{"value":"test"}',
+            providerExecuted: false,
+          },
+          {
+            type: 'finish',
+            finishReason: 'tool-calls',
+            usage: {
+              inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 20, text: 20, reasoning: undefined },
+            },
+          },
+        ]),
+      }),
+    });
+
+    // Create a tool WITHOUT an execute function (client-side tool)
+    const clientAction = createTool({
+      id: 'clientAction',
+      description: 'A client-side tool with no execute function',
+      inputSchema: z.object({
+        value: z.string(),
+      }),
+      // No execute function!
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for client tools',
+      model,
+      tools: { clientAction },
+    });
+
+    const result = await agent.generate('Use the client action tool', {
+      maxSteps: 5,
+    });
+
+    // The model should only be called ONCE. If the dowhile loop doesn't stop,
+    // it would be called multiple times (up to maxSteps).
+    expect(doGenerateCallCount).toBe(1);
+    expect(result.toolCalls.length).toBeGreaterThan(0);
+  });
+
+  it('should stop the loop when mixed tools are called (one with execute, one without)', async () => {
+    let doStreamCallCount = 0;
+
+    const model = new MockLanguageModelV3({
+      doGenerate: async () => ({
+        finishReason: 'tool-calls' as const,
+        usage: {
+          inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+          outputTokens: { total: 20, text: 20, reasoning: undefined },
+        },
+        content: [
+          {
+            type: 'tool-call' as const,
+            toolCallId: 'call-exec-1',
+            toolName: 'executableTool',
+            input: '{"value":"test"}',
+          },
+          {
+            type: 'tool-call' as const,
+            toolCallId: 'call-client-1',
+            toolName: 'clientAction',
+            input: '{"value":"test"}',
+          },
+        ],
+        warnings: [],
+      }),
+      doStream: async () => {
+        doStreamCallCount++;
+        return {
+          stream: convertArrayToReadableStreamV3([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'response-metadata',
+              id: `id-${doStreamCallCount}`,
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-exec-1',
+              toolName: 'executableTool',
+              input: '{"value":"test"}',
+              providerExecuted: false,
+            },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-client-1',
+              toolName: 'clientAction',
+              input: '{"value":"test"}',
+              providerExecuted: false,
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: {
+                inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 20, text: 20, reasoning: undefined },
+              },
+            },
+          ]),
+        };
+      },
+    });
+
+    const executableTool = createTool({
+      id: 'executableTool',
+      description: 'A tool with an execute function',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async () => ({ result: 'executed' }),
+    });
+
+    const clientAction = createTool({
+      id: 'clientAction',
+      description: 'A client-side tool with no execute function',
+      inputSchema: z.object({ value: z.string() }),
+      // No execute function!
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for mixed tools',
+      model,
+      tools: { executableTool, clientAction },
+    });
+
+    const result = await agent.stream('Use both tools', {
+      maxSteps: 5,
+    });
+
+    for await (const _ of result.fullStream) {
+      // consume the stream
+    }
+
+    // When a client tool (no execute) is present alongside an executable tool,
+    // the loop should stop after 1 call because the system needs to return
+    // control to the client for the client tool's result.
+    expect(doStreamCallCount).toBe(1);
+  });
+
+  it('should continue the loop when tool has execute and finishReason is stop (regression for #14043)', async () => {
+    let doStreamCallCount = 0;
+
+    const model = new MockLanguageModelV3({
+      doGenerate: async () => ({
+        finishReason: 'stop' as const,
+        usage: {
+          inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+          outputTokens: { total: 20, text: 20, reasoning: undefined },
+        },
+        content: [
+          {
+            type: 'tool-call' as const,
+            toolCallId: 'call-exec-1',
+            toolName: 'myTool',
+            input: '{"value":"test"}',
+          },
+        ],
+        warnings: [],
+      }),
+      doStream: async () => {
+        doStreamCallCount++;
+        if (doStreamCallCount === 1) {
+          // First call: model returns tool call with finishReason 'stop'
+          return {
+            stream: convertArrayToReadableStreamV3([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'response-metadata',
+                id: `id-${doStreamCallCount}`,
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              {
+                type: 'tool-call',
+                toolCallId: `call-exec-${doStreamCallCount}`,
+                toolName: 'myTool',
+                input: '{"value":"test"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: {
+                  inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 20, text: 20, reasoning: undefined },
+                },
+              },
+            ]),
+          };
+        }
+        // Second call: model returns text (done)
+        return {
+          stream: convertArrayToReadableStreamV3([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'response-metadata',
+              id: `id-${doStreamCallCount}`,
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            { type: 'text', text: 'Done' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: {
+                inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 20, text: 20, reasoning: undefined },
+              },
+            },
+          ]),
+        };
+      },
+    });
+
+    const myTool = createTool({
+      id: 'myTool',
+      description: 'A tool with an execute function',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async () => ({ result: 'executed' }),
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent',
+      model,
+      tools: { myTool },
+    });
+
+    const result = await agent.stream('Use the tool', {
+      maxSteps: 5,
+    });
+
+    for await (const _ of result.fullStream) {
+      // consume the stream
+    }
+
+    // The model should be called TWICE even with finishReason 'stop',
+    // because the tool has an execute function and should be processed.
+    expect(doStreamCallCount).toBe(2);
+  });
+});
