@@ -23,10 +23,10 @@ Tracking document for Studio/Playground E2E smoke tests.
 | Datasets      | ✅✅✅✅✅✅✅✅✅✅✅  | 11   | 0    | 0       |
 | Scorers       | ✅✅                  | 2    | 0    | 0       |
 | Processors    | ✅✅✅                | 3    | 0    | 0       |
-| Workspaces    | ⬜⬜⬜⬜⬜            | 0    | 5    | 0       |
+| Workspaces    | ✅✅✅✅✅            | 5    | 2    | 0       |
 | CMS           | ⬜⬜⬜⬜              | 0    | 4    | 0       |
 | Settings      | ✅✅                  | 2    | 0    | 0       |
-| **Total**     |                       | **62** | **9** | **1** |
+| **Total**     |                       | **67** | **6** | **1** |
 
 ---
 
@@ -56,6 +56,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 | Processor  | suffix                | Appends [processed] suffix         |
 | Processor  | tripwire-test         | Aborts on "BLOCK" keyword          |
 | MCP Server | test-mcp              | Test MCP server                    |
+| Workspace  | test-workspace        | LocalFilesystem, fixture files via API |
 
 ---
 
@@ -167,15 +168,17 @@ Tracking document for Studio/Playground E2E smoke tests.
 | 2 | Processor detail: run and verify result      | ✅     |
 | 3 | Processor detail: tripwire triggered         | ✅     |
 
-### Workspaces — `tests-ui/workspaces/` (0/5)
+### Workspaces — `tests-ui/workspaces/workspaces.spec.ts` (5/7)
 
-|   | Test                                        | Status |
-|---|---------------------------------------------|--------|
-| 1 | File browser navigation                     | ⬜     |
-| 2 | File viewer with syntax highlighting        | ⬜     |
-| 3 | Skills tab: list installed skills           | ⬜     |
-| 4 | Search: BM25 keyword search                 | ⬜     |
-| 5 | Search: vector/semantic search              | ⬜     |
+|   | Test                                                    | Status |
+|---|---------------------------------------------------------|--------|
+| 1 | Workspace page shows file browser with workspace name   | ✅     |
+| 2 | File browser: navigate into directory, view file, close | ✅     |
+| 3 | File browser: create and delete directory               | ✅     |
+| 4 | Skills tab: shows empty state with add skill button     | ✅     |
+| 5 | Skills tab: install skill from registry and remove it   | ✅     |
+| 6 | Search: BM25 keyword search                             | ⬜     |
+| 7 | Search: vector/semantic search                          | ⬜     |
 
 ### CMS — `tests-ui/cms/` (0/4)
 
@@ -198,6 +201,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 ## Known Issues
 
 - 🚫 `always-fails` tool error is not surfaced in the UI result panel (JSON output stays `{}`). Blocked until playground renders tool errors.
+- ⬜ Workspace search tests (BM25, vector) require `canBM25: true` / `canVector: true` on the workspace config. Current `test-workspace` has both disabled.
 
 ## Notes
 
