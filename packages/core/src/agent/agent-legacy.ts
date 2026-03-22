@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { WritableStream } from 'node:stream/web';
 import type { CoreMessage, UIMessage, Tool } from '@internal/ai-sdk-v4';
+import type { StepResult } from '@internal/ai-sdk-v5';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod/v3';
@@ -29,7 +30,13 @@ import {
   createObservabilityContext,
   resolveObservabilityContext,
 } from '../observability';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
+import type {
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+  ProcessorStreamWriter,
+  ToolCallInfo,
+} from '../processors/index';
+import type { ProcessorState } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { ChunkType } from '../stream/types';
 import type { CoreTool } from '../tools/types';
@@ -127,6 +134,30 @@ export interface AgentLegacyCapabilities {
       requestContext: RequestContext;
       messageList: MessageList;
       stepNumber?: number;
+      processorStates?: Map<string, ProcessorState>;
+    },
+  ): Promise<{
+    messageList: MessageList;
+    tripwire?: {
+      reason: string;
+      retry?: boolean;
+      metadata?: unknown;
+      processorId?: string;
+    };
+  }>;
+  /** Run processOutputStep phase on output processors (for legacy path compatibility) */
+  __runProcessOutputStep(
+    args: Partial<ObservabilityContext> & {
+      requestContext: RequestContext;
+      messageList: MessageList;
+      stepNumber?: number;
+      steps?: Array<StepResult<any>>;
+      finishReason?: string;
+      toolCalls?: ToolCallInfo[];
+      text?: string;
+      retryCount?: number;
+      writer?: ProcessorStreamWriter;
+      processorStates?: Map<string, ProcessorState>;
     },
   ): Promise<{
     messageList: MessageList;
@@ -837,6 +868,48 @@ export class AgentLegacyHandler {
           resourceId,
           requestContext,
           onStepFinish: async (props: any) => {
+            const stepWriter =
+              props.writer ??
+              (writableStream
+                ? {
+                    custom: async (data: { type: string }) => {
+                      const streamWriter = writableStream.getWriter();
+                      try {
+                        await streamWriter.write(data as ChunkType);
+                      } finally {
+                        streamWriter.releaseLock();
+                      }
+                    },
+                  }
+                : undefined);
+
+            const outputStepResult = await this.capabilities.__runProcessOutputStep({
+              requestContext,
+              ...resolveObservabilityContext(args as Partial<ObservabilityContext>),
+              messageList,
+              stepNumber: props.stepNumber,
+              steps: props.steps,
+              finishReason: props.finishReason,
+              toolCalls: props.toolCalls,
+              text: props.text,
+              writer: stepWriter,
+            });
+
+            if (outputStepResult.tripwire) {
+              agentSpan?.end({
+                output: { tripwire: outputStepResult.tripwire },
+                attributes: {
+                  tripwireAbort: {
+                    reason: outputStepResult.tripwire.reason,
+                    processorId: outputStepResult.tripwire.processorId,
+                    retry: outputStepResult.tripwire.retry,
+                    metadata: outputStepResult.tripwire.metadata,
+                  },
+                },
+              });
+              throw new Error(outputStepResult.tripwire.reason);
+            }
+
             if (savePerStep) {
               if (!threadExists && !threadCreatedByStep && memory && thread) {
                 await memory.createThread({

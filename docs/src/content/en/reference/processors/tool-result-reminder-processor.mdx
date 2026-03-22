@@ -1,0 +1,101 @@
+---
+title: "Reference: ToolResultReminderProcessor | Processors"
+description: "API reference for ToolResultReminderProcessor, an output processor that streams and persists instruction-file reminders."
+packages:
+  - "@mastra/core"
+---
+
+# ToolResultReminderProcessor
+
+`ToolResultReminderProcessor` is an output processor that detects when tool arguments reference an instruction file path such as `AGENTS.md`, `CLAUDE.md`, or `CONTEXT.md`. When it finds one, it streams a `data-system-reminder` chunk for live UIs and persists a `<system-reminder>` message so the reminder survives thread reloads.
+
+Use it when you want agents to surface dynamically discovered instruction files inline in the same turn as the triggering tool usage.
+
+## Usage example
+
+Use the processor in an agent's `outputProcessors` array.
+
+```typescript title="src/mastra/agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { ToolResultReminderProcessor } from '@mastra/core/processors'
+
+const agent = new Agent({
+  id: 'code-agent',
+  name: 'Code Agent',
+  instructions: 'You are a coding assistant.',
+  model: 'anthropic/claude-sonnet-4-6',
+  outputProcessors: [
+    new ToolResultReminderProcessor({
+      reminderText:
+        'When using guidance from a discovered instruction file, mention the instruction file you used and how it affected your response.',
+    }),
+  ],
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'ToolResultReminderOptions',
+    description: 'Configuration for instruction-file reminder detection and rendering.',
+    properties: [
+      {
+        name: 'reminderText',
+        type: 'string',
+        description: 'Fallback reminder text used when the discovered instruction file cannot be read or is empty.',
+        isOptional: true,
+      },
+      {
+        name: 'pathExists',
+        type: '(path: string) => boolean',
+        description: 'Override for filesystem existence checks, mainly useful in tests.',
+        isOptional: true,
+      },
+      {
+        name: 'isDirectory',
+        type: '(path: string) => boolean',
+        description: 'Override for directory detection when walking up from a referenced path.',
+        isOptional: true,
+      },
+      {
+        name: 'readFile',
+        type: '(path: string) => string',
+        description: 'Override for reading instruction file contents before streaming or persisting the reminder.',
+        isOptional: true,
+      },
+      {
+        name: 'getIgnoredInstructionPaths',
+        type: '(args: ProcessOutputStepArgs) => string[]',
+        description:
+          'Returns instruction file paths that should not trigger reminders, such as files already loaded statically into the system prompt.',
+        isOptional: true,
+      },
+    ],
+  },
+]}
+/>
+
+## How it works
+
+1. Reads the current step's tool calls from `processOutputStep()`.
+1. Looks for path-like tool arguments such as `path`, `file`, `target`, or `destination`.
+1. Walks upward from the referenced path until it finds `AGENTS.md`, `CLAUDE.md`, or `CONTEXT.md`.
+1. Skips reminders for ignored instruction files.
+1. Streams a transient `data-system-reminder` chunk for live rendering.
+1. Rotates the active response message when supported, then persists a `<system-reminder>` message in the conversation.
+
+## Behavior notes
+
+- The reminder is emitted during the same turn as the tool usage that discovered the instruction file.
+- The persisted reminder includes `type="dynamic-agents-md"` and `path="..."` metadata.
+- Duplicate reminders for the same exact persisted markup are suppressed.
+- If the instruction file is readable, the reminder body uses the file contents. Otherwise it falls back to `reminderText`.
+
+## Returns
+
+**Returns:** `ToolResultReminderProcessor`
+
+The constructed processor can be passed to an agent's `outputProcessors` array.

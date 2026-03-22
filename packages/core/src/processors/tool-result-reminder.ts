@@ -1,100 +1,251 @@
-import type { MessageList } from '../agent/message-list';
-import type { Processor, ProcessInputStepArgs } from './index';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join, normalize, resolve } from 'node:path';
+import type { MessageList, MastraDBMessage } from '../agent/message-list';
+import type { DataChunkType } from '../stream/types';
+import type { ProcessOutputStepArgs, Processor, ToolCallInfo } from './index';
 
-/**
- * Type definition for tool invocation in MastraDBMessage format 2
- * Note: The full ToolInvocation type includes 'partial-call' state which we don't need to handle
- */
-type V2ToolInvocation = {
-  toolName: string;
-  toolCallId: string;
-  args: unknown;
-  result?: unknown;
-  state: string;
+const INSTRUCTION_FILE_NAMES = ['AGENTS.md', 'CLAUDE.md', 'CONTEXT.md'] as const;
+const PATH_FIELDS = ['path', 'file', 'filePath', 'target', 'targetPath', 'dest', 'destination'] as const;
+const REMINDER_TYPE = 'dynamic-agents-md';
+
+type SystemReminderChunk = DataChunkType & {
+  type: 'data-system-reminder';
+  data: {
+    message: string;
+    reminderType: string;
+    path: string;
+  };
 };
 
-/**
- * Options for ToolResultReminderProcessor
- */
+type TextPartLike = {
+  type: 'text';
+  text: string;
+};
+
 export interface ToolResultReminderOptions {
-  /** The reminder text to inject when tool results are detected */
-  reminderText: string;
-  /**
-   * Tag used for duplicate suppression.
-   * If a system message with this tag was already added in this step (by another processor),
-   * this processor will not add a duplicate.
-   * Defaults to 'tool-result-reminder'.
-   */
-  tag?: string;
+  reminderText?: string;
+  pathExists?: (path: string) => boolean;
+  isDirectory?: (path: string) => boolean;
+  readFile?: (path: string) => string;
+  getIgnoredInstructionPaths?: (args: ProcessOutputStepArgs) => string[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isInstructionFileName(name: string): boolean {
+  return INSTRUCTION_FILE_NAMES.some(instructionFileName => instructionFileName.toLowerCase() === name.toLowerCase());
+}
+
+function toAbsolutePath(candidatePath: string): string {
+  return normalize(isAbsolute(candidatePath) ? candidatePath : resolve(process.cwd(), candidatePath));
+}
+
+function findInstructionFileForPath(
+  candidatePath: string,
+  pathExists: (path: string) => boolean,
+  isDirectory: (path: string) => boolean,
+): string | undefined {
+  const absoluteCandidatePath = toAbsolutePath(candidatePath);
+  const candidateName = basename(absoluteCandidatePath);
+
+  if (isInstructionFileName(candidateName)) {
+    return absoluteCandidatePath;
+  }
+
+  let currentDir = absoluteCandidatePath;
+  if (!pathExists(currentDir) || !isDirectory(currentDir)) {
+    currentDir = dirname(currentDir);
+  }
+
+  let previousDir: string | undefined;
+  while (currentDir && currentDir !== previousDir) {
+    for (const instructionFileName of INSTRUCTION_FILE_NAMES) {
+      const instructionFilePath = join(currentDir, instructionFileName);
+      if (pathExists(instructionFilePath)) {
+        return instructionFilePath;
+      }
+    }
+
+    previousDir = currentDir;
+    currentDir = dirname(currentDir);
+  }
+
+  return undefined;
+}
+
+function escapeXml(value: string): string {
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+function escapeXmlAttribute(value: string): string {
+  return escapeXml(value).replaceAll('"', '&quot;');
+}
+
+function getMessageText(message: MastraDBMessage): string {
+  const parts = isRecord(message.content) ? message.content.parts : undefined;
+  if (!Array.isArray(parts)) {
+    return '';
+  }
+
+  return parts
+    .filter((part): part is TextPartLike => isRecord(part) && part.type === 'text' && typeof part.text === 'string')
+    .map(part => part.text)
+    .join('\n');
+}
+
+function getReminderMarkup(reminderText: string, instructionPath: string): string {
+  return `<system-reminder type="${REMINDER_TYPE}" path="${escapeXmlAttribute(instructionPath)}">${escapeXml(reminderText)}</system-reminder>`;
+}
+
+function parseInvocationArgs(args: unknown): Record<string, unknown> | undefined {
+  if (isRecord(args)) {
+    return args;
+  }
+
+  if (typeof args !== 'string') {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(args);
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
- * A processInputStep processor that injects a system reminder when tool-result messages
- * are detected in the prompt-visible history.
- *
- * This runs at every step of the agentic loop (including tool-call continuations).
- * When tool-result history is present and no duplicate reminder is already in the
- * current step's system messages, a tagged system reminder is added via messageList.addSystem.
- *
- * Duplicate suppression is automatic: addSystem with a tag prevents the same content
- * from being added twice in a single step (content equality check within the tag bucket).
- * The per-step replaceAllSystemMessages() clears all tagged system messages at the
- * start of each step, so the reminder is independently re-evaluated each step.
- *
- * Tool-result detection works in two scenarios:
- * 1. Production: After tool execution, updateToolInvocation stores results in message.content.parts
- *    with type 'tool-invocation' and toolInvocation.state === 'result'.
- * 2. Legacy/direct storage: Messages may have toolInvocations array with state 'result'.
+ * Injects a persisted UI-visible reminder when the agent just interacted with
+ * a path whose directory ancestry contains an instruction file such as AGENTS.md.
  */
 export class ToolResultReminderProcessor implements Processor<'tool-result-reminder'> {
-  readonly id = 'tool-result-reminder' as const;
-  readonly name = 'Tool Result Reminder';
-  private readonly reminderText: string;
-  private readonly tag: string;
+  id = 'tool-result-reminder' as const;
+  name = 'Instruction File Reminder';
+  description = 'Injects a reminder when instruction file operations are detected';
+  processorIndex = 0;
+
+  private readonly reminderText?: string;
+  private readonly pathExists: (path: string) => boolean;
+  private readonly isDirectory: (path: string) => boolean;
+  private readonly readFile: (path: string) => string;
+  private readonly getIgnoredInstructionPaths?: (args: ProcessOutputStepArgs) => string[];
 
   constructor(options: ToolResultReminderOptions) {
     this.reminderText = options.reminderText;
-    this.tag = options.tag ?? 'tool-result-reminder';
+    this.pathExists = options.pathExists ?? existsSync;
+    this.isDirectory =
+      options.isDirectory ??
+      ((path: string) => {
+        try {
+          return statSync(path).isDirectory();
+        } catch {
+          return false;
+        }
+      });
+    this.readFile = options.readFile ?? (path => readFileSync(path, 'utf-8'));
+    this.getIgnoredInstructionPaths = options.getIgnoredInstructionPaths;
   }
 
-  async processInputStep({ messageList }: ProcessInputStepArgs): Promise<MessageList | undefined> {
-    // Check prompt-visible history for tool-result messages
+  async processOutputStep(args: ProcessOutputStepArgs): Promise<MessageList | MastraDBMessage[]> {
+    const { messageList, writer, rotateResponseMessageId } = args;
     const messages = messageList.get.all.db();
+    const instructionPath = this.findReferencedInstructionPath(args.toolCalls);
 
-    // Detect tool results in messages.
-    // After tool execution, updateToolInvocation stores results in message.content.parts
-    // with type 'tool-invocation' and toolInvocation.state === 'result'.
-    const hasToolResults = messages.some(m => {
-      // Check parts array for tool-invocation with state 'result'
-      const hasToolResultInParts = m.content.parts?.some(
-        part => part.type === 'tool-invocation' && part.toolInvocation?.state === 'result',
-      );
-      if (hasToolResultInParts) {
-        return true;
+    if (!instructionPath || this.isIgnoredInstructionPath(args, instructionPath)) {
+      return messageList;
+    }
+
+    const reminderText = this.getReminderText(instructionPath);
+    if (!reminderText) {
+      return messageList;
+    }
+
+    const reminderMarkup = getReminderMarkup(reminderText, instructionPath);
+    if (this.hasReminderAlready(messages, reminderMarkup)) {
+      return messageList;
+    }
+
+    rotateResponseMessageId?.();
+
+    if (writer) {
+      const chunk: SystemReminderChunk = {
+        type: 'data-system-reminder',
+        data: {
+          message: reminderText,
+          reminderType: REMINDER_TYPE,
+          path: instructionPath,
+        },
+        transient: true,
+      };
+      await writer.custom(chunk);
+    }
+
+    messageList.add(reminderMarkup, 'user');
+    return messageList;
+  }
+
+  private getReminderText(instructionPath: string): string | undefined {
+    try {
+      const content = this.readFile(instructionPath).trim();
+      if (content.length > 0) {
+        return content;
       }
+    } catch {
+      // Fall back to configured reminder text if file cannot be read.
+    }
 
-      // Also check toolInvocations array (legacy/direct storage format)
-      const hasToolResultInInvocations = m.content.toolInvocations?.some(
-        (inv: V2ToolInvocation) => inv.state === 'result',
-      );
-      if (hasToolResultInInvocations) {
-        return true;
-      }
+    return this.reminderText?.trim() || undefined;
+  }
 
-      return false;
-    });
+  private isIgnoredInstructionPath(args: ProcessOutputStepArgs, instructionPath: string): boolean {
+    const ignoredPaths = this.getIgnoredInstructionPaths?.(args) ?? [];
+    const normalizedInstructionPath = toAbsolutePath(instructionPath);
+    return ignoredPaths.some(path => toAbsolutePath(path) === normalizedInstructionPath);
+  }
 
-    if (!hasToolResults) {
+  private findReferencedInstructionPath(toolCalls?: ToolCallInfo[]): string | undefined {
+    if (!Array.isArray(toolCalls)) {
       return undefined;
     }
 
-    // addSystem with tag handles duplicate suppression within the step:
-    // - If a system message with the same content is already in taggedSystemMessages[tag],
-    //   the second call is a no-op (isDuplicateSystem returns true).
-    // - replaceAllSystemMessages at the start of each step clears taggedSystemMessages,
-    //   so this processor re-evaluates independently each step.
-    messageList.addSystem(this.reminderText, this.tag);
+    for (const toolCall of toolCalls) {
+      const path = this.findInstructionPathInInvocation(toolCall);
+      if (path) {
+        return path;
+      }
+    }
 
-    return messageList;
+    return undefined;
+  }
+
+  private findInstructionPathInInvocation(invocation: unknown): string | undefined {
+    if (!isRecord(invocation)) {
+      return undefined;
+    }
+
+    const args = parseInvocationArgs(invocation.args);
+    if (!args) {
+      return undefined;
+    }
+
+    for (const field of PATH_FIELDS) {
+      const value = args[field];
+      if (typeof value !== 'string' || value.trim().length === 0) {
+        continue;
+      }
+
+      const instructionPath = findInstructionFileForPath(value, this.pathExists, this.isDirectory);
+      if (instructionPath) {
+        return instructionPath;
+      }
+    }
+
+    return undefined;
+  }
+
+  private hasReminderAlready(messages: MastraDBMessage[], reminderMarkup: string): boolean {
+    return messages.some(message => message.role === 'user' && getMessageText(message).includes(reminderMarkup));
   }
 }

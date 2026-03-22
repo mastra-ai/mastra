@@ -102,6 +102,8 @@ export interface TUIState {
   seenToolCallIds: Set<string>;
   /** Track subagent tool call IDs to skip in trailing content logic */
   subagentToolCallIds: Set<string>;
+  /** Track streamed system reminders to avoid duplicate rendering */
+  seenSystemReminderKeys: Set<string>;
   /** Track all tools for expand/collapse */
   allToolComponents: IToolExecutionComponent[];
   /** Track slash command boxes for expand/collapse */
@@ -223,6 +225,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     taskWriteInsertIndex: -1,
     seenToolCallIds: new Set(),
     subagentToolCallIds: new Set(),
+    seenSystemReminderKeys: new Set(),
     allToolComponents: [],
     allSlashCommandComponents: [],
     pendingSubagents: new Map(),

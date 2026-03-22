@@ -148,6 +148,46 @@ const { harness } = createMastraCode({
 
 This is equivalent to setting `.mastracode/database.json` but allows configuration at the code level.
 
+## Output processors
+
+Mastra Code uses [output processors](/reference/processors/overview) to modify agent behavior after each model step in the agentic loop. The built-in code agent includes a `ToolResultReminderProcessor` that detects when tool arguments reference instruction files such as `AGENTS.md` and streams a `Loaded AGENTS.md` reminder in the same turn.
+
+You can customize or replace this processor by passing an `outputProcessors` array when creating the agent in your own modes configuration:
+
+```typescript title="src/custom-processors.ts"
+import { createMastraCode } from 'mastracode'
+import { Agent } from '@mastra/core/agent'
+import { ToolResultReminderProcessor } from '@mastra/core/processors'
+
+const codeAgent = new Agent({
+  id: 'code-agent',
+  name: 'Code Agent',
+  instructions: 'You are a coding assistant.',
+  model: 'anthropic/claude-opus-4-6',
+  tools: [], // or your custom tools
+  outputProcessors: [
+    new ToolResultReminderProcessor({
+      reminderText:
+        'When using guidance from a discovered instruction file, mention the instruction file you used and how it affected your response.',
+    }),
+  ],
+})
+
+const { harness } = createMastraCode({
+  modes: [
+    {
+      id: 'build',
+      name: 'Build',
+      default: true,
+      defaultModelId: 'anthropic/claude-opus-4-6',
+      agent: codeAgent,
+    },
+  ],
+})
+```
+
+The reminder appears in the TUI as a system notice during the same turn as the triggering tool usage and is also persisted with the conversation, so it remains visible when reloading threads.
+
 ## Custom heartbeat handlers
 
 Replace or extend the default background tasks:

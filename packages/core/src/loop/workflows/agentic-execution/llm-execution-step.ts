@@ -716,10 +716,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
             const stepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
 
-            // Create a ProcessorStreamWriter from outputWriter if available
-            const inputStepWriter: ProcessorStreamWriter | undefined = outputWriter
-              ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
-              : undefined;
+            // Create a ProcessorStreamWriter that can emit custom chunks into the live stream.
+            const inputStepWriter: ProcessorStreamWriter = {
+              custom: async data => {
+                safeEnqueue(controller as ReadableStreamDefaultController<ChunkType>, data as ChunkType);
+                if (outputWriter) {
+                  await outputWriter(data as ChunkType);
+                }
+              },
+            };
 
             const processInputStepResult = await processorRunner.runProcessInputStep({
               messageList,
@@ -1168,7 +1173,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           const immediateText = outputStream._getImmediateText();
           const immediateFinishReason = outputStream._getImmediateFinishReason();
 
-          // Convert toolCalls to ToolCallInfo format
+          // Convert toolCalls to ToolCallInfo format.
+          // AI SDK tool-call chunks use `input`, while downstream message/invocation shapes often use `args`.
+          // Preserve either shape so output processors can inspect same-turn tool arguments reliably.
           const toolCallInfos = toolCalls.map(tc => ({
             toolName: tc.toolName,
             toolCallId: tc.toolCallId,
@@ -1181,16 +1188,26 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
           const outputStepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
 
-          // Create a ProcessorStreamWriter from outputWriter if available
-          const processorWriter: ProcessorStreamWriter | undefined = outputWriter
-            ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
-            : undefined;
+          // Create a ProcessorStreamWriter that can emit custom chunks into the live stream.
+          const processorWriter: ProcessorStreamWriter = {
+            custom: async data => {
+              safeEnqueue(controller as ReadableStreamDefaultController<ChunkType>, data as ChunkType);
+              if (outputWriter) {
+                await outputWriter(data as ChunkType);
+              }
+            },
+          };
 
           await processorRunner.runProcessOutputStep({
             steps: inputData.output?.steps ?? [],
             messages: messageList.get.all.db(),
             messageList,
             stepNumber,
+            messageId: currentMessageId,
+            rotateResponseMessageId: () => {
+              currentMessageId = _internal?.generateId?.() ?? generateId();
+              return currentMessageId;
+            },
             finishReason: immediateFinishReason,
             toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
             text: immediateText,

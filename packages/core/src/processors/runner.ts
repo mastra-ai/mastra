@@ -1108,6 +1108,8 @@ export class ProcessorRunner {
       messages: MastraDBMessage[];
       messageList: MessageList;
       stepNumber: number;
+      messageId?: string;
+      rotateResponseMessageId?: () => string;
       finishReason?: string;
       toolCalls?: ToolCallInfo[];
       text?: string;
@@ -1120,6 +1122,8 @@ export class ProcessorRunner {
       steps,
       messageList,
       stepNumber,
+      messageId,
+      rotateResponseMessageId,
       finishReason,
       toolCalls,
       text,
@@ -1128,6 +1132,14 @@ export class ProcessorRunner {
       writer,
     } = args;
     const observabilityContext = resolveObservabilityContext(args);
+
+    let currentMessageId = messageId;
+    const rotateCurrentResponseMessageId = rotateResponseMessageId
+      ? () => {
+          currentMessageId = rotateResponseMessageId();
+          return currentMessageId;
+        }
+      : undefined;
 
     // Run through all output processors that have processOutputStep
     for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
@@ -1184,7 +1196,14 @@ export class ProcessorRunner {
           processorExecutor: 'legacy',
           processorIndex: index,
         },
-        input: { messages: processableMessages, stepNumber, finishReason, toolCalls, text },
+        input: {
+          messages: processableMessages,
+          stepNumber,
+          messageId: currentMessageId,
+          finishReason,
+          toolCalls,
+          text,
+        },
       });
 
       // Start recording MessageList mutations for this processor
@@ -1201,6 +1220,8 @@ export class ProcessorRunner {
           messages: processableMessages,
           messageList,
           stepNumber,
+          messageId: currentMessageId,
+          rotateResponseMessageId: rotateCurrentResponseMessageId,
           finishReason,
           toolCalls,
           text,

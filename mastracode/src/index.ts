@@ -9,11 +9,15 @@ import type {
 } from '@mastra/core/harness';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
+import {
+  ToolResultReminderProcessor,
+} from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
 import { getDynamicModel, resolveModel } from './agents/model.js';
+import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-instructions.js';
 import { executeSubagent } from './agents/subagents/execute.js';
 import { exploreSubagent } from './agents/subagents/explore.js';
 import { planSubagent } from './agents/subagents/plan.js';
@@ -157,6 +161,17 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     instructions: getDynamicInstructions,
     model: getDynamicModel,
     tools: createDynamicTools(mcpManager, config?.extraTools, hookManager, config?.disabledTools),
+    outputProcessors: [
+      new ToolResultReminderProcessor({
+        getIgnoredInstructionPaths: ({ requestContext }) => {
+          const harnessContext = requestContext.get('harness') as
+            | { state?: { projectPath?: string }; getState?: () => { projectPath?: string } }
+            | undefined;
+          const projectPath = harnessContext?.getState?.()?.projectPath ?? harnessContext?.state?.projectPath ?? process.cwd();
+          return getStaticallyLoadedInstructionPaths(projectPath);
+        },
+      }),
+    ],
   });
 
   const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
