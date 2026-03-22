@@ -366,6 +366,21 @@ export const toolCallResponseSchema = z.object({
 });
 
 // ============================================================================
+// Resume Stream Schema
+// ============================================================================
+
+/**
+ * Body schema for resuming a suspended agent stream with custom data.
+ * Extends the agent execution body without messages, since resume
+ * continues from a prior suspension point rather than starting fresh.
+ */
+export const resumeStreamBodySchema = agentExecutionBodySchema.omit({ messages: true }).extend({
+  runId: z.string(),
+  resumeData: z.any(),
+  toolCallId: z.string().optional(),
+});
+
+// ============================================================================
 // Model Management Schemas
 // ============================================================================
 
