@@ -74,6 +74,63 @@ GET /api/agents/my-agent?versionId=abc123
 }
 ```
 
+## Responses API
+
+| Method | Path | Description |
+| - | - | - |
+| `POST` | `/api/v1/responses` | Create a response through an OpenAI-compatible Responses API route |
+| `GET` | `/api/v1/responses/:responseId` | Retrieve a stored response |
+| `DELETE` | `/api/v1/responses/:responseId` | Delete a stored response |
+
+### Create response request body
+
+```typescript prettier:false
+{
+  model: string;                    // Required. Mastra agent ID.
+  input: string | Array<{
+    role: 'system' | 'developer' | 'user' | 'assistant';
+    content: string | Array<{
+      type: 'input_text' | 'text' | 'output_text';
+      text: string;
+    }>;
+  }>;
+  instructions?: string;            // Override the agent instructions
+  stream?: boolean;                 // Return SSE events instead of JSON
+  store?: boolean;                  // Persist the response when the agent has memory configured
+  previous_response_id?: string;    // Continue a stored conversation thread
+}
+```
+
+### Create response response body
+
+```typescript prettier:false
+{
+  id: string;
+  object: 'response';
+  created_at: number;
+  model: string;
+  status: 'in_progress' | 'completed' | 'incomplete';
+  output: Array<{
+    id: string;
+    type: 'message';
+    role: 'assistant';
+    status: 'in_progress' | 'completed' | 'incomplete';
+    content: Array<{
+      type: 'output_text';
+      text: string;
+    }>;
+  }>;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  } | null;
+  instructions?: string | null;
+  previous_response_id?: string | null;
+  store?: boolean;                  // Reflects whether the response was actually persisted
+}
+```
+
 ## Workflows
 
 | Method | Path | Description |

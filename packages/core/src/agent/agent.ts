@@ -4694,9 +4694,12 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as AgentExecutionOptions<any>;
+    const modelOverride = (mergedOptions as AgentExecutionOptions<any> & { model?: DynamicArgument<MastraModelConfig> })
+      .model;
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
+      model: modelOverride,
     });
 
     const modelInfo = llm.getModel();
@@ -4810,9 +4813,13 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as AgentExecutionOptions<OUTPUT>;
+    const modelOverride = (
+      mergedOptions as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> }
+    ).model;
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
+      model: modelOverride,
     });
 
     const modelInfo = llm.getModel();

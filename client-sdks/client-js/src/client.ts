@@ -64,6 +64,7 @@ import {
   ToolProvider,
   ProcessorProvider,
   Workspace,
+  Responses,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -153,9 +154,11 @@ import { base64RequestContext, parseClientRequestContext, requestContextQueryStr
 
 export class MastraClient extends BaseResource {
   private observability: Observability;
+  public readonly responses: Responses;
   constructor(options: ClientOptions) {
     super(options);
     this.observability = new Observability(options);
+    this.responses = new Responses(options);
   }
 
   /**

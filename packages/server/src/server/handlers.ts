@@ -6,6 +6,7 @@ export * as logs from './handlers/logs';
 export * as mcp from './handlers/mcp';
 export * as memory from './handlers/memory';
 export * as observability from './handlers/observability';
+export * as responses from './handlers/responses';
 export * as scores from './handlers/scores';
 export * as tools from './handlers/tools';
 export * as workspace from './handlers/workspace';
