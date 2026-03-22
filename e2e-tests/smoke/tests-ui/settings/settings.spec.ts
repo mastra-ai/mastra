@@ -73,7 +73,8 @@ test.describe('Settings', () => {
     // Save to persist the removal
     await page.getByRole('button', { name: 'Save Configuration' }).click();
 
-    // Intercept again to verify the header is no longer sent
+    // Remove the first route handler before registering a fresh one
+    await page.unroute('**/api/**');
     const headersAfterRemoval: Record<string, string>[] = [];
     await page.route('**/api/**', async route => {
       headersAfterRemoval.push(Object.fromEntries(
