@@ -14,7 +14,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 
 | Section         | Progress                    | Done | Todo | Blocked |
 |-----------------|-----------------------------|------|------|---------|
-| Agents          | ✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅ | 19   | 0    | 0       |
+| Agents          | ✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅ | 20   | 0    | 0       |
 | Tools           | ✅✅✅✅✅✅✅🚫              | 7    | 0    | 1       |
 | Workflows       | ✅✅✅✅✅✅✅✅✅✅✅✅         | 12   | 0    | 0       |
 | MCP Servers     | ✅✅✅                        | 3    | 0    | 0       |
@@ -27,7 +27,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 | CMS             | ⬜⬜⬜⬜                      | 0    | 4    | 0       |
 | Settings        | ✅✅                          | 2    | 0    | 0       |
 | Request Context | ✅✅                          | 2    | 0    | 0       |
-| **Total**       |                               | **76** | **6** | **1** |
+| **Total**       |                               | **77** | **6** | **1** |
 
 ---
 
@@ -39,6 +39,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 | Agent      | approval-agent        | Uses needs-approval tool           |
 | Agent      | helper-agent          | Sub-agent of network-agent, has string-transform |
 | Agent      | network-agent         | Has memory + helper-agent sub-agent, Network mode enabled |
+| Agent      | workflow-agent        | Has sequential-steps workflow attached |
 | Tool       | calculator            | add/subtract/multiply/divide       |
 | Tool       | string-transform      | upper/lower/reverse/length         |
 | Tool       | always-fails          | Throws error                       |
@@ -65,7 +66,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 
 ## Test Coverage
 
-### ✅ Agents — `tests-ui/agents/` (19/19)
+### ✅ Agents — `tests-ui/agents/` (20/20)
 
 #### `agent-chat.spec.ts` (11/11)
 
@@ -83,7 +84,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 | 10 | Approval agent triggers tool approval flow | ✅     |
 | 11 | Agent overview shows correct tools list    | ✅     |
 
-#### `agent-features.spec.ts` (8/8)
+#### `agent-features.spec.ts` (9/9)
 
 |   | Test                                                        | Status |
 |---|-------------------------------------------------------------|--------|
@@ -95,6 +96,7 @@ Tracking document for Studio/Playground E2E smoke tests.
 | 6 | Network-agent overview shows sub-agents section              | ✅     |
 | 7 | Agents list shows all agents with correct attached entities  | ✅     |
 | 8 | Network-agent delegates to helper-agent via sub-agent call   | ✅     |
+| 9 | Workflow-agent triggers workflow and workflow badge renders   | ✅     |
 
 ### ✅ Workflows — `tests-ui/workflows/workflow-run.spec.ts` (12/12)
 
