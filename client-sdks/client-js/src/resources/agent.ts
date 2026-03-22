@@ -1672,7 +1672,7 @@ export class Agent extends BaseResource {
    * Used to continue execution after a suspension point (e.g., workflow suspend within an agent).
    */
   async resumeStream<OUTPUT extends {}>(
-    resumeData: Record<string, unknown>,
+    resumeData: JSONValue,
     options: StreamParamsBaseWithoutMessages<OUTPUT> & {
       runId: string;
       toolCallId?: string;

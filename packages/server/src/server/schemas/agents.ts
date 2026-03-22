@@ -376,7 +376,7 @@ export const toolCallResponseSchema = z.object({
  */
 export const resumeStreamBodySchema = agentExecutionBodySchema.omit({ messages: true }).extend({
   runId: z.string(),
-  resumeData: z.any(),
+  resumeData: z.unknown().refine(x => x !== undefined, { message: 'resumeData is required' }),
   toolCallId: z.string().optional(),
 });
 
