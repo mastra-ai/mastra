@@ -6,7 +6,13 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@m
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
-import { GET_PROVIDERS_ROUTE, GENERATE_AGENT_ROUTE, STREAM_GENERATE_ROUTE, isProviderConnected } from './agents';
+import {
+  GET_PROVIDERS_ROUTE,
+  GENERATE_AGENT_ROUTE,
+  STREAM_GENERATE_ROUTE,
+  RESUME_STREAM_ROUTE,
+  isProviderConnected,
+} from './agents';
 
 // Mock the PROVIDER_REGISTRY before importing anything that uses it
 vi.mock('@mastra/core/llm', async () => {
@@ -716,6 +722,191 @@ describe('Agent Routes Authorization', () => {
       // Verify requestContext was passed through
       expect(capturedOptions.requestContext).toBeDefined();
       expect(capturedOptions.requestContext.get('custom-key')).toBe('stream-value');
+    });
+  });
+
+  describe('RESUME_STREAM_ROUTE', () => {
+    it('should return 400 when runId is missing', async () => {
+      const requestContext = createContextWithReservedKeys({});
+
+      await expect(
+        RESUME_STREAM_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          resumeData: { approved: true },
+        } as any),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Run id is required' }));
+    });
+
+    it('should return 403 when memory option specifies thread owned by different resource', async () => {
+      await mockMemory.createThread({
+        threadId: 'resume-thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Thread B',
+      });
+
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      await expect(
+        RESUME_STREAM_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          runId: 'test-run-id',
+          resumeData: { step: 'next' },
+          memory: {
+            thread: 'resume-thread-owned-by-b',
+            resource: 'user-a',
+          },
+        } as any),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+    });
+
+    it('should override client-provided resource with context value', async () => {
+      await mockMemory.createThread({
+        threadId: 'resume-thread-owned-by-a',
+        resourceId: 'user-a',
+        title: 'Thread A',
+      });
+
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      let capturedOptions: any;
+      vi.spyOn(mockAgent, 'resumeStream').mockImplementation(async (_resumeData, options) => {
+        capturedOptions = options;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await RESUME_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'test-run-id',
+        resumeData: { step: 'next' },
+        memory: {
+          thread: 'resume-thread-owned-by-a',
+          resource: 'user-b',
+        },
+      } as any);
+
+      expect(capturedOptions.memory.resource).toBe('user-a');
+    });
+
+    it('should pass resumeData, runId, and toolCallId to agent.resumeStream()', async () => {
+      const requestContext = createContextWithReservedKeys({});
+
+      let capturedResumeData: any;
+      let capturedOptions: any;
+      vi.spyOn(mockAgent, 'resumeStream').mockImplementation(async (resumeData, options) => {
+        capturedResumeData = resumeData;
+        capturedOptions = options;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await RESUME_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'test-run-id',
+        resumeData: { workflowResult: 'approved' },
+        toolCallId: 'tool-call-123',
+      } as any);
+
+      expect(capturedResumeData).toEqual({ workflowResult: 'approved' });
+      expect(capturedOptions.runId).toBe('test-run-id');
+      expect(capturedOptions.toolCallId).toBe('tool-call-123');
+    });
+
+    it('should pass requestContext to agent.resumeStream()', async () => {
+      const requestContext = createContextWithReservedKeys({});
+      requestContext.set('custom-key', 'resume-value');
+
+      let capturedOptions: any;
+      vi.spyOn(mockAgent, 'resumeStream').mockImplementation(async (_resumeData, options) => {
+        capturedOptions = options;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await RESUME_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'test-run-id',
+        resumeData: { step: 'next' },
+      } as any);
+
+      expect(capturedOptions.requestContext).toBeDefined();
+      expect(capturedOptions.requestContext.get('custom-key')).toBe('resume-value');
+    });
+
+    it('should pass abortSignal to agent.resumeStream()', async () => {
+      const requestContext = createContextWithReservedKeys({});
+      const abortController = new AbortController();
+
+      let capturedOptions: any;
+      vi.spyOn(mockAgent, 'resumeStream').mockImplementation(async (_resumeData, options) => {
+        capturedOptions = options;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await RESUME_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: abortController.signal,
+        runId: 'test-run-id',
+        resumeData: { step: 'next' },
+      } as any);
+
+      expect(capturedOptions.abortSignal).toBe(abortController.signal);
+    });
+
+    it('should work without toolCallId (optional)', async () => {
+      const requestContext = createContextWithReservedKeys({});
+
+      let capturedOptions: any;
+      vi.spyOn(mockAgent, 'resumeStream').mockImplementation(async (_resumeData, options) => {
+        capturedOptions = options;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await RESUME_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'test-run-id',
+        resumeData: { customData: 'value' },
+      } as any);
+
+      expect(capturedOptions.toolCallId).toBeUndefined();
+      expect(capturedOptions.runId).toBe('test-run-id');
+    });
+
+    it('should return fullStream from agent.resumeStream()', async () => {
+      const requestContext = createContextWithReservedKeys({});
+      const expectedStream = new ReadableStream();
+
+      vi.spyOn(mockAgent, 'resumeStream').mockResolvedValue({
+        fullStream: expectedStream,
+      } as any);
+
+      const result = await RESUME_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'test-run-id',
+        resumeData: { step: 'next' },
+      } as any);
+
+      expect(result).toBe(expectedStream);
     });
   });
 });
