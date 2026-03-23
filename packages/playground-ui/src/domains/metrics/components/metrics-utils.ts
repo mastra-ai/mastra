@@ -4,7 +4,6 @@ export function formatCompact(n: number): string {
   return n.toLocaleString();
 }
 
-
 export const CHART_COLORS = {
   green: '#22c55e',
   orange: '#fb923c',
