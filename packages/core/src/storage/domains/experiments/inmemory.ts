@@ -34,6 +34,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       id: input.id ?? crypto.randomUUID(),
       datasetId: input.datasetId,
       datasetVersion: input.datasetVersion,
+      agentVersion: input.agentVersion ?? null,
       targetType: input.targetType,
       targetId: input.targetId,
       name: input.name,
