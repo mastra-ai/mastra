@@ -18,7 +18,6 @@ import {
 } from '@mastra/playground-ui';
 import type { NavLink, NavSection } from '@mastra/playground-ui';
 import {
-  GaugeIcon,
   EyeIcon,
   PackageIcon,
   GlobeIcon,
@@ -29,8 +28,8 @@ import {
   MessagesSquareIcon,
   FolderIcon,
   Cpu,
-  DatabaseIcon,
   BarChart3Icon,
+  FlaskConicalIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -90,11 +89,11 @@ const mainNavigation: SidebarSection[] = [
         requiredPermission: 'tools:read',
       },
       {
-        name: 'Scorers',
-        url: '/scorers',
-        icon: <GaugeIcon />,
+        name: 'Evaluation',
+        url: '/evaluation',
+        icon: <FlaskConicalIcon />,
         isOnMastraPlatform: true,
-        requiredPermission: 'scorers:read',
+        requiredAnyPermission: ['scorers:read', 'datasets:read'],
       },
       {
         name: 'Workspaces',
@@ -127,13 +126,6 @@ const mainNavigation: SidebarSection[] = [
         icon: <EyeIcon />,
         isOnMastraPlatform: true,
         requiredPermission: 'observability:read',
-      },
-      {
-        name: 'Datasets',
-        url: '/datasets',
-        icon: <DatabaseIcon />,
-        isOnMastraPlatform: false,
-        requiredPermission: 'datasets:read',
       },
     ],
   },

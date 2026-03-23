@@ -475,8 +475,43 @@ export const DELETE_ITEM_ROUTE = createRoute({
 });
 
 // ============================================================================
-// Experiment Operations Routes (nested under datasets)
+// Experiment Operations Routes
 // ============================================================================
+
+export const LIST_ALL_EXPERIMENTS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/experiments',
+  responseType: 'json',
+  queryParamSchema: paginationQuerySchema,
+  responseSchema: listExperimentsResponseSchema,
+  summary: 'List all experiments',
+  description: 'Returns a paginated list of all experiments across all datasets',
+  tags: ['Experiments'],
+  requiresAuth: true,
+  handler: async ({ mastra, ...params }) => {
+    assertDatasetsAvailable();
+    try {
+      const { page, perPage } = params;
+      const storage = mastra.getStorage();
+      if (!storage) {
+        throw new HTTPException(500, { message: 'Storage not configured' });
+      }
+      const experimentsStore = await storage.getStore('experiments');
+      if (!experimentsStore) {
+        throw new HTTPException(500, { message: 'Experiments storage not available' });
+      }
+      const result = await experimentsStore.listExperiments({
+        pagination: { page: page ?? 0, perPage: perPage ?? 20 },
+      });
+      return { experiments: result.experiments, pagination: result.pagination };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error listing experiments');
+    }
+  },
+});
 
 export const LIST_EXPERIMENTS_ROUTE = createRoute({
   method: 'GET',

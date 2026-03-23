@@ -11,6 +11,7 @@ export * from './domains/templates/index';
 export * from './domains/metrics/index';
 export * from './domains/observability/index';
 export * from './domains/datasets/index';
+export * from './domains/evaluation/index';
 export * from './ds/components/Threads';
 export * from './types';
 
