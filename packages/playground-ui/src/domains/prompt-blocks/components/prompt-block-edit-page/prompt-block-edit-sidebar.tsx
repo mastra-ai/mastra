@@ -117,9 +117,7 @@ export function PromptBlockEditSidebar({
     if (!blockId || !storedAgentsData?.agents) return [];
     return storedAgentsData.agents.filter(agent => {
       if (!Array.isArray(agent.instructions)) return false;
-      return agent.instructions.some(
-        instr => instr.type === 'prompt_block_ref' && instr.id === blockId,
-      );
+      return agent.instructions.some(instr => instr.type === 'prompt_block_ref' && instr.id === blockId);
     });
   }, [blockId, storedAgentsData]);
 

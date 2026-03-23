@@ -274,23 +274,11 @@ export const AgentCMSBlock = ({
   autoFocus,
 }: AgentCMSBlockProps) => {
   if (block.type === 'prompt_block_ref') {
-    return (
-      <AgentCMSRefBlock
-        index={index}
-        block={block}
-        onDelete={onDelete}
-        className={className}
-        schema={schema}
-      />
-    );
+    return <AgentCMSRefBlock index={index} block={block} onDelete={onDelete} className={className} schema={schema} />;
   }
 
   return (
-    <ContentBlock
-      index={index}
-      draggableId={block.id}
-      className={cn('', className)}
-    >
+    <ContentBlock index={index} draggableId={block.id} className={cn('', className)}>
       {(dragHandleProps: DraggableProvidedDragHandleProps | null) => (
         <InlineBlockContent
           index={index}

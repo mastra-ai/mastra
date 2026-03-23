@@ -79,9 +79,7 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, schema }: RefBlockC
     return storedAgentsData.agents.filter(agent => {
       const instructions = agent.instructions;
       if (!Array.isArray(instructions)) return false;
-      return instructions.some(
-        (instr: any) => instr.type === 'prompt_block_ref' && instr.id === block.promptBlockId,
-      );
+      return instructions.some((instr: any) => instr.type === 'prompt_block_ref' && instr.id === block.promptBlockId);
     });
   }, [storedAgentsData?.agents, block.promptBlockId]);
 
@@ -127,56 +125,56 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, schema }: RefBlockC
                     </Icon>
                   </button>
                 </PopoverTrigger>
-              <PopoverContent align="end" className="w-[280px] p-0">
-                <div className="p-3 border-b border-border1">
-                  <Txt variant="ui-sm" className="font-medium text-neutral6">
-                    {promptBlock.name}
-                  </Txt>
-                  {promptBlock.description && (
-                    <Txt variant="ui-xs" className="text-neutral3 mt-0.5 line-clamp-2">
-                      {promptBlock.description}
+                <PopoverContent align="end" className="w-[280px] p-0">
+                  <div className="p-3 border-b border-border1">
+                    <Txt variant="ui-sm" className="font-medium text-neutral6">
+                      {promptBlock.name}
                     </Txt>
-                  )}
-                </div>
-                <div className="p-1">
-                  <button
-                    type="button"
-                    className="flex items-center gap-2 w-full px-2 py-1.5 text-left rounded hover:bg-surface4/50 transition-colors text-neutral5 text-ui-xs"
-                    onClick={() => navigate(paths.cmsPromptBlockEditLink(block.promptBlockId))}
-                  >
-                    <Icon className="!h-3.5 !w-3.5 text-neutral3">
-                      <ExternalLink />
-                    </Icon>
-                    Open original
-                  </button>
-                  {onDelete && (
+                    {promptBlock.description && (
+                      <Txt variant="ui-xs" className="text-neutral3 mt-0.5 line-clamp-2">
+                        {promptBlock.description}
+                      </Txt>
+                    )}
+                  </div>
+                  <div className="p-1">
                     <button
                       type="button"
-                      className="flex items-center gap-2 w-full px-2 py-1.5 text-left rounded hover:bg-surface4/50 transition-colors text-error text-ui-xs"
-                      onClick={onDelete}
+                      className="flex items-center gap-2 w-full px-2 py-1.5 text-left rounded hover:bg-surface4/50 transition-colors text-neutral5 text-ui-xs"
+                      onClick={() => navigate(paths.cmsPromptBlockEditLink(block.promptBlockId))}
                     >
-                      <Icon className="!h-3.5 !w-3.5">
-                        <X />
+                      <Icon className="!h-3.5 !w-3.5 text-neutral3">
+                        <ExternalLink />
                       </Icon>
-                      De-reference block
+                      Open original
                     </button>
-                  )}
-                </div>
-                {usedByAgents.length > 0 && (
-                  <div className="border-t border-border1 p-3">
-                    <Txt variant="ui-xs" className="text-neutral3 mb-1.5">
-                      Used by {usedByAgents.length} agent{usedByAgents.length !== 1 ? 's' : ''}
-                    </Txt>
-                    <div className="flex flex-col gap-1">
-                      {usedByAgents.map(agent => (
-                        <Txt key={agent.id} variant="ui-xs" className="text-neutral5 truncate">
-                          {agent.name}
-                        </Txt>
-                      ))}
-                    </div>
+                    {onDelete && (
+                      <button
+                        type="button"
+                        className="flex items-center gap-2 w-full px-2 py-1.5 text-left rounded hover:bg-surface4/50 transition-colors text-error text-ui-xs"
+                        onClick={onDelete}
+                      >
+                        <Icon className="!h-3.5 !w-3.5">
+                          <X />
+                        </Icon>
+                        De-reference block
+                      </button>
+                    )}
                   </div>
-                )}
-              </PopoverContent>
+                  {usedByAgents.length > 0 && (
+                    <div className="border-t border-border1 p-3">
+                      <Txt variant="ui-xs" className="text-neutral3 mb-1.5">
+                        Used by {usedByAgents.length} agent{usedByAgents.length !== 1 ? 's' : ''}
+                      </Txt>
+                      <div className="flex flex-col gap-1">
+                        {usedByAgents.map(agent => (
+                          <Txt key={agent.id} variant="ui-xs" className="text-neutral5 truncate">
+                            {agent.name}
+                          </Txt>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </PopoverContent>
               </Popover>
             </div>
 
@@ -205,11 +203,7 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, schema }: RefBlockC
 
 export const AgentCMSRefBlock = ({ index, block, onDelete, className, schema }: AgentCMSRefBlockProps) => {
   return (
-    <ContentBlock
-      index={index}
-      draggableId={block.id}
-      className={cn('', className)}
-    >
+    <ContentBlock index={index} draggableId={block.id} className={cn('', className)}>
       {(dragHandleProps: DraggableProvidedDragHandleProps | null) => (
         <RefBlockContent
           block={block}
