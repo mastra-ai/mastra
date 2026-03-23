@@ -1,27 +1,27 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { useMastraClient } from '@mastra/react';
 import { EntityType } from '@mastra/core/observability';
 import type { ListTracesResponse, SpanRecord } from '@mastra/core/storage';
-import { XIcon, AlertCircle, CheckCircle2, Loader2, DatabaseIcon } from 'lucide-react';
+import { useMastraClient } from '@mastra/react';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { format, isToday, isYesterday } from 'date-fns';
+import { XIcon, AlertCircle, CheckCircle2, Loader2, DatabaseIcon } from 'lucide-react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 
-import { useInView } from '@/hooks/use-in-view';
+import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { TraceDialog } from '@/domains/observability/components/trace-dialog';
-import { DateTimePicker } from '@/ds/components/DateTimePicker';
+import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { Button } from '@/ds/components/Button/Button';
 import { Checkbox } from '@/ds/components/Checkbox/checkbox';
+import { DateTimePicker } from '@/ds/components/DateTimePicker';
+import { getToNextEntryFn, getToPreviousEntryFn } from '@/ds/components/EntryList/helpers';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
 import { Spinner } from '@/ds/components/Spinner';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
-import { getToNextEntryFn, getToPreviousEntryFn } from '@/ds/components/EntryList/helpers';
+import { useInView } from '@/hooks/use-in-view';
 import { is403ForbiddenError } from '@/lib/query-utils';
-import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { cn } from '@/lib/utils';
 
 const TRACES_PER_PAGE = 25;
 
@@ -388,6 +388,7 @@ export function AgentTracesPanel({ agentId }: AgentTracesPanelProps) {
       const items = selectedTraces.map(trace => ({
         input: extractRawInput(trace),
         groundTruth: trace.output ?? undefined,
+        source: { type: 'trace' as const, referenceId: trace.traceId },
       }));
 
       try {

@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import { Combobox, ComboboxOption, type ComboboxProps } from '@/ds/components/Combobox';
-import { useLLMProviders } from '../hooks/use-llm-providers';
 import { useAllModels, useFilteredModels } from '../hooks/use-filtered-models';
+import { useLLMProviders } from '../hooks/use-llm-providers';
+import { Combobox } from '@/ds/components/Combobox';
+import type { ComboboxOption, ComboboxProps } from '@/ds/components/Combobox';
 import { Skeleton } from '@/ds/components/Skeleton';
 
 export interface LLMModelsProps {

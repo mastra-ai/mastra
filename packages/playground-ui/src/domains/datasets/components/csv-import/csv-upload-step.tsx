@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
 import { Upload } from 'lucide-react';
-import { Icon } from '@/ds/icons';
+import { useCallback, useRef, useState } from 'react';
 import { Spinner } from '@/ds/components/Spinner';
+import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 
 export interface CSVUploadStepProps {

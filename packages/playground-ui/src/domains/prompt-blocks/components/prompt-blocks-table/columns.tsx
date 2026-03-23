@@ -1,8 +1,8 @@
+import type { ColumnDef, Row } from '@tanstack/react-table';
+import type { PromptBlockTableData } from './types';
 import { Badge } from '@/ds/components/Badge';
 import { EntryCell } from '@/ds/components/Table';
-import { ColumnDef, Row } from '@tanstack/react-table';
 import { useLinkComponent } from '@/lib/framework';
-import { PromptBlockTableData } from './types';
 
 const NameCell = ({ row }: { row: Row<PromptBlockTableData> }) => {
   const { Link, paths } = useLinkComponent();

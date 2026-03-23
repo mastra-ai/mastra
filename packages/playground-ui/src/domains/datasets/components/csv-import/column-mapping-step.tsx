@@ -1,8 +1,9 @@
-import { DragDropContext, Draggable, DropResult, Droppable } from '@hello-pangea/dnd';
+import type { DropResult } from '@hello-pangea/dnd';
+import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import { GripVertical } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import type { ColumnMapping, FieldType } from '../../hooks/use-column-mapping';
 import { Icon } from '@/ds/icons';
-import { ColumnMapping, FieldType } from '../../hooks/use-column-mapping';
 
 export interface ColumnMappingStepProps {
   headers: string[];

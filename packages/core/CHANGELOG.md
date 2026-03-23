@@ -1,5 +1,46 @@
 # @mastra/core
 
+## 1.16.0-alpha.1
+
+### Minor Changes
+
+- Added agent version support for experiments. When triggering an experiment, you can now pass an `agentVersion` parameter to pin which agent version to use. The agent version is stored with the experiment and returned in experiment responses. ([#14562](https://github.com/mastra-ai/mastra/pull/14562))
+
+  ```ts
+  const client = new MastraClient();
+
+  await client.triggerDatasetExperiment({
+    datasetId: 'my-dataset',
+    targetType: 'agent',
+    targetId: 'my-agent',
+    version: 3, // pin to dataset version 3
+    agentVersion: 'ver_abc123', // pin to a specific agent version
+  });
+  ```
+
+### Patch Changes
+
+- Improved custom OpenAI-compatible model configuration guidance in the models docs. ([#14594](https://github.com/mastra-ai/mastra/pull/14594))
+
+## 1.16.0-alpha.0
+
+### Minor Changes
+
+- Added dataset-agent association and experiment status tracking for the Evaluate workflow. ([#14470](https://github.com/mastra-ai/mastra/pull/14470))
+  - **Dataset targeting**: Added `targetType` and `targetIds` fields to datasets, enabling association with agents, scorers, or workflows. Datasets can now be linked to multiple entities.
+  - **Experiment status**: Added `status` field to experiment results (`'needs-review'`, `'reviewed'`, `'complete'`) for review queue workflow.
+  - **Dataset experiment routes**: Added API endpoints for triggering experiments from a dataset with configurable target type and target ID.
+  - **LLM data generation**: Added endpoint for generating dataset items using an LLM with configurable count and prompt.
+  - **Failure analysis**: Added endpoint for clustering experiment failures and proposing tags using LLM analysis.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`68ed4e9`](https://github.com/mastra-ai/mastra/commit/68ed4e9f118e8646b60a6112dabe854d0ef53902))
+
+- Fixed missing tool lists in agent traces for streaming runs. Exporters like Datadog LLM Observability now receive the tools available to the agent. ([#14550](https://github.com/mastra-ai/mastra/pull/14550))
+
+- Added client/server body schemas for feedback and scores that omit the timestamp field, allowing it to be set server-side ([#14470](https://github.com/mastra-ai/mastra/pull/14470))
+
 ## 1.15.0
 
 ### Minor Changes

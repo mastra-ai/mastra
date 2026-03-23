@@ -1,9 +1,9 @@
-import * as React from 'react';
 import * as SliderPrimitive from '@radix-ui/react-slider';
+import * as React from 'react';
 
-import { cn } from '@/lib/utils';
 import { formElementFocus } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 const Slider = React.forwardRef<
   React.ElementRef<typeof SliderPrimitive.Root>,

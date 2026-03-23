@@ -23,7 +23,8 @@
         "entityType": "agent",
         "entityId": "child-span-agent",
         "attributes": {
-          "instructions": "You use tools that create child spans"
+          "instructions": "You use tools that create child spans",
+          "availableTools": ["childSpanTool"]
         },
         "metadata": {
           "runId": "<runId-1>"

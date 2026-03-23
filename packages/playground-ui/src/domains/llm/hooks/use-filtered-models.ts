@@ -1,5 +1,5 @@
+import type { Provider } from '@mastra/client-js';
 import { useMemo } from 'react';
-import { Provider } from '@mastra/client-js';
 import { cleanProviderId } from '../utils';
 
 export interface ModelInfo {

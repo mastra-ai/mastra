@@ -120,5 +120,30 @@
     "@mastra/gcs": "0.2.0",
     "@mastra/s3": "0.3.0"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20260320-182256",
+    "evaluate-backend-support",
+    "evaluate-client-sdk",
+    "evaluate-storage-support",
+    "experimental-ui-cli",
+    "experimental-ui-deployers",
+    "fluffy-ghosts-accept",
+    "great-onions-give",
+    "green-birds-knock",
+    "happy-walls-follow",
+    "hip-paths-remain",
+    "kind-rabbits-vanish",
+    "late-swans-greet",
+    "little-frogs-wonder",
+    "little-nails-shave",
+    "nice-times-end",
+    "open-apples-do",
+    "open-dolls-listen",
+    "orange-pianos-battle",
+    "real-rockets-melt",
+    "sharp-crabs-think",
+    "slow-clouds-occur",
+    "sour-kids-smell",
+    "sunny-candies-jump"
+  ]
 }
