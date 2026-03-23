@@ -1,10 +1,9 @@
 import { Loader2 } from 'lucide-react';
 import type { ZodSchema } from 'zod';
 
+import { WorkflowInputData } from './workflow-input-data';
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons';
-
-import { WorkflowInputData } from './workflow-input-data';
 
 export interface WorkflowTriggerFormProps {
   zodSchema: ZodSchema | null;

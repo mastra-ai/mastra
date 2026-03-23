@@ -1,5 +1,5 @@
-import { toSigFigs } from '@/lib/number';
 import { useEffect, useState } from 'react';
+import { toSigFigs } from '@/lib/number';
 
 interface ClockProps {
   startedAt: number;

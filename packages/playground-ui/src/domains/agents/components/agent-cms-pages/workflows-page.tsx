@@ -1,20 +1,19 @@
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
+import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
-import { WorkflowIcon } from '@/ds/icons';
+import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
+import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
+import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
 import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Searchbar } from '@/ds/components/Searchbar';
 import { Section } from '@/ds/components/Section';
 import { SubSectionRoot } from '@/ds/components/Section/section-root';
-import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
-import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
 import { Switch } from '@/ds/components/Switch';
-import { cn } from '@/lib/utils';
-import { Searchbar } from '@/ds/components/Searchbar';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
+import { WorkflowIcon } from '@/ds/icons';
 import type { RuleGroup } from '@/lib/rule-engine';
-
-import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { cn } from '@/lib/utils';
 
 export function WorkflowsPage() {
   const { form, readOnly } = useAgentEditFormContext();

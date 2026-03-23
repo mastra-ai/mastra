@@ -1,11 +1,11 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useMastraClient } from '@mastra/react';
 import type { StoredSkillResponse } from '@mastra/client-js';
+import { useMastraClient } from '@mastra/react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { toast } from '@/lib/toast';
-import { useWriteWorkspaceFile } from '@/domains/workspace/hooks';
 import { extractSkillInstructions, extractSkillLicense } from '../components/agent-cms-pages/skill-file-tree';
 import type { InMemoryFileNode } from '../components/agent-edit-page/utils/form-validation';
+import { useWriteWorkspaceFile } from '@/domains/workspace/hooks';
+import { toast } from '@/lib/toast';
 
 interface CreateSkillParams {
   name: string;
@@ -58,8 +58,8 @@ export function useCreateSkill() {
       });
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['stored-skills'] });
-      queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-skills'] });
+      void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
       toast.success('Skill created');
     },
     onError: error => {
