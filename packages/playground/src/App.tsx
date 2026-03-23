@@ -17,6 +17,7 @@ declare global {
     MASTRA_AUTO_DETECT_URL?: string;
     MASTRA_REQUEST_CONTEXT_PRESETS?: string;
     MASTRA_THEME_TOGGLE?: string;
+    MASTRA_EXPERIMENTAL_UI?: string;
   }
 }
 
