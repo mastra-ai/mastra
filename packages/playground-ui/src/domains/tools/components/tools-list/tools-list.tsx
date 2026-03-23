@@ -1,15 +1,14 @@
 import type { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
-import { EntityList } from '@/ds/components/EntityList';
-import { EntityListSkeleton } from '@/ds/components/EntityList';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { useMemo } from 'react';
 import { NoToolsInfo } from './no-tools-info';
-import { useLinkComponent } from '@/lib/framework';
-import { truncateString } from '@/lib/truncate-string';
 import { prepareToolsTable } from '@/domains/tools/utils/prepareToolsTable';
+import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
 import { ErrorState } from '@/ds/components/ErrorState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { useLinkComponent } from '@/lib/framework';
 import { is403ForbiddenError } from '@/lib/query-utils';
-import { useMemo } from 'react';
+import { truncateString } from '@/lib/truncate-string';
 
 export interface ToolsListProps {
   tools: Record<string, GetToolResponse>;

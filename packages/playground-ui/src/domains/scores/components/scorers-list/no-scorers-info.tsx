@@ -1,6 +1,6 @@
+import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 
 export const NoScorersInfo = () => (
   <div className="flex h-full items-center justify-center">

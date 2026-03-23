@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 export function EntityListPageLayoutRoot({ children, className }: { children: ReactNode; className?: string }) {

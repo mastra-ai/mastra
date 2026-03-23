@@ -1,14 +1,13 @@
-import { EntityList } from '@/ds/components/EntityList';
-import { EntityListSkeleton } from '@/ds/components/EntityList';
+import { CheckIcon, FileInput, FileOutput } from 'lucide-react';
+import { useMemo } from 'react';
+import type { ProcessorInfo, ProcessorPhase } from '../../hooks/use-processors';
 import { NoProcessorsInfo } from './no-processors-info';
+import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
 import { ErrorState } from '@/ds/components/ErrorState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
-import { is403ForbiddenError } from '@/lib/query-utils';
 import { useLinkComponent } from '@/lib/framework';
+import { is403ForbiddenError } from '@/lib/query-utils';
 import { truncateString } from '@/lib/truncate-string';
-import { useMemo } from 'react';
-import { CheckIcon, FileInput, FileOutput } from 'lucide-react';
-import type { ProcessorInfo, ProcessorPhase } from '../../hooks/use-processors';
 
 const phaseKeys: ProcessorPhase[] = ['input', 'inputStep', 'outputStep', 'outputStream', 'outputResult'];
 

@@ -1,6 +1,7 @@
-import { type ReactNode, forwardRef } from 'react';
-import { cn } from '@/lib/utils';
+import type { ReactNode } from 'react';
+import { forwardRef } from 'react';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
+import { cn } from '@/lib/utils';
 
 export type EntityListTopCellProps = {
   children: ReactNode;

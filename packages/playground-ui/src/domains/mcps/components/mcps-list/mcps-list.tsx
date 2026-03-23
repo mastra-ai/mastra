@@ -1,17 +1,16 @@
 import type { McpServerListResponse } from '@mastra/client-js';
-import { EntityList } from '@/ds/components/EntityList';
-import { EntityListSkeleton } from '@/ds/components/EntityList';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
-import { ToolsIcon, WorkflowIcon } from '@/ds/icons';
-import { ErrorState } from '@/ds/components/ErrorState';
-import { PermissionDenied } from '@/ds/components/PermissionDenied';
-import { is403ForbiddenError } from '@/lib/query-utils';
-import { useLinkComponent } from '@/lib/framework';
-import { truncateString } from '@/lib/truncate-string';
-import { useMCPServerTools } from '../../hooks/useMCPServerTools';
-import { NoMCPServersInfo } from './no-mcp-servers-info';
 import { useMastraClient } from '@mastra/react';
 import { useMemo } from 'react';
+import { useMCPServerTools } from '../../hooks/useMCPServerTools';
+import { NoMCPServersInfo } from './no-mcp-servers-info';
+import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
+import { ErrorState } from '@/ds/components/ErrorState';
+import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { ToolsIcon, WorkflowIcon } from '@/ds/icons';
+import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { useLinkComponent } from '@/lib/framework';
+import { is403ForbiddenError } from '@/lib/query-utils';
+import { truncateString } from '@/lib/truncate-string';
 
 type McpServer = McpServerListResponse['servers'][number];
 

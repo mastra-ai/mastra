@@ -1,5 +1,5 @@
-import { EntityListRoot } from './entity-list-root';
 import { EntityListCell } from './entity-list-cells';
+import { EntityListRoot } from './entity-list-root';
 
 const widths = ['75%', '50%', '65%', '90%', '60%', '80%'];
 

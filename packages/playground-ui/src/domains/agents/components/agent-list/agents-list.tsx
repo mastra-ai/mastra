@@ -1,4 +1,5 @@
 import type { GetAgentResponse } from '@mastra/client-js';
+import { useMemo } from 'react';
 import { extractPrompt } from '../../utils/extractPrompt';
 import { ProviderLogo } from '../agent-metadata/provider-logo';
 import { NoAgentsInfo } from './no-agents-info';
@@ -6,13 +7,12 @@ import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
 import { ErrorState } from '@/ds/components/ErrorState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { TextAndIcon } from '@/ds/components/Text';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { WorkflowIcon } from '@/ds/icons';
+import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { useLinkComponent } from '@/lib/framework';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { truncateString } from '@/lib/truncate-string';
-import { useMemo } from 'react';
 
 export interface AgentsListProps {
   agents: Record<string, GetAgentResponse>;
