@@ -11,6 +11,7 @@ import {
   Pencil,
   Check,
   CheckCircle,
+  GaugeIcon,
 } from 'lucide-react';
 import { useMastraClient } from '@mastra/react';
 
@@ -537,6 +538,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     <Button
                       variant="outline"
                       size="sm"
+                      aria-label={`Create Scorer from ${filteredItems.length} item${filteredItems.length !== 1 ? 's' : ''}`}
                       onClick={() => {
                         onCreateScorer(
                           filteredItems.map(item => ({
@@ -546,7 +548,10 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                         );
                       }}
                     >
-                      Create Scorer ({filteredItems.length})
+                      <Icon size="sm">
+                        <GaugeIcon />
+                      </Icon>
+                      Create Scorer
                     </Button>
                   )}
                   <Txt variant="ui-xs" className="text-neutral3">

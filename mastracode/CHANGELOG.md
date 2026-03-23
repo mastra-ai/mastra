@@ -1,5 +1,20 @@
 # mastracode
 
+## 0.9.2-alpha.1
+
+### Patch Changes
+
+- Improved Mastra Code autonomy prompts by expanding the default guidance around assumptions, persistence, and when to ask questions. Also applied GPT-5.4-specific prompt instructions consistently during prompt assembly. ([#14587](https://github.com/mastra-ai/mastra/pull/14587))
+
+## 0.9.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`68ed4e9`](https://github.com/mastra-ai/mastra/commit/68ed4e9f118e8646b60a6112dabe854d0ef53902), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c), [`4a75e10`](https://github.com/mastra-ai/mastra/commit/4a75e106bd31c283a1b3fe74c923610dcc46415b), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c)]:
+  - @mastra/core@1.16.0-alpha.0
+  - @mastra/libsql@1.7.2-alpha.0
+  - @mastra/pg@1.8.3-alpha.0
+
 ## 0.9.1
 
 ### Patch Changes
