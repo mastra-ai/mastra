@@ -20,6 +20,14 @@ function hasVisibleParts(msg: MastraDBMessage): boolean {
   return parts.some((p: { type?: string }) => !p.type?.startsWith('data-'));
 }
 
+type RecallThread = {
+  id: string;
+  title?: string;
+  resourceId: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type RecallMemory = {
   getMemoryStore: () => Promise<{
     listMessagesById: (args: { messageIds: string[] }) => Promise<{ messages: MastraDBMessage[] }>;
@@ -39,6 +47,18 @@ type RecallMemory = {
       };
     };
   }) => Promise<{ messages: MastraDBMessage[] }>;
+  listThreads: (args: {
+    perPage?: number | false;
+    page?: number;
+    orderBy?: { field: string; direction: 'ASC' | 'DESC' };
+    filter?: { resourceId?: string; metadata?: Record<string, unknown> };
+  }) => Promise<{ threads: RecallThread[]; total: number; hasMore: boolean; page: number }>;
+  searchMessages?: (args: {
+    query: string;
+    resourceId: string;
+    topK?: number;
+  }) => Promise<{ results: Array<{ messageId: string; threadId: string; score: number }> }>;
+  getThreadById?: (args: { threadId: string }) => Promise<RecallThread | null>;
 };
 
 function parseRangeFormat(cursor: string): { startId: string; endId: string } | null {
@@ -72,6 +92,7 @@ function parseRangeFormat(cursor: string): { startId: string; endId: string } | 
 async function resolveCursorMessage(
   memory: RecallMemory,
   cursor: string,
+  access?: { resourceId?: string; threadScope?: string },
 ): Promise<MastraDBMessage | { hint: string; startId: string; endId: string }> {
   const normalized = cursor.trim();
 
@@ -95,7 +116,253 @@ async function resolveCursorMessage(
     throw new Error(`Could not resolve cursor message: ${cursor}`);
   }
 
+  // Verify the cursor message belongs to the current resource
+  if (access?.resourceId && message.resourceId !== access.resourceId) {
+    throw new Error(`Could not resolve cursor message: ${cursor}`);
+  }
+
+  // In thread scope, verify the cursor belongs to the current thread
+  if (access?.threadScope && message.threadId !== access.threadScope) {
+    throw new Error(`Could not resolve cursor message: ${cursor}`);
+  }
+
   return message;
+}
+
+// ── Thread listing ──────────────────────────────────────────────────
+
+export async function listThreadsForResource({
+  memory,
+  resourceId,
+  currentThreadId,
+  page = 0,
+  limit = 20,
+  before,
+  after,
+}: {
+  memory: RecallMemory;
+  resourceId: string;
+  currentThreadId: string;
+  page?: number;
+  limit?: number;
+  before?: string;
+  after?: string;
+}): Promise<{
+  threads: string;
+  count: number;
+  page: number;
+  hasMore: boolean;
+}> {
+  if (!resourceId) {
+    throw new Error('Resource ID is required to list threads');
+  }
+
+  const MAX_LIMIT = 50;
+  const normalizedLimit = Math.min(Math.max(limit, 1), MAX_LIMIT);
+
+  const hasDateFilter = !!(before || after);
+  const beforeDate = before ? new Date(before) : null;
+  const afterDate = after ? new Date(after) : null;
+
+  // When date filtering, fetch all threads and filter client-side
+  // (storage layer doesn't support date range on threads)
+  const result = await memory.listThreads({
+    filter: { resourceId },
+    page: hasDateFilter ? 0 : page,
+    perPage: hasDateFilter ? false : normalizedLimit,
+    orderBy: { field: 'updatedAt', direction: 'DESC' },
+  });
+
+  let threads = result.threads;
+
+  if (beforeDate) {
+    threads = threads.filter(t => t.createdAt < beforeDate);
+  }
+  if (afterDate) {
+    threads = threads.filter(t => t.createdAt > afterDate);
+  }
+
+  // Apply client-side pagination when date-filtered
+  let hasMore: boolean;
+  if (hasDateFilter) {
+    const offset = page * normalizedLimit;
+    hasMore = offset + normalizedLimit < threads.length;
+    threads = threads.slice(offset, offset + normalizedLimit);
+  } else {
+    hasMore = result.hasMore;
+  }
+
+  if (threads.length === 0) {
+    return {
+      threads: 'No threads found matching the criteria.',
+      count: 0,
+      page,
+      hasMore: false,
+    };
+  }
+
+  const lines: string[] = [];
+  for (const thread of threads) {
+    const isCurrent = thread.id === currentThreadId;
+    const title = thread.title || '(untitled)';
+    const updated = formatTimestamp(thread.updatedAt);
+    const created = formatTimestamp(thread.createdAt);
+    const marker = isCurrent ? ' ← current' : '';
+    lines.push(`- **${title}**${marker}`);
+    lines.push(`  id: ${thread.id}`);
+    lines.push(`  updated: ${updated} | created: ${created}`);
+  }
+
+  return {
+    threads: lines.join('\n'),
+    count: threads.length,
+    page,
+    hasMore,
+  };
+}
+
+// ── Cross-thread search ─────────────────────────────────────────────
+
+export async function searchMessagesForResource({
+  memory,
+  resourceId,
+  currentThreadId,
+  query,
+  topK = 10,
+  maxTokens = DEFAULT_MAX_RESULT_TOKENS,
+  before,
+  after,
+  threadScope,
+}: {
+  memory: RecallMemory;
+  resourceId: string;
+  currentThreadId?: string;
+  query: string;
+  topK?: number;
+  maxTokens?: number;
+  before?: string;
+  after?: string;
+  /** When set, restrict search results to only this thread */
+  threadScope?: string;
+}): Promise<{
+  results: string;
+  count: number;
+}> {
+  if (!memory.searchMessages) {
+    return {
+      results:
+        'Search is not configured. Enable it with `retrieval: { vector: true }` and configure a vector store and embedder on your Memory instance.',
+      count: 0,
+    };
+  }
+
+  const MAX_TOPK = 20;
+  const clampedTopK = Math.min(Math.max(topK, 1), MAX_TOPK);
+
+  const { results } = await memory.searchMessages({ query, resourceId, topK: clampedTopK });
+
+  if (results.length === 0) {
+    return {
+      results: 'No matching messages found.',
+      count: 0,
+    };
+  }
+
+  // Fetch actual message content
+  const memoryStore = await memory.getMemoryStore();
+  const messageIds = results.map(r => r.messageId);
+  const { messages } = await memoryStore.listMessagesById({ messageIds });
+  const messageMap = new Map(messages.map(m => [m.id, m]));
+
+  // Fetch thread info for context
+  const threadIds = [...new Set(results.map(r => r.threadId))];
+  const threadMap = new Map<string, RecallThread>();
+  if (memory.getThreadById) {
+    await Promise.all(
+      threadIds.map(async id => {
+        const thread = await memory.getThreadById!({ threadId: id });
+        if (thread) threadMap.set(id, thread);
+      }),
+    );
+  }
+
+  // Filter by date if specified
+  const beforeDate = before ? new Date(before) : undefined;
+  const afterDate = after ? new Date(after) : undefined;
+  const dateFilteredThreadIds = new Set(
+    threadIds.filter(id => {
+      const thread = threadMap.get(id);
+      if (!thread) return true; // keep if no thread info
+      const created = new Date(thread.createdAt);
+      if (beforeDate && created >= beforeDate) return false;
+      if (afterDate && created <= afterDate) return false;
+      return true;
+    }),
+  );
+
+  // Group results by thread (filtered)
+  const byThread = new Map<string, Array<{ messageId: string; score: number; message: MastraDBMessage }>>();
+  for (const r of results) {
+    if (threadScope && r.threadId !== threadScope) continue;
+    if (!dateFilteredThreadIds.has(r.threadId)) continue;
+    const msg = messageMap.get(r.messageId);
+    if (!msg) continue;
+    const group = byThread.get(r.threadId) || [];
+    group.push({ messageId: r.messageId, score: r.score, message: msg });
+    byThread.set(r.threadId, group);
+  }
+
+  const filteredCount = [...byThread.values()].reduce((sum, matches) => sum + matches.length, 0);
+
+  if (filteredCount === 0) {
+    return { results: 'No matching messages found.', count: 0 };
+  }
+
+  // Render each thread group using the same format as cursor-based recall
+  const threadCount = byThread.size;
+  const perThreadBudget = Math.floor(maxTokens / threadCount);
+  const sections: string[] = [];
+
+  for (const [threadId, matches] of byThread) {
+    const thread = threadMap.get(threadId);
+    const title = thread?.title || '(untitled)';
+    const isCurrent = threadId === currentThreadId;
+    const marker = isCurrent ? ' ← current' : '';
+    const date = thread ? formatTimestamp(thread.updatedAt) : '';
+
+    // Format messages using the standard pipeline
+    const parts: FormattedPart[] = [];
+    const timestamps = new Map<string, Date>();
+    for (const match of matches) {
+      const msgParts = formatMessageParts(match.message, 'low');
+      // Prepend score to first visible part
+      const first = msgParts[0];
+      if (first) {
+        msgParts[0] = {
+          ...first,
+          text: `[${match.score.toFixed(2)}] ${first.text}`,
+          fullText: `[${match.score.toFixed(2)}] ${first.fullText}`,
+        };
+      }
+      parts.push(...msgParts);
+      if (match.message.createdAt) {
+        timestamps.set(match.messageId, new Date(match.message.createdAt));
+      }
+    }
+
+    const { text: rendered } = renderFormattedParts(parts, timestamps, {
+      detail: 'low',
+      maxTokens: perThreadBudget,
+    });
+
+    const header = `**${title}**${marker}\n  thread: ${threadId}${date ? ` | updated: ${date}` : ''}`;
+    sections.push(`${header}\n${rendered}`);
+  }
+
+  return {
+    results: sections.join('\n\n'),
+    count: filteredCount,
+  };
 }
 
 // ── Per-part formatting ─────────────────────────────────────────────
@@ -318,14 +585,18 @@ function renderFormattedParts(
 export async function recallPart({
   memory,
   threadId,
+  resourceId,
   cursor,
   partIndex,
+  threadScope,
   maxTokens = DEFAULT_MAX_RESULT_TOKENS,
 }: {
   memory: RecallMemory;
   threadId: string;
+  resourceId?: string;
   cursor: string;
   partIndex: number;
+  threadScope?: string;
   maxTokens?: number;
 }): Promise<{ text: string; messageId: string; partIndex: number; role: string; type: string; truncated: boolean }> {
   if (!memory || typeof memory.getMemoryStore !== 'function') {
@@ -336,14 +607,10 @@ export async function recallPart({
     throw new Error('Thread ID is required for recall');
   }
 
-  const resolved = await resolveCursorMessage(memory, cursor);
+  const resolved = await resolveCursorMessage(memory, cursor, { resourceId, threadScope });
 
   if ('hint' in resolved) {
     throw new Error(resolved.hint);
-  }
-
-  if (resolved.threadId !== threadId) {
-    throw new Error('The requested cursor does not belong to the current thread');
   }
 
   const allParts = formatMessageParts(resolved, 'high');
@@ -398,6 +665,7 @@ export async function recallMessages({
   page = 1,
   limit = 20,
   detail = 'low',
+  threadScope,
   maxTokens = DEFAULT_MAX_RESULT_TOKENS,
 }: {
   memory: RecallMemory;
@@ -407,6 +675,7 @@ export async function recallMessages({
   page?: number;
   limit?: number;
   detail?: RecallDetail;
+  threadScope?: string;
   maxTokens?: number;
 }): Promise<RecallResult> {
   if (!memory) {
@@ -427,7 +696,7 @@ export async function recallMessages({
   const normalizedPage = Math.max(Math.min(rawPage, MAX_PAGE), -MAX_PAGE);
   const normalizedLimit = Math.min(limit, MAX_LIMIT);
 
-  const resolved = await resolveCursorMessage(memory, cursor);
+  const resolved = await resolveCursorMessage(memory, cursor, { resourceId, threadScope });
 
   if ('hint' in resolved) {
     return {
@@ -446,9 +715,8 @@ export async function recallMessages({
 
   const anchor = resolved;
 
-  if (anchor.threadId !== threadId) {
-    throw new Error('The requested cursor does not belong to the current thread');
-  }
+  // Use the thread the cursor actually belongs to — the caller may be browsing a different thread
+  const resolvedThreadId = anchor.threadId || threadId;
 
   const isForward = normalizedPage > 0;
   const pageIndex = Math.max(Math.abs(normalizedPage), 1) - 1;
@@ -458,7 +726,7 @@ export async function recallMessages({
   const fetchCount = skip + normalizedLimit + 1;
 
   const result = await memory.recall({
-    threadId,
+    threadId: resolvedThreadId,
     resourceId,
     page: 0,
     perPage: fetchCount,
@@ -566,16 +834,147 @@ export async function recallMessages({
   };
 }
 
-export const recallTool = (_memoryConfig?: MemoryConfigInternal) => {
+// ── Thread browsing (no cursor) ─────────────────────────────────────
+
+export async function recallThreadFromStart({
+  memory,
+  threadId,
+  resourceId,
+  page = 1,
+  limit = 20,
+  detail = 'low',
+  maxTokens = DEFAULT_MAX_RESULT_TOKENS,
+}: {
+  memory: RecallMemory;
+  threadId: string;
+  resourceId?: string;
+  page?: number;
+  limit?: number;
+  detail?: RecallDetail;
+  maxTokens?: number;
+}): Promise<RecallResult> {
+  if (!memory) {
+    throw new Error('Memory instance is required for recall');
+  }
+  if (!threadId) {
+    throw new Error('Thread ID is required for recall');
+  }
+
+  // Verify the thread belongs to the current resource
+  if (resourceId && memory.getThreadById) {
+    const thread = await memory.getThreadById({ threadId });
+    if (!thread || thread.resourceId !== resourceId) {
+      throw new Error('Thread not found');
+    }
+  }
+
+  const MAX_PAGE = 50;
+  const MAX_LIMIT = 20;
+  const normalizedPage = Math.max(Math.min(page, MAX_PAGE), 1);
+  const normalizedLimit = Math.min(Math.max(limit, 1), MAX_LIMIT);
+  const pageIndex = normalizedPage - 1;
+
+  // Fetch one extra to detect hasNextPage
+  const fetchCount = pageIndex * normalizedLimit + normalizedLimit + 1;
+
+  const result = await memory.recall({
+    threadId,
+    resourceId,
+    page: 0,
+    perPage: fetchCount,
+    orderBy: { field: 'createdAt', direction: 'ASC' },
+  });
+
+  const visibleMessages = result.messages.filter(hasVisibleParts);
+  const total = visibleMessages.length;
+  const skip = pageIndex * normalizedLimit;
+  const hasMore = total > skip + normalizedLimit;
+  const messages = visibleMessages.slice(skip, skip + normalizedLimit);
+
+  const allParts: FormattedPart[] = [];
+  const timestamps = new Map<string, Date>();
+  for (const msg of messages) {
+    timestamps.set(msg.id, msg.createdAt);
+    allParts.push(...formatMessageParts(msg, detail));
+  }
+
+  const rendered = renderFormattedParts(allParts, timestamps, { detail, maxTokens });
+
+  return {
+    messages: rendered.text || '(no messages in this thread)',
+    count: messages.length,
+    cursor: messages[0]?.id || '',
+    page: normalizedPage,
+    limit: normalizedLimit,
+    detail,
+    hasNextPage: hasMore,
+    hasPrevPage: pageIndex > 0,
+    truncated: rendered.truncated,
+    tokenOffset: rendered.tokenOffset,
+  };
+}
+
+export const recallTool = (
+  _memoryConfig?: MemoryConfigInternal,
+  options?: { retrievalScope?: 'thread' | 'resource' },
+) => {
+  const retrievalScope = options?.retrievalScope ?? 'thread';
+  const isResourceScope = retrievalScope === 'resource';
+
+  const description = isResourceScope
+    ? 'Browse conversation history. Use mode="threads" to list all threads for the current user. Use mode="messages" (default) to page through messages near a cursor. Pass threadId to browse a different thread. Use mode="search" to find messages by content across all threads.'
+    : 'Browse conversation history in the current thread. Use mode="messages" (default) to page through messages near a cursor. Use mode="search" to find messages by content in this thread. Use mode="threads" to get the current thread\'s ID and title.';
+
   return createTool({
     id: 'recall',
-    description:
-      'Retrieve raw message history near an observation group cursor. Observation group ranges use the format startId:endId. Pass either the start or end message ID as the cursor. Use detail="low" (default) for an overview, detail="high" for full content, or provide partIndex to fetch a specific part from the cursor message.',
+    description,
     inputSchema: z.object({
+      ...(isResourceScope
+        ? {
+            mode: z
+              .enum(['messages', 'threads', 'search'])
+              .optional()
+              .describe(
+                'What to retrieve. "messages" (default) pages through message history. "threads" lists all threads for the current user. "search" finds messages by semantic similarity across all threads.',
+              ),
+            threadId: z
+              .string()
+              .min(1)
+              .optional()
+              .describe('Browse a different thread. Use mode="threads" first to discover thread IDs.'),
+            before: z
+              .string()
+              .optional()
+              .describe(
+                'For mode="threads": only show threads created before this date. ISO 8601 or natural date string (e.g. "2026-03-15", "2026-03-10T00:00:00Z").',
+              ),
+            after: z
+              .string()
+              .optional()
+              .describe(
+                'For mode="threads": only show threads created after this date. ISO 8601 or natural date string (e.g. "2026-03-01", "2026-03-10T00:00:00Z").',
+              ),
+          }
+        : {
+            mode: z
+              .enum(['messages', 'threads', 'search'])
+              .optional()
+              .describe(
+                'What to retrieve. "messages" (default) pages through message history. "threads" returns info about the current thread. "search" finds messages by semantic similarity in this thread.',
+              ),
+          }),
+      query: z
+        .string()
+        .min(1)
+        .optional()
+        .describe('Search query for mode="search". Finds messages semantically similar to this text.'),
       cursor: z
         .string()
         .min(1)
-        .describe('A single message ID to use as the pagination cursor. Extract it from the start or end of a range.'),
+        .optional()
+        .describe(
+          'A message ID to use as the pagination cursor. Required for mode="messages". Extract it from the start or end of an observation group range.',
+        ),
       page: z
         .number()
         .int()
@@ -583,7 +982,7 @@ export const recallTool = (_memoryConfig?: MemoryConfigInternal) => {
         .max(50)
         .optional()
         .describe(
-          'Pagination offset from the cursor. Positive pages move forward, negative pages move backward, and 0 is treated as 1.',
+          'Pagination offset. For messages: positive pages move forward from cursor, negative move backward. For threads: page number (0-indexed). 0 is treated as 1 for messages.',
         ),
       limit: z
         .number()
@@ -591,12 +990,12 @@ export const recallTool = (_memoryConfig?: MemoryConfigInternal) => {
         .positive()
         .max(20)
         .optional()
-        .describe('Maximum number of messages to return. Defaults to 20.'),
+        .describe('Maximum number of items to return per page. Defaults to 20.'),
       detail: z
         .enum(['low', 'high'])
         .optional()
         .describe(
-          'Detail level. "low" (default) returns truncated text and tool names. "high" returns full content with tool args/results.',
+          'Detail level for messages. "low" (default) returns truncated text and tool names. "high" returns full content with tool args/results.',
         ),
       partIndex: z
         .number()
@@ -609,44 +1008,131 @@ export const recallTool = (_memoryConfig?: MemoryConfigInternal) => {
     }),
     execute: async (
       {
+        mode,
+        query,
         cursor,
+        threadId: explicitThreadId,
         page,
         limit,
         detail,
         partIndex,
-      }: { cursor: string; page?: number; limit?: number; detail?: RecallDetail; partIndex?: number },
+        before,
+        after,
+      }: {
+        mode?: 'messages' | 'threads' | 'search';
+        query?: string;
+        cursor?: string;
+        threadId?: string;
+        page?: number;
+        limit?: number;
+        detail?: RecallDetail;
+        partIndex?: number;
+        before?: string;
+        after?: string;
+      },
       context,
     ) => {
       const memory = (context as any)?.memory as RecallMemory | undefined;
-      const threadId = context?.agent?.threadId;
+      const currentThreadId = context?.agent?.threadId;
       const resourceId = context?.agent?.resourceId;
 
       if (!memory) {
         throw new Error('Memory instance is required for recall');
       }
+      if (!resourceId) {
+        throw new Error('Resource ID is required for recall');
+      }
 
-      if (!threadId) {
+      // Search mode
+      if (mode === 'search') {
+        if (!query) {
+          throw new Error('query is required for mode="search"');
+        }
+        return searchMessagesForResource({
+          memory,
+          resourceId,
+          currentThreadId: currentThreadId || undefined,
+          query,
+          topK: limit ?? 10,
+          before,
+          after,
+          threadScope: !isResourceScope ? currentThreadId || undefined : undefined,
+        });
+      }
+
+      // Thread listing mode
+      if (mode === 'threads') {
+        // Thread scope: return current thread info only
+        if (!isResourceScope) {
+          if (!currentThreadId || !memory.getThreadById) {
+            return { error: 'Could not resolve current thread.' };
+          }
+          const thread = await memory.getThreadById({ threadId: currentThreadId });
+          if (!thread) {
+            return { error: 'Could not resolve current thread.' };
+          }
+          return {
+            threads: `- **${thread.title || '(untitled)'}** ← current\n  id: ${thread.id}\n  updated: ${formatTimestamp(thread.updatedAt)} | created: ${formatTimestamp(thread.createdAt)}`,
+            count: 1,
+            page: 0,
+            hasMore: false,
+          };
+        }
+        return listThreadsForResource({
+          memory,
+          resourceId,
+          currentThreadId: currentThreadId || '',
+          page: page ?? 0,
+          limit: limit ?? 20,
+          before,
+          after,
+        });
+      }
+
+      // Use explicit threadId if provided, otherwise fall back to current thread
+      // Thread scope: ignore explicit threadId — always use current thread
+      const targetThreadId = isResourceScope ? explicitThreadId || currentThreadId : currentThreadId;
+      if (!targetThreadId) {
         throw new Error('Thread ID is required for recall');
+      }
+
+      // In thread scope, the cursor must belong to the current thread.
+      // In resource scope, the cursor must belong to the current resource.
+      const threadScope = !isResourceScope ? currentThreadId || undefined : undefined;
+
+      // No cursor — read from the start of the thread
+      if (!cursor) {
+        return recallThreadFromStart({
+          memory,
+          threadId: targetThreadId,
+          resourceId,
+          page: page ?? 1,
+          limit: limit ?? 20,
+          detail: detail ?? 'low',
+        });
       }
 
       // Single-part fetch mode
       if (partIndex !== undefined && partIndex !== null) {
         return recallPart({
           memory,
-          threadId,
+          threadId: targetThreadId,
+          resourceId,
           cursor,
           partIndex,
+          threadScope,
         });
       }
 
       return recallMessages({
         memory,
-        threadId,
+        threadId: targetThreadId,
         resourceId,
         cursor,
         page,
         limit,
         detail: detail ?? 'low',
+        threadScope,
       });
     },
   });

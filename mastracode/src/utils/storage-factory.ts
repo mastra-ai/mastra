@@ -6,11 +6,12 @@
  */
 
 import type { MastraCompositeStore } from '@mastra/core/storage';
-import { LibSQLStore } from '@mastra/libsql';
+import type { MastraVector } from '@mastra/core/vector';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { PostgresStore } from '@mastra/pg';
 
 import type { StorageConfig, PgStorageConfig } from './project.js';
-import { getDatabasePath } from './project.js';
+import { getDatabasePath, getVectorDatabasePath } from './project.js';
 
 export interface StorageResult {
   storage: MastraCompositeStore;
@@ -96,4 +97,31 @@ async function createPgStorage(config: PgStorageConfig): Promise<StorageResult> 
   }
 
   return { storage: store };
+}
+
+/**
+ * Create a vector store for recall search.
+ * Uses a separate LibSQL file to avoid bloating the main storage DB with embedding data.
+ * For PG backends, reuses the same connection (PG handles the extra tables fine).
+ */
+export async function createVectorStore(config: StorageConfig): Promise<MastraVector | undefined> {
+  if (config.backend === 'pg') {
+    // PG can handle vector tables in the same database
+    const pgConfig = config as PgStorageConfig;
+    if (!pgConfig.connectionString && !pgConfig.host) return undefined;
+
+    const { PgVector } = await import('@mastra/pg');
+    return new PgVector({
+      id: 'mastra-code-vectors',
+      connectionString:
+        pgConfig.connectionString ??
+        `postgresql://${pgConfig.user}:${pgConfig.password}@${pgConfig.host}:${pgConfig.port ?? 5432}/${pgConfig.database}`,
+    });
+  }
+
+  // LibSQL: separate file for vectors
+  return new LibSQLVector({
+    id: 'mastra-code-vectors',
+    url: `file:${getVectorDatabasePath()}`,
+  });
 }
