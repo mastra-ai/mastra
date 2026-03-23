@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 1.16.0-alpha.1
+
+### Patch Changes
+
+- Inject MASTRA_EXPERIMENTAL_UI environment variable into the studio HTML shell during build and deploy. ([#14547](https://github.com/mastra-ai/mastra/pull/14547))
+
+- Updated dependencies [[`7dbd611`](https://github.com/mastra-ai/mastra/commit/7dbd611a85cb1e0c0a1581c57564268cb183d86e), [`8a738d8`](https://github.com/mastra-ai/mastra/commit/8a738d844772e14be381d54b22fd5d548ee4af42), [`41aee84`](https://github.com/mastra-ai/mastra/commit/41aee84561ceebe28bad1ecba8702d92838f67f0)]:
+  - @mastra/core@1.16.0-alpha.1
+  - @mastra/server@1.16.0-alpha.1
+
 ## 1.16.0-alpha.0
 
 ### Patch Changes

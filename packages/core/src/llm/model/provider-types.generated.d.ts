@@ -210,6 +210,7 @@ export type ProviderModelsMap = {
     'nvidia/llama3-chatqa-1.5-70b',
     'nvidia/nemoretriever-ocr-v1',
     'nvidia/nemotron-3-nano-30b-a3b',
+    'nvidia/nemotron-3-super-120b-a12b',
     'nvidia/nemotron-4-340b-instruct',
     'nvidia/nvidia-nemotron-nano-9b-v2',
     'nvidia/parakeet-tdt-0.6b-v2',
@@ -242,6 +243,7 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-20b',
     'qwen/qwen3-coder',
     'x-ai/grok-4',
+    'z-ai/glm-5',
   ];
   readonly iflowcn: readonly [
     'deepseek-r1',
@@ -1368,6 +1370,8 @@ export type ProviderModelsMap = {
     'nousresearch/hermes-4-405b',
     'nousresearch/hermes-4-70b',
     'nvidia/nemotron-3-nano-30b-a3b:free',
+    'nvidia/nemotron-3-super-120b-a12b',
+    'nvidia/nemotron-3-super-120b-a12b-free',
     'nvidia/nemotron-nano-12b-v2-vl:free',
     'nvidia/nemotron-nano-9b-v2',
     'nvidia/nemotron-nano-9b-v2:free',
@@ -2264,7 +2268,7 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-V3-0324',
     'deepseek-ai/DeepSeek-V3.1',
     'moonshotai/Kimi-K2.5',
-    'nvidia/Nemotron-3-Super',
+    'nvidia/Nemotron-120B-A12B',
     'openai/gpt-oss-120b',
     'zai-org/GLM-4.6',
     'zai-org/GLM-4.7',
@@ -3280,6 +3284,10 @@ export type ProviderModelsMap = {
   readonly cerebras: readonly ['gpt-oss-120b', 'llama3.1-8b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.7'];
   readonly cortecs: readonly [
     'claude-4-5-sonnet',
+    'claude-4-6-sonnet',
+    'claude-haiku-4-5',
+    'claude-opus4-5',
+    'claude-opus4-6',
     'claude-sonnet-4',
     'deepseek-v3-0324',
     'devstral-2512',
