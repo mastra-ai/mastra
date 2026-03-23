@@ -15,6 +15,7 @@ import {
   useAuthCapabilities,
   isAuthenticated,
   usePermissions,
+  useExperimentalFeatures,
 } from '@mastra/playground-ui';
 import type { NavLink, NavSection } from '@mastra/playground-ui';
 import {
@@ -38,6 +39,7 @@ import { ExperimentalUIManager } from '@/domains/experimental-ui/experimental-ui
 type SidebarLink = NavLink & {
   requiredPermission?: string;
   requiredAnyPermission?: string[];
+  requiresExperimentalFeatures?: boolean;
 };
 
 type SidebarSection = Omit<NavSection, 'links'> & {
@@ -121,6 +123,7 @@ const mainNavigation: SidebarSection[] = [
         url: '/metrics',
         icon: <BarChart3Icon />,
         isOnMastraPlatform: true,
+        requiresExperimentalFeatures: true,
       },
       {
         name: 'Observability',
@@ -211,6 +214,7 @@ export function AppSidebar() {
 
   const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
   const showTemplates = window?.MASTRA_TEMPLATES === 'true';
+  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
   const { isMastraPlatform } = useMastraPlatform();
   const { data: authCapabilities } = useAuthCapabilities();
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
@@ -227,6 +231,11 @@ export function AppSidebar() {
   const cmsOnlyLinks = new Set(['/prompts']);
 
   const filterSidebarLink = (link: SidebarLink) => {
+    // 0) Experimental features gating
+    if (link.requiresExperimentalFeatures && !experimentalFeaturesEnabled) {
+      return false;
+    }
+
     // 1) CMS link gating
     if (cmsOnlyLinks.has(link.url) && !isCmsAvailable && !isCmsLoading) {
       return false;
