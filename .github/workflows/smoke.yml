@@ -13,7 +13,12 @@ name: Smoke Tests
 on:
   schedule:
     - cron: '0 8 * * 1-5' # weekdays 8am UTC
-  workflow_dispatch: # manual trigger
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Run tests even if no new alpha versions'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -44,7 +49,10 @@ jobs:
       - name: Check for changes
         id: diff
         run: |
-          if git diff --quiet pnpm-lock.yaml; then
+          if [ "${{ inputs.force }}" = "true" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Force flag set. Running tests."
+          elif git diff --quiet pnpm-lock.yaml; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "No new alpha versions. Skipping tests."
           else
