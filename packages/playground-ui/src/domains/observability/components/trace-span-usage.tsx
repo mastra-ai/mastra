@@ -1,7 +1,7 @@
-import { cn } from '@/lib/utils';
-import { ArrowRightIcon, ArrowRightToLineIcon, CoinsIcon } from 'lucide-react';
 import type { InputTokenDetails, OutputTokenDetails } from '@mastra/core/observability';
-import { SpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@mastra/core/storage';
+import { ArrowRightIcon, ArrowRightToLineIcon, CoinsIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 // V5 format (AI SDK v5)
 type V5TokenUsage = {

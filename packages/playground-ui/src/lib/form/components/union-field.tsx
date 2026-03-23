@@ -1,5 +1,5 @@
-import { ParsedField } from '@autoform/core';
-import { AutoFormFieldProps } from '@autoform/react';
+import type { ParsedField } from '@autoform/core';
+import type { AutoFormFieldProps } from '@autoform/react';
 import { CustomAutoFormField } from './custom-auto-form-field';
 import { Txt } from '@/ds/components/Txt';
 

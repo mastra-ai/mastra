@@ -543,6 +543,7 @@ export type GetScorerResponse = MastraScorerEntry & {
   agentNames: string[];
   workflowIds: string[];
   isRegistered: boolean;
+  source: 'code' | 'stored';
 };
 
 export interface GetScorersResponse {
@@ -2020,6 +2021,11 @@ export class MastraClientError extends Error {
 // Dataset Types
 // ============================================
 
+export interface DatasetItemSource {
+  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+  referenceId?: string;
+}
+
 export interface DatasetItem {
   id: string;
   datasetId: string;
@@ -2028,6 +2034,7 @@ export interface DatasetItem {
   groundTruth?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: unknown;
+  source?: DatasetItemSource;
   createdAt: string | Date;
   updatedAt: string | Date;
 }
@@ -2040,6 +2047,9 @@ export interface DatasetRecord {
   inputSchema?: Record<string, unknown>;
   groundTruthSchema?: Record<string, unknown>;
   requestContextSchema?: Record<string, unknown>;
+  tags?: string[] | null;
+  targetType?: string | null;
+  targetIds?: string[] | null;
   version: number;
   createdAt: string | Date;
   updatedAt: string | Date;
@@ -2049,6 +2059,7 @@ export interface DatasetExperiment {
   id: string;
   datasetId: string | null;
   datasetVersion: number | null;
+  agentVersion: string | null;
   targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
   targetId: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
@@ -2074,6 +2085,8 @@ export interface DatasetExperimentResult {
   completedAt: string | Date;
   retryCount: number;
   traceId: string | null;
+  status: 'needs-review' | 'reviewed' | 'complete' | null;
+  tags: string[] | null;
   scores: Array<{
     scorerId: string;
     scorerName: string;
@@ -2084,6 +2097,14 @@ export interface DatasetExperimentResult {
   createdAt: string | Date;
 }
 
+export interface UpdateExperimentResultParams {
+  datasetId: string;
+  experimentId: string;
+  resultId: string;
+  status?: 'needs-review' | 'reviewed' | 'complete' | null;
+  tags?: string[];
+}
+
 export interface CreateDatasetParams {
   name: string;
   description?: string;
@@ -2091,6 +2112,8 @@ export interface CreateDatasetParams {
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
   requestContextSchema?: Record<string, unknown> | null;
+  targetType?: string;
+  targetIds?: string[];
 }
 
 export interface UpdateDatasetParams {
@@ -2101,6 +2124,9 @@ export interface UpdateDatasetParams {
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
   requestContextSchema?: Record<string, unknown> | null;
+  tags?: string[];
+  targetType?: string;
+  targetIds?: string[];
 }
 
 export interface AddDatasetItemParams {
@@ -2109,6 +2135,7 @@ export interface AddDatasetItemParams {
   groundTruth?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
 }
 
 export interface UpdateDatasetItemParams {
@@ -2118,6 +2145,7 @@ export interface UpdateDatasetItemParams {
   groundTruth?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
 }
 
 export interface BatchInsertDatasetItemsParams {
@@ -2127,6 +2155,7 @@ export interface BatchInsertDatasetItemsParams {
     groundTruth?: unknown;
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
+    source?: DatasetItemSource;
   }>;
 }
 
@@ -2135,12 +2164,30 @@ export interface BatchDeleteDatasetItemsParams {
   itemIds: string[];
 }
 
+export interface GenerateDatasetItemsParams {
+  datasetId: string;
+  modelId: string;
+  prompt: string;
+  count?: number;
+  agentContext?: {
+    description?: string;
+    instructions?: string;
+    tools?: string[];
+  };
+}
+
+export interface GeneratedItem {
+  input: unknown;
+  groundTruth?: unknown;
+}
+
 export interface TriggerDatasetExperimentParams {
   datasetId: string;
   targetType: 'agent' | 'workflow' | 'scorer';
   targetId: string;
   scorerIds?: string[];
   version?: number;
+  agentVersion?: string;
   maxConcurrency?: number;
   requestContext?: Record<string, unknown>;
 }

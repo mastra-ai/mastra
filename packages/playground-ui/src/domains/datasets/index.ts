@@ -25,6 +25,7 @@ export * from './utils/json-export';
 
 // Components
 export { DatasetsTable } from './components/datasets-table/datasets-table';
+export { DatasetsList, type DatasetsListProps } from './components/datasets-list/datasets-list';
 export { CreateDatasetDialog } from './components/create-dataset-dialog';
 export { CreateDatasetFromItemsDialog } from './components/create-dataset-from-items-dialog';
 export { AddItemsToDatasetDialog } from './components/add-items-to-dataset-dialog';
@@ -88,3 +89,6 @@ export { DatasetVersionsPanel } from './components/items/dataset-versions-panel'
 export { DatasetItemVersionsPanel } from './components/versions';
 export { DatasetCompareVersionToolbar } from './components/versions';
 export { DatasetCompareVersionsList } from './components/versions';
+
+// Generation context
+export { GenerationProvider, useGenerationTasks } from './context/generation-context';

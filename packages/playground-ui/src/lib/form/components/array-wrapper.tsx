@@ -1,9 +1,9 @@
+import type { ArrayWrapperProps } from '@autoform/react';
+import { Brackets, PlusIcon } from 'lucide-react';
 import React from 'react';
 
-import { Brackets, PlusIcon } from 'lucide-react';
-import { ArrayWrapperProps } from '@autoform/react';
-import { Txt } from '@/ds/components/Txt';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
 
 export const ArrayWrapper: React.FC<ArrayWrapperProps> = ({ label, children, onAddItem }) => {

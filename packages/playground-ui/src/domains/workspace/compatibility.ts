@@ -1,7 +1,7 @@
+import type { MastraClient } from '@mastra/client-js';
 import { coreFeatures } from '@mastra/core/features';
-import { MastraClient } from '@mastra/client-js';
-import { hasMethod } from './client-utils';
 import { isNonRetryableError } from '../../lib/query-utils';
+import { hasMethod } from './client-utils';
 
 /**
  * Checks if workspace v1 features are supported by both core and client.

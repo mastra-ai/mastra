@@ -1,9 +1,9 @@
-import CodeMirror from '@uiw/react-codemirror';
-import { EditorView } from '@codemirror/view';
-import { CopyButton } from '@/ds/components/CopyButton';
-import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
-import { jsonLanguage } from '@codemirror/lang-json';
 import { javascript } from '@codemirror/lang-javascript';
+import { jsonLanguage } from '@codemirror/lang-json';
+import { EditorView } from '@codemirror/view';
+import CodeMirror from '@uiw/react-codemirror';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
+import { CopyButton } from '@/ds/components/CopyButton';
 
 export const CodeDialogContent = ({
   data,

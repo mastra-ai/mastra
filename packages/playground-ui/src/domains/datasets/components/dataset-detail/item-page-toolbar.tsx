@@ -1,21 +1,18 @@
 'use client';
 
-import { Button } from '@/ds/components/Button';
 import { Pencil, Trash2, Copy, ChevronDownIcon, ArrowLeft } from 'lucide-react';
-import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { useState } from 'react';
-import { useLinkComponent } from '@/lib/framework';
+import { Button } from '@/ds/components/Button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 
 export interface ItemPageToolbarProps {
-  datasetId: string;
   onBack: () => void;
   onEdit: () => void;
   onDelete: () => void;
   isEditing?: boolean;
 }
 
-export function ItemPageToolbar({ datasetId, onBack, onEdit, onDelete, isEditing = false }: ItemPageToolbarProps) {
-  const { Link } = useLinkComponent();
+export function ItemPageToolbar({ onBack, onEdit, onDelete, isEditing = false }: ItemPageToolbarProps) {
   const [open, setOpen] = useState(false);
 
   return (

@@ -1,8 +1,8 @@
 'use client';
 
 import { useMemo } from 'react';
-import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { cn } from '@/lib/utils';
 
 // Priority emoji to color mapping
 // P1 (🔴) = highest priority = purple theme

@@ -1,21 +1,21 @@
 'use client';
 
+import type { DatasetExperimentResult } from '@mastra/client-js';
+import type { ExperimentStatus } from '@mastra/core/storage';
 import { useState, useMemo } from 'react';
-import { DatasetExperimentResult } from '@mastra/client-js';
 
-import { Columns } from '@/ds/components/Columns/columns';
-import { Column } from '@/ds/components/Columns/column';
-import { MultiColumn } from '@/ds/components/Columns/multi-column';
-import { Tabs, Tab, TabList, TabContent } from '@/ds/components/Tabs';
-import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useExperimentTrace } from '../hooks/use-experiment-trace';
 import { ExperimentResultPanel } from './experiment-result-panel';
 import { ExperimentResultSpanPane } from './experiment-result-span-pane';
 import { ExperimentResultTracePanel } from './experiment-result-trace-panel';
-import { ExperimentScorePanel } from './experiment-score-panel';
 import { ExperimentResultsList } from './experiment-results-list';
+import { ExperimentScorePanel } from './experiment-score-panel';
 import { ExperimentScorerSummary } from './experiment-scorer-summary';
-import type { ExperimentStatus } from '@mastra/core/storage';
+import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { Column } from '@/ds/components/Columns/column';
+import { Columns } from '@/ds/components/Columns/columns';
+import { MultiColumn } from '@/ds/components/Columns/multi-column';
+import { Tabs, Tab, TabList, TabContent } from '@/ds/components/Tabs';
 
 export type ExperimentPageContentProps = {
   experimentId: string;

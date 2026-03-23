@@ -32,3 +32,8 @@ export function useAgentEditFormContext() {
   }
   return ctx;
 }
+
+/** Returns the form context or null if no provider is present. */
+export function useOptionalAgentEditFormContext() {
+  return useContext(AgentEditFormContext);
+}
