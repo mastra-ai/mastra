@@ -81,6 +81,10 @@ const VECTOR_DELETE_BATCH_SIZE = 100;
  * and message injection.
  */
 export class Memory extends MastraMemory {
+  /** Cached OM engine instance — created lazily by getOMEngine(). */
+  private _omEngine: any | null = null;
+  private _omEngineInitPromise: Promise<any | null> | null = null;
+
   constructor(config: Omit<SharedMemoryConfig, 'working'> = {}) {
     super({ name: 'Memory', ...config });
 
@@ -1051,6 +1055,225 @@ ${workingMemory}`;
         });
   }
 
+  /**
+   * Get everything needed for an LLM call in one shot.
+   *
+   * Assembles the system message (observations + working memory), loads
+   * unobserved messages from storage, and returns them ready to use.
+   *
+   * @example
+   * ```ts
+   * const ctx = await memory.getContext({ threadId });
+   * const result = await generateText({
+   *   model: openai('gpt-4o'),
+   *   system: ctx.systemMessage,
+   *   messages: ctx.messages.map(toAiSdkMessage),
+   * });
+   * ```
+   */
+  public async getContext(opts: {
+    threadId: string;
+    resourceId?: string;
+    memoryConfig?: MemoryConfigInternal;
+  }): Promise<{
+    /** Fully-formed system message (observations + instructions + working memory), or undefined if none. */
+    systemMessage: string | undefined;
+    /** Messages for the LLM — unobserved messages if OM is active, or recent messages from history. */
+    messages: MastraDBMessage[];
+    /** Whether observations exist for this thread. */
+    hasObservations: boolean;
+    /** The OM record, if OM is active. */
+    omRecord: ObservationalMemoryRecord | null;
+    /** The om-continuation reminder message, if OM has observations. Caller decides where to place it. */
+    continuationMessage: MastraDBMessage | undefined;
+    /** Formatted context blocks from other threads (resource scope only). */
+    otherThreadsContext: string | undefined;
+  }> {
+    const { threadId, resourceId, memoryConfig } = opts;
+    const config = this.getMergedThreadConfig(memoryConfig);
+    const memoryStore = await this.getMemoryStore();
+
+    // Build system message parts
+    const systemParts: string[] = [];
+
+    // 1. OM observations system message
+    let hasObservations = false;
+    let omRecord: ObservationalMemoryRecord | null = null;
+    let continuationMessage: MastraDBMessage | undefined;
+    let otherThreadsContext: string | undefined;
+
+    const omEngine = await this.getOMEngine();
+    if (omEngine) {
+      omRecord = await omEngine.getRecord(threadId, resourceId);
+      if (omRecord?.activeObservations) {
+        hasObservations = true;
+
+        // For resource scope, load other threads' unobserved context
+        if (omEngine.scope === 'resource' && resourceId) {
+          otherThreadsContext = await omEngine.getOtherThreadsContext(resourceId, threadId);
+        }
+
+        const obsSystemMessage = await omEngine.buildContextSystemMessage({
+          threadId,
+          resourceId,
+          record: omRecord,
+          unobservedContextBlocks: otherThreadsContext,
+        });
+        if (obsSystemMessage) {
+          systemParts.push(obsSystemMessage);
+        }
+
+        // Build the continuation reminder message
+        const { OBSERVATION_CONTINUATION_HINT } = await import('./processors/observational-memory/constants');
+        continuationMessage = {
+          id: 'om-continuation',
+          role: 'user' as const,
+          createdAt: new Date(0),
+          content: {
+            format: 2 as const,
+            parts: [
+              {
+                type: 'text' as const,
+                text: `<system-reminder>${OBSERVATION_CONTINUATION_HINT}</system-reminder>`,
+              },
+            ],
+          },
+          threadId,
+          resourceId,
+        };
+      }
+    }
+
+    // 2. Working memory system message
+    const workingMemoryMessage = await this.getSystemMessage({ threadId, resourceId, memoryConfig: config });
+    if (workingMemoryMessage) {
+      systemParts.push(workingMemoryMessage);
+    }
+
+    // 3. Load messages — unobserved if OM is active, or recent N
+    let messages: MastraDBMessage[];
+    if (omEngine && omRecord) {
+      // OM is active: load unobserved messages.
+      // When lastObservedAt exists, load only messages after the boundary.
+      // When lastObservedAt is NULL (no observations yet), load ALL messages
+      // so the threshold check can fire on the full context.
+      const dateFilter = omRecord.lastObservedAt
+        ? { dateRange: { start: new Date(new Date(omRecord.lastObservedAt).getTime() + 1) } }
+        : undefined;
+
+      if (omEngine.scope === 'resource' && resourceId) {
+        const result = await memoryStore.listMessagesByResourceId({
+          resourceId,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+          perPage: false,
+          filter: dateFilter,
+        });
+        messages = result.messages;
+      } else {
+        const result = await memoryStore.listMessages({
+          threadId,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+          perPage: false,
+          filter: dateFilter,
+        });
+        messages = result.messages;
+      }
+    } else {
+      // No OM: load recent messages
+      const lastMessages = config.lastMessages;
+      if (lastMessages === false) {
+        messages = [];
+      } else {
+        const result = await memoryStore.listMessages({
+          threadId,
+          resourceId,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
+          perPage: typeof lastMessages === 'number' ? lastMessages : undefined,
+        });
+        messages = result.messages.reverse(); // DESC → chronological order
+      }
+    }
+
+    return {
+      systemMessage: systemParts.length > 0 ? systemParts.join('\n\n') : undefined,
+      messages,
+      hasObservations,
+      omRecord,
+      continuationMessage,
+      otherThreadsContext,
+    };
+  }
+
+  /**
+   * Raw message upsert — persist messages to storage without embedding or working memory processing.
+   * Used by the processor to save sealed messages before firing a background buffer operation.
+   */
+  async persistMessages(messages: MastraDBMessage[]): Promise<void> {
+    if (messages.length === 0) return;
+    const memoryStore = await this.getMemoryStore();
+    await memoryStore.saveMessages({ messages });
+  }
+
+  /**
+   * Get or create the cached ObservationalMemory engine instance.
+   * Returns null if OM is not configured.
+   */
+  private async getOMEngine(): Promise<any | null> {
+    if (this._omEngine !== null) return this._omEngine;
+    if (this._omEngineInitPromise) return this._omEngineInitPromise;
+
+    this._omEngineInitPromise = (async () => {
+      const omConfig = normalizeObservationalMemoryConfig(this.threadConfig.observationalMemory);
+      if (!omConfig) {
+        this._omEngine = null;
+        return null;
+      }
+
+      const memoryStore = await this.storage.getStore('memory');
+      if (!memoryStore || !memoryStore.supportsObservationalMemory) {
+        this._omEngine = null;
+        return null;
+      }
+
+      const { ObservationalMemory } = await import('./processors/observational-memory');
+
+      this._omEngine = new ObservationalMemory({
+        storage: memoryStore,
+        scope: omConfig.scope,
+        shareTokenBudget: omConfig.shareTokenBudget,
+        model: omConfig.model,
+        observation: omConfig.observation
+          ? {
+              model: omConfig.observation.model,
+              messageTokens: omConfig.observation.messageTokens,
+              modelSettings: omConfig.observation.modelSettings,
+              maxTokensPerBatch: omConfig.observation.maxTokensPerBatch,
+              providerOptions: omConfig.observation.providerOptions,
+              bufferTokens: omConfig.observation.bufferTokens,
+              bufferActivation: omConfig.observation.bufferActivation,
+              blockAfter: omConfig.observation.blockAfter,
+              instruction: omConfig.observation.instruction,
+            }
+          : undefined,
+        reflection: omConfig.reflection
+          ? {
+              model: omConfig.reflection.model,
+              observationTokens: omConfig.reflection.observationTokens,
+              modelSettings: omConfig.reflection.modelSettings,
+              providerOptions: omConfig.reflection.providerOptions,
+              bufferActivation: omConfig.reflection.bufferActivation,
+              blockAfter: omConfig.reflection.blockAfter,
+              instruction: omConfig.reflection.instruction,
+            }
+          : undefined,
+      });
+
+      return this._omEngine;
+    })();
+
+    return this._omEngineInitPromise;
+  }
+
   public defaultWorkingMemoryTemplate = `
 # User Information
 - **First Name**: 
@@ -2008,9 +2231,9 @@ Notes:
 
     // Dynamic import to avoid loading OM code when not needed and to prevent
     // import errors when paired with an older @mastra/core version
-    const { ObservationalMemory } = await import('./processors/observational-memory');
+    const { ObservationalMemory, ObservationalMemoryProcessor } = await import('./processors/observational-memory');
 
-    return new ObservationalMemory({
+    const engine = new ObservationalMemory({
       storage: memoryStore,
       scope: omConfig.scope,
       retrieval: omConfig.retrieval,
@@ -2043,6 +2266,8 @@ Notes:
           }
         : undefined,
     });
+
+    return new ObservationalMemoryProcessor(engine, this);
   }
 }
 
