@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Play, Sparkles, Clock, ChevronRight, ChevronDown, Pencil, Save, X, Trash2 } from 'lucide-react';
-import { useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { formatVersionLabel } from './format-version-label';
 import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
 import { useDatasetExperiments } from '@/domains/datasets/hooks/use-dataset-experiments';
@@ -18,6 +18,7 @@ import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
+import { CopyButton } from '@/ds/components/CopyButton';
 
 interface DatasetDetailViewProps {
   agentId: string;
@@ -88,6 +89,14 @@ export function DatasetDetailView({
   const isAgentTarget = !datasetTargetType || datasetTargetType === 'agent';
   const agentVersionsQuery = useAgentVersions({ agentId: isAgentTarget ? agentId : '' });
   const agentVersions = agentVersionsQuery.data?.versions ?? [];
+
+  useEffect(() => {
+    setSelectedDatasetVersion('');
+  }, [datasetId]);
+
+  useEffect(() => {
+    setSelectedAgentVersion('');
+  }, [agentId]);
 
   const mergedRequestContext = useMergedRequestContext();
   const queryClient = useQueryClient();
@@ -223,20 +232,29 @@ export function DatasetDetailView({
               <Txt variant="ui-xs" className="text-neutral3 mb-1 block">
                 Agent version
               </Txt>
-              <Combobox
-                options={[
-                  { label: 'Current', value: '' },
-                  ...agentVersions.map(v => ({
-                    label: `v${v.versionNumber}`,
-                    value: v.id,
-                    description: v.changeMessage ?? undefined,
-                  })),
-                ]}
-                value={selectedAgentVersion}
-                onValueChange={setSelectedAgentVersion}
-                placeholder="Current"
-                size="sm"
-              />
+              <div className="flex items-center gap-1">
+                <Combobox
+                  options={[
+                    { label: 'Current', value: '' },
+                    ...agentVersions.map(v => ({
+                      label: `v${v.versionNumber}`,
+                      value: v.id,
+                      description: v.changeMessage ?? undefined,
+                    })),
+                  ]}
+                  value={selectedAgentVersion}
+                  onValueChange={setSelectedAgentVersion}
+                  placeholder="Current"
+                  size="sm"
+                />
+                {(selectedAgentVersion || agentVersions[0]?.id) && (
+                  <CopyButton
+                    content={selectedAgentVersion || agentVersions[0]?.id}
+                    tooltip="Copy version ID"
+                    size="sm"
+                  />
+                )}
+              </div>
             </div>
           )}
         </div>
