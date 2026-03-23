@@ -161,7 +161,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     instructions: getDynamicInstructions,
     model: getDynamicModel,
     tools: createDynamicTools(mcpManager, config?.extraTools, hookManager, config?.disabledTools),
-    outputProcessors: [
+    inputProcessors: [
       new ToolResultReminderProcessor({
         getIgnoredInstructionPaths: ({ requestContext }) => {
           const harnessContext = requestContext.get('harness') as

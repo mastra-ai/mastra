@@ -3,7 +3,7 @@ import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import { MastraLanguageModelV3Mock } from '../loop/test-utils/MastraLanguageModelV3Mock';
 import type { RequestContext } from '../request-context';
 import { ToolResultReminderProcessor } from './tool-result-reminder';
-import type { ProcessOutputStepArgs, ProcessorStreamWriter, ToolCallInfo } from './index';
+import type { ProcessInputStepArgs, ProcessorStreamWriter, ToolCallInfo } from './index';
 
 const REMINDER_TEXT = 'Remember to cite project instructions when using AGENTS.md guidance.';
 const FILE_CONTENT = '# Nested AGENTS\n\nUse the nested instructions when replying.';
@@ -17,8 +17,8 @@ type TestToolInvocation = {
   toolName: string;
   toolCallId: string;
   args: Record<string, unknown>;
-  state: 'result';
-  result: unknown;
+  state: 'call' | 'result';
+  result?: unknown;
 };
 
 type TestToolInvocationPart = {
@@ -76,20 +76,38 @@ function createAssistantMessage(content: TestMessageContent): MastraDBMessage {
   };
 }
 
-function createToolCall(args: Record<string, unknown>, toolName = 'view'): ToolCallInfo {
+function createToolInvocationPart(
+  toolCallId: string,
+  args: Record<string, unknown>,
+  state: 'call' | 'result',
+  result?: unknown,
+): TestToolInvocationPart {
+  return {
+    type: 'tool-invocation',
+    toolInvocation: {
+      toolName: 'mkdir',
+      toolCallId,
+      args,
+      state,
+      ...(state === 'result' ? { result } : {}),
+    },
+  };
+}
+
+function createToolCall(args: Record<string, unknown>, toolName = 'view', toolCallId?: string): ToolCallInfo {
   return {
     toolName,
-    toolCallId: `call-${Math.random().toString(36).slice(2, 8)}`,
+    toolCallId: toolCallId ?? `call-${Math.random().toString(36).slice(2, 8)}`,
     args,
   };
 }
 
-function createProcessOutputStepArgs(
+function createProcessInputStepArgs(
   messageList: TestMessageList,
   toolCalls: ToolCallInfo[],
-  customImpl?: ProcessorStreamWriter['custom'],
+  writer?: ProcessorStreamWriter,
   rotateResponseMessageId?: () => string,
-): ProcessOutputStepArgs {
+): ProcessInputStepArgs {
   const requestContext = {
     get: () => undefined,
     set: () => undefined,
@@ -100,10 +118,6 @@ function createProcessOutputStepArgs(
     entries: () => [],
     keys: () => [],
   } as unknown as RequestContext;
-
-  const writer = {
-    custom: customImpl ?? (async () => undefined),
-  } satisfies ProcessorStreamWriter;
 
   return {
     stepNumber: 0,
@@ -123,9 +137,9 @@ function createProcessOutputStepArgs(
     abortSignal: new AbortController().signal,
     requestContext,
     retryCount: 0,
-    writer,
     model: new MastraLanguageModelV3Mock({}),
-  } as ProcessOutputStepArgs;
+    writer,
+  } as ProcessInputStepArgs;
 }
 
 function extractReminderMarkup(messageList: TestMessageList): string[] {
@@ -145,45 +159,18 @@ function getMessageText(message: MastraDBMessage): string {
 }
 
 describe('ToolResultReminderProcessor', () => {
-  it('emits a transient data-system-reminder chunk with instruction file contents', async () => {
-    const messageList = new TestMessageList();
-    const chunks: Array<{ type: string; data?: unknown; transient?: boolean }> = [];
-
-    messageList.push(createAssistantMessage({ format: 2, parts: [] }));
-
-    const testProcessor = new ToolResultReminderProcessor({
-      reminderText: REMINDER_TEXT,
-      pathExists: path => String(path) === '/repo/src/agents/nested/AGENTS.md',
-      isDirectory: path => String(path) !== '/repo/src/agents/nested/file.ts',
-      readFile: () => FILE_CONTENT,
-    });
-
-    await testProcessor.processOutputStep(
-      createProcessOutputStepArgs(
-        messageList,
-        [createToolCall({ path: '/repo/src/agents/nested/file.ts' })],
-        async chunk => {
-          chunks.push(chunk as { type: string; data?: unknown; transient?: boolean });
-        },
-      ),
-    );
-
-    expect(chunks).toEqual([
-      {
-        type: 'data-system-reminder',
-        data: {
-          message: FILE_CONTENT,
-          reminderType: 'dynamic-agents-md',
-          path: '/repo/src/agents/nested/AGENTS.md',
-        },
-        transient: true,
-      },
-    ]);
-  });
-
   it('injects metadata-rich reminder for direct AGENTS.md path references', async () => {
     const messageList = new TestMessageList();
-    messageList.push(createUserMessage('Open the instructions'), createAssistantMessage({ format: 2, parts: [] }));
+    const toolCallId = 'call-agents';
+    messageList.push(
+      createUserMessage('Open the instructions'),
+      createAssistantMessage({
+        format: 2,
+        parts: [
+          createToolInvocationPart(toolCallId, { path: '/repo/src/agents/nested/AGENTS.md' }, 'result', { ok: true }),
+        ],
+      }),
+    );
 
     const testProcessor = new ToolResultReminderProcessor({
       reminderText: REMINDER_TEXT,
@@ -192,8 +179,10 @@ describe('ToolResultReminderProcessor', () => {
       readFile: () => FILE_CONTENT,
     });
 
-    await testProcessor.processOutputStep(
-      createProcessOutputStepArgs(messageList, [createToolCall({ path: '/repo/src/agents/nested/AGENTS.md' })]),
+    await testProcessor.processInputStep(
+      createProcessInputStepArgs(messageList, [
+        createToolCall({ path: '/repo/src/agents/nested/AGENTS.md' }, 'view', toolCallId),
+      ]),
     );
 
     expect(extractReminderMarkup(messageList)).toEqual([
@@ -203,7 +192,13 @@ describe('ToolResultReminderProcessor', () => {
 
   it('injects reminder for tool calls array format', async () => {
     const messageList = new TestMessageList();
-    messageList.push(createAssistantMessage({ format: 2, parts: [] }));
+    const toolCallId = 'call-read';
+    messageList.push(
+      createAssistantMessage({
+        format: 2,
+        parts: [createToolInvocationPart(toolCallId, { filePath: '/repo/CLAUDE.md' }, 'result', { ok: true })],
+      }),
+    );
 
     const testProcessor = new ToolResultReminderProcessor({
       reminderText: REMINDER_TEXT,
@@ -212,10 +207,32 @@ describe('ToolResultReminderProcessor', () => {
       readFile: () => 'Project guidance from CLAUDE',
     });
 
-    await testProcessor.processOutputStep(
-      createProcessOutputStepArgs(messageList, [createToolCall({ filePath: '/repo/CLAUDE.md' }, 'read')]),
+    const chunks: Array<{ type: string; data?: unknown; transient?: boolean }> = [];
+    const writer: ProcessorStreamWriter = {
+      custom: async chunk => {
+        chunks.push(chunk as { type: string; data?: unknown; transient?: boolean });
+      },
+    };
+
+    await testProcessor.processInputStep(
+      createProcessInputStepArgs(
+        messageList,
+        [createToolCall({ filePath: '/repo/CLAUDE.md' }, 'read', toolCallId)],
+        writer,
+      ),
     );
 
+    expect(chunks).toEqual([
+      {
+        type: 'data-system-reminder',
+        data: {
+          message: 'Project guidance from CLAUDE',
+          reminderType: 'dynamic-agents-md',
+          path: '/repo/CLAUDE.md',
+        },
+        transient: true,
+      },
+    ]);
     expect(extractReminderMarkup(messageList)).toEqual([
       `<system-reminder type="dynamic-agents-md" path="/repo/CLAUDE.md">Project guidance from CLAUDE</system-reminder>`,
     ]);
@@ -223,7 +240,15 @@ describe('ToolResultReminderProcessor', () => {
 
   it('rotates the active response id before persisting an injected reminder', async () => {
     const messageList = new TestMessageList();
-    messageList.push(createAssistantMessage({ format: 2, parts: [] }));
+    const toolCallId = 'call-result';
+    messageList.push(
+      createAssistantMessage({
+        format: 2,
+        parts: [
+          createToolInvocationPart(toolCallId, { path: '/repo/src/agents/nested/AGENTS.md' }, 'result', { ok: true }),
+        ],
+      }),
+    );
     const rotateResponseMessageId = vi.fn(() => 'response-2');
 
     const testProcessor = new ToolResultReminderProcessor({
@@ -233,10 +258,10 @@ describe('ToolResultReminderProcessor', () => {
       readFile: () => FILE_CONTENT,
     });
 
-    await testProcessor.processOutputStep(
-      createProcessOutputStepArgs(
+    await testProcessor.processInputStep(
+      createProcessInputStepArgs(
         messageList,
-        [createToolCall({ path: '/repo/src/agents/nested/AGENTS.md' })],
+        [createToolCall({ path: '/repo/src/agents/nested/AGENTS.md' }, 'view', toolCallId)],
         undefined,
         rotateResponseMessageId,
       ),
@@ -245,9 +270,47 @@ describe('ToolResultReminderProcessor', () => {
     expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
   });
 
+  it('does not detect a reminder from tool args while the tool invocation is still missing a result', async () => {
+    const messageList = new TestMessageList();
+    const toolCallId = 'call-pending';
+    messageList.push(
+      createAssistantMessage({
+        format: 2,
+        parts: [createToolInvocationPart(toolCallId, { path: 'src/agents/nested' }, 'call')],
+      }),
+    );
+
+    const rotateResponseMessageId = vi.fn(() => 'response-2');
+    const testProcessor = new ToolResultReminderProcessor({
+      reminderText: REMINDER_TEXT,
+      pathExists: path =>
+        String(path) === '/repo/src/agents/nested' || String(path) === '/repo/src/agents/nested/AGENTS.md',
+      isDirectory: path => String(path) === '/repo/src/agents/nested',
+      readFile: () => FILE_CONTENT,
+    });
+
+    await testProcessor.processInputStep(
+      createProcessInputStepArgs(
+        messageList,
+        [createToolCall({ path: '/repo/src/agents/nested' }, 'mkdir', toolCallId)],
+        undefined,
+        rotateResponseMessageId,
+      ),
+    );
+
+    expect(rotateResponseMessageId).not.toHaveBeenCalled();
+    expect(extractReminderMarkup(messageList)).toEqual([]);
+  });
+
   it('does not inject for instruction files already loaded statically', async () => {
     const messageList = new TestMessageList();
-    messageList.push(createAssistantMessage({ format: 2, parts: [] }));
+    const toolCallId = 'call-static';
+    messageList.push(
+      createAssistantMessage({
+        format: 2,
+        parts: [createToolInvocationPart(toolCallId, { path: '/repo/src/deep/file.ts' }, 'result', { ok: true })],
+      }),
+    );
 
     const testProcessor = new ToolResultReminderProcessor({
       pathExists: path => String(path) === '/repo/AGENTS.md',
@@ -256,8 +319,8 @@ describe('ToolResultReminderProcessor', () => {
       getIgnoredInstructionPaths: () => ['/repo/AGENTS.md'],
     });
 
-    await testProcessor.processOutputStep(
-      createProcessOutputStepArgs(messageList, [createToolCall({ path: '/repo/src/deep/file.ts' })]),
+    await testProcessor.processInputStep(
+      createProcessInputStepArgs(messageList, [createToolCall({ path: '/repo/src/deep/file.ts' }, 'view', toolCallId)]),
     );
 
     expect(extractReminderMarkup(messageList)).toEqual([]);
@@ -265,7 +328,15 @@ describe('ToolResultReminderProcessor', () => {
 
   it('falls back to configured reminder text when file cannot be read', async () => {
     const messageList = new TestMessageList();
-    messageList.push(createAssistantMessage({ format: 2, parts: [] }));
+    const toolCallId = 'call-fallback';
+    messageList.push(
+      createAssistantMessage({
+        format: 2,
+        parts: [
+          createToolInvocationPart(toolCallId, { path: '/repo/src/agents/nested/file.ts' }, 'result', { ok: true }),
+        ],
+      }),
+    );
 
     const testProcessor = new ToolResultReminderProcessor({
       reminderText: REMINDER_TEXT,
@@ -276,8 +347,10 @@ describe('ToolResultReminderProcessor', () => {
       },
     });
 
-    await testProcessor.processOutputStep(
-      createProcessOutputStepArgs(messageList, [createToolCall({ path: '/repo/src/agents/nested/file.ts' })]),
+    await testProcessor.processInputStep(
+      createProcessInputStepArgs(messageList, [
+        createToolCall({ path: '/repo/src/agents/nested/file.ts' }, 'view', toolCallId),
+      ]),
     );
 
     expect(extractReminderMarkup(messageList)).toEqual([
@@ -287,11 +360,15 @@ describe('ToolResultReminderProcessor', () => {
 
   it('does not inject duplicate reminder for the same path and content', async () => {
     const messageList = new TestMessageList();
+    const toolCallId = 'call-duplicate';
     messageList.push(
       createUserMessage(
         `<system-reminder type="dynamic-agents-md" path="/repo/AGENTS.md">Project guidance from AGENTS</system-reminder>`,
       ),
-      createAssistantMessage({ format: 2, parts: [] }),
+      createAssistantMessage({
+        format: 2,
+        parts: [createToolInvocationPart(toolCallId, { path: '/repo/src/index.ts' }, 'result', { ok: true })],
+      }),
     );
 
     const testProcessor = new ToolResultReminderProcessor({
@@ -300,8 +377,8 @@ describe('ToolResultReminderProcessor', () => {
       readFile: () => 'Project guidance from AGENTS',
     });
 
-    await testProcessor.processOutputStep(
-      createProcessOutputStepArgs(messageList, [createToolCall({ path: '/repo/src/index.ts' })]),
+    await testProcessor.processInputStep(
+      createProcessInputStepArgs(messageList, [createToolCall({ path: '/repo/src/index.ts' }, 'view', toolCallId)]),
     );
 
     expect(extractReminderMarkup(messageList)).toEqual([
@@ -311,11 +388,15 @@ describe('ToolResultReminderProcessor', () => {
 
   it('injects a new reminder when the path differs', async () => {
     const messageList = new TestMessageList();
+    const toolCallId = 'call-different-path';
     messageList.push(
       createUserMessage(
         `<system-reminder type="dynamic-agents-md" path="/repo/AGENTS.md">Root guidance</system-reminder>`,
       ),
-      createAssistantMessage({ format: 2, parts: [] }),
+      createAssistantMessage({
+        format: 2,
+        parts: [createToolInvocationPart(toolCallId, { path: '/repo/nested/file.ts' }, 'result', { ok: true })],
+      }),
     );
 
     const testProcessor = new ToolResultReminderProcessor({
@@ -324,8 +405,8 @@ describe('ToolResultReminderProcessor', () => {
       readFile: path => (String(path) === '/repo/nested/AGENTS.md' ? 'Nested guidance' : 'Root guidance'),
     });
 
-    await testProcessor.processOutputStep(
-      createProcessOutputStepArgs(messageList, [createToolCall({ path: '/repo/nested/file.ts' })]),
+    await testProcessor.processInputStep(
+      createProcessInputStepArgs(messageList, [createToolCall({ path: '/repo/nested/file.ts' }, 'view', toolCallId)]),
     );
 
     expect(extractReminderMarkup(messageList)).toEqual([

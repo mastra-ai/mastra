@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, normalize, resolve } from 'node:path';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { DataChunkType } from '../stream/types';
-import type { ProcessOutputStepArgs, Processor, ToolCallInfo } from './index';
+import type { ProcessInputStepArgs, Processor, ToolCallInfo } from './index';
 
 const INSTRUCTION_FILE_NAMES = ['AGENTS.md', 'CLAUDE.md', 'CONTEXT.md'] as const;
 const PATH_FIELDS = ['path', 'file', 'filePath', 'target', 'targetPath', 'dest', 'destination'] as const;
@@ -15,6 +15,7 @@ type SystemReminderChunk = DataChunkType & {
     reminderType: string;
     path: string;
   };
+  transient: true;
 };
 
 type TextPartLike = {
@@ -22,12 +23,21 @@ type TextPartLike = {
   text: string;
 };
 
+type ToolInvocationLike = {
+  type: 'tool-invocation';
+  toolInvocation?: {
+    state?: string;
+    toolCallId?: string;
+    args?: unknown;
+  };
+};
+
 export interface ToolResultReminderOptions {
   reminderText?: string;
   pathExists?: (path: string) => boolean;
   isDirectory?: (path: string) => boolean;
   readFile?: (path: string) => string;
-  getIgnoredInstructionPaths?: (args: ProcessOutputStepArgs) => string[];
+  getIgnoredInstructionPaths?: (args: ProcessInputStepArgs) => string[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -99,6 +109,37 @@ function getReminderMarkup(reminderText: string, instructionPath: string): strin
   return `<system-reminder type="${REMINDER_TYPE}" path="${escapeXmlAttribute(instructionPath)}">${escapeXml(reminderText)}</system-reminder>`;
 }
 
+type CompletedToolCall = Pick<ToolCallInfo, 'toolCallId' | 'args'>;
+
+function getCompletedToolCalls(messageList: MessageList): CompletedToolCall[] {
+  const completed: CompletedToolCall[] = [];
+
+  for (const message of messageList.get.all.db()) {
+    const parts = isRecord(message.content) ? message.content.parts : undefined;
+    if (!Array.isArray(parts)) {
+      continue;
+    }
+
+    for (const part of parts) {
+      if (!isRecord(part) || part.type !== 'tool-invocation') {
+        continue;
+      }
+
+      const invocation = (part as ToolInvocationLike).toolInvocation;
+      if (!invocation || invocation.state !== 'result' || typeof invocation.toolCallId !== 'string') {
+        continue;
+      }
+
+      completed.push({
+        toolCallId: invocation.toolCallId,
+        args: invocation.args,
+      });
+    }
+  }
+
+  return completed;
+}
+
 function parseInvocationArgs(args: unknown): Record<string, unknown> | undefined {
   if (isRecord(args)) {
     return args;
@@ -130,7 +171,7 @@ export class ToolResultReminderProcessor implements Processor<'tool-result-remin
   private readonly pathExists: (path: string) => boolean;
   private readonly isDirectory: (path: string) => boolean;
   private readonly readFile: (path: string) => string;
-  private readonly getIgnoredInstructionPaths?: (args: ProcessOutputStepArgs) => string[];
+  private readonly getIgnoredInstructionPaths?: (args: ProcessInputStepArgs) => string[];
 
   constructor(options: ToolResultReminderOptions) {
     this.reminderText = options.reminderText;
@@ -148,10 +189,12 @@ export class ToolResultReminderProcessor implements Processor<'tool-result-remin
     this.getIgnoredInstructionPaths = options.getIgnoredInstructionPaths;
   }
 
-  async processOutputStep(args: ProcessOutputStepArgs): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, writer, rotateResponseMessageId } = args;
+  async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
+    const { messageList, rotateResponseMessageId } = args;
     const messages = messageList.get.all.db();
-    const instructionPath = this.findReferencedInstructionPath(args.toolCalls);
+    const completedToolCalls = getCompletedToolCalls(messageList);
+
+    const instructionPath = this.findReferencedInstructionPath(completedToolCalls);
 
     if (!instructionPath || this.isIgnoredInstructionPath(args, instructionPath)) {
       return messageList;
@@ -167,9 +210,7 @@ export class ToolResultReminderProcessor implements Processor<'tool-result-remin
       return messageList;
     }
 
-    rotateResponseMessageId?.();
-
-    if (writer) {
+    if (args.writer) {
       const chunk: SystemReminderChunk = {
         type: 'data-system-reminder',
         data: {
@@ -179,10 +220,11 @@ export class ToolResultReminderProcessor implements Processor<'tool-result-remin
         },
         transient: true,
       };
-      await writer.custom(chunk);
+      await args.writer.custom(chunk);
     }
 
     messageList.add(reminderMarkup, 'user');
+    rotateResponseMessageId?.();
     return messageList;
   }
 
@@ -199,13 +241,13 @@ export class ToolResultReminderProcessor implements Processor<'tool-result-remin
     return this.reminderText?.trim() || undefined;
   }
 
-  private isIgnoredInstructionPath(args: ProcessOutputStepArgs, instructionPath: string): boolean {
+  private isIgnoredInstructionPath(args: ProcessInputStepArgs, instructionPath: string): boolean {
     const ignoredPaths = this.getIgnoredInstructionPaths?.(args) ?? [];
     const normalizedInstructionPath = toAbsolutePath(instructionPath);
     return ignoredPaths.some(path => toAbsolutePath(path) === normalizedInstructionPath);
   }
 
-  private findReferencedInstructionPath(toolCalls?: ToolCallInfo[]): string | undefined {
+  private findReferencedInstructionPath(toolCalls?: CompletedToolCall[]): string | undefined {
     if (!Array.isArray(toolCalls)) {
       return undefined;
     }

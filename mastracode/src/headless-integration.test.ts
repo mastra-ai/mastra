@@ -275,7 +275,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     expect(agentEnd.reason).toBe('aborted');
   });
 
-  it('ToolResultReminderProcessor streams a system reminder during the same turn as instruction-file tool usage', async () => {
+  it('ToolResultReminderProcessor persists a system reminder after instruction-file tool usage', async () => {
     const tempProjectDir = mkdtempSync(join(tmpdir(), 'mastracode-reminder-project-'));
     tempStorePaths.push(tempProjectDir);
     const instructionDir = join(tempProjectDir, 'src', 'agents', 'nested');
@@ -307,7 +307,7 @@ describe('headless mode — event-driven auto-resolution', () => {
         };
       },
       tools: { readFile: readFileTool },
-      outputProcessors: [reminderProcessor],
+      inputProcessors: [reminderProcessor],
     });
 
     await harness.init();
@@ -325,14 +325,31 @@ describe('headless mode — event-driven auto-resolution', () => {
     const reminderUpdates = events.filter(
       (event): event is Extract<HarnessEvent, { type: 'message_update' }> => event.type === 'message_update',
     );
-    const streamedReminderMessages = reminderUpdates.filter(event =>
-      JSON.stringify(event.message.content).includes('"type":"system_reminder"') &&
-      JSON.stringify(event.message.content).includes('"reminderType":"dynamic-agents-md"') &&
-      JSON.stringify(event.message.content).includes(`"path":"${instructionPath.split('\\').join('\\\\')}"`) &&
-      JSON.stringify(event.message.content).includes(`"message":"${instructionContents}"`),
+    const persistedReminderMessages = reminderUpdates.filter(event =>
+      event.message.content.some(
+        part =>
+          part.type === 'system_reminder' &&
+          part.reminderType === 'dynamic-agents-md' &&
+          part.path === instructionPath &&
+          part.message === instructionContents,
+      ),
     );
 
-    console.log(JSON.stringify(events, null, 2));
-    expect(streamedReminderMessages).toHaveLength(1);
+    expect(persistedReminderMessages.length).toBeGreaterThan(0);
+
+    const finalMessageEnd = [...events]
+      .reverse()
+      .find((event): event is Extract<HarnessEvent, { type: 'message_end' }> => event.type === 'message_end');
+
+    expect(finalMessageEnd).toBeDefined();
+    expect(
+      finalMessageEnd?.message.content.filter(
+        part =>
+          part.type === 'system_reminder' &&
+          part.reminderType === 'dynamic-agents-md' &&
+          part.path === instructionPath &&
+          part.message === instructionContents,
+      ),
+    ).toHaveLength(1);
   });
 });
