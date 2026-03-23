@@ -1,16 +1,19 @@
 import type { StoredPromptBlockResponse } from '@mastra/client-js';
 import { EntityList } from '@/ds/components/EntityList';
 import { EntityListSkeleton } from '@/ds/components/EntityList';
-import { EmptyState } from '@/ds/components/EmptyState';
-import { Button } from '@/ds/components/Button';
+import { ErrorState } from '@/ds/components/ErrorState';
+import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { is403ForbiddenError } from '@/lib/query-utils';
 import { useLinkComponent } from '@/lib/framework';
+import { NoPromptBlocksInfo } from './no-prompt-blocks-info';
 import { truncateString } from '@/lib/truncate-string';
 import { useMemo, useState } from 'react';
-import { CheckIcon, FileTextIcon } from 'lucide-react';
+import { CheckIcon } from 'lucide-react';
 
 export interface PromptsListProps {
   promptBlocks: StoredPromptBlockResponse[];
   isLoading: boolean;
+  error?: Error | null;
   search?: string;
   onSearch?: (search: string) => void;
 }
@@ -18,6 +21,7 @@ export interface PromptsListProps {
 export function PromptsList({
   promptBlocks,
   isLoading,
+  error,
   search: externalSearch,
   onSearch: externalOnSearch,
 }: PromptsListProps) {
@@ -32,22 +36,16 @@ export function PromptsList({
     );
   }, [promptBlocks, search]);
 
+  if (error && is403ForbiddenError(error)) {
+    return <PermissionDenied resource="prompt blocks" />;
+  }
+
+  if (error) {
+    return <ErrorState title="Failed to load prompt blocks" message={error.message} />;
+  }
+
   if (promptBlocks.length === 0 && !isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <EmptyState
-          iconSlot={<FileTextIcon className="h-8 w-8" />}
-          titleSlot="No Prompt Blocks"
-          descriptionSlot="Create reusable prompt blocks that can be referenced in your agent instructions."
-          actionSlot={
-            <Button as="a" href="https://mastra.ai/en/docs/agents/agent-instructions#prompt-blocks" target="_blank">
-              <FileTextIcon />
-              Docs
-            </Button>
-          }
-        />
-      </div>
-    );
+    return <NoPromptBlocksInfo />;
   }
 
   if (isLoading) {

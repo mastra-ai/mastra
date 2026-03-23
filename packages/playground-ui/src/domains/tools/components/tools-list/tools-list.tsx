@@ -1,15 +1,12 @@
 import type { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
 import { EntityList } from '@/ds/components/EntityList';
 import { EntityListSkeleton } from '@/ds/components/EntityList';
-import { EmptyState } from '@/ds/components/EmptyState';
-import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
-import { ToolsIcon } from '@/ds/icons';
-import { ToolCoinIcon } from '@/ds/icons/ToolCoinIcon';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { NoToolsInfo } from './no-tools-info';
 import { useLinkComponent } from '@/lib/framework';
 import { truncateString } from '@/lib/truncate-string';
 import { prepareToolsTable } from '@/domains/tools/utils/prepareToolsTable';
+import { ErrorState } from '@/ds/components/ErrorState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { useMemo, useState } from 'react';
@@ -46,31 +43,12 @@ export function ToolsList({
     return <PermissionDenied resource="tools" />;
   }
 
+  if (error) {
+    return <ErrorState title="Failed to load tools" message={error.message} />;
+  }
+
   if (toolData.length === 0 && !isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <EmptyState
-          iconSlot={<ToolCoinIcon />}
-          titleSlot="Configure Tools"
-          descriptionSlot="Mastra tools are not configured yet. You can find more information in the documentation."
-          actionSlot={
-            <Button
-              size="lg"
-              className="w-full"
-              variant="light"
-              as="a"
-              href="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
-              target="_blank"
-            >
-              <Icon>
-                <ToolsIcon />
-              </Icon>
-              Docs
-            </Button>
-          }
-        />
-      </div>
-    );
+    return <NoToolsInfo />;
   }
 
   if (isLoading) {

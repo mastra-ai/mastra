@@ -2,21 +2,21 @@ import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 
-export const NoAgentsInfo = () => (
-  <div className="flex h-full items-center justify-center ">
+export const NoScorersInfo = () => (
+  <div className="flex h-full items-center justify-center">
     <EmptyState
       iconSlot={<CircleSlashIcon />}
-      titleSlot="No Agents yet"
-      descriptionSlot="Configure agents in code to get started."
+      titleSlot="No Scorers yet"
+      descriptionSlot="Configure scorers in code to get started. More info in the documentation."
       actionSlot={
         <Button
           variant="ghost"
           as="a"
-          href="https://mastra.ai/docs/agents/overview"
+          href="https://mastra.ai/docs/evals/overview"
           target="_blank"
           rel="noopener noreferrer"
         >
-          Agents Documentation <ExternalLinkIcon />
+          Scorers Documentation <ExternalLinkIcon />
         </Button>
       }
     />

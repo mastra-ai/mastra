@@ -1,11 +1,12 @@
 import type { DatasetRecord } from '@mastra/client-js';
 import { EntityList } from '@/ds/components/EntityList';
 import { EntityListSkeleton } from '@/ds/components/EntityList';
+import { ErrorState } from '@/ds/components/ErrorState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { useLinkComponent } from '@/lib/framework';
 import { truncateString } from '@/lib/truncate-string';
-import { EmptyDatasetsTable } from '../empty-datasets-table';
+import { NoDatasetsInfo } from './no-datasets-info';
 import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 
@@ -13,7 +14,6 @@ export interface DatasetsListProps {
   datasets: DatasetRecord[];
   isLoading: boolean;
   error?: Error | null;
-  onCreateClick?: () => void;
   search?: string;
   onSearch?: (search: string) => void;
 }
@@ -22,7 +22,6 @@ export function DatasetsList({
   datasets,
   isLoading,
   error,
-  onCreateClick,
   search: externalSearch,
   onSearch: externalOnSearch,
 }: DatasetsListProps) {
@@ -39,8 +38,12 @@ export function DatasetsList({
     return <PermissionDenied resource="datasets" />;
   }
 
+  if (error) {
+    return <ErrorState title="Failed to load datasets" message={error.message} />;
+  }
+
   if (datasets.length === 0 && !isLoading) {
-    return <EmptyDatasetsTable onCreateClick={onCreateClick} />;
+    return <NoDatasetsInfo />;
   }
 
   if (isLoading) {

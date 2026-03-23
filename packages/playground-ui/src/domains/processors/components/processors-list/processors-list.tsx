@@ -1,15 +1,13 @@
 import { EntityList } from '@/ds/components/EntityList';
 import { EntityListSkeleton } from '@/ds/components/EntityList';
-import { EmptyState } from '@/ds/components/EmptyState';
-import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { NoProcessorsInfo } from './no-processors-info';
+import { ErrorState } from '@/ds/components/ErrorState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { useLinkComponent } from '@/lib/framework';
 import { truncateString } from '@/lib/truncate-string';
 import { useMemo, useState } from 'react';
-import { CheckIcon, Cpu, FileInput, FileOutput } from 'lucide-react';
+import { CheckIcon, FileInput, FileOutput } from 'lucide-react';
 import type { ProcessorInfo, ProcessorPhase } from '../../hooks/use-processors';
 
 const phaseKeys: ProcessorPhase[] = ['input', 'inputStep', 'outputStep', 'outputStream', 'outputResult'];
@@ -41,31 +39,12 @@ export function ProcessorsList({ processors, isLoading, error, search: externalS
     return <PermissionDenied resource="processors" />;
   }
 
+  if (error) {
+    return <ErrorState title="Failed to load processors" message={error.message} />;
+  }
+
   if (processorData.length === 0 && !isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <EmptyState
-          iconSlot={<Cpu />}
-          titleSlot="Configure Processors"
-          descriptionSlot="No processors are configured yet. Add input or output processors to your agents to transform messages."
-          actionSlot={
-            <Button
-              size="lg"
-              className="w-full"
-              variant="light"
-              as="a"
-              href="https://mastra.ai/docs/agents/processors"
-              target="_blank"
-            >
-              <Icon>
-                <Cpu />
-              </Icon>
-              Docs
-            </Button>
-          }
-        />
-      </div>
-    );
+    return <NoProcessorsInfo />;
   }
 
   if (isLoading) {

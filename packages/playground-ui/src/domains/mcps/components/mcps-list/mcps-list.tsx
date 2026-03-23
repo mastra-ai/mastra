@@ -1,15 +1,15 @@
 import type { McpServerListResponse } from '@mastra/client-js';
 import { EntityList } from '@/ds/components/EntityList';
 import { EntityListSkeleton } from '@/ds/components/EntityList';
-import { EmptyState } from '@/ds/components/EmptyState';
-import { Button } from '@/ds/components/Button';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
-import { ToolsIcon, WorkflowIcon, McpServerIcon } from '@/ds/icons';
+import { ToolsIcon, WorkflowIcon } from '@/ds/icons';
+import { ErrorState } from '@/ds/components/ErrorState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { useLinkComponent } from '@/lib/framework';
 import { truncateString } from '@/lib/truncate-string';
 import { useMCPServerTools } from '../../hooks/useMCPServerTools';
+import { NoMCPServersInfo } from './no-mcp-servers-info';
 import { useMastraClient } from '@mastra/react';
 import { useMemo, useState } from 'react';
 
@@ -69,22 +69,12 @@ export function McpServersList({
     return <PermissionDenied resource="MCP servers" />;
   }
 
+  if (error) {
+    return <ErrorState title="Failed to load MCP servers" message={error.message} />;
+  }
+
   if (mcpServers.length === 0 && !isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <EmptyState
-          iconSlot={<McpServerIcon className="h-8 w-8" />}
-          titleSlot="No MCP Servers"
-          descriptionSlot="MCP servers are not configured yet. You can find more information in the documentation."
-          actionSlot={
-            <Button as="a" href="https://mastra.ai/en/docs/tools-mcp/mcp-overview" target="_blank">
-              <McpServerIcon />
-              Docs
-            </Button>
-          }
-        />
-      </div>
-    );
+    return <NoMCPServersInfo />;
   }
 
   if (isLoading) {

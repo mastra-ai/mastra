@@ -21,13 +21,12 @@ export interface AgentsListProps {
   agents: Record<string, GetAgentResponse>;
   isLoading: boolean;
   error?: Error | null;
-  onCreateClick?: () => void;
   search?: string;
   onSearch?: (search: string) => void;
   hideToolbar?: boolean;
 }
 
-export function AgentsList({ agents, isLoading, error, onCreateClick, search: externalSearch }: AgentsListProps) {
+export function AgentsList({ agents, isLoading, error, search: externalSearch }: AgentsListProps) {
   const { paths } = useLinkComponent();
   const [internalSearch, setInternalSearch] = useState('');
   const search = externalSearch ?? internalSearch;
@@ -51,7 +50,7 @@ export function AgentsList({ agents, isLoading, error, onCreateClick, search: ex
   }
 
   if (agentData.length === 0 && !isLoading) {
-    return <NoAgentsInfo onCreateClick={onCreateClick} />;
+    return <NoAgentsInfo />;
   }
 
   if (isLoading) {

@@ -1,11 +1,8 @@
 import type { GetScorerResponse } from '@mastra/client-js';
 import { EntityList } from '@/ds/components/EntityList';
 import { EntityListSkeleton } from '@/ds/components/EntityList';
-import { EmptyState } from '@/ds/components/EmptyState';
-import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
-import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
+import { NoScorersInfo } from './no-scorers-info';
+import { ErrorState } from '@/ds/components/ErrorState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { useLinkComponent } from '@/lib/framework';
@@ -51,31 +48,12 @@ export function ScorersList({
     return <PermissionDenied resource="scorers" />;
   }
 
+  if (error) {
+    return <ErrorState title="Failed to load scorers" message={error.message} />;
+  }
+
   if (scorersData.length === 0 && !isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <EmptyState
-          iconSlot={<AgentCoinIcon />}
-          titleSlot="Configure Scorers"
-          descriptionSlot="Mastra scorers are not configured yet. You can find more information in the documentation."
-          actionSlot={
-            <Button
-              size="lg"
-              className="w-full"
-              variant="light"
-              as="a"
-              href="https://mastra.ai/en/docs/evals/overview"
-              target="_blank"
-            >
-              <Icon>
-                <AgentIcon />
-              </Icon>
-              Docs
-            </Button>
-          }
-        />
-      </div>
-    );
+    return <NoScorersInfo />;
   }
 
   if (isLoading) {

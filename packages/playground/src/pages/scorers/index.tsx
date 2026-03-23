@@ -16,7 +16,7 @@ import {
   EntityListPageLayout,
 } from '@mastra/playground-ui';
 import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
-import { BookIcon, GaugeIcon, Plus } from 'lucide-react';
+import { BookIcon, GaugeIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
@@ -45,12 +45,6 @@ export default function Scorers() {
               >
                 <BookIcon />
               </ButtonWithTooltip>
-              {isCmsAvailable && (
-                <Button as={Link} to="/cms/scorers/create" variant="primary">
-                  <Plus />
-                  Create Scorer
-                </Button>
-              )}
             </MainHeader.Column>
           </MainHeader>
           <div className="max-w-[30rem]">

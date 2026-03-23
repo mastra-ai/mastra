@@ -2,21 +2,26 @@ import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 
-export const NoAgentsInfo = () => (
-  <div className="flex h-full items-center justify-center ">
+export const NoMCPServersInfo = () => (
+  <div className="flex h-full items-center justify-center">
     <EmptyState
       iconSlot={<CircleSlashIcon />}
-      titleSlot="No Agents yet"
-      descriptionSlot="Configure agents in code to get started."
+      titleSlot="No MCP Servers yet"
+      descriptionSlot={
+        <>
+          MCP servers are not configured yet. <br />
+          More information in the documentation.
+        </>
+      }
       actionSlot={
         <Button
           variant="ghost"
           as="a"
-          href="https://mastra.ai/docs/agents/overview"
+          href="https://mastra.ai/docs/tools-mcp/mcp-overview"
           target="_blank"
           rel="noopener noreferrer"
         >
-          Agents Documentation <ExternalLinkIcon />
+          MCP Documentation <ExternalLinkIcon />
         </Button>
       }
     />
