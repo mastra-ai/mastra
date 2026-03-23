@@ -1,5 +1,23 @@
 # @mastra/express
 
+## 1.3.0-alpha.1
+
+### Minor Changes
+
+- Added adapter auth middleware helpers for raw framework routes. ([#14458](https://github.com/mastra-ai/mastra/pull/14458))
+
+  Use `createAuthMiddleware({ mastra })` when you mount routes directly on a Hono, Express, Fastify, or Koa app and still want Mastra auth to run. Set `requiresAuth: false` when you need to reuse the same helper chain on a public route.
+
+  ```ts
+  app.get('/custom/protected', createAuthMiddleware({ mastra }), handler);
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`7dbd611`](https://github.com/mastra-ai/mastra/commit/7dbd611a85cb1e0c0a1581c57564268cb183d86e), [`8a738d8`](https://github.com/mastra-ai/mastra/commit/8a738d844772e14be381d54b22fd5d548ee4af42), [`41aee84`](https://github.com/mastra-ai/mastra/commit/41aee84561ceebe28bad1ecba8702d92838f67f0)]:
+  - @mastra/core@1.16.0-alpha.1
+  - @mastra/server@1.16.0-alpha.1
+
 ## 1.2.7-alpha.0
 
 ### Patch Changes
