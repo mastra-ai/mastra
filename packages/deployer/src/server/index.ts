@@ -410,6 +410,7 @@ export async function createHonoServer(
 
       const cloudApiEndpoint = process.env.MASTRA_CLOUD_API_ENDPOINT || '';
       const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
+      const experimentalUI = process.env.MASTRA_EXPERIMENTAL_UI === 'true' ? 'true' : 'false';
       const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
       const requestContextPresets = process.env.MASTRA_REQUEST_CONTEXT_PRESETS || '';
       const themeToggle = process.env.MASTRA_THEME_TOGGLE === 'true' ? 'true' : 'false';
@@ -442,6 +443,7 @@ export async function createHonoServer(
         telemetryDisabled: `''`,
         requestContextPresets: `'${escapeForHtml(requestContextPresets)}'`,
         themeToggle: `'${themeToggle}'`,
+        experimentalUI: `'${experimentalUI}'`,
         autoDetectUrl: `'${autoDetectUrl}'`,
       });
 

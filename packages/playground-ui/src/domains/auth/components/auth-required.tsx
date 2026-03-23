@@ -1,8 +1,7 @@
-import { LogoWithoutText } from '@/ds/components/Logo/MastraLogo';
-
 import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
 import { isAuthenticated } from '../types';
 import { LoginButton } from './login-button';
+import { LogoWithoutText } from '@/ds/components/Logo/MastraLogo';
 
 export type AuthRequiredProps = {
   children: React.ReactNode;

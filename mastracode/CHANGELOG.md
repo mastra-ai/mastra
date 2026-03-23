@@ -1,5 +1,26 @@
 # mastracode
 
+## 0.9.2-alpha.2
+
+### Patch Changes
+
+- Added macOS sleep prevention while Mastra Code is actively running. ([#14586](https://github.com/mastra-ai/mastra/pull/14586))
+
+  Mastra Code now starts the built-in caffeinate utility only while an agent run is in progress, then releases it after completion, aborts, errors, or app shutdown.
+
+  To opt out, set MASTRACODE_DISABLE_CAFFEINATE=1 before launching Mastra Code.
+
+- Updated dependencies [[`7dbd611`](https://github.com/mastra-ai/mastra/commit/7dbd611a85cb1e0c0a1581c57564268cb183d86e), [`41aee84`](https://github.com/mastra-ai/mastra/commit/41aee84561ceebe28bad1ecba8702d92838f67f0)]:
+  - @mastra/core@1.16.0-alpha.1
+  - @mastra/libsql@1.7.2-alpha.1
+  - @mastra/pg@1.8.3-alpha.1
+
+## 0.9.2-alpha.1
+
+### Patch Changes
+
+- Improved Mastra Code autonomy prompts by expanding the default guidance around assumptions, persistence, and when to ask questions. Also applied GPT-5.4-specific prompt instructions consistently during prompt assembly. ([#14587](https://github.com/mastra-ai/mastra/pull/14587))
+
 ## 0.9.2-alpha.0
 
 ### Patch Changes

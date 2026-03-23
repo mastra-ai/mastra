@@ -1,6 +1,7 @@
-import { Combobox, type ComboboxProps } from '@/ds/components/Combobox';
-import { Badge } from '@/ds/components/Badge';
 import { useAgentVersions } from '../hooks/use-agent-versions';
+import { Badge } from '@/ds/components/Badge';
+import { Combobox } from '@/ds/components/Combobox';
+import type { ComboboxProps } from '@/ds/components/Combobox';
 
 function formatTimestamp(isoString: string): string {
   const date = new Date(isoString);
