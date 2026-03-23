@@ -25,8 +25,8 @@ export interface McpServersListProps {
 function McpServerRow({ server }: { server: McpServer }) {
   const { paths } = useLinkComponent();
   const client = useMastraClient();
-  const effectiveBaseUrl = client.options.baseUrl || 'http://localhost:4111';
-  const sseUrl = `${effectiveBaseUrl}/api/mcp/${server.id}/sse`;
+  const baseUrl = client.options.baseUrl;
+  const sseUrl = baseUrl ? `${baseUrl}/api/mcp/${server.id}/sse` : '';
 
   const { data: tools } = useMCPServerTools(server);
   const toolsList = Object.values(tools || {});

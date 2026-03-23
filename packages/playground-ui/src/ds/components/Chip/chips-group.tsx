@@ -1,10 +1,7 @@
 import { forwardRef } from 'react';
 import { cn } from '@/lib/utils';
 
-export type ChipsGroupProps = {
-  children: React.ReactNode;
-  className?: string;
-};
+export type ChipsGroupProps = React.ComponentPropsWithoutRef<'div'>;
 
 export const ChipsGroup = forwardRef<HTMLDivElement, ChipsGroupProps>(function ChipsGroup(
   { children, className, ...props },
