@@ -1,17 +1,18 @@
-import { AttachmentPrimitive, AttachmentState, ComposerPrimitive, useAttachment } from '@assistant-ui/react';
+import type { AttachmentState } from '@assistant-ui/react';
+import { AttachmentPrimitive, ComposerPrimitive, useAttachment } from '@assistant-ui/react';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
-import { CircleXIcon, PaperclipIcon } from 'lucide-react';
+import { CircleXIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { useAttachmentSrc } from '../hooks/use-attachment-src';
+import { useHasAttachments } from '../hooks/use-has-attachments';
+import { useLoadBrowserFile } from '../hooks/use-load-browser-file';
+import { ImageEntry, TxtEntry, PdfEntry } from './attachment-preview-dialog';
 import { IconButton } from '@/ds/components/IconButton';
+import { Spinner } from '@/ds/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 import { Icon } from '@/ds/icons';
-import { useHasAttachments } from '../hooks/use-has-attachments';
-import { useAttachmentSrc } from '../hooks/use-attachment-src';
-import { ImageEntry, TxtEntry, PdfEntry } from './attachment-preview-dialog';
-import { Spinner } from '@/ds/components/Spinner';
-import { useLoadBrowserFile } from '../hooks/use-load-browser-file';
 import { fileToBase64 } from '@/lib/file/toBase64';
 
 const ComposerTxtAttachment = ({ document }: { document: AttachmentState }) => {
@@ -38,7 +39,7 @@ const ComposerPdfAttachment = ({ document }: { document: AttachmentState }) => {
       }
       setState(s => ({ ...s, isLoading: false, text }));
     };
-    run();
+    void run();
 
     return () => {
       isCanceled = true;
@@ -122,20 +123,5 @@ export const ComposerAttachments = () => {
     <div className="flex w-full flex-row items-center gap-4 pb-2">
       <ComposerPrimitive.Attachments components={{ Attachment: AttachmentThumbnail }} />
     </div>
-  );
-};
-
-const ComposerAddAttachment = () => {
-  return (
-    <ComposerPrimitive.AddAttachment asChild>
-      <IconButton
-        variant="light"
-        size="md"
-        className="my-2.5 size-8 p-2 transition-opacity ease-in"
-        tooltip="Add Attachment"
-      >
-        <PaperclipIcon />
-      </IconButton>
-    </ComposerPrimitive.AddAttachment>
   );
 };

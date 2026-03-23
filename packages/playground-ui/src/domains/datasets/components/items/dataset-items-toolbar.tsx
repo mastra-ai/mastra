@@ -1,7 +1,5 @@
 'use client';
 
-import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { Button } from '@/ds/components/Button';
 import {
   Plus,
   Upload,
@@ -16,11 +14,13 @@ import {
   GitCompareIcon,
   AmpersandIcon,
 } from 'lucide-react';
+import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 
-import { Column } from '@/ds/components/Columns/column';
-import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 import { Chip } from '@/ds/components/Chip';
+import { Column } from '@/ds/components/Columns/column';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 interface ActionsMenuProps {

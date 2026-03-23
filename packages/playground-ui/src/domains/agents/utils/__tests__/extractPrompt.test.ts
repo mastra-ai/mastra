@@ -1,6 +1,6 @@
+import type { AgentInstructions } from '@mastra/core/agent';
 import { describe, it, expect } from 'vitest';
 import { extractPrompt } from '../extractPrompt';
-import { AgentInstructions } from '@mastra/core/agent';
 
 describe('extractPrompt', () => {
   describe('string input', () => {

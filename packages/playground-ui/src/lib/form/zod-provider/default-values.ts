@@ -1,4 +1,4 @@
-import { getDef, getDefaultValue, getLiteralValue, getShape, isV4 } from './compat';
+import { getDef, getDefaultValue, getLiteralValue, getShape } from './compat';
 
 export function getDefaultValueInZodStack(schema: any): any {
   const def = getDef(schema);

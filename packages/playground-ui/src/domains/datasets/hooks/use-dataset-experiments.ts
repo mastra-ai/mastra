@@ -1,9 +1,9 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
+import type { ExperimentStatus } from '@mastra/core/storage';
 import { useMastraClient } from '@mastra/react';
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useInView } from '@/hooks/use-in-view';
-import type { ExperimentStatus } from '@mastra/core/storage';
 
 export interface DatasetExperimentsFilters {
   status?: string;
@@ -107,7 +107,7 @@ export const useDatasetExperimentResults = ({
 
   useEffect(() => {
     if (isEndOfListInView && query.hasNextPage && !query.isFetchingNextPage) {
-      query.fetchNextPage();
+      void query.fetchNextPage();
     }
   }, [isEndOfListInView, query.hasNextPage, query.isFetchingNextPage]);
 
@@ -127,7 +127,6 @@ export const useScoresByExperimentId = (experimentId: string, experimentStatus?:
       let page = 0;
       const perPage = 100;
 
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         const response = await client.listScoresByRunId({ runId: experimentId, page, perPage });
         allScores.push(...response.scores);

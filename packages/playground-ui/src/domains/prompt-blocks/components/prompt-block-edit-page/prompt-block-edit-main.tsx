@@ -1,10 +1,10 @@
-import { Controller, useWatch, UseFormReturn } from 'react-hook-form';
-
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { DisplayConditionsDialog, SectionHeader } from '@/domains/cms';
-import type { JsonSchema, RuleGroup } from '@/lib/rule-engine';
+import type { UseFormReturn } from 'react-hook-form';
+import { Controller, useWatch } from 'react-hook-form';
 
 import type { PromptBlockFormValues } from './utils/form-validation';
+import { DisplayConditionsDialog, SectionHeader } from '@/domains/cms';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import type { JsonSchema, RuleGroup } from '@/lib/rule-engine';
 
 interface PromptBlockEditMainProps {
   form: UseFormReturn<PromptBlockFormValues>;
@@ -45,7 +45,6 @@ export function PromptBlockEditMain({ form }: PromptBlockEditMainProps) {
               language="markdown"
               showCopyButton={false}
               placeholder="Enter prompt block content..."
-              wordWrap
               highlightVariables
               schema={schema}
               className="flex-1 min-h-[200px]"
