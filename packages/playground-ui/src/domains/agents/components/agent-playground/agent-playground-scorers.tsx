@@ -12,7 +12,6 @@ import { Switch } from '@/ds/components/Switch';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 
-
 interface AgentPlaygroundScorersProps {
   agentId: string;
 }

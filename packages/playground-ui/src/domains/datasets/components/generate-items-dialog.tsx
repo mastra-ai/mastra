@@ -17,7 +17,6 @@ import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { toast } from '@/lib/toast';
 
-
 interface GeneratedItem {
   input: unknown;
   groundTruth?: unknown;

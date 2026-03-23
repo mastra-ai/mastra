@@ -1,5 +1,5 @@
-import { createContext, useContext, useCallback, useState, useRef  } from 'react';
-import type {ReactNode} from 'react';
+import { createContext, useContext, useCallback, useState, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { toast } from '@/lib/toast';
 
 interface GeneratedItem {
