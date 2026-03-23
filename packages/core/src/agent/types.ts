@@ -4,7 +4,7 @@ import type { Adapter } from 'chat';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypev4 } from 'zod/v4';
-import type { MastraChannel } from '../channels/base';
+import type { AgentChat, ChannelOptions } from '../channels/agent-chat';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type {
   CoreMessage,
@@ -299,13 +299,18 @@ export interface AgentConfig<
   voice?: MastraVoice;
   /**
    * Messaging channels the agent communicates over (e.g. Slack, Discord).
-   * Webhook routes are auto-registered when the agent is added to Mastra.
    *
-   * Accepts either a `MastraChannel` instance (e.g. `SlackChannel`) or a raw
-   * Chat SDK `Adapter` (e.g. `new DiscordAdapter(...)`) which will be
-   * automatically wrapped in a `ChatAdapterChannel`.
+   * Pass a record of Chat SDK adapters, or an `AgentChat` instance for full control:
+   * ```ts
+   * channels: { discord: new DiscordAdapter({ ... }) }
+   * ```
    */
-  channels?: Record<string, MastraChannel | Adapter>;
+  channels?: Record<string, Adapter> | AgentChat;
+  /**
+   * Options for channel behavior (streaming edits, edit interval, etc.).
+   * Ignored when `channels` is an `AgentChat` instance.
+   */
+  channelOptions?: ChannelOptions;
   /**
    * Workspace for file storage and code execution.
    * When configured, workspace tools are automatically injected into the agent.

@@ -3,8 +3,8 @@ import type {
   ProcessInputResult,
   ProcessInputStepArgs,
   ProcessInputStepResult,
-} from '../../processors/index';
-import type { ChannelContext } from '../types';
+} from '../processors/index';
+import type { ChannelContext } from './types';
 
 /**
  * Input processor that injects channel context into agent prompts.
@@ -13,7 +13,7 @@ import type { ChannelContext } from '../types';
  * - `processInputStep`: At step 0, prepends a `<system-reminder>` to the user's message
  *   with per-request data (messageId, eventType).
  *
- * Designed for use with `ChatAdapterChannel`. Reads from `requestContext.get('channel')`.
+ * Reads from `requestContext.get('channel')`.
  *
  * @example
  * ```ts
@@ -40,7 +40,9 @@ export class ChatChannelProcessor {
       lines.push('This message is in a public channel or thread.');
     }
 
-    if (ctx.userName) {
+    // In DMs the user is always the same person, so include their identity.
+    // In shared threads each message is already prefixed with [name], so skip.
+    if (ctx.isDM && ctx.userName) {
       lines.push(`The user you are talking to is "${ctx.userName}".`);
     }
 
@@ -81,7 +83,6 @@ export class ChatChannelProcessor {
     // Prepend reminder to the last user message's text parts
     const messages = [...args.messages];
 
-    // Find and modify the last user message
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i]!;
       if (msg.role === 'user') {
@@ -96,7 +97,6 @@ export class ChatChannelProcessor {
           newParts[firstTextIdx] = { ...textPart, text: reminder + textPart.text };
           messages[i] = { ...msg, content: { ...content, parts: newParts } };
         } else {
-          // No text part — add one at the beginning
           messages[i] = {
             ...msg,
             content: {

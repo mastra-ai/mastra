@@ -7,8 +7,7 @@ import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
-import { MastraChannel } from '../channels/base';
-import { ChatAdapterChannel } from '../channels/chat-adapter/channel';
+import { AgentChat } from '../channels/agent-chat';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
   ScorerRunInputForAgent,
@@ -62,6 +61,7 @@ import { ChunkFrom } from '../stream';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
+import type { ToolToConvert } from '../tools/tool-builder/builder';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
@@ -175,7 +175,7 @@ export class Agent<
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
   #agents: DynamicArgument<Record<string, Agent>, TRequestContext>;
   #voice: MastraVoice;
-  #channels: Record<string, MastraChannel> = {};
+  #agentChat: AgentChat | null = null;
   #workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[], TRequestContext>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
@@ -302,13 +302,12 @@ export class Agent<
     }
 
     if (config.channels) {
-      for (const [key, value] of Object.entries(config.channels)) {
-        if (value == null) continue;
-        const channel =
-          value instanceof MastraChannel ? value : new ChatAdapterChannel({ adapter: value, platform: key });
-        channel.__setAgent(this);
-        this.#channels[key] = channel;
+      if (config.channels instanceof AgentChat) {
+        this.#agentChat = config.channels;
+      } else if (Object.keys(config.channels).length > 0) {
+        this.#agentChat = new AgentChat({ adapters: config.channels, ...config.channelOptions });
       }
+      this.#agentChat?.__setAgent(this);
     }
 
     if (config.workspace) {
@@ -340,27 +339,11 @@ export class Agent<
   }
 
   /**
-   * Retrieves a registered channel by name.
-   * @throws {Error} When the channel is not found.
+   * Returns the AgentChat instance that manages all channel adapters.
+   * Returns null if no channels are configured.
    */
-  getChannel(name: string): MastraChannel {
-    const channel = this.#channels[name];
-    if (!channel) {
-      throw new MastraError({
-        id: 'AGENT_GET_CHANNEL_NOT_FOUND',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `Channel "${name}" not found on agent "${this.name}"`,
-      });
-    }
-    return channel;
-  }
-
-  /**
-   * Returns all channels registered on this agent.
-   */
-  getChannels(): Record<string, MastraChannel> {
-    return { ...this.#channels };
+  getAgentChat(): AgentChat | null {
+    return this.#agentChat;
   }
 
   /**
@@ -2209,16 +2192,13 @@ export class Agent<
     autoResumeSuspendedTools?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
-    let convertedChannelTools: Record<string, CoreTool> = {};
+    const convertedChannelTools: Record<string, CoreTool> = {};
 
-    if (Object.keys(this.#channels).length === 0) {
+    if (!this.#agentChat) {
       return convertedChannelTools;
     }
 
-    const channelTools: Record<string, any> = {};
-    for (const channel of Object.values(this.#channels)) {
-      Object.assign(channelTools, channel.getTools());
-    }
+    const channelTools = this.#agentChat.getTools();
 
     if (Object.keys(channelTools).length > 0) {
       this.logger.debug(`[Agent:${this.name}] - Adding channel tools: ${Object.keys(channelTools).join(', ')}`, {
@@ -2241,7 +2221,12 @@ export class Agent<
           ...observabilityContext,
           tracingPolicy: this.#options?.tracingPolicy,
         };
-        convertedChannelTools[toolName] = makeCoreTool(tool, options, undefined, autoResumeSuspendedTools);
+        convertedChannelTools[toolName] = makeCoreTool(
+          tool as ToolToConvert,
+          options,
+          undefined,
+          autoResumeSuspendedTools,
+        );
       }
     }
 

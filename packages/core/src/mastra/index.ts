@@ -3,7 +3,7 @@ import type { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
-import type { MastraChannel } from '../channels/base';
+import type { AgentChat } from '../channels/agent-chat';
 import { DatasetsManager } from '../datasets/manager.js';
 import type { MastraDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
@@ -29,7 +29,7 @@ import type {
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
-import type { ApiRoute, Middleware, ServerConfig } from '../server/types';
+import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
@@ -833,14 +833,15 @@ export class Mastra<
   }
 
   /**
-   * Returns all channels across all registered agents.
-   * Keys are `agentId:channelName` to avoid collisions.
+   * Returns the `AgentChat` instances for all registered agents.
+   * Keys are agent IDs.
    */
-  public getChannels(): Record<string, MastraChannel> {
-    const result: Record<string, MastraChannel> = {};
+  public getChannels(): Record<string, AgentChat> {
+    const result: Record<string, AgentChat> = {};
     for (const [agentKey, agent] of Object.entries(this.#agents ?? {})) {
-      for (const [channelKey, channel] of Object.entries(agent.getChannels())) {
-        result[`${agentKey}:${channelKey}`] = channel;
+      const agentChat = agent.getAgentChat();
+      if (agentChat) {
+        result[agentKey] = agentChat;
       }
     }
     return result;
@@ -1072,18 +1073,18 @@ export class Mastra<
         this.#logger?.debug(`Failed to register scorers from agent ${agentKey}:`, err);
       });
 
-    // Register webhook routes from the agent's channels
-    const agentChannels = mastraAgent.getChannels();
-    const channelRoutes: ApiRoute[] = [];
-    for (const [, channel] of Object.entries(agentChannels)) {
-      channel.__setLogger(this.#logger);
-      channelRoutes.push(...channel.getWebhookRoutes());
-    }
-    if (channelRoutes.length > 0) {
-      this.#server = {
-        ...this.#server,
-        apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
-      };
+    // Register webhook routes and initialize channels
+    const agentChat = mastraAgent.getAgentChat();
+    if (agentChat) {
+      agentChat.__setLogger(this.#logger);
+      const channelRoutes = agentChat.getWebhookRoutes();
+      if (channelRoutes.length > 0) {
+        this.#server = {
+          ...this.#server,
+          apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
+        };
+      }
+      void agentChat.initialize(this);
     }
   }
 

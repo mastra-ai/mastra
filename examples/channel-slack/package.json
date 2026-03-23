@@ -2,7 +2,7 @@
   "name": "examples-channel-slack",
   "type": "module",
   "private": true,
-  "description": "Mastra channel integration with Slack",
+  "description": "Mastra channel integration example",
   "scripts": {
     "dev": "MASTRA_HOST=0.0.0.0 mastra dev"
   },
@@ -12,7 +12,7 @@
   "dependencies": {
     "@ai-sdk/openai": "^2.0.23",
     "@chat-adapter/discord": "^4.20.2",
-    "@mastra/channel-slack": "latest",
+    "@chat-adapter/slack": "^4.21.0",
     "@mastra/core": "latest",
     "@mastra/libsql": "latest",
     "@mastra/memory": "latest"
@@ -25,7 +25,6 @@
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../packages/core",
-      "@mastra/channel-slack": "link:../../channels/slack",
       "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/memory": "link:../../packages/memory",
       "@mastra/cli": "link:../../packages/cli"
