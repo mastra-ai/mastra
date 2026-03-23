@@ -738,24 +738,14 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         if (choice === 'skills') {
           // Popular agents
           const POPULAR_AGENTS: { value: string; label: string }[] = [
+            { value: 'universal', label: 'Universal (Codex, Cursor, Gemini, GitHub, OpenCode)' },
             { value: 'claude-code', label: 'Claude Code' },
-            { value: 'cursor', label: 'Cursor' },
-            { value: 'codex', label: 'Codex' },
-            { value: 'opencode', label: 'OpenCode' },
-            { value: 'windsurf', label: 'Windsurf' },
-            { value: 'github-copilot', label: 'GitHub Copilot' },
-            { value: 'cline', label: 'Cline' },
-            { value: 'continue', label: 'Continue' },
-            { value: 'gemini-cli', label: 'Gemini CLI' },
-            { value: 'replit', label: 'Replit' },
-            { value: 'roo', label: 'Roo Code' },
           ];
 
           // All agents (alphabetically)
           const ALL_AGENTS: { value: string; label: string }[] = [
             ...POPULAR_AGENTS,
             { value: 'adal', label: 'AdaL' },
-            { value: 'amp', label: 'Amp' },
             { value: 'antigravity', label: 'Antigravity' },
             { value: 'augment', label: 'Augment' },
             { value: 'codebuddy', label: 'CodeBuddy' },
@@ -766,7 +756,6 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
             { value: 'iflow-cli', label: 'iFlow CLI' },
             { value: 'junie', label: 'Junie' },
             { value: 'kilo', label: 'Kilo Code' },
-            { value: 'kimi-cli', label: 'Kimi Code CLI' },
             { value: 'kiro-cli', label: 'Kiro CLI' },
             { value: 'kode', label: 'Kode' },
             { value: 'mcpjam', label: 'MCPJam' },
@@ -780,45 +769,47 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
             { value: 'pochi', label: 'Pochi' },
             { value: 'qoder', label: 'Qoder' },
             { value: 'qwen-code', label: 'Qwen Code' },
+            { value: 'replit', label: 'Replit' },
+            { value: 'roo', label: 'Roo Code' },
             { value: 'trae', label: 'Trae' },
             { value: 'trae-cn', label: 'Trae CN' },
+            { value: 'windsurf', label: 'Windsurf' },
             { value: 'zencoder', label: 'Zencoder' },
           ];
 
           // Show popular agents first with "Show all" option
-          const initialSelection = await p.multiselect({
-            message: `Select agent(s) to install skills for ${color.dim('(use arrow keys / space bar)')}`,
-            options: [...POPULAR_AGENTS, { value: '__show_all__', label: '+ Show all agents (29 more)' }],
-            initialValues: ['claude-code', 'cursor'],
-            required: true,
+          const initialSelection = await p.select({
+            message: `Select your agent:`,
+            options: [...POPULAR_AGENTS, { value: '__show_all__', label: '+ Show all agents' }],
+            initialValue: 'universal',
           });
 
           if (p.isCancel(initialSelection)) {
             return { skills: undefined, mcpServer: undefined };
           }
 
-          let selectedAgents = initialSelection as string[];
+          let selectedAgents = new Set<string>();
 
           // If user selected "Show all", show full list
-          if (selectedAgents.includes('__show_all__')) {
-            // Remove the __show_all__ marker and use those as pre-selected
-            const preSelected = selectedAgents.filter(a => a !== '__show_all__');
-
-            const fullSelection = await p.multiselect({
-              message: `Select agent(s) to install skills for ${color.dim('(use arrow keys / space bar)')}`,
+          if (initialSelection === '__show_all__') {
+            const followUpSelection = await p.select({
+              message: `Select your agent:`,
               options: ALL_AGENTS,
-              initialValues: preSelected,
-              required: true,
             });
 
-            if (p.isCancel(fullSelection)) {
+            if (p.isCancel(followUpSelection)) {
               return { skills: undefined, mcpServer: undefined };
             }
 
-            selectedAgents = fullSelection as string[];
+            selectedAgents.add(followUpSelection);
+          } else {
+            selectedAgents.add(initialSelection);
           }
 
-          return { skills: selectedAgents, mcpServer: undefined };
+          // Always add "universal" type so that the definition there gets symlinked to the proprietary agent folders
+          selectedAgents.add('universal');
+
+          return { skills: Array.from(selectedAgents), mcpServer: undefined };
         }
 
         // If MCP selected, show editor sub-selection
