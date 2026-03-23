@@ -5,6 +5,7 @@ import type {
   ScoreEvent,
   FeedbackEvent,
 } from '../../../observability/index.js';
+import type { CorrelationContext } from '../../../observability/types/core.js';
 import { EntityType } from '../../../observability/types/tracing.js';
 import type { CreateFeedbackRecord } from './feedback.js';
 import type { CreateLogRecord } from './logs.js';
@@ -36,15 +37,6 @@ export function getObjectOrNull(value: unknown): Record<string, any> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, any>) : null;
 }
 
-/** Extract a key from a labels record and remove it */
-function extractAndRemove(labels: Record<string, string>, key: string): string | undefined {
-  const value = labels[key];
-  if (value !== undefined) {
-    delete labels[key];
-  }
-  return value;
-}
-
 // ============================================================================
 // Span attribute serialization
 // ============================================================================
@@ -70,6 +62,97 @@ export function serializeSpanAttributes(span: AnyExportedSpan): Record<string, a
   } catch {
     return null;
   }
+}
+
+type CorrelationRecordFields = Pick<
+  CreateLogRecord,
+  | 'traceId'
+  | 'spanId'
+  | 'tags'
+  | 'entityType'
+  | 'entityId'
+  | 'entityName'
+  | 'parentEntityType'
+  | 'parentEntityId'
+  | 'parentEntityName'
+  | 'rootEntityType'
+  | 'rootEntityId'
+  | 'rootEntityName'
+  | 'userId'
+  | 'organizationId'
+  | 'resourceId'
+  | 'runId'
+  | 'sessionId'
+  | 'threadId'
+  | 'requestId'
+  | 'environment'
+  | 'source'
+  | 'serviceName'
+  | 'experimentId'
+>;
+
+function buildCorrelationRecordFields(context: CorrelationContext | undefined): CorrelationRecordFields {
+  return {
+    traceId: context?.traceId ?? null,
+    spanId: context?.spanId ?? null,
+    tags: context?.tags ?? null,
+    entityType: context?.entityType ?? null,
+    entityId: context?.entityId ?? null,
+    entityName: context?.entityName ?? null,
+    parentEntityType: context?.parentEntityType ?? null,
+    parentEntityId: context?.parentEntityId ?? null,
+    parentEntityName: context?.parentEntityName ?? null,
+    rootEntityType: context?.rootEntityType ?? null,
+    rootEntityId: context?.rootEntityId ?? null,
+    rootEntityName: context?.rootEntityName ?? null,
+    userId: context?.userId ?? null,
+    organizationId: context?.organizationId ?? null,
+    resourceId: context?.resourceId ?? null,
+    runId: context?.runId ?? null,
+    sessionId: context?.sessionId ?? null,
+    threadId: context?.threadId ?? null,
+    requestId: context?.requestId ?? null,
+    environment: context?.environment ?? null,
+    source: context?.source ?? null,
+    serviceName: context?.serviceName ?? null,
+    experimentId: context?.experimentId ?? null,
+  };
+}
+
+function buildLegacyMetricLabelCorrelationFields(labels: Record<string, string>): Partial<CorrelationRecordFields> {
+  return {
+    entityType: toEntityType(labels.entity_type),
+    entityName: getStringOrNull(labels.entity_name),
+    parentEntityType: toEntityType(labels.parent_type),
+    parentEntityName: getStringOrNull(labels.parent_name),
+    serviceName: getStringOrNull(labels.service_name),
+  };
+}
+
+function stripLegacyMetricCorrelationLabels(labels: Record<string, string>): Record<string, string> {
+  const sanitized = { ...labels };
+  delete sanitized.entity_type;
+  delete sanitized.entity_name;
+  delete sanitized.parent_type;
+  delete sanitized.parent_name;
+  delete sanitized.service_name;
+  return sanitized;
+}
+
+function buildLegacyLogMetadataCorrelationFields(
+  metadata: Record<string, any> | null,
+): Partial<CorrelationRecordFields> {
+  return {
+    entityType: toEntityType(getStringOrNull(metadata?.entity_type) ?? undefined),
+    entityName: getStringOrNull(metadata?.entity_name),
+    parentEntityType: toEntityType(getStringOrNull(metadata?.parent_type) ?? undefined),
+    parentEntityName: getStringOrNull(metadata?.parent_name),
+    rootEntityType: toEntityType(getStringOrNull(metadata?.root_type) ?? undefined),
+    rootEntityName: getStringOrNull(metadata?.root_name),
+    environment: getStringOrNull(metadata?.environment),
+    source: getStringOrNull(metadata?.source),
+    serviceName: getStringOrNull(metadata?.service_name),
+  };
 }
 
 // ============================================================================
@@ -143,65 +226,61 @@ export function buildUpdateSpanRecord(span: AnyExportedSpan): Partial<UpdateSpan
   };
 }
 
-/**
- * Convert a MetricEvent to a CreateMetricRecord,
- * extracting entity hierarchy from labels to first-class columns.
- */
+/** Convert a MetricEvent to a CreateMetricRecord. */
 export function buildMetricRecord(event: MetricEvent): CreateMetricRecord {
   const m = event.metric;
-  const labels = { ...m.labels };
-
-  const entityType = extractAndRemove(labels, 'entity_type');
-  const entityName = extractAndRemove(labels, 'entity_name');
-  const parentType = extractAndRemove(labels, 'parent_type');
-  const parentName = extractAndRemove(labels, 'parent_name');
-  const rootType = extractAndRemove(labels, 'root_type');
-  const rootName = extractAndRemove(labels, 'root_name');
-  const serviceName = extractAndRemove(labels, 'service_name');
+  const labels = stripLegacyMetricCorrelationLabels(m.labels);
+  const correlationFields = buildCorrelationRecordFields(m.correlationContext);
+  const legacyCorrelationFields = buildLegacyMetricLabelCorrelationFields(m.labels);
+  const cost = m.costContext;
 
   return {
     timestamp: m.timestamp,
     name: m.name,
     value: m.value,
     labels,
-    entityType: toEntityType(entityType),
-    entityName: entityName ?? null,
-    parentEntityType: toEntityType(parentType),
-    parentEntityName: parentName ?? null,
-    rootEntityType: toEntityType(rootType),
-    rootEntityName: rootName ?? null,
-    serviceName: serviceName ?? null,
+    ...correlationFields,
+    scope: null,
+    entityType: correlationFields.entityType ?? legacyCorrelationFields.entityType ?? null,
+    entityName: correlationFields.entityName ?? legacyCorrelationFields.entityName ?? null,
+    parentEntityType: correlationFields.parentEntityType ?? legacyCorrelationFields.parentEntityType ?? null,
+    parentEntityName: correlationFields.parentEntityName ?? legacyCorrelationFields.parentEntityName ?? null,
+    serviceName: correlationFields.serviceName ?? legacyCorrelationFields.serviceName ?? null,
+    provider: cost?.provider ?? null,
+    model: cost?.model ?? null,
+    estimatedCost: cost?.estimatedCost ?? null,
+    costUnit: cost?.costUnit ?? null,
+    costMetadata: cost?.costMetadata ?? null,
+    metadata: m.metadata ?? null,
   };
 }
 
 /** Convert a LogEvent to a CreateLogRecord */
 export function buildLogRecord(event: LogEvent): CreateLogRecord {
-  const log = event.log;
-  const metadata = log.metadata ?? {};
+  const l = event.log;
+  const correlationFields = buildCorrelationRecordFields(l.correlationContext);
+  const legacyCorrelationFields = buildLegacyLogMetadataCorrelationFields(l.metadata ?? null);
 
   return {
-    timestamp: log.timestamp,
-    level: log.level,
-    message: log.message,
-    data: log.data ?? null,
-    traceId: log.traceId ?? null,
-    spanId: log.spanId ?? null,
-    tags: log.tags ?? null,
-    entityType: toEntityType(getStringOrNull(metadata.entity_type)),
-    entityId: getStringOrNull(metadata.entity_id),
-    entityName: getStringOrNull(metadata.entity_name),
-    parentEntityType: toEntityType(getStringOrNull(metadata.parent_type)),
-    parentEntityName: getStringOrNull(metadata.parent_name),
-    rootEntityType: toEntityType(getStringOrNull(metadata.root_type)),
-    rootEntityName: getStringOrNull(metadata.root_name),
-    userId: getStringOrNull(metadata.userId),
-    organizationId: getStringOrNull(metadata.organizationId),
-    runId: getStringOrNull(metadata.runId),
-    sessionId: getStringOrNull(metadata.sessionId),
-    environment: getStringOrNull(metadata.environment),
-    serviceName: getStringOrNull(metadata.serviceName),
-    experimentId: getStringOrNull(metadata.experimentId),
-    metadata: log.metadata ?? null,
+    timestamp: l.timestamp,
+    level: l.level,
+    message: l.message,
+    data: l.data ?? null,
+    ...correlationFields,
+    traceId: correlationFields.traceId ?? l.traceId ?? null,
+    spanId: correlationFields.spanId ?? l.spanId ?? null,
+    tags: correlationFields.tags ?? l.tags ?? null,
+    entityType: correlationFields.entityType ?? legacyCorrelationFields.entityType ?? null,
+    entityName: correlationFields.entityName ?? legacyCorrelationFields.entityName ?? null,
+    parentEntityType: correlationFields.parentEntityType ?? legacyCorrelationFields.parentEntityType ?? null,
+    parentEntityName: correlationFields.parentEntityName ?? legacyCorrelationFields.parentEntityName ?? null,
+    rootEntityType: correlationFields.rootEntityType ?? legacyCorrelationFields.rootEntityType ?? null,
+    rootEntityName: correlationFields.rootEntityName ?? legacyCorrelationFields.rootEntityName ?? null,
+    environment: correlationFields.environment ?? legacyCorrelationFields.environment ?? null,
+    source: correlationFields.source ?? legacyCorrelationFields.source ?? null,
+    serviceName: correlationFields.serviceName ?? legacyCorrelationFields.serviceName ?? null,
+    scope: null,
+    metadata: l.metadata ?? null,
   };
 }
 
