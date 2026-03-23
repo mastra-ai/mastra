@@ -226,6 +226,26 @@ response.processDataStream({
 })
 ```
 
+### `resumeStream()`
+
+Resume a suspended agent stream with custom data. Use this to continue execution after a suspension point, such as a workflow suspend within an agent:
+
+```typescript
+const response = await agent.resumeStream(
+  { approved: true, selectedOption: 'plan-b' },
+  {
+    runId: 'run-123',
+    toolCallId: 'tool-call-456', // optional
+  },
+)
+
+await response.processDataStream({
+  onChunk: chunk => {
+    console.log(chunk)
+  },
+})
+```
+
 ### `approveToolCallGenerate()`
 
 Approve a pending tool call when using `generate()` (non-streaming). Returns the complete response:
