@@ -30,7 +30,7 @@
     "fetch-to-node": "^2.1.0"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.99",
+    "@ai-sdk/openai": "^2.0.100",
     "@hono/node-server": "^1.19.11",
     "@hono/swagger-ui": "^0.5.3",
     "@internal/lint": "workspace:*",
