@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import { MastraBrowser } from '@mastra/core/browser';
 
+import { loadBrowserManager } from './browser-types.js';
 import type { BrowserManagerLike, BrowserLocator, BrowserPage } from './browser-types.js';
 import { ScreencastStream } from './screencast/index.js';
 import type { ScreencastOptions } from './screencast/index.js';
@@ -57,15 +58,13 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   // ---------------------------------------------------------------------------
-  // Lifecycle (called by base class _launch/_close wrappers)
+  // Lifecycle (called by base class launch/close wrappers)
   // ---------------------------------------------------------------------------
 
-  protected async launch(): Promise<void> {
+  protected async doLaunch(): Promise<void> {
     if (this.browserManager) return;
 
-    const { BrowserManager } = (await import('agent-browser')) as unknown as {
-      BrowserManager: new (config: BrowserConfig) => BrowserManagerLike;
-    };
+    const BrowserManager = await loadBrowserManager();
 
     this.browserManager = new BrowserManager({
       headless: this.config.headless ?? true,
@@ -81,7 +80,7 @@ export class AgentBrowser extends MastraBrowser {
     this.logger.info('Browser launched');
   }
 
-  protected async close(): Promise<void> {
+  protected async doClose(): Promise<void> {
     if (this.screencastStream) {
       await this.screencastStream.stop();
       this.screencastStream = null;

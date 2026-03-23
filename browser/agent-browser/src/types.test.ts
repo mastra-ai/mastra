@@ -1,176 +1,306 @@
+/**
+ * Schema Tests
+ *
+ * Tests for the 19 grouped browser tool schemas.
+ * These schemas are defined in @mastra/core/browser and use discriminated unions.
+ */
+
 import {
   navigateInputSchema,
-  snapshotInputSchema,
-  clickInputSchema,
-  typeInputSchema,
+  interactInputSchema,
+  inputInputSchema,
   scrollInputSchema,
-  screenshotInputSchema,
-  closeInputSchema,
-  selectInputSchema,
+  extractInputSchema,
+  formInputSchema,
 } from '@mastra/core/browser';
 import { describe, expect, it } from 'vitest';
 
 describe('navigateInputSchema', () => {
-  it('accepts a valid URL', () => {
-    const result = navigateInputSchema.safeParse({ url: 'https://example.com' });
+  it('accepts goto action with valid URL', () => {
+    const result = navigateInputSchema.safeParse({ action: 'goto', url: 'https://example.com' });
     expect(result.success).toBe(true);
   });
 
-  it('rejects an invalid URL', () => {
-    const result = navigateInputSchema.safeParse({ url: 'not-a-url' });
+  it('rejects goto action with invalid URL', () => {
+    const result = navigateInputSchema.safeParse({ action: 'goto', url: 'not-a-url' });
     expect(result.success).toBe(false);
   });
 
-  it('defaults waitUntil to domcontentloaded', () => {
-    const result = navigateInputSchema.parse({ url: 'https://example.com' });
-    expect(result.waitUntil).toBe('domcontentloaded');
+  it('defaults waitUntil to domcontentloaded for goto', () => {
+    const result = navigateInputSchema.parse({ action: 'goto', url: 'https://example.com' });
+    if (result.action === 'goto') {
+      expect(result.waitUntil).toBe('domcontentloaded');
+    }
   });
 
-  it('accepts valid waitUntil values', () => {
-    for (const value of ['load', 'domcontentloaded', 'networkidle'] as const) {
-      const result = navigateInputSchema.safeParse({ url: 'https://example.com', waitUntil: value });
+  it('accepts valid waitUntil values for goto', () => {
+    for (const waitUntil of ['load', 'domcontentloaded', 'networkidle'] as const) {
+      const result = navigateInputSchema.safeParse({ action: 'goto', url: 'https://example.com', waitUntil });
       expect(result.success).toBe(true);
     }
   });
 
   it('rejects invalid waitUntil values', () => {
-    const result = navigateInputSchema.safeParse({ url: 'https://example.com', waitUntil: 'never' });
+    const result = navigateInputSchema.safeParse({ action: 'goto', url: 'https://example.com', waitUntil: 'never' });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts back action', () => {
+    const result = navigateInputSchema.safeParse({ action: 'back' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts forward action', () => {
+    const result = navigateInputSchema.safeParse({ action: 'forward' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts reload action', () => {
+    const result = navigateInputSchema.safeParse({ action: 'reload' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts close action', () => {
+    const result = navigateInputSchema.safeParse({ action: 'close' });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects unknown action', () => {
+    const result = navigateInputSchema.safeParse({ action: 'teleport' });
     expect(result.success).toBe(false);
   });
 });
 
-describe('snapshotInputSchema', () => {
-  it('accepts empty input with defaults', () => {
-    const result = snapshotInputSchema.parse({});
-    expect(result.interactiveOnly).toBe(true);
-    expect(result.maxElements).toBe(50);
-    expect(result.offset).toBe(0);
+describe('interactInputSchema', () => {
+  it('accepts click action with ref', () => {
+    const result = interactInputSchema.safeParse({ action: 'click', ref: '@e5' });
+    expect(result.success).toBe(true);
   });
 
-  it('accepts custom values', () => {
-    const result = snapshotInputSchema.parse({ interactiveOnly: false, maxElements: 100, offset: 25 });
-    expect(result.interactiveOnly).toBe(false);
-    expect(result.maxElements).toBe(100);
-    expect(result.offset).toBe(25);
-  });
-});
-
-describe('clickInputSchema', () => {
-  it('requires a ref', () => {
-    const result = clickInputSchema.safeParse({});
+  it('requires ref for click action', () => {
+    const result = interactInputSchema.safeParse({ action: 'click' });
     expect(result.success).toBe(false);
   });
 
-  it('accepts a ref with default button', () => {
-    const result = clickInputSchema.parse({ ref: '@e5' });
-    expect(result.ref).toBe('@e5');
-    expect(result.button).toBe('left');
+  it('defaults button to left for click', () => {
+    const result = interactInputSchema.parse({ action: 'click', ref: '@e5' });
+    if (result.action === 'click') {
+      expect(result.button).toBe('left');
+    }
   });
 
-  it('accepts all button types', () => {
+  it('accepts all button types for click', () => {
     for (const button of ['left', 'right', 'middle'] as const) {
-      const result = clickInputSchema.safeParse({ ref: '@e1', button });
+      const result = interactInputSchema.safeParse({ action: 'click', ref: '@e1', button });
       expect(result.success).toBe(true);
     }
   });
 
-  it('rejects invalid button', () => {
-    const result = clickInputSchema.safeParse({ ref: '@e1', button: 'back' });
+  it('rejects invalid button for click', () => {
+    const result = interactInputSchema.safeParse({ action: 'click', ref: '@e1', button: 'back' });
     expect(result.success).toBe(false);
+  });
+
+  it('accepts double_click action', () => {
+    const result = interactInputSchema.safeParse({ action: 'double_click', ref: '@e1' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts hover action', () => {
+    const result = interactInputSchema.safeParse({ action: 'hover', ref: '@e1' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts focus action', () => {
+    const result = interactInputSchema.safeParse({ action: 'focus', ref: '@e1' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts drag action with source and target refs', () => {
+    const result = interactInputSchema.safeParse({ action: 'drag', sourceRef: '@e1', targetRef: '@e2' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts tap action', () => {
+    const result = interactInputSchema.safeParse({ action: 'tap', ref: '@e1' });
+    expect(result.success).toBe(true);
   });
 });
 
-describe('typeInputSchema', () => {
-  it('requires ref and text', () => {
-    expect(typeInputSchema.safeParse({}).success).toBe(false);
-    expect(typeInputSchema.safeParse({ ref: '@e1' }).success).toBe(false);
-    expect(typeInputSchema.safeParse({ text: 'hello' }).success).toBe(false);
+describe('inputInputSchema', () => {
+  it('accepts fill action with ref and value', () => {
+    const result = inputInputSchema.safeParse({ action: 'fill', ref: '@e3', value: 'hello' });
+    expect(result.success).toBe(true);
   });
 
-  it('accepts ref and text with clearFirst default', () => {
-    const result = typeInputSchema.parse({ ref: '@e3', text: 'hello' });
-    expect(result.clearFirst).toBe(false);
+  it('requires ref for fill action', () => {
+    const result = inputInputSchema.safeParse({ action: 'fill', value: 'hello' });
+    expect(result.success).toBe(false);
+  });
+
+  it('requires value for fill action', () => {
+    const result = inputInputSchema.safeParse({ action: 'fill', ref: '@e3' });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts type action with ref and text', () => {
+    const result = inputInputSchema.safeParse({ action: 'type', ref: '@e3', text: 'hello' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts press action with ref and key', () => {
+    const result = inputInputSchema.safeParse({ action: 'press', ref: '@e3', key: 'Enter' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts clear action', () => {
+    const result = inputInputSchema.safeParse({ action: 'clear', ref: '@e3' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts select_all action', () => {
+    const result = inputInputSchema.safeParse({ action: 'select_all', ref: '@e3' });
+    expect(result.success).toBe(true);
   });
 });
 
 describe('scrollInputSchema', () => {
-  it('requires a direction', () => {
-    const result = scrollInputSchema.safeParse({});
+  it('accepts scroll action with direction', () => {
+    const result = scrollInputSchema.safeParse({ action: 'scroll', direction: 'down' });
+    expect(result.success).toBe(true);
+  });
+
+  it('requires action field', () => {
+    const result = scrollInputSchema.safeParse({ direction: 'down' });
     expect(result.success).toBe(false);
   });
 
-  it('accepts all direction values', () => {
+  it('accepts all direction values for scroll', () => {
     for (const direction of ['up', 'down', 'left', 'right'] as const) {
-      const result = scrollInputSchema.safeParse({ direction });
+      const result = scrollInputSchema.safeParse({ action: 'scroll', direction });
       expect(result.success).toBe(true);
     }
   });
 
-  it('defaults amount to page', () => {
-    const result = scrollInputSchema.parse({ direction: 'down' });
-    expect(result.amount).toBe('page');
+  it('accepts numeric amount for scroll', () => {
+    const result = scrollInputSchema.parse({ action: 'scroll', direction: 'down', amount: 300 });
+    if (result.action === 'scroll') {
+      expect(result.amount).toBe(300);
+    }
   });
 
-  it('accepts numeric amount', () => {
-    const result = scrollInputSchema.parse({ direction: 'down', amount: 300 });
-    expect(result.amount).toBe(300);
+  it('accepts optional ref for element scrolling', () => {
+    const result = scrollInputSchema.parse({ action: 'scroll', direction: 'down', ref: '@e10' });
+    if (result.action === 'scroll') {
+      expect(result.ref).toBe('@e10');
+    }
   });
 
-  it('accepts an optional ref for element scrolling', () => {
-    const result = scrollInputSchema.parse({ direction: 'down', ref: '@e10' });
-    expect(result.ref).toBe('@e10');
-  });
-});
-
-describe('screenshotInputSchema', () => {
-  it('accepts empty input with defaults', () => {
-    const result = screenshotInputSchema.parse({});
-    expect(result.fullPage).toBe(false);
-    expect(result.format).toBe('png');
-    expect(result.quality).toBe(80);
+  it('accepts into_view action with ref', () => {
+    const result = scrollInputSchema.safeParse({ action: 'into_view', ref: '@e5' });
+    expect(result.success).toBe(true);
   });
 
-  it('rejects quality outside 0-100', () => {
-    expect(screenshotInputSchema.safeParse({ quality: -1 }).success).toBe(false);
-    expect(screenshotInputSchema.safeParse({ quality: 101 }).success).toBe(false);
-  });
-
-  it('accepts an element ref', () => {
-    const result = screenshotInputSchema.parse({ ref: '@e2' });
-    expect(result.ref).toBe('@e2');
+  it('requires ref for into_view action', () => {
+    const result = scrollInputSchema.safeParse({ action: 'into_view' });
+    expect(result.success).toBe(false);
   });
 });
 
-describe('selectInputSchema', () => {
-  it('accepts selection by value', () => {
-    const result = selectInputSchema.parse({ ref: '@e5', value: 'opt1' });
-    expect(result.ref).toBe('@e5');
-    expect(result.value).toBe('opt1');
+describe('extractInputSchema', () => {
+  it('accepts snapshot action with defaults', () => {
+    const result = extractInputSchema.parse({ action: 'snapshot' });
+    if (result.action === 'snapshot') {
+      expect(result.interactiveOnly).toBe(true);
+      expect(result.maxElements).toBe(50);
+      expect(result.offset).toBe(0);
+    }
   });
 
-  it('accepts selection by label', () => {
-    const result = selectInputSchema.parse({ ref: '@e5', label: 'Option One' });
-    expect(result.label).toBe('Option One');
+  it('accepts snapshot action with custom values', () => {
+    const result = extractInputSchema.parse({
+      action: 'snapshot',
+      interactiveOnly: false,
+      maxElements: 100,
+      offset: 25,
+    });
+    if (result.action === 'snapshot') {
+      expect(result.interactiveOnly).toBe(false);
+      expect(result.maxElements).toBe(100);
+      expect(result.offset).toBe(25);
+    }
   });
 
-  it('accepts selection by index', () => {
-    const result = selectInputSchema.parse({ ref: '@e5', index: 0 });
-    expect(result.index).toBe(0);
+  it('accepts screenshot action with defaults', () => {
+    const result = extractInputSchema.parse({ action: 'screenshot' });
+    if (result.action === 'screenshot') {
+      expect(result.fullPage).toBe(false);
+    }
   });
 
-  it('requires a ref', () => {
-    expect(selectInputSchema.safeParse({ value: 'opt1' }).success).toBe(false);
+  it('accepts screenshot action with fullPage', () => {
+    const result = extractInputSchema.parse({ action: 'screenshot', fullPage: true });
+    if (result.action === 'screenshot') {
+      expect(result.fullPage).toBe(true);
+    }
+  });
+
+  it('accepts screenshot action with element ref', () => {
+    const result = extractInputSchema.parse({ action: 'screenshot', ref: '@e2' });
+    if (result.action === 'screenshot') {
+      expect(result.ref).toBe('@e2');
+    }
+  });
+
+  it('accepts text action with ref', () => {
+    const result = extractInputSchema.safeParse({ action: 'text', ref: '@e1' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts html action with ref', () => {
+    const result = extractInputSchema.safeParse({ action: 'html', ref: '@e1' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts title action', () => {
+    const result = extractInputSchema.safeParse({ action: 'title' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts url action', () => {
+    const result = extractInputSchema.safeParse({ action: 'url' });
+    expect(result.success).toBe(true);
   });
 });
 
-describe('closeInputSchema', () => {
-  it('accepts empty input', () => {
-    const result = closeInputSchema.parse({});
-    expect(result.reason).toBeUndefined();
+describe('formInputSchema', () => {
+  it('accepts select action with value', () => {
+    const result = formInputSchema.safeParse({ action: 'select', ref: '@e5', value: 'opt1' });
+    expect(result.success).toBe(true);
   });
 
-  it('accepts an optional reason', () => {
-    const result = closeInputSchema.parse({ reason: 'Task complete' });
-    expect(result.reason).toBe('Task complete');
+  it('accepts select action with label', () => {
+    const result = formInputSchema.safeParse({ action: 'select', ref: '@e5', label: 'Option One' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts select action with index', () => {
+    const result = formInputSchema.safeParse({ action: 'select', ref: '@e5', index: 0 });
+    expect(result.success).toBe(true);
+  });
+
+  it('requires ref for select action', () => {
+    const result = formInputSchema.safeParse({ action: 'select', value: 'opt1' });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts check action', () => {
+    const result = formInputSchema.safeParse({ action: 'check', ref: '@e5' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts uncheck action', () => {
+    const result = formInputSchema.safeParse({ action: 'uncheck', ref: '@e5' });
+    expect(result.success).toBe(true);
   });
 });

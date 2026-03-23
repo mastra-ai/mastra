@@ -1,16 +1,18 @@
-import type { BaseBrowserConfig } from '@mastra/core/browser';
-
 /**
- * Configuration options for the Browser (agent-browser provider).
- *
- * Extends the base browser config shared by all providers.
+ * Configuration options for AgentBrowser.
  */
-export interface BrowserConfig extends BaseBrowserConfig {
+export interface BrowserConfig {
   /**
    * Run browser in headless mode.
    * @default true
    */
   headless?: boolean;
+
+  /**
+   * Default timeout in milliseconds for browser operations.
+   * @default 30000 (30 seconds)
+   */
+  timeout?: number;
 
   /**
    * Allow file:// URLs to be loaded.

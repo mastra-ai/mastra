@@ -258,3 +258,17 @@ export interface PageError {
   message: string;
   timestamp: number;
 }
+
+/**
+ * Load BrowserManager from agent-browser package.
+ *
+ * The agent-browser package doesn't export BrowserManager from its main entry point
+ * (it's a CLI-first tool), so we need to import from the dist/browser.js subpath.
+ * This helper centralizes that import and provides proper typing.
+ */
+export async function loadBrowserManager(): Promise<new (config?: Record<string, unknown>) => BrowserManagerLike> {
+  const module = (await import('agent-browser/dist/browser.js')) as {
+    BrowserManager: new (config?: Record<string, unknown>) => BrowserManagerLike;
+  };
+  return module.BrowserManager;
+}

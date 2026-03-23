@@ -228,21 +228,21 @@ export abstract class MastraBrowser extends MastraBase {
 
   /**
    * Launch the browser. Override in subclass.
-   * Called by _launch() wrapper which handles status and race conditions.
+   * Called by launch() wrapper which handles status and race conditions.
    */
-  protected abstract launch(): Promise<void>;
+  protected abstract doLaunch(): Promise<void>;
 
   /**
    * Close the browser. Override in subclass.
-   * Called by _close() wrapper which handles status and race conditions.
+   * Called by close() wrapper which handles status and race conditions.
    */
-  protected abstract close(): Promise<void>;
+  protected abstract doClose(): Promise<void>;
 
   /**
-   * Race-condition-safe launch wrapper.
-   * Handles concurrent calls, status management, and lifecycle hooks.
+   * Launch the browser.
+   * Race-condition-safe - handles concurrent calls, status management, and lifecycle hooks.
    */
-  async _launch(): Promise<void> {
+  async launch(): Promise<void> {
     // Already ready
     if (this.status === 'ready') {
       return;
@@ -263,7 +263,7 @@ export abstract class MastraBrowser extends MastraBase {
 
     this._launchPromise = (async () => {
       try {
-        await this.launch();
+        await this.doLaunch();
         this.status = 'ready';
 
         // Fire onLaunch hook
@@ -283,10 +283,10 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   /**
-   * Race-condition-safe close wrapper.
-   * Handles concurrent calls, status management, and lifecycle hooks.
+   * Close the browser.
+   * Race-condition-safe - handles concurrent calls, status management, and lifecycle hooks.
    */
-  async _close(): Promise<void> {
+  async close(): Promise<void> {
     // Already closed
     if (this.status === 'closed') {
       return;
@@ -306,7 +306,7 @@ export abstract class MastraBrowser extends MastraBase {
 
     this._closePromise = (async () => {
       try {
-        await this.close();
+        await this.doClose();
         this.status = 'closed';
       } catch (err) {
         this.status = 'error';
@@ -328,7 +328,7 @@ export abstract class MastraBrowser extends MastraBase {
       return;
     }
     if (this.status === 'pending' || this.status === 'error') {
-      await this._launch();
+      await this.launch();
       return;
     }
     if (this.status === 'launching') {

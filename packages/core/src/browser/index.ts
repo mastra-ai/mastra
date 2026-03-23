@@ -21,12 +21,6 @@ export { createError } from './errors';
 export type { ErrorCode, BrowserToolError } from './errors';
 
 // ============================================================================
-// Legacy types (for backwards compatibility - will be removed)
-// ============================================================================
-
-export type { BaseBrowserConfig } from './types';
-
-// ============================================================================
 // Tool Factory & Helpers
 // ============================================================================
 
