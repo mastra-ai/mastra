@@ -12,6 +12,8 @@ import {
 } from '@mastra/server/server-adapter';
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler, RouteHandlerMethod } from 'fastify';
 import { ZodError } from 'zod';
+export { createAuthMiddleware } from './auth-middleware';
+export type { FastifyAuthMiddlewareOptions } from './auth-middleware';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
