@@ -1,6 +1,6 @@
-import type { WorkflowRunState, StepResult, TimeTravelContext } from '@mastra/core/workflows';
+import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
 
-import { WorkflowRunStreamResult } from './context/workflow-run-context';
+import type { WorkflowRunStreamResult } from './context/workflow-run-context';
 
 export function convertWorkflowRunStateToStreamResult(runState: WorkflowRunState): WorkflowRunStreamResult {
   // Extract step information from the context

@@ -16,7 +16,7 @@ export const useCopyToClipboard = ({ copiedDuration = 1500 }: UseCopyToClipboard
   const copyToClipboard = (value: string) => {
     if (!value) return;
 
-    navigator.clipboard.writeText(value).then(() => {
+    void navigator.clipboard.writeText(value).then(() => {
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), copiedDuration);
     });

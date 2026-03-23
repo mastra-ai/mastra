@@ -1,6 +1,6 @@
+import type { FieldWrapperProps } from '@autoform/react';
 import React from 'react';
 
-import { FieldWrapperProps } from '@autoform/react';
 import { Txt } from '@/ds/components/Txt';
 
 const DISABLED_LABELS = ['boolean', 'object', 'array'];

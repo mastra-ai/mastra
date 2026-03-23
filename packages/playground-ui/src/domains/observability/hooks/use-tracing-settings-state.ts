@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { TracingSettings } from '../context/tracing-settings-context';
+import type { TracingSettings } from '../context/tracing-settings-context';
 
 export interface TracingSettingsStateProps {
   entityId: string;

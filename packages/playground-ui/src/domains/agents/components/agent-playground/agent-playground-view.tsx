@@ -1,11 +1,10 @@
 import { Panel, Group, useDefaultLayout } from 'react-resizable-panels';
 
-import { PanelSeparator } from '@/lib/resize/separator';
-import { Txt } from '@/ds/components/Txt';
-
 import { AgentPlaygroundConfig } from './agent-playground-config';
 import { AgentPlaygroundTestChat } from './agent-playground-test-chat';
 import { AgentPlaygroundVersionBar } from './agent-playground-version-bar';
+import { Txt } from '@/ds/components/Txt';
+import { PanelSeparator } from '@/lib/resize/separator';
 
 interface AgentPlaygroundViewProps {
   agentId: string;

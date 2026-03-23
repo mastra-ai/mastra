@@ -1,7 +1,7 @@
-import { cn } from '@/lib/utils';
-import { transitions } from '@/ds/primitives/transitions';
-import { ItemListColumn } from './types';
 import { getItemListColumnTemplate } from './shared';
+import type { ItemListColumn } from './types';
+import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export type ItemListRowProps = {
   isSelected?: boolean;

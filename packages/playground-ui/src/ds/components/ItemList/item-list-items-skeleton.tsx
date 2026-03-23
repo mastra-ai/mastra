@@ -1,7 +1,7 @@
-import { type ItemListColumn } from './types';
 import { ItemListItems } from './item-list-items';
 import { ItemListRow } from './item-list-row';
 import { ItemListRowButton } from './item-list-row-button';
+import type { ItemListColumn } from './types';
 
 const widths = ['75%', '50%', '65%', '90%', '60%', '80%'];
 

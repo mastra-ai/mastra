@@ -1,15 +1,16 @@
-import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
+import { Handle, Position } from '@xyflow/react';
+import type { NodeProps, Node } from '@xyflow/react';
 import { CircleDashed, HourglassIcon, Loader2, PauseIcon, ShieldAlert } from 'lucide-react';
 import { useCurrentRun } from '../context/use-current-run';
-import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
-import { Txt } from '@/ds/components/Txt';
-import { Badge } from '@/ds/components/Badge';
 
 import { Clock } from './workflow-clock';
 import { BADGE_COLORS, BADGE_ICONS, getNodeBadgeInfo } from './workflow-node-badges';
 
-import { cn } from '@/lib/utils';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
+import { Badge } from '@/ds/components/Badge';
+import { Txt } from '@/ds/components/Txt';
+import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
+import { cn } from '@/lib/utils';
 
 export type DefaultNode = Node<
   {
