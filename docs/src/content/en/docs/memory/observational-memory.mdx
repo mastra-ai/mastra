@@ -158,8 +158,7 @@ See [model configuration](/reference/memory/observational-memory#custom-model) f
 For large-scale deployments, you can use `ModelByInputTokens` to automatically select cheaper models for small inputs and stronger models for large inputs. This is useful when the Observer or Reflector processes varying amounts of content — small message batches use a fast model while large batches automatically switch to a more capable one.
 
 ```typescript
-import { Memory } from '@mastra/memory'
-import { ModelByInputTokens } from '@mastra/core/llm'
+import { Memory, ModelByInputTokens } from '@mastra/memory'
 
 const memory = new Memory({
   options: {
@@ -186,7 +185,7 @@ const memory = new Memory({
 })
 ```
 
-The `upTo` keys are inclusive upper bounds. OM automatically sets the input token count in the request context before resolving the model, so the selection happens transparently based on the actual content being processed by the Observer or Reflector.
+The `upTo` keys are inclusive upper bounds. OM computes the actual input token count for the Observer or Reflector call, resolves the matching tier directly, and uses that concrete model for the run.
 
 If the input exceeds the largest configured threshold, an error is thrown — ensure your thresholds cover the full range of possible input sizes, or use a model with a sufficiently large context window at the highest tier.
 

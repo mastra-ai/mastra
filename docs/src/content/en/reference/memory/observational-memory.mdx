@@ -910,7 +910,7 @@ Where `config` is an object with `upTo` keys that map token thresholds (numbers)
 #### Example
 
 ```typescript
-import { ModelByInputTokens } from '@mastra/core/llm'
+import { ModelByInputTokens } from '@mastra/memory'
 
 const selector = new ModelByInputTokens({
   upTo: {
@@ -926,7 +926,7 @@ const selector = new ModelByInputTokens({
 - Thresholds are sorted internally, so the order in the config object does not matter.
 - `inputTokens ≤ smallest threshold` → uses that threshold's model
 - `inputTokens > largest threshold` → throws an error
-- OM automatically sets the input token count in the request context before resolving the model
+- OM computes the input token count for the Observer or Reflector call and resolves the matching model tier directly
 
 #### Methods
 
