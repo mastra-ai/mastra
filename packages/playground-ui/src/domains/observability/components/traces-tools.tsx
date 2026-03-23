@@ -1,15 +1,16 @@
-import { DatePicker, TimePicker } from '@/ds/components/DateTimePicker';
-import { Button } from '@/ds/components/Button/Button';
-import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
-import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
-import { Searchbar } from '@/ds/components/Searchbar/searchbar';
-import { cn } from '@/lib/utils';
-import { Switch } from '@/ds/components/Switch/switch';
+import type { EntityType } from '@mastra/core/observability';
 import { Portal as DropdownMenuPortal, SubContent as DropdownMenuSubContent } from '@radix-ui/react-dropdown-menu';
 import { format, isValid } from 'date-fns';
 import { CalendarIcon, FilterIcon, XIcon, SearchIcon } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
-import type { EntityType } from '@mastra/core/observability';
+
+import { Button } from '@/ds/components/Button/Button';
+import { DatePicker, TimePicker } from '@/ds/components/DateTimePicker';
+import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
+import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
+import { Searchbar } from '@/ds/components/Searchbar/searchbar';
+import { Switch } from '@/ds/components/Switch/switch';
+import { cn } from '@/lib/utils';
 
 // UI-specific entity options that map to API EntityType values
 // Using the enum values (lowercase strings) for the type field
@@ -155,7 +156,7 @@ export function TracesTools({
   isLoading,
   groupByThread,
   onGroupByThreadChange,
-  searchQuery,
+  searchQuery: _searchQuery,
   onSearchChange,
   datePreset = 'all',
   onDatePresetChange,
