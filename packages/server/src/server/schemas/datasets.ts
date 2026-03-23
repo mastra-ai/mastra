@@ -11,6 +11,15 @@ const jsonSchemaObject: z.ZodType<Record<string, unknown>> = z.lazy(() => z.reco
 // JSON Schema field (object or null to disable)
 const jsonSchemaField = z.union([jsonSchemaObject, z.null()]).optional();
 
+// Dataset item source tracking
+const datasetItemSourceSchema = z
+  .object({
+    type: z.enum(['csv', 'json', 'trace', 'llm', 'experiment-result']).describe('How this item was created'),
+    referenceId: z.string().optional().describe('Reference identifier (e.g., trace id, csv filename)'),
+  })
+  .optional()
+  .describe('Source/provenance of this dataset item');
+
 // ============================================================================
 // Path Parameter Schemas
 // ============================================================================
@@ -30,6 +39,12 @@ export const itemIdPathParams = z.object({
 export const datasetAndExperimentIdPathParams = z.object({
   datasetId: z.string().describe('Unique identifier for the dataset'),
   experimentId: z.string().describe('Unique identifier for the experiment'),
+});
+
+export const experimentResultIdPathParams = z.object({
+  datasetId: z.string().describe('Unique identifier for the dataset'),
+  experimentId: z.string().describe('Unique identifier for the experiment'),
+  resultId: z.string().describe('Unique identifier for the experiment result'),
 });
 
 export const datasetAndItemIdPathParams = z.object({
@@ -64,6 +79,8 @@ export const createDatasetBodySchema = z.object({
   inputSchema: jsonSchemaField.describe('JSON Schema for validating item input'),
   groundTruthSchema: jsonSchemaField.describe('JSON Schema for validating item groundTruth'),
   requestContextSchema: jsonSchemaField.describe('JSON Schema describing expected request context shape'),
+  targetType: z.string().optional().describe('Target entity type (e.g. agent, workflow, scorer)'),
+  targetIds: z.array(z.string()).optional().describe('IDs of target entities this dataset is attached to'),
 });
 
 export const updateDatasetBodySchema = z.object({
@@ -73,6 +90,9 @@ export const updateDatasetBodySchema = z.object({
   inputSchema: jsonSchemaField.describe('JSON Schema for validating item input'),
   groundTruthSchema: jsonSchemaField.describe('JSON Schema for validating item groundTruth'),
   requestContextSchema: jsonSchemaField.describe('JSON Schema describing expected request context shape'),
+  tags: z.array(z.string()).optional().describe('Tag definitions for categorizing experiment results'),
+  targetType: z.string().optional().describe('Target entity type (e.g. agent, workflow, scorer)'),
+  targetIds: z.array(z.string()).optional().describe('IDs of target entities this dataset is attached to'),
 });
 
 export const addItemBodySchema = z.object({
@@ -80,6 +100,7 @@ export const addItemBodySchema = z.object({
   groundTruth: z.unknown().optional().describe('Expected output for comparison'),
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Request context preset for this item'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
+  source: datasetItemSourceSchema,
 });
 
 export const updateItemBodySchema = z.object({
@@ -87,6 +108,7 @@ export const updateItemBodySchema = z.object({
   groundTruth: z.unknown().optional().describe('Expected output for comparison'),
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Request context preset for this item'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
+  source: datasetItemSourceSchema,
 });
 
 export const triggerExperimentBodySchema = z.object({
@@ -94,6 +116,7 @@ export const triggerExperimentBodySchema = z.object({
   targetId: z.string().describe('ID of the target'),
   scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
   version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
+  agentVersion: z.string().optional().describe('Agent version ID to use for experiment'),
   maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Global request context passed to the target'),
 });
@@ -116,6 +139,9 @@ export const datasetResponseSchema = z.object({
   inputSchema: z.record(z.string(), z.unknown()).optional(),
   groundTruthSchema: z.record(z.string(), z.unknown()).optional(),
   requestContextSchema: z.record(z.string(), z.unknown()).optional(),
+  tags: z.array(z.string()).optional().nullable(),
+  targetType: z.string().optional().nullable(),
+  targetIds: z.array(z.string()).optional().nullable(),
   version: z.number().int(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -130,6 +156,7 @@ export const datasetItemResponseSchema = z.object({
   groundTruth: z.unknown().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  source: datasetItemSourceSchema,
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -139,6 +166,7 @@ export const experimentResponseSchema = z.object({
   id: z.string(),
   datasetId: z.string().nullable(),
   datasetVersion: z.number().int().nullable(),
+  agentVersion: z.string().nullable().optional(),
   targetType: z.enum(['agent', 'workflow', 'scorer', 'processor']),
   targetId: z.string(),
   name: z.string().optional(),
@@ -184,7 +212,14 @@ export const experimentResultResponseSchema = z.object({
   completedAt: z.coerce.date(),
   retryCount: z.number(),
   traceId: z.string().nullable(),
+  status: z.enum(['needs-review', 'reviewed', 'complete']).nullable().optional(),
+  tags: z.array(z.string()).nullable().optional(),
   createdAt: z.coerce.date(),
+});
+
+export const updateExperimentResultBodySchema = z.object({
+  status: z.enum(['needs-review', 'reviewed', 'complete']).nullable().optional(),
+  tags: z.array(z.string()).optional(),
 });
 
 // Comparison item schema (MVP shape)
@@ -320,6 +355,7 @@ export const batchInsertItemsBodySchema = z.object({
       groundTruth: z.unknown().optional(),
       requestContext: z.record(z.string(), z.unknown()).optional(),
       metadata: z.record(z.string(), z.unknown()).optional(),
+      source: datasetItemSourceSchema,
     }),
   ),
 });
@@ -336,4 +372,82 @@ export const batchDeleteItemsBodySchema = z.object({
 export const batchDeleteItemsResponseSchema = z.object({
   success: z.boolean(),
   deletedCount: z.number(),
+});
+
+// ============================================================================
+// AI Generation Schemas
+// ============================================================================
+
+export const generateItemsBodySchema = z.object({
+  modelId: z.string().describe('Model identifier in "provider/model" format (e.g., "openai/gpt-4o")'),
+  prompt: z.string().describe('Description of the kind of test data to generate'),
+  count: z.number().int().min(1).max(50).default(5).describe('Number of items to generate'),
+  agentContext: z
+    .object({
+      description: z.string().optional(),
+      instructions: z.string().optional(),
+      tools: z.array(z.string()).optional(),
+    })
+    .optional()
+    .describe('Context about the agent to generate relevant test data'),
+});
+
+const generatedItemSchema = z.object({
+  input: z.unknown(),
+  groundTruth: z.unknown().optional(),
+});
+
+export const generateItemsResponseSchema = z.object({
+  items: z.array(generatedItemSchema),
+});
+
+// ============================================================================
+// Cluster Failures
+// ============================================================================
+
+export const clusterFailuresBodySchema = z.object({
+  modelId: z.string().describe('Model identifier in "provider/model" format (e.g., "openai/gpt-4o")'),
+  items: z
+    .array(
+      z.object({
+        id: z.string(),
+        input: z.unknown(),
+        output: z.unknown().optional(),
+        error: z.string().optional(),
+        scores: z.record(z.string(), z.number()).optional(),
+        existingTags: z.array(z.string()).optional().describe('Tags already applied to this item'),
+      }),
+    )
+    .min(1)
+    .max(200)
+    .describe('Failure items to cluster'),
+  availableTags: z
+    .array(z.string())
+    .optional()
+    .describe('Existing tag vocabulary from the dataset. The LLM should prefer reusing these tags when applicable.'),
+  prompt: z
+    .string()
+    .optional()
+    .describe('Optional user instructions to guide the analysis (e.g., "focus on tool usage failures")'),
+});
+
+const failureClusterSchema = z.object({
+  id: z.string().describe('A unique cluster identifier'),
+  label: z.string().describe('Short label for this failure pattern'),
+  description: z.string().describe('Description of the common pattern'),
+  itemIds: z.array(z.string()).describe('IDs of items belonging to this cluster'),
+});
+
+export const clusterFailuresResponseSchema = z.object({
+  clusters: z.array(failureClusterSchema),
+  /** Per-item proposed tag assignments. Each entry maps an item ID to the tags the LLM suggests adding. */
+  proposedTags: z
+    .array(
+      z.object({
+        itemId: z.string(),
+        tags: z.array(z.string()),
+        reason: z.string().describe('Brief explanation of why these tags were assigned to this item'),
+      }),
+    )
+    .optional(),
 });

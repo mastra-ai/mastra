@@ -143,7 +143,10 @@ describe('MastraMCPClient with Streamable HTTP', () => {
     it('should call a tool', async () => {
       const tools = await client.tools();
       const result = await tools.greet?.execute?.({ name: 'Stateless' });
-      expect(result).toEqual({ content: [{ type: 'text', text: 'Hello, Stateless!' }] });
+      // Returns the full CallToolResult envelope
+      expect(result).toEqual({
+        content: [{ type: 'text', text: 'Hello, Stateless!' }],
+      });
     });
 
     it('should list resources', async () => {
@@ -215,20 +218,20 @@ describe('MastraMCPClient with Streamable HTTP', () => {
     it('should call a tool', async () => {
       const tools = await client.tools();
       const result = await tools.greet?.execute?.({ name: 'Stateful' });
-      expect(result).toEqual({ content: [{ type: 'text', text: 'Hello, Stateful!' }] });
+      // Returns the full CallToolResult envelope
+      expect(result).toEqual({
+        content: [{ type: 'text', text: 'Hello, Stateful!' }],
+      });
     });
   });
 });
 
 describe('MastraMCPClient - outputSchema without structuredContent', () => {
-  // Reproduces the bug where MCP servers (e.g. FastMCP) define outputSchema on
-  // a tool but don't return structuredContent in the response. The raw
-  // CallToolResult envelope gets validated against the outputSchema and Zod
-  // strips all unrecognised keys, producing {}.
-  //
-  // We use a real server connection but spy on the SDK Client's methods to
-  // simulate a non-SDK MCP server (like FastMCP) that advertises outputSchema
-  // on tool listings but only populates the content array in tool call responses.
+  // When MCP servers (e.g. FastMCP) define outputSchema on a tool but don't
+  // return structuredContent in the response, the full CallToolResult envelope
+  // should be returned as-is. We don't pass outputSchema to createTool, so
+  // Zod won't strip unrecognised keys. The MCP SDK validates structuredContent
+  // against outputSchema internally via AJV.
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
@@ -253,10 +256,7 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     testServer?.httpServer.close();
   });
 
-  it('should return the parsed result, not {} when structuredContent is absent', async () => {
-    // Spy on the SDK Client to simulate a FastMCP-style server:
-    // - listTools returns a tool with outputSchema
-    // - callTool returns content[] without structuredContent
+  it('should return the full CallToolResult envelope when structuredContent is absent', async () => {
     const sdkClient = (client as any).client as Client;
 
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
@@ -279,10 +279,12 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
       ],
     });
 
-    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+    const callToolResult = {
       content: [{ type: 'text', text: JSON.stringify({ result: 2, expression: '1 + 1' }) }],
       isError: false,
-    });
+    };
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue(callToolResult);
 
     const tools = await client.tools();
     const calculateTool = tools['calculate'];
@@ -290,24 +292,14 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
 
     const result = await calculateTool.execute?.({ expression: '1 + 1' });
 
-    // Before the fix this would be {} because the raw CallToolResult envelope
-    // ({ content: [...], isError: false }) was validated against the outputSchema
-    // and Zod stripped all unrecognised keys.
-    expect(result).toEqual({ result: 2, expression: '1 + 1' });
+    // The full CallToolResult envelope is returned — no extraction, no Zod stripping
+    expect(result).toEqual(callToolResult);
   });
 });
 
-describe('MastraMCPClient - outputSchema Zod stripping', () => {
-  // Reproduces the bug where the Zod output schema converted from the MCP tool's
-  // JSON Schema strips unknown keys from the result. This happens because Zod's
-  // default mode is "strip" which silently removes unknown keys.
-  //
-  // Example: FastMCP server returns structuredContent with fields like
-  // { success, events, count, message, tool } but the outputSchema only defines
-  // { events, count } — Zod strips success, message, and tool.
-  //
-  // Worse case: outputSchema is { type: "object" } with no properties, which
-  // produces z.object({}) and strips ALL keys, returning {}.
+describe('MastraMCPClient - no outputSchema', () => {
+  // MCP tools that do NOT declare an outputSchema return the full
+  // CallToolResult envelope. We don't extract or transform the result.
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
@@ -319,7 +311,7 @@ describe('MastraMCPClient - outputSchema Zod stripping', () => {
   beforeEach(async () => {
     testServer = await setupTestServer(false);
     client = new InternalMastraMCPClient({
-      name: 'zod-stripping-test-client',
+      name: 'no-output-schema-test-client',
       server: { url: testServer.baseUrl },
     });
     await client.connect();
@@ -332,11 +324,72 @@ describe('MastraMCPClient - outputSchema Zod stripping', () => {
     testServer?.httpServer.close();
   });
 
-  it('should not strip extra fields from structuredContent when outputSchema has fewer properties', async () => {
+  it('should return the full CallToolResult envelope when no outputSchema', async () => {
     const sdkClient = (client as any).client as Client;
 
-    // outputSchema only defines "count" and "events", but the server returns
-    // additional fields like "success", "message", and "tool"
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'get_patient',
+          description: 'Get patient information',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { patientId: { type: 'string' } },
+          },
+          // No outputSchema defined
+        },
+      ],
+    });
+
+    const callToolResult = {
+      content: [{ type: 'text', text: JSON.stringify({ success: true, patient: { id: '123' } }) }],
+      isError: false,
+    };
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue(callToolResult);
+
+    const tools = await client.tools();
+    const getTool = tools['get_patient'];
+    expect(getTool).toBeDefined();
+
+    const result = await getTool.execute?.({ patientId: '123' });
+
+    // Returns the full CallToolResult envelope — no content extraction
+    expect(result).toEqual(callToolResult);
+  });
+});
+
+describe('MastraMCPClient - outputSchema with structuredContent', () => {
+  // When a tool has an outputSchema and returns structuredContent, the
+  // structuredContent is returned directly. We don't pass outputSchema to
+  // createTool so there's no Zod stripping — the MCP SDK validates via AJV.
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'structured-content-test-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should return structuredContent directly, preserving all fields', async () => {
+    const sdkClient = (client as any).client as Client;
+
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
       tools: [
         {
@@ -381,15 +434,13 @@ describe('MastraMCPClient - outputSchema Zod stripping', () => {
       enddate: '2026-02-27T23:59:59Z',
     });
 
-    // All fields should be preserved, including those not in the outputSchema
+    // structuredContent is returned directly — all fields preserved
     expect(result).toEqual(fullResult);
   });
 
-  it('should not return {} when outputSchema is a generic object with no properties', async () => {
+  it('should return structuredContent even with generic object outputSchema', async () => {
     const sdkClient = (client as any).client as Client;
 
-    // outputSchema is just { type: "object" } with no properties defined
-    // This converts to z.object({}) which strips ALL keys by default
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
       tools: [
         {
@@ -418,8 +469,66 @@ describe('MastraMCPClient - outputSchema Zod stripping', () => {
     const tool = tools['generic_tool'];
     const result = await tool.execute?.({ query: 'test' });
 
-    // Should return the full result, not {}
     expect(result).toEqual(fullResult);
+  });
+});
+
+describe('MastraMCPClient - tools without outputSchema preserve envelope', () => {
+  // MCP tools without outputSchema return the full CallToolResult envelope.
+  // We don't extract or transform content — callers get the standard MCP shape.
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'no-output-schema-test',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should return the full CallToolResult envelope', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'simple_tool',
+          description: 'A tool without outputSchema',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+          },
+        },
+      ],
+    });
+
+    const callToolResult = {
+      content: [{ type: 'text', text: 'Hello, world!' }],
+      isError: false,
+    };
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue(callToolResult);
+
+    const tools = await client.tools();
+    const tool = tools['simple_tool'];
+    const result = await tool.execute?.({ query: 'test' });
+
+    // Returns the full CallToolResult envelope
+    expect(result).toEqual(callToolResult);
   });
 });
 
@@ -629,12 +738,10 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     console.log('result', result);
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
-    expect(result.content).toBeDefined();
-    expect(result.content[0].type).toBe('text');
-
-    const elicitationResult = JSON.parse(result.content[0].text);
-    expect(elicitationResult.action).toBe('accept');
-    expect(elicitationResult.content).toEqual({
+    // Result is the full CallToolResult envelope
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.action).toBe('accept');
+    expect(parsed.content).toEqual({
       name: 'John Doe',
       email: 'john@example.com',
     });
@@ -664,11 +771,9 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     const result = await collectSensitiveInfoTool?.execute?.({ message: 'Please provide sensitive information' }, {});
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
-    expect(result.content).toBeDefined();
-    expect(result.content[0].type).toBe('text');
-
-    const elicitationResult = JSON.parse(result.content[0].text);
-    expect(elicitationResult.action).toBe('decline');
+    // Result is the full CallToolResult envelope
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.action).toBe('decline');
   });
 
   it('should handle elicitation request with cancel response', async () => {
@@ -694,11 +799,9 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     const result = await collectOptionalInfoTool?.execute?.({ message: 'Optional information request' }, {});
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
-    expect(result.content).toBeDefined();
-    expect(result.content[0].type).toBe('text');
-
-    const elicitationResult = JSON.parse(result.content[0].text);
-    expect(elicitationResult.action).toBe('cancel');
+    // Result is the full CallToolResult envelope
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.action).toBe('cancel');
   });
 
   it('should return an error when elicitation handler throws error', async () => {
@@ -2104,8 +2207,8 @@ describe('MastraMCPClient - Stdio stderr and cwd forwarding', () => {
     expect(getCwdTool).toBeDefined();
 
     // Execute the tool and verify the child process cwd matches
-    const result = (await getCwdTool!.execute({}, {})) as { content: Array<{ type: string; text: string }> };
-    expect(result.content[0]!.text).toBe(targetDir);
+    const result = await getCwdTool!.execute({}, {});
+    expect(result).toEqual({ content: [{ type: 'text', text: targetDir }] });
 
     await client.disconnect();
   }, 30000);

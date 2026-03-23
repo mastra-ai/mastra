@@ -1,5 +1,84 @@
 # @mastra/ai-sdk
 
+## 1.2.0
+
+### Minor Changes
+
+- Exposes `messageMetadata` option in `handleChatStream` for attaching custom metadata to streamed messages. ([#14315](https://github.com/mastra-ai/mastra/pull/14315))
+
+  ```ts
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'my-agent',
+    params,
+    messageMetadata: () => ({ createdAt: new Date().toISOString() }),
+  });
+  ```
+
+### Patch Changes
+
+- Added support for AI SDK v6 response helpers while keeping the existing v5 stream path backwards compatible. ([#14405](https://github.com/mastra-ai/mastra/pull/14405))
+
+  ```ts
+  import { toAISdkStream } from '@mastra/ai-sdk';
+
+  // Existing default path for AI SDK v5
+  const v5Stream = toAISdkStream(mastraStream, { from: 'agent' });
+
+  // Use the v6 stream contract with AI SDK v6 response helpers
+  const v6Stream = toAISdkStream(mastraStream, { from: 'agent', version: 'v6' });
+  ```
+
+  `toAISdkStream`, the framework-agnostic `handle*Stream()` helpers, and the `chatRoute()` / `networkRoute()` / `workflowRoute()` route helpers keep the existing v5/default behavior. Pass `version: 'v6'` when your app is typed against AI SDK v6 response helpers.
+
+- Fixed `withMastra` to accept `LanguageModelV3` models from the latest AI SDK (`@ai-sdk/openai@3+`, `ai@6+`). Previously, passing a V3 model caused a TypeScript error: `LanguageModelV3 is not assignable to LanguageModelV2`. The function now accepts both `LanguageModelV2` and `LanguageModelV3` via overloads. ([#14380](https://github.com/mastra-ai/mastra/pull/14380))
+
+- Updated dependencies [[`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5), [`da93115`](https://github.com/mastra-ai/mastra/commit/da931155c1a9bc63d455d3d86b4ec984db5991fe), [`62d1d3c`](https://github.com/mastra-ai/mastra/commit/62d1d3cc08fe8182e7080237fd975de862ec8c91), [`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`8681ecb`](https://github.com/mastra-ai/mastra/commit/8681ecb86184d5907267000e4576cc442a9a83fc), [`28d0249`](https://github.com/mastra-ai/mastra/commit/28d0249295782277040ad1e0d243e695b7ab1ce4), [`681ee1c`](https://github.com/mastra-ai/mastra/commit/681ee1c811359efd1b8bebc4bce35b9bb7b14bec), [`bb0f09d`](https://github.com/mastra-ai/mastra/commit/bb0f09dbac58401b36069f483acf5673202db5b5), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8), [`5f7e9d0`](https://github.com/mastra-ai/mastra/commit/5f7e9d0db664020e1f3d97d7d18c6b0b9d4843d0), [`d7f14c3`](https://github.com/mastra-ai/mastra/commit/d7f14c3285cd253ecdd5f58139b7b6cbdf3678b5), [`0efe12a`](https://github.com/mastra-ai/mastra/commit/0efe12a5f008a939a1aac71699486ba40138054e)]:
+  - @mastra/core@1.15.0
+
+## 1.2.0-alpha.1
+
+### Minor Changes
+
+- Exposes `messageMetadata` option in `handleChatStream` for attaching custom metadata to streamed messages. ([#14315](https://github.com/mastra-ai/mastra/pull/14315))
+
+  ```ts
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'my-agent',
+    params,
+    messageMetadata: () => ({ createdAt: new Date().toISOString() }),
+  });
+  ```
+
+### Patch Changes
+
+- Fixed `withMastra` to accept `LanguageModelV3` models from the latest AI SDK (`@ai-sdk/openai@3+`, `ai@6+`). Previously, passing a V3 model caused a TypeScript error: `LanguageModelV3 is not assignable to LanguageModelV2`. The function now accepts both `LanguageModelV2` and `LanguageModelV3` via overloads. ([#14380](https://github.com/mastra-ai/mastra/pull/14380))
+
+- Updated dependencies [[`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8)]:
+  - @mastra/core@1.15.0-alpha.2
+
+## 1.1.5-alpha.0
+
+### Patch Changes
+
+- Added support for AI SDK v6 response helpers while keeping the existing v5 stream path backwards compatible. ([#14405](https://github.com/mastra-ai/mastra/pull/14405))
+
+  ```ts
+  import { toAISdkStream } from '@mastra/ai-sdk';
+
+  // Existing default path for AI SDK v5
+  const v5Stream = toAISdkStream(mastraStream, { from: 'agent' });
+
+  // Use the v6 stream contract with AI SDK v6 response helpers
+  const v6Stream = toAISdkStream(mastraStream, { from: 'agent', version: 'v6' });
+  ```
+
+  `toAISdkStream`, the framework-agnostic `handle*Stream()` helpers, and the `chatRoute()` / `networkRoute()` / `workflowRoute()` route helpers keep the existing v5/default behavior. Pass `version: 'v6'` when your app is typed against AI SDK v6 response helpers.
+
+- Updated dependencies [[`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5), [`62d1d3c`](https://github.com/mastra-ai/mastra/commit/62d1d3cc08fe8182e7080237fd975de862ec8c91), [`8681ecb`](https://github.com/mastra-ai/mastra/commit/8681ecb86184d5907267000e4576cc442a9a83fc), [`28d0249`](https://github.com/mastra-ai/mastra/commit/28d0249295782277040ad1e0d243e695b7ab1ce4), [`bb0f09d`](https://github.com/mastra-ai/mastra/commit/bb0f09dbac58401b36069f483acf5673202db5b5), [`5f7e9d0`](https://github.com/mastra-ai/mastra/commit/5f7e9d0db664020e1f3d97d7d18c6b0b9d4843d0)]:
+  - @mastra/core@1.15.0-alpha.0
+
 ## 1.1.4
 
 ### Patch Changes

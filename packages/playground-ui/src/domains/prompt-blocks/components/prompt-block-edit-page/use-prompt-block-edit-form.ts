@@ -1,4 +1,5 @@
-import { useForm, Resolver } from 'react-hook-form';
+import type { Resolver } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 
 import type { PromptBlockFormValues } from './utils/form-validation';
 

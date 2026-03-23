@@ -115,6 +115,10 @@
       "glob@<=10.5.0": "10.5.0",
       "body-parser@<=2.2.1": "2.2.2",
       "fast-xml-parser@<=5.3.8": "5.3.8"
+    },
+    "patchedDependencies": {
+      "@changesets/get-dependents-graph": "patches/@changesets__get-dependents-graph.patch",
+      "fetch-to-node@2.1.0": "patches/fetch-to-node@2.1.0.patch"
     }
   },
   "license": "Apache-2.0",

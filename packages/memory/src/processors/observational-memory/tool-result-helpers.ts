@@ -92,8 +92,7 @@ export function truncateStringByTokens(text: string, maxTokens: number): string 
 
   const buildCandidate = (sliceEnd: number) => {
     const visible = text.slice(0, sliceEnd);
-    const omittedChars = text.length - sliceEnd;
-    return `${visible}\n... [truncated ~${totalTokens - estimateTokenCount(visible)} tokens / ${omittedChars} characters]`;
+    return `${visible}\n... [truncated ~${totalTokens - estimateTokenCount(visible)} tokens]`;
   };
 
   let low = 0;

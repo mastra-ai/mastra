@@ -363,6 +363,41 @@ describe('Dataset', () => {
     await new Promise(r => setTimeout(r, 500));
   });
 
+  it('startExperimentAsync forwards requestContext to agent.generate()', async () => {
+    await ds.addItem({ input: { prompt: 'Hello' } });
+
+    const mockAgent = createMockAgent('Response');
+    const localMastra = {
+      ...mastra,
+      getAgent: vi.fn().mockReturnValue(mockAgent),
+      getAgentById: vi.fn().mockReturnValue(mockAgent),
+    } as unknown as Mastra;
+
+    // Create a new dataset instance bound to localMastra
+    const localDs = new Dataset(datasetId, localMastra);
+
+    await localDs.startExperimentAsync({
+      targetType: 'agent',
+      targetId: 'test-agent',
+      requestContext: { userId: 'dev-user-123', environment: 'development' },
+    });
+
+    // Wait for fire-and-forget execution
+    await new Promise(r => setTimeout(r, 1000));
+
+    // agent.generate should have been called
+    expect(mockAgent.generate).toHaveBeenCalled();
+
+    // Verify requestContext was forwarded
+    const firstCallOptions = (mockAgent.generate as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const { RequestContext } = await import('../../request-context');
+    expect(firstCallOptions.requestContext).toBeInstanceOf(RequestContext);
+    expect(firstCallOptions.requestContext.all).toEqual({
+      userId: 'dev-user-123',
+      environment: 'development',
+    });
+  });
+
   // 23b. startExperimentAsync — throws on empty dataset
   it('startExperimentAsync throws EXPERIMENT_NO_ITEMS when dataset has no items', async () => {
     // Dataset has no items — do NOT add any

@@ -395,6 +395,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':datasetId')) params.datasetId = 'test-dataset';
   if (route.path.includes(':itemId')) params.itemId = 'test-item';
   if (route.path.includes(':experimentId')) params.experimentId = 'test-experiment';
+  if (route.path.includes(':resultId')) params.resultId = 'test-result';
   if (route.path.includes(':datasetVersion')) params.datasetVersion = '1';
 
   // Tool provider route params

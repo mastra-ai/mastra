@@ -1,19 +1,19 @@
-import { DynamicForm } from '@/lib/form';
-import { CopyButton } from '@/ds/components/CopyButton';
-import { ZodType } from 'zod';
-import { ToolInformation } from '@/domains/tools/components/ToolInformation';
 import { jsonLanguage } from '@codemirror/lang-json';
-import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
+import type { MCPToolType } from '@mastra/core/mcp';
 import CodeMirror from '@uiw/react-codemirror';
-import { MCPToolType } from '@mastra/core/mcp';
-import { MainContentContent } from '@/ds/components/MainContent';
+import { useState } from 'react';
+import type { ZodType } from 'zod';
 import {
   RequestContextSchemaForm,
   SchemaRequestContextProvider,
   useSchemaRequestContext,
 } from '@/domains/request-context';
+import { ToolInformation } from '@/domains/tools/components/ToolInformation';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
+import { CopyButton } from '@/ds/components/CopyButton';
+import { MainContentContent } from '@/ds/components/MainContent';
 import { Tabs, Tab, TabList } from '@/ds/components/Tabs';
-import { useState } from 'react';
+import { DynamicForm } from '@/lib/form';
 import { cn } from '@/lib/utils';
 
 interface ToolExecutorProps {

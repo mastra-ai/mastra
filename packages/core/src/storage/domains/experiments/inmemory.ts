@@ -5,6 +5,7 @@ import type {
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
+  UpdateExperimentResultInput,
   ListExperimentsInput,
   ListExperimentsOutput,
   ListExperimentResultsInput,
@@ -33,6 +34,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       id: input.id ?? crypto.randomUUID(),
       datasetId: input.datasetId,
       datasetVersion: input.datasetVersion,
+      agentVersion: input.agentVersion ?? null,
       targetType: input.targetType,
       targetId: input.targetId,
       name: input.name,
@@ -132,10 +134,29 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       completedAt: input.completedAt,
       retryCount: input.retryCount,
       traceId: input.traceId ?? null,
+      status: input.status ?? null,
+      tags: input.tags ?? null,
       createdAt: now,
     };
     this.db.experimentResults.set(result.id, result);
     return result;
+  }
+
+  async updateExperimentResult(input: UpdateExperimentResultInput): Promise<ExperimentResult> {
+    const existing = this.db.experimentResults.get(input.id);
+    if (!existing) {
+      throw new Error(`Experiment result not found: ${input.id}`);
+    }
+    if (input.experimentId && existing.experimentId !== input.experimentId) {
+      throw new Error(`Experiment result ${input.id} does not belong to experiment ${input.experimentId}`);
+    }
+    const updated: ExperimentResult = {
+      ...existing,
+      status: input.status !== undefined ? input.status : existing.status,
+      tags: input.tags !== undefined ? input.tags : existing.tags,
+    };
+    this.db.experimentResults.set(input.id, updated);
+    return updated;
   }
 
   async getExperimentResultById(args: { id: string }): Promise<ExperimentResult | null> {

@@ -1,9 +1,9 @@
-import CodeMirror from '@uiw/react-codemirror';
 import { jsonLanguage } from '@codemirror/lang-json';
-import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
+import CodeMirror from '@uiw/react-codemirror';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
-import { Txt } from '@/ds/components/Txt';
 import { WorkflowRunOptions } from '@/domains/workflows/workflow/workflow-run-options';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
+import { Txt } from '@/ds/components/Txt';
 
 export const TracingRunOptions = () => {
   const theme = useCodemirrorTheme();

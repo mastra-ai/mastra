@@ -66,13 +66,5 @@
   },
   "engines": {
     "node": ">=22.13.0"
-  },
-  "pnpm": {
-    "overrides": {
-      "fast-xml-parser@<=5.3.8": "5.3.8",
-      "@aws-sdk/client-dynamodb@<=3.974.0": "3.974.0",
-      "@aws-sdk/lib-dynamodb@<=3.974.0": "3.974.0",
-      "@aws-sdk/client-s3vectors@<=3.974.0": "3.974.0"
-    }
   }
 }

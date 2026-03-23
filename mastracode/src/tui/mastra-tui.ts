@@ -2,6 +2,8 @@
  * Main TUI class for Mastra Code.
  * Wires the Harness to pi-tui components for a full interactive experience.
  */
+import { spawn } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import { Spacer } from '@mariozechner/pi-tui';
 import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessEvent } from '@mastra/core/harness';
@@ -73,6 +75,11 @@ export type { MastraTUIOptions } from './state.js';
 /** How often to recheck for updates during a long-running session (ms). */
 const UPDATE_RECHECK_INTERVAL_MS = 45 * 60 * 1_000; // 45 minutes
 const IMAGE_PLACEHOLDER_PATTERN = /\[image\]\s*/g;
+const CAFFEINATE_ARGS = ['-i', '-m'];
+
+function shouldUseCaffeinate(): boolean {
+  return process.platform === 'darwin' && process.env.MASTRACODE_DISABLE_CAFFEINATE !== '1';
+}
 
 export function consumePendingImages(
   text: string,
@@ -91,6 +98,7 @@ export class MastraTUI {
   private state: TUIState;
   private updateCheckTimer: ReturnType<typeof setInterval> | null = null;
   private hasShownUpdateBanner = false;
+  private caffeinateProcess: ChildProcess | null = null;
 
   private static readonly DOUBLE_CTRL_C_MS = 500;
 
@@ -136,6 +144,7 @@ export class MastraTUI {
       this.state.editor.insertTextAtCursor?.('[image] ');
       this.state.ui.requestRender();
     };
+    this.state.editor.getPromptAnimator = () => this.state.gradientAnimator;
 
     setupKeyboardShortcuts(this.state, {
       stop: () => this.stop(),
@@ -261,6 +270,8 @@ export class MastraTUI {
    * Stop the TUI and clean up.
    */
   stop(): void {
+    this.stopCaffeinate();
+
     // Run SessionEnd hooks (best-effort, don't await)
     const hookMgr = this.state.hookManager;
     if (hookMgr) {
@@ -318,6 +329,17 @@ export class MastraTUI {
     // thread selection fired before we were listening).
     // This emits om_status → display_state_changed → updateStatusLine.
     await this.state.harness.loadOMProgress();
+
+    // Sync current thread title — the thread_changed event from
+    // promptForThreadSelection fired before we subscribed above.
+    const initThreadId = this.state.harness.getCurrentThreadId();
+    if (initThreadId) {
+      const initThreads = await this.state.harness.listThreads();
+      const initThread = initThreads.find(t => t.id === initThreadId);
+      if (initThread?.title) {
+        this.state.currentThreadTitle = initThread.title;
+      }
+    }
 
     // Start the UI
     this.state.ui.start();
@@ -389,18 +411,66 @@ export class MastraTUI {
   }
 
   private async handleEvent(event: HarnessEvent): Promise<void> {
-    await dispatchEvent(event, this.getEventContext(), this.state);
-
-    if (event.type === 'thread_created') {
-      await this.syncThreadActivePackMetadata(event.thread);
-    } else if (event.type === 'thread_changed') {
-      await this.syncThreadActivePackMetadata();
+    if (event.type === 'agent_start') {
+      this.startCaffeinate();
     }
 
-    if (event.type === 'agent_end') {
-      const stopReason = event.reason === 'aborted' ? 'aborted' : event.reason === 'error' ? 'error' : 'complete';
-      await this.runStopHook(stopReason);
+    try {
+      await dispatchEvent(event, this.getEventContext(), this.state);
+
+      if (event.type === 'thread_created') {
+        await this.syncThreadActivePackMetadata(event.thread);
+      } else if (event.type === 'thread_changed') {
+        await this.syncThreadActivePackMetadata();
+      }
+
+      if (event.type === 'agent_end') {
+        const stopReason = event.reason === 'aborted' ? 'aborted' : event.reason === 'error' ? 'error' : 'complete';
+        await this.runStopHook(stopReason);
+      }
+    } finally {
+      if (event.type === 'agent_end') {
+        this.stopCaffeinate();
+      }
     }
+  }
+
+  private startCaffeinate(): void {
+    if (!shouldUseCaffeinate() || this.caffeinateProcess) {
+      return;
+    }
+
+    try {
+      const child = spawn('caffeinate', CAFFEINATE_ARGS, {
+        stdio: 'ignore',
+      });
+
+      child.once('error', () => {
+        if (this.caffeinateProcess === child) {
+          this.caffeinateProcess = null;
+        }
+      });
+
+      child.once('exit', () => {
+        if (this.caffeinateProcess === child) {
+          this.caffeinateProcess = null;
+        }
+      });
+
+      this.caffeinateProcess = child;
+    } catch {
+      this.caffeinateProcess = null;
+    }
+  }
+
+  private stopCaffeinate(): void {
+    const child = this.caffeinateProcess;
+    if (!child) {
+      return;
+    }
+
+    this.caffeinateProcess = null;
+    child.kill();
   }
 
   private async buildProviderAccess(): Promise<ProviderAccess> {
