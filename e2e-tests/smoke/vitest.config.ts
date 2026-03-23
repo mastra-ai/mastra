@@ -14,7 +14,7 @@ export default defineConfig({
     },
     reporters: ['verbose', 'json'],
     outputFile: {
-      json: 'test-results/api-results.json',
+      json: 'reports/api-results.json',
     },
   },
 });

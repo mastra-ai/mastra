@@ -12,7 +12,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   workers: 1,
   reporter: process.env.CI
-    ? [['list'], ['json', { outputFile: 'test-results/report.json' }]]
+    ? [['list'], ['json', { outputFile: 'reports/ui-results.json' }]]
     : 'html',
   timeout: 60_000,
 

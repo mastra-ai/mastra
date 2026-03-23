@@ -1,4 +1,5 @@
 test-results/
+reports/
 playwright-report/
 test-workspace/
 .env

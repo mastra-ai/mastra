@@ -40,24 +40,25 @@ pnpm build:studio
 pnpm test:all
 ```
 
-### Slack report (after UI tests)
+### Slack report (after tests)
 
 ```bash
-CI=1 pnpm build:studio && pnpm test:ui   # generates test-results/report.json + videos
-pnpm report:slack                          # posts results to Slack DM
+CI=1 pnpm build:studio && pnpm test:all   # generates reports/ + videos
+pnpm report:slack                           # posts combined results to Slack DM
 ```
 
-The script loads `.env` automatically for local runs.
+The report includes both API (Vitest) and UI (Playwright) results. The script loads `.env` automatically for local runs.
 
 ## CI / GitHub Actions
 
-The workflow at `.github/workflows/smoke.yml` runs on a weekday cron:
+The workflow at `.github/workflows/smoke.yml` runs twice daily (1 hour after alpha publish at 05:00/17:00 UTC), or on manual dispatch:
 
 1. Checks for new alpha versions via `pnpm update --ignore-workspace`
-2. If the lockfile changed, builds the project (`mastra build --studio`)
+2. If the lockfile changed (or `force` flag is set), builds the project (`mastra build --studio`)
 3. Runs API tests (Vitest) and UI tests (Playwright)
-4. Posts results to Slack (pass or fail, with failure videos)
-5. Commits the updated lockfile back to the branch
+4. Posts combined results to Slack (pass or fail, with failure videos and a link to the workflow run)
+5. Uploads test artifacts
+6. Commits the updated lockfile back to the branch
 
 ### Required repository secrets
 
@@ -82,16 +83,7 @@ The workflow at `.github/workflows/smoke.yml` runs on a weekday cron:
 
 ### API tests (Vitest)
 
-| Test File | Features |
-|-----------|----------|
-| `basic.test.ts` | Sequential steps, input/output schema validation, `.map()` between steps |
-| `control-flow.test.ts` | `.branch()`, `.parallel()`, `.dowhile()`, `.dountil()`, `.foreach()` |
-| `suspend-resume.test.ts` | Suspend with payload, resume with data, parallel branch suspend, loop suspend |
-| `state.test.ts` | Workflow-level `setState()`, `initialState` |
-| `nested.test.ts` | Workflow as a step inside another workflow |
-| `error-handling.test.ts` | Step retries, step failure |
-| `run-management.test.ts` | List/get/delete runs, cancel (via sleep), time-travel |
-| `streaming.test.ts` | Stream execution, stream suspend/resume |
+See [`tests/COVERAGE.md`](tests/COVERAGE.md) for the full test inventory. Coverage includes Workflows, Agents, Tools, Memory, MCP, Datasets, Scores, Processors, Workspaces, and Observability.
 
 ### UI tests (Playwright)
 
@@ -109,14 +101,16 @@ e2e-tests/smoke/
 ├── tests/                    # API tests (Vitest)
 │   ├── setup.ts              # globalSetup: start server, teardown
 │   ├── utils.ts              # fetchApi(), startWorkflow(), etc.
-│   └── workflows/
+│   ├── COVERAGE.md           # Test inventory
+│   └── agents/workflows/...  # Test files by feature
 ├── tests-ui/                 # UI tests (Playwright)
 │   ├── global-setup.ts       # Clean state before run
 │   ├── helpers.ts            # Shared Playwright helpers
 │   ├── COVERAGE.md           # Test inventory
 │   └── agents/workflows/...  # Test spec files
+├── reports/                  # JSON test results (gitignored)
 └── scripts/
-    └── slack-report.ts       # Slack DM reporter
+    └── slack-report.ts       # Slack DM reporter (API + UI)
 ```
 
 ## Adding new tests

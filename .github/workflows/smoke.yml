@@ -1,12 +1,9 @@
-# Copy this file to .github/workflows/smoke.yml in your fork.
+# Smoke tests — runs after alpha publish to verify core features.
 #
 # Required secrets:
 #   OPENAI_API_KEY   – OpenAI API key (sk-...)
 #   SLACK_BOT_TOKEN  – Slack Bot User OAuth Token (xoxb-...)
 #   SLACK_USER_ID    – Your Slack member ID (U...)
-#
-# Set your fork's default branch to the branch containing this workflow
-# (e.g. roamin/easy-smoke) for the cron schedule to fire.
 
 name: Smoke Tests
 
@@ -31,11 +28,11 @@ jobs:
         working-directory: e2e-tests/smoke
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: pnpm/action-setup@v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
 
@@ -100,10 +97,12 @@ jobs:
       # ── Upload artifacts (backup) ────────────────────────────
       - name: Upload test artifacts
         if: steps.diff.outputs.changed == 'true' && always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: smoke-test-results
-          path: e2e-tests/smoke/test-results/
+          path: |
+            e2e-tests/smoke/reports/
+            e2e-tests/smoke/test-results/
           retention-days: 30
 
       # ── Commit updated lockfile ───────────────────────────────

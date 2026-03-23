@@ -9,8 +9,8 @@
  *   SLACK_USER_ID    – Slack user ID to DM (e.g. U01ABCDEF)
  *
  * Optional env vars:
- *   REPORT_PATH      – path to Playwright JSON report (default: test-results/report.json)
- *   API_REPORT_PATH  – path to Vitest JSON report (default: test-results/api-results.json)
+ *   REPORT_PATH      – path to Playwright JSON report (default: reports/ui-results.json)
+ *   API_REPORT_PATH  – path to Vitest JSON report (default: reports/api-results.json)
  *   VIDEO_DIR        – path to Playwright test-results dir (default: test-results)
  */
 
@@ -104,8 +104,8 @@ interface FailedTest {
 
 const SLACK_BOT_TOKEN = env('SLACK_BOT_TOKEN');
 const SLACK_USER_ID = env('SLACK_USER_ID');
-const REPORT_PATH = process.env.REPORT_PATH || 'test-results/report.json';
-const API_REPORT_PATH = process.env.API_REPORT_PATH || 'test-results/api-results.json';
+const REPORT_PATH = process.env.REPORT_PATH || 'reports/ui-results.json';
+const API_REPORT_PATH = process.env.API_REPORT_PATH || 'reports/api-results.json';
 const VIDEO_DIR = process.env.VIDEO_DIR || 'test-results';
 
 // ── Helpers ────────────────────────────────────────────────────────
