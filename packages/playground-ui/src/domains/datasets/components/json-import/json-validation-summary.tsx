@@ -1,8 +1,8 @@
 'use client';
 
 import { AlertTriangle } from 'lucide-react';
-import { Icon } from '@/ds/icons';
 import type { JSONValidationError } from '../../utils/json-validation';
+import { Icon } from '@/ds/icons';
 
 export interface JSONValidationSummaryProps {
   errors: JSONValidationError[];

@@ -1,6 +1,6 @@
+import type { CompareExperimentsParams, CompareExperimentsResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import type { CompareExperimentsParams, CompareExperimentsResponse } from '@mastra/client-js';
 
 type CompareExperimentsOptions = Omit<CompareExperimentsParams, 'datasetId' | 'experimentIdA' | 'experimentIdB'>;
 

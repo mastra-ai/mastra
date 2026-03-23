@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
 import { Brain, XCircle, Loader2, ChevronDown, ChevronRight, Unplug, CloudCog } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { ObservationRenderer } from './observation-renderer';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 

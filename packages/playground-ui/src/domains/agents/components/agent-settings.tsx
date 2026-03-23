@@ -1,26 +1,23 @@
-import { Slider } from '@/ds/components/Slider';
-
-import { Label } from '@/ds/components/Label';
-
 import { RefreshCw, Info } from 'lucide-react';
 
-import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
-
-import { Entry } from '@/ds/components/Entry';
 import { useAgentSettings } from '../context/agent-context';
-import { Button } from '@/ds/components/Button/Button';
-import { Icon } from '@/ds/icons/Icon';
-import { Txt } from '@/ds/components/Txt/Txt';
 
-import { AgentAdvancedSettings } from './agent-advanced-settings';
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
-import { Checkbox } from '@/ds/components/Checkbox';
-import { cn } from '@/lib/utils';
 import { useAgent } from '../hooks/use-agent';
-import { useMemory } from '@/domains/memory/hooks/use-memory';
-import { Skeleton } from '@/ds/components/Skeleton';
 import { useSamplingRestriction } from '../hooks/use-sampling-restriction';
+import { AgentAdvancedSettings } from './agent-advanced-settings';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { useMemory } from '@/domains/memory/hooks/use-memory';
+import { Button } from '@/ds/components/Button/Button';
+import { Checkbox } from '@/ds/components/Checkbox';
+import { Entry } from '@/ds/components/Entry';
+import { Label } from '@/ds/components/Label';
+import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Slider } from '@/ds/components/Slider';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt/Txt';
+import { Icon } from '@/ds/icons/Icon';
+import { cn } from '@/lib/utils';
 
 export interface AgentSettingsProps {
   agentId: string;

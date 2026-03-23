@@ -1,12 +1,8 @@
-import { AttachmentPrimitive, MessagePrimitive, TextMessagePart, useAttachment, useMessage } from '@assistant-ui/react';
+import { MessagePrimitive, useMessage } from '@assistant-ui/react';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
-
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-
-import { useAttachmentSrc } from '../hooks/use-attachment-src';
 import { ImageEntry, PdfEntry, TxtEntry } from '../attachments/attachment-preview-dialog';
 import { DatasetSaveAction } from './dataset-save-action';
-
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 export interface InMessageAttachmentProps {
   type: string;
   contentType?: string;
