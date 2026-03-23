@@ -1,15 +1,16 @@
 /**
  * Slack smoke-test reporter.
  *
- * Reads the Playwright JSON report, posts a summary DM, and uploads
- * failure videos as threaded replies.
+ * Reads the Vitest JSON report (API tests) and Playwright JSON report (UI tests),
+ * posts a combined summary DM, and uploads failure videos as threaded replies.
  *
  * Required env vars:
  *   SLACK_BOT_TOKEN  – Bot User OAuth Token (xoxb-…)
  *   SLACK_USER_ID    – Slack user ID to DM (e.g. U01ABCDEF)
  *
  * Optional env vars:
- *   REPORT_PATH      – path to Playwright JSON report (default: test-results.json)
+ *   REPORT_PATH      – path to Playwright JSON report (default: test-results/report.json)
+ *   API_REPORT_PATH  – path to Vitest JSON report (default: test-results/api-results.json)
  *   VIDEO_DIR        – path to Playwright test-results dir (default: test-results)
  */
 
@@ -29,6 +30,7 @@ if (existsSync(envPath)) {
 
 // ── Types ──────────────────────────────────────────────────────────
 
+// Playwright types
 interface PlaywrightResult {
   status: 'passed' | 'failed' | 'timedOut' | 'skipped' | 'interrupted';
   duration: number;
@@ -65,7 +67,33 @@ interface PlaywrightReport {
   };
 }
 
+// Vitest JSON types (Jest-compatible format)
+interface VitestAssertionResult {
+  ancestorTitles: string[];
+  fullName: string;
+  status: 'passed' | 'failed' | 'skipped' | 'pending' | 'todo';
+  title: string;
+  failureMessages?: string[];
+}
+
+interface VitestTestResult {
+  name: string;
+  status: 'passed' | 'failed';
+  assertionResults: VitestAssertionResult[];
+}
+
+interface VitestReport {
+  numTotalTests: number;
+  numPassedTests: number;
+  numFailedTests: number;
+  numPendingTests: number;
+  numTodoTests: number;
+  startTime: number;
+  testResults: VitestTestResult[];
+}
+
 interface FailedTest {
+  source: 'API' | 'UI';
   title: string;
   file: string;
   error: string;
@@ -77,6 +105,7 @@ interface FailedTest {
 const SLACK_BOT_TOKEN = env('SLACK_BOT_TOKEN');
 const SLACK_USER_ID = env('SLACK_USER_ID');
 const REPORT_PATH = process.env.REPORT_PATH || 'test-results/report.json';
+const API_REPORT_PATH = process.env.API_REPORT_PATH || 'test-results/api-results.json';
 const VIDEO_DIR = process.env.VIDEO_DIR || 'test-results';
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -154,16 +183,9 @@ async function uploadFile(channelId: string, threadTs: string, filePath: string,
   }
 }
 
-function formatDuration(ms: number): string {
-  const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
-  const remainS = s % 60;
-  return m > 0 ? `${m}m ${remainS}s` : `${remainS}s`;
-}
+// ── Parse Playwright report ─────────────────────────────────────────
 
-// ── Parse report ───────────────────────────────────────────────────
-
-function collectFailures(suites: PlaywrightSuite[], parentFile = ''): FailedTest[] {
+function collectPlaywrightFailures(suites: PlaywrightSuite[], parentFile = ''): FailedTest[] {
   const failures: FailedTest[] = [];
 
   for (const suite of suites) {
@@ -172,27 +194,24 @@ function collectFailures(suites: PlaywrightSuite[], parentFile = ''): FailedTest
     for (const spec of suite.specs) {
       if (spec.ok) continue;
 
-      // spec.tests contains one entry per project (e.g. chromium).
-      // The test name is spec.title; each entry's results[] has the outcomes.
       const allResults = spec.tests.flatMap(t => t.results);
       const failedResult = allResults.find(
         r => r.status === 'failed' || r.status === 'timedOut',
       );
       if (!failedResult) continue;
 
-      // Look for video attachment in the result
       let videoPath: string | null = null;
       const videoAttachment = failedResult.attachments?.find(a => a.contentType === 'video/webm');
       if (videoAttachment?.path && existsSync(videoAttachment.path)) {
         videoPath = videoAttachment.path;
       }
 
-      // Fallback: scan test-results dir for matching video
       if (!videoPath) {
         videoPath = findVideo(spec.title, spec.title);
       }
 
       failures.push({
+        source: 'UI',
         title: spec.title,
         file,
         error: (failedResult.error?.message?.split('\n')[0] || 'Unknown error').replace(/\x1b\[[0-9;]*m/g, ''),
@@ -201,7 +220,7 @@ function collectFailures(suites: PlaywrightSuite[], parentFile = ''): FailedTest
     }
 
     if (suite.suites) {
-      failures.push(...collectFailures(suite.suites, file));
+      failures.push(...collectPlaywrightFailures(suite.suites, file));
     }
   }
 
@@ -211,7 +230,6 @@ function collectFailures(suites: PlaywrightSuite[], parentFile = ''): FailedTest
 function findVideo(_specTitle: string, testTitle: string): string | null {
   if (!existsSync(VIDEO_DIR)) return null;
 
-  // Playwright stores videos in test-results/<test-name-hash>/video.webm
   const dirs = readdirSync(VIDEO_DIR, { withFileTypes: true })
     .filter(d => d.isDirectory());
 
@@ -227,39 +245,118 @@ function findVideo(_specTitle: string, testTitle: string): string | null {
   return null;
 }
 
+// ── Parse Vitest report ─────────────────────────────────────────────
+
+function collectVitestFailures(report: VitestReport): FailedTest[] {
+  const failures: FailedTest[] = [];
+
+  for (const testResult of report.testResults) {
+    for (const assertion of testResult.assertionResults) {
+      if (assertion.status !== 'failed') continue;
+
+      const errorMsg = assertion.failureMessages?.[0]?.split('\n')[0] || 'Unknown error';
+
+      failures.push({
+        source: 'API',
+        title: assertion.fullName,
+        file: testResult.name,
+        error: errorMsg.replace(/\x1b\[[0-9;]*m/g, ''),
+        videoPath: null,
+      });
+    }
+  }
+
+  return failures;
+}
+
 // ── Main ───────────────────────────────────────────────────────────
 
 async function main() {
-  // Read report
-  if (!existsSync(REPORT_PATH)) {
-    console.error(`Report not found: ${REPORT_PATH}`);
-    process.exit(1);
+  // Read API report (Vitest)
+  let apiStats = { passed: 0, failed: 0, skipped: 0, total: 0 };
+  let apiFailures: FailedTest[] = [];
+  let apiStartTime: number | null = null;
+
+  if (existsSync(API_REPORT_PATH)) {
+    const apiReport: VitestReport = JSON.parse(readFileSync(API_REPORT_PATH, 'utf-8'));
+    apiStats = {
+      passed: apiReport.numPassedTests,
+      failed: apiReport.numFailedTests,
+      skipped: apiReport.numPendingTests + apiReport.numTodoTests,
+      total: apiReport.numTotalTests,
+    };
+    apiStartTime = apiReport.startTime;
+    apiFailures = collectVitestFailures(apiReport);
+    console.log(`API report: ${apiStats.passed}/${apiStats.total} passed, ${apiStats.failed} failed`);
+  } else {
+    console.warn(`API report not found: ${API_REPORT_PATH}`);
   }
 
-  const report: PlaywrightReport = JSON.parse(readFileSync(REPORT_PATH, 'utf-8'));
-  const { expected, unexpected, flaky, skipped } = report.stats;
-  const total = expected + unexpected + flaky + skipped;
-  const duration = formatDuration(report.stats.duration);
-  const failures = collectFailures(report.suites);
+  // Read UI report (Playwright)
+  let uiStats = { passed: 0, failed: 0, skipped: 0, flaky: 0, total: 0 };
+  let uiFailures: FailedTest[] = [];
+  let uiStartTime: string | null = null;
+
+  if (existsSync(REPORT_PATH)) {
+    const uiReport: PlaywrightReport = JSON.parse(readFileSync(REPORT_PATH, 'utf-8'));
+    uiStats = {
+      passed: uiReport.stats.expected,
+      failed: uiReport.stats.unexpected,
+      skipped: uiReport.stats.skipped,
+      flaky: uiReport.stats.flaky,
+      total: uiReport.stats.expected + uiReport.stats.unexpected + uiReport.stats.flaky + uiReport.stats.skipped,
+    };
+    uiStartTime = uiReport.stats.startTime;
+    uiFailures = collectPlaywrightFailures(uiReport.suites);
+    console.log(`UI report: ${uiStats.passed}/${uiStats.total} passed, ${uiStats.failed} failed`);
+  } else {
+    console.warn(`UI report not found: ${REPORT_PATH}`);
+  }
+
+  if (!existsSync(API_REPORT_PATH) && !existsSync(REPORT_PATH)) {
+    console.error('No test reports found. Nothing to report.');
+    process.exit(1);
+  }
 
   // Open DM channel
   const dmRes = await slackApi('conversations.open', { users: SLACK_USER_ID });
   const channelId = dmRes.channel!.id;
 
-  // Build summary message
-  const isGreen = unexpected === 0;
+  // Build summary
+  const allFailures = [...apiFailures, ...uiFailures];
+  const totalFailed = apiStats.failed + uiStats.failed;
+  const isGreen = totalFailed === 0;
   const emoji = isGreen ? '✅' : '🔴';
-  const runTs = Math.floor(new Date(report.stats.startTime).getTime() / 1000);
-  const timeStr = `<!date^${runTs}^{date_short_pretty} at {time}|${report.stats.startTime}>`;
+
+  // Use the earliest available start time for the timestamp
+  const startMs = apiStartTime ?? (uiStartTime ? new Date(uiStartTime).getTime() : Date.now());
+  const runTs = Math.floor(startMs / 1000);
+  const timeStr = `<!date^${runTs}^{date_short_pretty} at {time}|${new Date(startMs).toISOString()}>`;
+
+  // Per-suite status lines
+  const apiLine = apiStats.total > 0
+    ? (apiStats.failed > 0
+      ? `API: ${apiStats.failed} failed, ${apiStats.passed} passed`
+      : `API: ${apiStats.passed}/${apiStats.total} passed`)
+    : null;
+  const uiLine = uiStats.total > 0
+    ? (uiStats.failed > 0
+      ? `UI: ${uiStats.failed} failed, ${uiStats.passed} passed`
+      : `UI: ${uiStats.passed}/${uiStats.total} passed`)
+    : null;
+
   const headline = isGreen
-    ? `${emoji} *Smoke Tests* — ${total}/${total} passed (${duration})`
-    : `${emoji} *Smoke Tests* — ${unexpected} failed, ${expected} passed (${duration})`;
+    ? `${emoji} *Smoke Tests* — all green`
+    : `${emoji} *Smoke Tests* — ${totalFailed} failed`;
+
+  const statusLines = [apiLine, uiLine].filter(Boolean).join('  ·  ');
 
   // Context line: timestamp, run link, skipped/flaky counts
   const contextParts = [timeStr];
   if (process.env.WORKFLOW_RUN_URL) contextParts.push(`<${process.env.WORKFLOW_RUN_URL}|View run>`);
-  if (skipped > 0) contextParts.push(`${skipped} skipped`);
-  if (flaky > 0) contextParts.push(`⚠️ ${flaky} flaky`);
+  const totalSkipped = apiStats.skipped + uiStats.skipped;
+  if (totalSkipped > 0) contextParts.push(`${totalSkipped} skipped`);
+  if (uiStats.flaky > 0) contextParts.push(`⚠️ ${uiStats.flaky} flaky`);
 
   const blocks: Record<string, unknown>[] = [
     {
@@ -268,11 +365,11 @@ async function main() {
     },
     {
       type: 'section',
-      text: { type: 'mrkdwn', text: headline },
+      text: { type: 'mrkdwn', text: `${headline}\n${statusLines}` },
     },
   ];
 
-  if (!isGreen && failures.length > 0) {
+  if (!isGreen && allFailures.length > 0) {
     blocks.push({ type: 'divider' });
 
     // Slack section blocks have a 3000-char text limit.
@@ -282,18 +379,18 @@ async function main() {
     let failureList = '';
     let shown = 0;
 
-    for (const f of failures) {
+    for (const f of allFailures) {
       const error = f.error.length > 120 ? f.error.slice(0, 120) + '…' : f.error;
       // Escape chars that break Slack mrkdwn inside the error string
       const safeError = error.replace(/[*_~`<>]/g, c => `\\${c}`);
-      const entry = `• \`${f.file}\`\n   ${f.title}\n   _${safeError}_`;
+      const entry = `• [${f.source}] \`${f.file}\`\n   ${f.title}\n   _${safeError}_`;
       const candidate = failureList ? failureList + '\n\n' + entry : entry;
       if (header.length + candidate.length > maxLen) break;
       failureList = candidate;
       shown++;
     }
 
-    const remaining = failures.length - shown;
+    const remaining = allFailures.length - shown;
     if (remaining > 0) {
       failureList += `\n\n_…and ${remaining} more_`;
     }
@@ -306,7 +403,7 @@ async function main() {
       },
     });
 
-    if (failures.some(f => f.videoPath)) {
+    if (allFailures.some(f => f.videoPath)) {
       blocks.push({
         type: 'context',
         elements: [
@@ -319,7 +416,7 @@ async function main() {
   // Post summary
   const msgRes = await slackApi('chat.postMessage', {
     channel: channelId,
-    text: headline, // fallback for notifications
+    text: `${headline} — ${statusLines}`, // fallback for notifications
     blocks,
   });
 
@@ -327,7 +424,7 @@ async function main() {
   console.log(`Posted summary to DM (ts: ${threadTs})`);
 
   // Upload failure videos as thread replies
-  for (const failure of failures) {
+  for (const failure of allFailures) {
     if (!failure.videoPath) continue;
     console.log(`Uploading video for: ${failure.title}`);
     try {

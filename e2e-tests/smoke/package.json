@@ -6,9 +6,9 @@
   "scripts": {
     "build": "npx mastra build",
     "build:studio": "npx mastra build --studio",
-    "test": "vitest run --reporter=verbose",
+    "test": "vitest run",
     "test:ui": "playwright test",
-    "test:all": "vitest run --reporter=verbose && playwright test",
+    "test:all": "vitest run && playwright test",
     "report:slack": "npx tsx scripts/slack-report.ts"
   },
   "dependencies": {

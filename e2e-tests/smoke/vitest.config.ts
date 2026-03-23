@@ -12,5 +12,9 @@ export default defineConfig({
     sequence: {
       concurrent: false,
     },
+    reporters: ['verbose', 'json'],
+    outputFile: {
+      json: 'test-results/api-results.json',
+    },
   },
 });
