@@ -1,8 +1,6 @@
-import { cn } from '@/lib/utils';
-import { type ExperimentUISpan, type ExperimentUISpanStyle } from '../types';
+import type { ExperimentUISpan, ExperimentUISpanStyle } from '../types';
 import { ExperimentTraceTimelineStructureSign } from './experiment-trace-timeline-structure-sign';
-import { FileIcon } from 'lucide-react';
-import { ExperimentTraceSpanTypeIcon } from './experiment-trace-span-type-icon';
+import { cn } from '@/lib/utils';
 
 type ExperimentTraceTimelineNameColProps = {
   span: ExperimentUISpan;
@@ -20,11 +18,11 @@ type ExperimentTraceTimelineNameColProps = {
 
 export function ExperimentTraceTimelineNameCol({
   span,
-  spanUI,
-  isFaded,
+  spanUI: _spanUI,
+  isFaded: _isFaded,
   depth = 0,
   onSpanClick,
-  selectedSpanId,
+  selectedSpanId: _selectedSpanId,
   isLastChild,
   hasChildren,
   isRootSpan,

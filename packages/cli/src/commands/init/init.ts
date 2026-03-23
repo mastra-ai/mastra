@@ -155,7 +155,7 @@ export const init = async ({
         // Write CLAUDE.md only if claude-code is in skills list
         const shouldWriteClaudeMd = skills?.includes('claude-code');
         if (shouldWriteClaudeMd) {
-          await writeClaudeMarkdown({ skills, mcpServer });
+          await writeClaudeMarkdown();
         }
       } catch (error) {
         // Don't fail initialization if markdown files fail to write

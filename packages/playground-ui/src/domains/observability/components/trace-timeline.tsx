@@ -1,7 +1,7 @@
-import { cn } from '@/lib/utils';
+import type { UISpan } from '../types';
 import { TraceTimelineSpan } from './trace-timeline-span';
 import { Spinner } from '@/ds/components/Spinner';
-import { UISpan } from '../types';
+import { cn } from '@/lib/utils';
 
 type TraceTimelineProps = {
   hierarchicalSpans: UISpan[];

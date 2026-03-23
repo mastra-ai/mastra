@@ -1,19 +1,18 @@
+import type { StoredSkillResponse } from '@mastra/client-js';
+import { Plus, Drill } from 'lucide-react';
 import { useState } from 'react';
 import { useWatch } from 'react-hook-form';
-import { Plus, Drill } from 'lucide-react';
-import type { StoredSkillResponse } from '@mastra/client-js';
-
-import { SectionHeader } from '@/domains/cms';
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Button } from '@/ds/components/Button';
-import { Entity, EntityContent, EntityName, EntityDescription } from '@/ds/components/Entity';
-import { Switch } from '@/ds/components/Switch';
-import { Searchbar } from '@/ds/components/Searchbar';
-import { EmptyState } from '@/ds/components/EmptyState';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { useStoredSkills } from '../../hooks/use-stored-skills';
 import { SkillEditDialog } from './skill-edit-dialog';
+import { SectionHeader } from '@/domains/cms';
+import { Button } from '@/ds/components/Button';
+import { EmptyState } from '@/ds/components/EmptyState';
+import { Entity, EntityContent, EntityName, EntityDescription } from '@/ds/components/Entity';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Searchbar } from '@/ds/components/Searchbar';
+import { Switch } from '@/ds/components/Switch';
 
 export function SkillsPage() {
   const { form, readOnly } = useAgentEditFormContext();
