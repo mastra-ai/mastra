@@ -420,7 +420,7 @@ Added when a filesystem is configured:
 
 | Tool | Description |
 | - | - |
-| `mastra_workspace_read_file` | Read file contents. Supports optional line range for reading specific portions of large files. |
+| `mastra_workspace_read_file` | Read file contents. Supports optional line range for large files. For image files (png, jpg, gif, webp, etc.), the image is shown to the model so it can see the content. |
 | `mastra_workspace_write_file` | Create or overwrite a file with new content. Creates parent directories automatically. |
 | `mastra_workspace_edit_file` | Edit an existing file by finding and replacing text. Useful for targeted changes without rewriting the entire file. |
 | `mastra_workspace_list_files` | List directory contents as a tree structure. Supports recursive listing with depth limits, glob patterns, and `.gitignore` filtering (enabled by default). |

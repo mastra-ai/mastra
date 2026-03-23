@@ -99,4 +99,55 @@ describe('workspace_read_file', () => {
 
     expect(result).toContain('[output truncated');
   });
+
+  it('should return image object for image files so model can see the image', async () => {
+    const pngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    await fs.writeFile(path.join(tempDir, 'screenshot.png'), pngHeader);
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = createWorkspaceTools(workspace);
+
+    const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+      { path: 'screenshot.png' },
+      { workspace },
+    )) as { type: string; path: string; size: number; data: string; mediaType: string };
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        type: 'image',
+        path: expect.stringContaining('screenshot.png'),
+        size: 8,
+        mediaType: 'image/png',
+      }),
+    );
+    expect(typeof result.data).toBe('string');
+    expect(Buffer.from(result.data, 'base64').length).toBe(8);
+
+    const toModelOutput = (tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE] as { toModelOutput?: (o: unknown) => unknown })
+      .toModelOutput;
+    expect(toModelOutput).toBeDefined();
+    const modelOutput = toModelOutput!(result);
+    expect(modelOutput).toEqual({
+      type: 'content',
+      value: [
+        { type: 'text', text: expect.stringContaining('screenshot.png') },
+        { type: 'image-data', data: result.data, mediaType: 'image/png' },
+      ],
+    });
+  });
+
+  it('should read image as text when encoding is explicitly set', async () => {
+    const pngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    await fs.writeFile(path.join(tempDir, 'img.png'), pngHeader);
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = createWorkspaceTools(workspace);
+
+    const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+      { path: 'img.png', encoding: 'base64' },
+      { workspace },
+    )) as string;
+
+    expect(typeof result).toBe('string');
+    expect(result).toContain('img.png');
+    expect(result).toContain('base64');
+  });
 });
