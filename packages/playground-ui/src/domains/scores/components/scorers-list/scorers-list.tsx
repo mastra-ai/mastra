@@ -7,26 +7,22 @@ import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { useLinkComponent } from '@/lib/framework';
 import { truncateString } from '@/lib/truncate-string';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 export interface ScorersListProps {
   scorers: Record<string, GetScorerResponse>;
   isLoading: boolean;
   error?: Error | null;
   search?: string;
-  onSearch?: (search: string) => void;
 }
 
 export function ScorersList({
   scorers,
   isLoading,
   error,
-  search: externalSearch,
-  onSearch: externalOnSearch,
+  search = '',
 }: ScorersListProps) {
   const { paths } = useLinkComponent();
-  const [internalSearch, setInternalSearch] = useState('');
-  const search = externalSearch ?? internalSearch;
 
   const scorersData = useMemo(
     () =>

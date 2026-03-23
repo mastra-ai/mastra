@@ -9,7 +9,7 @@ import { prepareToolsTable } from '@/domains/tools/utils/prepareToolsTable';
 import { ErrorState } from '@/ds/components/ErrorState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { is403ForbiddenError } from '@/lib/query-utils';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 export interface ToolsListProps {
   tools: Record<string, GetToolResponse>;
@@ -17,7 +17,6 @@ export interface ToolsListProps {
   isLoading: boolean;
   error?: Error | null;
   search?: string;
-  onSearch?: (search: string) => void;
 }
 
 export function ToolsList({
@@ -25,12 +24,9 @@ export function ToolsList({
   agents,
   isLoading,
   error,
-  search: externalSearch,
-  onSearch: externalOnSearch,
+  search = '',
 }: ToolsListProps) {
   const { paths } = useLinkComponent();
-  const [internalSearch, setInternalSearch] = useState('');
-  const search = externalSearch ?? internalSearch;
 
   const toolData = useMemo(() => prepareToolsTable(tools, agents), [tools, agents]);
 

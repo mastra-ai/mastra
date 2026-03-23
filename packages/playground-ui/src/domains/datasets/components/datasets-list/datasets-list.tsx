@@ -7,7 +7,7 @@ import { is403ForbiddenError } from '@/lib/query-utils';
 import { useLinkComponent } from '@/lib/framework';
 import { truncateString } from '@/lib/truncate-string';
 import { NoDatasetsInfo } from './no-datasets-info';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { format } from 'date-fns';
 
 export interface DatasetsListProps {
@@ -15,19 +15,10 @@ export interface DatasetsListProps {
   isLoading: boolean;
   error?: Error | null;
   search?: string;
-  onSearch?: (search: string) => void;
 }
 
-export function DatasetsList({
-  datasets,
-  isLoading,
-  error,
-  search: externalSearch,
-  onSearch: externalOnSearch,
-}: DatasetsListProps) {
+export function DatasetsList({ datasets, isLoading, error, search = '' }: DatasetsListProps) {
   const { paths } = useLinkComponent();
-  const [internalSearch, setInternalSearch] = useState('');
-  const search = externalSearch ?? internalSearch;
 
   const filteredData = useMemo(() => {
     const term = search.toLowerCase();

@@ -7,26 +7,17 @@ import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { useLinkComponent } from '@/lib/framework';
 import { truncateString } from '@/lib/truncate-string';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 export interface WorkflowsListProps {
   workflows: Record<string, GetWorkflowResponse>;
   isLoading: boolean;
   error?: Error | null;
   search?: string;
-  onSearch?: (search: string) => void;
 }
 
-export function WorkflowsList({
-  workflows,
-  isLoading,
-  error,
-  search: externalSearch,
-  onSearch: externalOnSearch,
-}: WorkflowsListProps) {
+export function WorkflowsList({ workflows, isLoading, error, search = '' }: WorkflowsListProps) {
   const { paths } = useLinkComponent();
-  const [internalSearch, setInternalSearch] = useState('');
-  const search = externalSearch ?? internalSearch;
 
   const workflowData = useMemo(
     () =>

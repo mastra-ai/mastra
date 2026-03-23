@@ -11,7 +11,7 @@ import { truncateString } from '@/lib/truncate-string';
 import { useMCPServerTools } from '../../hooks/useMCPServerTools';
 import { NoMCPServersInfo } from './no-mcp-servers-info';
 import { useMastraClient } from '@mastra/react';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 type McpServer = McpServerListResponse['servers'][number];
 
@@ -20,7 +20,6 @@ export interface McpServersListProps {
   isLoading: boolean;
   error?: Error | null;
   search?: string;
-  onSearch?: (search: string) => void;
 }
 
 function McpServerRow({ server }: { server: McpServer }) {
@@ -52,11 +51,8 @@ export function McpServersList({
   mcpServers,
   isLoading,
   error,
-  search: externalSearch,
-  onSearch: externalOnSearch,
+  search = '',
 }: McpServersListProps) {
-  const [internalSearch, setInternalSearch] = useState('');
-  const search = externalSearch ?? internalSearch;
 
   const filteredData = useMemo(() => {
     const term = search.toLowerCase();

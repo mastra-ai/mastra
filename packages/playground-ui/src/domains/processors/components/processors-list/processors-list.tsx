@@ -6,7 +6,7 @@ import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { useLinkComponent } from '@/lib/framework';
 import { truncateString } from '@/lib/truncate-string';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { CheckIcon, FileInput, FileOutput } from 'lucide-react';
 import type { ProcessorInfo, ProcessorPhase } from '../../hooks/use-processors';
 
@@ -17,13 +17,10 @@ export interface ProcessorsListProps {
   isLoading: boolean;
   error?: Error | null;
   search?: string;
-  onSearch?: (search: string) => void;
 }
 
-export function ProcessorsList({ processors, isLoading, error, search: externalSearch }: ProcessorsListProps) {
+export function ProcessorsList({ processors, isLoading, error, search = '' }: ProcessorsListProps) {
   const { paths } = useLinkComponent();
-  const [internalSearch, setInternalSearch] = useState('');
-  const search = externalSearch ?? internalSearch;
 
   const processorData = useMemo(
     () => Object.values(processors ?? {}).filter(p => p.phases && p.phases.length > 0),

@@ -7,7 +7,7 @@ import { is403ForbiddenError } from '@/lib/query-utils';
 import { useLinkComponent } from '@/lib/framework';
 import { NoPromptBlocksInfo } from './no-prompt-blocks-info';
 import { truncateString } from '@/lib/truncate-string';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { CheckIcon } from 'lucide-react';
 
 export interface PromptsListProps {
@@ -15,19 +15,10 @@ export interface PromptsListProps {
   isLoading: boolean;
   error?: Error | null;
   search?: string;
-  onSearch?: (search: string) => void;
 }
 
-export function PromptsList({
-  promptBlocks,
-  isLoading,
-  error,
-  search: externalSearch,
-  onSearch: externalOnSearch,
-}: PromptsListProps) {
+export function PromptsList({ promptBlocks, isLoading, error, search = '' }: PromptsListProps) {
   const { paths } = useLinkComponent();
-  const [internalSearch, setInternalSearch] = useState('');
-  const search = externalSearch ?? internalSearch;
 
   const filteredData = useMemo(() => {
     const term = search.toLowerCase();

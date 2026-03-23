@@ -4,7 +4,7 @@ import { ErrorState } from '@/ds/components/ErrorState';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { EntityList } from '@/ds/components/EntityList';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
 
 import { extractPrompt } from '../../utils/extractPrompt';
@@ -22,14 +22,10 @@ export interface AgentsListProps {
   isLoading: boolean;
   error?: Error | null;
   search?: string;
-  onSearch?: (search: string) => void;
-  hideToolbar?: boolean;
 }
 
-export function AgentsList({ agents, isLoading, error, search: externalSearch }: AgentsListProps) {
+export function AgentsList({ agents, isLoading, error, search = '' }: AgentsListProps) {
   const { paths } = useLinkComponent();
-  const [internalSearch, setInternalSearch] = useState('');
-  const search = externalSearch ?? internalSearch;
 
   const agentData = useMemo(() => Object.values(agents ?? {}), [agents]);
 
