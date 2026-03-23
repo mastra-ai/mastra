@@ -2,7 +2,7 @@ import { openai } from '@ai-sdk/openai-v5';
 import { createGatewayMock } from '@internal/test-utils';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, it, expect } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { ChunkType } from '../../stream';
 import { createTool } from '../../tools/tool';
 import { Agent } from '../agent';

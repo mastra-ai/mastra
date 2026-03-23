@@ -2,7 +2,7 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
 import { describe, it, beforeEach, expect, vi } from 'vitest';
-import z from 'zod';
+import { z } from 'zod/v4';
 import { MastraClient } from '../client';
 
 // Mock fetch globally

@@ -116,7 +116,7 @@ export interface HarnessSubagent {
 
 /**
  * Schema type for harness state.
- * Accepts any PublicSchema variant: Zod v3/v4, JSON Schema, AI SDK Schema, or Standard Schema.
+ * Accepts any PublicSchema variant: Zod v4, JSON Schema, AI SDK Schema, or Standard Schema.
  */
 export type HarnessStateSchema<T> = PublicSchema<T>;
 

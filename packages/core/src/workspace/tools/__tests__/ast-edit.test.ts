@@ -336,7 +336,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
   // ===========================================================================
   describe('remove-import transform', () => {
     it('should remove import by module name', async () => {
-      const code = `import { useState } from 'react';\nimport { z } from 'zod';\n\nconst x = 1;`;
+      const code = `import { useState } from 'react';\nimport { z } from 'zod/v4';\n\nconst x = 1;`;
       await fs.writeFile(path.join(tempDir, 'test.ts'), code);
 
       const workspace = new Workspace({
