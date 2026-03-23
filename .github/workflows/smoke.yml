@@ -41,7 +41,7 @@ jobs:
 
       # ── Install & update ────────────────────────────────────
       - name: Install dependencies
-        run: pnpm install --ignore-workspace
+        run: pnpm install --frozen-lockfile --ignore-workspace
 
       - name: Update alpha packages
         run: pnpm update "@mastra/*" mastra --ignore-workspace
