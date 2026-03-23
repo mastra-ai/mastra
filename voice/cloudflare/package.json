@@ -35,7 +35,7 @@
     "cloudflare": "^4.5.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260316.1",
+    "@cloudflare/workers-types": "^4.20260317.1",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
