@@ -194,13 +194,22 @@ async function captureDependenciesToOptimize(
 
         for (const [innerDep, innerMeta] of analysis.dependencies) {
           /**
-           * Only add to depsToOptimize if:
-           * - It's a workspace package
+           * Add to depsToOptimize if:
            * - We haven't already processed it
            * - We haven't already discovered it at the beginning
+           *
+           * Both workspace and non-workspace transitive dependencies are included
+           * so the caller can route them appropriately (bundle or externalize).
+           * Only workspace packages trigger further recursion below.
            */
-          if (innerMeta.isWorkspace && !internalMap.has(innerDep) && !depsToOptimize.has(innerDep)) {
-            depsToOptimize.set(innerDep, innerMeta);
+          if (internalMap.has(innerDep) || depsToOptimize.has(innerDep)) {
+            continue;
+          }
+
+          depsToOptimize.set(innerDep, innerMeta);
+
+          // Mark workspace packages for further recursive discovery
+          if (innerMeta.isWorkspace) {
             internalMap.set(innerDep, innerMeta);
             hasAddedDeps = true;
           }

@@ -261,4 +261,56 @@ describe('analyzeEntry', () => {
     // The initialDepsToOptimize map tracks already-analyzed dependencies to prevent re-analysis.
     // (Test will timeout if there's an infinite loop issue)
   });
+
+  it('should discover non-workspace transitive dependencies of workspace packages', async () => {
+    // Scenario: app -> @internal/forge (workspace) -> zod (npm package)
+    // Non-workspace transitive dependencies of workspace packages must be
+    // included in the result so they can be externalized or installed at runtime.
+    const root = join(import.meta.dirname, '__fixtures__', 'transitive-external-dep');
+    vi.spyOn(process, 'cwd').mockReturnValue(join(root, 'apps', 'mastra'));
+
+    vi.mocked(resolveModule).mockImplementation(dep => {
+      if (dep === '@internal/forge') {
+        return join(root, 'packages', 'forge', 'src', 'index.ts');
+      }
+      return undefined;
+    });
+
+    const workspaceMap = new Map<string, WorkspacePackageInfo>([
+      [
+        '@internal/forge',
+        {
+          location: `${root}/packages/forge`,
+          dependencies: {
+            zod: '^3.0.0',
+          },
+          version: '1.0.0',
+        },
+      ],
+    ]);
+
+    const result = await analyzeEntry(
+      {
+        entry: join(process.cwd(), 'src', 'index.ts'),
+        isVirtualFile: false,
+      },
+      '',
+      {
+        shouldCheckTransitiveDependencies: true,
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap,
+        projectRoot: root,
+      },
+    );
+
+    // @internal/forge is a workspace package - it should be discovered
+    expect(result.dependencies.has('@internal/forge')).toBe(true);
+    expect(result.dependencies.get('@internal/forge')?.isWorkspace).toBe(true);
+
+    // zod is a non-workspace transitive dependency of @internal/forge.
+    // It must be included so it can be either bundled or externalized.
+    expect(result.dependencies.has('zod')).toBe(true);
+    expect(result.dependencies.get('zod')?.isWorkspace).toBe(false);
+  });
 });
