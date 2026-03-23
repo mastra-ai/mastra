@@ -218,7 +218,14 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, onDereference, sche
   );
 };
 
-export const AgentCMSRefBlock = ({ index, block, onDelete, onDereference, className, schema }: AgentCMSRefBlockProps) => {
+export const AgentCMSRefBlock = ({
+  index,
+  block,
+  onDelete,
+  onDereference,
+  className,
+  schema,
+}: AgentCMSRefBlockProps) => {
   return (
     <ContentBlock index={index} draggableId={block.id} className={cn('', className)}>
       {(dragHandleProps: DraggableProvidedDragHandleProps | null) => (
