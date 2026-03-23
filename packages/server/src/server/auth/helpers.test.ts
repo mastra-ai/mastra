@@ -11,6 +11,7 @@ import {
   matchesOrIncludes,
   pathMatchesPattern,
   pathMatchesRule,
+  getAuthenticatedUser,
 } from './helpers';
 
 describe('auth helpers', () => {
@@ -151,6 +152,80 @@ describe('auth helpers', () => {
 
     it('should deny access when no rules match', async () => {
       expect(await checkRules(rules, '/api/other/resource', 'GET', {})).toBe(false);
+    });
+  });
+
+  describe('getAuthenticatedUser', () => {
+    it('returns null when the auth token is empty', async () => {
+      const user = await getAuthenticatedUser({
+        mastra: {
+          getServer: () => ({
+            auth: {
+              authenticateToken: async () => ({ id: 'user-123' }),
+            },
+          }),
+        } as any,
+        token: '',
+        request: new Request('http://localhost/api/test'),
+      });
+
+      expect(user).toBeNull();
+    });
+
+    it('returns null when auth is not configured', async () => {
+      const user = await getAuthenticatedUser({
+        mastra: {
+          getServer: () => ({}),
+        } as any,
+        token: 'valid-token',
+        request: new Request('http://localhost/api/test'),
+      });
+
+      expect(user).toBeNull();
+    });
+
+    it('resolves the user with the configured auth provider', async () => {
+      const request = new Request('http://localhost/api/test', {
+        headers: { Authorization: 'Bearer valid-token' },
+      });
+
+      const user = await getAuthenticatedUser<{ id: string; token: string; method: string }>({
+        mastra: {
+          getServer: () => ({
+            auth: {
+              authenticateToken: async (token: string, incomingRequest: Request) => ({
+                id: 'user-123',
+                token,
+                method: incomingRequest.method,
+              }),
+            },
+          }),
+        } as any,
+        token: 'valid-token',
+        request,
+      });
+
+      expect(user).toEqual({
+        id: 'user-123',
+        token: 'valid-token',
+        method: 'GET',
+      });
+    });
+
+    it('accepts an authorization header value with the bearer prefix', async () => {
+      const user = await getAuthenticatedUser<{ token: string }>({
+        mastra: {
+          getServer: () => ({
+            auth: {
+              authenticateToken: async (token: string) => ({ token }),
+            },
+          }),
+        } as any,
+        token: 'Bearer valid-token',
+        request: new Request('http://localhost/api/test'),
+      });
+
+      expect(user).toEqual({ token: 'valid-token' });
     });
   });
 
