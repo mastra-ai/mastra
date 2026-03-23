@@ -1,9 +1,9 @@
-import { cn } from '@/lib/utils';
-import { Skeleton } from '@/ds/components/Skeleton';
+import type { SemanticRecall } from '@mastra/core/memory';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useMemoryConfig } from '@/domains/memory/hooks';
-import { SemanticRecall } from '@mastra/core/memory';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { cn } from '@/lib/utils';
 
 interface MemoryConfigSection {
   title: string;

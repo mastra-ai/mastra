@@ -21,6 +21,7 @@ interface CreateProjectArgs {
 }
 
 export const createProject = async (projectNameArg: string | undefined, args: CreateProjectArgs) => {
+  // TODO(major): Remove args.projectName in favor of projectNameArg
   const projectName = projectNameArg || args.projectName;
   await analytics.trackCommandExecution({
     command: 'create',
@@ -33,6 +34,7 @@ export const createProject = async (projectNameArg: string | undefined, args: Cr
           llmProvider: 'openai',
           addExample: true,
           timeout,
+          projectName: projectNameArg,
           mcpServer: args.mcp,
           skills: args.skills,
           template: args.template,

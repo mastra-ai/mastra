@@ -179,7 +179,6 @@ export const createMastraProject = async ({
     (await p.text({
       message: 'What do you want to name your project?',
       placeholder: 'my-mastra-app',
-      defaultValue: 'my-mastra-app',
       validate: value => {
         if (!value || value.length === 0) return 'Project name cannot be empty';
         if (fsSync.existsSync(value)) {
@@ -203,6 +202,7 @@ export const createMastraProject = async ({
         llmApiKey: llmApiKey !== undefined,
         skills: skills !== undefined && skills.length > 0,
         mcpServer: mcpServer !== undefined,
+        directory: true,
       },
     });
   }

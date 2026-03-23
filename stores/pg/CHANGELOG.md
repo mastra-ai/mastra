@@ -1,5 +1,18 @@
 # @mastra/pg
 
+## 1.8.3-alpha.0
+
+### Patch Changes
+
+- Added storage support for dataset targeting and experiment status fields. ([#14470](https://github.com/mastra-ai/mastra/pull/14470))
+  - Added `targetType` (text) and `targetIds` (jsonb) columns to datasets table for entity association
+  - Added `tags` (jsonb) column to datasets table for tag vocabulary
+  - Added `status` column to experiment results for review workflow tracking
+  - Added migration logic to add new columns to existing tables
+
+- Updated dependencies [[`68ed4e9`](https://github.com/mastra-ai/mastra/commit/68ed4e9f118e8646b60a6112dabe854d0ef53902), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c), [`4a75e10`](https://github.com/mastra-ai/mastra/commit/4a75e106bd31c283a1b3fe74c923610dcc46415b), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c)]:
+  - @mastra/core@1.16.0-alpha.0
+
 ## 1.8.2
 
 ### Patch Changes

@@ -1,26 +1,24 @@
-import { useState, useCallback, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Play, Sparkles, Clock, ChevronRight, ChevronDown, Pencil, Save, X, Trash2 } from 'lucide-react';
-
+import { useState, useCallback, useRef } from 'react';
+import { useDatasetExperiments } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
+import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { Button } from '@/ds/components/Button';
 import { Combobox } from '@/ds/components/Combobox';
-import { Icon } from '@/ds/icons/Icon';
-import { Txt } from '@/ds/components/Txt';
+import { Chip } from '@/ds/components/Chip';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Spinner } from '@/ds/components/Spinner';
 import { Textarea } from '@/ds/components/Textarea';
-import { Chip } from '@/ds/components/Chip';
-import { cn } from '@/lib/utils';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
 import { toast } from '@/lib/toast';
 
-import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
-import { useDatasetExperiments } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useDatasetVersions } from '@/domains/datasets/hooks/use-dataset-versions';
 import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
-
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
-import { useQueryClient } from '@tanstack/react-query';
 import { formatVersionLabel } from './format-version-label';
+import { cn } from '@/lib/utils';
 
 interface DatasetDetailViewProps {
   agentId: string;
@@ -128,8 +126,8 @@ export function DatasetDetailView({
         ...(selectedDatasetVersion ? { version: Number(selectedDatasetVersion) } : {}),
         ...(selectedAgentVersion ? { agentVersion: selectedAgentVersion } : {}),
       });
-      queryClient.invalidateQueries({ queryKey: ['agent-experiments', agentId] });
-      refetchExperiments();
+      void queryClient.invalidateQueries({ queryKey: ['agent-experiments', agentId] });
+      void refetchExperiments();
       // Poll a few times to pick up status changes
       const poll = setInterval(() => refetchExperiments(), 3000);
       setTimeout(() => clearInterval(poll), 30000);

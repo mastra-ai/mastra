@@ -1,8 +1,8 @@
-import * as React from 'react';
 import { Trash2Icon } from 'lucide-react';
-import { type IconButtonProps } from '@/ds/components/IconButton';
-import { useJSONSchemaFormField } from './json-schema-form-field-context';
+import * as React from 'react';
 import { ButtonWithTooltip } from '../Button';
+import { useJSONSchemaFormField } from './json-schema-form-field-context';
+import type { IconButtonProps } from '@/ds/components/IconButton';
 
 export type JSONSchemaFormFieldRemoveProps = Omit<IconButtonProps, 'onClick' | 'tooltip' | 'children'> & {
   tooltip?: React.ReactNode;
