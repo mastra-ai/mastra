@@ -2351,6 +2351,7 @@ export interface CreateExperimentInput {
   metadata?: Record<string, unknown>;
   datasetId: string | null;
   datasetVersion: number | null;
+  agentVersion?: string;
   targetType: TargetType;
   targetId: string;
   totalItems: number;

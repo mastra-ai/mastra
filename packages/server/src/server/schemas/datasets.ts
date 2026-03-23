@@ -116,6 +116,7 @@ export const triggerExperimentBodySchema = z.object({
   targetId: z.string().describe('ID of the target'),
   scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
   version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
+  agentVersion: z.string().optional().describe('Agent version ID to use for experiment'),
   maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Global request context passed to the target'),
 });
@@ -165,6 +166,7 @@ export const experimentResponseSchema = z.object({
   id: z.string(),
   datasetId: z.string().nullable(),
   datasetVersion: z.number().int().nullable(),
+  agentVersion: z.string().nullable().optional(),
   targetType: z.enum(['agent', 'workflow', 'scorer', 'processor']),
   targetId: z.string(),
   name: z.string().optional(),
