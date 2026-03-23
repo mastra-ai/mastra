@@ -29,8 +29,8 @@ npx mastracode
 On first launch, an interactive onboarding wizard guides you through:
 
 1. **Authentication** — log in with your AI provider (Anthropic, OpenAI, etc.)
-2. **Model packs** — choose default models for each mode (build / plan / fast)
-3. **Observational Memory** — pick a model for OM (learns about you over time)
+2. **Model packs** — choose default models for each mode (build / plan / fast). The OpenAI pack defaults to `openai/gpt-5.4` for build and plan, and `openai/gpt-5.4-mini` for fast.
+3. **Observational Memory** — pick a model for OM (learns about you over time). The OpenAI OM pack defaults to `openai/gpt-5.4-mini`.
 4. **YOLO mode** — auto-approve tool calls, or require manual confirmation
 
 You can re-run setup anytime with `/setup`.
