@@ -146,18 +146,18 @@ export interface AgentLegacyCapabilities {
     userMessage: UIMessage | UIMessageWithMetadata,
     requestContext: RequestContext,
     observabilityContext: ObservabilityContext,
-    titleModel?: DynamicArgument<MastraModelConfig>,
+    titleModel?: DynamicArgument<MastraModelConfig, any>,
     titleInstructions?: DynamicArgument<string>,
   ): Promise<string | undefined>;
   /** Resolve title generation config */
   resolveTitleGenerationConfig(
     generateTitleConfig:
       | boolean
-      | { model: DynamicArgument<MastraModelConfig>; instructions?: DynamicArgument<string> }
+      | { model: DynamicArgument<MastraModelConfig, any>; instructions?: DynamicArgument<string> }
       | undefined,
   ): {
     shouldGenerate: boolean;
-    model?: DynamicArgument<MastraModelConfig>;
+    model?: DynamicArgument<MastraModelConfig, any>;
     instructions?: DynamicArgument<string>;
   };
   /** Save step messages */
