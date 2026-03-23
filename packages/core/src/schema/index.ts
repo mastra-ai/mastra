@@ -2,6 +2,7 @@
 export type {
   PublicSchema,
   InferPublicSchema,
+  ZodType,
   StandardSchemaWithJSON,
   InferStandardSchemaOutput,
   StandardSchemaIssue,

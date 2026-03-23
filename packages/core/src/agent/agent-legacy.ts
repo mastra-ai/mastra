@@ -3,7 +3,6 @@ import type { WritableStream } from 'node:stream/web';
 import type { CoreMessage, UIMessage, Tool } from '@internal/ai-sdk-v4';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod/v4';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { MastraLLMV1 } from '../llm/model';
 import type {
@@ -36,8 +35,8 @@ import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { MessageList } from './message-list';
 import type { MastraDBMessage, MessageListInput, UIMessageWithMetadata } from './message-list/index';
-
 import type {
+  ZodSchema,
   AgentGenerateOptions,
   AgentStreamOptions,
   AgentInstructions,
@@ -45,6 +44,7 @@ import type {
   ToolsInput,
   AgentMethodType,
 } from './types';
+
 import { resolveThreadIdFromArgs } from './utils';
 
 /**

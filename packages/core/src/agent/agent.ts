@@ -3,7 +3,6 @@ import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
 import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod/v4';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
@@ -100,6 +99,7 @@ import type {
   StructuredOutputOptions,
   PublicStructuredOutputOptions,
   ModelWithRetries,
+  ZodSchema,
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';

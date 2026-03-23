@@ -18,12 +18,12 @@ import type {
   DeepPartial,
 } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod/v4';
 import type { MessageList } from '../../agent/types';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
 import type { ObservabilityContext, TracingProperties } from '../../observability';
 import type { OutputProcessorOrWorkflow } from '../../processors';
 import type { RequestContext } from '../../request-context';
+import type { ZodSchema } from '../../schema';
 import type { inferOutput, ScoringProperties, TripwireProperties } from './shared.types';
 
 export type { ToolSet } from '@internal/ai-sdk-v4';

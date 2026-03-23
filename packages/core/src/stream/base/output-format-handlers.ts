@@ -1,11 +1,10 @@
 import { TransformStream } from 'node:stream/web';
 import { isDeepEqualData, parsePartialJson } from '@internal/ai-sdk-v5';
 import { isZodType } from '@mastra/schema-compat';
-import type { z } from 'zod/v4';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { IMastraLogger } from '../../logger';
-import type { PublicSchema, StandardSchemaWithJSON } from '../../schema';
+import type { ZodType, PublicSchema, StandardSchemaWithJSON } from '../../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ValidationResult } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
@@ -149,7 +148,7 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
   /**
    * Checks if the original schema is a Zod schema with safeParse method.
    */
-  protected isZodSchema(schema: unknown): schema is z.ZodType<unknown, unknown> {
+  protected isZodSchema(schema: unknown): schema is ZodType {
     return isZodType(schema);
   }
 
