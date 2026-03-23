@@ -143,7 +143,7 @@ export function getAvailableOmPacks(access: ProviderAccess): OMPack[] {
   if (access.openai) {
     packs.push({
       id: 'openai',
-      name: 'Codex Mini',
+      name: 'OpenAI Mini',
       description: access.openai === 'oauth' ? 'Via Codex subscription' : 'Via OpenAI API key',
       modelId: 'openai/gpt-5.4-mini',
     });
