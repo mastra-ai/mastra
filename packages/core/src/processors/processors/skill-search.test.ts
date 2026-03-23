@@ -39,9 +39,7 @@ function createMockSkills(skillData: Array<{ name: string; description: string; 
 }
 
 // Mock workspace
-function createMockWorkspace(
-  skillData: Array<{ name: string; description: string; instructions: string }> = [],
-) {
+function createMockWorkspace(skillData: Array<{ name: string; description: string; instructions: string }> = []) {
   const mockSkills = skillData.length > 0 ? createMockSkills(skillData) : undefined;
   return {
     skills: mockSkills,
@@ -249,6 +247,9 @@ describe('SkillSearchProcessor', () => {
       const calls = addSystemSpy.mock.calls;
       const skillCall = calls.find(call => {
         const arg = call[0];
+        if (typeof arg === 'string') {
+          return arg.includes('[Skill: api-design]');
+        }
         if (arg && typeof arg === 'object' && 'content' in arg) {
           const content = (arg as Record<string, unknown>).content;
           return typeof content === 'string' && content.includes('[Skill: api-design]');
@@ -279,6 +280,9 @@ describe('SkillSearchProcessor', () => {
       const callsB = addSystemSpyB.mock.calls;
       const skillMessage = callsB.find(call => {
         const arg = call[0];
+        if (typeof arg === 'string') {
+          return arg.includes('[Skill: api-design]');
+        }
         if (arg && typeof arg === 'object' && 'content' in arg) {
           const content = (arg as Record<string, unknown>).content;
           return typeof content === 'string' && content.includes('[Skill: api-design]');
@@ -363,6 +367,41 @@ describe('SkillSearchProcessor', () => {
 
       processor.clearAllState();
       expect(processor.getStateStats().threadCount).toBe(0);
+    });
+  });
+
+  describe('dispose', () => {
+    it('should clear the cleanup interval and all thread state', async () => {
+      const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
+      const processor = new SkillSearchProcessor({
+        workspace: createMockWorkspace(testSkills),
+        ttl: 60000,
+      });
+
+      // Create some thread state
+      const args = createMockArgs('thread-1');
+      const result = await processor.processInputStep(args);
+      await result.tools?.load_skill!.execute?.({ skillName: 'api-design' }, undefined);
+      expect(processor.getStateStats().threadCount).toBe(1);
+
+      processor.dispose();
+
+      expect(clearIntervalSpy).toHaveBeenCalled();
+      expect(processor.getStateStats().threadCount).toBe(0);
+
+      clearIntervalSpy.mockRestore();
+    });
+
+    it('should be safe to call multiple times', () => {
+      const processor = new SkillSearchProcessor({
+        workspace: createMockWorkspace(testSkills),
+        ttl: 60000,
+      });
+
+      expect(() => {
+        processor.dispose();
+        processor.dispose();
+      }).not.toThrow();
     });
   });
 });

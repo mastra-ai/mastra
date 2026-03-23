@@ -92,6 +92,7 @@ export class SkillSearchProcessor implements Processor<'skill-search'> {
   private readonly workspace: Workspace;
   private readonly searchConfig: { topK: number; minScore: number };
   private readonly ttl: number;
+  private cleanupIntervalId?: ReturnType<typeof setInterval>;
 
   /**
    * Thread-scoped state management for loaded skills with TTL support.
@@ -110,6 +111,18 @@ export class SkillSearchProcessor implements Processor<'skill-search'> {
     if (this.ttl > 0) {
       this.scheduleCleanup();
     }
+  }
+
+  /**
+   * Dispose of this processor, clearing the cleanup interval and all thread state.
+   * Call this when the processor is no longer needed to prevent timer leaks.
+   */
+  public dispose(): void {
+    if (this.cleanupIntervalId) {
+      clearInterval(this.cleanupIntervalId);
+      this.cleanupIntervalId = undefined;
+    }
+    this.clearAllState();
   }
 
   /**
@@ -181,12 +194,12 @@ export class SkillSearchProcessor implements Processor<'skill-search'> {
    */
   private scheduleCleanup(): void {
     const cleanupInterval = Math.max(this.ttl / 2, 60000); // Minimum 1 minute
-    const intervalId = setInterval(() => {
+    this.cleanupIntervalId = setInterval(() => {
       this.cleanupStaleState();
     }, cleanupInterval);
 
-    if (intervalId.unref) {
-      intervalId.unref();
+    if (this.cleanupIntervalId.unref) {
+      this.cleanupIntervalId.unref();
     }
   }
 
@@ -364,17 +377,22 @@ export class SkillSearchProcessor implements Processor<'skill-search'> {
 
     // Build system messages for loaded skills
     for (const [skillName, instructions] of threadState.skills) {
-      messageList.addSystem({
-        role: 'system',
-        content: `[Skill: ${skillName}]\n\n${instructions}`,
-      });
+      messageList.addSystem(`[Skill: ${skillName}]\n\n${instructions}`);
+    }
+
+    const metaTools = { search_skills: searchSkillTool, load_skill: loadSkillTool };
+    if (tools) {
+      for (const key of Object.keys(tools)) {
+        if (key in metaTools) {
+          console.warn(`[SkillSearchProcessor] User tool "${key}" conflicts with meta-tool and will be shadowed.`);
+        }
+      }
     }
 
     return {
       tools: {
-        search_skills: searchSkillTool,
-        load_skill: loadSkillTool,
         ...(tools ?? {}),
+        ...metaTools,
       },
     };
   }
