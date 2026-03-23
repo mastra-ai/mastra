@@ -1,7 +1,7 @@
-import { cn } from '@/lib/utils';
+import type { ExperimentUISpan } from '../types';
 import { ExperimentTraceTimelineSpan } from './experiment-trace-timeline-span';
 import { Spinner } from '@/ds/components/Spinner';
-import { ExperimentUISpan } from '../types';
+import { cn } from '@/lib/utils';
 
 type ExperimentTraceTimelineProps = {
   hierarchicalSpans: ExperimentUISpan[];

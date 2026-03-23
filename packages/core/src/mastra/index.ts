@@ -662,7 +662,7 @@ export class Mastra<
     if (config?.scorers) {
       Object.entries(config.scorers).forEach(([key, scorer]) => {
         if (scorer != null) {
-          this.addScorer(scorer, key);
+          this.addScorer(scorer, key, { source: 'code' });
         }
       });
     }
@@ -944,7 +944,7 @@ export class Mastra<
       .listScorers()
       .then(scorers => {
         for (const [, entry] of Object.entries(scorers || {})) {
-          this.addScorer(entry.scorer);
+          this.addScorer(entry.scorer, undefined, { source: 'code' });
         }
       })
       .catch(err => {

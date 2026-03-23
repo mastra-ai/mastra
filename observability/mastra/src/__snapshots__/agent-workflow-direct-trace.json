@@ -24,7 +24,8 @@
         "entityType": "agent",
         "entityId": "workflow-agent",
         "attributes": {
-          "instructions": "You can execute workflows that exist in your config"
+          "instructions": "You can execute workflows that exist in your config",
+          "availableTools": ["workflow-simpleWorkflow"]
         },
         "metadata": {
           "runId": "<runId-1>"

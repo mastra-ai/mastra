@@ -1,0 +1,341 @@
+{
+  "meta": {
+    "name": "mcp-src-client-configuration.e2e",
+    "testFile": "src/client/configuration.e2e.test.ts",
+    "model": "gpt-4o",
+    "createdAt": "2026-03-20T09:19:17.800Z"
+  },
+  "recordings": [
+    {
+      "hash": "3bf4d8ace564c98f",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o",
+          "input": [
+            {
+              "role": "system",
+              "content": "Use the getStockPrice tool to find the price of MSFT."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is the price of MSFT?"
+                }
+              ]
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "stockPriceServer_getStockPrice",
+              "description": "Fetches the last day's closing stock price for a given symbol",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "symbol": {
+                    "type": "string",
+                    "description": "Stock symbol"
+                  }
+                },
+                "required": ["symbol"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773998354309
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9df3a2532fcbe634-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Fri, 20 Mar 2026 09:19:15 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "690",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "30000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "29999705",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_6b4b341ab6a049dea2435e231d9bd4ee"
+        },
+        "body": {
+          "id": "resp_0295297d8d2f57920069bd111282f481968909556c4dd1e35d",
+          "object": "response",
+          "created_at": 1773998354,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1773998355,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-2024-08-06",
+          "output": [
+            {
+              "id": "fc_0295297d8d2f57920069bd1112fbd081969734cb6f5690ad1c",
+              "type": "function_call",
+              "status": "completed",
+              "arguments": "{\"symbol\":\"MSFT\"}",
+              "call_id": "call_LteYTSYSv5EuNGjRzb4ZYMEU",
+              "name": "stockPriceServer_getStockPrice"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Fetches the last day's closing stock price for a given symbol",
+              "name": "stockPriceServer_getStockPrice",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "symbol": {
+                    "type": "string",
+                    "description": "Stock symbol"
+                  }
+                },
+                "required": ["symbol"],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 78,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 20,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 98
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "0f88427a2b4385ca",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o",
+          "input": [
+            {
+              "role": "system",
+              "content": "Use the getStockPrice tool to find the price of MSFT."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is the price of MSFT?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0295297d8d2f57920069bd1112fbd081969734cb6f5690ad1c"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_LteYTSYSv5EuNGjRzb4ZYMEU",
+              "output": "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"symbol\\\":\\\"MSFT\\\",\\\"currentPrice\\\":\\\"150.00\\\"}\"}],\"isError\":false}"
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "stockPriceServer_getStockPrice",
+              "description": "Fetches the last day's closing stock price for a given symbol",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "symbol": {
+                    "type": "string",
+                    "description": "Stock symbol"
+                  }
+                },
+                "required": ["symbol"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773998355283
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9df3a258cbffe634-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Fri, 20 Mar 2026 09:19:17 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1947",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "30000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "29999642",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_53f78f57b47e47e48e32ccfe5abea977"
+        },
+        "body": {
+          "id": "resp_0295297d8d2f57920069bd1113bc148196899424f72ccaae21",
+          "object": "response",
+          "created_at": 1773998355,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1773998357,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-2024-08-06",
+          "output": [
+            {
+              "id": "msg_0295297d8d2f57920069bd111568d08196b903a5c71045dd74",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "The current price of MSFT is $150.00."
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Fetches the last day's closing stock price for a given symbol",
+              "name": "stockPriceServer_getStockPrice",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "symbol": {
+                    "type": "string",
+                    "description": "Stock symbol"
+                  }
+                },
+                "required": ["symbol"],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 141,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 14,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 155
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

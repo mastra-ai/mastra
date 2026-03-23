@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
-import { cn } from '@/lib/utils';
 import { KeyboardIcon, PanelRightIcon } from 'lucide-react';
+import { useEffect } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
 import { MainSidebarNavSeparator } from './main-sidebar-nav-separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { cn } from '@/lib/utils';
 
 export type MainSidebarRootProps = {
   children: React.ReactNode;

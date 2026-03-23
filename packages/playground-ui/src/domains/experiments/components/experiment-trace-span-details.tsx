@@ -1,6 +1,6 @@
-import { SideDialog } from '@/ds/components/SideDialog';
-import { SpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@mastra/core/storage';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
+import { SideDialog } from '@/ds/components/SideDialog';
 
 interface ExperimentTraceSpanDetailsProps {
   span?: SpanRecord;

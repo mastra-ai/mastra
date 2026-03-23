@@ -1,10 +1,10 @@
-import React, { forwardRef } from 'react';
+import type { PanelProps } from '@xyflow/react';
+import { Panel, useViewport, useReactFlow } from '@xyflow/react';
 import { Maximize, Minus, Plus } from 'lucide-react';
+import React, { forwardRef } from 'react';
 
-import { Panel, useViewport, useReactFlow, PanelProps } from '@xyflow/react';
-
-import { Slider } from '@/ds/components/Slider';
 import { Button } from '@/ds/components/Button/Button';
+import { Slider } from '@/ds/components/Slider';
 import { cn } from '@/lib/utils';
 
 export const ZoomSlider = forwardRef<HTMLDivElement, Omit<PanelProps, 'children'>>(({ className, ...props }) => {
@@ -23,7 +23,7 @@ export const ZoomSlider = forwardRef<HTMLDivElement, Omit<PanelProps, 'children'
         max={1}
         step={0.01}
         onValueChange={values => {
-          zoomTo(values[0]);
+          void zoomTo(values[0]);
         }}
       />
       <Button onClick={() => zoomIn({ duration: 300 })}>
