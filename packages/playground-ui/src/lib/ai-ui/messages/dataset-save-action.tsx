@@ -1,15 +1,13 @@
-import { DatabaseIcon, Save } from 'lucide-react';
-import { useState, useCallback, useEffect } from 'react';
 import { useMessage } from '@assistant-ui/react';
 import { useMastraClient } from '@mastra/react';
+import { DatabaseIcon, Save } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
 
-import { IconButton } from '@/ds/components/IconButton';
-import { Icon } from '@/ds/icons/Icon';
-import { Spinner } from '@/ds/components/Spinner';
+import { useDatasetSaveContext } from '../context/dataset-save-context';
+import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { Button } from '@/ds/components/Button';
-import { Label } from '@/ds/components/Label';
 import { CodeEditor } from '@/ds/components/CodeEditor';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
 import {
   Dialog,
   DialogContent,
@@ -19,10 +17,12 @@ import {
   DialogBody,
   DialogFooter,
 } from '@/ds/components/Dialog';
+import { IconButton } from '@/ds/components/IconButton';
+import { Label } from '@/ds/components/Label';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
+import { Spinner } from '@/ds/components/Spinner';
+import { Icon } from '@/ds/icons/Icon';
 import { toast } from '@/lib/toast';
-import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
-import { useDatasetSaveContext } from '../context/dataset-save-context';
 
 /** Extract text content from a thread message's content parts */
 function extractTextFromParts(content: readonly { type: string; text?: string }[]): string {

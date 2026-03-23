@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect } from 'react';
-import { toast } from '@/lib/toast';
-import { Combobox, type ComboboxProps } from '@/ds/components/Combobox';
 import { useDatasets } from '../hooks/use-datasets';
+import { Combobox } from '@/ds/components/Combobox';
+import type { ComboboxProps } from '@/ds/components/Combobox';
 import { useLinkComponent } from '@/lib/framework';
+import { toast } from '@/lib/toast';
 
 export interface DatasetComboboxProps {
   value?: string;

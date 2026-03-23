@@ -17,6 +17,7 @@ const meta: Meta<typeof SearchFieldBlock> = {
   },
   tags: ['autodocs'],
   argTypes: {
+    // @ts-expect-error - FIXME
     size: {
       control: { type: 'select' },
       options: ['small', 'default'],

@@ -1,4 +1,5 @@
-import { createContext, useContext, ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { createContext, useContext } from 'react';
 
 interface ToolCallContextValue {
   approveToolcall: (toolCallId: string) => void;

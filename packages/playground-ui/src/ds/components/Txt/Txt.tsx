@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { FontSizes } from '../../tokens';
+import type { FontSizes } from '../../tokens';
 import { cn } from '@/lib/utils';
 
 export interface TxtProps extends React.HTMLAttributes<HTMLDivElement | HTMLLabelElement> {
