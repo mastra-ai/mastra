@@ -15,7 +15,6 @@ import {
   writeAPIKey,
   writeClaudeMarkdown,
   writeCodeSample,
-  writeGatewaySharedFile,
   writeIndexFile,
 } from './utils';
 import type { Component, ConnectionMethod, LLMProvider } from './utils';
@@ -81,12 +80,10 @@ export const init = async ({
       ...components.map(component => createComponentsDir(dirPath, component)),
     ];
 
-    if (connectionMethod !== 'gateway') {
-      initTasks.push(writeAPIKey({ provider: llmProvider, apiKey: llmApiKey }));
-    }
-
     if (connectionMethod === 'gateway') {
-      initTasks.push(writeGatewaySharedFile(dirPath));
+      initTasks.push(writeAPIKey({ provider: llmProvider, apiKey: llmApiKey, connectionMethod }));
+    } else {
+      initTasks.push(writeAPIKey({ provider: llmProvider, apiKey: llmApiKey }));
     }
 
     await Promise.all(initTasks);
@@ -126,13 +123,6 @@ export const init = async ({
         components.includes(`scorers`) && (await depService.checkDependencies(['@mastra/evals'])) !== `ok`;
       if (needsEvals) {
         await installWithFallback(depService, '@mastra/evals', packageVersionTag);
-      }
-
-      if (connectionMethod === 'gateway') {
-        const needsOpenAICompat = (await depService.checkDependencies(['@ai-sdk/openai-compatible'])) !== `ok`;
-        if (needsOpenAICompat) {
-          await depService.installPackages(['@ai-sdk/openai-compatible']);
-        }
       }
     }
 
@@ -212,7 +202,7 @@ export const init = async ({
       p.note(`
       ${color.green('Mastra initialized successfully!')}
 
-      ${color.cyan('GATEWAY_URL')} and ${color.cyan('GATEWAY_API_KEY')} have been written to your ${color.cyan('.env')} file
+      Your ${color.cyan('MASTRA_GATEWAY_API_KEY')} has been written to ${color.cyan('.env')}
       `);
     } else if (!llmApiKey) {
       const key = await getAPIKey(llmProvider || 'openai');

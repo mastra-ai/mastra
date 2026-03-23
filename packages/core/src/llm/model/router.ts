@@ -10,6 +10,7 @@ import { parseModelRouterId } from './gateway-resolver.js';
 import type { GatewayLanguageModel, MastraModelGateway } from './gateways/base.js';
 import { findGatewayForModel } from './gateways/index.js';
 
+import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
 import { createOpenAIWebSocketFetch } from './openai-websocket-fetch.js';
@@ -69,7 +70,11 @@ function getStaticProvidersByGateway(name: string) {
   return Object.fromEntries(Object.entries(PROVIDER_REGISTRY).filter(([_provider, config]) => config.gateway === name));
 }
 
-export const defaultGateways = [new NetlifyGateway(), new ModelsDevGateway(getStaticProvidersByGateway(`models.dev`))];
+export const defaultGateways = [
+  new NetlifyGateway(),
+  new MastraGateway(),
+  new ModelsDevGateway(getStaticProvidersByGateway(`models.dev`)),
+];
 
 /**
  * @deprecated Use defaultGateways instead. This export will be removed in a future version.

@@ -41,7 +41,10 @@ export function areValidComponents(values: string[]): values is Component[] {
   return values.every(value => COMPONENTS.includes(value as Component));
 }
 
-export const getModelIdentifier = (llmProvider: LLMProvider): ModelRouterModelId => {
+export const getModelIdentifier = (
+  llmProvider: LLMProvider,
+  connectionMethod: ConnectionMethod = 'direct',
+): ModelRouterModelId => {
   let model: ModelRouterModelId = 'openai/gpt-5-mini';
 
   if (llmProvider === 'anthropic') {
@@ -56,6 +59,10 @@ export const getModelIdentifier = (llmProvider: LLMProvider): ModelRouterModelId
     model = 'mistral/mistral-medium-2508';
   }
 
+  if (connectionMethod === 'gateway') {
+    return `mastra/${model}` as ModelRouterModelId;
+  }
+
   return model;
 };
 
@@ -66,8 +73,7 @@ export async function writeAgentSample(
   addScorers: boolean,
   connectionMethod: ConnectionMethod = 'direct',
 ) {
-  const modelString = getModelIdentifier(llmProvider);
-  const [, modelName] = modelString.split('/');
+  const modelString = getModelIdentifier(llmProvider, connectionMethod);
 
   const instructions = `
       You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
@@ -84,21 +90,18 @@ export async function writeAgentSample(
       ${addExampleTool ? 'Use the weatherTool to fetch current weather data.' : ''}
 `;
 
-  const gatewayImport = connectionMethod === 'gateway' ? `import { gateway } from '../shared';\n` : '';
-  const modelValue = connectionMethod === 'gateway' ? `gateway.chatModel('${modelName}')` : `'${modelString}'`;
-
   const memoryImport = connectionMethod !== 'gateway' ? `import { Memory } from '@mastra/memory';\n` : '';
 
   const content = `
 import { Agent } from '@mastra/core/agent';
-${memoryImport}${gatewayImport}${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
+${memoryImport}${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
 ${addScorers ? `import { scorers } from '../scorers/weather-scorer';` : ''}
 
 export const weatherAgent = new Agent({
   id: 'weather-agent',
   name: 'Weather Agent',
   instructions: \`${instructions}\`,
-  model: ${modelValue},
+  model: '${modelString}',
   ${addExampleTool ? 'tools: { weatherTool },' : ''}
   ${
     addScorers
@@ -136,33 +139,6 @@ export const weatherAgent = new Agent({
   });
 
   await fs.writeFile(destPath, '');
-  await fs.writeFile(destPath, formattedContent);
-}
-
-export async function writeGatewayShared(dirPath: string) {
-  const content = `import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-
-/**
- * Memory Gateway provider — an OpenAI-compatible proxy with built-in
- * observational memory.  Configure GATEWAY_URL and GATEWAY_API_KEY in .env.
- *
- * Usage:
- *   import { gateway } from './shared';
- *   const model = gateway.chatModel('gpt-5-mini');
- */
-export const gateway = createOpenAICompatible({
-  name: 'mastra-gateway',
-  baseURL: process.env.GATEWAY_URL!,
-  apiKey: process.env.GATEWAY_API_KEY ?? '',
-});
-`;
-
-  const formattedContent = await prettier.format(content, {
-    parser: 'typescript',
-    singleQuote: true,
-  });
-
-  const destPath = path.join(dirPath, 'shared.ts');
   await fs.writeFile(destPath, formattedContent);
 }
 
@@ -491,19 +467,6 @@ export const createComponentsDir = async (dirPath: string, component: string) =>
   await fsExtra.ensureDir(componentPath);
 };
 
-export const writeGatewaySharedFile = async (dirPath: string) => {
-  const sharedPath = path.join(dirPath, 'shared.ts');
-  const content = `import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-
-export const gateway = createOpenAICompatible({
-  name: 'mastra-gateway',
-  baseURL: process.env.GATEWAY_URL!,
-  apiKey: process.env.GATEWAY_API_KEY!,
-});
-`;
-  await fs.writeFile(sharedPath, content);
-};
-
 export const writeIndexFile = async ({
   dirPath,
   addAgent,
@@ -658,11 +621,26 @@ export const getAPIKey = async (provider: LLMProvider) => {
   }
 };
 
-export const writeAPIKey = async ({ provider, apiKey }: { provider: LLMProvider; apiKey?: string }) => {
+export const writeAPIKey = async ({
+  provider,
+  apiKey,
+  connectionMethod,
+}: {
+  provider: LLMProvider;
+  apiKey?: string;
+  connectionMethod?: ConnectionMethod;
+}) => {
   /**
    * If people skip entering an API key (because they e.g. have it in their environment already), we write to .env.example instead of .env so that they can immediately run Mastra without having to delete an .env file with an invalid key.
    */
   const envFileName = apiKey ? '.env' : '.env.example';
+
+  if (connectionMethod === 'gateway') {
+    const escapedKey = shellQuote.quote(['MASTRA_GATEWAY_API_KEY']);
+    const escapedApiKey = shellQuote.quote([apiKey ? apiKey : 'your-gateway-api-key']);
+    await exec(`echo ${escapedKey}=${escapedApiKey} >> ${envFileName}`);
+    return;
+  }
 
   const key = await getAPIKey(provider);
   const escapedKey = shellQuote.quote([key]);

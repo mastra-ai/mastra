@@ -3,6 +3,7 @@ import type { MastraModelGateway } from './base.js';
 export { MastraModelGateway, type ProviderConfig, type GatewayLanguageModel } from './base.js';
 export { AzureOpenAIGateway, type AzureOpenAIGatewayConfig } from './azure.js';
 export { ModelsDevGateway } from './models-dev.js';
+export { MastraGateway } from './mastra.js';
 export { NetlifyGateway } from './netlify.js';
 
 /**
