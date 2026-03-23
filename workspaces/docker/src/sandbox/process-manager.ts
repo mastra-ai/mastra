@@ -29,8 +29,11 @@ class DockerProcessHandle extends ProcessHandle {
   private readonly _container: Container;
   private readonly _startTime: number;
   private _exitCode: number | undefined;
+  /** @internal Set by kill() and timeout to distinguish forced termination from natural exit */
+  _killed = false;
   private _waitPromise: Promise<CommandResult> | null = null;
   private _stdinStream: NodeJS.WritableStream | null = null;
+  private _execStream: NodeJS.ReadWriteStream | null = null;
 
   constructor(
     exec: Exec,
@@ -61,6 +64,11 @@ class DockerProcessHandle extends ProcessHandle {
     this._waitPromise = p;
   }
 
+  /** @internal Set the exec stream so kill() can destroy it */
+  _setExecStream(stream: NodeJS.ReadWriteStream): void {
+    this._execStream = stream;
+  }
+
   async wait(): Promise<CommandResult> {
     if (this._waitPromise) {
       return this._waitPromise;
@@ -81,12 +89,28 @@ class DockerProcessHandle extends ProcessHandle {
     if (this._exitCode !== undefined) return false;
 
     try {
-      // Get the PID inside the container from exec inspect
-      const info = await this._inspectExec();
-      if (!info.Running) return false;
+      // Get the PID inside the container from exec inspect.
+      // Single retry with 50ms delay — Docker may not have assigned a PID yet
+      // if kill() is called immediately after spawn(). A polling loop with
+      // backoff would be more robust under heavy load, but overkill in practice.
+      let info = await this._inspectExec();
+      if (!info.Running || !info.Pid) {
+        await new Promise(r => setTimeout(r, 50));
+        info = await this._inspectExec();
+      }
+
+      if (!info.Running) {
+        this._killed = true;
+        this._destroyStream();
+        return false;
+      }
 
       const pid = info.Pid;
-      if (!pid) return false;
+      if (!pid) {
+        this._killed = true;
+        this._destroyStream();
+        return false;
+      }
 
       // Kill the process group (negative PID), fall back to direct PID
       const killExec = await this._container.exec({
@@ -95,8 +119,15 @@ class DockerProcessHandle extends ProcessHandle {
         AttachStderr: false,
       });
       await killExec.start({});
+
+      // Mark as killed and destroy stream so wait() resolves.
+      // Docker exec streams don't close automatically when the process is killed externally.
+      this._killed = true;
+      this._destroyStream();
       return true;
     } catch (error: unknown) {
+      this._killed = true;
+      this._destroyStream();
       // ESRCH / "no such process" is expected if the process exited between inspect and kill
       const msg = error instanceof Error ? error.message.toLowerCase() : '';
       if (!msg.includes('no such process') && !msg.includes('esrch')) {
@@ -115,6 +146,14 @@ class DockerProcessHandle extends ProcessHandle {
       throw new Error(`Process ${this.pid} was not started with stdin support`);
     }
     this._stdinStream.write(data);
+  }
+
+  /** @internal Force-close the exec stream to unblock wait(). */
+  _destroyStream(): void {
+    if (this._execStream && typeof this._execStream.destroy === 'function') {
+      this._execStream.destroy();
+      this._execStream = null;
+    }
   }
 
   private async _inspectExec(): Promise<ExecInspectInfo> {
@@ -171,6 +210,7 @@ export class DockerProcessManager extends SandboxProcessManager {
 
     const startTime = Date.now();
     const handle = new DockerProcessHandle(exec, container, startTime, stream, options);
+    handle._setExecStream(stream);
 
     // Create the wait promise that resolves when the stream ends
     const waitPromise = new Promise<CommandResult>(resolve => {
@@ -236,7 +276,26 @@ export class DockerProcessManager extends SandboxProcessManager {
         }
       });
 
+      // 'close' fires when stream.destroy() is called (e.g., from kill or timeout).
+      // Only resolve with SIGKILL exit code when the process was explicitly killed;
+      // natural stream close should be handled by the 'end' event above.
+      // Note: Docker multiplexed streams always emit 'end' before 'close' for
+      // natural exits, so the !_killed guard won't silently drop natural closes.
+      stream.on('close', () => {
+        if (handle.exitCode !== undefined) return; // Already resolved via 'end'
+        if (!handle._killed) return; // Natural close — 'end' handles it
+        handle._setExitCode(137); // SIGKILL
+        resolve({
+          success: false,
+          exitCode: 137,
+          stdout: handle.stdout,
+          stderr: handle.stderr,
+          executionTimeMs: Date.now() - startTime,
+        });
+      });
+
       stream.on('error', () => {
+        if (handle.exitCode !== undefined) return; // Already resolved
         handle._setExitCode(1);
         resolve({
           success: false,
@@ -247,6 +306,21 @@ export class DockerProcessManager extends SandboxProcessManager {
         });
       });
     });
+
+    // Wire up timeout: kill the process and destroy the stream after the timeout period
+    if (options.timeout && options.timeout > 0) {
+      const timeoutMs = options.timeout;
+      const timer = setTimeout(() => {
+        if (handle.exitCode === undefined) {
+          handle._killed = true;
+          handle.kill().catch(() => {});
+          // Ensure stream is destroyed even if kill() fails (e.g., PID not found)
+          handle._destroyStream();
+        }
+      }, timeoutMs);
+      // Clear timer when process exits naturally
+      waitPromise.then(() => clearTimeout(timer));
+    }
 
     handle._setWaitPromise(waitPromise);
     this._tracked.set(handle.pid, handle);
