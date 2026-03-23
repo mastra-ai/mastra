@@ -892,7 +892,23 @@ const agent = new Agent({
   name: "My Agent",
   instructions: "You are a helpful assistant",
   model: {
-    providerId: "google",
+    id: "custom/my-qwen3-model",
+    url: "http://your-custom-openai-compatible-endpoint.com/v1"
+  }
+})
+\`\`\`
+
+If the remote endpoint expects a provider-qualified model name, pass that exact value in \`modelId\`:
+
+\`\`\`typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: {
+    providerId: "gateway",
     modelId: "google/gemini-2.5-flash",
     url: "http://your-custom-openai-compatible-endpoint.com/v1"
   }
