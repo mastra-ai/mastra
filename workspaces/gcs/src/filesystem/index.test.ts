@@ -199,6 +199,36 @@ describe('GCSFilesystem', () => {
 
       expect(config.serviceAccountKey).toBeUndefined();
     });
+
+    it('includes prefix if set (without trailing slash)', () => {
+      const fs = new GCSFilesystem({
+        bucket: 'test',
+        prefix: 'workspace/user1/agents/abc',
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.prefix).toBe('workspace/user1/agents/abc');
+    });
+
+    it('strips trailing slash from prefix in mount config', () => {
+      const fs = new GCSFilesystem({
+        bucket: 'test',
+        prefix: '/foo/bar/',
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.prefix).toBe('foo/bar');
+    });
+
+    it('excludes prefix if not set', () => {
+      const fs = new GCSFilesystem({ bucket: 'test' });
+
+      const config = fs.getMountConfig();
+
+      expect(config.prefix).toBeUndefined();
+    });
   });
 
   describe('getInfo()', () => {
