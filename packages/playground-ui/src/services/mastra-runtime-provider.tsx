@@ -1,24 +1,22 @@
-import {
-  useExternalStoreRuntime,
-  ThreadMessageLike,
-  AppendMessage,
-  AssistantRuntimeProvider,
-} from '@assistant-ui/react';
-import { useState, useMemo, ReactNode, useRef, useEffect } from 'react';
+import type { ThreadMessageLike, AppendMessage } from '@assistant-ui/react';
+import { useExternalStoreRuntime, AssistantRuntimeProvider } from '@assistant-ui/react';
+import type { UIMessageWithMetadata } from '@mastra/client-js';
+import { MastraClient } from '@mastra/client-js';
 import { RequestContext } from '@mastra/core/di';
-import { ChatProps } from '@/types';
-import { CoreUserMessage } from '@mastra/core/llm';
-import { fileToBase64 } from '@/lib/file/toBase64';
-import { toAssistantUIMessage, useMastraClient } from '@mastra/react';
-import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
-import { MastraClient, UIMessageWithMetadata } from '@mastra/client-js';
-import { useAdapters } from '@/lib/ai-ui/hooks/use-adapters';
-import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
-import { MastraUIMessage, useChat } from '@mastra/react';
+import type { CoreUserMessage } from '@mastra/core/llm';
+import type { MastraUIMessage } from '@mastra/react';
+import { toAssistantUIMessage, useMastraClient, useChat } from '@mastra/react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useState, useMemo, useRef, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { ToolCallProvider } from './tool-call-provider';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
-import { useQueryClient } from '@tanstack/react-query';
+import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { useMemoryConfig } from '@/domains/memory/hooks';
+import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
+import { useAdapters } from '@/lib/ai-ui/hooks/use-adapters';
+import { fileToBase64 } from '@/lib/file/toBase64';
+import type { ChatProps } from '@/types';
 
 const handleFinishReason = (finishReason: string) => {
   switch (finishReason) {
@@ -463,8 +461,8 @@ export function MastraRuntimeProvider({
     // accurate token counts even after the stream ends or on page reload
     signalObservationsUpdated();
     // Invalidate both the OM data and status queries to trigger refetch
-    queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
-    queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+    void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+    void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
   };
 
   // Helper to handle activation markers - marks cycleId as activated so buffering badges update
@@ -601,8 +599,8 @@ export function MastraRuntimeProvider({
     setLegacyMessages(prev => markOmMarkersAsDisconnected(prev));
 
     // Refresh to get latest state from server
-    queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
-    queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+    void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+    void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
   };
 
   // On initial load, scan messages for activation markers and the last progress part.
@@ -711,7 +709,7 @@ export function MastraRuntimeProvider({
                 'success' in chunk.payload.result! &&
                 chunk.payload.result?.success
               ) {
-                refreshWorkingMemory?.();
+                void refreshWorkingMemory?.();
               }
 
               if (chunk.type === 'network-execution-event-step-finish') {
@@ -780,7 +778,7 @@ export function MastraRuntimeProvider({
                   'success' in chunk.payload.result! &&
                   chunk.payload.result?.success
                 ) {
-                  refreshWorkingMemory?.();
+                  void refreshWorkingMemory?.();
                 }
 
                 // Signal observation started (for sidebar status)
@@ -816,8 +814,8 @@ export function MastraRuntimeProvider({
                 .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
                 .then(result => {
                   setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
-                  queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
-                  queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+                  void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+                  void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
                 })
                 .catch(() => {});
             }
@@ -1183,8 +1181,8 @@ export function MastraRuntimeProvider({
           .then(result => {
             setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
             setLegacyMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
-            queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
-            queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+            void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+            void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
           })
           .catch(() => {});
       }
@@ -1235,8 +1233,8 @@ export function MastraRuntimeProvider({
           .then(result => {
             setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
             setLegacyMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
-            queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
-            queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+            void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+            void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
           })
           .catch(() => {});
       }

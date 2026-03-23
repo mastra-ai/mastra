@@ -1,22 +1,22 @@
+import { PlusIcon, XIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
-import { PlusIcon, XIcon } from 'lucide-react';
-
-import { DisplayConditionsDialog } from '@/domains/cms';
-import { Icon, ToolsIcon } from '@/ds/icons';
-import { Button } from '@/ds/components/Button';
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Section } from '@/ds/components/Section';
-import { useTools } from '@/domains/tools/hooks/use-all-tools';
-import { IntegrationToolsSection } from '@/domains/tool-providers/components';
-import { MCPClientList } from '@/domains/mcps/components/mcp-client-list';
-import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
-import type { RuleGroup } from '@/lib/rule-engine';
-import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
-import { SubSectionRoot } from '@/ds/components/Section/section-root';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { DisplayConditionsDialog } from '@/domains/cms';
+import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
+import { MCPClientList } from '@/domains/mcps/components/mcp-client-list';
+import { IntegrationToolsSection } from '@/domains/tool-providers/components';
+import { useTools } from '@/domains/tools/hooks/use-all-tools';
+import { Button } from '@/ds/components/Button';
 import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
+import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Section } from '@/ds/components/Section';
+import { SubSectionRoot } from '@/ds/components/Section/section-root';
+import { Icon, ToolsIcon } from '@/ds/icons';
+import type { RuleGroup } from '@/lib/rule-engine';
+
 import { cn } from '@/lib/utils';
 
 export function ToolsPage() {

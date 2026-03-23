@@ -1,6 +1,6 @@
-import { Input } from '@/ds/components/Input';
-import { AutoFormFieldProps } from '@autoform/react';
+import type { AutoFormFieldProps } from '@autoform/react';
 import React from 'react';
+import { Input } from '@/ds/components/Input';
 
 export const StringField: React.FC<AutoFormFieldProps> = ({ inputProps, error, field, id }) => {
   const { key, ...props } = inputProps;

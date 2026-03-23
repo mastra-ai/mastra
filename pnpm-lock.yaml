@@ -3401,6 +3401,12 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@internal/llm-recorder':
+        specifier: workspace:*
+        version: link:../_llm-recorder
+      '@internal/test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder
@@ -3946,6 +3952,9 @@ importers:
         specifier: ^5.0.12
         version: 5.0.12(@types/react@19.2.14)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
     devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../_config
       '@mastra/ai-sdk':
         specifier: workspace:^
         version: link:../../client-sdks/ai-sdk
@@ -4009,6 +4018,12 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      eslint-plugin-react-hooks:
+        specifier: ^7.0.1
+        version: 7.0.1(eslint@9.39.4(jiti@2.6.1))
+      eslint-plugin-react-refresh:
+        specifier: ^0.5.2
+        version: 0.5.2(eslint@9.39.4(jiti@2.6.1))
       postcss:
         specifier: ^8.5.8
         version: 8.5.8
@@ -41009,6 +41024,10 @@ snapshots:
   eslint-plugin-react-refresh@0.5.2(eslint@9.39.4(jiti@1.21.7)):
     dependencies:
       eslint: 9.39.4(jiti@1.21.7)
+
+  eslint-plugin-react-refresh@0.5.2(eslint@9.39.4(jiti@2.6.1)):
+    dependencies:
+      eslint: 9.39.4(jiti@2.6.1)
 
   eslint-plugin-react@7.37.5(eslint@9.39.4(jiti@2.6.1)):
     dependencies:

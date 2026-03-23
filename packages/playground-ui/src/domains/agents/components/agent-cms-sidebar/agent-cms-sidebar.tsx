@@ -1,15 +1,13 @@
 import { Check } from 'lucide-react';
 
+import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { isActive } from './agent-cms-is-active';
+import { AGENT_CMS_SECTIONS, CODE_AGENT_OVERRIDE_SECTIONS } from './agent-cms-sections';
+import { useSidebarDescriptions } from './use-sidebar-descriptions';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Txt } from '@/ds/components/Txt';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/lib/utils';
-
-import { ScrollArea } from '@/ds/components/ScrollArea';
-
-import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { Txt } from '@/ds/components/Txt';
-import { useSidebarDescriptions } from './use-sidebar-descriptions';
-import { AGENT_CMS_SECTIONS, CODE_AGENT_OVERRIDE_SECTIONS } from './agent-cms-sections';
-import { isActive } from './agent-cms-is-active';
 
 interface AgentCmsSidebarProps {
   basePath: string;

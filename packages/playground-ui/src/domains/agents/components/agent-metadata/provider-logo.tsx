@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Icon } from '@/ds/icons';
 import { providerMapToIcon } from '../provider-map-icon';
 import { cleanProviderId as cleanProviderIdUtil } from './utils';
+import { Icon } from '@/ds/icons';
 
 interface ProviderLogoProps {
   providerId: string;

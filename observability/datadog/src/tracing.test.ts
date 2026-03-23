@@ -257,11 +257,9 @@ describe('DatadogExporter', () => {
         expect.objectContaining({
           tags: expect.objectContaining({
             error: true,
-            errorInfo: {
-              message: 'Something went wrong',
-              id: 'err-123',
-              category: 'validation',
-            },
+            'error.message': 'Something went wrong',
+            'error.id': 'err-123',
+            'error.category': 'validation',
           }),
         }),
       );
@@ -346,10 +344,8 @@ describe('DatadogExporter', () => {
             production: true,
             critical: true,
             error: true,
-            errorInfo: {
-              message: 'Something failed',
-              category: 'runtime',
-            },
+            'error.message': 'Something failed',
+            'error.category': 'runtime',
           },
         }),
       );
