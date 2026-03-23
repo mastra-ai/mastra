@@ -24,6 +24,38 @@ export class MessageMerger {
   }
 
   /**
+   * Check if the incoming message introduces new tool calls (state: "call")
+   * that don't correspond to existing tool calls in the latest message.
+   * This indicates a new LLM step's tool calls, which should NOT be merged
+   * into the previous step's message.
+   */
+  private static hasNewToolCalls(latestMessage: MastraDBMessage, incomingMessage: MastraDBMessage): boolean {
+    const incomingParts = incomingMessage.content?.parts || [];
+    const latestParts = latestMessage.content?.parts || [];
+
+    // Collect toolCallIds from the latest message
+    const latestToolCallIds = new Set<string>();
+    for (const part of latestParts) {
+      if (part.type === 'tool-invocation') {
+        latestToolCallIds.add(part.toolInvocation.toolCallId);
+      }
+    }
+
+    // Check if the incoming message has tool-invocation "call" parts with new toolCallIds
+    for (const part of incomingParts) {
+      if (
+        part.type === 'tool-invocation' &&
+        part.toolInvocation.state === 'call' &&
+        !latestToolCallIds.has(part.toolInvocation.toolCallId)
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Check if we should merge an incoming message with the latest message
    *
    * @param latestMessage - The most recent message in the list
@@ -63,11 +95,20 @@ export class MessageMerger {
       // If the message is from memory, don't append to the last assistant message
       messageSource !== 'memory';
 
+    if (!shouldAppendToLastAssistantMessage) return false;
+
+    // Don't merge if the incoming message introduces new tool calls from a different step.
+    // When an agent performs consecutive tool-only turns (Step 1: Tool A, Step 2: Tool B),
+    // each step's tool calls should remain in separate messages. Without this check, Tool B's
+    // calls would be merged into Tool A's message, making them appear as parallel calls.
+    // Tool result updates (state: "result" with matching toolCallId) should still be merged.
+    if (MessageMerger.hasNewToolCalls(latestMessage, incomingMessage)) return false;
+
     // Agent network append flag handling
     // When enabled, only merge if the latest message is NOT from memory
     const appendNetworkMessage = agentNetworkAppend ? !isLatestFromMemory : true;
 
-    return shouldAppendToLastAssistantMessage && appendNetworkMessage;
+    return appendNetworkMessage;
   }
 
   /**
