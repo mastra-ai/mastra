@@ -1064,8 +1064,23 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
     const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
     const versionsCollection = await this.getCollection(TABLE_DATASET_VERSIONS);
 
-    await datasetsCollection.deleteMany({});
-    await itemsCollection.deleteMany({});
-    await versionsCollection.deleteMany({});
+    const results = await Promise.allSettled([
+      datasetsCollection.deleteMany({}),
+      itemsCollection.deleteMany({}),
+      versionsCollection.deleteMany({}),
+    ]);
+
+    const failures = results.filter(r => r.status === 'rejected');
+    if (failures.length > 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'CLEAR_ALL', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { failedCollections: failures.length },
+        },
+        (failures[0] as PromiseRejectedResult).reason,
+      );
+    }
   }
 }
