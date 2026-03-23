@@ -86,6 +86,11 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         options: { name: 'idx_dataset_items_datasetid_version' },
       },
       {
+        collection: TABLE_DATASET_ITEMS,
+        keys: { datasetId: 1, validTo: 1, isDeleted: 1, createdAt: -1, id: 1 },
+        options: { name: 'idx_dataset_items_list' },
+      },
+      {
         collection: TABLE_DATASET_VERSIONS,
         keys: { datasetId: 1 },
         options: { name: 'idx_dataset_versions_datasetid' },
