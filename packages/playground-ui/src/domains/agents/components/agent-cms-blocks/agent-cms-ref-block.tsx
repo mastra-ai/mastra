@@ -36,15 +36,20 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, schema }: RefBlockC
   const { data: promptBlock, isLoading } = useStoredPromptBlock(block.promptBlockId);
   const { updateStoredPromptBlock } = useStoredPromptBlockMutations(block.promptBlockId);
   const { navigate, paths } = useLinkComponent();
-  const [isHovered, setIsHovered] = useState(false);
-
   // Local state for the editor so edits aren't lost on query refetch
   const [localContent, setLocalContent] = useState('');
   const hasInitialized = useRef(false);
+  const hasUserEdited = useRef(false);
 
-  // Sync from server on first load
+  // Reset sync flags when the referenced block changes
   useEffect(() => {
-    if (promptBlock?.content != null && !hasInitialized.current) {
+    hasInitialized.current = false;
+    hasUserEdited.current = false;
+  }, [block.promptBlockId]);
+
+  // Sync from server on first load (or when promptBlockId changes)
+  useEffect(() => {
+    if (promptBlock?.content != null && !hasInitialized.current && !hasUserEdited.current) {
       setLocalContent(promptBlock.content);
       hasInitialized.current = true;
     }
@@ -55,11 +60,12 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, schema }: RefBlockC
     updateStoredPromptBlock.mutate({ content });
   }, 500);
 
-  // Cancel pending save on unmount
-  useEffect(() => () => debouncedSave.cancel(), [debouncedSave]);
+  // Flush pending save on unmount so the last edit isn't lost
+  useEffect(() => () => debouncedSave.flush(), [debouncedSave]);
 
   const handleContentChange = useCallback(
     (content: string) => {
+      hasUserEdited.current = true;
       setLocalContent(content);
       debouncedSave(content);
     },
@@ -80,18 +86,9 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, schema }: RefBlockC
   }, [storedAgentsData?.agents, block.promptBlockId]);
 
   return (
-    <div
-      className="relative group rounded-md transition-colors duration-150 hover:bg-surface2/50"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      {/* Left gutter — drag handle (visible on hover) */}
-      <div
-        className={cn(
-          'absolute -left-8 top-1 flex flex-col items-center transition-opacity duration-150',
-          isHovered ? 'opacity-100' : 'opacity-0',
-        )}
-      >
+    <div className="relative group rounded-md transition-colors duration-150 hover:bg-surface2/50">
+      {/* Left gutter — drag handle (visible on hover/focus-within) */}
+      <div className="absolute -left-8 top-1 flex flex-col items-center transition-opacity duration-150 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
         <div {...dragHandleProps} className="text-neutral3 hover:text-neutral6 cursor-grab active:cursor-grabbing">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -122,6 +119,7 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, schema }: RefBlockC
                 <PopoverTrigger asChild>
                   <button
                     type="button"
+                    aria-label={`Open actions for ${promptBlock.name}`}
                     className="ml-auto rounded p-0.5 hover:bg-surface4/50 transition-colors duration-150 text-neutral3 hover:text-neutral5"
                   >
                     <Icon className="!h-3 !w-3">

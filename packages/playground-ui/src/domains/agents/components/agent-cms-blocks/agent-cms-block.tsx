@@ -145,7 +145,7 @@ const InlineBlockContent = ({
   autoFocus = false,
 }: InlineBlockContentProps) => {
   const editorRef = useRef<ReactCodeMirrorRef>(null);
-  const [isHovered, setIsHovered] = useState(false);
+
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const { createStoredPromptBlock } = useStoredPromptBlockMutations();
@@ -172,6 +172,7 @@ const InlineBlockContent = ({
           name,
           description: description || undefined,
           content: block.content,
+          rules: block.rules,
         },
         {
           onSuccess: data => {
@@ -189,18 +190,9 @@ const InlineBlockContent = ({
 
   return (
     <>
-      <div
-        className="relative group rounded-md transition-colors duration-150 hover:bg-surface2/50"
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
-        {/* Left gutter — drag handle (visible on hover) */}
-        <div
-          className={cn(
-            'absolute -left-8 top-1 flex flex-col items-center transition-opacity duration-150',
-            isHovered ? 'opacity-100' : 'opacity-0',
-          )}
-        >
+      <div className="relative group rounded-md transition-colors duration-150 hover:bg-surface2/50">
+        {/* Left gutter — drag handle (visible on hover/focus-within) */}
+        <div className="absolute -left-8 top-1 flex flex-col items-center transition-opacity duration-150 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
           <div {...dragHandleProps} className="text-neutral3 hover:text-neutral6 cursor-grab active:cursor-grabbing">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -213,13 +205,8 @@ const InlineBlockContent = ({
           </div>
         </div>
 
-        {/* Right toolbar — conditions + save as ref + delete (visible on hover) */}
-        <div
-          className={cn(
-            'absolute -right-1 top-1 z-10 flex items-center gap-0.5 transition-opacity duration-150',
-            isHovered ? 'opacity-100' : 'opacity-0',
-          )}
-        >
+        {/* Right toolbar — conditions + save as ref + delete (visible on hover/focus-within) */}
+        <div className="absolute -right-1 top-1 z-10 flex items-center gap-0.5 transition-opacity duration-150 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
           <DisplayConditionsDialog
             entityName={`Block ${index + 1}`}
             schema={schema}
