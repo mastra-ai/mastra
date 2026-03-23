@@ -16,10 +16,10 @@ import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { FullOutput, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
-import type { ZodSchema } from '@mastra/schema-compat/schema';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
 import type {
+  ZodSchema,
   GenerateLegacyParams,
   GetAgentResponse,
   GetToolResponse,

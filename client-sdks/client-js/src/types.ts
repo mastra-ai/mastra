@@ -50,7 +50,7 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4 } from 'zod/v4';
 
-type ZodSchema = ZodSchemaV3 | ZodTypeV4;
+export type ZodSchema = ZodSchemaV3 | ZodTypeV4;
 
 export interface ClientOptions {
   /** Base URL for API requests */
