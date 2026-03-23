@@ -378,13 +378,10 @@ export class DockerSandbox extends MastraSandbox {
       try {
         const stream = await this._docker.pull(this._image);
         await new Promise<void>((resolve, reject) => {
-          this._docker.modem.followProgress(
-            stream,
-            (err: Error | null) => {
-              if (err) reject(err);
-              else resolve();
-            },
-          );
+          this._docker.modem.followProgress(stream, (err: Error | null) => {
+            if (err) reject(err);
+            else resolve();
+          });
         });
         this.logger.debug(`${LOG_PREFIX} Image ${this._image} pulled successfully`);
       } catch (error) {

@@ -173,7 +173,7 @@ export class DockerProcessManager extends SandboxProcessManager {
     const handle = new DockerProcessHandle(exec, container, startTime, stream, options);
 
     // Create the wait promise that resolves when the stream ends
-    const waitPromise = new Promise<CommandResult>((resolve) => {
+    const waitPromise = new Promise<CommandResult>(resolve => {
       // Demux the multiplexed stream into stdout/stderr
       // Docker multiplexes stdout/stderr into a single stream with 8-byte headers
       // when Tty is false. We need to parse these headers.

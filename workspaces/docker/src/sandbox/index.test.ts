@@ -322,9 +322,7 @@ describe('DockerSandbox', () => {
 
   describe('reconnection', () => {
     it('should reconnect to existing running container', async () => {
-      mockDocker.listContainers.mockResolvedValue([
-        { Id: 'existing-container-id', State: 'running' },
-      ]);
+      mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
 
       const sandbox = new DockerSandbox({ id: 'existing-sandbox' });
       await sandbox._start();
@@ -337,9 +335,7 @@ describe('DockerSandbox', () => {
     });
 
     it('should start a stopped container on reconnect', async () => {
-      mockDocker.listContainers.mockResolvedValue([
-        { Id: 'stopped-container-id', State: 'exited' },
-      ]);
+      mockDocker.listContainers.mockResolvedValue([{ Id: 'stopped-container-id', State: 'exited' }]);
 
       const sandbox = new DockerSandbox({ id: 'stopped-sandbox' });
       await sandbox._start();
