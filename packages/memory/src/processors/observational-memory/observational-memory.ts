@@ -88,6 +88,7 @@ import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-regis
 import {
   buildReflectorSystemPrompt,
   buildReflectorPrompt,
+  MAX_COMPRESSION_LEVEL,
   parseReflectorOutput,
   validateCompression,
 } from './reflector-agent';
@@ -1139,7 +1140,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       const modelId = resolved?.modelId ?? '';
 
       // gemini-2.5-flash is conservative about compression - start at level 2
-      if (modelId === 'gemini-2.5-flash' || modelId.includes('gemini-2.5-flash')) {
+      if (modelId.includes('gemini-2.5-flash')) {
         return 2;
       }
 
@@ -2266,9 +2267,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
     // Attempt reflection with escalating compression levels.
-    // Start at the provided level and retry up to level 3 if compression fails.
-    let currentLevel: CompressionLevel = compressionStartLevel ?? 0;
-    const maxLevel: CompressionLevel = 3;
+    // Start at the provided level and retry upward, but cap retries relative to the start level
+    // and never go past the highest defined compression level.
+    const startLevel: CompressionLevel = compressionStartLevel ?? 0;
+    let currentLevel: CompressionLevel = startLevel;
+    const maxLevel: CompressionLevel = Math.min(MAX_COMPRESSION_LEVEL, startLevel + 3) as CompressionLevel;
     let parsed: ReturnType<typeof parseReflectorOutput> = { observations: '', suggestedContinuation: undefined };
     let reflectedTokens = 0;
     let attemptNumber = 0;
@@ -2361,6 +2364,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         break;
       }
 
+      if (currentLevel >= maxLevel) {
+        break;
+      }
+
+      const nextLevel = (currentLevel + 1) as CompressionLevel;
+
       // Emit failed marker and start marker for next retry
       if (streamContext?.writer) {
         const failedMarker = createObservationFailedMarker({
@@ -2368,7 +2377,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           operationType: 'reflection',
           startedAt: streamContext.startedAt,
           tokensAttempted: originalTokens,
-          error: `Did not compress below threshold (${originalTokens} → ${reflectedTokens}, target: ${targetThreshold}), retrying at level ${currentLevel + 1}`,
+          error: `Did not compress below threshold (${originalTokens} → ${reflectedTokens}, target: ${targetThreshold}), retrying at level ${nextLevel}`,
           recordId: streamContext.recordId,
           threadId: streamContext.threadId,
         });
@@ -2391,7 +2400,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       }
 
       // Escalate to next compression level
-      currentLevel = Math.min(currentLevel + 1, maxLevel) as CompressionLevel;
+      currentLevel = nextLevel;
     }
 
     return {
