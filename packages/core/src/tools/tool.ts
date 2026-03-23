@@ -303,11 +303,21 @@ export class Tool<
 
           if (isAgentExecution && !baseContext.agent) {
             // Reorganize agent context - nest agent-specific properties under 'agent' key
-            const { toolCallId, messages, suspend, resumeData, threadId, resourceId, writableStream, ...rest } =
-              baseContext;
+            const {
+              agentId,
+              toolCallId,
+              messages,
+              suspend,
+              resumeData,
+              threadId,
+              resourceId,
+              writableStream,
+              ...rest
+            } = baseContext;
             organizedContext = {
               ...rest,
               agent: {
+                agentId: agentId || '',
                 toolCallId,
                 messages,
                 suspend,
@@ -342,6 +352,7 @@ export class Tool<
               agent: baseContext.agent
                 ? {
                     ...baseContext.agent,
+                    agentId: baseContext.agent.agentId ?? '',
                     suspend: (args: any, suspendOptions?: SuspendOptions) => {
                       suspendData = args;
                       return baseContext.agent?.suspend?.(args, suspendOptions);

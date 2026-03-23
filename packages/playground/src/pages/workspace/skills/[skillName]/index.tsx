@@ -15,23 +15,36 @@ import {
   PermissionDenied,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { useQueryClient } from '@tanstack/react-query';
 import { Bot, Folder, Wand2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { Link, useParams, useSearchParams } from 'react-router';
 
+import { validateAgentId } from './validate-agent-id';
+
 export default function WorkspaceSkillDetailPage() {
   const { skillName, workspaceId } = useParams<{ skillName: string; workspaceId: string }>();
   const [searchParams] = useSearchParams();
+  const queryClient = useQueryClient();
   const decodedSkillName = skillName ? decodeURIComponent(skillName) : '';
 
   // Check if we came from an agent page (for breadcrumb context)
   const agentId = searchParams.get('agentId');
   const decodedAgentId = agentId ? decodeURIComponent(agentId) : null;
 
+  // Validate agentId against cached agent list (no extra API call).
+  // If the cache is cold (e.g. direct URL visit) or the ID doesn't match,
+  // we fall back to the workspace breadcrumb.
+  // Note: getQueriesData matches all queries starting with ['agents'] (across requestContext variants).
+  // We take the first match, which is acceptable since agent IDs are globally unique.
+  const agentsCache = queryClient.getQueriesData<Record<string, unknown>>({ queryKey: ['agents'] });
+  const cachedAgents = agentsCache?.[0]?.[1] ?? null;
+  const validAgentId = validateAgentId(decodedAgentId, cachedAgents);
+
   // Build back link based on context
-  const backLink = decodedAgentId
-    ? `/agents/${decodedAgentId}` // Back to agent
+  const backLink = validAgentId
+    ? `/agents/${validAgentId}` // Back to agent
     : workspaceId
       ? `/workspaces/${workspaceId}?tab=skills` // Back to workspace skills tab
       : '/workspaces';
@@ -59,14 +72,14 @@ export default function WorkspaceSkillDetailPage() {
 
   // Breadcrumb component based on context
   const renderBreadcrumb = (currentLabel: string) =>
-    decodedAgentId ? (
+    validAgentId ? (
       // Agent context: Agent > Skill
       <Breadcrumb>
         <Crumb as={Link} to={backLink}>
           <Icon>
             <Bot className="h-4 w-4" />
           </Icon>
-          {decodedAgentId}
+          {validAgentId}
         </Crumb>
         <Crumb as="span" to="" isCurrent>
           <Icon>
