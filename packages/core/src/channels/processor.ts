@@ -37,7 +37,10 @@ export class ChatChannelProcessor {
     if (ctx.isDM) {
       lines.push('This is a direct message (DM) conversation.');
     } else {
-      lines.push('This message is in a public channel or thread.');
+      lines.push(
+        'This message is in a public channel or thread.',
+        'Not every message is directed at you. If users appear to be talking to each other, stay silent unless you are explicitly mentioned or your input is clearly needed. To stay silent, respond with an empty message.',
+      );
     }
 
     // In DMs the user is always the same person, so include their identity.

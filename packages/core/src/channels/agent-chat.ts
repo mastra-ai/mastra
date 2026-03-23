@@ -21,13 +21,6 @@ export interface ChannelOptions {
   /** The bot's display name (default: `'Mastra'`). */
   userName?: string;
   /**
-   * Stream response chunks as live message edits (default: `true`).
-   * When `false`, shows a typing indicator and posts the final message once complete.
-   */
-  streamingEdits?: boolean;
-  /** Minimum interval (ms) between message edits to avoid rate limits (default: `1000`). */
-  editIntervalMs?: number;
-  /**
    * Start persistent Gateway WebSocket listeners for adapters that support it,
    * e.g. Discord (default: `true`).
    *
@@ -53,8 +46,6 @@ export class AgentChat {
   private customState: StateAdapter | undefined;
   private stateAdapter!: StateAdapter;
   private userName: string;
-  private streamingEdits: boolean;
-  private editIntervalMs: number;
   private gateway: boolean;
   /** Names of auto-generated channel tools whose effects are already visible. */
   private channelToolNames: Set<string>;
@@ -63,8 +54,6 @@ export class AgentChat {
     this.adapters = config.adapters;
     this.customState = config.state;
     this.userName = config.userName ?? 'Mastra';
-    this.streamingEdits = config.streamingEdits ?? false;
-    this.editIntervalMs = config.editIntervalMs ?? 1000;
     this.gateway = config.gateway ?? true;
 
     const suffixes = ['send_message', 'edit_message', 'delete_message', 'add_reaction', 'remove_reaction'];
@@ -197,6 +186,20 @@ export class AgentChat {
    * updates the channel message in real-time via edits.
    */
   private async handleChatMessage(sdkThread: Thread, message: Message, mastra: Mastra): Promise<void> {
+    try {
+      await this.processChatMessage(sdkThread, message, mastra);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      this.log('error', `[${sdkThread.adapter.name}] Error handling message`, err);
+      try {
+        await sdkThread.post(`⚠️ ${errMsg}`);
+      } catch {
+        // best-effort — if we can't post the error, just log it
+      }
+    }
+  }
+
+  private async processChatMessage(sdkThread: Thread, message: Message, mastra: Mastra): Promise<void> {
     const agent = this.agent;
     const platform = sdkThread.adapter.name;
 
@@ -227,8 +230,14 @@ export class AgentChat {
       userName: message.author.fullName || message.author.userName,
     } satisfies ChannelContext);
 
-    // Show typing indicator while generating
-    await sdkThread.startTyping();
+    // Lazy typing indicator — only trigger when actual content arrives
+    let typingStarted = false;
+    const ensureTyping = async () => {
+      if (!typingStarted) {
+        typingStarted = true;
+        await sdkThread.startTyping();
+      }
+    };
 
     // Prefix the message with the author so the agent can distinguish
     // who said what in multi-user threads and mention them if needed.
@@ -242,10 +251,46 @@ export class AgentChat {
     } else if (authorName) {
       authorPrefix = authorName;
     }
-    const messageText = authorPrefix ? `[${authorPrefix}]: ${message.text}` : message.text;
+    const rawText = authorPrefix ? `[${authorPrefix}]: ${message.text}` : message.text;
+
+    // Build multimodal content if the message has image/file attachments,
+    // otherwise pass a plain string. Use fetchData() when available (e.g. Slack
+    // private URLs that require auth), falling back to the public URL.
+    const usableAttachments = message.attachments.filter(a => a.url || a.fetchData);
+
+    let streamInput: Parameters<typeof agent.stream>[0];
+    if (usableAttachments.length > 0) {
+      type ContentPart =
+        | { type: 'text'; text: string }
+        | { type: 'image'; image: URL | Uint8Array; mimeType?: string }
+        | { type: 'file'; data: URL | Uint8Array; mimeType: string };
+      const parts: ContentPart[] = [{ type: 'text', text: rawText }];
+
+      for (const att of usableAttachments) {
+        const data = att.fetchData ? await att.fetchData() : undefined;
+        if (att.type === 'image') {
+          parts.push({
+            type: 'image',
+            image: data ?? new URL(att.url!),
+            ...(att.mimeType && { mimeType: att.mimeType }),
+          });
+        } else if (att.mimeType) {
+          parts.push({
+            type: 'file',
+            data: data ?? new URL(att.url!),
+            mimeType: att.mimeType,
+          });
+        }
+        // Skip non-image attachments without a mimeType — FilePart requires it
+      }
+
+      streamInput = { role: 'user' as const, content: parts };
+    } else {
+      streamInput = rawText;
+    }
 
     // Stream the agent response
-    const stream = await agent.stream(messageText, {
+    const stream = await agent.stream(streamInput, {
       requestContext,
       memory: {
         thread: mastraThread,
@@ -253,116 +298,73 @@ export class AgentChat {
       },
     });
 
-    // Track tool call messages so we can edit them with results
-    type SentMessage = Awaited<ReturnType<typeof sdkThread.post>>;
-    const toolCallMessages = new Map<string, { sent: SentMessage; toolName: string; argsText: string }>();
+    // Track pending tool calls. If a result arrives within TOOL_POST_DELAY_MS we
+    // post a single combined message; otherwise post the call immediately and the
+    // result as a follow-up when it arrives.
+    const TOOL_POST_DELAY_MS = 1000;
+    interface PendingTool {
+      toolName: string;
+      argsText: string;
+      timer: ReturnType<typeof setTimeout>;
+      posted: boolean;
+    }
+    const pendingTools = new Map<string, PendingTool>();
 
-    if (this.streamingEdits) {
-      // Post an initial message and edit it as chunks arrive
-      let sentMessage: SentMessage | null = null;
-      let accumulated = '';
-      let lastEditTime = 0;
-      let pendingEdit: ReturnType<typeof setTimeout> | null = null;
+    const postToolCall = async (id: string) => {
+      const entry = pendingTools.get(id);
+      if (!entry || entry.posted) return;
+      entry.posted = true;
+      await sdkThread.post(`🔧 \`${entry.toolName}\`(${entry.argsText})`);
+    };
 
-      const flushEdit = async () => {
-        if (pendingEdit) {
-          clearTimeout(pendingEdit);
-          pendingEdit = null;
-        }
-        if (!sentMessage || !accumulated) return;
-        try {
-          sentMessage = await sentMessage.edit(accumulated);
-          lastEditTime = Date.now();
-        } catch (err) {
-          this.log('error', `[${platform}] Failed to edit message`, err);
-        }
-      };
+    // Accumulate text and flush before tool calls / on step-finish.
+    let text = '';
 
-      for await (const chunk of stream.fullStream) {
-        if (chunk.type === 'tool-call') {
-          // Skip channel tools — their effects are already visible in the chat
-          if (this.channelToolNames.has(chunk.payload.toolName)) continue;
-
-          // Flush any pending text edit before the tool message
-          await flushEdit();
-
-          const displayName = stripToolPrefix(chunk.payload.toolName);
-          const argsText = formatArgs(chunk.payload.args);
-          const toolMsg = await sdkThread.post(`🔧 \`${displayName}\`(${argsText})`);
-          toolCallMessages.set(chunk.payload.toolCallId, {
-            sent: toolMsg,
-            toolName: displayName,
-            argsText,
-          });
-        } else if (chunk.type === 'tool-result') {
-          const entry = toolCallMessages.get(chunk.payload.toolCallId);
-          if (entry) {
-            const resultText = formatResult(chunk.payload.result, chunk.payload.isError);
-            try {
-              await entry.sent.edit(`🔧 \`${entry.toolName}\`(${entry.argsText})\n> ${resultText}`);
-            } catch (err) {
-              this.log('error', `[${platform}] Failed to edit tool result`, err);
-            }
-            toolCallMessages.delete(chunk.payload.toolCallId);
-          }
-        } else if (chunk.type === 'text-delta') {
-          accumulated += chunk.payload.text;
-
-          if (!sentMessage) {
-            sentMessage = await sdkThread.post(accumulated);
-            lastEditTime = Date.now();
-            continue;
-          }
-
-          const elapsed = Date.now() - lastEditTime;
-          if (elapsed >= this.editIntervalMs) {
-            await flushEdit();
-          } else if (!pendingEdit) {
-            pendingEdit = setTimeout(() => {
-              pendingEdit = null;
-              void flushEdit();
-            }, this.editIntervalMs - elapsed);
-          }
-        }
-      }
-
-      // Final edit with the complete response
-      await flushEdit();
-    } else {
-      // Collect the full response, then send once. Post tool calls in real-time.
-      let text = '';
-
-      for await (const chunk of stream.fullStream) {
-        if (chunk.type === 'tool-call') {
-          // Skip channel tools — their effects are already visible in the chat
-          if (this.channelToolNames.has(chunk.payload.toolName)) continue;
-
-          const displayName = stripToolPrefix(chunk.payload.toolName);
-          const argsText = formatArgs(chunk.payload.args);
-          const toolMsg = await sdkThread.post(`🔧 \`${displayName}\`(${argsText})`);
-          toolCallMessages.set(chunk.payload.toolCallId, {
-            sent: toolMsg,
-            toolName: displayName,
-            argsText,
-          });
-        } else if (chunk.type === 'tool-result') {
-          const entry = toolCallMessages.get(chunk.payload.toolCallId);
-          if (entry) {
-            const resultText = formatResult(chunk.payload.result, chunk.payload.isError);
-            try {
-              await entry.sent.edit(`🔧 \`${entry.toolName}\`(${entry.argsText})\n> ${resultText}`);
-            } catch (err) {
-              this.log('error', `[${platform}] Failed to edit tool result`, err);
-            }
-            toolCallMessages.delete(chunk.payload.toolCallId);
-          }
-        } else if (chunk.type === 'text-delta') {
-          text += chunk.payload.text;
-        }
-      }
-
-      if (text) {
+    const flushText = async () => {
+      if (text.trim()) {
         await sdkThread.post(text);
+        text = '';
+      }
+    };
+
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-call') {
+        // Skip channel tools — their effects are already visible in the chat
+        if (this.channelToolNames.has(chunk.payload.toolName)) continue;
+
+        await ensureTyping();
+
+        // Flush any accumulated text before the tool message
+        await flushText();
+
+        const displayName = stripToolPrefix(chunk.payload.toolName);
+        const argsText = formatArgs(chunk.payload.args);
+
+        // Start a timer — if the result doesn't arrive fast, post the call now
+        const id = chunk.payload.toolCallId;
+        const timer = setTimeout(() => void postToolCall(id), TOOL_POST_DELAY_MS);
+        pendingTools.set(id, { toolName: displayName, argsText, timer, posted: false });
+      } else if (chunk.type === 'tool-result') {
+        const entry = pendingTools.get(chunk.payload.toolCallId);
+        if (entry) {
+          clearTimeout(entry.timer);
+          const resultText = formatResult(chunk.payload.result, chunk.payload.isError);
+          if (entry.posted) {
+            // Slow tool: call was already posted, post result as a follow-up
+            await sdkThread.post(`> ${resultText}`);
+          } else {
+            // Fast tool: combine call + result into one message
+            await sdkThread.post(`🔧 \`${entry.toolName}\`(${entry.argsText})\n> ${resultText}`);
+          }
+          pendingTools.delete(chunk.payload.toolCallId);
+        }
+      } else if (chunk.type === 'text-delta') {
+        if (chunk.payload.text) await ensureTyping();
+        text += chunk.payload.text;
+      } else if (chunk.type === 'reasoning-delta') {
+        await ensureTyping();
+      } else if (chunk.type === 'step-finish') {
+        await flushText();
       }
     }
 
@@ -577,17 +579,7 @@ function stripToolPrefix(name: string): string {
   if (parts.length <= 2) return name;
   // Heuristic: known prefixes are single-word (platform or namespace)
   // Try dropping first segment, then first two if the second is also a known namespace word
-  const knownPrefixes = new Set([
-    'mastra',
-    'discord',
-    'slack',
-    'teams',
-    'gchat',
-    'telegram',
-    'github',
-    'linear',
-    'whatsapp',
-  ]);
+  const knownPrefixes = new Set(['mastra_workspace']);
   if (knownPrefixes.has(parts[0]!)) {
     const rest = parts.slice(1);
     if (rest.length > 1 && knownPrefixes.has(rest[0]!)) {

@@ -243,12 +243,6 @@ export interface Config<
   workspace?: AnyWorkspace;
 
   /**
-   * @deprecated Channels are now configured on individual agents via `AgentConfig.channels`.
-   * Any channels passed here will be ignored.
-   */
-  channels?: never;
-
-  /**
    * Custom model router gateways for accessing LLM providers.
    * Gateways handle provider-specific authentication, URL construction, and model resolution.
    */

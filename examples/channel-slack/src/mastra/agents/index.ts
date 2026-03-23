@@ -2,8 +2,9 @@ import { Agent } from '@mastra/core/agent';
 import { ChatChannelProcessor, type ChannelContext } from '@mastra/core/channels';
 import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace';
 import { DiscordAdapter, createDiscordAdapter } from '@chat-adapter/discord';
-import { createSlackAdapter } from '@chat-adapter/slack';
+import { createSlackAdapter, SlackAdapter } from '@chat-adapter/slack';
 import { Memory } from '@mastra/memory';
+import { AgentChat } from '@mastra/core/channels';
 
 export const exampleAgent = new Agent({
   id: 'example-agent',
@@ -16,36 +17,19 @@ export const exampleAgent = new Agent({
     },
   }),
   channels: {
-    discord: createDiscordAdapter({
+    discord: new DiscordAdapter({
       applicationId: process.env.DISCORD_APPLICATION_ID,
       publicKey: process.env.DISCORD_PUBLIC_KEY,
       botToken: process.env.DISCORD_BOT_TOKEN,
     }),
-    slack: createSlackAdapter({
+    slack: new SlackAdapter({
       clientId: process.env.SLACK_CLIENT_ID!,
       clientSecret: process.env.SLACK_CLIENT_SECRET!,
       signingSecret: process.env.SLACK_SIGNING_SECRET!,
       botToken: process.env.SLACK_BOT_TOKEN!,
     }),
   },
-  channelOptions: {
-    streamingEdits: false,
-    editIntervalMs: 500,
-  },
-
   inputProcessors: [new ChatChannelProcessor()],
-
-  // defaultOptions: {
-  //   prepareStep: ({ messageList, requestContext }) => {
-  //     const channel = requestContext?.get('channel') as ChannelContext | undefined;
-  //     if (channel) {
-  //       messageList.addSystem(
-  //         `The user's name is ${channel.userName} (ID: ${channel.userId}). They're messaging via ${channel.platform}.`,
-  //       );
-  //     }
-  //   },
-  // },
-
   workspace: new Workspace({
     id: 'example-workspace',
     filesystem: new LocalFilesystem({ basePath: './workspace' }),
