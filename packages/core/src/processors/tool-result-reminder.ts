@@ -193,7 +193,6 @@ export class ToolResultReminderProcessor implements Processor<'tool-result-remin
     const { messageList, rotateResponseMessageId } = args;
     const messages = messageList.get.all.db();
     const completedToolCalls = getCompletedToolCalls(messageList);
-
     const instructionPath = this.findReferencedInstructionPath(completedToolCalls);
 
     if (!instructionPath || this.isIgnoredInstructionPath(args, instructionPath)) {

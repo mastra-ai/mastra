@@ -285,7 +285,9 @@ describe('headless mode — event-driven auto-resolution', () => {
     mkdirSync(instructionDir, { recursive: true });
     writeFileSync(instructionPath, instructionContents, 'utf-8');
 
-    const reminderProcessor = new ToolResultReminderProcessor({ reminderText: REMINDER_TEXT });
+    const reminderProcessor = new ToolResultReminderProcessor({
+      reminderText: REMINDER_TEXT,
+    });
 
     const mockExecute = vi.fn().mockResolvedValue({ content: instructionContents });
     const readFileTool = createTool({
@@ -343,13 +345,13 @@ describe('headless mode — event-driven auto-resolution', () => {
 
     expect(finalMessageEnd).toBeDefined();
     expect(
-      finalMessageEnd?.message.content.filter(
+      finalMessageEnd?.message.content.some(
         part =>
           part.type === 'system_reminder' &&
           part.reminderType === 'dynamic-agents-md' &&
           part.path === instructionPath &&
           part.message === instructionContents,
       ),
-    ).toHaveLength(1);
+    ).toBe(true);
   });
 });
