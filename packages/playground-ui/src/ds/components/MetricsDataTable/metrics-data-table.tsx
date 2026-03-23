@@ -1,6 +1,6 @@
 import { Fragment } from 'react';
-import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
+import { cn } from '@/lib/utils';
 
 type Column<T> = {
   label: string;

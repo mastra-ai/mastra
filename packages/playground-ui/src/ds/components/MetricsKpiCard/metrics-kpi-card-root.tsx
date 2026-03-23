@@ -1,6 +1,6 @@
-import { cn } from '@/lib/utils';
 import type { ReactNode } from 'react';
 import { DashboardCard } from '@/ds/components/DashboardCard';
+import { cn } from '@/lib/utils';
 
 export function MetricsKpiCardRoot({ children, className }: { children: ReactNode; className?: string }) {
   return (

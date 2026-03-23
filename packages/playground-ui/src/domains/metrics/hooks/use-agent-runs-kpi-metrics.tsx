@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
-import { useMastraClient } from '@mastra/react';
 import { useMetricsFilters } from './use-metrics-filters';
+import { useMastraClient } from '@mastra/react';
+import { useQuery } from '@tanstack/react-query';
 
 /** Total Agent Runs — count of agent duration metric observations */
 export function useAgentRunsKpiMetrics() {

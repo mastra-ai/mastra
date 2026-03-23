@@ -1,10 +1,10 @@
+import { CHART_COLORS } from './metrics-utils';
+import { useScoresMetrics } from '../hooks/use-scores-metrics';
 import { useMemo } from 'react';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import { MetricsDataTable } from '@/ds/components/MetricsDataTable/metrics-data-table';
 import { MetricsLineChart } from '@/ds/components/MetricsLineChart';
-import { CHART_COLORS } from './metrics-utils';
 import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
-import { useScoresMetrics } from '../hooks/use-scores-metrics';
 
 const SERIES_COLORS = [
   CHART_COLORS.green,

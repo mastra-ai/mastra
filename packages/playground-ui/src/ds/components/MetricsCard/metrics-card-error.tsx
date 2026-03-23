@@ -1,5 +1,4 @@
 import { cn } from '@/lib/utils';
-import { CircleXIcon } from 'lucide-react';
 
 export function MetricsCardError({
   message = 'Failed to load data',
