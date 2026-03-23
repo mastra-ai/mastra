@@ -115,10 +115,16 @@ export interface HarnessSubagent {
 }
 
 /**
- * Schema type for harness state.
- * Accepts any PublicSchema variant: Zod v4, JSON Schema, AI SDK Schema, or Standard Schema.
+ * Resolves to the state data type for the Harness generic parameter.
+ *
+ * @example
+ * ```ts
+ * // Both forms are equivalent:
+ * new Harness<HarnessStateSchema<z.infer<typeof mySchema>>>({...})
+ * new Harness<z.infer<typeof mySchema>>({...})
+ * ```
  */
-export type HarnessStateSchema<T> = PublicSchema<T>;
+export type HarnessStateSchema<T> = T;
 
 /**
  * Configuration for creating a Harness instance.
@@ -137,7 +143,7 @@ export interface HarnessConfig<TState = {}> {
   storage?: MastraCompositeStore;
 
   /** Schema defining the shape of harness state (Zod, JSON Schema, Standard Schema, etc.) */
-  stateSchema?: TState;
+  stateSchema?: PublicSchema<TState, any>;
 
   /** Initial state values (must conform to schema) */
   initialState?: Partial<TState>;
