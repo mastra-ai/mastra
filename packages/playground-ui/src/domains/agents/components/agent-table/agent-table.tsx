@@ -1,22 +1,23 @@
-import { GetAgentResponse } from '@mastra/client-js';
+import type { GetAgentResponse } from '@mastra/client-js';
+import type { ColumnDef} from '@tanstack/react-table';
+import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import { BookOpen } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { getColumns } from './columns';
+import type { AgentTableData } from './types';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
+import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
-import { is403ForbiddenError } from '@/lib/query-utils';
+import { TooltipProvider } from '@/ds/components/Tooltip';
 import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
 import { Icon } from '@/ds/icons/Icon';
-import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React, { useMemo, useState } from 'react';
-import { BookOpen } from 'lucide-react';
 
-import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { getColumns } from './columns';
-import { AgentTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
-import { TooltipProvider } from '@/ds/components/Tooltip';
-import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
+import { is403ForbiddenError } from '@/lib/query-utils';
 
 export interface AgentsTableProps {
   agents: Record<string, GetAgentResponse>;

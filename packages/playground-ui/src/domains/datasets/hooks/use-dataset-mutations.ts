@@ -117,9 +117,9 @@ export const useDatasetMutations = () => {
   const updateExperimentResult = useMutation({
     mutationFn: (params: UpdateExperimentResultParams) => client.updateDatasetExperimentResult(params),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['experiment-results', variables.experimentId] });
-      queryClient.invalidateQueries({ queryKey: ['dataset-experiment-results'] });
-      queryClient.invalidateQueries({ queryKey: ['review-items'] });
+      void queryClient.invalidateQueries({ queryKey: ['experiment-results', variables.experimentId] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-experiment-results'] });
+      void queryClient.invalidateQueries({ queryKey: ['review-items'] });
     },
   });
 

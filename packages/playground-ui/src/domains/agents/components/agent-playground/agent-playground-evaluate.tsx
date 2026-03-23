@@ -1,34 +1,32 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
-
-import { Txt } from '@/ds/components/Txt';
-import { Button } from '@/ds/components/Button';
-import { Searchbar } from '@/ds/components/Searchbar';
-import { Spinner } from '@/ds/components/Spinner';
-
-import { Icon } from '@/ds/icons/Icon';
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
-import { cn } from '@/lib/utils';
-import { toast } from '@/lib/toast';
 import { Sparkles, Database, GaugeIcon, FlaskConical, ChevronRight } from 'lucide-react';
-
-import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
-import { useAgentExperiments, type AgentExperiment } from '../../hooks/use-agent-experiments';
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useWatch } from 'react-hook-form';
+import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { useReviewQueue } from '../../context/review-queue-context';
+import { useAgentExperiments  } from '../../hooks/use-agent-experiments';
+import type {AgentExperiment} from '../../hooks/use-agent-experiments';
+import { useStoredAgentMutations } from '../../hooks/use-stored-agents';
+import { mapScorersToApi } from '../../utils/agent-form-mappers';
+import { ExperimentResultsPanel } from './agent-playground-eval';
+import { DatasetDetailView } from './dataset-detail-view';
+import { ScorerDetailView } from './scorer-detail-view';
+import { ScorerMiniEditor } from './scorer-mini-editor';
 import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
 import { GenerateConfigDialog, GenerateReviewDialog } from '@/domains/datasets/components/generate-items-dialog';
 import { useGenerationTasks } from '@/domains/datasets/context/generation-context';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
-import { useReviewQueue } from '../../context/review-queue-context';
-import { useStoredAgentMutations } from '../../hooks/use-stored-agents';
-import { mapScorersToApi } from '../../utils/agent-form-mappers';
-import { ScorerMiniEditor } from './scorer-mini-editor';
-import { DatasetDetailView } from './dataset-detail-view';
-import { ScorerDetailView } from './scorer-detail-view';
-import { ExperimentResultsPanel } from './agent-playground-eval';
+import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
+import { useScorers } from '@/domains/scores/hooks/use-scorers';
+import { Button } from '@/ds/components/Button';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Searchbar } from '@/ds/components/Searchbar';
+import { Spinner } from '@/ds/components/Spinner';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
+import { toast } from '@/lib/toast';
+import { cn } from '@/lib/utils';
 
 type EvaluateView =
   | { type: 'overview' }
@@ -534,9 +532,9 @@ export function AgentPlaygroundEvaluate({
                   const scorer = (scorers || {})[view.id];
                   if (scorer) {
                     if (agentScorers[view.id]) {
-                      detachScorer(view.id);
+                      void detachScorer(view.id);
                     } else {
-                      attachScorer(view.id, scorer);
+                      void attachScorer(view.id, scorer);
                     }
                   }
                 }}
