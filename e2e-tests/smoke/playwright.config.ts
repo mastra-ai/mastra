@@ -30,7 +30,7 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: `MASTRA_STUDIO_PATH=.mastra/output/studio PORT=${PORT} MASTRA_HOST=0.0.0.0 node ${existsSync('.env') ? '--env-file=.env' : ''} .mastra/output/index.mjs`,
+    command: `npx mastra build --studio && MASTRA_STUDIO_PATH=.mastra/output/studio PORT=${PORT} MASTRA_HOST=0.0.0.0 node ${existsSync('.env') ? '--env-file=.env' : ''} .mastra/output/index.mjs`,
     url: `${BASE_URL}/api/workflows`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

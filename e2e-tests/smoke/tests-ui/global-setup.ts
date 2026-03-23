@@ -1,7 +1,6 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdir, rm } from 'node:fs/promises';
-import { execa } from 'execa';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectDir = join(__dirname, '..');
@@ -37,18 +36,4 @@ async function cleanWorkspace() {
 export default async function globalSetup() {
   await cleanDatabase();
   await cleanWorkspace();
-
-  const mastraBin = join(projectDir, 'node_modules', '.bin', 'mastra');
-  console.log('[smoke:ui] Running mastra build --studio...');
-  const result = await execa(mastraBin, ['build', '--studio'], {
-    cwd: projectDir,
-    stdio: 'pipe',
-    env: process.env,
-    reject: false,
-  });
-  if (result.exitCode !== 0) {
-    console.error('[smoke:ui] Build failed:', result.stderr || result.stdout);
-    throw new Error(`mastra build failed with exit code ${result.exitCode}`);
-  }
-  console.log('[smoke:ui] Build complete.');
 }
