@@ -1,11 +1,11 @@
-import { EntryList } from '@/ds/components/EntryList';
-import { getShortId } from '@/ds/components/Text';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
-import { cn } from '@/lib/utils';
 import { format, isToday } from 'date-fns';
 import { ChevronRightIcon } from 'lucide-react';
 import { groupTracesByThread } from '../utils/group-traces-by-thread';
 import { getInputPreview } from '../utils/span-utils';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
+import { EntryList } from '@/ds/components/EntryList';
+import { getShortId } from '@/ds/components/Text';
+import { cn } from '@/lib/utils';
 
 export const tracesListColumns = [
   { name: 'shortId', label: 'ID', size: '6rem' },

@@ -1,12 +1,12 @@
-import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
-import { cn } from '@/lib/utils';
 import { ArrowRightIcon, PackageOpenIcon } from 'lucide-react';
 import { Fragment } from 'react';
-import { Container } from './shared';
-import { Spinner } from '@/ds/components/Spinner';
 import { AgentMetadataModelSwitcher } from '../agents/components/agent-metadata/agent-metadata-model-switcher';
+import { Container } from './shared';
 import { Button } from '@/ds/components/Button/Button';
+import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
 import { TextFieldBlock } from '@/ds/components/FormFieldBlocks/fields/text-field-block';
+import { Spinner } from '@/ds/components/Spinner';
+import { cn } from '@/lib/utils';
 
 type TemplateFormProps = {
   providerOptions: { value: string; label: string }[];

@@ -1,8 +1,8 @@
+import { InfoIcon } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { useLinkComponent } from '@/lib/framework';
-import { InfoIcon } from 'lucide-react';
 
 export interface AgentMetadataSectionProps {
   title: string | React.ReactNode;

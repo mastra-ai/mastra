@@ -1,6 +1,6 @@
+import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
 import { Chip } from '@/index';
 import { cn } from '@/lib/utils';
-import { ArrowDownIcon, ArrowUpIcon, EqualIcon } from 'lucide-react';
 
 interface ScoreDeltaProps {
   /** Difference between scores (B - A) */

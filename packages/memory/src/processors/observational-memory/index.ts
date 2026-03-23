@@ -68,3 +68,14 @@ export type {
 
 // Utilities
 export { TokenCounter } from './token-counter';
+export { injectAnchorIds, stripEphemeralAnchorIds, parseAnchorId } from './anchor-ids';
+export {
+  parseObservationGroups,
+  stripObservationGroups,
+  wrapInObservationGroup,
+  renderObservationGroupsForReflection,
+  reconcileObservationGroupsFromReflection,
+  deriveObservationGroupProvenance,
+  combineObservationGroupRanges,
+  type ObservationGroup,
+} from './observation-groups';

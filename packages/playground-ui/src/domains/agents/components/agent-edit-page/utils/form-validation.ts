@@ -1,7 +1,7 @@
-import { z } from 'zod';
 import { v4 as uuid } from '@lukeed/uuid';
-import type { JsonSchema } from '@/lib/json-schema';
 import type { RuleGroup, RuleGroupDepth1, RuleGroupDepth2 } from '@mastra/core/storage';
+import { z } from 'zod';
+import type { JsonSchema } from '@/lib/json-schema';
 
 export type InMemoryFileNode = {
   id: string;
@@ -192,14 +192,6 @@ const inMemoryFileNodeSchema: z.ZodType<InMemoryFileNode> = z.lazy(() =>
     children: z.array(inMemoryFileNodeSchema).optional(),
   }),
 );
-
-const skillFormValueSchema = z.object({
-  localId: z.string(),
-  name: z.string().min(1, 'Skill name is required'),
-  description: z.string(),
-  workspaceId: z.string().min(1, 'Workspace is required'),
-  files: z.array(inMemoryFileNodeSchema),
-});
 
 export const agentFormSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name must be 100 characters or less'),

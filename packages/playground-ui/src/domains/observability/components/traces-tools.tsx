@@ -9,7 +9,7 @@ import { Portal as DropdownMenuPortal, SubContent as DropdownMenuSubContent } fr
 import { format, isValid } from 'date-fns';
 import { CalendarIcon, FilterIcon, XIcon, SearchIcon } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
-import { EntityType } from '@mastra/core/observability';
+import type { EntityType } from '@mastra/core/observability';
 
 // UI-specific entity options that map to API EntityType values
 // Using the enum values (lowercase strings) for the type field
