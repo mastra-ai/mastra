@@ -129,9 +129,7 @@ export function AgentPlaygroundVersionBar({
           </Txt>
         )}
 
-        {currentValue && (
-          <CopyButton content={currentValue} tooltip="Copy version ID" size="sm" />
-        )}
+        {currentValue && <CopyButton content={currentValue} tooltip="Copy version ID" size="sm" />}
 
         <HoverPopover>
           <PopoverTrigger asChild>

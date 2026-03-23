@@ -5,18 +5,18 @@ import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { useReviewQueue } from '../../context/review-queue-context';
 import { useAgentExperiments } from '../../hooks/use-agent-experiments';
 import type { AgentExperiment } from '../../hooks/use-agent-experiments';
+import { useAgentVersions } from '../../hooks/use-agent-versions';
 import { useStoredAgentMutations } from '../../hooks/use-stored-agents';
 import { mapScorersToApi } from '../../utils/agent-form-mappers';
 import { ExperimentResultsPanel } from './agent-playground-eval';
 import { DatasetDetailView } from './dataset-detail-view';
+import { formatVersionLabel } from './format-version-label';
 import { ScorerDetailView } from './scorer-detail-view';
 import { ScorerMiniEditor } from './scorer-mini-editor';
 import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
 import { GenerateConfigDialog, GenerateReviewDialog } from '@/domains/datasets/components/generate-items-dialog';
 import { useGenerationTasks } from '@/domains/datasets/context/generation-context';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
-import { useAgentVersions } from '../../hooks/use-agent-versions';
-import { formatVersionLabel } from './format-version-label';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { Button } from '@/ds/components/Button';
@@ -276,7 +276,8 @@ export function AgentPlaygroundEvaluate({
                       const isActive = view.type === 'experiment' && view.id === exp.id;
                       const ds = allDatasets.find(d => d.id === exp.datasetId);
                       const versionParts: string[] = [];
-                      if (exp.datasetVersion != null) versionParts.push(formatVersionLabel('Dataset', exp.datasetVersion));
+                      if (exp.datasetVersion != null)
+                        versionParts.push(formatVersionLabel('Dataset', exp.datasetVersion));
                       if (exp.agentVersion) {
                         const av = agentVersions.find(v => v.id === exp.agentVersion);
                         versionParts.push(formatVersionLabel('Agent', av ? av.versionNumber : exp.agentVersion));
