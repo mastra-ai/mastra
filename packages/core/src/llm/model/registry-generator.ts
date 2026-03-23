@@ -167,6 +167,7 @@ export type ModelRouterModelId =
   | {
       [P in Provider]: \`\${P}/\${ProviderModelsMap[P][number]}\`;
     }[Provider]
+  | \`mastra/\${ProviderModelsMap['openrouter'][number]}\`
   | (string & {});
 
 /**
