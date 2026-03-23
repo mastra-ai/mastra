@@ -1,23 +1,22 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Play, Sparkles, Clock, ChevronRight, ChevronDown, Pencil, Save, X, Trash2 } from 'lucide-react';
 import { useState, useCallback, useRef } from 'react';
+import { formatVersionLabel } from './format-version-label';
+import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
 import { useDatasetExperiments } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { useDatasetVersions } from '@/domains/datasets/hooks/use-dataset-versions';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { Button } from '@/ds/components/Button';
-import { Combobox } from '@/ds/components/Combobox';
 import { Chip } from '@/ds/components/Chip';
+import { Combobox } from '@/ds/components/Combobox';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Spinner } from '@/ds/components/Spinner';
 import { Textarea } from '@/ds/components/Textarea';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { toast } from '@/lib/toast';
-
-import { useDatasetVersions } from '@/domains/datasets/hooks/use-dataset-versions';
-import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
-import { formatVersionLabel } from './format-version-label';
 import { cn } from '@/lib/utils';
 
 interface DatasetDetailViewProps {
