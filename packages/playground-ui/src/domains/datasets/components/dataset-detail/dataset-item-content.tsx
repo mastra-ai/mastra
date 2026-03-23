@@ -1,9 +1,9 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
+import { FileInputIcon, FileOutputIcon, TagIcon } from 'lucide-react';
 import { Sections } from '@/ds/components/Sections';
 import { SideDialog } from '@/ds/components/SideDialog';
-import { FileInputIcon, FileOutputIcon, TagIcon } from 'lucide-react';
 import type { useLinkComponent } from '@/lib/framework';
 
 /**

@@ -1,11 +1,11 @@
+import { useContext } from 'react';
+import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
+import { WorkflowRunContext } from '../context/workflow-run-context';
+import { convertWorkflowRunStateToStreamResult } from '../utils';
+import type { WorkflowTriggerProps } from '../workflow/workflow-trigger';
+import { WorkflowTrigger } from '../workflow/workflow-trigger';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
-
-import { WorkflowTrigger, WorkflowTriggerProps } from '../workflow/workflow-trigger';
-import { convertWorkflowRunStateToStreamResult } from '../utils';
-
-import { WorkflowRunContext, WorkflowRunStreamResult } from '../context/workflow-run-context';
-import { useContext } from 'react';
 
 export interface WorkflowRunDetailProps extends Omit<
   WorkflowTriggerProps,

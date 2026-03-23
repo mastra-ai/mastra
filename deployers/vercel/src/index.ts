@@ -89,6 +89,7 @@ export const HEAD = handle(app);
       telemetryDisabled: `''`,
       requestContextPresets: `''`,
       themeToggle: `'false'`,
+      experimentalUI: `'false'`,
     });
 
     writeFileSync(indexPath, html);

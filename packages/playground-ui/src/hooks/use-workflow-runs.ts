@@ -1,8 +1,8 @@
+import type { WorkflowRuns } from '@mastra/core/storage';
 import { useMastraClient } from '@mastra/react';
-import { WorkflowRuns } from '@mastra/core/storage';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useInView } from './use-in-view';
 import { useEffect } from 'react';
+import { useInView } from './use-in-view';
 import { toast } from '@/lib/toast';
 
 export const PER_PAGE = 20;
@@ -45,7 +45,7 @@ export const useWorkflowRuns = (workflowId: string, { enabled = true }: { enable
 
   useEffect(() => {
     if (isEndOfListInView && hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
+      void fetchNextPage();
     }
   }, [isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
@@ -70,7 +70,7 @@ export const useDeleteWorkflowRun = (workflowId: string) => {
   return useMutation({
     mutationFn: ({ runId }: { runId: string }) => client.getWorkflow(workflowId).deleteRunById(runId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflow-runs', workflowId] });
+      void queryClient.invalidateQueries({ queryKey: ['workflow-runs', workflowId] });
       toast.success('Workflow run deleted successfully');
     },
     onError: () => {

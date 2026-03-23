@@ -1,6 +1,6 @@
+import type { SpanRecord } from '@mastra/core/storage';
 import { describe, it, expect } from 'vitest';
 import { isTokenLimitExceeded, getTokenLimitMessage, getInputPreview } from '../span-utils';
-import { SpanRecord } from '@mastra/core/storage';
 
 describe('span-utils', () => {
   const createMockSpan = (attributes: any): SpanRecord => ({

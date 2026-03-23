@@ -1,17 +1,19 @@
-import { ReactFlow, Background, useNodesState, useEdgesState, BackgroundVariant, NodeProps } from '@xyflow/react';
+import type { GetWorkflowResponse } from '@mastra/client-js';
+import type { NodeProps } from '@xyflow/react';
+import { ReactFlow, Background, useNodesState, useEdgesState, BackgroundVariant } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { GetWorkflowResponse } from '@mastra/client-js';
 
-import { constructNodesAndEdges } from './utils';
-import { WorkflowConditionNode } from './workflow-condition-node';
-import { DefaultNode, WorkflowDefaultNode } from './workflow-default-node';
-import { WorkflowAfterNode } from './workflow-after-node';
-import { WorkflowLoopResultNode } from './workflow-loop-result-node';
-import { NestedNode, WorkflowNestedNode } from './workflow-nested-node';
-import { ZoomSlider } from './zoom-slider';
-
-import { useCurrentRun } from '../context/use-current-run';
 import { useMemo } from 'react';
+import { useCurrentRun } from '../context/use-current-run';
+import { constructNodesAndEdges } from './utils';
+import { WorkflowAfterNode } from './workflow-after-node';
+import { WorkflowConditionNode } from './workflow-condition-node';
+import type { DefaultNode } from './workflow-default-node';
+import { WorkflowDefaultNode } from './workflow-default-node';
+import { WorkflowLoopResultNode } from './workflow-loop-result-node';
+import type { NestedNode } from './workflow-nested-node';
+import { WorkflowNestedNode } from './workflow-nested-node';
+import { ZoomSlider } from './zoom-slider';
 
 export interface WorkflowGraphInnerProps {
   workflow: {

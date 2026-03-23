@@ -32,6 +32,7 @@ import {
   FlaskConicalIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
+import { ExperimentalUIManager } from '@/domains/experimental-ui/experimental-ui-manager';
 
 type SidebarLink = NavLink & {
   requiredPermission?: string;
@@ -246,7 +247,7 @@ export function AppSidebar() {
   };
 
   return (
-    <MainSidebar>
+    <MainSidebar footerSlot={<ExperimentalUIManager pathname={pathname} />}>
       <div className="pt-3 mb-4 -ml-0.5 sticky top-0 bg-surface1 z-10">
         {state === 'collapsed' ? (
           <div className="flex flex-col gap-3 items-center">
