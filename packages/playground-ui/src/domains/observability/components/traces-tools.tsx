@@ -23,35 +23,59 @@ export type MetadataFilter = { key: string; value: string };
 
 export type DatePreset = 'all' | 'last-24h' | 'last-3d' | 'last-7d' | 'last-14d' | 'last-30d' | 'custom';
 
+/** Canonical list of context field IDs used for trace filtering and value extraction */
+export const CONTEXT_FIELD_IDS = [
+  'environment',
+  'serviceName',
+  'source',
+  'scope',
+  'userId',
+  'organizationId',
+  'resourceId',
+  'runId',
+  'sessionId',
+  'threadId',
+  'requestId',
+  'experimentId',
+  'spanType',
+  'entityName',
+  'parentEntityType',
+  'parentEntityId',
+  'parentEntityName',
+  'rootEntityType',
+  'rootEntityId',
+  'rootEntityName',
+] as const;
+
+/** Label and group metadata for each context field, keyed by field ID */
+const CONTEXT_FIELD_META: Record<string, { label: string; group: string }> = {
+  environment: { label: 'Environment', group: 'Deployment' },
+  serviceName: { label: 'Service Name', group: 'Deployment' },
+  source: { label: 'Source', group: 'Deployment' },
+  scope: { label: 'Scope', group: 'Deployment' },
+  userId: { label: 'User ID', group: 'Identity' },
+  organizationId: { label: 'Organization ID', group: 'Identity' },
+  resourceId: { label: 'Resource ID', group: 'Identity' },
+  runId: { label: 'Run ID', group: 'Correlation' },
+  sessionId: { label: 'Session ID', group: 'Correlation' },
+  threadId: { label: 'Thread ID', group: 'Correlation' },
+  requestId: { label: 'Request ID', group: 'Correlation' },
+  experimentId: { label: 'Experiment ID', group: 'Experimentation' },
+  spanType: { label: 'Span Type', group: 'Span' },
+  entityName: { label: 'Entity Name', group: 'Entity' },
+  parentEntityType: { label: 'Parent Entity Type', group: 'Entity' },
+  parentEntityId: { label: 'Parent Entity ID', group: 'Entity' },
+  parentEntityName: { label: 'Parent Entity Name', group: 'Entity' },
+  rootEntityType: { label: 'Root Entity Type', group: 'Entity' },
+  rootEntityId: { label: 'Root Entity ID', group: 'Entity' },
+  rootEntityName: { label: 'Root Entity Name', group: 'Entity' },
+};
+
 /** All string-valued filter fields from tracesFilterSchema (beyond entity/status/tags/metadata) */
-const CONTEXT_FILTER_CATEGORIES: { id: string; label: string; group: string }[] = [
-  // Deployment context
-  { id: 'environment', label: 'Environment', group: 'Deployment' },
-  { id: 'serviceName', label: 'Service Name', group: 'Deployment' },
-  { id: 'source', label: 'Source', group: 'Deployment' },
-  { id: 'scope', label: 'Scope', group: 'Deployment' },
-  // Identity & tenancy
-  { id: 'userId', label: 'User ID', group: 'Identity' },
-  { id: 'organizationId', label: 'Organization ID', group: 'Identity' },
-  { id: 'resourceId', label: 'Resource ID', group: 'Identity' },
-  // Correlation IDs
-  { id: 'runId', label: 'Run ID', group: 'Correlation' },
-  { id: 'sessionId', label: 'Session ID', group: 'Correlation' },
-  { id: 'threadId', label: 'Thread ID', group: 'Correlation' },
-  { id: 'requestId', label: 'Request ID', group: 'Correlation' },
-  // Experimentation
-  { id: 'experimentId', label: 'Experiment ID', group: 'Experimentation' },
-  // Span type
-  { id: 'spanType', label: 'Span Type', group: 'Span' },
-  // Entity hierarchy
-  { id: 'entityName', label: 'Entity Name', group: 'Entity' },
-  { id: 'parentEntityType', label: 'Parent Entity Type', group: 'Entity' },
-  { id: 'parentEntityId', label: 'Parent Entity ID', group: 'Entity' },
-  { id: 'parentEntityName', label: 'Parent Entity Name', group: 'Entity' },
-  { id: 'rootEntityType', label: 'Root Entity Type', group: 'Entity' },
-  { id: 'rootEntityId', label: 'Root Entity ID', group: 'Entity' },
-  { id: 'rootEntityName', label: 'Root Entity Name', group: 'Entity' },
-];
+const CONTEXT_FILTER_CATEGORIES: { id: string; label: string; group: string }[] = CONTEXT_FIELD_IDS.map(id => ({
+  id,
+  ...CONTEXT_FIELD_META[id],
+}));
 
 const DATE_PRESETS: { value: DatePreset; label: string; ms?: number }[] = [
   { value: 'all', label: 'All' },

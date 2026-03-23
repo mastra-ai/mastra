@@ -8,6 +8,7 @@ import {
   tracesListColumns,
   PageHeader,
   TracesTools,
+  CONTEXT_FIELD_IDS,
   TraceDialog,
   parseError,
   Icon,
@@ -35,29 +36,6 @@ import { useTrace } from '@/domains/observability/hooks/use-trace';
 import { useTraces } from '@/domains/observability/hooks/use-traces';
 
 import { cn } from '@/lib/utils';
-
-/** Context field IDs that we extract distinct values from on loaded traces */
-const CONTEXT_FIELD_IDS = [
-  'environment',
-  'serviceName',
-  'source',
-  'userId',
-  'organizationId',
-  'resourceId',
-  'runId',
-  'sessionId',
-  'threadId',
-  'requestId',
-  'experimentId',
-  'spanType',
-  'entityName',
-  'parentEntityType',
-  'parentEntityId',
-  'parentEntityName',
-  'rootEntityType',
-  'rootEntityId',
-  'rootEntityName',
-] as const;
 
 export default function Observability() {
   const navigate = useNavigate();
