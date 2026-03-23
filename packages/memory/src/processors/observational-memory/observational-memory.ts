@@ -1145,7 +1145,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   private async resolveModelContext(
-    modelConfig: AgentConfig['model'],
+    modelConfig: Exclude<ObservationalMemoryModel, ModelByInputTokens>,
     requestContext?: RequestContext,
   ): Promise<TokenCounterModelContext | undefined> {
     const modelToResolve = this.getModelToResolve(modelConfig);
