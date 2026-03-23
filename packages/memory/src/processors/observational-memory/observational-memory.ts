@@ -5,6 +5,7 @@ import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/age
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { resolveModelConfig } from '@mastra/core/llm';
+import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, parseMemoryRequestContext, setThreadOMMetadata } from '@mastra/core/memory';
 import type {
   Processor,
@@ -71,6 +72,7 @@ import {
   createObservationStartMarker,
   createThreadUpdateMarker,
 } from './markers';
+import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import {
   buildObserverSystemPrompt,
   buildObserverTaskPrompt,
@@ -110,6 +112,33 @@ import type {
   DataOmStatusPart,
   ObservationMarkerConfig,
 } from './types';
+
+/**
+ * Returns true when a message contains at least one part with visible user/assistant
+ * content (text, tool-invocation, reasoning, image, file).  Messages that only carry
+ * internal `data-*` parts (buffering markers, observation markers, etc.) return false.
+ */
+function messageHasVisibleContent(msg: MastraDBMessage): boolean {
+  const content = msg.content as { parts?: Array<{ type?: string }>; content?: string };
+  if (content?.parts && Array.isArray(content.parts)) {
+    return content.parts.some(p => {
+      const t = p?.type;
+      return t && !t.startsWith('data-') && t !== 'step-start';
+    });
+  }
+  if (content?.content) return true;
+  return false;
+}
+
+/**
+ * Build a messageRange string from the first and last messages that have visible
+ * content.  Falls back to the full array boundaries when every message is data-only.
+ */
+function buildMessageRange(messages: MastraDBMessage[]): string {
+  const first = messages.find(messageHasVisibleContent) ?? messages[0]!;
+  const last = [...messages].reverse().find(messageHasVisibleContent) ?? messages[messages.length - 1]!;
+  return `${first.id}:${last.id}`;
+}
 
 /**
  * Debug event emitted when observation-related events occur.
@@ -168,6 +197,17 @@ export interface ObservationalMemoryConfig {
    * Must be a MemoryStorage instance (from MastraStorage.stores.memory).
    */
   storage: MemoryStorage;
+
+  /**
+   * **Experimental.** Enable retrieval-mode observation group metadata.
+   * When true, observation groups are treated as durable pointers to raw
+   * message history and a `recall` tool is registered so the actor can
+   * inspect raw messages behind a stored observation summary.
+   *
+   * @experimental
+   * @default false
+   */
+  retrieval?: boolean;
 
   /**
    * Model for both Observer and Reflector agents.
@@ -267,6 +307,7 @@ interface ResolvedReflectionConfig {
  * Default configuration values matching the spec
  */
 export const OBSERVATIONAL_MEMORY_DEFAULTS = {
+  retrieval: false,
   observation: {
     model: 'google/gemini-2.5-flash',
     messageTokens: 30_000,
@@ -337,6 +378,48 @@ PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm goi
 
 MOST RECENT USER INPUT: Treat the most recent user message as the highest-priority signal for what to do next. Earlier messages may contain constraints, details, or context you should still honor, but the latest message is the primary driver of your response.`;
 
+export const OBSERVATION_RETRIEVAL_INSTRUCTIONS = `## Recall — looking up source messages
+
+Your memory is comprised of observations which are sometimes wrapped in <observation-group> xml tags containing ranges like <observation-group range="startId:endId">. These ranges point back to the raw messages that each observation group was derived from. The original messages are still available — use the **recall** tool to retrieve them.
+
+### When to use recall
+- The user asks you to **repeat, show, or reproduce** something from a past conversation
+- The user asks for **exact content** — code, text, quotes, error messages, URLs, file paths, specific numbers
+- Your observations mention something but your memory lacks the detail needed to fully answer (e.g. you know a blog post was shared but only have a summary of it)
+- You want to **verify or expand on** an observation before responding
+
+**Default to using recall when the user references specific past content.** Your observations capture the gist, not the details. If there's any doubt whether your memory is complete enough, use recall.
+
+### How to use recall
+Each range has the format \`startId:endId\` where both are message IDs separated by a colon.
+
+1. Find the observation group relevant to the user's question and extract the start or end ID from its range.
+2. Call \`recall\` with that ID as the \`cursor\`.
+3. Use \`page: 1\` (or omit) to read forward from the cursor, \`page: -1\` to read backward.
+4. If the first page doesn't have what you need, increment the page number to keep paginating.
+5. Check \`hasNextPage\`/\`hasPrevPage\` in the result to know if more pages exist in each direction.
+
+### Detail levels
+By default recall returns **low** detail: truncated text and tool names only. Each message shows its ID and each part has a positional index like \`[p0]\`, \`[p1]\`, etc.
+
+- Use \`detail: "high"\` to get full message content including tool arguments and results. This will only return the high detail version of a single message part at a time.
+- Use \`partIndex\` with a cursor to fetch a single part at full detail — for example, to read one specific tool result or code block without loading every part.
+
+If the result says \`truncated: true\`, the output was cut to fit the token budget. You can paginate or use \`partIndex\` to target specific content.
+
+### Following up on truncated parts
+Low-detail results may include truncation hints like:
+\`[truncated — call recall cursor="..." partIndex=N detail="high" for full content]\`
+
+**When you see these hints and need the full content, make the exact call described in the hint.** This is the normal workflow: first recall at low detail to scan, then drill into specific parts at high detail. Do not stop at the low-detail result if the user asked for exact content.
+
+### When recall is NOT needed
+- The user is asking for a high-level summary and your observations already cover it
+- The question is about general preferences or facts that don't require source text
+- There is no relevant range in your observations for the topic
+
+Observation groups with range IDs and your recall tool allows you to think back and remember details you're fuzzy on.`;
+
 /**
  * ObservationalMemory - A three-agent memory system for long conversations.
  *
@@ -390,6 +473,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private storage: MemoryStorage;
   private tokenCounter: TokenCounter;
   private scope: 'resource' | 'thread';
+  private retrieval: boolean = false;
   private observationConfig: ResolvedObservationConfig;
   private reflectionConfig: ResolvedReflectionConfig;
   private onDebugEvent?: (event: ObservationDebugEvent) => void;
@@ -793,6 +877,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
+    this.retrieval = this.scope === 'thread' && (config.retrieval ?? OBSERVATIONAL_MEMORY_DEFAULTS.retrieval);
 
     // Resolve "default" to the default model
     const resolveModel = (m: typeof config.model) =>
@@ -968,6 +1053,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   get config(): {
     scope: 'resource' | 'thread';
+    retrieval: boolean;
     observation: {
       messageTokens: number | ThresholdRange;
       previousObserverTokens: number | false | undefined;
@@ -978,6 +1064,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   } {
     return {
       scope: this.scope,
+      retrieval: this.retrieval,
       observation: {
         messageTokens: this.observationConfig.messageTokens,
         previousObserverTokens: this.observationConfig.previousObserverTokens,
@@ -1006,7 +1093,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
     if (typeof model === 'function') {
       // Wrap to handle functions that may return ModelWithRetries[]
-      return async ctx => {
+      return async (ctx: { requestContext: RequestContext; mastra?: Mastra }) => {
         const result = await model(ctx);
         if (Array.isArray(result)) {
           return (result[0]?.model ?? 'unknown') as MastraModelConfig;
@@ -1314,6 +1401,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           observation: this.observationConfig,
           reflection: this.reflectionConfig,
           scope: this.scope,
+          retrieval: this.retrieval,
         },
         observedTimezone,
       });
@@ -2224,7 +2312,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         totalUsage.totalTokens += usage.totalTokens ?? 0;
       }
 
-      parsed = parseReflectorOutput(result.text);
+      parsed = parseReflectorOutput(result.text, observations);
 
       // If degenerate repetition detected, treat as compression failure
       if (parsed.degenerate) {
@@ -2309,16 +2397,21 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     suggestedResponse?: string,
     unobservedContextBlocks?: string,
     currentDate?: Date,
+    retrieval = false,
   ): string[] {
-    // Optimize observations to save tokens
-    let optimized = optimizeObservationsForContext(observations);
+    // Optimize observations to save tokens unless retrieval mode needs durable group metadata preserved.
+    let optimized = retrieval
+      ? (renderObservationGroupsForReflection(observations) ?? observations)
+      : optimizeObservationsForContext(observations);
 
     // Add relative time annotations to date headers if currentDate is provided
     if (currentDate) {
       optimized = addRelativeTimeToObservations(optimized, currentDate);
     }
 
-    const messages = [`${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}`];
+    const messages = [
+      `${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${OBSERVATION_RETRIEVAL_INSTRUCTIONS}` : ''}`,
+    ];
 
     // Add unobserved context from other threads (resource scope only)
     if (unobservedContextBlocks) {
@@ -3026,6 +3119,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       suggestedResponse,
       unobservedContextBlocks,
       currentDate,
+      this.retrieval,
     );
 
     // Clear any existing observation system messages and re-add them with the
@@ -3978,11 +4072,13 @@ ${formattedMessages}
    * Wrap observations in a thread attribution tag.
    * Used in resource scope to track which thread observations came from.
    */
-  private async wrapWithThreadTag(threadId: string, observations: string): Promise<string> {
+  private async wrapWithThreadTag(threadId: string, observations: string, messageRange?: string): Promise<string> {
     // First strip any thread tags the Observer might have added
     const cleanObservations = this.stripThreadTags(observations);
+    const groupedObservations =
+      this.retrieval && messageRange ? wrapInObservationGroup(cleanObservations, messageRange) : cleanObservations;
     const obscuredId = await this.representThreadIDInContext(threadId);
-    return `<thread id="${obscuredId}">\n${cleanObservations}\n</thread>`;
+    return `<thread id="${obscuredId}">\n${groupedObservations}\n</thread>`;
   }
 
   /**
@@ -4188,10 +4284,11 @@ ${formattedMessages}
 
       // Build new observations (use freshRecord if available)
       const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
+      const messageRange = this.retrieval ? buildMessageRange(messagesToObserve) : undefined;
       let newObservations: string;
       if (this.scope === 'resource') {
         // In resource scope: wrap with thread tag and replace/append
-        const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
+        const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
         newObservations = this.replaceOrAppendThreadSection(
           existingObservations,
           threadId,
@@ -4199,10 +4296,14 @@ ${formattedMessages}
           lastObservedAt,
         );
       } else {
-        // In thread scope: simple append with message boundary delimiter for cache stability
+        // In thread scope: append grouped observations with a message boundary delimiter for cache stability
+        const groupedObservations =
+          this.retrieval && messageRange
+            ? wrapInObservationGroup(result.observations, messageRange)
+            : result.observations;
         newObservations = existingObservations
-          ? `${existingObservations}${ObservationalMemory.createMessageBoundary(lastObservedAt)}${result.observations}`
-          : result.observations;
+          ? `${existingObservations}${ObservationalMemory.createMessageBoundary(lastObservedAt)}${groupedObservations}`
+          : groupedObservations;
       }
 
       let totalTokenCount = this.tokenCounter.countObservations(newObservations);
@@ -4651,11 +4752,15 @@ ${formattedMessages}
 
     // Get the new observations to buffer (just the new content, not merged)
     // The storage adapter will handle appending to existing buffered content
+    const messageRange = this.retrieval ? buildMessageRange(messagesToBuffer) : undefined;
     let newObservations: string;
     if (this.scope === 'resource') {
-      newObservations = await this.wrapWithThreadTag(threadId, result.observations);
+      newObservations = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
     } else {
-      newObservations = result.observations;
+      newObservations =
+        this.retrieval && messageRange
+          ? wrapInObservationGroup(result.observations, messageRange)
+          : result.observations;
     }
 
     const newTokenCount = this.tokenCounter.countObservations(newObservations);
@@ -5589,13 +5694,18 @@ ${formattedMessages}
         const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
 
         // Wrap with thread tag and append (in thread order for consistency)
-        const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
+        const messageRange = this.retrieval ? buildMessageRange(threadMessages) : undefined;
+        const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
         currentObservations = this.replaceOrAppendThreadSection(
           currentObservations,
           threadId,
           threadSection,
           threadLastObservedAt,
         );
+
+        // Update thread-specific metadata:
+        // - lastObservedAt: ALWAYS update to track per-thread observation progress
+        // - currentTask, suggestedResponse: explicitly clear when omitted to avoid stale hints
         const thread = await this.storage.getThreadById({ threadId });
         if (thread) {
           // Determine new title if thread title generation is enabled

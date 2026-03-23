@@ -1,4 +1,4 @@
-import { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
+import type { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
 
 export interface ToolWithAgents extends GetToolResponse {
   agents: Array<GetAgentResponse & { id: string }>;

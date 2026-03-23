@@ -102,6 +102,13 @@ await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
             isOptional: true,
             defaultValue: 'true',
           },
+          {
+            name: 'expectedMtime',
+            type: 'Date',
+            description:
+              "If provided, the write fails with a StaleFileError when the file's current modification time doesn't match. Use this for optimistic concurrency control to detect external modifications between read and write.",
+            isOptional: true,
+          },
         ],
       },
     ],

@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
-import { Combobox, ComboboxOption, type ComboboxProps } from '@/ds/components/Combobox';
 import { Info } from 'lucide-react';
-import { useLLMProviders } from '../hooks/use-llm-providers';
+import { useMemo } from 'react';
 import { useFilteredProviders } from '../hooks/use-filtered-providers';
-import { ProviderLogo } from './provider-logo';
+import { useLLMProviders } from '../hooks/use-llm-providers';
 import { cleanProviderId, findProviderById } from '../utils';
+import { ProviderLogo } from './provider-logo';
+import { Combobox } from '@/ds/components/Combobox';
+import type { ComboboxProps, ComboboxOption } from '@/ds/components/Combobox';
 import { Skeleton } from '@/ds/components/Skeleton';
 
 export interface LLMProvidersProps {

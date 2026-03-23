@@ -1,15 +1,15 @@
-import { Agent } from '@mastra/core/agent';
-import { useMastraClient } from '@mastra/react';
-import { useEffect, useState } from 'react';
-import { VoiceAttachmentAdapter } from '../attachments/voice-adapter';
+import type { SpeechSynthesisAdapter } from '@assistant-ui/react';
 import {
   CompositeAttachmentAdapter,
   SimpleImageAttachmentAdapter,
   SimpleTextAttachmentAdapter,
-  SpeechSynthesisAdapter,
   WebSpeechSynthesisAdapter,
 } from '@assistant-ui/react';
+import type { Agent } from '@mastra/core/agent';
+import { useMastraClient } from '@mastra/react';
+import { useEffect, useState } from 'react';
 import { PDFAttachmentAdapter } from '../attachments/pdfs-adapter';
+import { VoiceAttachmentAdapter } from '../attachments/voice-adapter';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 export const useAdapters = (agentId: string) => {
@@ -36,7 +36,7 @@ export const useAdapters = (agentId: string) => {
       }
     };
 
-    check();
+    void check();
   }, [agentId]);
 
   return {

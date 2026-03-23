@@ -40,7 +40,10 @@ Usage:
       }
 
       const result = replaceString(content, old_string, new_string, replace_all);
-      await filesystem.writeFile(path, result.content, { overwrite: true });
+      await filesystem.writeFile(path, result.content, {
+        overwrite: true,
+        expectedMtime: (context as any)?.__expectedMtime,
+      });
 
       let output = `Replaced ${result.replacements} occurrence${result.replacements !== 1 ? 's' : ''} in ${path}`;
       output += await getEditDiagnosticsText(workspace, path, result.content);
