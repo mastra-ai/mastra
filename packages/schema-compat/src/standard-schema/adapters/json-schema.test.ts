@@ -209,6 +209,42 @@ describe('json-schema standard-schema adapter', () => {
     });
   });
 
+  describe('draft 2020-12 schema support', () => {
+    it('should validate correctly when $schema is draft 2020-12', async () => {
+      const jsonSchema = {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object' as const,
+        properties: {
+          url: { type: 'string' as const },
+          formats: {
+            type: 'array' as const,
+            items: { type: 'string' as const },
+          },
+        },
+        required: ['url'],
+      };
+
+      const standardSchema = toStandardSchema(jsonSchema);
+
+      // Valid input should pass
+      const validResult = await standardSchema['~standard'].validate({
+        url: 'https://example.com',
+        formats: ['markdown'],
+      });
+      expect('value' in validResult).toBe(true);
+
+      // Invalid input should fail
+      const invalidResult = await standardSchema['~standard'].validate({
+        formats: ['markdown'],
+        // missing required 'url'
+      });
+      expect('issues' in invalidResult).toBe(true);
+      if ('issues' in invalidResult && invalidResult.issues) {
+        expect(invalidResult.issues.length).toBeGreaterThan(0);
+      }
+    });
+  });
+
   describe('isStandardSchemaWithJSON', () => {
     it('should return true for JSON Schema wrapped schemas', () => {
       const jsonSchema: JSONSchema7 = { type: 'string' };
