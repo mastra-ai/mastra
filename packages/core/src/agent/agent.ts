@@ -7,6 +7,8 @@ import type { ZodSchema, z as z3 } from 'zod/v3';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
+import { createBrowserTools } from '../browser';
+import type { MastraBrowser } from '../browser/browser';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
   ScorerRunInputForAgent,
@@ -174,6 +176,7 @@ export class Agent<
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
+  #browser?: MastraBrowser;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
@@ -297,6 +300,10 @@ export class Agent<
       this.#voice = new DefaultVoice();
     }
 
+    if (config.browser) {
+      this.#browser = config.browser;
+    }
+
     if (config.workspace) {
       this.#workspace = config.workspace;
     }
@@ -323,6 +330,14 @@ export class Agent<
 
   getMastraInstance() {
     return this.#mastra;
+  }
+
+  /**
+   * Returns the browser toolset for this agent, if configured.
+   * Used by server-side code to access browser features like screencast streaming.
+   */
+  get browser(): MastraBrowser | undefined {
+    return this.#browser;
   }
 
   /**
@@ -1329,18 +1344,29 @@ export class Agent<
   /**
    * Gets the tools configured for this agent, resolving function-based tools if necessary.
    * Tools extend the agent's capabilities, allowing it to perform specific actions or access external systems.
+   * If a browser toolset is configured, its tools are automatically merged.
    *
    * @example
    * ```typescript
    * const tools = await agent.listTools();
-   * console.log(Object.keys(tools)); // ['calculator', 'weather']
+   * console.log(Object.keys(tools)); // ['calculator', 'weather', 'browser_navigate', ...]
    * ```
    */
   public listTools({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
     | TTools
     | Promise<TTools> {
+    const mergeBrowserTools = (baseTools: TTools): TTools => {
+      if (!this.#browser) {
+        return baseTools;
+      }
+      // Use createBrowserTools factory to get browser tools
+      const browserTools = createBrowserTools(this.#browser);
+      return { ...browserTools, ...baseTools } as TTools;
+    };
+
     if (typeof this.#tools !== 'function') {
-      return ensureToolProperties(this.#tools) as TTools;
+      const tools = ensureToolProperties(this.#tools) as TTools;
+      return mergeBrowserTools(tools);
     }
 
     const result = this.#tools({
@@ -1364,7 +1390,7 @@ export class Agent<
         throw mastraError;
       }
 
-      return ensureToolProperties(tools) as TTools;
+      return mergeBrowserTools(ensureToolProperties(tools) as TTools);
     });
   }
 
@@ -2206,6 +2232,71 @@ export class Agent<
     }
 
     return convertedSkillTools;
+  }
+
+  /**
+   * Lists browser tools if a browser is configured.
+   * @internal
+   */
+  private async listBrowserTools({
+    runId,
+    resourceId,
+    threadId,
+    requestContext,
+    mastraProxy,
+    autoResumeSuspendedTools,
+    ...rest
+  }: {
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+    requestContext: RequestContext;
+    mastraProxy?: MastraUnion;
+    autoResumeSuspendedTools?: boolean;
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
+    let convertedBrowserTools: Record<string, CoreTool> = {};
+
+    if (this._agentNetworkAppend) {
+      return convertedBrowserTools;
+    }
+
+    // Check if browser is configured
+    if (!this.#browser) {
+      return convertedBrowserTools;
+    }
+
+    // Create browser tools using the factory
+    const browserTools = createBrowserTools(this.#browser);
+
+    if (Object.keys(browserTools).length > 0) {
+      this.logger.debug(`[Agent:${this.name}] - Adding browser tools: ${Object.keys(browserTools).join(', ')}`, {
+        runId,
+      });
+
+      for (const [toolName, tool] of Object.entries(browserTools)) {
+        const toolObj = tool;
+        const options: ToolOptions = {
+          name: toolName,
+          runId,
+          threadId,
+          resourceId,
+          logger: this.logger,
+          mastra: mastraProxy as MastraUnion | undefined,
+          agentName: this.name,
+          requestContext,
+          ...observabilityContext,
+          model: await this.getModel({ requestContext }),
+          tracingPolicy: this.#options?.tracingPolicy,
+          requireApproval: (toolObj as any).requireApproval,
+          browser: this.#browser,
+        };
+        const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
+        convertedBrowserTools[toolName] = convertedToCoreTool;
+      }
+    }
+
+    return convertedBrowserTools;
   }
 
   /**
