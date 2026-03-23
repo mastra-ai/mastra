@@ -521,7 +521,27 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const distanceExpr = `embedding ${ops.distanceOperator} '${vectorStr}'::${qualifiedVectorType}`;
       const scoreExpr = ops.scoreExpr(distanceExpr);
 
-      const query = `
+      // Move ORDER BY and LIMIT inside the CTE for HNSW indexes without filters to enable index usage
+      const hasFilter = filterQuery.trim().length > 0;
+      const useIndexedOrder = indexInfo.type === 'hnsw' && !hasFilter;
+
+      const query = useIndexedOrder
+        ? `
+        WITH vector_scores AS (
+          SELECT
+            vector_id as id,
+            ${scoreExpr} as score,
+            metadata
+            ${includeVector ? ', embedding' : ''}
+          FROM ${tableName}
+          ORDER BY ${distanceExpr}
+          LIMIT $2
+        )
+        SELECT *
+        FROM vector_scores
+        WHERE score > $1
+        ORDER BY score DESC`
+        : `
         WITH vector_scores AS (
           SELECT
             vector_id as id,
