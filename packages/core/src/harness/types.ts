@@ -115,14 +115,7 @@ export interface HarnessSubagent {
 }
 
 /**
- * Resolves to the state data type for the Harness generic parameter.
- *
- * @example
- * ```ts
- * // Both forms are equivalent:
- * new Harness<HarnessStateSchema<z.infer<typeof mySchema>>>({...})
- * new Harness<z.infer<typeof mySchema>>({...})
- * ```
+ * State data type for the Harness generic parameter.
  */
 export type HarnessStateSchema<T> = T;
 
