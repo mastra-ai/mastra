@@ -1,5 +1,28 @@
 # @mastra/server
 
+## 1.16.0-alpha.1
+
+### Minor Changes
+
+- Added `getAuthenticatedUser()` to `@mastra/server/auth` so server middleware can resolve the configured auth user without changing route auth behavior. ([#14458](https://github.com/mastra-ai/mastra/pull/14458))
+
+  **Example**
+
+  ```ts
+  import { getAuthenticatedUser } from '@mastra/server/auth';
+
+  const user = await getAuthenticatedUser({
+    mastra,
+    token,
+    request: c.req.raw,
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.16.0-alpha.1
+
 ## 1.16.0-alpha.0
 
 ### Minor Changes
