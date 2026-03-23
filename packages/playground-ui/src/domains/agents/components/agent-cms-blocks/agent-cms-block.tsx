@@ -284,7 +284,9 @@ export const AgentCMSBlock = ({
           index={index}
           block={block}
           onBlockChange={onBlockChange}
-          onConvertToRef={onConvertToRef ? (promptBlockId: string) => onConvertToRef(block.id, promptBlockId) : undefined}
+          onConvertToRef={
+            onConvertToRef ? (promptBlockId: string) => onConvertToRef(block.id, promptBlockId) : undefined
+          }
           placeholder={placeholder}
           dragHandleProps={dragHandleProps}
           onDelete={onDelete ? () => onDelete(index) : undefined}
