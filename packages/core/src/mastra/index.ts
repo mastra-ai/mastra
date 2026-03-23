@@ -3,6 +3,7 @@ import type { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
+import type { MastraChannel } from '../channels/base';
 import { DatasetsManager } from '../datasets/manager.js';
 import type { MastraDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
@@ -21,7 +22,7 @@ import type { ObservabilityEntrypoint, LoggerContext, MetricsContext } from '../
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
-import type { Middleware, ServerConfig } from '../server/types';
+import type { ApiRoute, Middleware, ServerConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
@@ -235,6 +236,12 @@ export interface Config<
   workspace?: AnyWorkspace;
 
   /**
+   * Channels enable agents to communicate over messaging platforms (Slack, Discord, etc.).
+   * Webhook routes are auto-registered with the server.
+   */
+  channels?: Record<string, MastraChannel>;
+
+  /**
    * Custom model router gateways for accessing LLM providers.
    * Gateways handle provider-specific authentication, URL construction, and model resolution.
    */
@@ -334,6 +341,7 @@ export class Mastra<
   #idGenerator?: MastraIdGenerator;
   #pubsub: PubSub;
   #gateways?: Record<string, MastraModelGateway>;
+  #channels: Record<string, MastraChannel> = {};
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
@@ -712,6 +720,24 @@ export class Mastra<
       this.#server = config.server;
     }
 
+    if (config?.channels) {
+      const channelRoutes: ApiRoute[] = [];
+
+      for (const [key, channel] of Object.entries(config.channels)) {
+        if (channel == null) continue;
+        channel.__setLogger(this.#logger);
+        this.#channels[key] = channel;
+        channelRoutes.push(...channel.getWebhookRoutes());
+      }
+
+      if (channelRoutes.length > 0) {
+        this.#server = {
+          ...this.#server,
+          apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
+        };
+      }
+    }
+
     registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
 
     /*
@@ -762,6 +788,36 @@ export class Mastra<
       throw error;
     }
     return this.#agents[name];
+  }
+
+  /**
+   * Retrieves a registered channel by its name.
+   *
+   * @throws {MastraError} When the channel with the specified name is not found
+   */
+  public getChannel(name: string): MastraChannel {
+    const channel = this.#channels[name];
+    if (!channel) {
+      throw new MastraError({
+        id: 'MASTRA_GET_CHANNEL_BY_NAME_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Channel with name ${name} not found`,
+        details: {
+          status: 404,
+          channelName: name,
+          channels: Object.keys(this.#channels).join(', '),
+        },
+      });
+    }
+    return channel;
+  }
+
+  /**
+   * Returns all registered channels.
+   */
+  public getChannels(): Record<string, MastraChannel> {
+    return { ...this.#channels };
   }
 
   /**
