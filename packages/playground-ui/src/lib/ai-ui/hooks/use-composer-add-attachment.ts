@@ -34,7 +34,7 @@ export const useComposerAddAttachment = ({
       const fileList = (e.target as HTMLInputElement).files;
       if (!fileList) return;
       for (const file of fileList) {
-        composerRuntime.addAttachment(file);
+        void composerRuntime.addAttachment(file);
         onChange?.(Array.from(fileList));
       }
 

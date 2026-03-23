@@ -1,7 +1,7 @@
-import { ParsedField } from '@autoform/core';
-import { AutoFormFieldProps } from '@autoform/react';
-import { CustomAutoFormField } from './custom-auto-form-field';
+import type { ParsedField } from '@autoform/core';
+import type { AutoFormFieldProps } from '@autoform/react';
 import { useFormContext } from 'react-hook-form';
+import { CustomAutoFormField } from './custom-auto-form-field';
 
 export const DiscriminatedUnionField: React.FC<AutoFormFieldProps> = ({ field, path }) => {
   const { watch } = useFormContext();

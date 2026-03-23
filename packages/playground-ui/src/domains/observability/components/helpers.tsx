@@ -1,5 +1,5 @@
+import type { SpanRecord } from '@mastra/core/storage';
 import { format } from 'date-fns';
-import { SpanRecord } from '@mastra/core/storage';
 import { useLinkComponent } from '@/lib/framework';
 
 export function useTraceInfo(trace: SpanRecord | undefined) {

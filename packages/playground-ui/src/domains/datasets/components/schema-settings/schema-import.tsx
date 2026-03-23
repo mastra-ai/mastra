@@ -1,9 +1,9 @@
-import { useState } from 'react';
 import { Download } from 'lucide-react';
+import { useState } from 'react';
+import { useWorkflowSchema } from '../../hooks/use-workflow-schema';
+import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { Button } from '@/ds/components/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
-import { useWorkflowSchema } from '../../hooks/use-workflow-schema';
 
 interface SchemaImportProps {
   schemaType: 'input' | 'output';
