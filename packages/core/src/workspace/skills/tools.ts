@@ -10,7 +10,7 @@
  * the model just calls the tool again.
  */
 
-import z from 'zod';
+import { z } from 'zod/v4';
 
 import { createTool } from '../../tools';
 import { extractLines } from '../line-utils';

@@ -1,6 +1,5 @@
 import type { JSONSchema7, Schema } from '@internal/ai-sdk-v5';
-import type z3 from 'zod/v3';
-import type z4 from 'zod/v4';
+import type { z } from 'zod/v4';
 import type { StandardSchemaWithJSON } from '../../schema';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '../../schema';
 
@@ -9,42 +8,26 @@ export type PartialSchemaOutput<OUTPUT = undefined> = OUTPUT extends undefined ?
 /**
  * @deprecated Use StandardSchemaWithJSON from '../../schema' instead
  */
-export type OutputSchema<OBJECT = any> =
-  | z4.ZodType<OBJECT, any>
-  | z3.Schema<OBJECT, z3.ZodTypeDef, any>
-  | Schema<OBJECT>
-  | JSONSchema7
-  | undefined;
+export type OutputSchema<OBJECT = any> = z.ZodType<OBJECT, any> | Schema<OBJECT> | JSONSchema7 | undefined;
 
 /**
  * @deprecated Use StandardSchemaWithJSON from '../../schema' instead
- * Legacy type for schema validation - accepts both Zod v3 and v4 schemas
+ * Legacy type for schema validation.
  */
-export type SchemaWithValidation<T = any> = z4.ZodType<T, any> | z3.ZodType<T, z3.ZodTypeDef, any>;
+export type SchemaWithValidation<T = any> = z.ZodType<T, any>;
 
 /**
  * @deprecated Use InferPublicSchema or InferStandardSchemaOutput from '../../schema' instead
  * Infer the output type from a schema
  */
-export type InferSchemaOutput<T> =
-  T extends z4.ZodType<infer O, any>
-    ? O
-    : T extends z3.ZodType<infer O, z3.ZodTypeDef, any>
-      ? O
-      : T extends Schema<infer O>
-        ? O
-        : unknown;
+export type InferSchemaOutput<T> = T extends z.ZodType<infer O, any> ? O : T extends Schema<infer O> ? O : unknown;
 
 /**
  * @deprecated Use PublicSchema from '../../schema' instead
  */
-export type InferZodLikeSchema<T> =
-  T extends z4.ZodType<infer O, any> ? O : T extends z3.ZodType<infer O, z3.ZodTypeDef, any> ? O : unknown;
+export type InferZodLikeSchema<T> = T extends z.ZodType<infer O, any> ? O : unknown;
 
-export type ZodLikePartialSchema<T = any> = (
-  | z4.core.$ZodType<Partial<T>, any> // Zod v4 partial schema
-  | z3.ZodType<Partial<T>, z3.ZodTypeDef, any> // Zod v3 partial schema
-) & {
+export type ZodLikePartialSchema<T = any> = z.core.$ZodType<Partial<T>, any> & {
   safeParse(value: unknown): { success: boolean; data?: Partial<T>; error?: any };
 };
 

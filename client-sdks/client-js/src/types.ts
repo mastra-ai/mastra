@@ -47,7 +47,7 @@ import type {
 import type { PublicSchema } from '@mastra/schema-compat';
 
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod/v3';
+import type { ZodSchema } from 'zod/v4';
 
 export interface ClientOptions {
   /** Base URL for API requests */
