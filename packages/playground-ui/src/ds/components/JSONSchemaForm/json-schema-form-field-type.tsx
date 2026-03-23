@@ -1,10 +1,11 @@
-import * as React from 'react';
 import { Type, Hash, ToggleLeft, AlignLeft, Braces, List } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Icon } from '@/ds/icons';
+import * as React from 'react';
+import type { SelectFieldBlockProps } from '../FormFieldBlocks/fields/select-field-block';
+import { SelectFieldBlock } from '../FormFieldBlocks/fields/select-field-block';
 import { useJSONSchemaFormField } from './json-schema-form-field-context';
 import type { FieldType } from './types';
-import { SelectFieldBlock, SelectFieldBlockProps } from '../FormFieldBlocks/fields/select-field-block';
+import { Icon } from '@/ds/icons';
+import { cn } from '@/lib/utils';
 
 const TYPE_OPTIONS = [
   {

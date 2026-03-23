@@ -1,6 +1,7 @@
-import { useState } from 'react';
 import { FileText, Search } from 'lucide-react';
+import { useState } from 'react';
 
+import { useStoredPromptBlocks } from '@/domains/prompt-blocks';
 import {
   Dialog,
   DialogContent,
@@ -9,10 +10,9 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/ds/components/Dialog';
-import { Txt } from '@/ds/components/Txt';
 import { Spinner } from '@/ds/components/Spinner';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
-import { useStoredPromptBlocks } from '@/domains/prompt-blocks';
 
 interface PromptBlockPickerDialogProps {
   open: boolean;

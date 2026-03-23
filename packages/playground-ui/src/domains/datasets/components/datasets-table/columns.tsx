@@ -1,6 +1,6 @@
-import { Cell, EntryCell } from '@/ds/components/Table';
-import { ColumnDef } from '@tanstack/react-table';
 import type { DatasetRecord } from '@mastra/client-js';
+import type { ColumnDef } from '@tanstack/react-table';
+import { Cell, EntryCell } from '@/ds/components/Table';
 
 import { useLinkComponent } from '@/lib/framework';
 

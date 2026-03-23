@@ -1,11 +1,11 @@
-import { toast } from '@/lib/toast';
+import type { GetObservationalMemoryResponse, GetMemoryStatusResponse } from '@mastra/client-js';
+import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
+import { useMergedRequestContext } from '@/domains/request-context';
+import { toast } from '@/lib/toast';
 
 import type { MemorySearchParams } from '@/types/memory';
-import { useMastraClient } from '@mastra/react';
-import { useMergedRequestContext } from '@/domains/request-context';
-import type { GetObservationalMemoryResponse, GetMemoryStatusResponse } from '@mastra/client-js';
 
 export const useMemory = (agentId?: string) => {
   const client = useMastraClient();
@@ -91,7 +91,7 @@ export const useDeleteThread = () => {
     onSuccess: (_, variables) => {
       const { agentId } = variables;
       if (agentId) {
-        queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
       }
       toast.success('Chat deleted successfully');
     },
@@ -132,7 +132,7 @@ export const useCloneThread = () => {
     onSuccess: (_, variables) => {
       const { agentId } = variables;
       if (agentId) {
-        queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
       }
       toast.success('Thread cloned successfully');
     },

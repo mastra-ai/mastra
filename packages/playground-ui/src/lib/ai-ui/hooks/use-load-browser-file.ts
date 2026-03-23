@@ -14,7 +14,7 @@ export const useLoadBrowserFile = (file?: File) => {
       setState(s => ({ ...s, isLoading: false, text }));
     };
 
-    run();
+    void run();
   }, [file]);
 
   return state;

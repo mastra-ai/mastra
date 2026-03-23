@@ -1,4 +1,5 @@
-import { createContext, useContext, ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { createContext, useContext } from 'react';
 import { useAgentWorkingMemory } from '@/domains/agents/hooks/use-agent-working-memory';
 
 type AgentWorkingMemoryContextType = {
