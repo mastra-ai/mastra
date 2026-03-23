@@ -40,10 +40,15 @@ export default async function globalSetup() {
 
   const mastraBin = join(projectDir, 'node_modules', '.bin', 'mastra');
   console.log('[smoke:ui] Running mastra build --studio...');
-  await execa(mastraBin, ['build', '--studio'], {
+  const result = await execa(mastraBin, ['build', '--studio'], {
     cwd: projectDir,
     stdio: 'pipe',
     env: process.env,
+    reject: false,
   });
+  if (result.exitCode !== 0) {
+    console.error('[smoke:ui] Build failed:', result.stderr || result.stdout);
+    throw new Error(`mastra build failed with exit code ${result.exitCode}`);
+  }
   console.log('[smoke:ui] Build complete.');
 }
