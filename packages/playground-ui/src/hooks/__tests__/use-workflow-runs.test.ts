@@ -1,6 +1,6 @@
+import type { WorkflowRuns } from '@mastra/core/storage';
 import { describe, it, expect } from 'vitest';
 import { getWorkflowRunsNextPageParam, selectUniqueRuns, PER_PAGE } from '../use-workflow-runs';
-import type { WorkflowRuns } from '@mastra/core/storage';
 
 function makeRunsPage(runs: Array<{ runId: string; workflowName: string }>): WorkflowRuns {
   return { runs, total: runs.length } as unknown as WorkflowRuns;

@@ -1,27 +1,19 @@
+import { PackageIcon, GitBranchIcon, InfoIcon } from 'lucide-react';
+import { KeyValueList } from '@/ds/components/KeyValueList';
+import type { KeyValueListItemData } from '@/ds/components/KeyValueList';
 import { GithubIcon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
-import { Link, PackageIcon, GitBranchIcon, InfoIcon } from 'lucide-react';
-import { KeyValueList, type KeyValueListItemData } from '@/ds/components/KeyValueList';
 
 type TemplateInfoProps = {
   title?: string;
   description?: string;
-  imageURL?: string;
   githubUrl?: string;
   infoData?: KeyValueListItemData[];
   isLoading?: boolean;
   templateSlug?: string;
 };
 
-export function TemplateInfo({
-  title,
-  description,
-  imageURL,
-  githubUrl,
-  isLoading,
-  infoData,
-  templateSlug,
-}: TemplateInfoProps) {
+export function TemplateInfo({ title, description, githubUrl, isLoading, infoData, templateSlug }: TemplateInfoProps) {
   // Generate branch name that will be created
   const branchName = templateSlug ? `feat/install-template-${templateSlug}` : 'feat/install-template-[slug]';
 
@@ -94,7 +86,7 @@ export function TemplateInfo({
           )}
         </div>
 
-        {infoData && <KeyValueList data={infoData} LinkComponent={Link} labelsAreHidden={true} isLoading={isLoading} />}
+        {infoData && <KeyValueList data={infoData} labelsAreHidden={true} isLoading={isLoading} />}
       </div>
     </>
   );
