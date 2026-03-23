@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 19.0.0-alpha.1
+
+### Patch Changes
+
+- Internal cleanup and linting fixes ([#14497](https://github.com/mastra-ai/mastra/pull/14497))
+
+- Updated dependencies:
+  - @mastra/core@1.16.0-alpha.1
+  - @mastra/client-js@1.10.0-alpha.1
+  - @mastra/react@0.2.17-alpha.1
+
 ## 19.0.0-alpha.0
 
 ### Minor Changes

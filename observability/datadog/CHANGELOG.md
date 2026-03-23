@@ -1,5 +1,14 @@
 # @mastra/datadog
 
+## 1.0.9-alpha.0
+
+### Patch Changes
+
+- Fixed error info tags being recorded as [object Object] in Datadog. Error details (message, id, domain, category) are now stored as separate flattened tags (error.message, error.id, error.domain, error.category) instead of a nested object, making error information properly visible in Datadog LLM Observability. ([#14570](https://github.com/mastra-ai/mastra/pull/14570))
+
+- Updated dependencies:
+  - @mastra/core@1.16.0-alpha.1
+
 ## 1.0.8
 
 ### Patch Changes
