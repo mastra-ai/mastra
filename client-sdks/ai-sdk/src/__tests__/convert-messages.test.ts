@@ -1,6 +1,7 @@
 import type { UIMessage as UIMessageV5 } from '@internal/ai-sdk-v5';
 import type { UIMessage as UIMessageV6 } from '@internal/ai-v6';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { MessageList } from '@mastra/core/agent/message-list';
 import type { MastraModelOutput } from '@mastra/core/stream';
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { toAISdkMessages, toAISdkV4Messages, toAISdkV5Messages } from '../convert-messages';
@@ -51,7 +52,7 @@ describe('toAISdkFormat', () => {
       const result = toAISdkMessages(sampleMessages, { version: 'v6' });
 
       expectTypeOf(result).toEqualTypeOf<UIMessageV6[]>();
-      expect(result).toEqual(toAISdkV5Messages(sampleMessages));
+      expect(result).toEqual(new MessageList().add(sampleMessages, 'memory').get.all.aiV6.ui());
     });
 
     it('should handle empty arrays for both versions', () => {

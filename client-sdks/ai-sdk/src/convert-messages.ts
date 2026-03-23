@@ -19,8 +19,8 @@ type MessageConversionOptions = MessageConversionOptionsV5 | MessageConversionOp
  * and normalizes them to the AI SDK UIMessage format. It keeps the existing AI SDK v5/default behavior. If your app
  * is typed against AI SDK v6, pass `version: 'v6'`.
  *
- * Note: `version: 'v6'` changes the returned TypeScript contract for AI SDK v6 consumers. The current runtime
- * conversion still uses the shared MessageList AI SDK v5 UI conversion path.
+ * Note: `version: 'v6'` uses the MessageList AI SDK v6 UI output path. MessageList input detection and ingestion
+ * remain unchanged.
  *
  * @param messages - Messages to convert. Accepts:
  *   - `string` - A single text message (treated as user role)
@@ -48,9 +48,13 @@ export function toAISdkMessages(messages: MessageListInput, options?: MessageCon
 export function toAISdkMessages(messages: MessageListInput, options: MessageConversionOptionsV6): V6UIMessage[];
 export function toAISdkMessages(
   messages: MessageListInput,
-  _options: MessageConversionOptions = {},
+  options: MessageConversionOptions = {},
 ): V5UIMessage[] | V6UIMessage[] {
-  return new MessageList().add(messages, `memory`).get.all.aiV5.ui();
+  const list = new MessageList().add(messages, `memory`);
+  if (options.version === 'v6') {
+    return list.get.all.aiV6.ui();
+  }
+  return list.get.all.aiV5.ui();
 }
 
 /**
