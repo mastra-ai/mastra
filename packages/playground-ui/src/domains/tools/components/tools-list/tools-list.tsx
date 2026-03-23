@@ -19,13 +19,7 @@ export interface ToolsListProps {
   search?: string;
 }
 
-export function ToolsList({
-  tools,
-  agents,
-  isLoading,
-  error,
-  search = '',
-}: ToolsListProps) {
+export function ToolsList({ tools, agents, isLoading, error, search = '' }: ToolsListProps) {
   const { paths } = useLinkComponent();
 
   const toolData = useMemo(() => prepareToolsTable(tools, agents), [tools, agents]);

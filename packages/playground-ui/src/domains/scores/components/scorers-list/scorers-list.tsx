@@ -16,12 +16,7 @@ export interface ScorersListProps {
   search?: string;
 }
 
-export function ScorersList({
-  scorers,
-  isLoading,
-  error,
-  search = '',
-}: ScorersListProps) {
+export function ScorersList({ scorers, isLoading, error, search = '' }: ScorersListProps) {
   const { paths } = useLinkComponent();
 
   const scorersData = useMemo(

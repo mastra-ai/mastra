@@ -1,6 +1,5 @@
 import type { DatasetRecord } from '@mastra/client-js';
-import { EntityList } from '@/ds/components/EntityList';
-import { EntityListSkeleton } from '@/ds/components/EntityList';
+import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
 import { ErrorState } from '@/ds/components/ErrorState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { is403ForbiddenError } from '@/lib/query-utils';

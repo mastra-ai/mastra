@@ -47,13 +47,7 @@ function McpServerRow({ server }: { server: McpServer }) {
   );
 }
 
-export function McpServersList({
-  mcpServers,
-  isLoading,
-  error,
-  search = '',
-}: McpServersListProps) {
-
+export function McpServersList({ mcpServers, isLoading, error, search = '' }: McpServersListProps) {
   const filteredData = useMemo(() => {
     const term = search.toLowerCase();
     return mcpServers.filter(
