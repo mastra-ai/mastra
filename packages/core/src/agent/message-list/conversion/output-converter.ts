@@ -57,19 +57,37 @@ export function sanitizeV5UIMessages(
       if (m.parts.length === 0) return false;
 
       // When building a prompt TO the LLM (filterIncompleteToolCalls=true),
-      // check if this message contains OpenAI reasoning parts (rs_* itemIds).
-      // If so, we need to strip them AND clear providerMetadata.openai from remaining
-      // parts to prevent item_reference linking to the stripped reasoning items.
-      const hasOpenAIReasoning =
+      // check if this message contains OpenAI-specific metadata that would cause
+      // item_reference linking. This includes:
+      //   - reasoning parts with providerMetadata.openai (rs_* itemIds)
+      //   - text parts with providerMetadata.openai (msg_* itemIds)
+      //   - tool parts with callProviderMetadata.openai (fc_* itemIds)
+      // All of these must be stripped to prevent OpenAI's Responses API from
+      // rejecting orphaned item_references. We check for ANY openai metadata,
+      // not just reasoning parts, because messages stored after a prior agent loop
+      // may have already had reasoning stripped while retaining fc_*/msg_* metadata
+      // on other parts.
+      const hasOpenAIMetadata =
         filterIncompleteToolCalls &&
-        m.parts.some(
-          p =>
-            p.type === 'reasoning' &&
+        m.parts.some(p => {
+          if (
             'providerMetadata' in p &&
             p.providerMetadata &&
             typeof p.providerMetadata === 'object' &&
-            'openai' in (p.providerMetadata as Record<string, unknown>),
-        );
+            'openai' in (p.providerMetadata as Record<string, unknown>)
+          ) {
+            return true;
+          }
+          if (
+            'callProviderMetadata' in p &&
+            (p as any).callProviderMetadata &&
+            typeof (p as any).callProviderMetadata === 'object' &&
+            'openai' in ((p as any).callProviderMetadata as Record<string, unknown>)
+          ) {
+            return true;
+          }
+          return false;
+        });
 
       // Filter out streaming states and optionally input-available (which aren't supported by convertToModelMessages)
       const safeParts = m.parts.filter(p => {
@@ -89,7 +107,7 @@ export function sanitizeV5UIMessages(
         //   "Item 'msg_*' of type 'message' was provided without its required 'reasoning' item"
         // Reasoning data is preserved in the database — only stripped from LLM input.
         // See: https://github.com/mastra-ai/mastra/issues/12980
-        if (p.type === 'reasoning' && hasOpenAIReasoning) {
+        if (p.type === 'reasoning' && hasOpenAIMetadata) {
           return false;
         }
 
@@ -133,7 +151,7 @@ export function sanitizeV5UIMessages(
           //   - callProviderMetadata.openai on tool parts (fc_* itemIds used by convertToModelMessages)
           // Without paired reasoning items, OpenAI rejects orphaned item_references with:
           //   "function_call was provided without its required reasoning item"
-          if (hasOpenAIReasoning) {
+          if (hasOpenAIMetadata) {
             if ('providerMetadata' in part && part.providerMetadata) {
               const meta = part.providerMetadata as Record<string, unknown>;
               if ('openai' in meta) {
