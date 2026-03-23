@@ -2931,6 +2931,15 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
   }
 
   // ===========================================================================
+  // Lifecycle
+  // ===========================================================================
+
+  async destroy(): Promise<void> {
+    await this.stopHeartbeats();
+    await this.destroyWorkspace();
+  }
+
+  // ===========================================================================
   // Session
   // ===========================================================================
 
