@@ -87,7 +87,7 @@ export const mastra = new Mastra({
 ```typescript
 new RespanExporter({
   // Required credentials
-  apiKey: process.env.RESPAN_API_KEY!, // Falls back to RESPAN_API_KEY env var
+  apiKey: process.env.RESPAN_API_KEY!, // Read from RESPAN_API_KEY env var
 
   // Optional settings
   baseUrl: 'https://api.respan.ai', // API endpoint URL
