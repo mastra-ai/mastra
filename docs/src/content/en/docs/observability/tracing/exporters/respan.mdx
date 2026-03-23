@@ -1,0 +1,123 @@
+---
+title: "Respan exporter | Tracing | Observability"
+description: "Send traces to Respan for LLM observability, evaluation, and optimization"
+packages:
+  - "@respan/exporter-vercel"
+  - "@mastra/core"
+  - "@mastra/observability"
+---
+
+# Respan exporter
+
+[Respan](https://respan.ai/) is an observability and optimization platform for LLM applications. It captures traces of agent steps, LLM calls, and user interactions, providing execution trees with latency and cost metrics. The Respan exporter sends your traces to Respan using an OpenTelemetry-compatible span exporter.
+
+## Installation
+
+```bash npm2yarn
+npm install @respan/exporter-vercel@latest
+```
+
+## Configuration
+
+### Prerequisites
+
+1. **Respan Account**: Sign up at [platform.respan.ai](https://platform.respan.ai)
+1. **API Key**: Generate one on the [API keys page](https://platform.respan.ai)
+1. **Environment Variables**: Set your credentials
+
+```bash title=".env"
+# Required
+RESPAN_API_KEY=your-respan-api-key
+
+# Optional
+RESPAN_BASE_URL=https://api.respan.ai  # Default endpoint
+```
+
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { RespanExporter } from '@respan/exporter-vercel'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      respan: {
+        serviceName: 'my-service',
+        exporters: [new RespanExporter()],
+      },
+    },
+  }),
+})
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { RespanExporter } from '@respan/exporter-vercel'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      respan: {
+        serviceName: 'my-service',
+        exporters: [
+          new RespanExporter({
+            apiKey: process.env.RESPAN_API_KEY!,
+            baseUrl: process.env.RESPAN_BASE_URL,
+          }),
+        ],
+      },
+    },
+  }),
+})
+```
+
+## Configuration options
+
+### Complete Configuration
+
+```typescript
+new RespanExporter({
+  // Required credentials
+  apiKey: process.env.RESPAN_API_KEY!, // Falls back to RESPAN_API_KEY env var
+
+  // Optional settings
+  baseUrl: 'https://api.respan.ai', // API endpoint URL
+  debug: true, // Enable diagnostic logging
+})
+```
+
+### Custom metadata
+
+Attach custom attributes to traces using `tracingOptions.metadata`. Respan recognizes the following metadata fields for dashboard filtering and user analytics:
+
+```ts
+await agent.generate(input, {
+  tracingOptions: {
+    metadata: {
+      customer_identifier: 'user-123', // User/customer ID
+      customer_name: 'Jane Doe', // Display name
+      customer_email: 'jane@example.com', // Contact email
+      thread_identifier: 'conv-456', // Conversation ID
+      environment: 'production', // Deployment stage
+      workflow: 'support-agent', // Process name
+    },
+  },
+})
+```
+
+Custom keys beyond the recognized fields are automatically added to span metadata in Respan.
+
+## Related
+
+- [Tracing Overview](/docs/observability/tracing/overview)
+- [Respan Documentation](https://respan.ai/docs)
+- [Respan Mastra Integration](https://respan.ai/docs/integrations/tracing/mastra)

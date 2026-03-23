@@ -581,6 +581,11 @@ const sidebars = {
                 },
                 {
                   type: 'doc',
+                  id: 'observability/tracing/exporters/respan',
+                  label: 'Respan',
+                },
+                {
+                  type: 'doc',
                   id: 'observability/tracing/exporters/sentry',
                   label: 'Sentry',
                 },
