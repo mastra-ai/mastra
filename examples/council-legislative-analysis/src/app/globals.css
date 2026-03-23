@@ -1,0 +1,44 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Report content styling */
+.report-content h1 {
+  @apply font-serif text-2xl font-normal mt-8 mb-3 pb-2 border-b border-cream-dark;
+}
+.report-content h1:first-child {
+  @apply mt-0;
+}
+.report-content h2 {
+  @apply font-serif text-xl font-normal mt-7 mb-2 text-navy-mid;
+}
+.report-content h3 {
+  @apply text-sm font-medium uppercase tracking-wider mt-6 mb-2 text-gold-dim;
+}
+.report-content p {
+  @apply my-2;
+}
+.report-content ul,
+.report-content ol {
+  @apply my-2 ml-6;
+}
+.report-content li {
+  @apply my-1;
+}
+.report-content strong {
+  @apply font-medium text-navy;
+}
+.report-content hr {
+  @apply border-cream-dark my-6;
+}
+.report-content table {
+  @apply w-full border-collapse my-4 text-sm;
+}
+.report-content th {
+  @apply text-left p-2 bg-cream border-b-2 border-cream-dark font-medium text-xs uppercase tracking-wide;
+}
+.report-content td {
+  @apply p-2 border-b border-cream-dark;
+}
