@@ -255,8 +255,9 @@ async function main() {
     ? `${emoji} *Smoke Tests* — ${total}/${total} passed (${duration})`
     : `${emoji} *Smoke Tests* — ${unexpected} failed, ${expected} passed (${duration})`;
 
-  // Context line: timestamp, branch, skipped/flaky counts
+  // Context line: timestamp, run link, skipped/flaky counts
   const contextParts = [timeStr];
+  if (process.env.WORKFLOW_RUN_URL) contextParts.push(`<${process.env.WORKFLOW_RUN_URL}|View run>`);
   if (skipped > 0) contextParts.push(`${skipped} skipped`);
   if (flaky > 0) contextParts.push(`⚠️ ${flaky} flaky`);
 

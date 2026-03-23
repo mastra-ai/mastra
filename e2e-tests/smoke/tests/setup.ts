@@ -27,16 +27,9 @@ export default async function setup(project: TestProject) {
   const port = await getPort({ host: '0.0.0.0' });
   const baseUrl = `http://127.0.0.1:${port}`;
 
-  // Step 1: Build
   const mastraBin = join(projectDir, 'node_modules', '.bin', 'mastra');
-  console.log('[smoke] Running mastra build...');
-  await execa(mastraBin, ['build'], {
-    cwd: projectDir,
-    stdio: 'pipe',
-  });
-  console.log('[smoke] Build complete.');
 
-  // Step 2: Create workspace fixture files (mastra start cwd = .mastra/output/)
+  // Step 1: Create workspace fixture files (mastra start cwd = .mastra/output/)
   const outputDir = join(projectDir, '.mastra', 'output');
   const wsDir = join(outputDir, 'test-workspace');
   const skillDir = join(wsDir, 'skills', 'test-skill');
@@ -58,6 +51,7 @@ export default async function setup(project: TestProject) {
   );
   await writeFile(join(refDir, 'example.md'), '# Example Reference\n\nSome reference content.');
 
+  // Step 2: Start server via mastra start
   console.log(`[smoke] Starting mastra server on port ${port}...`);
   const serverProc = execa(mastraBin, ['start'], {
     cwd: projectDir,
@@ -81,7 +75,7 @@ export default async function setup(project: TestProject) {
     console.error(`[mastra:err] ${data.toString().trim()}`);
   });
 
-  // Step 3: Wait for server readiness
+  // Step 3: Wait for server
   try {
     await waitForServer(baseUrl);
   } catch (err) {
@@ -91,10 +85,10 @@ export default async function setup(project: TestProject) {
 
   console.log(`[smoke] Server ready at ${baseUrl}`);
 
-  // Step 4: Provide baseUrl to tests
+  // Step 4: Provide baseUrl
   project.provide('baseUrl', baseUrl);
 
-  // Step 5: Return teardown
+  // Step 5: Teardown
   return async () => {
     console.log('[smoke] Tearing down...');
     serverProc.kill('SIGTERM');

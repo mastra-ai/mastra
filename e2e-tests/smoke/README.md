@@ -12,27 +12,39 @@ pnpm install --ignore-workspace
 
 ## Running
 
+You must build before running any tests:
+
+```bash
+pnpm build              # API tests only
+pnpm build:studio       # API + UI tests (includes Studio assets)
+```
+
 ### API tests (Vitest)
 
 ```bash
+pnpm build
 pnpm test
 ```
-
-Vitest's globalSetup handles `mastra build`, starts the server, runs tests, then tears down.
 
 ### UI tests (Playwright)
 
 ```bash
+pnpm build:studio
 pnpm test:ui
 ```
 
-Playwright's globalSetup builds the project and starts the dev server automatically.
+### Both
+
+```bash
+pnpm build:studio
+pnpm test:all
+```
 
 ### Slack report (after UI tests)
 
 ```bash
-CI=1 pnpm test:ui        # generates test-results/report.json + videos
-pnpm report:slack         # posts results to Slack DM
+CI=1 pnpm build:studio && pnpm test:ui   # generates test-results/report.json + videos
+pnpm report:slack                          # posts results to Slack DM
 ```
 
 The script loads `.env` automatically for local runs.
@@ -42,9 +54,10 @@ The script loads `.env` automatically for local runs.
 The workflow at `.github/workflows/smoke.yml` runs on a weekday cron:
 
 1. Checks for new alpha versions via `pnpm update --ignore-workspace`
-2. If the lockfile changed, runs the full UI test suite
-3. Posts results to Slack (pass or fail, with failure videos)
-4. Commits the updated lockfile back to the branch
+2. If the lockfile changed, builds the project (`mastra build --studio`)
+3. Runs API tests (Vitest) and UI tests (Playwright)
+4. Posts results to Slack (pass or fail, with failure videos)
+5. Commits the updated lockfile back to the branch
 
 ### Required repository secrets
 
@@ -94,11 +107,11 @@ e2e-tests/smoke/
 │   ├── agents/               # Agent fixtures
 │   └── workflows/            # Workflow fixtures
 ├── tests/                    # API tests (Vitest)
-│   ├── setup.ts              # globalSetup: build, start server, teardown
+│   ├── setup.ts              # globalSetup: start server, teardown
 │   ├── utils.ts              # fetchApi(), startWorkflow(), etc.
 │   └── workflows/
 ├── tests-ui/                 # UI tests (Playwright)
-│   ├── global-setup.ts       # Build + clean state
+│   ├── global-setup.ts       # Clean state before run
 │   ├── helpers.ts            # Shared Playwright helpers
 │   ├── COVERAGE.md           # Test inventory
 │   └── agents/workflows/...  # Test spec files

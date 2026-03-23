@@ -61,14 +61,27 @@ jobs:
             git diff pnpm-lock.yaml | grep -E '^\+.*version:' | head -20 || true
           fi
 
+      # ── Build ───────────────────────────────────────────────
+      - name: Build project
+        if: steps.diff.outputs.changed == 'true'
+        run: pnpm build:studio
+
       # ── Playwright browsers ─────────────────────────────────
       - name: Install Playwright browsers
         if: steps.diff.outputs.changed == 'true'
         run: npx playwright install --with-deps chromium
 
       # ── Run tests ─────────────────────────────────────────────
-      - name: Run smoke tests
-        id: tests
+      - name: Run API tests
+        id: api-tests
+        if: steps.diff.outputs.changed == 'true'
+        run: pnpm test
+        continue-on-error: true
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Run UI tests
+        id: ui-tests
         if: steps.diff.outputs.changed == 'true'
         run: pnpm test:ui
         continue-on-error: true
@@ -82,6 +95,7 @@ jobs:
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_USER_ID: ${{ secrets.SLACK_USER_ID }}
+          WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
       # ── Upload artifacts (backup) ────────────────────────────
       - name: Upload test artifacts

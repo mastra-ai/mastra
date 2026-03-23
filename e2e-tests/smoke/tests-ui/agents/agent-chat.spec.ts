@@ -217,8 +217,9 @@ test.describe('Agent Chat', () => {
     await fillAndSend(page, 'Please greet John');
 
     // The tool badge for needs-approval should appear, auto-expanded because of approval metadata.
-    // Wait for the tool badge first — URL navigation may happen before or after.
-    const toolBadge = page.getByTestId('tool-badge');
+    // Scope to the chat thread so we don't match the overview panel's tool badges.
+    const thread = page.getByTestId('thread-wrapper');
+    const toolBadge = thread.getByTestId('tool-badge');
     await expect(toolBadge.first()).toBeVisible({ timeout: 30_000 });
     await expect(toolBadge.first()).toContainText('needs-approval');
 
