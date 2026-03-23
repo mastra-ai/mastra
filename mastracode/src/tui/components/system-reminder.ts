@@ -65,10 +65,7 @@ export class SystemReminderComponent extends Container {
     const innerWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 4);
     const horizontal = '─'.repeat(innerWidth + 1);
 
-    const metadataLines = [
-      this.reminderType ? `Type: ${this.reminderType}` : undefined,
-      this.path ? `Path: ${formatReminderPath(this.path)}` : undefined,
-    ].filter((line): line is string => Boolean(line));
+    const metadataLines = [this.path ? formatReminderPath(this.path) : undefined].filter((line): line is string => Boolean(line));
 
     const wrappedMessageLines = wrapLines(this.messageLines, innerWidth);
     const shouldCollapse = wrappedMessageLines.length > MAX_COLLAPSED_LINES;

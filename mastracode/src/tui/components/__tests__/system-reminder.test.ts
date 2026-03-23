@@ -32,7 +32,7 @@ describe('SystemReminderComponent', () => {
     });
   });
 
-  it('renders the Loaded AGENTS.md title and metadata for dynamic instruction reminders', () => {
+  it('renders the Loaded AGENTS.md title and path for dynamic instruction reminders', () => {
     const comp = new SystemReminderComponent({
       message: 'Use the nested instructions when replying.',
       reminderType: 'dynamic-agents-md',
@@ -42,8 +42,9 @@ describe('SystemReminderComponent', () => {
     const lines = nonEmpty(renderPlain(comp));
 
     expect(lines.some(line => line.includes('Loaded AGENTS.md'))).toBe(true);
-    expect(lines.some(line => line.includes('Type: dynamic-agents-md'))).toBe(true);
-    expect(lines.some(line => line.includes('Path: /repo/src/agents/nested/AGENTS.md'))).toBe(true);
+    expect(lines.some(line => line.includes('/repo/src/agents/nested/AGENTS.md'))).toBe(true);
+    expect(lines.some(line => line.includes('Type: dynamic-agents-md'))).toBe(false);
+    expect(lines.some(line => line.includes('Path: /repo/src/agents/nested/AGENTS.md'))).toBe(false);
   });
 
   it('renders the original title for regular system reminders', () => {
@@ -58,7 +59,7 @@ describe('SystemReminderComponent', () => {
     expect(lines.some(line => line.includes('Loaded AGENTS.md'))).toBe(false);
   });
 
-  it('renders cwd-relative paths in metadata when possible', () => {
+  it('renders cwd-relative paths when possible', () => {
     const comp = new SystemReminderComponent({
       message: 'Use the nested instructions when replying.',
       path: `${process.cwd()}/src/agents/nested/AGENTS.md`,
@@ -66,8 +67,9 @@ describe('SystemReminderComponent', () => {
 
     const lines = nonEmpty(renderPlain(comp));
 
-    expect(lines.some(line => line.includes('Path: src/agents/nested/AGENTS.md'))).toBe(true);
+    expect(lines.some(line => line.includes('src/agents/nested/AGENTS.md'))).toBe(true);
     expect(lines.some(line => line.includes(`Path: ${process.cwd()}/src/agents/nested/AGENTS.md`))).toBe(false);
+    expect(lines.some(line => line.includes(`Path: src/agents/nested/AGENTS.md`))).toBe(false);
   });
 
   it('keeps the right border aligned on every rendered line', () => {
