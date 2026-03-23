@@ -29,7 +29,7 @@ import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContex
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
-import type { MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
+import type { LanguageModelUsage, MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
@@ -332,6 +332,15 @@ export interface AgentConfig<
    * If validation fails, an error is thrown.
    */
   requestContextSchema?: PublicSchema<TRequestContext>;
+  /**
+   * Periodic heartbeat configuration.
+   * When set, the agent can be started on a timer that periodically runs
+   * an agent turn with the given prompt, applies judgment, and surfaces
+   * alerts or stays quiet.
+   *
+   * Call `agent.startHeartbeat()` to begin and `agent.stopHeartbeat()` to stop.
+   */
+  heartbeat?: HeartbeatConfig;
 }
 
 export type AgentMemoryOption = {
@@ -518,3 +527,55 @@ export type AgentExecuteOnFinishOptions = {
 };
 
 export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+
+// =============================================================================
+// Heartbeat
+// =============================================================================
+
+/**
+ * Result of a single heartbeat agent turn.
+ */
+export interface HeartbeatResult {
+  /** The agent's text response */
+  text: string;
+  /** Whether the agent flagged something needing attention (`alert`) or everything is fine (`ok`) */
+  status: 'ok' | 'alert';
+  /** Timestamp of the run */
+  timestamp: Date;
+  /** Token usage for this run (shape matches LanguageModelUsage from the model) */
+  usage?: LanguageModelUsage;
+}
+
+/**
+ * Configuration for an agent-level heartbeat — a context-aware periodic agent turn
+ * where the agent wakes up, evaluates a prompt/checklist, and decides whether
+ * anything needs attention.
+ *
+ * When configured, call `agent.startHeartbeat()` to begin and `agent.stopHeartbeat()` to stop.
+ */
+export interface HeartbeatConfig {
+  /** Interval between heartbeat runs in milliseconds. @default 1_800_000 (30 minutes) */
+  intervalMs?: number;
+  /**
+   * The prompt/checklist the agent evaluates on each tick.
+   * Can be a static string or a function that returns one dynamically.
+   */
+  prompt: string | (() => string | Promise<string>);
+  /**
+   * Context mode for heartbeat runs.
+   * - `'light'` — uses only the heartbeat prompt (no thread history). Cheaper.
+   * - `'full'` — loads a dedicated heartbeat thread with memory. Richer context.
+   * @default 'light'
+   */
+  contextMode?: 'full' | 'light';
+  /** Whether to run the first heartbeat immediately on start. @default false */
+  immediate?: boolean;
+  /**
+   * Optional cheap pre-check that runs before the agent turn.
+   * Return `false` to skip the LLM call entirely (saves tokens).
+   * Useful for quick checks like "is the service even reachable?"
+   */
+  preCheck?: () => boolean | Promise<boolean>;
+  /** Called after each heartbeat run with the agent's response. */
+  onHeartbeat?: (result: HeartbeatResult) => void | Promise<void>;
+}

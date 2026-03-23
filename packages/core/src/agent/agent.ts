@@ -100,6 +100,8 @@ import type {
   StructuredOutputOptions,
   PublicStructuredOutputOptions,
   ModelWithRetries,
+  HeartbeatConfig,
+  HeartbeatResult,
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
@@ -177,6 +179,9 @@ export class Agent<
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
+  #heartbeatConfig?: HeartbeatConfig;
+  #heartbeatTimer?: ReturnType<typeof setInterval>;
+  #heartbeatRunning = false;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -315,6 +320,10 @@ export class Agent<
 
     if (config.requestContextSchema) {
       this.#requestContextSchema = toStandardSchema(config.requestContextSchema);
+    }
+
+    if (config.heartbeat) {
+      this.#heartbeatConfig = config.heartbeat;
     }
 
     // @ts-expect-error Flag for agent network messages
@@ -5374,6 +5383,146 @@ export class Agent<
       return resolveMaybePromise(result, resolvedInstructions => {
         return resolvedInstructions || DEFAULT_TITLE_INSTRUCTIONS;
       });
+    }
+  }
+
+  // ===========================================================================
+  // Heartbeat
+  // ===========================================================================
+
+  /**
+   * Starts the periodic heartbeat. On each tick the agent runs an agent turn
+   * with the configured prompt and surfaces the result via the `onHeartbeat`
+   * callback.
+   *
+   * Does nothing if no `heartbeat` config was provided or if a heartbeat
+   * is already running.
+   */
+  startHeartbeat(): void {
+    if (!this.#heartbeatConfig) {
+      this.logger.warn(`[Heartbeat:${this.name}] No heartbeat config — skipping start`);
+      return;
+    }
+
+    if (this.#heartbeatTimer) {
+      return; // already running
+    }
+
+    const intervalMs = this.#heartbeatConfig.intervalMs ?? 30 * 60 * 1000;
+
+    if (this.#heartbeatConfig.immediate) {
+      void this.#runHeartbeatTick();
+    }
+
+    this.#heartbeatTimer = setInterval(() => {
+      void this.#runHeartbeatTick();
+    }, intervalMs);
+
+    // Don't block the process from exiting
+    if (typeof this.#heartbeatTimer === 'object' && 'unref' in this.#heartbeatTimer) {
+      this.#heartbeatTimer.unref();
+    }
+
+    this.logger.debug(`[Heartbeat:${this.name}] Started (interval=${intervalMs}ms)`);
+  }
+
+  /**
+   * Stops the periodic heartbeat and waits for any in-flight tick to settle.
+   */
+  stopHeartbeat(): void {
+    if (this.#heartbeatTimer) {
+      clearInterval(this.#heartbeatTimer);
+      this.#heartbeatTimer = undefined;
+      this.logger.debug(`[Heartbeat:${this.name}] Stopped`);
+    }
+  }
+
+  /**
+   * Returns `true` if the heartbeat timer is currently active.
+   */
+  get heartbeatActive(): boolean {
+    return this.#heartbeatTimer !== undefined;
+  }
+
+  /**
+   * Runs a single heartbeat tick. Can be called manually outside the timer
+   * for testing or on-demand checks.
+   */
+  async runHeartbeatTick(): Promise<HeartbeatResult | null> {
+    return this.#runHeartbeatTick();
+  }
+
+  async #runHeartbeatTick(): Promise<HeartbeatResult | null> {
+    const config = this.#heartbeatConfig;
+    if (!config) return null;
+
+    // Prevent overlapping ticks
+    if (this.#heartbeatRunning) {
+      this.logger.debug(`[Heartbeat:${this.name}] Skipping tick — previous still running`);
+      return null;
+    }
+
+    this.#heartbeatRunning = true;
+
+    try {
+      // Pre-check gate
+      if (config.preCheck) {
+        const shouldRun = await config.preCheck();
+        if (!shouldRun) {
+          this.logger.debug(`[Heartbeat:${this.name}] preCheck returned false — skipping agent turn`);
+          return null;
+        }
+      }
+
+      // Resolve the prompt
+      const prompt = typeof config.prompt === 'function' ? await config.prompt() : config.prompt;
+
+      const heartbeatUserMessage =
+        `You are running a periodic heartbeat check. Review the following checklist and determine if anything needs attention.\n` +
+        `If everything is fine, respond with HEARTBEAT_OK at the start of your message.\n` +
+        `If something needs attention, describe what needs action.\n\n` +
+        `Checklist:\n${prompt}`;
+
+      // Build generate options based on context mode.
+      // 'light' (default) — no thread history, just the heartbeat prompt.
+      // 'full' — uses a dedicated heartbeat thread so the agent has memory across ticks.
+      const contextMode = config.contextMode ?? 'light';
+      const generateOptions: Record<string, unknown> =
+        contextMode === 'full' ? { memory: { thread: `heartbeat-${this.id}`, resource: 'heartbeat' } } : {};
+
+      // Run the agent turn
+      const result = await this.generate([{ role: 'user', content: heartbeatUserMessage }], generateOptions as any);
+
+      const text = typeof result.text === 'string' ? result.text : '';
+      const isOk = text.trim().startsWith('HEARTBEAT_OK');
+
+      const heartbeatResult: HeartbeatResult = {
+        text,
+        status: isOk ? 'ok' : 'alert',
+        timestamp: new Date(),
+        usage: result.usage ? { ...result.usage } : undefined,
+      };
+
+      this.logger.debug(
+        `[Heartbeat:${this.name}] Tick complete — status=${heartbeatResult.status}` +
+          (heartbeatResult.usage ? ` tokens=${heartbeatResult.usage.totalTokens}` : ''),
+      );
+
+      // Deliver result via callback
+      if (config.onHeartbeat) {
+        try {
+          await config.onHeartbeat(heartbeatResult);
+        } catch (callbackError) {
+          this.logger.error(`[Heartbeat:${this.name}] onHeartbeat callback failed:`, callbackError);
+        }
+      }
+
+      return heartbeatResult;
+    } catch (error) {
+      this.logger.error(`[Heartbeat:${this.name}] Tick failed:`, error);
+      return null;
+    } finally {
+      this.#heartbeatRunning = false;
     }
   }
 }
