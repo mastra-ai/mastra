@@ -502,6 +502,9 @@ importers:
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../../packages/schema-compat
+      '@mastra/server':
+        specifier: workspace:*
+        version: link:../../packages/server
       json-schema:
         specifier: ^0.4.0
         version: 0.4.0

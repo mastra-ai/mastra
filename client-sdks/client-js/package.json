@@ -46,6 +46,7 @@
     "@lukeed/uuid": "^2.0.1",
     "@mastra/core": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
+    "@mastra/server": "workspace:*",
     "json-schema": "^0.4.0"
   },
   "peerDependencies": {

@@ -35,7 +35,7 @@ export function AgentVersionCombobox({
 }: AgentVersionComboboxProps) {
   const { data, isLoading } = useAgentVersions({
     agentId,
-    params: { sortDirection: 'DESC' },
+    params: { orderBy: { direction: 'DESC' } },
   });
 
   const versions = data?.versions ?? [];
