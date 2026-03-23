@@ -385,6 +385,43 @@ describe('fetchWithRetry', () => {
     expect(delays[2]).toBe(8000); // 1000 * 2^3
     expect(delays[3]).toBe(10000); // 1000 * 2^4 = 16000, capped at 10000
   });
+
+  it('should not retry on 4xx client errors and throw immediately', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchWithRetry('https://example.com', {}, 3)).rejects.toThrow(
+      'Request failed with status: 404 Not Found',
+    );
+
+    // fetch should only have been called once — no retries for 4xx
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('should retry on 5xx server errors up to maxRetries', async () => {
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void) => {
+      if (typeof fn === 'function') fn();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout);
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchWithRetry('https://example.com', {}, 3)).rejects.toThrow(
+      'Request failed with status: 503 Service Unavailable',
+    );
+
+    // fetch should have been called maxRetries (3) times
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
 });
 
 describe('generateEmptyFromSchema', () => {
