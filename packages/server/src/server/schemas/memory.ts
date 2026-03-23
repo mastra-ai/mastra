@@ -366,6 +366,13 @@ export const memoryStatusResponseSchema = z.object({
 /**
  * Observational Memory config schema for API responses
  */
+const observationalMemoryModelRoutingSchema = z.array(
+  z.object({
+    upTo: z.number(),
+    model: z.string(),
+  }),
+);
+
 const observationalMemoryConfigSchema = z.object({
   enabled: z.boolean(),
   scope: z.enum(['thread', 'resource']).optional(),
@@ -374,6 +381,8 @@ const observationalMemoryConfigSchema = z.object({
   observationTokens: z.union([z.number(), z.object({ min: z.number(), max: z.number() })]).optional(),
   observationModel: z.string().optional(),
   reflectionModel: z.string().optional(),
+  observationModelRouting: observationalMemoryModelRoutingSchema.optional(),
+  reflectionModelRouting: observationalMemoryModelRoutingSchema.optional(),
 });
 
 /**

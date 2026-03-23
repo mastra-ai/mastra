@@ -1,11 +1,11 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
-import { ModelByInputTokens, OM_INPUT_TOKENS_KEY } from '@mastra/core/llm';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { injectAnchorIds, parseAnchorId, stripEphemeralAnchorIds } from '../anchor-ids';
+import { ModelByInputTokens } from '../model-by-input-tokens';
 import {
   deriveObservationGroupProvenance,
   parseObservationGroups,
@@ -11170,14 +11170,9 @@ describe('Single-thread replay red tests', () => {
 });
 
 describe('ModelByInputTokens with ObservationalMemory', () => {
-  let storage: InMemoryMemory;
   let om: ObservationalMemory;
-  const threadId = 'test-thread';
-  const resourceId = 'test-resource';
 
-  beforeEach(async () => {
-    storage = createInMemoryStorage();
-  });
+  beforeEach(async () => {});
 
   afterEach(() => {
     if (om) {
@@ -11185,19 +11180,7 @@ describe('ModelByInputTokens with ObservationalMemory', () => {
     }
   });
 
-  const createMessages = (count: number, baseContent = 'Test message '): MastraDBMessage[] => {
-    return Array.from({ length: count }, (_, i) =>
-      createTestMessage(`${baseContent}${i + 1}`, i % 2 === 0 ? 'user' : 'assistant', `msg-${i}`),
-    );
-  };
-
   it('should select observer model based on input token count', async () => {
-    const { MessageList } = await import('@mastra/core/agent');
-    const { RequestContext } = await import('@mastra/core/di');
-
-    // Track which model was used for each call
-    const observedModels: string[] = [];
-
     const modelSelector = new ModelByInputTokens({
       upTo: {
         5000: 'openai/gpt-4o-mini',
@@ -11205,51 +11188,9 @@ describe('ModelByInputTokens with ObservationalMemory', () => {
       },
     });
 
-    om = new ObservationalMemory({
-      storage,
-      observation: {
-        messageTokens: 100, // Very low threshold to trigger observation
-        bufferTokens: false,
-        model: modelSelector,
-      },
-      reflection: {
-        observationTokens: 100_000,
-        model: 'test-model',
-      },
-      scope: 'thread',
-    });
-
-    // Helper to run observation and capture which model was resolved
-    const runObservation = async (tokenCount: number) => {
-      const _messages = createMessages(1, 'x'.repeat(tokenCount));
-
-      // Create request context - ModelByInputTokens reads from OM_INPUT_TOKENS_KEY
-      const requestContext = new RequestContext();
-      requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
-      requestContext.set(OM_INPUT_TOKENS_KEY, tokenCount);
-
-      const _messageList = new MessageList({ threadId, resourceId });
-
-      // We intercept by checking if resolveModelConfig would select the right model
-      // based on the token count we set
-      const resolvedModel = modelSelector.resolve(tokenCount);
-      observedModels.push(resolvedModel as string);
-
-      // Also verify the OM sets the token in context
-      expect(requestContext.get(OM_INPUT_TOKENS_KEY)).toBe(tokenCount);
-    };
-
-    // Small input should use gpt-4o-mini
-    await runObservation(1000);
-    expect(observedModels[observedModels.length - 1]).toBe('openai/gpt-4o-mini');
-
-    // Medium input should use gpt-4o-mini
-    await runObservation(4000);
-    expect(observedModels[observedModels.length - 1]).toBe('openai/gpt-4o-mini');
-
-    // Medium input should use gpt-4o
-    await runObservation(10000);
-    expect(observedModels[observedModels.length - 1]).toBe('openai/gpt-4o');
+    expect(modelSelector.resolve(1000)).toBe('openai/gpt-4o-mini');
+    expect(modelSelector.resolve(4000)).toBe('openai/gpt-4o-mini');
+    expect(modelSelector.resolve(10000)).toBe('openai/gpt-4o');
   });
 
   it('should throw when input exceeds the largest configured threshold', async () => {

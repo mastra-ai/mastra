@@ -4,7 +4,6 @@ import type { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { AISDKV6LanguageModel } from './aisdk/v6/model';
-import { ModelByInputTokens, OM_INPUT_TOKENS_KEY } from './model-by-input-tokens';
 import { ModelRouterLanguageModel } from './router';
 import type {
   MastraModelConfig,
@@ -85,19 +84,6 @@ export async function resolveModelConfig(
   // If it's a function, resolve it first
   if (typeof modelConfig === 'function') {
     modelConfig = await modelConfig({ requestContext, mastra });
-  }
-
-  // Handle ModelByInputTokens: resolve to a concrete model based on input token count
-  if (modelConfig instanceof ModelByInputTokens) {
-    const inputTokens = requestContext.get(OM_INPUT_TOKENS_KEY);
-    if (typeof inputTokens !== 'number') {
-      throw new Error(
-        `ModelByInputTokens requires "${OM_INPUT_TOKENS_KEY}" to be set in requestContext. ` +
-          `This value should be set automatically by Observational Memory when using token-tiered model selection.`,
-      );
-    }
-    const resolvedModel = modelConfig.resolve(inputTokens);
-    return resolveModelConfig(resolvedModel, requestContext, mastra);
   }
 
   // Filter out custom language model instances

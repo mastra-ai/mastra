@@ -4,7 +4,7 @@ import { Agent } from '@mastra/core/agent';
 import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { resolveModelConfig, OM_INPUT_TOKENS_KEY } from '@mastra/core/llm';
+import { resolveModelConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, parseMemoryRequestContext, setThreadOMMetadata } from '@mastra/core/memory';
 import type {
@@ -15,7 +15,7 @@ import type {
   ProcessorStreamWriter,
 } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
-import { RequestContext } from '@mastra/core/request-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, BufferedObservationChunk } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
@@ -72,6 +72,7 @@ import {
   createObservationStartMarker,
   createThreadUpdateMarker,
 } from './markers';
+import { ModelByInputTokens } from './model-by-input-tokens';
 import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import {
   buildObserverSystemPrompt,
@@ -111,6 +112,7 @@ import type {
   ProviderOptions,
   DataOmStatusPart,
   ObservationMarkerConfig,
+  ObservationalMemoryModel,
 } from './types';
 
 /**
@@ -216,7 +218,7 @@ export interface ObservationalMemoryConfig {
    *
    * @default 'google/gemini-2.5-flash'
    */
-  model?: AgentConfig['model'];
+  model?: ObservationalMemoryModel;
 
   /**
    * Observation step configuration.
@@ -263,7 +265,7 @@ export interface ObservationalMemoryConfig {
  * even when user provides a simple number (converted based on shareTokenBudget).
  */
 interface ResolvedObservationConfig {
-  model: AgentConfig['model'];
+  model: ObservationalMemoryModel;
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   messageTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */
@@ -287,7 +289,7 @@ interface ResolvedObservationConfig {
 }
 
 interface ResolvedReflectionConfig {
-  model: AgentConfig['model'];
+  model: ObservationalMemoryModel;
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   observationTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */
@@ -480,9 +482,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
   /** Internal Observer agent - created lazily */
   private observerAgent?: Agent;
+  private observerAgentModel?: AgentConfig['model'];
 
   /** Internal Reflector agent - created lazily */
   private reflectorAgent?: Agent;
+  private reflectorAgentModel?: AgentConfig['model'];
 
   private shouldObscureThreadIds = false;
   private hasher = xxhash();
@@ -879,9 +883,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.scope = config.scope ?? 'thread';
     this.retrieval = this.scope === 'thread' && (config.retrieval ?? OBSERVATIONAL_MEMORY_DEFAULTS.retrieval);
 
-    // Resolve "default" to the default model
-    const resolveModel = (m: typeof config.model) =>
-      m === 'default' ? OBSERVATIONAL_MEMORY_DEFAULTS.observation.model : m;
+    // Resolve "default" to the default model and unwrap OM-local model selectors.
+    const resolveModel = (m: typeof config.model) => {
+      if (m === 'default') {
+        return OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
+      }
+
+      if (m instanceof ModelByInputTokens) {
+        return m;
+      }
+
+      return m;
+    };
 
     // Require an explicit model — no silent default.
     // Resolution order: top-level model → sub-config model → the other sub-config model → error
@@ -906,8 +919,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens;
     const isSharedBudget = config.shareTokenBudget ?? false;
 
-    const isDefaultModelSelection = (model: AgentConfig['model'] | undefined) =>
-      model === undefined || model === 'default';
+    const isDefaultModelSelection = (model: ObservationalMemoryModel | undefined) => {
+      return model === undefined || model === 'default';
+    };
 
     const observationSelectedModel = config.model ?? config.observation?.model ?? config.reflection?.model;
     const reflectionSelectedModel = config.model ?? config.reflection?.model ?? config.observation?.model;
@@ -1087,7 +1101,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     return ObservationalMemory.awaitBuffering(threadId, resourceId, this.scope, timeoutMs);
   }
 
-  private getModelToResolve(model: AgentConfig['model']): Parameters<typeof resolveModelConfig>[0] {
+  private getModelToResolve(
+    model: Exclude<ObservationalMemoryModel, ModelByInputTokens>,
+  ): Parameters<typeof resolveModelConfig>[0] {
     if (Array.isArray(model)) {
       return (model[0]?.model ?? 'unknown') as Parameters<typeof resolveModelConfig>[0];
     }
@@ -1154,41 +1170,69 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   async getResolvedConfig(requestContext?: RequestContext): Promise<{
     scope: 'resource' | 'thread';
+    shareTokenBudget: boolean;
     observation: {
       messageTokens: number | ThresholdRange;
       model: string;
       previousObserverTokens: number | false | undefined;
+      routing?: Array<{ upTo: number; model: string }>;
     };
     reflection: {
       observationTokens: number | ThresholdRange;
       model: string;
+      routing?: Array<{ upTo: number; model: string }>;
     };
   }> {
-    const safeResolveModel = async (modelConfig: AgentConfig['model']): Promise<string> => {
+    const resolveRouting = async (
+      modelConfig: ObservationalMemoryModel,
+    ): Promise<{ model: string; routing?: Array<{ upTo: number; model: string }> }> => {
       try {
+        if (modelConfig instanceof ModelByInputTokens) {
+          const routing = await Promise.all(
+            modelConfig.getThresholds().map(async upTo => {
+              const resolvedModel = modelConfig.resolve(upTo);
+              const resolved = await this.resolveModelContext(resolvedModel, requestContext);
+              return {
+                upTo,
+                model: resolved?.modelId ? this.formatModelName(resolved) : '(unknown)',
+              };
+            }),
+          );
+
+          return {
+            model: routing[0]?.model ?? '(unknown)',
+            routing,
+          };
+        }
+
         const resolved = await this.resolveModelContext(modelConfig, requestContext);
-        return resolved?.modelId ? this.formatModelName(resolved) : '(unknown)';
+        return {
+          model: resolved?.modelId ? this.formatModelName(resolved) : '(unknown)',
+        };
       } catch (error) {
         omError('[OM] Failed to resolve model config', error);
-        return '(unknown)';
+        return { model: '(unknown)' };
       }
     };
 
-    const [observationModelName, reflectionModelName] = await Promise.all([
-      safeResolveModel(this.observationConfig.model),
-      safeResolveModel(this.reflectionConfig.model),
+    const [observationResolved, reflectionResolved] = await Promise.all([
+      resolveRouting(this.observationConfig.model),
+      resolveRouting(this.reflectionConfig.model),
     ]);
 
     return {
       scope: this.scope,
+      shareTokenBudget: this.observationConfig.shareTokenBudget,
       observation: {
         messageTokens: this.observationConfig.messageTokens,
-        model: observationModelName,
+        model: observationResolved.model,
         previousObserverTokens: this.observationConfig.previousObserverTokens,
+        routing: observationResolved.routing,
       },
       reflection: {
         observationTokens: this.reflectionConfig.observationTokens,
-        model: reflectionModelName,
+        model: reflectionResolved.model,
+        routing: reflectionResolved.routing,
       },
     };
   }
@@ -1324,8 +1368,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   /**
    * Get or create the Observer agent
    */
-  private getObserverAgent(): Agent {
-    if (!this.observerAgent) {
+  private getObserverAgent(model: AgentConfig['model']): Agent {
+    if (this.observerAgent && this.observerAgentModel === undefined) {
+      return this.observerAgent;
+    }
+
+    if (!this.observerAgent || this.observerAgentModel !== model) {
       const systemPrompt = buildObserverSystemPrompt(
         false,
         this.observationConfig.instruction,
@@ -1336,8 +1384,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         id: 'observational-memory-observer',
         name: 'Observer',
         instructions: systemPrompt,
-        model: this.observationConfig.model,
+        model,
       });
+      this.observerAgentModel = model;
     }
     return this.observerAgent;
   }
@@ -1345,16 +1394,21 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   /**
    * Get or create the Reflector agent
    */
-  private getReflectorAgent(): Agent {
-    if (!this.reflectorAgent) {
+  private getReflectorAgent(model: AgentConfig['model']): Agent {
+    if (this.reflectorAgent && this.reflectorAgentModel === undefined) {
+      return this.reflectorAgent;
+    }
+
+    if (!this.reflectorAgent || this.reflectorAgentModel !== model) {
       const systemPrompt = buildReflectorSystemPrompt(this.reflectionConfig.instruction);
 
       this.reflectorAgent = new Agent({
         id: 'observational-memory-reflector',
         name: 'Reflector',
         instructions: systemPrompt,
-        model: this.reflectionConfig.model,
+        model,
       });
+      this.reflectorAgentModel = model;
     }
     return this.reflectorAgent;
   }
@@ -2005,7 +2059,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     threadTitle?: string;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
-    const agent = this.getObserverAgent();
     const observerMessages = [
       {
         role: 'user' as const,
@@ -2021,18 +2074,13 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       buildObserverHistoryMessage(messagesToObserve),
     ];
 
-    // Count input tokens for token-tiered model selection (ModelByInputTokens)
     const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
-
-    // Build requestContext with input token count for ModelByInputTokens
-    const existingContext = options?.requestContext;
-    const contextWithTokens = new RequestContext();
-    if (existingContext) {
-      for (const [key, value] of existingContext.entries()) {
-        contextWithTokens.set(key, value);
-      }
-    }
-    contextWithTokens.set(OM_INPUT_TOKENS_KEY, inputTokens);
+    const requestContext = options?.requestContext;
+    const resolvedModel =
+      this.observationConfig.model instanceof ModelByInputTokens
+        ? this.observationConfig.model.resolve(inputTokens)
+        : this.observationConfig.model;
+    const agent = this.getObserverAgent(resolvedModel);
 
     const doGenerate = async () => {
       const result = await this.withAbortCheck(async () => {
@@ -2042,7 +2090,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           },
           providerOptions: this.observationConfig.providerOptions as any,
           ...(abortSignal ? { abortSignal } : {}),
-          requestContext: contextWithTokens,
+          ...(requestContext ? { requestContext } : {}),
         });
 
         return streamResult.getFullOutput();
@@ -2115,12 +2163,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       this.observationConfig.instruction,
       this.observationConfig.threadTitle,
     );
-    const agent = new Agent({
-      id: 'multi-thread-observer',
-      name: 'multi-thread-observer',
-      model: this.observationConfig.model,
-      instructions: systemPrompt,
-    });
 
     const observerMessages = [
       {
@@ -2147,17 +2189,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       this.observedMessageIds.add(msg.id);
     }
 
-    // Count input tokens for token-tiered model selection (ModelByInputTokens)
     const inputTokens = this.tokenCounter.countMessages(allMessages);
+    const resolvedModel =
+      this.observationConfig.model instanceof ModelByInputTokens
+        ? this.observationConfig.model.resolve(inputTokens)
+        : this.observationConfig.model;
 
-    // Build requestContext with input token count for ModelByInputTokens
-    const contextWithTokens = new RequestContext();
-    if (requestContext) {
-      for (const [key, value] of requestContext.entries()) {
-        contextWithTokens.set(key, value);
-      }
-    }
-    contextWithTokens.set(OM_INPUT_TOKENS_KEY, inputTokens);
+    const agent = new Agent({
+      id: 'multi-thread-observer',
+      name: 'multi-thread-observer',
+      model: resolvedModel,
+      instructions: systemPrompt,
+    });
 
     const doGenerate = async () => {
       const result = await this.withAbortCheck(async () => {
@@ -2167,7 +2210,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           },
           providerOptions: this.observationConfig.providerOptions as any,
           ...(abortSignal ? { abortSignal } : {}),
-          requestContext: contextWithTokens,
+          ...(requestContext ? { requestContext } : {}),
         });
 
         return streamResult.getFullOutput();
@@ -2257,18 +2300,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     suggestedContinuation?: string;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
-    const agent = this.getReflectorAgent();
-
     const originalTokens = this.tokenCounter.countObservations(observations);
-
-    // Build requestContext with input token count for token-tiered model selection (ModelByInputTokens)
-    const contextWithTokens = new RequestContext();
-    if (requestContext) {
-      for (const [key, value] of requestContext.entries()) {
-        contextWithTokens.set(key, value);
-      }
-    }
-    contextWithTokens.set(OM_INPUT_TOKENS_KEY, originalTokens);
+    const resolvedModel =
+      this.reflectionConfig.model instanceof ModelByInputTokens
+        ? this.reflectionConfig.model.resolve(originalTokens)
+        : this.reflectionConfig.model;
+    const agent = this.getReflectorAgent(resolvedModel);
 
     // Get the target threshold - use provided value or fall back to config
     const targetThreshold = observationTokensThreshold ?? getMaxThreshold(this.reflectionConfig.observationTokens);
@@ -2301,7 +2338,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           },
           providerOptions: this.reflectionConfig.providerOptions as any,
           ...(abortSignal ? { abortSignal } : {}),
-          requestContext: contextWithTokens,
+          ...(requestContext ? { requestContext } : {}),
           ...(attemptNumber === 1
             ? {
                 onChunk(chunk: any) {
@@ -5959,7 +5996,7 @@ ${formattedMessages}
     const lockKey = this.getLockKey(record.threadId, record.resourceId);
     const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
 
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════��═════════════════��═��═════════════════════════════════════════════
     // ASYNC BUFFERING: Trigger background reflection at bufferActivation ratio
     // This runs in the background and stores results to bufferedReflection.
     // ════════════════════════════════════════════════════════════════════════
