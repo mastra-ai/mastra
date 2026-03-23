@@ -1,12 +1,17 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Play, Sparkles, Clock, ChevronRight, ChevronDown, Pencil, Save, X, Trash2 } from 'lucide-react';
-import { useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { formatVersionLabel } from './format-version-label';
+import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
 import { useDatasetExperiments } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { useDatasetVersions } from '@/domains/datasets/hooks/use-dataset-versions';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { Button } from '@/ds/components/Button';
 import { Chip } from '@/ds/components/Chip';
+import { Combobox } from '@/ds/components/Combobox';
+import { CopyButton } from '@/ds/components/CopyButton';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Spinner } from '@/ds/components/Spinner';
 import { Textarea } from '@/ds/components/Textarea';
@@ -71,10 +76,27 @@ export function DatasetDetailView({
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [itemsCollapsed, setItemsCollapsed] = useState(false);
   const [runsCollapsed, setRunsCollapsed] = useState(false);
+  const [selectedDatasetVersion, setSelectedDatasetVersion] = useState<string>('');
+  const [selectedAgentVersion, setSelectedAgentVersion] = useState<string>('');
 
   const { data: items = [], setEndOfListElement, isFetchingNextPage } = useDatasetItems(datasetId);
   const { data: experimentsData, refetch: refetchExperiments } = useDatasetExperiments(datasetId);
   const datasetExperiments = experimentsData?.experiments ?? [];
+
+  const datasetVersionsQuery = useDatasetVersions(datasetId);
+  const datasetVersions = datasetVersionsQuery.data ?? [];
+
+  const isAgentTarget = !datasetTargetType || datasetTargetType === 'agent';
+  const agentVersionsQuery = useAgentVersions({ agentId: isAgentTarget ? agentId : '' });
+  const agentVersions = agentVersionsQuery.data?.versions ?? [];
+
+  useEffect(() => {
+    setSelectedDatasetVersion('');
+  }, [datasetId]);
+
+  useEffect(() => {
+    setSelectedAgentVersion('');
+  }, [agentId]);
 
   const mergedRequestContext = useMergedRequestContext();
   const queryClient = useQueryClient();
@@ -109,6 +131,8 @@ export function DatasetDetailView({
         targetId: expTargetId,
         ...(activeScorers.length > 0 ? { scorerIds: activeScorers } : {}),
         ...(hasRequestContext ? { requestContext: mergedRequestContext } : {}),
+        ...(selectedDatasetVersion ? { version: Number(selectedDatasetVersion) } : {}),
+        ...(selectedAgentVersion ? { agentVersion: selectedAgentVersion } : {}),
       });
       void queryClient.invalidateQueries({ queryKey: ['agent-experiments', agentId] });
       void refetchExperiments();
@@ -131,6 +155,8 @@ export function DatasetDetailView({
     triggerExperiment,
     mergedRequestContext,
     queryClient,
+    selectedDatasetVersion,
+    selectedAgentVersion,
   ]);
 
   return (
@@ -179,6 +205,58 @@ export function DatasetDetailView({
               )}
             </Button>
           </div>
+        </div>
+        {/* Version selectors */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <Txt variant="ui-xs" className="text-neutral3 mb-1 block">
+              Dataset version
+            </Txt>
+            <Combobox
+              options={[
+                { label: 'Latest', value: '' },
+                ...datasetVersions.map(v => ({
+                  label: `v${v.version}`,
+                  value: String(v.version),
+                  description: v.isCurrent ? 'Current' : undefined,
+                })),
+              ]}
+              value={selectedDatasetVersion}
+              onValueChange={setSelectedDatasetVersion}
+              placeholder="Latest"
+              size="sm"
+            />
+          </div>
+          {isAgentTarget && (
+            <div className="flex-1 min-w-0">
+              <Txt variant="ui-xs" className="text-neutral3 mb-1 block">
+                Agent version
+              </Txt>
+              <div className="flex items-center gap-1">
+                <Combobox
+                  options={[
+                    { label: 'Current', value: '' },
+                    ...agentVersions.map(v => ({
+                      label: `v${v.versionNumber}`,
+                      value: v.id,
+                      description: v.changeMessage ?? undefined,
+                    })),
+                  ]}
+                  value={selectedAgentVersion}
+                  onValueChange={setSelectedAgentVersion}
+                  placeholder="Current"
+                  size="sm"
+                />
+                {(selectedAgentVersion || agentVersions[0]?.id) && (
+                  <CopyButton
+                    content={selectedAgentVersion || agentVersions[0]?.id}
+                    tooltip="Copy version ID"
+                    size="sm"
+                  />
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -280,6 +358,12 @@ export function DatasetDetailView({
                         </Txt>
                         <Txt variant="ui-xs" className="text-neutral3">
                           {exp.succeededCount}/{exp.totalItems} passed
+                          {exp.datasetVersion != null && ` · ${formatVersionLabel('Dataset', exp.datasetVersion)}`}
+                          {exp.agentVersion &&
+                            (() => {
+                              const av = agentVersions.find(v => v.id === exp.agentVersion);
+                              return ` · ${formatVersionLabel('Agent', av ? av.versionNumber : exp.agentVersion)}`;
+                            })()}
                         </Txt>
                       </div>
                       <Icon size="sm" className="text-neutral3">

@@ -14,6 +14,8 @@ import {
 import { useState } from 'react';
 
 import type { AgentExperiment } from '../../hooks/use-agent-experiments';
+import { useAgentVersions } from '../../hooks/use-agent-versions';
+import { formatVersionLabel } from './format-version-label';
 import { useDatasetExperimentResults, useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { TraceDialog } from '@/domains/observability/components/trace-dialog';
 import { Badge } from '@/ds/components/Badge';
@@ -292,6 +294,10 @@ export function ExperimentResultsPanel({
   });
   const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experimentStatus);
 
+  const agentId = experiment.targetType === 'agent' ? experiment.targetId : '';
+  const { data: agentVersionsData } = useAgentVersions({ agentId });
+  const agentVersions = agentVersionsData?.versions ?? [];
+
   const { data: traceData, isLoading: isLoadingTrace } = useQuery({
     queryKey: ['trace', viewingTraceId],
     queryFn: () => client.getTrace(viewingTraceId!),
@@ -337,7 +343,15 @@ export function ExperimentResultsPanel({
         <div className="flex-1" />
         <ExperimentStatusBadge status={experiment.status} />
         <Txt variant="ui-xs" className="text-neutral2">
-          {experiment.datasetName} &middot; {experiment.startedAt ? formatTimestamp(experiment.startedAt) : '-'}
+          {experiment.datasetName}
+          {experiment.datasetVersion != null && ` ${formatVersionLabel('Dataset', experiment.datasetVersion)}`}
+          {experiment.agentVersion &&
+            (() => {
+              const av = agentVersions.find(v => v.id === experiment.agentVersion);
+              return ` · ${formatVersionLabel('Agent', av ? av.versionNumber : experiment.agentVersion)}`;
+            })()}
+          {' · '}
+          {experiment.startedAt ? formatTimestamp(experiment.startedAt) : '-'}
         </Txt>
       </div>
 
