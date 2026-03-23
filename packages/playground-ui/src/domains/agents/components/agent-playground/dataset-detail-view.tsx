@@ -11,6 +11,7 @@ import { useMergedRequestContext } from '@/domains/request-context/context/schem
 import { Button } from '@/ds/components/Button';
 import { Chip } from '@/ds/components/Chip';
 import { Combobox } from '@/ds/components/Combobox';
+import { CopyButton } from '@/ds/components/CopyButton';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Spinner } from '@/ds/components/Spinner';
 import { Textarea } from '@/ds/components/Textarea';
@@ -18,7 +19,6 @@ import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
-import { CopyButton } from '@/ds/components/CopyButton';
 
 interface DatasetDetailViewProps {
   agentId: string;
