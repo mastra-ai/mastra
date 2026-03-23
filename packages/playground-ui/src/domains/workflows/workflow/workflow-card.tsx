@@ -1,7 +1,7 @@
-import { Icon } from '@/ds/icons';
-import { cn } from '@/lib/utils';
 import { ChevronDownIcon } from 'lucide-react';
 import { useState } from 'react';
+import { Icon } from '@/ds/icons';
+import { cn } from '@/lib/utils';
 
 export interface WorkflowCardProps {
   header: React.ReactNode;

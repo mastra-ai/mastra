@@ -1,17 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { GripVertical, X, BookmarkPlus } from 'lucide-react';
-import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { ContentBlock } from '@/ds/components/ContentBlocks';
-import type { JsonSchema, RuleGroup } from '@/lib/rule-engine';
-import { IconButton } from '@/ds/components/IconButton';
-import { Icon } from '@/ds/icons';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { cn } from '@/lib/utils';
+import type { InstructionBlock, InlineInstructionBlock } from '../agent-edit-page/utils/form-validation';
+import { AgentCMSRefBlock } from './agent-cms-ref-block';
+import { DisplayConditionsDialog } from '@/domains/cms';
+import { useStoredPromptBlockMutations } from '@/domains/prompt-blocks';
 import { Button } from '@/ds/components/Button';
-import { Input } from '@/ds/components/Input';
-import { Label } from '@/ds/components/Label';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { ContentBlock } from '@/ds/components/ContentBlocks';
 import {
   Dialog,
   DialogContent,
@@ -21,12 +19,14 @@ import {
   DialogBody,
   DialogFooter,
 } from '@/ds/components/Dialog';
-import type { InstructionBlock, InlineInstructionBlock } from '../agent-edit-page/utils/form-validation';
+import { IconButton } from '@/ds/components/IconButton';
+import { Input } from '@/ds/components/Input';
+import { Label } from '@/ds/components/Label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
-import { DisplayConditionsDialog } from '@/domains/cms';
-import { useStoredPromptBlockMutations } from '@/domains/prompt-blocks';
-import { AgentCMSRefBlock } from './agent-cms-ref-block';
+import { Icon } from '@/ds/icons';
+import type { RuleGroup, JsonSchema } from '@/lib/rule-engine';
+import { cn } from '@/lib/utils';
 
 export interface AgentCMSBlockProps {
   index: number;

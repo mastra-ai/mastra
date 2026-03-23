@@ -1,28 +1,20 @@
-import {
-  ComposerPrimitive,
-  MessagePrimitive,
-  ThreadPrimitive,
-  ToolCallMessagePartComponent,
-  useComposerRuntime,
-} from '@assistant-ui/react';
+import type { MessagePrimitive } from '@assistant-ui/react';
+import { ComposerPrimitive, ThreadPrimitive, useComposerRuntime } from '@assistant-ui/react';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
-
-import { IconButton } from '@/ds/components/IconButton';
-import { Avatar } from '@/ds/components/Avatar';
-
-import { AssistantMessage } from './messages/assistant-message';
-import { UserMessage } from './messages/user-messages';
 import { useEffect, useRef, useState } from 'react';
-import { useAutoscroll } from '@/hooks/use-autoscroll';
-
-import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
-import { ComposerAttachments } from './attachments/attachment';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
-import { useThreadInput } from '@/domains/conversation';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { ComposerModelSwitcher } from '@/domains/agents/components/composer-model-switcher';
+import { ComposerAttachments } from './attachments/attachment';
 import { BracketOverlay } from './components/bracket-overlay';
+import { AssistantMessage } from './messages/assistant-message';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
+import { UserMessage } from './messages/user-messages';
+import { ComposerModelSwitcher } from '@/domains/agents/components/composer-model-switcher';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { useThreadInput } from '@/domains/conversation';
+import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
+import { Avatar } from '@/ds/components/Avatar';
+import { IconButton } from '@/ds/components/IconButton';
+import { useAutoscroll } from '@/hooks/use-autoscroll';
 
 export interface ThreadProps {
   agentName?: string;
@@ -105,7 +97,7 @@ interface ComposerProps {
   hideModelSwitcher?: boolean;
 }
 
-const Composer = ({ hasMemory, agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
+const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { canExecute } = usePermissions();

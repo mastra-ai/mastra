@@ -1,34 +1,34 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
-
-import { Txt } from '@/ds/components/Txt';
-import { Button } from '@/ds/components/Button';
-import { Searchbar } from '@/ds/components/Searchbar';
-import { Spinner } from '@/ds/components/Spinner';
-
-import { Icon } from '@/ds/icons/Icon';
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
-import { cn } from '@/lib/utils';
-import { toast } from '@/lib/toast';
 import { Sparkles, Database, GaugeIcon, FlaskConical, ChevronRight } from 'lucide-react';
-
-import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
-import { useAgentExperiments, type AgentExperiment } from '../../hooks/use-agent-experiments';
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useWatch } from 'react-hook-form';
+import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { useReviewQueue } from '../../context/review-queue-context';
+import { useAgentExperiments } from '../../hooks/use-agent-experiments';
+import type { AgentExperiment } from '../../hooks/use-agent-experiments';
+import { useAgentVersions } from '../../hooks/use-agent-versions';
+import { useStoredAgentMutations } from '../../hooks/use-stored-agents';
+import { mapScorersToApi } from '../../utils/agent-form-mappers';
+import { ExperimentResultsPanel } from './agent-playground-eval';
+import { DatasetDetailView } from './dataset-detail-view';
+import { formatVersionLabel } from './format-version-label';
+import { ScorerDetailView } from './scorer-detail-view';
+import { ScorerMiniEditor } from './scorer-mini-editor';
 import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
 import { GenerateConfigDialog, GenerateReviewDialog } from '@/domains/datasets/components/generate-items-dialog';
 import { useGenerationTasks } from '@/domains/datasets/context/generation-context';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
-import { useReviewQueue } from '../../context/review-queue-context';
-import { useStoredAgentMutations } from '../../hooks/use-stored-agents';
-import { mapScorersToApi } from '../../utils/agent-form-mappers';
-import { ScorerMiniEditor } from './scorer-mini-editor';
-import { DatasetDetailView } from './dataset-detail-view';
-import { ScorerDetailView } from './scorer-detail-view';
-import { ExperimentResultsPanel } from './agent-playground-eval';
+import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
+import { useScorers } from '@/domains/scores/hooks/use-scorers';
+import { Button } from '@/ds/components/Button';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Searchbar } from '@/ds/components/Searchbar';
+import { Spinner } from '@/ds/components/Spinner';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
+import { toast } from '@/lib/toast';
+import { cn } from '@/lib/utils';
 
 type EvaluateView =
   | { type: 'overview' }
@@ -98,6 +98,8 @@ export function AgentPlaygroundEvaluate({
   const agentScorers = useWatch({ control: form.control, name: 'scorers' }) || {};
   const attachedScorerIds = useMemo(() => Object.keys(agentScorers), [agentScorers]);
   const { data: experiments } = useAgentExperiments(agentId, attachedScorerIds);
+  const { data: agentVersionsData } = useAgentVersions({ agentId });
+  const agentVersions = agentVersionsData?.versions ?? [];
   const agentInstructions = useWatch({ control: form.control, name: 'instructions' });
   const agentDescription = useWatch({ control: form.control, name: 'description' });
   const agentTools = useWatch({ control: form.control, name: 'tools' });
@@ -273,12 +275,20 @@ export function AgentPlaygroundEvaluate({
                     {experiments.slice(0, 10).map(exp => {
                       const isActive = view.type === 'experiment' && view.id === exp.id;
                       const ds = allDatasets.find(d => d.id === exp.datasetId);
+                      const versionParts: string[] = [];
+                      if (exp.datasetVersion != null)
+                        versionParts.push(formatVersionLabel('Dataset', exp.datasetVersion));
+                      if (exp.agentVersion) {
+                        const av = agentVersions.find(v => v.id === exp.agentVersion);
+                        versionParts.push(formatVersionLabel('Agent', av ? av.versionNumber : exp.agentVersion));
+                      }
                       return (
                         <NavItem
                           key={exp.id}
                           isActive={isActive}
                           icon={<FlaskConical />}
                           label={ds?.name || 'Unknown dataset'}
+                          description={versionParts.length > 0 ? versionParts.join(' · ') : undefined}
                           onClick={() => setView({ type: 'experiment', id: exp.id, datasetId: exp.datasetId })}
                           badge={<ExperimentBadge experiment={exp} />}
                         />
@@ -534,9 +544,9 @@ export function AgentPlaygroundEvaluate({
                   const scorer = (scorers || {})[view.id];
                   if (scorer) {
                     if (agentScorers[view.id]) {
-                      detachScorer(view.id);
+                      void detachScorer(view.id);
                     } else {
-                      attachScorer(view.id, scorer);
+                      void attachScorer(view.id, scorer);
                     }
                   }
                 }}
@@ -734,6 +744,7 @@ function NavItem({
   isActive,
   icon,
   label,
+  description,
   onClick,
   badge,
   action,
@@ -741,6 +752,7 @@ function NavItem({
   isActive: boolean;
   icon: React.ReactNode;
   label: string;
+  description?: string;
   onClick: () => void;
   badge?: React.ReactNode;
   action?: React.ReactNode;
@@ -761,6 +773,11 @@ function NavItem({
         <Txt variant="ui-xs" className="truncate block font-medium">
           {label}
         </Txt>
+        {description && (
+          <Txt variant="ui-xs" className="truncate block text-neutral2">
+            {description}
+          </Txt>
+        )}
         {badge && <div className="mt-0.5">{badge}</div>}
       </div>
       {action && <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">{action}</div>}
@@ -838,19 +855,37 @@ function OverviewPanel({
 function ExperimentBadge({ experiment }: { experiment: AgentExperiment }) {
   const { status, succeededCount, totalItems } = experiment;
 
+  const versionTags = [
+    experiment.datasetVersion != null ? formatVersionLabel('Dataset', experiment.datasetVersion) : null,
+    experiment.agentVersion ? formatVersionLabel('Agent', experiment.agentVersion) : null,
+  ].filter(Boolean);
+
+  const versionLine =
+    versionTags.length > 0 ? (
+      <Txt variant="ui-xs" className="text-neutral3">
+        {versionTags.join(' · ')}
+      </Txt>
+    ) : null;
+
   if (status === 'running' || status === 'pending') {
     return (
-      <Txt variant="ui-xs" className="text-warning1">
-        {status === 'running' ? 'Running...' : 'Pending...'}
-      </Txt>
+      <>
+        <Txt variant="ui-xs" className="text-warning1">
+          {status === 'running' ? 'Running...' : 'Pending...'}
+        </Txt>
+        {versionLine}
+      </>
     );
   }
 
   if (totalItems === 0) {
     return (
-      <Txt variant="ui-xs" className="text-neutral3">
-        No results
-      </Txt>
+      <>
+        <Txt variant="ui-xs" className="text-neutral3">
+          No results
+        </Txt>
+        {versionLine}
+      </>
     );
   }
 
@@ -858,9 +893,12 @@ function ExperimentBadge({ experiment }: { experiment: AgentExperiment }) {
   const colorClass = passRate >= 0.8 ? 'text-positive1' : passRate >= 0.5 ? 'text-warning1' : 'text-negative1';
 
   return (
-    <Txt variant="ui-xs" className={colorClass}>
-      {succeededCount}/{totalItems} passed
-    </Txt>
+    <>
+      <Txt variant="ui-xs" className={colorClass}>
+        {succeededCount}/{totalItems} passed
+      </Txt>
+      {versionLine}
+    </>
   );
 }
 

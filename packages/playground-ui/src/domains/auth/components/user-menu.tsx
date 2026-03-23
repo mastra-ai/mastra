@@ -1,10 +1,9 @@
-import { Button } from '@/ds/components/Button/Button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
-import { Txt } from '@/ds/components/Txt';
-
 import { useLogout } from '../hooks';
 import type { AuthenticatedUser, CurrentUser } from '../types';
 import { UserAvatar } from './user-avatar';
+import { Button } from '@/ds/components/Button/Button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
+import { Txt } from '@/ds/components/Txt';
 
 export type UserMenuProps = {
   user: AuthenticatedUser | CurrentUser;

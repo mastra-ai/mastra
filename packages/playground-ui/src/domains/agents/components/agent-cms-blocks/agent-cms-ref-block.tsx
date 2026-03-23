@@ -1,21 +1,21 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { GripVertical, X, ExternalLink, ChevronDown } from 'lucide-react';
-import { useDebouncedCallback } from 'use-debounce';
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
+import { GripVertical, X, ExternalLink, ChevronDown } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useDebouncedCallback } from 'use-debounce';
 
+import type { RefInstructionBlock } from '../agent-edit-page/utils/form-validation';
+import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
+import { useStoredPromptBlock, useStoredPromptBlockMutations } from '@/domains/prompt-blocks';
+import { CodeEditor } from '@/ds/components/CodeEditor';
 import { ContentBlock } from '@/ds/components/ContentBlocks';
-import { Icon } from '@/ds/icons';
-import { cn } from '@/lib/utils';
+import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
+import { Spinner } from '@/ds/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { Spinner } from '@/ds/components/Spinner';
-import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
+import { Icon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
-import { useStoredPromptBlock, useStoredPromptBlockMutations } from '@/domains/prompt-blocks';
-import { useStoredAgents } from '../../hooks/use-stored-agents';
-import type { RefInstructionBlock } from '../agent-edit-page/utils/form-validation';
 import type { JsonSchema } from '@/lib/rule-engine';
+import { cn } from '@/lib/utils';
 
 export interface AgentCMSRefBlockProps {
   index: number;

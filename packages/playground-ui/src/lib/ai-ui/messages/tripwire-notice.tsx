@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import type { TripwireMetadata } from '@mastra/react';
 import { ChevronDown, ChevronRight, ShieldAlert, RefreshCw, Tag } from 'lucide-react';
-import { TripwireMetadata } from '@mastra/react';
+import { useState } from 'react';
 
 export interface TripwireNoticeProps {
   reason: string;

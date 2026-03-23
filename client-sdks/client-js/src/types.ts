@@ -2059,6 +2059,7 @@ export interface DatasetExperiment {
   id: string;
   datasetId: string | null;
   datasetVersion: number | null;
+  agentVersion: string | null;
   targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
   targetId: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
@@ -2186,6 +2187,7 @@ export interface TriggerDatasetExperimentParams {
   targetId: string;
   scorerIds?: string[];
   version?: number;
+  agentVersion?: string;
   maxConcurrency?: number;
   requestContext?: Record<string, unknown>;
 }
