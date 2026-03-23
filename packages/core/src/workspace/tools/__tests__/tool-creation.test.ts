@@ -380,6 +380,36 @@ describe('createWorkspaceTools', () => {
       expect(await writeTool.needsApprovalFn({ path: '/public/readme.txt' })).toBe(false);
     });
 
+    it('should normalize Map-like requestContext to a plain object for dynamic enabled', async () => {
+      let receivedContext: Record<string, unknown> | undefined;
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          [WORKSPACE_TOOLS.FILESYSTEM.DELETE]: {
+            enabled: (ctx: { requestContext: Record<string, unknown> }) => {
+              receivedContext = ctx.requestContext;
+              return ctx.requestContext['role'] === 'admin';
+            },
+          },
+        },
+      });
+
+      // Simulate a Map-like RequestContext (has .entries()) to verify
+      // that createWorkspaceTools normalizes it to a plain object.
+      const mapLike = new Map<string, unknown>([['role', 'admin']]);
+      const configContext = {
+        requestContext: mapLike as unknown as Record<string, unknown>,
+        workspace,
+      };
+      const tools = await createWorkspaceTools(workspace, configContext);
+
+      // The tool should be enabled because role === 'admin'
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.DELETE);
+      // The dynamic function should have received a plain object, not the Map
+      expect(receivedContext).toEqual({ role: 'admin' });
+      expect(receivedContext instanceof Map).toBe(false);
+    });
+
     it('should keep static boolean requireApproval without needsApprovalFn', async () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),

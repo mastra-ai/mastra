@@ -66,6 +66,20 @@ async function resolveDynamicValue<TContext>(
   }
 }
 
+/**
+ * Normalize a requestContext value to a plain Record.
+ * Callers may pass a Map-like RequestContext (with `.entries()`) or a plain
+ * object.  Dynamic config functions always receive a plain object so that
+ * bracket-notation access (`requestContext['key']`) works consistently.
+ */
+function toPlainRequestContext(requestContext: unknown): Record<string, unknown> {
+  if (!requestContext) return {};
+  if (typeof (requestContext as any).entries === 'function') {
+    return Object.fromEntries((requestContext as any).entries());
+  }
+  return requestContext as Record<string, unknown>;
+}
+
 /** Resolved tool config with `enabled` as a boolean and execution-time values as raw config. */
 export interface ResolvedToolConfig {
   enabled: boolean;
@@ -237,10 +251,16 @@ function wrapWithWriteLock(tool: any, writeLock: FileWriteLock): any {
  * @param workspace - The workspace instance to bind tools to
  * @returns Record of workspace tools
  */
-export async function createWorkspaceTools(workspace: Workspace, configContext?: ToolConfigContext) {
+export async function createWorkspaceTools(
+  workspace: Workspace,
+  configContext?: Omit<ToolConfigContext, 'requestContext'> & { requestContext?: unknown },
+) {
   // Seed fallback context so dynamic enabled functions always get called,
-  // even if the caller omits configContext.
-  const effectiveConfigContext = configContext ?? { requestContext: {}, workspace };
+  // even if the caller omits configContext.  Normalize requestContext so
+  // user-provided functions always receive a plain Record, not a Map.
+  const effectiveConfigContext: ToolConfigContext = configContext
+    ? { ...configContext, requestContext: toPlainRequestContext(configContext.requestContext) }
+    : { requestContext: {}, workspace };
   const tools: Record<string, any> = {};
   const toolsConfig = workspace.getToolsConfig();
   const isReadOnly = workspace.filesystem?.readOnly ?? false;
@@ -271,10 +291,20 @@ export async function createWorkspaceTools(workspace: Workspace, configContext?:
       wrapped = {
         ...tool,
         requireApproval: true,
-        needsApprovalFn: async (args: any, ctx?: { requestContext?: Record<string, unknown>; workspace?: object }) =>
+        needsApprovalFn: async (
+          args: Record<string, unknown>,
+          ctx?: {
+            requestContext?: Record<string, unknown> | { entries(): Iterable<[string, unknown]> };
+            workspace?: object;
+          },
+        ) =>
           resolveDynamicValue(
             approvalFn,
-            { args, requestContext: ctx?.requestContext ?? {}, workspace: ctx?.workspace ?? workspace },
+            {
+              args,
+              requestContext: toPlainRequestContext(ctx?.requestContext),
+              workspace: ctx?.workspace ?? workspace,
+            },
             true,
           ),
       };
