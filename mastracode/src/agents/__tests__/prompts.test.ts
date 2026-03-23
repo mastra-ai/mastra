@@ -22,7 +22,9 @@ describe('buildFullPrompt', () => {
     });
 
     expect(prompt).toContain('<autonomy_and_persistence>');
-    expect(prompt).toContain('Persist until the task is fully handled end-to-end within the current turn whenever feasible');
+    expect(prompt).toContain(
+      'Persist until the task is fully handled end-to-end within the current turn whenever feasible',
+    );
   });
 
   it('does not include model-specific prompt content for other models', () => {

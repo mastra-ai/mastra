@@ -68,7 +68,9 @@ export function buildFullPrompt(ctx: PromptContext): string {
   const base = buildBasePrompt(baseCtx);
   const entry = modePrompts[ctx.modeId] || modePrompts.build;
   const modeSpecific = (typeof entry === 'function' ? entry(ctx) : entry) ?? '';
-  const modelSpecific = ctx.modelId ? modelSpecificPrompts[ctx.modelId as keyof typeof modelSpecificPrompts] ?? '' : '';
+  const modelSpecific = ctx.modelId
+    ? (modelSpecificPrompts[ctx.modelId as keyof typeof modelSpecificPrompts] ?? '')
+    : '';
 
   // Inject current task state so agent doesn't lose track after OM truncation
   let taskSection = '';
@@ -85,7 +87,13 @@ export function buildFullPrompt(ctx: PromptContext): string {
   const instructionSources = loadAgentInstructions(ctx.workingDir);
   const instructionsSection = formatAgentInstructions(instructionSources);
 
-  const sections = [base, taskSection.trim(), instructionsSection.trim(), modelSpecific.trim(), modeSpecific.trim()].filter(Boolean);
+  const sections = [
+    base,
+    taskSection.trim(),
+    instructionsSection.trim(),
+    modelSpecific.trim(),
+    modeSpecific.trim(),
+  ].filter(Boolean);
 
   return sections.join('\n\n');
 }
