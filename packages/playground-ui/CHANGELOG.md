@@ -1,5 +1,34 @@
 # @mastra/playground-ui
 
+## 19.0.0-alpha.0
+
+### Minor Changes
+
+- Added Evaluate tab to the agent playground with full dataset management, scorer editing, experiment execution, and review workflow. ([#14470](https://github.com/mastra-ai/mastra/pull/14470))
+
+  **Evaluate tab** — A new sidebar-driven tab for managing datasets, scorers, and experiments within the agent playground. Key features:
+  - **Dataset management**: Create, attach/detach, and browse datasets. Inline item editing and deletion. Background LLM-powered test data generation with review-before-add flow.
+  - **Scorer editor**: Create and edit scorers with test items, linked test datasets, configurable score ranges, and model selection. Run scorer experiments directly from the editor.
+  - **Experiment runner**: Trigger experiments from dataset or scorer views with correct target routing (agent, scorer, or workflow). Past runs displayed with pass/fail counts and auto-polling for status updates.
+  - **Collapsible sidebar sections**: Datasets, Scorers, and Experiments sections are collapsible with search-enabled attach dialogs.
+
+  **Review tab** — A dedicated review workflow for experiment results:
+  - Tag-based organization with dataset-level tag vocabulary and bulk tagging
+  - LLM-powered analysis ("Analyze untagged/selected") that proposes tags with reasons, using existing tags when applicable
+  - Thumbs up/down ratings and comments persisted via feedback API
+  - Mark items as complete for audit trail
+  - Completed items section with read-only display
+
+### Patch Changes
+
+- Removed 'Create an Agent' button from agent list page and table empty state. Removed 'Create Scorer' button from top-level scorers page. Removed stored/code source icons (AgentSourceIcon) from agent headers, combobox, and table. Renamed 'Versions' tab to 'Editor' in agent page tabs. Added GaugeIcon to the 'Create Scorer' button in the review tab. ([#14555](https://github.com/mastra-ai/mastra/pull/14555))
+
+- Updated dependencies [[`68ed4e9`](https://github.com/mastra-ai/mastra/commit/68ed4e9f118e8646b60a6112dabe854d0ef53902), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c), [`4a75e10`](https://github.com/mastra-ai/mastra/commit/4a75e106bd31c283a1b3fe74c923610dcc46415b), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c)]:
+  - @mastra/core@1.16.0-alpha.0
+  - @mastra/client-js@1.10.0-alpha.0
+  - @mastra/react@0.2.17-alpha.0
+  - @mastra/ai-sdk@1.2.0
+
 ## 18.0.0
 
 ### Patch Changes
