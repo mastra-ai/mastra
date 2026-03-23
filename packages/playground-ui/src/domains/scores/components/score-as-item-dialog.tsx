@@ -40,6 +40,7 @@ export function ScoreAsItemDialog({ score, isOpen, onClose, level = 2 }: ScoreAs
       isOpen={isOpen}
       onClose={onClose}
       level={level}
+      source={score?.traceId ? { type: 'trace', referenceId: score.traceId } : undefined}
     />
   );
 }

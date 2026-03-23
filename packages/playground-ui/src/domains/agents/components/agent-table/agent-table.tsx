@@ -1,38 +1,34 @@
-import type { GetAgentResponse } from '@mastra/client-js';
-import type { ColumnDef } from '@tanstack/react-table';
-import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import { Plus, BookOpen } from 'lucide-react';
-import React, { useMemo, useState } from 'react';
-import { getColumns } from './columns';
-import type { AgentTableData } from './types';
-import { useIsCmsAvailable } from '@/domains/cms';
+import { GetAgentResponse } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
-import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
-import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
-import { Skeleton } from '@/ds/components/Skeleton';
 import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
-import { TooltipProvider } from '@/ds/components/Tooltip';
+import { is403ForbiddenError } from '@/lib/query-utils';
 import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
 import { Icon } from '@/ds/icons/Icon';
+import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import React, { useMemo, useState } from 'react';
+import { BookOpen } from 'lucide-react';
 
+import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { getColumns } from './columns';
+import { AgentTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
-import { is403ForbiddenError } from '@/lib/query-utils';
+import { TooltipProvider } from '@/ds/components/Tooltip';
+import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
 
 export interface AgentsTableProps {
   agents: Record<string, GetAgentResponse>;
   isLoading: boolean;
   error?: Error | null;
-  onCreateClick?: () => void;
 }
 
-export function AgentsTable({ agents, isLoading, error, onCreateClick }: AgentsTableProps) {
+export function AgentsTable({ agents, isLoading, error }: AgentsTableProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
-  const { isCmsAvailable } = useIsCmsAvailable();
   const projectData: AgentTableData[] = useMemo(() => Object.values(agents), [agents]);
-  const columns = useMemo(() => getColumns(isCmsAvailable), [isCmsAvailable]);
+  const columns = useMemo(() => getColumns(), []);
   const filteredData = useMemo(
     () => projectData.filter(agent => agent.name.toLowerCase().includes(search.toLowerCase())),
     [projectData, search],
@@ -68,7 +64,7 @@ export function AgentsTable({ agents, isLoading, error, onCreateClick }: AgentsT
   }
 
   if (projectData.length === 0 && !isLoading) {
-    return <EmptyAgentsTable onCreateClick={onCreateClick} />;
+    return <EmptyAgentsTable />;
   }
 
   return (
@@ -138,26 +134,14 @@ const AgentsTableSkeleton = () => (
   </Table>
 );
 
-interface EmptyAgentsTableProps {
-  onCreateClick?: () => void;
-}
-
-const EmptyAgentsTable = ({ onCreateClick }: EmptyAgentsTableProps) => (
+const EmptyAgentsTable = () => (
   <div className="flex h-full items-center justify-center">
     <EmptyState
       iconSlot={<AgentCoinIcon />}
       titleSlot="No Agents Yet"
-      descriptionSlot="Create your first agent or configure agents in code."
+      descriptionSlot="Configure agents in code to get started."
       actionSlot={
         <div className="flex flex-col sm:flex-row gap-2">
-          {onCreateClick && (
-            <Button size="lg" variant="light" onClick={onCreateClick}>
-              <Icon>
-                <Plus />
-              </Icon>
-              Create an agent
-            </Button>
-          )}
           <Button
             size="lg"
             variant="outline"

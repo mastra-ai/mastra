@@ -21,6 +21,7 @@ type SaveAsDatasetItemDialogProps = {
   isOpen: boolean;
   onClose: () => void;
   level?: SideDialogRootProps['level'];
+  source?: { type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result'; referenceId?: string };
 };
 
 export function SaveAsDatasetItemDialog({
@@ -30,10 +31,12 @@ export function SaveAsDatasetItemDialog({
   isOpen,
   onClose,
   level = 2,
+  source,
 }: SaveAsDatasetItemDialogProps) {
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
   const [input, setInput] = useState('');
   const [groundTruth, setGroundTruth] = useState('');
+  // source is passed through — not editable in the UI
 
   const { data, isLoading: isDatasetsLoading } = useDatasets();
   const { addItem } = useDatasetMutations();
@@ -78,6 +81,7 @@ export function SaveAsDatasetItemDialog({
         datasetId: selectedDatasetId,
         input: parsedInput,
         groundTruth: parsedGroundTruth,
+        ...(source ? { source } : {}),
       });
 
       const targetDataset = datasets.find(d => d.id === selectedDatasetId);

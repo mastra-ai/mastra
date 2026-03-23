@@ -23,7 +23,8 @@
         "entityId": "test-agent",
         "attributes": {
           "conversationId": "test-thread-id",
-          "instructions": "You are a test agent"
+          "instructions": "You are a test agent",
+          "availableTools": ["calculator", "apiCall", "workflowExecutor"]
         },
         "metadata": {
           "runId": "<runId-1>",
