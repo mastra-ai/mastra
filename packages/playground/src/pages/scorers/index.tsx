@@ -1,24 +1,61 @@
 import {
   Button,
+  ButtonWithTooltip,
   DocsIcon,
   HeaderAction,
   Icon,
   MainContentContent,
   useScorers,
-  useLinkComponent,
-  useIsCmsAvailable,
   Header,
   HeaderTitle,
   MainContentLayout,
   ScorersTable,
+  ScorersList,
+  ListSearch,
+  MainHeader,
+  EntityListPageLayout,
 } from '@mastra/playground-ui';
-import { GaugeIcon, Plus } from 'lucide-react';
+import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
+import { BookIcon, GaugeIcon } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 
 export default function Scorers() {
-  const { Link: FrameworkLink } = useLinkComponent();
   const { data: scorers = {}, isLoading, error } = useScorers();
-  const { isCmsAvailable } = useIsCmsAvailable();
+  const { variant } = useExperimentalUI('entity-list-page');
+  const [search, setSearch] = useState('');
+
+  if (variant === 'new-proposal') {
+    return (
+      <EntityListPageLayout>
+        <EntityListPageLayout.Top>
+          <MainHeader withMargins={false}>
+            <MainHeader.Column>
+              <MainHeader.Title isLoading={isLoading}>
+                <GaugeIcon /> Scorers
+              </MainHeader.Title>
+            </MainHeader.Column>
+            <MainHeader.Column className="flex justify-end gap-2">
+              <ButtonWithTooltip
+                as="a"
+                href="https://mastra.ai/en/docs/evals/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+                tooltipContent="Go to Scorers documentation"
+              >
+                <BookIcon />
+              </ButtonWithTooltip>
+            </MainHeader.Column>
+          </MainHeader>
+          <div className="max-w-[30rem]">
+            <ListSearch onSearch={setSearch} label="Filter scorers" placeholder="Filter by name" />
+          </div>
+        </EntityListPageLayout.Top>
+
+        <ScorersList scorers={scorers} isLoading={isLoading} error={error} search={search} onSearch={setSearch} />
+      </EntityListPageLayout>
+    );
+  }
 
   return (
     <MainContentLayout>
@@ -31,18 +68,8 @@ export default function Scorers() {
         </HeaderTitle>
 
         <HeaderAction>
-          {isCmsAvailable && (
-            <Button variant="light" as={FrameworkLink} to="/cms/scorers/create">
-              <Icon>
-                <Plus />
-              </Icon>
-              Create a scorer
-            </Button>
-          )}
-          <Button variant="outline" as={Link} to="https://mastra.ai/en/docs/evals/overview" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
+          <Button as={Link} to="https://mastra.ai/en/docs/evals/overview" target="_blank" variant="ghost" size="md">
+            <DocsIcon />
             Scorers documentation
           </Button>
         </HeaderAction>

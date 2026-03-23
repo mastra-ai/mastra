@@ -36,31 +36,27 @@ All parameters are the same as [`Run.timeTravel()`](../../workflows/run-methods/
 
 <PropertiesTable
   content={[
-{
-name: "output",
-type: "WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>",
-description:
-"An object containing both the stream and result promise",
-},
-{
-name: "output.fullStream",
-type: "ReadableStream<WorkflowStreamEvent>",
-description:
-"A readable stream that emits workflow events as execution progresses",
-},
-{
-name: "output.result",
-type: "Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>",
-description:
-"A promise that resolves to the final workflow execution result",
-},
-{
-name: "output.traceId",
-type: "string",
-isOptional: true,
-description:
-"The trace ID associated with this execution when Tracing is enabled",
-},
+  {
+    name: 'output',
+    type: 'WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>',
+    description: 'An object containing both the stream and result promise',
+  },
+  {
+    name: 'output.fullStream',
+    type: 'ReadableStream<WorkflowStreamEvent>',
+    description: 'A readable stream that emits workflow events as execution progresses',
+  },
+  {
+    name: 'output.result',
+    type: 'Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>',
+    description: 'A promise that resolves to the final workflow execution result',
+  },
+  {
+    name: 'output.traceId',
+    type: 'string',
+    isOptional: true,
+    description: 'The trace ID associated with this execution when Tracing is enabled',
+  },
 ]}
 />
 

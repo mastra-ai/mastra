@@ -4,7 +4,7 @@
  */
 
 import { Container, Text, Spacer } from '@mariozechner/pi-tui';
-import { theme } from '../theme.js';
+import { BOX_INDENT, theme } from '../theme.js';
 
 /**
  * Format token count for display (e.g., 7234 -> "7.2k", 234 -> "0.2k", 0 -> "0")
@@ -55,6 +55,11 @@ export type OMMarkerData =
       operationType: 'observation' | 'reflection';
       tokensActivated: number;
       observationTokens: number;
+    }
+  | {
+      type: 'om_thread_title_updated';
+      oldTitle?: string;
+      newTitle: string;
     };
 
 /**
@@ -66,10 +71,9 @@ export class OMMarkerComponent extends Container {
 
   constructor(data: OMMarkerData) {
     super();
-    // Add 1 line of padding above
-    this.addChild(new Spacer(1));
-    this.textChild = new Text(formatMarker(data), 0, 0);
+    this.textChild = new Text(formatMarker(data), BOX_INDENT, 0);
     this.addChild(this.textChild);
+    this.addChild(new Spacer(1));
   }
 
   /**
@@ -80,7 +84,7 @@ export class OMMarkerComponent extends Container {
   }
 }
 function formatMarker(data: OMMarkerData): string {
-  const isReflection = data.operationType === 'reflection';
+  const isReflection = 'operationType' in data && data.operationType === 'reflection';
   const label = isReflection ? 'Reflection' : 'Observation';
 
   switch (data.type) {
@@ -129,6 +133,9 @@ function formatMarker(data: OMMarkerData): string {
       const msgTokens = formatTokens(data.tokensActivated);
       const obsTokens = formatTokens(data.observationTokens);
       return theme.fg('success', `  ✓ Activated ${kind}: -${msgTokens} msg tokens, +${obsTokens} obs tokens`);
+    }
+    case 'om_thread_title_updated': {
+      return theme.fg('muted', `  thread title updated: ${data.newTitle}`);
     }
   }
 }

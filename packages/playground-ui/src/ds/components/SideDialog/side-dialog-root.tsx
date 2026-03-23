@@ -1,9 +1,9 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { cn } from '@/lib/utils';
 
 import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
 import { ChevronsRightIcon } from 'lucide-react';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export type SideDialogRootProps = {
   variant?: 'default' | 'confirmation';

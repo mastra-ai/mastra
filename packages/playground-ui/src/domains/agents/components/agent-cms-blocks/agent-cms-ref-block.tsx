@@ -1,16 +1,16 @@
-import { GripVertical, X, FileText, ExternalLink } from 'lucide-react';
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
+import { GripVertical, X, FileText, ExternalLink } from 'lucide-react';
 
+import type { RefInstructionBlock } from '../agent-edit-page/utils/form-validation';
+import { useStoredPromptBlock } from '@/domains/prompt-blocks';
+import { Badge } from '@/ds/components/Badge';
 import { ContentBlock } from '@/ds/components/ContentBlocks';
 import { IconButton } from '@/ds/components/IconButton';
-import { Icon } from '@/ds/icons';
-import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
-import { Badge } from '@/ds/components/Badge';
+import { Icon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
-import { useStoredPromptBlock } from '@/domains/prompt-blocks';
-import type { RefInstructionBlock } from '../agent-edit-page/utils/form-validation';
+import { cn } from '@/lib/utils';
 
 export interface AgentCMSRefBlockProps {
   index: number;

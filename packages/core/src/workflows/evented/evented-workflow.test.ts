@@ -50,6 +50,11 @@ createWorkflowTestSuite({
   // Provide access to storage for tests that need to spy on storage operations
   getStorage: () => sharedStorage,
 
+  beforeAll: async () => {
+    vi.unmock('crypto');
+    vi.unmock('node:crypto');
+  },
+
   beforeEach: async () => {
     // Don't reset mocks - they're created at describe time and need to persist
     // vi.resetAllMocks();

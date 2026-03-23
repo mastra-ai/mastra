@@ -115,11 +115,11 @@ const ModelsDevProviderSchema = z
     name: z.string(),
     url: z.string().optional(),
     npm: z.string().optional(),
-    models: z.record(ModelsDevModelSchema),
+    models: z.record(z.string(), ModelsDevModelSchema),
   })
   .passthrough();
 
-const ModelsDevResponseSchema = z.record(ModelsDevProviderSchema);
+const ModelsDevResponseSchema = z.record(z.string(), ModelsDevProviderSchema);
 
 type ModelsDevProvider = z.infer<typeof ModelsDevProviderSchema>;
 
@@ -315,9 +315,9 @@ Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-
   models={${modelDataJson}}
 />
 
-## Advanced Configuration
+## Advanced configuration
 
-### Custom Headers
+### Custom headers
 
 \`\`\`typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
@@ -338,7 +338,7 @@ const agent = new Agent({
 });
 \`\`\`
 
-### Dynamic Model Selection
+### Dynamic model selection
 
 \`\`\`typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
@@ -357,7 +357,7 @@ ${generateProviderOptionsSection(provider.id)}
 ${
   provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible'
     ? `
-## Direct Provider Installation
+## Direct provider installation
 
 This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/${provider.packageName}) for more details.
 
@@ -476,7 +476,7 @@ Learn more in the [${displayName} documentation](${docUrl}).`
   const modelTable =
     allModels.length > 0
       ? `
-## Available Models
+## Available models
 
 | Model |
 |-------|
@@ -576,7 +576,7 @@ Mastra provides a unified interface for working with LLMs across multiple provid
 
 - **Access the newest AI** - Use new models the moment they're released, no matter which provider they come from. Avoid vendor lock-in with Mastra's provider-agnostic interface.
 
-- [**Mix and match models**](#mix-and-match-models) - Use different models for different tasks. For example, run GPT-4o-mini for large-context processing, then switch to Claude Opus 4.1 for reasoning tasks.
+- [**Mix and match models**](#mix-and-match-models) - Use different models for different tasks. For example, run GPT-5-mini for large-context processing, then switch to Claude Opus 4.6 for reasoning tasks.
 
 - [**Model fallbacks**](#model-fallbacks) - If a provider experiences an outage, Mastra can automatically switch to another provider at the application level, minimizing latency compared to API gateways.
 
@@ -878,7 +878,9 @@ Your users never experience the disruption - the response comes back with the sa
 
 Mastra also supports local models like \`gpt-oss\`, \`Qwen3\`, \`DeepSeek\` and many more that you run on your own hardware. The application running your local model needs to provide an OpenAI-compatible API server for Mastra to connect to. We recommend using [LMStudio](https://lmstudio.ai/) (see [Running the LMStudio server](https://lmstudio.ai/docs/developer/core/server)).
 
-For a custom provider the \`id\` (\`$\{providerId\}/$\{modelId\}\`) is required but it will only be used for display purposes. The \`modelId\` needs to be the actual model you want to use. An example would be: \`custom/my-qwen3-model\`.
+For custom OpenAI-compatible endpoints, \`id\` is the shorthand \`provider/model\` form. It works well when the upstream server expects a bare model name such as \`llama3.2\`.
+
+If the remote endpoint expects a provider-qualified model name such as \`google/gemini-2.5-flash\`, use \`providerId\` and \`modelId\` instead. \`providerId\` is used by Mastra for metadata, and \`modelId\` is sent upstream exactly as provided.
 
 For the \`url\` it's **important** that you use the base URL of the OpenAI-compatible endpoint with Mastra's \`model\` setting and not the individual chat endpoints.
 
@@ -891,6 +893,23 @@ const agent = new Agent({
   instructions: "You are a helpful assistant",
   model: {
     id: "custom/my-qwen3-model",
+    url: "http://your-custom-openai-compatible-endpoint.com/v1"
+  }
+})
+\`\`\`
+
+If the remote endpoint expects a provider-qualified model name, pass that exact value in \`modelId\`:
+
+\`\`\`typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: {
+    providerId: "gateway",
+    modelId: "google/gemini-2.5-flash",
     url: "http://your-custom-openai-compatible-endpoint.com/v1"
   }
 })
@@ -952,11 +971,11 @@ import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";${
 
 Gateway providers aggregate multiple model providers and add features like caching, rate limiting, analytics, and automatic failover. Use gateways when you need observability, cost management, or simplified multi-provider access.
 
-## Custom Gateways
+## Custom gateways
 
 Create custom gateways for private LLM deployments or specialized provider integrations. See [Custom Gateways](/models/gateways/custom-gateways) for implementation details.
 
-## Built-in Gateways
+## Built-in gateways
 
 <CardGrid>
 ${gatewaysList
@@ -1177,7 +1196,7 @@ async function generateDocs() {
   const modelsDevResponse = await fetch('https://models.dev/api.json');
   const modelsDevData = ModelsDevResponseSchema.parse(await modelsDevResponse.json());
   // Convert object to array of providers
-  const allModelsDevProviders: ModelsDevProvider[] = Object.values(modelsDevData);
+  const allModelsDevProviders = Object.values(modelsDevData) as ModelsDevProvider[];
 
   // Generate index page
   const indexContent = generateIndexPage(grouped);

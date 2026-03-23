@@ -1,13 +1,17 @@
+import type { GetWorkflowResponse } from '@mastra/client-js';
 import { Braces, Loader2 } from 'lucide-react';
 import { useState, useEffect, useContext } from 'react';
-import { toast } from '@/lib/toast';
-
-import { Button } from '@/ds/components/Button';
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Skeleton } from '@/ds/components/Skeleton';
+import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
+import { WorkflowRunContext } from '../context/workflow-run-context';
+import { useSuspendedSteps, useWorkflowSchemas } from './use-workflow-trigger';
+import { WorkflowCancelButton } from './workflow-cancel-button';
+import { WorkflowStepsStatus } from './workflow-steps-status';
+import { WorkflowSuspendedSteps } from './workflow-suspended-steps';
+import type { ResumeStepParams } from './workflow-suspended-steps';
+import { WorkflowTriggerForm } from './workflow-trigger-form';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
-import { Icon } from '@/ds/icons';
-import { Txt } from '@/ds/components/Txt';
+import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import {
   Dialog,
@@ -17,16 +21,12 @@ import {
   DialogDescription,
   DialogBody,
 } from '@/ds/components/Dialog';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons';
 import { isObjectEmpty } from '@/lib/object';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-
-import type { GetWorkflowResponse } from '@mastra/client-js';
-import { WorkflowRunContext, WorkflowRunStreamResult } from '../context/workflow-run-context';
-import { useSuspendedSteps, useWorkflowSchemas, type SuspendedStep } from './use-workflow-trigger';
-import { WorkflowTriggerForm } from './workflow-trigger-form';
-import { WorkflowSuspendedSteps, type ResumeStepParams } from './workflow-suspended-steps';
-import { WorkflowCancelButton } from './workflow-cancel-button';
-import { WorkflowStepsStatus } from './workflow-steps-status';
+import { toast } from '@/lib/toast';
 
 export interface WorkflowTriggerProps {
   workflowId: string;
@@ -122,8 +122,8 @@ export function WorkflowTrigger({
       const { initialState, inputData: dataInputData } = data ?? {};
       const inputData = hasStateSchema ? dataInputData : data;
 
-      streamWorkflow({ workflowId, runId: run.runId, inputData, initialState, requestContext });
-    } catch (err) {
+      void streamWorkflow({ workflowId, runId: run.runId, inputData, initialState, requestContext });
+    } catch {
       toast.error('Error executing workflow');
     }
   };
@@ -200,7 +200,7 @@ export function WorkflowTrigger({
             isStreaming={isStreamingWorkflow}
             onExecute={data => {
               setPayload(data);
-              handleExecuteWorkflow(data);
+              void handleExecuteWorkflow(data);
             }}
             isViewingRun={!!paramsRunId}
             isProcessorWorkflow={workflow?.isProcessorWorkflow}

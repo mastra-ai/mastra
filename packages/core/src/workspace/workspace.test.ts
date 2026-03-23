@@ -19,6 +19,56 @@ import { createWorkspaceTools } from './tools';
 import { Workspace } from './workspace';
 
 // =============================================================================
+// Helpers
+// =============================================================================
+
+/** Create a SKILL.md file with valid frontmatter */
+function skillContent(name: string, description: string): string {
+  return `---
+name: ${name}
+description: ${description}
+---
+
+Instructions for the ${name} skill. This skill helps with ${description}.
+`;
+}
+
+/** Create skill directories with SKILL.md files inside a base directory */
+async function createSkillFixtures(baseDir: string): Promise<void> {
+  await fs.mkdir(path.join(baseDir, 'skills', 'travel-tips'), { recursive: true });
+  await fs.writeFile(
+    path.join(baseDir, 'skills', 'travel-tips', 'SKILL.md'),
+    skillContent('travel-tips', 'providing travel tips and recommendations'),
+  );
+
+  await fs.mkdir(path.join(baseDir, 'skills', 'language-helper'), { recursive: true });
+  await fs.writeFile(
+    path.join(baseDir, 'skills', 'language-helper', 'SKILL.md'),
+    skillContent('language-helper', 'translating common phrases for travelers'),
+  );
+  await fs.mkdir(path.join(baseDir, 'skills', 'language-helper', 'references'), { recursive: true });
+  await fs.writeFile(
+    path.join(baseDir, 'skills', 'language-helper', 'references', 'phrases.md'),
+    'Common Japanese phrases: konnichiwa, arigatou, sumimasen',
+  );
+}
+
+/** Create travel guide content files inside a base directory */
+async function createDocsFixtures(baseDir: string): Promise<void> {
+  await fs.mkdir(path.join(baseDir, 'docs', 'london'), { recursive: true });
+  await fs.mkdir(path.join(baseDir, 'docs', 'tokyo'), { recursive: true });
+  await fs.writeFile(
+    path.join(baseDir, 'docs', 'london', 'activities.md'),
+    'London has many activities including visiting the Tower of London and Big Ben',
+  );
+  await fs.writeFile(
+    path.join(baseDir, 'docs', 'tokyo', 'activities.md'),
+    'Tokyo offers amazing experiences like visiting Shibuya crossing and Senso-ji temple',
+  );
+  await fs.writeFile(path.join(baseDir, 'docs', 'overview.txt'), 'A travel guide covering major cities worldwide');
+}
+
+// =============================================================================
 // Tests
 // =============================================================================
 
@@ -99,7 +149,7 @@ describe('Workspace', () => {
       });
       const workspace = new Workspace({ filesystem });
 
-      const content = await workspace.filesystem.readFile('/test.txt');
+      const content = await workspace.filesystem.readFile('test.txt');
       expect(content.toString()).toBe('Hello World');
     });
 
@@ -109,7 +159,7 @@ describe('Workspace', () => {
       });
       const workspace = new Workspace({ filesystem });
 
-      await workspace.filesystem.writeFile('/test.txt', 'Hello World');
+      await workspace.filesystem.writeFile('test.txt', 'Hello World');
 
       const content = await fs.readFile(path.join(tempDir, 'test.txt'), 'utf-8');
       expect(content).toBe('Hello World');
@@ -125,7 +175,7 @@ describe('Workspace', () => {
       });
       const workspace = new Workspace({ filesystem });
 
-      const entries = await workspace.filesystem.readdir('/dir');
+      const entries = await workspace.filesystem.readdir('dir');
       expect(entries).toHaveLength(1);
       expect(entries[0]?.name).toBe('file.txt');
     });
@@ -138,8 +188,8 @@ describe('Workspace', () => {
       });
       const workspace = new Workspace({ filesystem });
 
-      expect(await workspace.filesystem.exists('/exists.txt')).toBe(true);
-      expect(await workspace.filesystem.exists('/notexists.txt')).toBe(false);
+      expect(await workspace.filesystem.exists('exists.txt')).toBe(true);
+      expect(await workspace.filesystem.exists('notexists.txt')).toBe(false);
     });
 
     it('should expose filesystem as undefined when not configured', async () => {
@@ -503,6 +553,266 @@ Line 3 conclusion`;
       const skills1 = workspace.skills;
       const skills2 = workspace.skills;
       expect(skills1).toBe(skills2);
+    });
+
+    // =========================================================================
+    // Skills + search interaction (regression tests for shared SearchEngine)
+    // =========================================================================
+
+    describe('search with skills configured', () => {
+      beforeEach(async () => {
+        await createDocsFixtures(tempDir);
+        await createSkillFixtures(tempDir);
+      });
+
+      it('should search with plain autoIndexPaths and skills', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        const results = await workspace.search('London');
+        expect(results.length).toBeGreaterThan(0);
+        expect(results.some(r => r.id.includes('london'))).toBe(true);
+
+        await workspace.destroy();
+      });
+
+      it('should search with glob autoIndexPaths and skills', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs/**/*.md'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        const results = await workspace.search('London');
+        expect(results.length).toBeGreaterThan(0);
+        expect(results.some(r => r.id.includes('london'))).toBe(true);
+
+        // Should NOT include .txt files
+        const overviewResults = await workspace.search('travel guide worldwide');
+        expect(overviewResults.every(r => r.id.endsWith('.md'))).toBe(true);
+
+        await workspace.destroy();
+      });
+
+      it('should find content from multiple subdirectories with skills', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        const londonResults = await workspace.search('Tower London Big Ben');
+        expect(londonResults.length).toBeGreaterThan(0);
+
+        const tokyoResults = await workspace.search('Shibuya Senso temple');
+        expect(tokyoResults.length).toBeGreaterThan(0);
+
+        await workspace.destroy();
+      });
+
+      it('should preserve auto-indexed content after accessing skills.list()', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        const resultsBefore = await workspace.search('London');
+        expect(resultsBefore.length).toBeGreaterThan(0);
+
+        // Access skills (triggers lazy initialization via #ensureInitialized)
+        const skillsList = await workspace.skills!.list();
+        expect(skillsList.length).toBe(2);
+
+        // Search should STILL work after skills initialization
+        const resultsAfter = await workspace.search('London');
+        expect(resultsAfter.length).toBeGreaterThan(0);
+
+        await workspace.destroy();
+      });
+
+      it('should preserve auto-indexed content after skills.search()', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        // Search skills (triggers skills initialization + skill search)
+        const skillResults = await workspace.skills!.search('travel');
+        expect(skillResults).toBeDefined();
+
+        // Workspace search should STILL work
+        const resultsAfter = await workspace.search('London');
+        expect(resultsAfter.length).toBeGreaterThan(0);
+
+        await workspace.destroy();
+      });
+
+      it('should preserve auto-indexed content after skills.refresh()', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        const resultsBefore = await workspace.search('London');
+        expect(resultsBefore.length).toBeGreaterThan(0);
+
+        // Trigger skills refresh (this is the destructive operation)
+        await workspace.skills!.refresh();
+
+        // Search should STILL work after refresh
+        const resultsAfter = await workspace.search('London');
+        expect(resultsAfter.length).toBeGreaterThan(0);
+        expect(resultsAfter.some(r => r.id.includes('london'))).toBe(true);
+
+        await workspace.destroy();
+      });
+
+      it('should preserve auto-indexed content after skills.maybeRefresh()', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        const resultsBefore = await workspace.search('London');
+        expect(resultsBefore.length).toBeGreaterThan(0);
+
+        // Trigger maybeRefresh (called by SkillsProcessor on step 0)
+        await workspace.skills!.maybeRefresh();
+
+        // Search should STILL work
+        const resultsAfter = await workspace.search('London');
+        expect(resultsAfter.length).toBeGreaterThan(0);
+
+        await workspace.destroy();
+      });
+
+      it('should preserve search after skills refresh with stale detection', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        // Initialize skills
+        await workspace.skills!.list();
+
+        // Wait for staleness cooldown to expire
+        await new Promise(resolve => setTimeout(resolve, 2100));
+
+        // Modify a skill to trigger staleness
+        await fs.writeFile(
+          path.join(tempDir, 'skills', 'travel-tips', 'SKILL.md'),
+          skillContent('travel-tips', 'updated travel tips and recommendations'),
+        );
+
+        // Touch the skill directory to update mtime
+        const now = new Date();
+        await fs.utimes(path.join(tempDir, 'skills', 'travel-tips'), now, now);
+
+        // maybeRefresh should detect staleness and call refresh()
+        await workspace.skills!.maybeRefresh();
+
+        // Search should STILL work (this is the key test)
+        const resultsAfter = await workspace.search('London');
+        expect(resultsAfter.length).toBeGreaterThan(0);
+        expect(resultsAfter.some(r => r.id.includes('london'))).toBe(true);
+
+        await workspace.destroy();
+      });
+
+      it('should preserve manually indexed content after skills.refresh()', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          skills: ['skills'],
+        });
+
+        // Manually index content (no autoIndexPaths)
+        await workspace.index('custom-doc', 'London has amazing historical landmarks and museums');
+
+        // Initialize then refresh skills
+        await workspace.skills!.list();
+        await workspace.skills!.refresh();
+
+        // Manual index should still be searchable
+        const results = await workspace.search('London landmarks');
+        expect(results.length).toBeGreaterThan(0);
+        expect(results.some(r => r.id === 'custom-doc')).toBe(true);
+
+        await workspace.destroy();
+      });
+
+      it('should find skill content via workspace.skills.search()', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        // Skills search should find skill content
+        const results = await workspace.skills!.search('travel tips');
+        expect(results.length).toBeGreaterThan(0);
+
+        await workspace.destroy();
+      });
+
+      it('should find both workspace and skill content after init + skills access', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          bm25: true,
+          autoIndexPaths: ['docs'],
+          skills: ['skills'],
+        });
+
+        await workspace.init();
+
+        // Access skills to trigger initialization
+        await workspace.skills!.list();
+
+        // Should find workspace content
+        const workspaceResults = await workspace.search('London Tower');
+        expect(workspaceResults.length).toBeGreaterThan(0);
+
+        // Should find skill content via skills.search
+        const skillResults = await workspace.skills!.search('travel tips');
+        expect(skillResults.length).toBeGreaterThan(0);
+
+        await workspace.destroy();
+      });
     });
   });
 
@@ -961,7 +1271,7 @@ Line 3 conclusion`;
       const workspace = new Workspace({
         filesystem,
         bm25: true,
-        autoIndexPaths: ['/docs'],
+        autoIndexPaths: ['docs'],
       });
 
       await workspace.init();
@@ -969,7 +1279,7 @@ Line 3 conclusion`;
       // Files should be searchable after init
       const results = await workspace.search('project');
       expect(results.length).toBeGreaterThan(0);
-      expect(results.some(r => r.id === '/docs/readme.txt')).toBe(true);
+      expect(results.some(r => r.id === 'docs/readme.txt')).toBe(true);
 
       await workspace.destroy();
     });
@@ -984,16 +1294,16 @@ Line 3 conclusion`;
       const workspace = new Workspace({
         filesystem,
         bm25: true,
-        autoIndexPaths: ['/docs', '/support'],
+        autoIndexPaths: ['docs', 'support'],
       });
 
       await workspace.init();
 
       const docsResults = await workspace.search('API reference');
-      expect(docsResults.some(r => r.id === '/docs/api.txt')).toBe(true);
+      expect(docsResults.some(r => r.id === 'docs/api.txt')).toBe(true);
 
       const faqResults = await workspace.search('frequently asked');
-      expect(faqResults.some(r => r.id === '/support/faq.txt')).toBe(true);
+      expect(faqResults.some(r => r.id === 'support/faq.txt')).toBe(true);
 
       await workspace.destroy();
     });
@@ -1003,7 +1313,7 @@ Line 3 conclusion`;
       const workspace = new Workspace({
         filesystem,
         bm25: true,
-        autoIndexPaths: ['/nonexistent'],
+        autoIndexPaths: ['nonexistent'],
       });
 
       // Should not throw
@@ -1022,13 +1332,13 @@ Line 3 conclusion`;
       const workspace = new Workspace({
         filesystem,
         bm25: true,
-        autoIndexPaths: ['/docs'],
+        autoIndexPaths: ['docs'],
       });
 
       await workspace.init();
 
       const results = await workspace.search('nested content');
-      expect(results.some(r => r.id === '/docs/nested/deep.txt')).toBe(true);
+      expect(results.some(r => r.id === 'docs/nested/deep.txt')).toBe(true);
 
       await workspace.destroy();
     });
@@ -1043,18 +1353,18 @@ Line 3 conclusion`;
       const workspace = new Workspace({
         filesystem,
         bm25: true,
-        autoIndexPaths: ['/docs/**/*.md'],
+        autoIndexPaths: ['docs/**/*.md'],
       });
 
       await workspace.init();
 
       // .md files should be searchable
       const mdResults = await workspace.search('project');
-      expect(mdResults.some(r => r.id === '/docs/readme.md')).toBe(true);
+      expect(mdResults.some(r => r.id === 'docs/readme.md')).toBe(true);
 
       // .txt files should NOT be indexed
       const txtResults = await workspace.search('Internal notes');
-      expect(txtResults.some(r => r.id === '/docs/notes.txt')).toBe(false);
+      expect(txtResults.some(r => r.id === 'docs/notes.txt')).toBe(false);
 
       await workspace.destroy();
     });
@@ -1072,24 +1382,24 @@ Line 3 conclusion`;
         filesystem,
         bm25: true,
         // Mix of plain path and glob pattern
-        autoIndexPaths: ['/support', '/docs/**/*.md'],
+        autoIndexPaths: ['support', 'docs/**/*.md'],
       });
 
       await workspace.init();
 
       // /support is a plain path — all files indexed
       const faqResults = await workspace.search('frequently asked');
-      expect(faqResults.some(r => r.id === '/support/faq.txt')).toBe(true);
+      expect(faqResults.some(r => r.id === 'support/faq.txt')).toBe(true);
 
       const guideResults = await workspace.search('Support guide');
-      expect(guideResults.some(r => r.id === '/support/guide.md')).toBe(true);
+      expect(guideResults.some(r => r.id === 'support/guide.md')).toBe(true);
 
       // /docs/**/*.md is a glob — only .md files indexed
       const apiResults = await workspace.search('API reference');
-      expect(apiResults.some(r => r.id === '/docs/api.md')).toBe(true);
+      expect(apiResults.some(r => r.id === 'docs/api.md')).toBe(true);
 
       const changelogResults = await workspace.search('Changelog text');
-      expect(changelogResults.some(r => r.id === '/docs/changelog.txt')).toBe(false);
+      expect(changelogResults.some(r => r.id === 'docs/changelog.txt')).toBe(false);
 
       await workspace.destroy();
     });
@@ -1099,7 +1409,7 @@ Line 3 conclusion`;
       const workspace = new Workspace({
         filesystem,
         bm25: true,
-        autoIndexPaths: ['/nonexistent/**/*.md'],
+        autoIndexPaths: ['nonexistent/**/*.md'],
       });
 
       // Should not throw
@@ -1144,20 +1454,20 @@ Line 3 conclusion`;
       const workspace = new Workspace({
         filesystem,
         bm25: true,
-        autoIndexPaths: ['/docs/**/*.{md,txt}'],
+        autoIndexPaths: ['docs/**/*.{md,txt}'],
       });
 
       await workspace.init();
 
       const mdResults = await workspace.search('Markdown content');
-      expect(mdResults.some(r => r.id === '/docs/readme.md')).toBe(true);
+      expect(mdResults.some(r => r.id === 'docs/readme.md')).toBe(true);
 
       const txtResults = await workspace.search('Text content');
-      expect(txtResults.some(r => r.id === '/docs/notes.txt')).toBe(true);
+      expect(txtResults.some(r => r.id === 'docs/notes.txt')).toBe(true);
 
       // .png should NOT be indexed
       const pngResults = await workspace.search('binary data');
-      expect(pngResults.some(r => r.id === '/docs/image.png')).toBe(false);
+      expect(pngResults.some(r => r.id === 'docs/image.png')).toBe(false);
 
       await workspace.destroy();
     });
@@ -1172,21 +1482,21 @@ Line 3 conclusion`;
       const workspace = new Workspace({
         filesystem,
         bm25: true,
-        autoIndexPaths: ['/docs/api/**/*.md'],
+        autoIndexPaths: ['docs/api/**/*.md'],
       });
 
       await workspace.init();
 
       // Files under /docs/api/ should be indexed
       const v2Results = await workspace.search('API v2 endpoints');
-      expect(v2Results.some(r => r.id === '/docs/api/v2/endpoints.md')).toBe(true);
+      expect(v2Results.some(r => r.id === 'docs/api/v2/endpoints.md')).toBe(true);
 
       const overviewResults = await workspace.search('API overview');
-      expect(overviewResults.some(r => r.id === '/docs/api/overview.md')).toBe(true);
+      expect(overviewResults.some(r => r.id === 'docs/api/overview.md')).toBe(true);
 
       // File outside /docs/api/ should NOT be indexed
       const topResults = await workspace.search('Top-level readme');
-      expect(topResults.some(r => r.id === '/docs/readme.md')).toBe(false);
+      expect(topResults.some(r => r.id === 'docs/readme.md')).toBe(false);
 
       await workspace.destroy();
     });
@@ -1199,7 +1509,7 @@ Line 3 conclusion`;
       const workspace = new Workspace({
         filesystem,
         // No bm25 or vectorStore — no search engine
-        autoIndexPaths: ['/docs'],
+        autoIndexPaths: ['docs'],
       });
 
       await workspace.init();
@@ -1220,18 +1530,18 @@ Line 3 conclusion`;
       const workspace = new Workspace({
         filesystem,
         bm25: true,
-        autoIndexPaths: ['/content/faq.md'],
+        autoIndexPaths: ['content/faq.md'],
       });
 
       await workspace.init();
 
       // The single file should be indexed
       const results = await workspace.search('Billing FAQ');
-      expect(results.some(r => r.id === '/content/faq.md')).toBe(true);
+      expect(results.some(r => r.id === 'content/faq.md')).toBe(true);
 
       // The other file should NOT be indexed
       const otherResults = await workspace.search('Setup guide');
-      expect(otherResults.some(r => r.id === '/content/guide.md')).toBe(false);
+      expect(otherResults.some(r => r.id === 'content/guide.md')).toBe(false);
 
       await workspace.destroy();
     });
@@ -1244,13 +1554,13 @@ Line 3 conclusion`;
       const workspace = new Workspace({
         filesystem,
         bm25: true,
-        autoIndexPaths: ['/docs/'],
+        autoIndexPaths: ['docs/'],
       });
 
       await workspace.init();
 
       const results = await workspace.search('project');
-      expect(results.some(r => r.id === '/docs/readme.txt')).toBe(true);
+      expect(results.some(r => r.id === 'docs/readme.txt')).toBe(true);
 
       await workspace.destroy();
     });
@@ -1273,14 +1583,14 @@ Line 3 conclusion`;
 
       // .md files anywhere should be indexed
       const apiResults = await workspace.search('API reference');
-      expect(apiResults.some(r => r.id === '/docs/api.md')).toBe(true);
+      expect(apiResults.some(r => r.id === 'docs/api.md')).toBe(true);
 
       const faqResults = await workspace.search('Frequently asked');
-      expect(faqResults.some(r => r.id === '/content/faq.md')).toBe(true);
+      expect(faqResults.some(r => r.id === 'content/faq.md')).toBe(true);
 
       // .txt files should NOT be indexed
       const txtResults = await workspace.search('Internal notes');
-      expect(txtResults.some(r => r.id === '/notes.txt')).toBe(false);
+      expect(txtResults.some(r => r.id === 'notes.txt')).toBe(false);
 
       await workspace.destroy();
     });
@@ -1302,11 +1612,11 @@ Line 3 conclusion`;
 
       // Files inside /content should be indexed
       const rootResults = await workspace.search('Root FAQ');
-      expect(rootResults.some(r => r.id === '/content/faq.md')).toBe(true);
+      expect(rootResults.some(r => r.id === 'content/faq.md')).toBe(true);
 
       // Files inside /src/content should also be indexed
       const nestedResults = await workspace.search('API documentation');
-      expect(nestedResults.some(r => r.id === '/src/content/api.md')).toBe(true);
+      expect(nestedResults.some(r => r.id === 'src/content/api.md')).toBe(true);
 
       await workspace.destroy();
     });
@@ -1391,12 +1701,12 @@ Line 3 conclusion`;
       const workspace = new Workspace({ filesystem: cfs });
       await workspace.init();
 
-      await workspace.filesystem.writeFile('/local/doc.txt', 'hello from workspace');
-      const content = await workspace.filesystem.readFile('/local/doc.txt', { encoding: 'utf-8' });
+      await workspace.filesystem.writeFile('local/doc.txt', 'hello from workspace');
+      const content = await workspace.filesystem.readFile('local/doc.txt', { encoding: 'utf-8' });
       expect(content).toBe('hello from workspace');
 
       // Verify isolation — file shouldn't exist in the other mount
-      expect(await workspace.filesystem.exists('/backup/doc.txt')).toBe(false);
+      expect(await workspace.filesystem.exists('backup/doc.txt')).toBe(false);
 
       await workspace.destroy();
     });
@@ -1425,14 +1735,14 @@ Line 3 conclusion`;
       const workspace = new Workspace({ filesystem: cfs });
       await workspace.init();
 
-      await workspace.filesystem.writeFile('/local/important.txt', 'critical data');
+      await workspace.filesystem.writeFile('local/important.txt', 'critical data');
       await workspace.filesystem.copyFile('/local/important.txt', '/backup/important.txt');
 
-      const backupContent = await workspace.filesystem.readFile('/backup/important.txt', { encoding: 'utf-8' });
+      const backupContent = await workspace.filesystem.readFile('backup/important.txt', { encoding: 'utf-8' });
       expect(backupContent).toBe('critical data');
 
       // Source still exists
-      expect(await workspace.filesystem.exists('/local/important.txt')).toBe(true);
+      expect(await workspace.filesystem.exists('local/important.txt')).toBe(true);
 
       await workspace.destroy();
     });
@@ -1462,6 +1772,65 @@ Line 3 conclusion`;
 
       const noteResults = await workspace.search('deployment');
       expect(noteResults.some(r => r.id === '/backup/notes.txt')).toBe(true);
+
+      await workspace.destroy();
+    });
+
+    it('should support search across mounts WITH skills configured', async () => {
+      await createDocsFixtures(tempDirA);
+      await createSkillFixtures(tempDirA);
+      await fs.writeFile(path.join(tempDirB, 'notes.txt'), 'Notes about Paris travel planning');
+
+      const cfs = new CompositeFilesystem({
+        mounts: {
+          '/data': new LocalFilesystem({ basePath: tempDirA }),
+          '/extra': new LocalFilesystem({ basePath: tempDirB }),
+        },
+      });
+      const workspace = new Workspace({
+        filesystem: cfs,
+        bm25: true,
+        autoIndexPaths: ['/data/docs', '/extra'],
+        skills: ['/data/skills'],
+      });
+
+      await workspace.init();
+
+      const londonResults = await workspace.search('London');
+      expect(londonResults.length).toBeGreaterThan(0);
+
+      const parisResults = await workspace.search('Paris travel');
+      expect(parisResults.length).toBeGreaterThan(0);
+
+      await workspace.destroy();
+    });
+
+    it('should support search with glob across mounts and skills', async () => {
+      await createDocsFixtures(tempDirA);
+      await createSkillFixtures(tempDirA);
+      await fs.writeFile(path.join(tempDirB, 'notes.md'), 'Notes about Paris travel planning');
+      await fs.writeFile(path.join(tempDirB, 'todo.txt'), 'Todo list for trip');
+
+      const cfs = new CompositeFilesystem({
+        mounts: {
+          '/data': new LocalFilesystem({ basePath: tempDirA }),
+          '/extra': new LocalFilesystem({ basePath: tempDirB }),
+        },
+      });
+      const workspace = new Workspace({
+        filesystem: cfs,
+        bm25: true,
+        autoIndexPaths: ['/data/docs/**/*.md', '/extra/**/*.md'],
+        skills: ['/data/skills'],
+      });
+
+      await workspace.init();
+
+      const londonResults = await workspace.search('London');
+      expect(londonResults.length).toBeGreaterThan(0);
+
+      const parisResults = await workspace.search('Paris travel');
+      expect(parisResults.length).toBeGreaterThan(0);
 
       await workspace.destroy();
     });
@@ -1511,13 +1880,13 @@ Line 3 conclusion`;
       const workspace = new Workspace({ filesystem: cfs });
       await workspace.init();
 
-      await workspace.filesystem.writeFile('/local/moveme.txt', 'moving data');
+      await workspace.filesystem.writeFile('local/moveme.txt', 'moving data');
       await workspace.filesystem.moveFile('/local/moveme.txt', '/backup/moveme.txt');
 
       // Source should be gone
-      expect(await workspace.filesystem.exists('/local/moveme.txt')).toBe(false);
+      expect(await workspace.filesystem.exists('local/moveme.txt')).toBe(false);
       // Dest should have the content
-      const content = await workspace.filesystem.readFile('/backup/moveme.txt', { encoding: 'utf-8' });
+      const content = await workspace.filesystem.readFile('backup/moveme.txt', { encoding: 'utf-8' });
       expect(content).toBe('moving data');
 
       await workspace.destroy();
@@ -1538,15 +1907,15 @@ Line 3 conclusion`;
         await workspace.init();
 
         // Reads work
-        const content = await workspace.filesystem.readFile('/ro/protected.txt', { encoding: 'utf-8' });
+        const content = await workspace.filesystem.readFile('ro/protected.txt', { encoding: 'utf-8' });
         expect(content).toBe('do not modify');
 
         // Writes fail
-        await expect(workspace.filesystem.writeFile('/ro/new.txt', 'fail')).rejects.toThrow();
+        await expect(workspace.filesystem.writeFile('ro/new.txt', 'fail')).rejects.toThrow();
 
         // Can still write to the read-write mount
-        await workspace.filesystem.writeFile('/rw/ok.txt', 'success');
-        expect(await workspace.filesystem.readFile('/rw/ok.txt', { encoding: 'utf-8' })).toBe('success');
+        await workspace.filesystem.writeFile('rw/ok.txt', 'success');
+        expect(await workspace.filesystem.readFile('rw/ok.txt', { encoding: 'utf-8' })).toBe('success');
 
         await workspace.destroy();
       } finally {
@@ -1569,8 +1938,8 @@ Line 3 conclusion`;
       expect(workspace.sandbox).toBe(sandbox);
 
       // Filesystem works
-      await workspace.filesystem.writeFile('/local/test.txt', 'via composite');
-      expect(await workspace.filesystem.readFile('/local/test.txt', { encoding: 'utf-8' })).toBe('via composite');
+      await workspace.filesystem.writeFile('local/test.txt', 'via composite');
+      expect(await workspace.filesystem.readFile('local/test.txt', { encoding: 'utf-8' })).toBe('via composite');
 
       // Sandbox works — the file written via composite is on disk in tempDirA
       const result = await workspace.sandbox.executeCommand('cat', ['test.txt']);
@@ -1603,26 +1972,26 @@ Line 3 conclusion`;
       await workspace.init();
 
       // Create nested structure in source
-      await workspace.filesystem.writeFile('/src/project/config.json', '{"key":"value"}');
-      await workspace.filesystem.writeFile('/src/project/lib/utils.ts', 'export const x = 1;');
+      await workspace.filesystem.writeFile('src/project/config.json', '{"key":"value"}');
+      await workspace.filesystem.writeFile('src/project/lib/utils.ts', 'export const x = 1;');
 
       // Pre-create empty files at dest to ensure parent directories exist
       // (cross-mount copyFile doesn't auto-create parent dirs, writeFile does)
-      await workspace.filesystem.writeFile('/dest/project/config.json', '');
+      await workspace.filesystem.writeFile('dest/project/config.json', '');
       await workspace.filesystem.copyFile('/src/project/config.json', '/dest/project/config.json');
-      await workspace.filesystem.writeFile('/dest/project/lib/utils.ts', '');
+      await workspace.filesystem.writeFile('dest/project/lib/utils.ts', '');
       await workspace.filesystem.copyFile('/src/project/lib/utils.ts', '/dest/project/lib/utils.ts');
 
       // Verify the nested structure was created correctly
-      const config = await workspace.filesystem.readFile('/dest/project/config.json', { encoding: 'utf-8' });
+      const config = await workspace.filesystem.readFile('dest/project/config.json', { encoding: 'utf-8' });
       expect(config).toBe('{"key":"value"}');
 
-      const utils = await workspace.filesystem.readFile('/dest/project/lib/utils.ts', { encoding: 'utf-8' });
+      const utils = await workspace.filesystem.readFile('dest/project/lib/utils.ts', { encoding: 'utf-8' });
       expect(utils).toBe('export const x = 1;');
 
       // Verify source is untouched
-      expect(await workspace.filesystem.exists('/src/project/config.json')).toBe(true);
-      expect(await workspace.filesystem.exists('/src/project/lib/utils.ts')).toBe(true);
+      expect(await workspace.filesystem.exists('src/project/config.json')).toBe(true);
+      expect(await workspace.filesystem.exists('src/project/lib/utils.ts')).toBe(true);
 
       await workspace.destroy();
     });
@@ -1664,9 +2033,9 @@ Line 3 conclusion`;
       expect(workspace.filesystem.mountPaths.sort()).toEqual(['/a', '/b']);
 
       // Verify operations work through the auto-created composite
-      await workspace.filesystem.writeFile('/a/test.txt', 'from mount a');
-      expect(await workspace.filesystem.readFile('/a/test.txt', { encoding: 'utf-8' })).toBe('from mount a');
-      expect(await workspace.filesystem.exists('/b/test.txt')).toBe(false);
+      await workspace.filesystem.writeFile('a/test.txt', 'from mount a');
+      expect(await workspace.filesystem.readFile('a/test.txt', { encoding: 'utf-8' })).toBe('from mount a');
+      expect(await workspace.filesystem.exists('b/test.txt')).toBe(false);
 
       await workspace.destroy();
     });

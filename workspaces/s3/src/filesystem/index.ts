@@ -261,6 +261,29 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   /**
+   * Get the underlying S3Client instance for direct access to AWS S3 APIs.
+   *
+   * Use this when you need to access S3 features not exposed through the
+   * WorkspaceFilesystem interface (e.g., presigned URLs, multipart uploads,
+   * custom S3 operations, etc.).
+   *
+   * @example Generate a presigned URL
+   * ```typescript
+   * import { GetObjectCommand } from '@aws-sdk/client-s3';
+   * import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+   *
+   * const s3Client = fs.client;
+   * const url = await getSignedUrl(s3Client, new GetObjectCommand({
+   *   Bucket: 'my-bucket',
+   *   Key: 'my-file.txt',
+   * }));
+   * ```
+   */
+  get client(): S3Client {
+    return this.getClient();
+  }
+
+  /**
    * Get mount configuration for E2B sandbox.
    * Returns S3-compatible config that works with s3fs-fuse.
    */

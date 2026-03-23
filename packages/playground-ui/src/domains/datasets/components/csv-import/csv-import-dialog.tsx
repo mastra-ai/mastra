@@ -1,6 +1,21 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import type { ColumnMapping, FieldType } from '../../hooks/use-column-mapping';
+import { useColumnMapping } from '../../hooks/use-column-mapping';
+import type { ParsedCSV } from '../../hooks/use-csv-parser';
+import { useCSVParser } from '../../hooks/use-csv-parser';
+import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
+import { useDataset } from '../../hooks/use-datasets';
+import type { CsvValidationResult } from '../../utils/csv-validation';
+import { validateCsvRows } from '../../utils/csv-validation';
+import { ColumnMappingStep } from './column-mapping-step';
+import { CSVPreviewTable } from './csv-preview-table';
+import { CSVUploadStep } from './csv-upload-step';
+import { ValidationReport } from './validation-report';
+import type { ValidationError } from './validation-summary';
+import { ValidationSummary } from './validation-summary';
+import { Button } from '@/ds/components/Button';
 import {
   Dialog,
   DialogContent,
@@ -10,19 +25,8 @@ import {
   DialogBody,
   DialogFooter,
 } from '@/ds/components/Dialog';
-import { Button } from '@/ds/components/Button';
 import { Spinner } from '@/ds/components/Spinner';
 import { toast } from '@/lib/toast';
-import { useCSVParser, ParsedCSV } from '../../hooks/use-csv-parser';
-import { useColumnMapping, ColumnMapping, FieldType } from '../../hooks/use-column-mapping';
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { useDataset } from '../../hooks/use-datasets';
-import { CSVUploadStep } from './csv-upload-step';
-import { CSVPreviewTable } from './csv-preview-table';
-import { ColumnMappingStep } from './column-mapping-step';
-import { ValidationSummary, ValidationError } from './validation-summary';
-import { ValidationReport } from './validation-report';
-import { validateCsvRows, CsvValidationResult } from '../../utils/csv-validation';
 
 export interface CSVImportDialogProps {
   datasetId: string;
@@ -435,19 +439,13 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
   const renderFooter = () => {
     switch (step) {
       case 'upload':
-        return (
-          <Button variant="standard" size="default" onClick={handleClose}>
-            Cancel
-          </Button>
-        );
+        return <Button onClick={handleClose}>Cancel</Button>;
 
       case 'preview':
         return (
           <>
-            <Button variant="standard" size="default" onClick={() => setStep('upload')}>
-              Back
-            </Button>
-            <Button variant="cta" size="default" onClick={() => setStep('mapping')}>
+            <Button onClick={() => setStep('upload')}>Back</Button>
+            <Button variant="primary" onClick={() => setStep('mapping')}>
               Next
             </Button>
           </>
@@ -456,15 +454,8 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'mapping':
         return (
           <>
-            <Button variant="standard" size="default" onClick={() => setStep('preview')}>
-              Back
-            </Button>
-            <Button
-              variant="cta"
-              size="default"
-              onClick={handleValidateMapping}
-              disabled={!columnMapping.isInputMapped}
-            >
+            <Button onClick={() => setStep('preview')}>Back</Button>
+            <Button variant="primary" onClick={handleValidateMapping} disabled={!columnMapping.isInputMapped}>
               {dataset?.inputSchema || dataset?.groundTruthSchema ? 'Validate' : 'Next'}
             </Button>
           </>
@@ -473,12 +464,9 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'validation':
         return (
           <>
-            <Button variant="standard" size="default" onClick={() => setStep('mapping')}>
-              Back
-            </Button>
+            <Button onClick={() => setStep('mapping')}>Back</Button>
             <Button
-              variant="cta"
-              size="default"
+              variant="primary"
               onClick={handleImport}
               disabled={!schemaValidation || schemaValidation.validCount === 0}
             >
@@ -494,7 +482,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
       case 'complete':
         return (
-          <Button variant="cta" size="default" onClick={handleDone}>
+          <Button variant="primary" onClick={handleDone}>
             Done
           </Button>
         );

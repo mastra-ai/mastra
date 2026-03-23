@@ -19,39 +19,32 @@ new ConsoleExporter(config?: BaseExporterConfig)
 ```
 
 <PropertiesTable
-  props={[
-{
-name: "config",
-type: "BaseExporterConfig",
-description: "Configuration options",
-required: false,
-},
-]}
-/>
-
-## BaseExporterConfig
-
-```typescript
-interface BaseExporterConfig {
-  logger?: IMastraLogger
-  logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'
-}
-```
-
-<PropertiesTable
-  props={[
-{
-name: "logger",
-type: "IMastraLogger",
-description: "Logger instance (falls back to ConsoleLogger with INFO level)",
-required: false,
-},
-{
-name: "logLevel",
-type: "LogLevel | 'debug' | 'info' | 'warn' | 'error'",
-description: "Log level for the exporter (default: INFO)",
-required: false,
-},
+  content={[
+  {
+    name: 'config',
+    type: 'BaseExporterConfig',
+    description: 'Configuration options',
+    isOptional: true,
+    properties: [
+      {
+        type: 'BaseExporterConfig',
+        parameters: [
+          {
+            name: 'logger',
+            type: 'IMastraLogger',
+            description: 'Logger instance (falls back to ConsoleLogger with INFO level)',
+            isOptional: true,
+          },
+          {
+            name: 'logLevel',
+            type: "LogLevel | 'debug' | 'info' | 'warn' | 'error'",
+            description: 'Log level for the exporter (default: INFO)',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -63,7 +56,7 @@ readonly name = 'tracing-console-exporter';
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -73,12 +66,12 @@ Exports a tracing event to the console.
 
 <PropertiesTable
   props={[
-{
-name: "event",
-type: "TracingEvent",
-description: "The tracing event to export",
-required: true,
-},
+  {
+    name: 'event',
+    type: 'TracingEvent',
+    description: 'The tracing event to export',
+    required: true,
+  },
 ]}
 />
 
@@ -90,7 +83,7 @@ async shutdown(): Promise<void>
 
 Logs shutdown message.
 
-## Output Format
+## Output format
 
 The exporter outputs different formats based on event type:
 
@@ -159,7 +152,7 @@ const exporterWithLogger = new ConsoleExporter({
 })
 ```
 
-## Implementation Details
+## Implementation details
 
 - Formats attributes as JSON with 2-space indentation
 - Calculates and displays span duration in milliseconds
@@ -167,7 +160,7 @@ const exporterWithLogger = new ConsoleExporter({
 - Logs unimplemented event types as warnings
 - Uses 80-character separator lines between events
 
-## See Also
+## See also
 
 ### Documentation
 

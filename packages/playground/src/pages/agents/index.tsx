@@ -5,28 +5,65 @@ import {
   MainContentContent,
   Icon,
   Button,
+  ButtonWithTooltip,
   HeaderAction,
-  useLinkComponent,
   DocsIcon,
   useAgents,
   AgentsTable,
+  AgentsList,
   AgentIcon,
-  useIsCmsAvailable,
-  usePermissions,
+  ListSearch,
+  MainHeader,
+  EntityListPageLayout,
 } from '@mastra/playground-ui';
-import { Plus } from 'lucide-react';
+import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
+import { BookIcon } from 'lucide-react';
+import { useState } from 'react';
+import { Link } from 'react-router';
 
 function Agents() {
-  const { Link, navigate } = useLinkComponent();
   const { data: agents = {}, isLoading, error } = useAgents();
-  const { isCmsAvailable } = useIsCmsAvailable();
-  const { canEdit } = usePermissions();
+  const { variant } = useExperimentalUI('entity-list-page');
+  const [search, setSearch] = useState('');
 
-  const canCreateAgent = isCmsAvailable && canEdit('stored-agents');
+  if (variant === 'new-proposal') {
+    return (
+      <EntityListPageLayout>
+        <EntityListPageLayout.Top>
+          <MainHeader withMargins={false}>
+            <MainHeader.Column>
+              <MainHeader.Title isLoading={isLoading}>
+                <AgentIcon /> Agents
+              </MainHeader.Title>
+            </MainHeader.Column>
+            <MainHeader.Column className="flex justify-end gap-2">
+              <ButtonWithTooltip
+                as="a"
+                href="https://mastra.ai/en/docs/agents/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+                tooltipContent="Go to Agents documentation"
+              >
+                <BookIcon />
+              </ButtonWithTooltip>
+            </MainHeader.Column>
+          </MainHeader>
+          <div className="max-w-[30rem]">
+            <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
+          </div>
+        </EntityListPageLayout.Top>
 
-  const handleCreateClick = () => {
-    navigate('/cms/agents/create');
-  };
+        <AgentsList
+          agents={agents}
+          isLoading={isLoading}
+          error={error}
+          search={search}
+          onSearch={setSearch}
+          hideToolbar
+        />
+      </EntityListPageLayout>
+    );
+  }
 
   return (
     <MainContentLayout>
@@ -39,30 +76,15 @@ function Agents() {
         </HeaderTitle>
 
         <HeaderAction>
-          {canCreateAgent && (
-            <Button variant="light" as={Link} to="/cms/agents/create">
-              <Icon>
-                <Plus />
-              </Icon>
-              Create an agent
-            </Button>
-          )}
-          <Button variant="outline" as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
+          <Button variant="ghost" size="md" as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
+            <DocsIcon />
             Agents documentation
           </Button>
         </HeaderAction>
       </Header>
 
       <MainContentContent isCentered={!isLoading && Object.keys(agents || {}).length === 0}>
-        <AgentsTable
-          agents={agents}
-          isLoading={isLoading}
-          error={error}
-          onCreateClick={canCreateAgent ? handleCreateClick : undefined}
-        />
+        <AgentsTable agents={agents} isLoading={isLoading} error={error} />
       </MainContentContent>
     </MainContentLayout>
   );

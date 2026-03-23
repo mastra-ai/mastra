@@ -1,21 +1,19 @@
 import { Controller, useWatch } from 'react-hook-form';
 
+import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { SectionHeader, SubSectionHeader } from '@/domains/cms';
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Label } from '@/ds/components/Label';
-import { Input } from '@/ds/components/Input';
-import { Switch } from '@/ds/components/Switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { Entity, EntityContent, EntityName, EntityDescription } from '@/ds/components/Entity';
-import { EmptyState } from '@/ds/components/EmptyState';
-import { Button } from '@/ds/components/Button';
-import { MemoryIcon } from '@/ds/icons';
-import { Icon } from '@/ds/icons/Icon';
-import { useVectors } from '@/domains/vectors/hooks/use-vectors';
 import { useEmbedders } from '@/domains/embedders/hooks/use-embedders';
 import { LLMProviders, LLMModels } from '@/domains/llm';
-
-import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { useVectors } from '@/domains/vectors/hooks/use-vectors';
+import { Button } from '@/ds/components/Button';
+import { EmptyState } from '@/ds/components/EmptyState';
+import { Entity, EntityContent, EntityName, EntityDescription } from '@/ds/components/Entity';
+import { Input } from '@/ds/components/Input';
+import { Label } from '@/ds/components/Label';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { Switch } from '@/ds/components/Switch';
+import { MemoryIcon } from '@/ds/icons';
 
 export function MemoryPage() {
   const { form, readOnly } = useAgentEditFormContext();
@@ -309,7 +307,6 @@ function ObservationalMemoryFields() {
                     field.onChange(v);
                     setValue('memory.observationalMemory.model.name', '', { shouldDirty: true });
                   }}
-                  variant="light"
                 />
               </div>
             )}
@@ -324,12 +321,7 @@ function ObservationalMemoryFields() {
             control={control}
             render={({ field }) => (
               <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                <LLMModels
-                  value={field.value ?? ''}
-                  onValueChange={field.onChange}
-                  llmId={omProvider}
-                  variant="light"
-                />
+                <LLMModels value={field.value ?? ''} onValueChange={field.onChange} llmId={omProvider} />
               </div>
             )}
           />
@@ -411,7 +403,6 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
                     field.onChange(v);
                     setValue('memory.observationalMemory.observation.model.name', '', { shouldDirty: true });
                   }}
-                  variant="light"
                 />
               </div>
             )}
@@ -426,12 +417,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
             control={control}
             render={({ field }) => (
               <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                <LLMModels
-                  value={field.value ?? ''}
-                  onValueChange={field.onChange}
-                  llmId={observerProvider}
-                  variant="light"
-                />
+                <LLMModels value={field.value ?? ''} onValueChange={field.onChange} llmId={observerProvider} />
               </div>
             )}
           />
@@ -615,7 +601,6 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
                     field.onChange(v);
                     setValue('memory.observationalMemory.reflection.model.name', '', { shouldDirty: true });
                   }}
-                  variant="light"
                 />
               </div>
             )}
@@ -630,12 +615,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
             control={control}
             render={({ field }) => (
               <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                <LLMModels
-                  value={field.value ?? ''}
-                  onValueChange={field.onChange}
-                  llmId={reflectorProvider}
-                  variant="light"
-                />
+                <LLMModels value={field.value ?? ''} onValueChange={field.onChange} llmId={reflectorProvider} />
               </div>
             )}
           />

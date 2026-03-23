@@ -1,16 +1,16 @@
-import { ToolCallMessagePartProps } from '@assistant-ui/react';
-import { useEffect } from 'react';
-import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
+import type { ToolCallMessagePartProps } from '@assistant-ui/react';
 
-import { ToolBadge } from './badges/tool-badge';
-import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
-import { FileTreeBadge } from './badges/file-tree-badge';
-import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
-import { WorkflowRunProvider } from '@/domains/workflows';
-import { MastraUIMessage } from '@mastra/react';
+import type { MastraUIMessage } from '@mastra/react';
+import { useEffect } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
+import { FileTreeBadge } from './badges/file-tree-badge';
 import { ObservationMarkerBadge } from './badges/observation-marker-badge';
+import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
+import { ToolBadge } from './badges/tool-badge';
+import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
+import { WorkflowRunProvider } from '@/domains/workflows';
+import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
 
 export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
   metadata?: MastraUIMessage['metadata'];
@@ -29,10 +29,11 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const { activateSkill } = useActivatedSkills();
 
   useEffect(() => {
-    if (toolName === 'skill-activate' && result?.success && args?.name) {
-      activateSkill(args.name);
-    }
-  }, [toolName, result, args, activateSkill]);
+    if (toolName !== 'skill') return;
+    if (!args?.name) return;
+    if (props.status?.type !== 'complete') return;
+    activateSkill(args.name);
+  }, [toolName, args?.name, props.status?.type, activateSkill]);
 
   useWorkflowStream(result);
 

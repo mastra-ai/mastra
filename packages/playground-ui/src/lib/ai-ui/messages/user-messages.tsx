@@ -1,11 +1,8 @@
-import { AttachmentPrimitive, MessagePrimitive, TextMessagePart, useAttachment, useMessage } from '@assistant-ui/react';
+import { MessagePrimitive, useMessage } from '@assistant-ui/react';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
-
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-
-import { useAttachmentSrc } from '../hooks/use-attachment-src';
 import { ImageEntry, PdfEntry, TxtEntry } from '../attachments/attachment-preview-dialog';
-
+import { DatasetSaveAction } from './dataset-save-action';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 export interface InMessageAttachmentProps {
   type: string;
   contentType?: string;
@@ -46,7 +43,7 @@ export const UserMessage = () => {
       data-message-id={messageId}
       data-message-index={message?.index}
     >
-      {/* <UserActionBar /> */}
+      <DatasetSaveAction />
       <div className="max-w-[366px] px-5 py-3 text-neutral6 text-ui-lg leading-ui-lg rounded-lg bg-surface3">
         <MessagePrimitive.Parts
           components={{

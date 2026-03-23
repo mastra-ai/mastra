@@ -1,7 +1,6 @@
-import { cn } from '@/lib/utils';
-import { transitions } from '@/ds/primitives/transitions';
-import { focusRing } from '@/ds/primitives/transitions';
+import { transitions, focusRing } from '@/ds/primitives/transitions';
 import { useLinkComponent } from '@/lib/framework';
+import { cn } from '@/lib/utils';
 
 export type ItemListLinkCellProps = {
   children?: React.ReactNode;

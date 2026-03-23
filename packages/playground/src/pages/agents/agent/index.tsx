@@ -12,7 +12,6 @@ import {
   TracingSettingsProvider,
   ObservationalMemoryProvider,
   ActivatedSkillsProvider,
-  SchemaRequestContextProvider,
   PermissionDenied,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
@@ -44,12 +43,11 @@ function Agent() {
   } = useThreads({ agentId: agentId!, isMemoryEnabled: hasMemory, resourceId: agentId! });
 
   useEffect(() => {
-    if (!hasMemory) return;
     if (threadId) return;
 
-    // After redirects on /agents/:agentId
+    // Normalize /agents/:agentId to /agents/:agentId/chat/new
     void navigate(`/agents/${agentId}/chat/new`);
-  }, [hasMemory, threadId, agentId, navigate]);
+  }, [threadId, agentId, navigate]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
 
@@ -102,6 +100,10 @@ function Agent() {
     return <div className="text-center py-4">Agent not found</div>;
   }
 
+  if (!threadId) {
+    return null;
+  }
+
   const actualThreadId = isNewThread ? newThreadId : threadId;
 
   const handleRefreshThreadList = async () => {
@@ -115,43 +117,41 @@ function Agent() {
   return (
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
       <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
-        <SchemaRequestContextProvider>
-          <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
-            <ThreadInputProvider>
-              <ObservationalMemoryProvider>
-                <ActivatedSkillsProvider>
-                  <AgentLayout
+        <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
+          <ThreadInputProvider>
+            <ObservationalMemoryProvider>
+              <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
+                <AgentLayout
+                  agentId={agentId!}
+                  leftSlot={
+                    hasMemory && (
+                      <AgentSidebar
+                        agentId={agentId!}
+                        threadId={actualThreadId!}
+                        threads={threads || []}
+                        isLoading={isThreadsLoading}
+                      />
+                    )
+                  }
+                  rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
+                >
+                  <AgentChat
+                    key={actualThreadId!}
                     agentId={agentId!}
-                    leftSlot={
-                      hasMemory && (
-                        <AgentSidebar
-                          agentId={agentId!}
-                          threadId={actualThreadId!}
-                          threads={threads || []}
-                          isLoading={isThreadsLoading}
-                        />
-                      )
-                    }
-                    rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
-                  >
-                    <AgentChat
-                      key={actualThreadId!}
-                      agentId={agentId!}
-                      agentName={agent?.name}
-                      modelVersion={agent?.modelVersion}
-                      threadId={actualThreadId!}
-                      memory={hasMemory}
-                      refreshThreadList={handleRefreshThreadList}
-                      modelList={agent?.modelList}
-                      messageId={messageId}
-                      isNewThread={isNewThread}
-                    />
-                  </AgentLayout>
-                </ActivatedSkillsProvider>
-              </ObservationalMemoryProvider>
-            </ThreadInputProvider>
-          </WorkingMemoryProvider>
-        </SchemaRequestContextProvider>
+                    agentName={agent?.name}
+                    modelVersion={agent?.modelVersion}
+                    threadId={actualThreadId!}
+                    memory={hasMemory}
+                    refreshThreadList={handleRefreshThreadList}
+                    modelList={agent?.modelList}
+                    messageId={messageId}
+                    isNewThread={isNewThread}
+                  />
+                </AgentLayout>
+              </ActivatedSkillsProvider>
+            </ObservationalMemoryProvider>
+          </ThreadInputProvider>
+        </WorkingMemoryProvider>
       </AgentSettingsProvider>
     </TracingSettingsProvider>
   );

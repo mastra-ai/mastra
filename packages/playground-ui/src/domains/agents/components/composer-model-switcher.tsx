@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
-import { UpdateModelParams, Provider } from '@mastra/client-js';
+import type { UpdateModelParams } from '@mastra/client-js';
 import { TriangleAlert } from 'lucide-react';
-import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
+import { useState, useEffect } from 'react';
 import { useAgent } from '../hooks/use-agent';
 import { useUpdateAgentModel } from '../hooks/use-agents';
+import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
 
 export interface ComposerModelSwitcherProps {
   agentId: string;
@@ -74,13 +74,12 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1.5">
-        <LLMProviders value={currentModelProvider} onValueChange={handleProviderSelect} variant="light" />
+        <LLMProviders value={currentModelProvider} onValueChange={handleProviderSelect} />
 
         <LLMModels
           llmId={currentModelProvider}
           value={selectedModel}
           onValueChange={handleModelSelect}
-          variant="light"
           open={modelOpen}
           onOpenChange={setModelOpen}
           className="min-w-48"

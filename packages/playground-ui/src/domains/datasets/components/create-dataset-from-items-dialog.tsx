@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
 import type { DatasetItem } from '@mastra/client-js';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
+import { useState } from 'react';
+import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { Button } from '@/ds/components/Button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
 import { Input } from '@/ds/components/Input';
 import { Label } from '@/ds/components/Label';
 import { toast } from '@/lib/toast';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 
 export interface CreateDatasetFromItemsDialogProps {
   open: boolean;
@@ -135,10 +135,10 @@ export function CreateDatasetFromItemsDialog({
             )}
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" variant="standard" size="default" onClick={handleCancel} disabled={isCreating}>
+              <Button type="button" onClick={handleCancel} disabled={isCreating}>
                 Cancel
               </Button>
-              <Button type="submit" variant="cta" size="default" disabled={isCreating || !name.trim()}>
+              <Button type="submit" variant="primary" disabled={isCreating || !name.trim()}>
                 {isCreating ? `Creating... (${progress}/${items.length})` : 'Create Dataset'}
               </Button>
             </div>

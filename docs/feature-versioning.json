@@ -3,7 +3,6 @@
   "/docs/agents/processors": "v1",
   "/docs/evals/built-in-scorers": "v1",
   "/docs/getting-started/manual-install": "v1",
-  "/docs/getting-started/start": "v1",
   "/docs/observability/tracing/bridges/otel": "v1",
   "/docs/observability/tracing/exporters/posthog": "v1",
   "/docs/workflows/time-travel": "v1",

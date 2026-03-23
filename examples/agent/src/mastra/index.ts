@@ -1,6 +1,6 @@
 import { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
-import { MastraCompositeStore, FilesystemStore } from '@mastra/core/storage';
+import { MastraCompositeStore, FilesystemStore, InMemoryDB, InMemoryStore } from '@mastra/core/storage';
 import { MastraEditor } from '@mastra/editor';
 import { LibSQLStore } from '@mastra/libsql';
 
@@ -28,6 +28,7 @@ import {
   agentWithBranchingModeration,
   agentWithSequentialModeration,
   supervisorAgent,
+  subscriptionOrchestratorAgent,
 } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/evals';
 import { myWorkflowX, nestedWorkflow, findUserWorkflow } from './workflows/other';
@@ -53,10 +54,14 @@ const libsqlStore = new LibSQLStore({
   url: 'file:./mastra.db',
 });
 
+const observability = await new InMemoryStore({ id: 'observability' }).getStore('observability');
 const storage = new MastraCompositeStore({
   id: 'composite-storage',
   default: libsqlStore,
-  editor: new FilesystemStore({ dir: '.mastra-storage' }),
+  domains: {
+    observability: observability,
+  },
+  // editor: new FilesystemStore({ dir: '.mastra-storage' }),
 });
 
 const config = {
@@ -79,6 +84,7 @@ const config = {
     agentWithBranchingModeration,
     agentWithSequentialModeration,
     supervisorAgent,
+    subscriptionOrchestratorAgent,
   },
   processors: {
     moderationProcessor,
@@ -106,10 +112,10 @@ const config = {
     sourcemap: true,
   },
   editor: new MastraEditor(),
-  server: {
-    auth: mastraAuth,
-    rbac: rbacProvider,
-  },
+  // server: {
+  //   auth: mastraAuth,
+  //   rbac: rbacProvider,
+  // },
 };
 
 export const mastra = new Mastra({
@@ -117,6 +123,15 @@ export const mastra = new Mastra({
   editor: new MastraEditor({
     toolProviders: {
       composio: new ComposioToolProvider({ apiKey: '' }),
+    },
+  }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [new DefaultExporter()],
+        spanOutputProcessors: [new SensitiveDataFilter()],
+      },
     },
   }),
 });

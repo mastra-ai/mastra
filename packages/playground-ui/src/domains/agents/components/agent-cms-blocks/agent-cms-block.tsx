@@ -1,19 +1,19 @@
-import { useEffect, useRef } from 'react';
+import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { GripVertical, X } from 'lucide-react';
-import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
+import { useEffect, useRef } from 'react';
 
-import { ContentBlock } from '@/ds/components/ContentBlocks';
-import type { JsonSchema, RuleGroup } from '@/lib/rule-engine';
-import { IconButton } from '@/ds/components/IconButton';
-import { Icon } from '@/ds/icons';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { cn } from '@/lib/utils';
 import type { InstructionBlock, InlineInstructionBlock } from '../agent-edit-page/utils/form-validation';
+import { AgentCMSRefBlock } from './agent-cms-ref-block';
+import { DisplayConditionsDialog } from '@/domains/cms';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { ContentBlock } from '@/ds/components/ContentBlocks';
+import { IconButton } from '@/ds/components/IconButton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
-import { DisplayConditionsDialog } from '@/domains/cms';
-import { AgentCMSRefBlock } from './agent-cms-ref-block';
+import { Icon } from '@/ds/icons';
+import type { JsonSchema, RuleGroup } from '@/lib/rule-engine';
+import { cn } from '@/lib/utils';
 
 export interface AgentCMSBlockProps {
   index: number;
@@ -106,7 +106,7 @@ const InlineBlockContent = ({
         value={block.content}
         onChange={handleContentChange}
         placeholder={placeholder}
-        className="border-none rounded-none text-neutral6 h-full bg-surface2 min-h-[300px]"
+        className="border-none rounded-none text-neutral6 h-full bg-surface2 min-h-[4.5rem]"
         language="markdown"
         highlightVariables
         showCopyButton={false}

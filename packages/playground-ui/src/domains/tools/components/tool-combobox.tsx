@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
-import { toast } from '@/lib/toast';
-import { Combobox } from '@/ds/components/Combobox';
-import { useTools } from '../hooks/use-all-tools';
 import { useAgents } from '../../agents/hooks/use-agents';
+import { useTools } from '../hooks/use-all-tools';
+import { Combobox } from '@/ds/components/Combobox';
+import type { ComboboxProps } from '@/ds/components/Combobox';
 import { useLinkComponent } from '@/lib/framework';
+import { toast } from '@/lib/toast';
 
 export interface ToolComboboxProps {
   value?: string;
@@ -13,7 +14,7 @@ export interface ToolComboboxProps {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'light' | 'outline' | 'ghost';
+  variant?: ComboboxProps['variant'];
 }
 
 export function ToolCombobox({
@@ -24,7 +25,7 @@ export function ToolCombobox({
   emptyText = 'No tools found.',
   className,
   disabled = false,
-  variant = 'default',
+  variant = 'inputLike',
 }: ToolComboboxProps) {
   const { data: tools = {}, isLoading: isLoadingTools, isError: isErrorTools, error: errorTools } = useTools();
   const { data: agents = {}, isLoading: isLoadingAgents, isError: isErrorAgents, error: errorAgents } = useAgents();

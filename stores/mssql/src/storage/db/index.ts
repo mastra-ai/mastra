@@ -113,6 +113,9 @@ export class MssqlDB extends MastraBase {
   private setupSchemaPromise: Promise<void> | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
 
+  /** Cache of actual table columns: tableName -> Set<columnName> */
+  private tableColumnsCache = new Map<string, Set<string>>();
+
   /**
    * Columns that participate in composite indexes need smaller sizes (NVARCHAR(100)).
    * MSSQL has a 900-byte index key limit, so composite indexes with NVARCHAR(400) columns fail.
@@ -204,6 +207,49 @@ export class MssqlDB extends MastraBase {
     this.skipDefaultIndexes = skipDefaultIndexes;
   }
 
+  /**
+   * Gets the set of column names that actually exist in the database table.
+   * Results are cached; the cache is invalidated when alterTable() adds new columns.
+   */
+  private async getTableColumns(tableName: TABLE_NAMES): Promise<Set<string>> {
+    const cached = this.tableColumnsCache.get(tableName);
+    if (cached) return cached;
+
+    const schema = this.schemaName || 'dbo';
+    const request = this.pool.request();
+    request.input('schema', schema);
+    request.input('tableName', tableName);
+    const result = await request.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @tableName`,
+    );
+
+    const columns = new Set((result.recordset || []).map((r: any) => r.COLUMN_NAME as string));
+    if (columns.size > 0) {
+      this.tableColumnsCache.set(tableName, columns);
+    }
+    return columns;
+  }
+
+  /**
+   * Filters a record to only include columns that exist in the actual database table.
+   * Unknown columns are silently dropped to ensure forward compatibility.
+   */
+  private async filterRecordToKnownColumns(
+    tableName: TABLE_NAMES,
+    record: Record<string, any>,
+  ): Promise<Record<string, any>> {
+    const knownColumns = await this.getTableColumns(tableName);
+    if (knownColumns.size === 0) return record;
+
+    const filtered: Record<string, any> = {};
+    for (const [key, value] of Object.entries(record)) {
+      if (knownColumns.has(key)) {
+        filtered[key] = value;
+      }
+    }
+    return filtered;
+  }
+
   async hasColumn(table: string, column: string): Promise<boolean> {
     const schema = this.schemaName || 'dbo';
     const request = this.pool.request();
@@ -270,14 +316,17 @@ export class MssqlDB extends MastraBase {
     transaction?: sql.Transaction;
   }): Promise<void> {
     try {
-      const columns = Object.keys(record);
+      // Filter out columns that don't exist in the actual database table
+      const filteredRecord = await this.filterRecordToKnownColumns(tableName, record);
+      const columns = Object.keys(filteredRecord);
+      if (columns.length === 0) return; // No known columns after filtering - skip insert
       const parsedColumns = columns.map(col => parseSqlIdentifier(col, 'column name'));
       const paramNames = columns.map((_, i) => `@param${i}`);
       const insertSql = `INSERT INTO ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} (${parsedColumns.map(c => `[${c}]`).join(', ')}) VALUES (${paramNames.join(', ')})`;
       const request = transaction ? transaction.request() : this.pool.request();
 
       columns.forEach((col, i) => {
-        const value = record[col];
+        const value = filteredRecord[col];
         const preparedValue = this.prepareValue(value, col, tableName);
 
         if (preparedValue instanceof Date) {
@@ -505,6 +554,8 @@ export class MssqlDB extends MastraBase {
         },
         error,
       );
+    } finally {
+      this.tableColumnsCache.delete(tableName);
     }
   }
 
@@ -757,6 +808,7 @@ export class MssqlDB extends MastraBase {
     ifNotExists: string[];
   }): Promise<void> {
     const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+
     try {
       for (const columnName of ifNotExists) {
         if (schema[columnName]) {
@@ -796,6 +848,9 @@ export class MssqlDB extends MastraBase {
         },
         error,
       );
+    } finally {
+      // Invalidate cached columns after DDL completes so concurrent writers see the new schema
+      this.tableColumnsCache.delete(tableName);
     }
   }
 
@@ -882,6 +937,8 @@ export class MssqlDB extends MastraBase {
         },
         error,
       );
+    } finally {
+      this.tableColumnsCache.delete(tableName);
     }
   }
 
@@ -991,12 +1048,16 @@ export class MssqlDB extends MastraBase {
         });
       }
 
+      // Filter out columns that don't exist in the actual database table
+      const filteredData = await this.filterRecordToKnownColumns(tableName, data);
+      if (Object.keys(filteredData).length === 0) return; // Nothing to update after filtering
+
       const setClauses: string[] = [];
       const request = transaction ? transaction.request() : this.pool.request();
       let paramIndex = 0;
 
       // Build SET clause
-      Object.entries(data).forEach(([key, value]) => {
+      Object.entries(filteredData).forEach(([key, value]) => {
         const parsedKey = parseSqlIdentifier(key, 'column name');
         const paramName = `set${paramIndex++}`;
         setClauses.push(`[${parsedKey}] = @${paramName}`);

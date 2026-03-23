@@ -1,9 +1,8 @@
-import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodTypeAny } from 'zod';
-import z, { ZodObject } from 'zod';
+import z from 'zod/v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type {
   MemoryStorage,
   StorageListMessagesInput,
@@ -18,13 +17,12 @@ import type { ToolAction } from '../tools';
 import { MastraMemory } from './memory';
 import type {
   StorageThreadType,
-  MemoryConfig,
+  MemoryConfigInternal,
   MessageDeleteInput,
   WorkingMemoryTemplate,
   WorkingMemory,
+  SharedMemoryConfig,
 } from './types';
-
-const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
 
 export class MockMemory extends MastraMemory {
   constructor({
@@ -32,20 +30,23 @@ export class MockMemory extends MastraMemory {
     enableWorkingMemory = false,
     workingMemoryTemplate,
     enableMessageHistory = true,
+    options,
   }: {
     storage?: InMemoryStore;
     enableWorkingMemory?: boolean;
     enableMessageHistory?: boolean;
     workingMemoryTemplate?: string;
+    options?: SharedMemoryConfig['options'];
   } = {}) {
     super({
       name: 'mock',
       storage: storage || new InMemoryStore(),
       options: {
+        ...options,
         workingMemory: enableWorkingMemory
           ? ({ enabled: true, template: workingMemoryTemplate } as WorkingMemory)
-          : undefined,
-        lastMessages: enableMessageHistory ? 10 : undefined,
+          : options?.workingMemory,
+        lastMessages: enableMessageHistory ? (options?.lastMessages ?? 10) : options?.lastMessages,
       },
     });
     this._hasOwnStorage = true;
@@ -69,7 +70,12 @@ export class MockMemory extends MastraMemory {
     return memoryStorage.getThreadById({ threadId });
   }
 
-  async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {
+  async saveThread({
+    thread,
+  }: {
+    thread: StorageThreadType;
+    memoryConfig?: MemoryConfigInternal;
+  }): Promise<StorageThreadType> {
     const memoryStorage = await this.getMemoryStore();
     return memoryStorage.saveThread({ thread });
   }
@@ -78,7 +84,7 @@ export class MockMemory extends MastraMemory {
     messages,
   }: {
     messages: MastraDBMessage[];
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<{ messages: MastraDBMessage[] }> {
     const memoryStorage = await this.getMemoryStore();
     return memoryStorage.saveMessages({ messages });
@@ -89,7 +95,9 @@ export class MockMemory extends MastraMemory {
     return memoryStorage.listThreads(args);
   }
 
-  async recall(args: StorageListMessagesInput & { threadConfig?: MemoryConfig; vectorSearchString?: string }): Promise<{
+  async recall(
+    args: StorageListMessagesInput & { threadConfig?: MemoryConfigInternal; vectorSearchString?: string },
+  ): Promise<{
     messages: MastraDBMessage[];
     usage?: { tokens: number };
     total: number;
@@ -125,7 +133,7 @@ export class MockMemory extends MastraMemory {
   }: {
     threadId: string;
     resourceId?: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<string | null> {
     const mergedConfig = this.getMergedThreadConfig(memoryConfig);
     const workingMemoryConfig = mergedConfig.workingMemory;
@@ -146,7 +154,7 @@ export class MockMemory extends MastraMemory {
     return resource?.workingMemory || null;
   }
 
-  public listTools(_config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
+  public listTools(_config?: MemoryConfigInternal): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(_config);
     if (!mergedConfig.workingMemory?.enabled) {
       return {};
@@ -214,7 +222,7 @@ export class MockMemory extends MastraMemory {
   async getWorkingMemoryTemplate({
     memoryConfig,
   }: {
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   } = {}): Promise<WorkingMemoryTemplate | null> {
     const mergedConfig = this.getMergedThreadConfig(memoryConfig);
     const workingMemoryConfig = mergedConfig.workingMemory;
@@ -235,11 +243,8 @@ export class MockMemory extends MastraMemory {
         const schema = workingMemoryConfig.schema;
         let convertedSchema: JSONSchema7;
 
-        if (isZodObject(schema as ZodTypeAny)) {
-          convertedSchema = zodToJsonSchema(schema as ZodTypeAny);
-        } else {
-          convertedSchema = schema as JSONSchema7;
-        }
+        // Convert any schema type to JSON Schema using the standard schema interface
+        convertedSchema = standardSchemaToJSONSchema(toStandardSchema(schema as any));
 
         return { format: 'json', content: JSON.stringify(convertedSchema) };
       } catch (error) {
@@ -260,7 +265,7 @@ export class MockMemory extends MastraMemory {
     threadId: string;
     resourceId?: string;
     workingMemory: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }) {
     const mergedConfig = this.getMergedThreadConfig(memoryConfig);
     const workingMemoryConfig = mergedConfig.workingMemory;
@@ -294,7 +299,7 @@ export class MockMemory extends MastraMemory {
     resourceId?: string;
     workingMemory: string;
     searchString?: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }) {
     try {
       await this.updateWorkingMemory({

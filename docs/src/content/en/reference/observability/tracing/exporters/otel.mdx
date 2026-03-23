@@ -17,7 +17,7 @@ Sends Tracing data to any OpenTelemetry-compatible observability platform using 
 new OtelExporter(config: OtelExporterConfig)
 ```
 
-## OtelExporterConfig
+## `OtelExporterConfig`
 
 ```typescript
 interface OtelExporterConfig {
@@ -30,43 +30,42 @@ interface OtelExporterConfig {
 
 <PropertiesTable
   props={[
-{
-name: "provider",
-type: "ProviderConfig",
-description: "Provider-specific configuration (see below)",
-required: true,
-},
-{
-name: "timeout",
-type: "number",
-description: "Export timeout in milliseconds (default: 30000)",
-required: false,
-},
-{
-name: "batchSize",
-type: "number",
-description: "Number of spans per batch (default: 100)",
-required: false,
-},
-{
-name: "logLevel",
-type: "'debug' | 'info' | 'warn' | 'error'",
-description: "Logger level (default: 'warn')",
-required: false,
-},
-{
-name: "resourceAttributes",
-type: "DetectedResourceAttributes",
-description:
-"Optional OpenTelemetry Resource Attributes (values here override any defaults)",
-required: false,
-},
+  {
+    name: 'provider',
+    type: 'ProviderConfig',
+    description: 'Provider-specific configuration (see below)',
+    required: true,
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    description: 'Export timeout in milliseconds (default: 30000)',
+    required: false,
+  },
+  {
+    name: 'batchSize',
+    type: 'number',
+    description: 'Number of spans per batch (default: 100)',
+    required: false,
+  },
+  {
+    name: 'logLevel',
+    type: "'debug' | 'info' | 'warn' | 'error'",
+    description: "Logger level (default: 'warn')",
+    required: false,
+  },
+  {
+    name: 'resourceAttributes',
+    type: 'DetectedResourceAttributes',
+    description: 'Optional OpenTelemetry Resource Attributes (values here override any defaults)',
+    required: false,
+  },
 ]}
 />
 
-## Provider Configurations
+## Provider configurations
 
-### Dash0Config
+### `Dash0Config`
 
 ```typescript
 interface Dash0Config {
@@ -78,29 +77,28 @@ interface Dash0Config {
 
 <PropertiesTable
   props={[
-{
-name: "apiKey",
-type: "string",
-description: "Dash0 API key. Falls back to DASH0_API_KEY env var.",
-required: false,
-},
-{
-name: "endpoint",
-type: "string",
-description:
-"Dash0 ingress endpoint. Falls back to DASH0_ENDPOINT env var.",
-required: false,
-},
-{
-name: "dataset",
-type: "string",
-description: "Dataset name. Falls back to DASH0_DATASET env var.",
-required: false,
-},
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'Dash0 API key. Falls back to DASH0_API_KEY env var.',
+    required: false,
+  },
+  {
+    name: 'endpoint',
+    type: 'string',
+    description: 'Dash0 ingress endpoint. Falls back to DASH0_ENDPOINT env var.',
+    required: false,
+  },
+  {
+    name: 'dataset',
+    type: 'string',
+    description: 'Dataset name. Falls back to DASH0_DATASET env var.',
+    required: false,
+  },
 ]}
 />
 
-### SignozConfig
+### `SignozConfig`
 
 ```typescript
 interface SignozConfig {
@@ -112,28 +110,28 @@ interface SignozConfig {
 
 <PropertiesTable
   props={[
-{
-name: "apiKey",
-type: "string",
-description: "SigNoz ingestion key. Falls back to SIGNOZ_API_KEY env var.",
-required: false,
-},
-{
-name: "region",
-type: "'us' | 'eu' | 'in'",
-description: "SigNoz cloud region. Falls back to SIGNOZ_REGION env var. (default: 'us')",
-required: false,
-},
-{
-name: "endpoint",
-type: "string",
-description: "Custom endpoint. Falls back to SIGNOZ_ENDPOINT env var.",
-required: false,
-},
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'SigNoz ingestion key. Falls back to SIGNOZ_API_KEY env var.',
+    required: false,
+  },
+  {
+    name: 'region',
+    type: "'us' | 'eu' | 'in'",
+    description: "SigNoz cloud region. Falls back to SIGNOZ_REGION env var. (default: 'us')",
+    required: false,
+  },
+  {
+    name: 'endpoint',
+    type: 'string',
+    description: 'Custom endpoint. Falls back to SIGNOZ_ENDPOINT env var.',
+    required: false,
+  },
 ]}
 />
 
-### NewRelicConfig
+### `NewRelicConfig`
 
 ```typescript
 interface NewRelicConfig {
@@ -144,23 +142,23 @@ interface NewRelicConfig {
 
 <PropertiesTable
   props={[
-{
-name: "apiKey",
-type: "string",
-description: "New Relic license key. Falls back to NEW_RELIC_LICENSE_KEY env var.",
-required: false,
-},
-{
-name: "endpoint",
-type: "string",
-description:
-"Custom endpoint. Falls back to NEW_RELIC_ENDPOINT env var. (default: https://otlp.nr-data.net:443/v1/traces)",
-required: false,
-},
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'New Relic license key. Falls back to NEW_RELIC_LICENSE_KEY env var.',
+    required: false,
+  },
+  {
+    name: 'endpoint',
+    type: 'string',
+    description:
+      'Custom endpoint. Falls back to NEW_RELIC_ENDPOINT env var. (default: https://otlp.nr-data.net:443/v1/traces)',
+    required: false,
+  },
 ]}
 />
 
-### TraceloopConfig
+### `TraceloopConfig`
 
 ```typescript
 interface TraceloopConfig {
@@ -172,29 +170,29 @@ interface TraceloopConfig {
 
 <PropertiesTable
   props={[
-{
-name: "apiKey",
-type: "string",
-description: "Traceloop API key. Falls back to TRACELOOP_API_KEY env var.",
-required: false,
-},
-{
-name: "destinationId",
-type: "string",
-description: "Destination identifier. Falls back to TRACELOOP_DESTINATION_ID env var.",
-required: false,
-},
-{
-name: "endpoint",
-type: "string",
-description:
-"Custom endpoint. Falls back to TRACELOOP_ENDPOINT env var. (default: https://api.traceloop.com/v1/traces)",
-required: false,
-},
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'Traceloop API key. Falls back to TRACELOOP_API_KEY env var.',
+    required: false,
+  },
+  {
+    name: 'destinationId',
+    type: 'string',
+    description: 'Destination identifier. Falls back to TRACELOOP_DESTINATION_ID env var.',
+    required: false,
+  },
+  {
+    name: 'endpoint',
+    type: 'string',
+    description:
+      'Custom endpoint. Falls back to TRACELOOP_ENDPOINT env var. (default: https://api.traceloop.com/v1/traces)',
+    required: false,
+  },
 ]}
 />
 
-### LaminarConfig
+### `LaminarConfig`
 
 ```typescript
 interface LaminarConfig {
@@ -205,22 +203,22 @@ interface LaminarConfig {
 
 <PropertiesTable
   props={[
-{
-name: "apiKey",
-type: "string",
-description: "Laminar project API key. Falls back to LMNR_PROJECT_API_KEY env var.",
-required: false,
-},
-{
-name: "endpoint",
-type: "string",
-description: "Custom endpoint. Falls back to LAMINAR_ENDPOINT env var. (default: https://api.lmnr.ai/v1/traces)",
-required: false,
-},
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'Laminar project API key. Falls back to LMNR_PROJECT_API_KEY env var.',
+    required: false,
+  },
+  {
+    name: 'endpoint',
+    type: 'string',
+    description: 'Custom endpoint. Falls back to LAMINAR_ENDPOINT env var. (default: https://api.lmnr.ai/v1/traces)',
+    required: false,
+  },
 ]}
 />
 
-### CustomConfig
+### `CustomConfig`
 
 ```typescript
 interface CustomConfig {
@@ -232,30 +230,30 @@ interface CustomConfig {
 
 <PropertiesTable
   props={[
-{
-name: "endpoint",
-type: "string",
-description: "OTEL collector endpoint URL",
-required: true,
-},
-{
-name: "protocol",
-type: "'http/json' | 'http/protobuf' | 'grpc' | 'zipkin'",
-description: "Export protocol (default: 'http/json')",
-required: false,
-},
-{
-name: "headers",
-type: "Record<string, string>",
-description: "Custom headers for authentication",
-required: false,
-},
+  {
+    name: 'endpoint',
+    type: 'string',
+    description: 'OTEL collector endpoint URL',
+    required: true,
+  },
+  {
+    name: 'protocol',
+    type: "'http/json' | 'http/protobuf' | 'grpc' | 'zipkin'",
+    description: "Export protocol (default: 'http/json')",
+    required: false,
+  },
+  {
+    name: 'headers',
+    type: 'Record<string, string>',
+    description: 'Custom headers for authentication',
+    required: false,
+  },
 ]}
 />
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -279,7 +277,7 @@ async shutdown(): Promise<void>
 
 Flushes pending traces and shuts down the exporter.
 
-## Usage Examples
+## Usage examples
 
 ### Zero-Config (using environment variables)
 
@@ -329,7 +327,7 @@ const exporter = new OtelExporter({
 })
 ```
 
-## Protocol Requirements
+## Protocol requirements
 
 Different providers require different OTEL exporter packages:
 
@@ -340,7 +338,7 @@ Different providers require different OTEL exporter packages:
 | HTTP/JSON | `@opentelemetry/exporter-trace-otlp-http` | Traceloop, Custom |
 | Zipkin | `@opentelemetry/exporter-zipkin` | Zipkin collectors |
 
-## Tags Support
+## Tags support
 
 The OtelExporter supports trace tagging for categorization and filtering. Tags are only applied to root spans and are stored as the `mastra.tags` attribute.
 

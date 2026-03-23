@@ -1,6 +1,7 @@
 import type { Handler, MiddlewareHandler, HonoRequest, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
+import type { ZodError } from 'zod';
 import type { IRBACProvider } from '../auth/ee/interfaces/rbac';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
@@ -112,6 +113,18 @@ export type HttpLoggingConfig = {
   redactHeaders?: string[];
 };
 
+export type ValidationErrorContext = 'query' | 'body' | 'path';
+
+export type ValidationErrorResponse = {
+  status: number;
+  body: unknown;
+};
+
+export type ValidationErrorHook = (
+  error: ZodError,
+  context: ValidationErrorContext,
+) => ValidationErrorResponse | undefined | void;
+
 export type ServerConfig = {
   /**
    * Port for the server
@@ -123,6 +136,25 @@ export type ServerConfig = {
    * @default 'localhost'
    */
   host?: string;
+  /**
+   * Host for Studio API URL. Use this when the server bind address
+   * differs from the public domain (e.g., binding to '0.0.0.0' but accessible at 'my-app.run.app').
+   * When not set, falls back to `host`.
+   */
+  studioHost?: string;
+  /**
+   * Protocol for Studio API URL ('http' or 'https').
+   * Use this when the public protocol differs from the server's local protocol
+   * (e.g., behind a TLS-terminating reverse proxy).
+   * When not set, falls back to auto-detected protocol based on HTTPS config.
+   */
+  studioProtocol?: 'http' | 'https';
+  /**
+   * Port for Studio API URL. Use this when the external port differs
+   * from the server's local port (e.g., server listens on 8080 but is exposed on 443).
+   * When not set, falls back to `port`.
+   */
+  studioPort?: number;
   /**
    * Base path for Mastra Studio UI
    * @default '/'
@@ -283,4 +315,35 @@ export type ServerConfig = {
    * ```
    */
   onError?: (err: Error, c: Context) => Response | Promise<Response>;
+
+  /**
+   * Custom validation error handler for the server. Called when a request fails
+   * Zod schema validation (query parameters, request body, or path parameters).
+   *
+   * Return a `{ status, body }` object to override the default 400 response,
+   * or return `undefined` to fall back to the default behavior.
+   *
+   * @param error - The ZodError from schema validation
+   * @param context - Which part of the request failed: 'query', 'body', or 'path'
+   *
+   * @example
+   * ```ts
+   * const mastra = new Mastra({
+   *   server: {
+   *     onValidationError: (error, context) => ({
+   *       status: 422,
+   *       body: {
+   *         ok: false,
+   *         errors: error.issues.map(i => ({
+   *           path: i.path.join('.'),
+   *           message: i.message,
+   *         })),
+   *         source: context,
+   *       },
+   *     }),
+   *   },
+   * });
+   * ```
+   */
+  onValidationError?: ValidationErrorHook;
 };

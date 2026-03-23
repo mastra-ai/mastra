@@ -1,5 +1,67 @@
 # @mastra/auth
 
+## 1.0.2
+
+### Patch Changes
+
+- Fixed Studio showing unauthenticated state when using `MastraJwtAuth` with custom headers. `MastraJwtAuth` now implements the `IUserProvider` interface (`getCurrentUser`/`getUser`), so the Studio capabilities endpoint can resolve the authenticated user from the JWT Bearer token. ([#14411](https://github.com/mastra-ai/mastra/pull/14411))
+
+  Also added an optional `mapUser` option to customize how JWT claims are mapped to user fields:
+
+  ```typescript
+  new MastraJwtAuth({
+    secret: process.env.JWT_SECRET,
+    mapUser: payload => ({
+      id: payload.userId,
+      name: payload.displayName,
+      email: payload.mail,
+    }),
+  });
+  ```
+
+  Closes #14350
+
+## 1.0.2-alpha.0
+
+### Patch Changes
+
+- Fixed Studio showing unauthenticated state when using `MastraJwtAuth` with custom headers. `MastraJwtAuth` now implements the `IUserProvider` interface (`getCurrentUser`/`getUser`), so the Studio capabilities endpoint can resolve the authenticated user from the JWT Bearer token. ([#14411](https://github.com/mastra-ai/mastra/pull/14411))
+
+  Also added an optional `mapUser` option to customize how JWT claims are mapped to user fields:
+
+  ```typescript
+  new MastraJwtAuth({
+    secret: process.env.JWT_SECRET,
+    mapUser: payload => ({
+      id: payload.userId,
+      name: payload.displayName,
+      email: payload.mail,
+    }),
+  });
+  ```
+
+  Closes #14350
+
+## 1.0.1
+
+### Patch Changes
+
+- dependencies updates: ([#13134](https://github.com/mastra-ai/mastra/pull/13134))
+  - Updated dependency [`jsonwebtoken@^9.0.3` ↗︎](https://www.npmjs.com/package/jsonwebtoken/v/9.0.3) (from `^9.0.2`, in `dependencies`)
+
+- dependencies updates: ([#13135](https://github.com/mastra-ai/mastra/pull/13135))
+  - Updated dependency [`jwks-rsa@^3.2.2` ↗︎](https://www.npmjs.com/package/jwks-rsa/v/3.2.2) (from `^3.2.0`, in `dependencies`)
+
+## 1.0.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#13134](https://github.com/mastra-ai/mastra/pull/13134))
+  - Updated dependency [`jsonwebtoken@^9.0.3` ↗︎](https://www.npmjs.com/package/jsonwebtoken/v/9.0.3) (from `^9.0.2`, in `dependencies`)
+
+- dependencies updates: ([#13135](https://github.com/mastra-ai/mastra/pull/13135))
+  - Updated dependency [`jwks-rsa@^3.2.2` ↗︎](https://www.npmjs.com/package/jwks-rsa/v/3.2.2) (from `^3.2.0`, in `dependencies`)
+
 ## 1.0.0
 
 ### Major Changes

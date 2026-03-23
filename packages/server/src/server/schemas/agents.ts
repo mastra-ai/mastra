@@ -7,6 +7,27 @@ export const agentIdPathParams = z.object({
   agentId: z.string().describe('Unique identifier for the agent'),
 });
 
+/**
+ * Query params for GET /agents/:agentId — controls which stored config version is used for overrides.
+ * Use either `status` or `versionId`, not both.
+ * - `status` — 'draft' (latest version, default) or 'published' (active published version).
+ * - `versionId` — Resolve with a specific version ID.
+ */
+export const agentVersionQuerySchema = z.object({
+  status: z
+    .enum(['draft', 'published'])
+    .optional()
+    .describe(
+      'Which stored config version to resolve: draft (latest, default) or published (active version). Mutually exclusive with versionId.',
+    ),
+  versionId: z
+    .string()
+    .optional()
+    .describe(
+      'Specific version ID to resolve. Mutually exclusive with status — if both are provided, versionId takes precedence.',
+    ),
+});
+
 export const toolIdPathParams = z.object({
   toolId: z.string().describe('Unique identifier for the tool'),
 });
@@ -270,11 +291,11 @@ export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
 /**
  * Body schema for tool execute endpoint
  * Simple schema - tool validates its own input data
- * Note: Using z.custom() instead of z.any()/z.any() because those are treated as optional by Zod
+ * Note: Using z.unknown().refine() instead of z.any() to ensure data is required
+ * (z.any() is treated as optional by Zod)
  */
-
 const executeToolDataBodySchema = z.object({
-  data: z.custom<unknown>(x => x !== undefined, { message: 'data is required' }),
+  data: z.unknown().refine(x => x !== undefined, { message: 'data is required' }),
 });
 
 export const executeToolBodySchema = executeToolDataBodySchema.extend({

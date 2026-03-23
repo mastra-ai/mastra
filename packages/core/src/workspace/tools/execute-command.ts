@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
@@ -140,6 +140,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
         await context?.writer?.custom({
           type: 'data-sandbox-stdout',
           data: { output: data, timestamp: Date.now(), toolCallId },
+          transient: true,
         });
       },
       onStderr: async (data: string) => {
@@ -147,6 +148,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
         await context?.writer?.custom({
           type: 'data-sandbox-stderr',
           data: { output: data, timestamp: Date.now(), toolCallId },
+          transient: true,
         });
       },
     });

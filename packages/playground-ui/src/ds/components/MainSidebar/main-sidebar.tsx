@@ -1,11 +1,11 @@
-import { MainSidebarRoot } from './main-sidebar-root';
 import { MainSidebarBottom } from './main-sidebar-bottom';
 import { MainSidebarNav } from './main-sidebar-nav';
-import { MainSidebarNavSection } from './main-sidebar-nav-section';
-import { MainSidebarNavLink } from './main-sidebar-nav-link';
 import { MainSidebarNavHeader } from './main-sidebar-nav-header';
+import { MainSidebarNavLink } from './main-sidebar-nav-link';
 import { MainSidebarNavList } from './main-sidebar-nav-list';
+import { MainSidebarNavSection } from './main-sidebar-nav-section';
 import { MainSidebarNavSeparator } from './main-sidebar-nav-separator';
+import { MainSidebarRoot } from './main-sidebar-root';
 
 export { MainSidebarProvider, type SidebarState } from './main-sidebar-context';
 export { useMainSidebar, useMaybeSidebar } from './main-sidebar-context';

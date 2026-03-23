@@ -21,7 +21,7 @@
     "@mastra/loggers": "latest",
     "@mastra/observability": "latest",
     "mastra": "latest",
-    "zod": "^3.25.76"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.3.2",
