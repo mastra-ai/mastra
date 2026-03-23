@@ -1,5 +1,26 @@
 # mastra
 
+## 1.3.15-alpha.1
+
+### Patch Changes
+
+- Pass MASTRA_EXPERIMENTAL_UI environment variable through the studio dev server HTML shell. ([#14547](https://github.com/mastra-ai/mastra/pull/14547))
+
+- - Improve generated `AGENTS.md` file ([#14591](https://github.com/mastra-ai/mastra/pull/14591))
+  - Remove `src/` directory question from create-mastra
+  - Fix a bug with project name input in wizard (it was setting a default value unintentionally)
+- Updated dependencies [[`b874092`](https://github.com/mastra-ai/mastra/commit/b87409266999a08d364528c31dff24af4584637f), [`7dbd611`](https://github.com/mastra-ai/mastra/commit/7dbd611a85cb1e0c0a1581c57564268cb183d86e), [`41aee84`](https://github.com/mastra-ai/mastra/commit/41aee84561ceebe28bad1ecba8702d92838f67f0)]:
+  - @mastra/deployer@1.16.0-alpha.1
+  - @mastra/core@1.16.0-alpha.1
+
+## 1.3.15-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`68ed4e9`](https://github.com/mastra-ai/mastra/commit/68ed4e9f118e8646b60a6112dabe854d0ef53902), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c), [`4a75e10`](https://github.com/mastra-ai/mastra/commit/4a75e106bd31c283a1b3fe74c923610dcc46415b), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c)]:
+  - @mastra/core@1.16.0-alpha.0
+  - @mastra/deployer@1.16.0-alpha.0
+
 ## 1.3.14
 
 ### Patch Changes

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { groupTracesByThread, GroupableTrace } from '../group-traces-by-thread';
+import type { GroupableTrace } from '../group-traces-by-thread';
+import { groupTracesByThread } from '../group-traces-by-thread';
 
 type MockTrace = GroupableTrace & { traceId: string };
 

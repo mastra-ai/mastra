@@ -1,9 +1,10 @@
-import { Icon } from '@/ds/icons';
-import { cn } from '@/lib/utils';
 import { AlertCircle, InfoIcon, TriangleAlert } from 'lucide-react';
 import React from 'react';
-import { Txt, TxtProps } from '../Txt';
+import type { TxtProps } from '../Txt';
+import { Txt } from '../Txt';
+import { Icon } from '@/ds/icons';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 type AlertVariant = 'warning' | 'destructive' | 'info';
 

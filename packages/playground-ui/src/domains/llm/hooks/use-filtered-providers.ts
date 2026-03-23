@@ -1,5 +1,5 @@
+import type { Provider } from '@mastra/client-js';
 import { useMemo } from 'react';
-import { Provider } from '@mastra/client-js';
 
 /**
  * Hook to filter and sort providers based on search and connection status

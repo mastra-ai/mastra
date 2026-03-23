@@ -1,16 +1,16 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import type { JSONSchema7 } from 'json-schema';
 import { ChevronRight } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { useAgentSchema } from '../hooks/use-agent-schema';
+import { useScorerSchema } from '../hooks/use-scorer-schema';
+import { useWorkflowSchema } from '../hooks/use-workflow-schema';
+import { SchemaField } from './schema-settings/schema-field';
+import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { SchemaField } from './schema-settings/schema-field';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
-import { useWorkflowSchema } from '../hooks/use-workflow-schema';
-import { useAgentSchema } from '../hooks/use-agent-schema';
-import { useScorerSchema } from '../hooks/use-scorer-schema';
-import type { JSONSchema7 } from 'json-schema';
 
 type SourceType = 'custom' | 'agent' | 'workflow' | 'scorer';
 type ScorerTargetType = 'agent' | 'custom';

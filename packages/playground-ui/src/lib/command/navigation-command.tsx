@@ -1,6 +1,13 @@
 import { Cpu, EyeIcon, GaugeIcon, PackageIcon, PanelLeftIcon } from 'lucide-react';
 import React from 'react';
 
+import { useNavigationCommand } from './use-navigation-command';
+import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useMCPServers } from '@/domains/mcps/hooks/use-mcp-servers';
+import { useProcessors } from '@/domains/processors/hooks/use-processors';
+import { useScorers } from '@/domains/scores/hooks/use-scorers';
+import { useTools } from '@/domains/tools/hooks/use-all-tools';
+import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import {
   CommandDialog,
   CommandEmpty,
@@ -11,17 +18,10 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from '@/ds/components/Command';
-import { AgentIcon, McpServerIcon, SettingsIcon, ToolsIcon, WorkflowIcon } from '@/ds/icons';
 import { useMaybeSidebar } from '@/ds/components/MainSidebar';
+import { AgentIcon, McpServerIcon, SettingsIcon, ToolsIcon, WorkflowIcon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
-import { useTools } from '@/domains/tools/hooks/use-all-tools';
-import { useProcessors } from '@/domains/processors/hooks/use-processors';
-import { useMCPServers } from '@/domains/mcps/hooks/use-mcp-servers';
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { useNavigationCommand } from './use-navigation-command';
 
 export const NavigationCommand = () => {
   const { open, setOpen } = useNavigationCommand();
