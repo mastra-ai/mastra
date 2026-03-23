@@ -1,7 +1,9 @@
 import { MastraClient, type CreateResponseParams } from '@mastra/client-js';
 
 const DEFAULT_AGENT_ID = process.env.MASTRA_AGENT_ID ?? 'support-agent';
+const TOOL_AGENT_ID = process.env.MASTRA_TOOL_AGENT_ID ?? 'tool-agent';
 const AGENT_BACKED_EXAMPLE = 'agent-memory';
+const AGENT_TOOLS_EXAMPLE = 'agent-tools';
 const mastraClient = new MastraClient({
   baseUrl: process.env.MASTRA_BASE_URL ?? 'http://localhost:4111',
 });
@@ -13,6 +15,10 @@ type DemoRequestBody = CreateResponseParams & {
 function normalizeDemoRequest(body: DemoRequestBody) {
   const requestBody = { ...body };
   delete requestBody.example;
+
+  if (body.example === AGENT_TOOLS_EXAMPLE && requestBody.agent_id == null) {
+    requestBody.agent_id = TOOL_AGENT_ID;
+  }
 
   if ((body.example === AGENT_BACKED_EXAMPLE || body.store === true) && requestBody.agent_id == null) {
     requestBody.agent_id = DEFAULT_AGENT_ID;
@@ -33,13 +39,11 @@ export async function POST(request: Request) {
 
     if (body.stream === true) {
       const streamResponseBody: CreateResponseParams & { stream: true } = { ...body, stream: true };
-      console.log({streamResponseBody})
       const stream = await mastraClient.responses.create(streamResponseBody);
       return stream.asResponse();
     }
 
     const createResponseBody: CreateResponseParams & { stream?: false } = { ...body, stream: false };
-    console.log({createResponseBody})
     const response = await mastraClient.responses.create(createResponseBody);
 
     return Response.json(response);

@@ -116,6 +116,15 @@ export type ResponseUsage = {
   };
 };
 
+export type ResponseTool = {
+  type: 'tool';
+  toolCallId: string | null;
+  toolName: string | null;
+  state: string | null;
+  args?: unknown;
+  result?: unknown;
+};
+
 export type ResponsesResponse = {
   id: string;
   object: 'response';
@@ -131,7 +140,7 @@ export type ResponsesResponse = {
   previous_response_id?: string | null;
   /** Provider-returned response state, such as `openai.responseId`, for provider-native continuation. */
   providerOptions?: Record<string, Record<string, unknown> | undefined>;
-  tools?: unknown[];
+  tools?: ResponseTool[];
   store?: boolean;
   output_text: string;
 };

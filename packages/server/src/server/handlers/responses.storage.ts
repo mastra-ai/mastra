@@ -39,6 +39,7 @@ export type StoredResponseMetadata = {
 export type StoredResponseMatch = {
   metadata: StoredResponseMetadata;
   message: MastraDBMessage;
+  messages: MastraDBMessage[];
   thread: StorageThreadType;
   memoryStore: MemoryStorage;
 };
@@ -150,8 +151,8 @@ export async function findStoredResponseMessage({
   }
 
   const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
-  const { messages } = await memoryStore.listMessagesById({ messageIds: [responseId] });
-  const message = messages[0];
+  const { messages: matchedMessages } = await memoryStore.listMessagesById({ messageIds: [responseId] });
+  const message = matchedMessages[0];
   if (!message || message.role !== 'assistant') {
     return null;
   }
@@ -167,7 +168,14 @@ export async function findStoredResponseMessage({
   }
 
   await validateThreadOwnership(thread, effectiveResourceId);
-  return { metadata, message, thread, memoryStore };
+  const messageIds = metadata.messageIds.length > 0 ? metadata.messageIds : [message.id];
+  const { messages: responseMessages } = await memoryStore.listMessagesById({ messageIds });
+  const messagesById = new Map(responseMessages.map(storedMessage => [storedMessage.id, storedMessage] as const));
+  const orderedMessages = messageIds
+    .map(messageId => messagesById.get(messageId))
+    .filter((storedMessage): storedMessage is MastraDBMessage => Boolean(storedMessage));
+
+  return { metadata, message, messages: orderedMessages, thread, memoryStore };
 }
 
 function createSyntheticResponseMessage({

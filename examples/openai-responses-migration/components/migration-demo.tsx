@@ -8,6 +8,7 @@ type TurnState = {
   responseId: string | null;
   previousResponseId: string | null;
   providerResponseId: string | null;
+  tools: ToolState[];
   text: string;
   raw: string;
   model: string | null;
@@ -17,7 +18,16 @@ type TurnState = {
   status: 'pending' | 'done' | 'error';
 };
 
-type ExampleId = 'model-only' | 'agent-memory' | 'provider-backed';
+type ToolState = {
+  type: 'tool';
+  toolCallId: string | null;
+  toolName: string | null;
+  state: string | null;
+  args?: unknown;
+  result?: unknown;
+};
+
+type ExampleId = 'agent-memory' | 'agent-tools' | 'provider-backed';
 
 type ExampleConfig = {
   id: ExampleId;
@@ -37,28 +47,10 @@ const DEFAULT_MODEL = `openai/${process.env.NEXT_PUBLIC_AGENT_MODEL ?? 'gpt-4.1-
 
 const EXAMPLES: readonly ExampleConfig[] = [
   {
-    id: 'model-only',
-    label: 'Direct Model',
-    eyebrow: 'Responses API',
-    description: 'No `agent_id`. This is the plain provider/model path and each turn is stateless.',
-    detail: 'Calls Mastra directly with only `model`, so no memory thread or `previous_response_id` is sent back.',
-    instructions:
-      'You are a direct model-only Responses API example. Answer clearly and keep replies compact unless the user asks for more detail.',
-    model: DEFAULT_MODEL,
-    usesAgentMemory: false,
-    store: false,
-    usesProviderContinuation: false,
-    prompts: [
-      'Write a one-sentence bedtime story about a unicorn.',
-      'Summarize why the Responses API is useful in one paragraph.',
-      'Generate a React component for a pricing table.',
-    ],
-  },
-  {
     id: 'agent-memory',
-    label: 'Agent-backed',
+    label: 'Mastra Agent',
     eyebrow: 'Responses API',
-    description: 'Uses `agent_id`, `store: true`, and an agent with memory configured for follow-up turns.',
+    description: 'Uses `agent_id`, `store: true`, and a Mastra agent with memory for follow-up turns.',
     detail: 'Each reply returns a stored response ID, and the next turn sends it as `previous_response_id` to continue the chain.',
     instructions:
       'You are a memory-backed Mastra agent. Use prior stored turns when the user asks follow-up questions.',
@@ -73,8 +65,27 @@ const EXAMPLES: readonly ExampleConfig[] = [
     ],
   },
   {
+    id: 'agent-tools',
+    label: 'Mastra Agent + Tool',
+    eyebrow: 'Responses API',
+    description: 'Uses `agent_id`, `store: true`, and a Mastra agent that can call a real tool.',
+    detail:
+      'This agent can call `release-status` during the turn, then the stored response stays anchored on the final assistant message.',
+    instructions:
+      'You are a Mastra agent with tools. Use tools when the user asks about launch readiness or release status.',
+    model: DEFAULT_MODEL,
+    usesAgentMemory: true,
+    store: true,
+    usesProviderContinuation: false,
+    prompts: [
+      'Check release readiness for the Responses API migration.',
+      'Who owns it?',
+      'What open items are left before rollout?',
+    ],
+  },
+  {
     id: 'provider-backed',
-    label: 'Provider-backed',
+    label: 'Direct Provider Store',
     eyebrow: 'Responses API',
     description:
       'Provider manages continuation via `providerOptions.openai.previousResponseId`.',
@@ -176,6 +187,29 @@ function extractProviderResponseId(payload: unknown) {
   }
 
   return openaiOptions.responseId;
+}
+
+function extractTools(payload: unknown): ToolState[] {
+  if (!isRecord(payload) || !Array.isArray(payload.tools)) {
+    return [];
+  }
+
+  return payload.tools.flatMap(tool => {
+    if (!isRecord(tool) || tool.type !== 'tool') {
+      return [];
+    }
+
+    return [
+      {
+        type: 'tool',
+        toolCallId: typeof tool.toolCallId === 'string' ? tool.toolCallId : null,
+        toolName: typeof tool.toolName === 'string' ? tool.toolName : null,
+        state: typeof tool.state === 'string' ? tool.state : null,
+        ...(tool.args !== undefined ? { args: tool.args } : {}),
+        ...(tool.result !== undefined ? { result: tool.result } : {}),
+      },
+    ];
+  });
 }
 
 function extractTokenCount(payload: unknown, fallbackText: string) {
@@ -376,8 +410,16 @@ function JsonPreview({ raw }: { raw: string }) {
   );
 }
 
+function formatToolValue(value: unknown) {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  return JSON.stringify(value, null, 2);
+}
+
 export function MigrationDemo() {
-  const [activeExampleId, setActiveExampleId] = useState<ExampleId>('model-only');
+  const [activeExampleId, setActiveExampleId] = useState<ExampleId>('agent-memory');
   const [input, setInput] = useState('');
   const [mode, setMode] = useState<'idle' | 'json' | 'stream'>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -480,6 +522,7 @@ export function MigrationDemo() {
         responseId: null,
         previousResponseId,
         providerResponseId: null,
+        tools: [],
         text: '',
         raw: '',
         model: null,
@@ -519,6 +562,7 @@ export function MigrationDemo() {
             ...turn,
             responseId: extractResponseId(payload),
             providerResponseId: extractProviderResponseId(payload),
+            tools: extractTools(payload),
             text,
             raw: JSON.stringify(payload, null, 2),
             model: extractModel(payload, activeExample.model),
@@ -533,6 +577,7 @@ export function MigrationDemo() {
       let streamedText = '';
       let responseId = previousResponseId;
       let providerResponseId = previousProviderResponseId;
+      let tools: ToolState[] = [];
       let raw = '';
       let model = activeExample.model;
       const response = await requestDemoResponse({ ...request, stream: true });
@@ -556,6 +601,7 @@ export function MigrationDemo() {
         ) {
           responseId = typeof event.response.id === 'string' ? event.response.id : responseId;
           providerResponseId = extractProviderResponseId(event.response) ?? providerResponseId;
+          tools = extractTools(event.response);
           model = extractModel(event.response, model) ?? model;
 
           if (eventType === 'response.completed') {
@@ -574,6 +620,7 @@ export function MigrationDemo() {
               ...turn,
               responseId,
               providerResponseId,
+              tools,
               text: streamedText,
               raw,
               model,
@@ -608,7 +655,7 @@ export function MigrationDemo() {
       <aside className="demo-sidebar">
         <div className="demo-sidebar__header">
           <span className="demo-sidebar__eyebrow">Modes</span>
-          <p className="demo-sidebar__intro">Switch between the stateless and agent-backed Responses API flows.</p>
+          <p className="demo-sidebar__intro">Switch between memory-backed, agent-with-tools, and provider-backed flows.</p>
         </div>
 
         <nav className="demo-sidebar__nav" aria-label="Example modes">
@@ -660,7 +707,7 @@ export function MigrationDemo() {
                 ? currentAnchor
                   ? `next turn will use provider response ${truncateResponseId(currentAnchor)}`
                   : 'first provider response creates the continuation anchor'
-                : 'stateless mode, so no previous_response_id is sent'}
+                : 'no continuation anchor yet'}
           </span>
         </div>
 
@@ -731,6 +778,36 @@ export function MigrationDemo() {
                         </div>
 
                         <div className="demo-message__body">
+                          {turn.tools.length > 0 ? (
+                            <div className="demo-tools">
+                              {turn.tools.map((tool, index) => (
+                                <div
+                                  className="demo-tool"
+                                  key={`${tool.toolCallId ?? tool.toolName ?? 'tool'}-${index}`}
+                                >
+                                  <div className="demo-tool__header">
+                                    <span className="demo-tool__name">{tool.toolName ?? 'Tool'}</span>
+                                    <span className="demo-tool__state">{tool.state ?? 'completed'}</span>
+                                  </div>
+
+                                  {tool.args !== undefined ? (
+                                    <div className="demo-tool__section">
+                                      <span className="demo-tool__label">Args</span>
+                                      <pre className="demo-tool__value">{formatToolValue(tool.args)}</pre>
+                                    </div>
+                                  ) : null}
+
+                                  {tool.result !== undefined ? (
+                                    <div className="demo-tool__section">
+                                      <span className="demo-tool__label">Result</span>
+                                      <pre className="demo-tool__value">{formatToolValue(tool.result)}</pre>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+
                           {turn.text ? (
                             turn.status === 'error' ? (
                               <p className="demo-turn__error">{turn.text}</p>

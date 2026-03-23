@@ -76,6 +76,17 @@ export const responseUsageSchema = z.object({
 
 export type ResponseUsage = z.infer<typeof responseUsageSchema>;
 
+export const responseToolSchema = z.object({
+  type: z.literal('tool'),
+  toolCallId: z.string().nullable(),
+  toolName: z.string().nullable(),
+  state: z.string().nullable(),
+  args: z.unknown().optional(),
+  result: z.unknown().optional(),
+});
+
+export type ResponseTool = z.infer<typeof responseToolSchema>;
+
 export const responseObjectSchema = z.object({
   id: z.string(),
   object: z.literal('response'),
@@ -90,7 +101,7 @@ export const responseObjectSchema = z.object({
   instructions: z.string().nullable().optional(),
   previous_response_id: z.string().nullable().optional(),
   providerOptions: providerOptionsSchema.optional(),
-  tools: z.array(z.unknown()).optional(),
+  tools: z.array(responseToolSchema).optional(),
   store: z.boolean().optional(),
 });
 

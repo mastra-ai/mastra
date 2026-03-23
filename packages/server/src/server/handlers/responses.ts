@@ -369,29 +369,22 @@ async function storeCompletedResponse({
   mastra,
   didStore,
   threadContext,
-  result,
   responseId,
   metadata,
   completedState,
+  messages,
 }: {
   mastra: Mastra | undefined;
   didStore: boolean;
   threadContext: ThreadExecutionContext | null;
-  result: ResponseExecutionResult | ResponseStreamResult;
   responseId: string;
   metadata: Omit<StoredResponseMetadata, 'completedAt' | 'status' | 'usage' | 'providerOptions' | 'messageIds'>;
   completedState: CompletedResponseState;
+  messages: MastraDBMessage[];
 }): Promise<void> {
   if (!didStore || !threadContext) {
     return;
   }
-
-  const responseMessages = await resolveResponseMessages({
-    result,
-    responseId,
-    text: completedState.text,
-    threadContext,
-  });
 
   await persistStoredResponse({
     mastra,
@@ -405,7 +398,7 @@ async function storeCompletedResponse({
       messageIds: [],
     },
     threadContext,
-    messages: responseMessages,
+    messages,
   });
 }
 
@@ -485,6 +478,12 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
         });
 
         const completedState = await resolveCompletedResponseState(result, '');
+        const responseMessages = await resolveResponseMessages({
+          result,
+          responseId,
+          text: completedState.text,
+          threadContext,
+        });
         const response = buildResponseObject({
           responseId,
           outputMessageId: responseId,
@@ -497,6 +496,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
           instructions: body.instructions,
           previousResponseId: body.previous_response_id,
           providerOptions: completedState.providerOptions,
+          messages: responseMessages,
           store: didStore,
         });
 
@@ -504,10 +504,10 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
           mastra,
           didStore,
           threadContext,
-          result,
           responseId,
           metadata: responseMetadata,
           completedState,
+          messages: responseMessages,
         });
 
         return jsonResponse(response);
@@ -597,6 +597,12 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
             }
 
             const completedState = await resolveCompletedResponseState(streamResult, text);
+            const responseMessages = await resolveResponseMessages({
+              result: streamResult,
+              responseId,
+              text: completedState.text,
+              threadContext,
+            });
             enqueueEvent('response.output_text.done', {
               type: 'response.output_text.done',
               output_index: 0,
@@ -617,6 +623,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
               instructions: body.instructions,
               previousResponseId: body.previous_response_id,
               providerOptions: completedState.providerOptions,
+              messages: responseMessages,
               store: didStore,
             });
 
@@ -624,10 +631,10 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
               mastra,
               didStore,
               threadContext,
-              result: streamResult,
               responseId,
               metadata: responseMetadata,
               completedState,
+              messages: responseMessages,
             });
 
             const completedItem = response.output[0] ?? {

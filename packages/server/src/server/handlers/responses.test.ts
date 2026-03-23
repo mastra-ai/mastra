@@ -7,7 +7,15 @@ import { HTTPException } from '../http-exception';
 import { CREATE_RESPONSE_ROUTE, DELETE_RESPONSE_ROUTE, GET_RESPONSE_ROUTE } from './responses';
 import { createTestServerContext } from './test-utils';
 
-function createGenerateResult(text: string, providerMetadata?: Record<string, Record<string, unknown> | undefined>) {
+function createGenerateResult({
+  text,
+  providerMetadata,
+  dbMessages,
+}: {
+  text: string;
+  providerMetadata?: Record<string, Record<string, unknown> | undefined>;
+  dbMessages?: Array<Record<string, unknown>>;
+}) {
   return {
     text,
     usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
@@ -27,6 +35,7 @@ function createGenerateResult(text: string, providerMetadata?: Record<string, Re
       timestamp: new Date(),
       modelId: 'test-model',
       messages: [],
+      dbMessages,
       uiMessages: [],
     },
     totalUsage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
@@ -40,6 +49,31 @@ function createGenerateResult(text: string, providerMetadata?: Record<string, Re
     messages: [],
     rememberedMessages: [],
   } as unknown as Awaited<ReturnType<Agent['generate']>>;
+}
+
+function createDbMessage({
+  id,
+  role,
+  createdAt,
+  parts,
+  type = 'text',
+}: {
+  id: string;
+  role: 'assistant' | 'tool' | 'user' | 'system';
+  createdAt: Date;
+  parts: Array<Record<string, unknown>>;
+  type?: string;
+}) {
+  return {
+    id,
+    role,
+    type,
+    createdAt,
+    content: {
+      format: 2 as const,
+      parts,
+    },
+  };
 }
 
 function createLegacyGenerateResult(text: string) {
@@ -147,7 +181,7 @@ describe('Responses Handlers', () => {
   });
 
   it('creates and retrieves a stored non-streaming response', async () => {
-    vi.spyOn(agent, 'generate').mockResolvedValue(createGenerateResult('Hello from Mastra'));
+    vi.spyOn(agent, 'generate').mockResolvedValue(createGenerateResult({ text: 'Hello from Mastra' }));
 
     const response = (await CREATE_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
@@ -217,7 +251,7 @@ describe('Responses Handlers', () => {
     });
 
     mockAgentSpecVersion(statelessAgent);
-    vi.spyOn(statelessAgent, 'generate').mockResolvedValue(createGenerateResult('Stateless response'));
+    vi.spyOn(statelessAgent, 'generate').mockResolvedValue(createGenerateResult({ text: 'Stateless response' }));
 
     await expect(
       CREATE_RESPONSE_ROUTE.handler({
@@ -245,7 +279,7 @@ describe('Responses Handlers', () => {
 
   it('reuses the stored thread when previous_response_id is provided', async () => {
     const generateSpy = vi.spyOn(agent, 'generate');
-    generateSpy.mockResolvedValue(createGenerateResult('First response'));
+    generateSpy.mockResolvedValue(createGenerateResult({ text: 'First response' }));
 
     const firstResponse = (await CREATE_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
@@ -261,7 +295,7 @@ describe('Responses Handlers', () => {
     const firstThreadId = (firstCall as { memory?: { thread?: string } })?.memory?.thread;
     const firstResourceId = (firstCall as { memory?: { resource?: string } })?.memory?.resource;
 
-    generateSpy.mockResolvedValue(createGenerateResult('Second response'));
+    generateSpy.mockResolvedValue(createGenerateResult({ text: 'Second response' }));
 
     await CREATE_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
@@ -322,9 +356,12 @@ describe('Responses Handlers', () => {
 
   it('passes providerOptions through to generate calls', async () => {
     const generateSpy = vi.spyOn(agent, 'generate').mockResolvedValue(
-      createGenerateResult('Provider aware', {
-        openai: {
-          responseId: 'resp_provider_123',
+      createGenerateResult({
+        text: 'Provider aware',
+        providerMetadata: {
+          openai: {
+            responseId: 'resp_provider_123',
+          },
         },
       }),
     );
@@ -474,7 +511,7 @@ describe('Responses Handlers', () => {
   });
 
   it('deletes a stored response', async () => {
-    vi.spyOn(agent, 'generate').mockResolvedValue(createGenerateResult('To delete'));
+    vi.spyOn(agent, 'generate').mockResolvedValue(createGenerateResult({ text: 'To delete' }));
 
     const response = (await CREATE_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
@@ -510,7 +547,9 @@ describe('Responses Handlers', () => {
     const getModelSpy = vi
       .spyOn(Agent.prototype, 'getModel')
       .mockResolvedValue({ specificationVersion: 'v2' } as never);
-    const generateSpy = vi.spyOn(Agent.prototype, 'generate').mockResolvedValue(createGenerateResult('Model only'));
+    const generateSpy = vi
+      .spyOn(Agent.prototype, 'generate')
+      .mockResolvedValue(createGenerateResult({ text: 'Model only' }));
 
     const response = (await CREATE_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
@@ -545,6 +584,170 @@ describe('Responses Handlers', () => {
         input: 'Hello',
         stream: false,
         store: false,
+      }),
+    ).rejects.toThrow(HTTPException);
+  });
+
+  it('stores tool-backed turns on the final assistant message', async () => {
+    const generateSpy = vi.spyOn(agent, 'generate').mockResolvedValue(
+      createGenerateResult({
+        text: 'The weather is sunny.',
+        dbMessages: [
+          createDbMessage({
+            id: 'assistant-tool-call',
+            role: 'assistant',
+            createdAt: new Date('2026-03-23T10:00:00.000Z'),
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call_1',
+                  toolName: 'weather',
+                  args: { city: 'Lagos' },
+                  result: { weather: 'sunny' },
+                },
+              },
+            ],
+          }),
+          createDbMessage({
+            id: 'tool-result-1',
+            role: 'tool',
+            type: 'tool-result',
+            createdAt: new Date('2026-03-23T10:00:01.000Z'),
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call_1',
+                  toolName: 'weather',
+                  result: { weather: 'sunny' },
+                },
+              },
+            ],
+          }),
+          createDbMessage({
+            id: 'assistant-final',
+            role: 'assistant',
+            createdAt: new Date('2026-03-23T10:00:02.000Z'),
+            parts: [{ type: 'text', text: 'The weather is sunny.' }],
+          }),
+        ],
+      }),
+    );
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'What is the weather in Lagos?',
+      store: true,
+      stream: false,
+    })) as Response;
+
+    const created = await readJson(response);
+    const threadId = (generateSpy.mock.calls[0]?.[1] as { memory?: { thread?: string } })?.memory?.thread;
+    const storedMessages = await memory.recall({ threadId: threadId!, perPage: false });
+
+    expect(created.id).toBe(created.output[0].id);
+    expect(created.tools).toEqual([
+      {
+        type: 'tool',
+        toolCallId: 'call_1',
+        toolName: 'weather',
+        state: 'result',
+        args: { city: 'Lagos' },
+        result: { weather: 'sunny' },
+      },
+    ]);
+    expect(storedMessages.messages.map(message => message.id)).toEqual(
+      expect.arrayContaining([created.id, 'assistant-tool-call', 'tool-result-1']),
+    );
+    expect(storedMessages.messages.map(message => message.id)).not.toContain('assistant-final');
+
+    const retrieved = await GET_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      responseId: created.id,
+    });
+
+    expect(retrieved).toMatchObject({
+      id: created.id,
+      tools: [
+        {
+          type: 'tool',
+          toolCallId: 'call_1',
+          toolName: 'weather',
+          state: 'result',
+          args: { city: 'Lagos' },
+          result: { weather: 'sunny' },
+        },
+      ],
+      output: [
+        {
+          id: created.id,
+          content: [{ text: 'The weather is sunny.' }],
+        },
+      ],
+    });
+  });
+
+  it('deletes all persisted messages for a tool-backed turn', async () => {
+    vi.spyOn(agent, 'generate').mockResolvedValue(
+      createGenerateResult({
+        text: 'Tool-backed answer',
+        dbMessages: [
+          createDbMessage({
+            id: 'assistant-tool-call',
+            role: 'assistant',
+            createdAt: new Date('2026-03-23T10:05:00.000Z'),
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call_2',
+                  toolName: 'lookup',
+                  result: { ok: true },
+                },
+              },
+            ],
+          }),
+          createDbMessage({
+            id: 'assistant-final',
+            role: 'assistant',
+            createdAt: new Date('2026-03-23T10:05:01.000Z'),
+            parts: [{ type: 'text', text: 'Tool-backed answer' }],
+          }),
+        ],
+      }),
+    );
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'Use the tool',
+      store: true,
+      stream: false,
+    })) as Response;
+
+    const created = await readJson(response);
+    const deleted = await DELETE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      responseId: created.id,
+    });
+
+    expect(deleted).toEqual({
+      id: created.id,
+      object: 'response',
+      deleted: true,
+    });
+
+    await expect(
+      GET_RESPONSE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        responseId: created.id,
       }),
     ).rejects.toThrow(HTTPException);
   });

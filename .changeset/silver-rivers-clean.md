@@ -11,6 +11,8 @@ You can now call Mastra through a Responses API flow and continue stored turns w
 also be passed through with `providerOptions`, and provider-returned continuation state
 is surfaced back on the response under the same `providerOptions` field. Stored
 response IDs now map directly to the persisted assistant turn ID in Mastra memory.
+Tool-using agent turns are also surfaced through the Responses payload, and the
+migration demo now includes memory-backed, tool-using, and provider-backed flows.
 
 ```ts
 import { MastraClient } from '@mastra/client-js';

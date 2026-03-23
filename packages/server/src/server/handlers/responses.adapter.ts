@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import type { ResponseInputMessage, ResponseObject } from '../schemas/responses';
+import type { ResponseInputMessage, ResponseObject, ResponseTool } from '../schemas/responses';
 import type { StoredResponseMatch, ProviderMetadataLike, UsageLike } from './responses.storage';
 
 export type InputMessage = {
@@ -22,6 +22,51 @@ function getMessageText(message: MastraDBMessage): string {
     .flatMap(part => (part.type === 'text' ? [part.text] : []))
     .filter((text): text is string => typeof text === 'string')
     .join('');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getToolKey(toolCallId: string | null, messageId: string, partIndex: number) {
+  return toolCallId ?? `${messageId}:${partIndex}`;
+}
+
+/**
+ * Collects tool invocations/results from response messages into a compact response-friendly shape.
+ */
+export function extractResponseTools(messages: MastraDBMessage[] | undefined): ResponseTool[] {
+  if (!messages?.length) {
+    return [];
+  }
+
+  const tools = new Map<string, ResponseTool>();
+
+  for (const message of messages) {
+    const parts = Array.isArray(message.content?.parts) ? message.content.parts : [];
+
+    for (const [partIndex, part] of parts.entries()) {
+      if (!isRecord(part) || part.type !== 'tool-invocation' || !isRecord(part.toolInvocation)) {
+        continue;
+      }
+
+      const invocation = part.toolInvocation;
+      const toolCallId = typeof invocation.toolCallId === 'string' ? invocation.toolCallId : null;
+      const key = getToolKey(toolCallId, message.id, partIndex);
+      const existingTool = tools.get(key);
+
+      tools.set(key, {
+        type: 'tool',
+        toolCallId,
+        toolName: typeof invocation.toolName === 'string' ? invocation.toolName : (existingTool?.toolName ?? null),
+        state: typeof invocation.state === 'string' ? invocation.state : (existingTool?.state ?? null),
+        args: invocation.args ?? existingTool?.args,
+        result: invocation.result ?? existingTool?.result,
+      });
+    }
+  }
+
+  return [...tools.values()];
 }
 
 /**
@@ -109,6 +154,7 @@ export function buildResponseObject({
   previousResponseId,
   providerOptions,
   store,
+  messages,
 }: {
   responseId: string;
   outputMessageId: string;
@@ -122,6 +168,7 @@ export function buildResponseObject({
   previousResponseId?: string;
   providerOptions?: ProviderMetadataLike;
   store: boolean;
+  messages?: MastraDBMessage[];
 }): ResponseObject {
   return {
     id: responseId,
@@ -145,7 +192,7 @@ export function buildResponseObject({
     instructions: instructions ?? null,
     previous_response_id: previousResponseId ?? null,
     providerOptions,
-    tools: [],
+    tools: extractResponseTools(messages),
     store,
   };
 }
@@ -212,7 +259,7 @@ export function buildStoredResponseObject(match: StoredResponseMatch): ResponseO
     instructions: match.metadata.instructions ?? null,
     previous_response_id: match.metadata.previousResponseId ?? null,
     providerOptions: match.metadata.providerOptions,
-    tools: [],
+    tools: extractResponseTools(match.messages),
     store: match.metadata.store,
   };
 }

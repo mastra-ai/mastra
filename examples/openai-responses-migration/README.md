@@ -11,22 +11,22 @@ This example uses the normal `create-mastra` layout:
 It is intentionally narrow:
 
 - The app uses `MastraClient.responses.create()` and `MastraClient.responses.stream()`.
-- The Mastra agent lives in `src/mastra/` inside the example.
+- The Mastra agents live in `src/mastra/` inside the example.
 - The example focuses on plain text Responses API calls and stored follow-up turns.
-- The UI includes three demo modes: a direct model-only flow, a memory-backed agent flow, and a provider-backed continuation flow.
-- The local Next API route stays intentionally thin and only injects the default demo `agent_id` for the agent-backed mode.
+- The UI includes three demo modes: `Mastra Agent`, `Mastra Agent + Tool`, and `Direct Provider Store`.
+- The local Next API route stays intentionally thin and only injects the default demo `agent_id` for the agent-backed and agent-with-tools modes.
 - The UI stays intentionally small: a sidebar, one prompt field, one response surface, and a raw JSON toggle.
 
 ## What this demonstrates
 
 - Non-streaming Responses API calls against Mastra
 - Streaming Responses API calls against Mastra
-- A direct model-only path with no `agent_id`
-- A memory-backed agent path with `store: true` and `previous_response_id`
-- A provider-backed path that uses `providerOptions.openai.previousResponseId`
+- A `Mastra Agent` path with `store: true` and `previous_response_id`
+- A `Mastra Agent + Tool` path that calls a real Mastra tool during the response turn
+- A `Direct Provider Store` path that uses `providerOptions.openai.previousResponseId`
 - A standard Mastra app structure instead of a custom embedded server bootstrap
-- A compact demo-friendly playground with a sidebar, prompt chips, `Cmd/Ctrl + Enter`, response copying, and expandable raw payloads
-- A lightweight chat transcript that makes the difference between stateless and stored turns visible
+- A compact demo-friendly playground with a sidebar, prompt chips, Enter-to-send, response copying, and expandable raw payloads
+- A lightweight chat transcript that makes the difference between stored agent turns and provider-backed continuation visible
 
 ## Migration shape
 
@@ -57,7 +57,7 @@ const client = new MastraClient({
 const response = await client.responses.create({
   model: 'openai/gpt-4.1-mini',
   agent_id: 'support-agent',
-  input: 'Write a short bedtime story.',
+  input: 'Check release readiness for the Responses API migration.',
   store: true,
 });
 ```
@@ -66,7 +66,7 @@ The important part is the split:
 
 - `model` is the provider/model string
 - `agent_id` is the optional Mastra agent selector
-- `store: true` only works on the agent-backed path
+- `store: true` works on the `Mastra Agent` and `Mastra Agent + Tool` paths
 - provider-native continuation can stay stateless in Mastra by reusing `response.providerOptions.openai.responseId`
 
 ## Run locally
@@ -91,6 +91,7 @@ Then open:
 
 - `OPENAI_API_KEY` is used by the underlying OpenAI model.
 - `MASTRA_BASE_URL` defaults to the local Mastra dev server and is used by the local Next API route.
-- `NEXT_PUBLIC_AGENT_MODEL` configures the underlying model used by both demo modes.
+- `NEXT_PUBLIC_AGENT_MODEL` configures the underlying model used by all demo modes.
 - `MASTRA_AGENT_ID` configures the registered agent used by the memory-backed demo mode.
+- `MASTRA_TOOL_AGENT_ID` configures the registered agent used by the agent-with-tools demo mode.
 - The example persists threads and response IDs in `./mastra.db`.

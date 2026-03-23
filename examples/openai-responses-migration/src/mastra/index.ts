@@ -1,6 +1,6 @@
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
-import { supportAgent } from './agents';
+import { supportAgent, toolAgent } from './agents';
 
 const storage = new LibSQLStore({
   id: 'openai-responses-migration-storage',
@@ -11,6 +11,7 @@ export const mastra = new Mastra({
   storage,
   agents: {
     supportAgent,
+    toolAgent,
   },
   server: {
     build: {
