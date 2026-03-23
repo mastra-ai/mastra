@@ -745,21 +745,24 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         });
       }
 
-      // Fetch current items (skip items not found or mismatched)
-      const currentItems: DatasetItem[] = [];
-      for (const itemId of input.itemIds) {
-        const item = await this.getItemById({ id: itemId });
-        if (item && item.datasetId === input.datasetId) {
-          currentItems.push(item);
-        }
-      }
+      const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
+
+      // Fetch current items in one query instead of sequential lookups
+      const currentRows = await itemsCollection
+        .find({
+          id: { $in: input.itemIds },
+          datasetId: input.datasetId,
+          validTo: null,
+          isDeleted: false,
+        })
+        .toArray();
+      const currentItems = currentRows.map(row => this.transformItemRow(row));
       if (currentItems.length === 0) return;
 
       const now = new Date();
       const versionId = randomUUID();
 
       const datasetsCollection = await this.getCollection(TABLE_DATASETS);
-      const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
       const versionsCollection = await this.getCollection(TABLE_DATASET_VERSIONS);
 
       // Single version bump
@@ -778,13 +781,12 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       }
       const newVersion = result.version as number;
 
-      // Close old rows
-      for (const item of currentItems) {
-        await itemsCollection.updateOne(
-          { id: item.id, validTo: null, isDeleted: false },
-          { $set: { validTo: newVersion } },
-        );
-      }
+      // Close old rows in batch
+      const currentIds = currentItems.map(i => i.id);
+      await itemsCollection.updateMany(
+        { id: { $in: currentIds }, validTo: null, isDeleted: false },
+        { $set: { validTo: newVersion } },
+      );
 
       // Insert tombstones in batch
       const tombstones = currentItems.map(item => ({
