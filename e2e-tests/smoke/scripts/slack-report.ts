@@ -275,18 +275,34 @@ async function main() {
   if (!isGreen && failures.length > 0) {
     blocks.push({ type: 'divider' });
 
-    const failureList = failures
-      .map(f => {
-        const error = f.error.length > 120 ? f.error.slice(0, 120) + '…' : f.error;
-        return `• \`${f.file}\`\n   ${f.title}\n   _${error}_`;
-      })
-      .join('\n\n');
+    // Slack section blocks have a 3000-char text limit.
+    // Build the list incrementally and stop when we'd exceed the budget.
+    const header = '*Failures:*\n\n';
+    const maxLen = 2900; // leave room for header + truncation notice
+    let failureList = '';
+    let shown = 0;
+
+    for (const f of failures) {
+      const error = f.error.length > 120 ? f.error.slice(0, 120) + '…' : f.error;
+      // Escape chars that break Slack mrkdwn inside the error string
+      const safeError = error.replace(/[*_~`<>]/g, c => `\\${c}`);
+      const entry = `• \`${f.file}\`\n   ${f.title}\n   _${safeError}_`;
+      const candidate = failureList ? failureList + '\n\n' + entry : entry;
+      if (header.length + candidate.length > maxLen) break;
+      failureList = candidate;
+      shown++;
+    }
+
+    const remaining = failures.length - shown;
+    if (remaining > 0) {
+      failureList += `\n\n_…and ${remaining} more_`;
+    }
 
     blocks.push({
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*Failures:*\n\n${failureList}`,
+        text: `${header}${failureList}`,
       },
     });
 
