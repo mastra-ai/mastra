@@ -12,7 +12,7 @@ name: Smoke Tests
 
 on:
   schedule:
-    - cron: '0 8 * * 1-5' # weekdays 8am UTC
+    - cron: '0 5,17 * * *' # 1 hour after alpha publish (4:00/16:00 UTC)
   workflow_dispatch:
     inputs:
       force:
