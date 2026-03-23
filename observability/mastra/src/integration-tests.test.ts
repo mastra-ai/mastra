@@ -720,14 +720,13 @@ describe('Tracing Integration Tests', () => {
     const stepLog = testExporter.getLogsByLevel('info').find(l => l.message === 'workflow-step: processing');
     expect(stepLog, 'loggerVNext.info() in workflow step should be captured by the exporter').toBeDefined();
     expect(stepLog!.data).toEqual({ value: 'tacos' });
-    expect(stepLog!.traceId).toBe(result.traceId);
-    expect(stepLog!.spanId).toBeDefined();
+    expect(stepLog!.correlationContext?.traceId).toBe(result.traceId);
+    expect(stepLog!.correlationContext?.spanId).toBeDefined();
 
     // Verify auto-extracted workflow metrics
     const workflowDuration = testExporter.getMetricsByName('mastra_workflow_duration_ms');
     expect(workflowDuration).toHaveLength(1);
     expect(workflowDuration[0]!.value).toBeGreaterThanOrEqual(0);
-    expect(workflowDuration[0]!.labels.entity_name).toBeDefined();
     expect(workflowDuration[0]!.labels.status).toBe('ok');
   });
 
@@ -1249,15 +1248,15 @@ describe('Tracing Integration Tests', () => {
       const toolLog = infoLogs.find(l => l.message === 'metadata-tool: processing');
       expect(toolLog, 'loggerVNext.info() in tool should be captured by the exporter').toBeDefined();
       expect(toolLog!.data).toEqual({ inputValue: 'some data' });
-      expect(toolLog!.traceId).toBe(result.traceId);
-      expect(toolLog!.spanId).toBeDefined();
+      expect(toolLog!.correlationContext?.traceId).toBe(result.traceId);
+      expect(toolLog!.correlationContext?.spanId).toBeDefined();
 
       // Verify custom metrics delivered to the exporter
       const counterMetrics = testExporter.getMetricsByName('metadata_tool_calls');
       expect(counterMetrics, 'metrics.counter() in tool should be captured by the exporter').toHaveLength(1);
       expect(counterMetrics[0]!.value).toBe(1);
       expect(counterMetrics[0]!.labels.tool_id).toBe('metadata-tool');
-      expect(counterMetrics[0]!.labels.service_name).toBe('integration-tests');
+      expect(counterMetrics[0]!.correlationContext?.serviceName).toBe('integration-tests');
 
       const histoMetrics = testExporter.getMetricsByName('metadata_tool_input_length');
       expect(histoMetrics, 'metrics.histogram() in tool should be captured by the exporter').toHaveLength(1);
@@ -1266,7 +1265,7 @@ describe('Tracing Integration Tests', () => {
       // Verify auto-extracted metrics from the agent run
       const agentDuration = testExporter.getMetricsByName('mastra_agent_duration_ms');
       expect(agentDuration).toHaveLength(1);
-      expect(agentDuration[0]!.labels.entity_name).toBe('Metadata Agent');
+      expect(agentDuration[0]!.correlationContext?.entityName).toBe('Metadata Agent');
       expect(agentDuration[0]!.labels.status).toBe('ok');
       expect(agentDuration[0]!.value).toBeGreaterThanOrEqual(0);
 
@@ -1277,15 +1276,31 @@ describe('Tracing Integration Tests', () => {
       const inputTokens = testExporter.getMetricsByName('mastra_model_total_input_tokens');
       expect(inputTokens.length).toBeGreaterThanOrEqual(1);
       expect(inputTokens[0]!.value).toBeGreaterThan(0);
+      expect(inputTokens[0]!.costContext).toBeDefined();
+      expect(typeof inputTokens[0]!.costContext?.provider).toBe('string');
+      expect(typeof inputTokens[0]!.costContext?.model).toBe('string');
+      expect(inputTokens[0]!.costContext?.costMetadata).toEqual(
+        expect.objectContaining({
+          estimationStatus: expect.any(String),
+        }),
+      );
 
       const outputTokens = testExporter.getMetricsByName('mastra_model_total_output_tokens');
       expect(outputTokens.length).toBeGreaterThanOrEqual(1);
       expect(outputTokens[0]!.value).toBeGreaterThan(0);
+      expect(outputTokens[0]!.costContext).toBeDefined();
+      expect(typeof outputTokens[0]!.costContext?.provider).toBe('string');
+      expect(typeof outputTokens[0]!.costContext?.model).toBe('string');
+      expect(outputTokens[0]!.costContext?.costMetadata).toEqual(
+        expect.objectContaining({
+          estimationStatus: expect.any(String),
+        }),
+      );
 
       // Auto-extracted tool call metrics
       const toolDuration = testExporter.getMetricsByName('mastra_tool_duration_ms');
       expect(toolDuration).toHaveLength(1);
-      expect(toolDuration[0]!.labels.entity_name).toBe('metadataTool');
+      expect(toolDuration[0]!.correlationContext?.entityName).toBe('metadataTool');
       expect(toolDuration[0]!.labels.status).toBe('ok');
       expect(toolDuration[0]!.value).toBeGreaterThanOrEqual(0);
     });
@@ -1359,10 +1374,10 @@ describe('Tracing Integration Tests', () => {
       const finishLog = allLogs.find(l => l.message === 'child-span-tool: finished');
       expect(startLog, 'loggerVNext in tool should deliver logs to the exporter').toBeDefined();
       expect(finishLog).toBeDefined();
-      expect(startLog!.traceId).toBe(result.traceId);
-      expect(finishLog!.traceId).toBe(result.traceId);
+      expect(startLog!.correlationContext?.traceId).toBe(result.traceId);
+      expect(finishLog!.correlationContext?.traceId).toBe(result.traceId);
       // Both logs share the same span (the tool call span)
-      expect(startLog!.spanId).toBe(finishLog!.spanId);
+      expect(startLog!.correlationContext?.spanId).toBe(finishLog!.correlationContext?.spanId);
     });
   });
 

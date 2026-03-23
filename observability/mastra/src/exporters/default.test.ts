@@ -939,7 +939,7 @@ describe('DefaultExporter', () => {
     });
 
     describe('Non-tracing signal handlers', () => {
-      it('onMetricEvent should extract entity hierarchy from labels', async () => {
+      it('onMetricEvent should prefer typed context and cost fields over labels and metadata', async () => {
         mockObservabilityStore.batchCreateMetrics = vi.fn().mockResolvedValue(undefined);
         const exporter = new DefaultExporter({ logger: mockLogger });
         await exporter.init({ mastra: mockMastra });
@@ -951,12 +951,31 @@ describe('DefaultExporter', () => {
             name: 'mastra_agent_duration_ms',
             value: 1,
             labels: {
-              entity_type: 'agent',
-              entity_name: 'my-agent',
-              parent_type: 'workflow_run',
-              parent_name: 'my-workflow',
-              service_name: 'api-server',
               other_label: 'kept',
+            },
+            correlationContext: {
+              traceId: 'trace-1',
+              spanId: 'span-1',
+              environment: 'production',
+              entityType: EntityType.AGENT,
+              entityName: 'my-agent',
+              parentEntityType: EntityType.WORKFLOW_RUN,
+              parentEntityName: 'my-workflow',
+              serviceName: 'api-server',
+            },
+            costContext: {
+              provider: 'openai',
+              model: 'gpt-4o-mini',
+              estimatedCost: 0.00123,
+              costUnit: 'usd',
+              costMetadata: {
+                estimationStatus: 'ok',
+                pricingRowId: 'openai-gpt-4o-mini',
+                matchedTierIndex: 0,
+              },
+            },
+            metadata: {
+              metadata_only: 'kept',
             },
           },
         };
@@ -973,9 +992,23 @@ describe('DefaultExporter', () => {
               entityName: 'my-agent',
               parentEntityType: EntityType.WORKFLOW_RUN,
               parentEntityName: 'my-workflow',
+              traceId: 'trace-1',
+              spanId: 'span-1',
+              provider: 'openai',
+              model: 'gpt-4o-mini',
+              estimatedCost: 0.00123,
+              costUnit: 'usd',
+              environment: 'production',
               serviceName: 'api-server',
-              // entity_type, entity_name, etc. should be removed from labels
-              labels: { other_label: 'kept' },
+              costMetadata: {
+                estimationStatus: 'ok',
+                pricingRowId: 'openai-gpt-4o-mini',
+                matchedTierIndex: 0,
+              },
+              metadata: { metadata_only: 'kept' },
+              labels: {
+                other_label: 'kept',
+              },
             }),
           ],
         });
@@ -1010,7 +1043,16 @@ describe('DefaultExporter', () => {
               parentEntityName: null,
               rootEntityType: null,
               rootEntityName: null,
+              traceId: null,
+              spanId: null,
+              provider: null,
+              model: null,
+              estimatedCost: null,
+              costUnit: null,
+              environment: null,
               serviceName: null,
+              costMetadata: null,
+              metadata: null,
               labels: { status: 'ok' },
             }),
           ],
@@ -1085,7 +1127,7 @@ describe('DefaultExporter', () => {
         await exporter.shutdown();
       });
 
-      it('onLogEvent should extract entity hierarchy from metadata', async () => {
+      it('onLogEvent should persist correlation context fields', async () => {
         mockObservabilityStore.batchCreateLogs = vi.fn().mockResolvedValue(undefined);
         const exporter = new DefaultExporter({ logger: mockLogger });
         await exporter.init({ mastra: mockMastra });
@@ -1096,7 +1138,12 @@ describe('DefaultExporter', () => {
             timestamp: new Date('2026-01-01T00:00:00Z'),
             level: 'info',
             message: 'Agent started',
-            traceId: 'trace-1',
+            correlationContext: {
+              traceId: 'trace-1',
+              entityType: EntityType.AGENT,
+              entityName: 'my-agent',
+              environment: 'production',
+            },
             metadata: {
               entity_type: 'agent',
               entity_name: 'my-agent',
