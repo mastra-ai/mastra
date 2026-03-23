@@ -5139,6 +5139,10 @@ ${formattedMessages}
     // Compression target: 75% of slice size. This gives breathing room while still making progress.
     const compressionTarget = Math.round(sliceTokenEstimate * 0.75);
 
+    omDebug(
+      `[OM:reflect] doAsyncBufferedReflection: slicing observations for reflection — totalLines=${totalLines}, avgTokPerLine=${avgTokensPerLine.toFixed(1)}, activationPointTokens=${activationPointTokens}, linesToReflect=${linesToReflect}/${totalLines}, sliceTokenEstimate=${sliceTokenEstimate}, compressionTarget=${compressionTarget}`,
+    );
+
     if (writer) {
       const startMarker = createBufferingStartMarker({
         cycleId,
@@ -5151,6 +5155,10 @@ ${formattedMessages}
       });
       void writer.custom(startMarker).catch(() => {});
     }
+
+    omDebug(
+      `[OM:reflect] doAsyncBufferedReflection: starting reflector call, recordId=${currentRecord.id}, observationTokens=${sliceTokenEstimate}, compressionTarget=${compressionTarget} (inputTokens), activeObsLength=${activeObservations.length}, reflectedLineCount=${reflectedObservationLineCount}`,
+    );
 
     // Call reflector with compression target.
     const reflectResult = await this.callReflector(
