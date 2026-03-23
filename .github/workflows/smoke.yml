@@ -33,9 +33,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
 
-      # ── Check for new alpha versions ──────────────────────────
+      # ── Install & update ────────────────────────────────────
+      - name: Install dependencies
+        run: pnpm install --ignore-workspace
+
       - name: Update alpha packages
         run: pnpm update "@mastra/*" mastra --ignore-workspace
 
@@ -51,11 +53,7 @@ jobs:
             git diff pnpm-lock.yaml | grep -E '^\+.*version:' | head -20 || true
           fi
 
-      # ── Install & build ───────────────────────────────────────
-      - name: Install dependencies
-        if: steps.diff.outputs.changed == 'true'
-        run: pnpm install --ignore-workspace
-
+      # ── Playwright browsers ─────────────────────────────────
       - name: Install Playwright browsers
         if: steps.diff.outputs.changed == 'true'
         run: npx playwright install --with-deps chromium
