@@ -11,6 +11,9 @@ import {
   consumeSSEStream,
   createMultipartTestSuite,
 } from '@internal/server-adapter-test-utils';
+import { Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
+import type { ApiRoute } from '@mastra/core/server';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
@@ -593,6 +596,102 @@ describe('Fastify Server Adapter', () => {
       expect(response.headers.get('x-custom-header')).toBe('custom-value');
 
       await response.json();
+    });
+  });
+
+  describe('Custom API Route Path Validation', () => {
+    it('should throw when a manually constructed route conflicts with the default /api prefix', async () => {
+      const routes: ApiRoute[] = [{ path: '/api/my-route', method: 'GET', handler: async c => c.json({}) }];
+      const mastra = new Mastra({});
+      const app = Fastify();
+      const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
+
+      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(/reserved for internal Mastra API routes/);
+
+      await app.close();
+    });
+
+    it('should throw when a manually constructed route conflicts with a custom prefix', async () => {
+      const routes: ApiRoute[] = [{ path: '/mastra/my-route', method: 'GET', handler: async c => c.json({}) }];
+      const mastra = new Mastra({});
+      const app = Fastify();
+      const adapter = new MastraServer({ app, mastra, prefix: '/mastra', customApiRoutes: routes });
+
+      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(/reserved for internal Mastra API routes/);
+
+      await app.close();
+    });
+
+    it('should throw when a manually constructed route path equals the prefix exactly', async () => {
+      const routes: ApiRoute[] = [{ path: '/api', method: 'GET', handler: async c => c.json({}) }];
+      const mastra = new Mastra({});
+      const app = Fastify();
+      const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
+
+      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(/reserved for internal Mastra API routes/);
+
+      await app.close();
+    });
+
+    it('should not throw for a path that shares a prefix string but is not a sub-path', async () => {
+      const routes = [
+        registerApiRoute('/api-custom', {
+          method: 'GET',
+          handler: async c => c.json({ ok: true }),
+        }),
+      ];
+      const mastra = new Mastra({});
+      const app = Fastify();
+      const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
+
+      await expect(adapter.registerCustomApiRoutes()).resolves.toBeUndefined();
+
+      await app.close();
+    });
+
+    it('should not throw for a valid route path with the default prefix', async () => {
+      const routes = [
+        registerApiRoute('/my-custom-route', {
+          method: 'GET',
+          handler: async c => c.json({ ok: true }),
+        }),
+      ];
+      const mastra = new Mastra({});
+      const app = Fastify();
+      const adapter = new MastraServer({ app, mastra, customApiRoutes: routes });
+
+      await expect(adapter.registerCustomApiRoutes()).resolves.toBeUndefined();
+
+      await app.close();
+    });
+
+    it('should throw when a no-prefix route conflicts with an internal Mastra route segment', async () => {
+      const routes: ApiRoute[] = [{ path: '/agents/my-route', method: 'GET', handler: async c => c.json({}) }];
+      const mastra = new Mastra({});
+      const app = Fastify();
+      const adapter = new MastraServer({ app, mastra, prefix: '', customApiRoutes: routes });
+
+      await expect(adapter.registerCustomApiRoutes()).rejects.toThrow(
+        /conflicts with the reserved internal Mastra API path/,
+      );
+
+      await app.close();
+    });
+
+    it('should not throw for a non-conflicting route when empty prefix is used', async () => {
+      const routes = [
+        registerApiRoute('/health', {
+          method: 'GET',
+          handler: async c => c.json({ ok: true }),
+        }),
+      ];
+      const mastra = new Mastra({});
+      const app = Fastify();
+      const adapter = new MastraServer({ app, mastra, prefix: '', customApiRoutes: routes });
+
+      await expect(adapter.registerCustomApiRoutes()).resolves.toBeUndefined();
+
+      await app.close();
     });
   });
 });
