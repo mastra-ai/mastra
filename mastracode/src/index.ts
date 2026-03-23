@@ -10,7 +10,7 @@ import type {
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
 import {
-  ToolResultReminderProcessor,
+  AgentsMDInjector,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
@@ -162,7 +162,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     model: getDynamicModel,
     tools: createDynamicTools(mcpManager, config?.extraTools, hookManager, config?.disabledTools),
     inputProcessors: [
-      new ToolResultReminderProcessor({
+      new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
           const harnessContext = requestContext.get('harness') as
             | { state?: { projectPath?: string }; getState?: () => { projectPath?: string } }

@@ -161,10 +161,10 @@ function parseInvocationArgs(args: unknown): Record<string, unknown> | undefined
  * Injects a persisted UI-visible reminder when the agent just interacted with
  * a path whose directory ancestry contains an instruction file such as AGENTS.md.
  */
-export class ToolResultReminderProcessor implements Processor<'tool-result-reminder'> {
-  id = 'tool-result-reminder' as const;
-  name = 'Instruction File Reminder';
-  description = 'Injects a reminder when instruction file operations are detected';
+export class AgentsMDInjector implements Processor<'agents-md-injector'> {
+  id = 'agents-md-injector' as const;
+  name = 'Agents.md Injector';
+  description = 'Injects AGENTS.md reminders when instruction file operations are detected';
   processorIndex = 0;
 
   private readonly reminderText?: string;

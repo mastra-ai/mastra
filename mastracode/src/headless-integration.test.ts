@@ -4,7 +4,7 @@ import type { HarnessEvent } from '@mastra/core/harness';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 
 import { createTool } from '@mastra/core/tools';
-import { ToolResultReminderProcessor } from '@mastra/core/processors';
+import { AgentsMDInjector } from '@mastra/core/processors';
 import { LibSQLStore } from '@mastra/libsql';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -275,7 +275,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     expect(agentEnd.reason).toBe('aborted');
   });
 
-  it('ToolResultReminderProcessor persists a system reminder after instruction-file tool usage', async () => {
+  it('AgentsMDInjector persists a system reminder after instruction-file tool usage', async () => {
     const tempProjectDir = mkdtempSync(join(tmpdir(), 'mastracode-reminder-project-'));
     tempStorePaths.push(tempProjectDir);
     const instructionDir = join(tempProjectDir, 'src', 'agents', 'nested');
@@ -285,7 +285,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     mkdirSync(instructionDir, { recursive: true });
     writeFileSync(instructionPath, instructionContents, 'utf-8');
 
-    const reminderProcessor = new ToolResultReminderProcessor({
+    const reminderProcessor = new AgentsMDInjector({
       reminderText: REMINDER_TEXT,
     });
 

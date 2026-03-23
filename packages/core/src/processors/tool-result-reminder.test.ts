@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import { MastraLanguageModelV3Mock } from '../loop/test-utils/MastraLanguageModelV3Mock';
 import type { RequestContext } from '../request-context';
-import { ToolResultReminderProcessor } from './tool-result-reminder';
+import { AgentsMDInjector } from './tool-result-reminder';
 import type { ProcessInputStepArgs, ProcessorStreamWriter, ToolCallInfo } from './index';
 
 const REMINDER_TEXT = 'Remember to cite project instructions when using AGENTS.md guidance.';
@@ -158,7 +158,7 @@ function getMessageText(message: MastraDBMessage): string {
     .join('\n');
 }
 
-describe('ToolResultReminderProcessor', () => {
+describe('AgentsMDInjector', () => {
   it('injects metadata-rich reminder for direct AGENTS.md path references', async () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-agents';
@@ -172,7 +172,7 @@ describe('ToolResultReminderProcessor', () => {
       }),
     );
 
-    const testProcessor = new ToolResultReminderProcessor({
+    const testProcessor = new AgentsMDInjector({
       reminderText: REMINDER_TEXT,
       pathExists: path => String(path) === '/repo/src/agents/nested/AGENTS.md',
       isDirectory: () => false,
@@ -200,7 +200,7 @@ describe('ToolResultReminderProcessor', () => {
       }),
     );
 
-    const testProcessor = new ToolResultReminderProcessor({
+    const testProcessor = new AgentsMDInjector({
       reminderText: REMINDER_TEXT,
       pathExists: path => String(path) === '/repo/CLAUDE.md',
       isDirectory: () => false,
@@ -251,7 +251,7 @@ describe('ToolResultReminderProcessor', () => {
     );
     const rotateResponseMessageId = vi.fn(() => 'response-2');
 
-    const testProcessor = new ToolResultReminderProcessor({
+    const testProcessor = new AgentsMDInjector({
       reminderText: REMINDER_TEXT,
       pathExists: path => String(path) === '/repo/src/agents/nested/AGENTS.md',
       isDirectory: () => false,
@@ -281,7 +281,7 @@ describe('ToolResultReminderProcessor', () => {
     );
 
     const rotateResponseMessageId = vi.fn(() => 'response-2');
-    const testProcessor = new ToolResultReminderProcessor({
+    const testProcessor = new AgentsMDInjector({
       reminderText: REMINDER_TEXT,
       pathExists: path =>
         String(path) === '/repo/src/agents/nested' || String(path) === '/repo/src/agents/nested/AGENTS.md',
@@ -312,7 +312,7 @@ describe('ToolResultReminderProcessor', () => {
       }),
     );
 
-    const testProcessor = new ToolResultReminderProcessor({
+    const testProcessor = new AgentsMDInjector({
       pathExists: path => String(path) === '/repo/AGENTS.md',
       isDirectory: path => String(path) !== '/repo/src/deep/file.ts',
       readFile: () => FILE_CONTENT,
@@ -338,7 +338,7 @@ describe('ToolResultReminderProcessor', () => {
       }),
     );
 
-    const testProcessor = new ToolResultReminderProcessor({
+    const testProcessor = new AgentsMDInjector({
       reminderText: REMINDER_TEXT,
       pathExists: path => String(path) === '/repo/src/agents/nested/AGENTS.md',
       isDirectory: path => String(path) !== '/repo/src/agents/nested/file.ts',
@@ -371,7 +371,7 @@ describe('ToolResultReminderProcessor', () => {
       }),
     );
 
-    const testProcessor = new ToolResultReminderProcessor({
+    const testProcessor = new AgentsMDInjector({
       pathExists: path => String(path) === '/repo/AGENTS.md',
       isDirectory: path => String(path) !== '/repo/src/index.ts',
       readFile: () => 'Project guidance from AGENTS',
@@ -399,7 +399,7 @@ describe('ToolResultReminderProcessor', () => {
       }),
     );
 
-    const testProcessor = new ToolResultReminderProcessor({
+    const testProcessor = new AgentsMDInjector({
       pathExists: path => String(path) === '/repo/nested/AGENTS.md' || String(path) === '/repo/AGENTS.md',
       isDirectory: path => String(path) === '/repo' || String(path) === '/repo/nested',
       readFile: path => (String(path) === '/repo/nested/AGENTS.md' ? 'Nested guidance' : 'Root guidance'),

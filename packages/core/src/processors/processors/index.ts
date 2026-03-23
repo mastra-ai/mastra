@@ -42,7 +42,7 @@ export {
 
 export { ToolCallFilter } from './tool-call-filter';
 
-export { ToolResultReminderProcessor, type ToolResultReminderOptions } from '../tool-result-reminder';
+export { AgentsMDInjector, type ToolResultReminderOptions } from '../tool-result-reminder';
 
 export { ToolSearchProcessor, type ToolSearchProcessorOptions } from './tool-search';
 export { SkillsProcessor, type SkillsProcessorOptions } from './skills';
