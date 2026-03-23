@@ -1,5 +1,6 @@
-import { useMetrics } from '../hooks/use-metrics';
 import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
+
+import { useMetrics } from '../hooks/use-metrics';
 
 const DATE_PRESETS = [
   { label: 'Last 24 hours', value: '24h' },

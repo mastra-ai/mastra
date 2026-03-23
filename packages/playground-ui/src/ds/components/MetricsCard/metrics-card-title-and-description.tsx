@@ -1,6 +1,7 @@
+import type { ReactNode } from 'react';
+
 import { MetricsCardDescription } from './metrics-card-description';
 import { MetricsCardTitle } from './metrics-card-title';
-import type { ReactNode } from 'react';
 
 type PropsWithTitleDescription = {
   title: string;

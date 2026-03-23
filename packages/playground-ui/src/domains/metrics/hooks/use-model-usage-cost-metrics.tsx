@@ -1,7 +1,8 @@
-import { formatCompact } from '../components/metrics-utils';
-import { useMetricsFilters } from './use-metrics-filters';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+
+import { formatCompact } from '../components/metrics-utils';
+import { useMetricsFilters } from './use-metrics-filters';
 
 export interface ModelUsageRow {
   model: string;

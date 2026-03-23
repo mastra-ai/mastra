@@ -1,8 +1,9 @@
-import { formatCompact } from './metrics-utils';
+import { MetricsKpiCard } from '@/ds/components/MetricsKpiCard';
+
 import { useAgentRunsKpiMetrics } from '../hooks/use-agent-runs-kpi-metrics';
 import { useAvgScoreKpiMetrics } from '../hooks/use-avg-score-kpi-metrics';
 import { useTotalTokensKpiMetrics } from '../hooks/use-total-tokens-kpi-metrics';
-import { MetricsKpiCard } from '@/ds/components/MetricsKpiCard';
+import { formatCompact } from './metrics-utils';
 
 export function AgentRunsKpiCard() {
   const { data: agentRunsKpi, isLoading, isError } = useAgentRunsKpiMetrics();

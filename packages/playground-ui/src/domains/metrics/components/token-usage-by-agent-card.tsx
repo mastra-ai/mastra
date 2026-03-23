@@ -1,8 +1,9 @@
-import { CHART_COLORS, formatCompact } from './metrics-utils';
-import { useTokenUsageByAgentMetrics } from '../hooks/use-token-usage-by-agent-metrics';
 import { HorizontalBars } from '@/ds/components/HorizontalBars';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
+
+import { useTokenUsageByAgentMetrics } from '../hooks/use-token-usage-by-agent-metrics';
+import { CHART_COLORS, formatCompact } from './metrics-utils';
 
 export function TokenUsageByAgentCard() {
   const { data, isLoading, isError } = useTokenUsageByAgentMetrics();
