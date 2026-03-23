@@ -199,8 +199,10 @@ const stream = await client.responses.stream({
 
 Retrieves a stored response by ID.
 
+For stored responses, the ID is the persisted assistant turn ID returned as `response.id`.
+
 ```typescript
-const response = await client.responses.retrieve('resp_123')
+const response = await client.responses.retrieve('msg_123')
 
 console.log(response.output_text)
 ```
@@ -212,7 +214,7 @@ console.log(response.output_text)
 Deletes a stored response by ID.
 
 ```typescript
-await client.responses.delete('resp_123')
+await client.responses.delete('msg_123')
 ```
 
 **Returns:** `Promise<{ id: string; object: 'response'; deleted: true }>`.

@@ -190,6 +190,7 @@ describe('Responses Handlers', () => {
         },
       },
     });
+    expect(created.id).toBe(created.output[0].id);
 
     const retrieved = await GET_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
@@ -281,11 +282,7 @@ describe('Responses Handlers', () => {
     });
 
     const secondInput = generateSpy.mock.calls[1]?.[0];
-    expect(secondInput).toEqual([
-      { role: 'user', content: 'First turn' },
-      { role: 'assistant', content: 'First response' },
-      { role: 'user', content: 'Second turn' },
-    ]);
+    expect(secondInput).toEqual([{ role: 'user', content: 'Second turn' }]);
   });
 
   it('falls back to generateLegacy for AI SDK v4 agents', async () => {
