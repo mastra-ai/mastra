@@ -1,8 +1,8 @@
-import { GetAgentResponse } from '@mastra/client-js';
+import type { GetAgentResponse } from '@mastra/client-js';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { ErrorState } from '@/ds/components/ErrorState';
 import { is403ForbiddenError } from '@/lib/query-utils';
-import { EntityList } from '@/ds/components/EntityList';
+import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
 
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
@@ -10,7 +10,6 @@ import { useLinkComponent } from '@/lib/framework';
 import { extractPrompt } from '../../utils/extractPrompt';
 import { ProviderLogo } from '../agent-metadata/provider-logo';
 import { NoAgentsInfo } from './no-agents-info';
-import { EntityListSkeleton } from '@/ds/components/EntityList';
 import { TextAndIcon } from '@/ds/components/Text';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { WorkflowIcon } from '@/ds/icons';
