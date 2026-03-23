@@ -162,6 +162,16 @@ Once saved, provider models appear in existing selectors like `/models` and `/su
 
 Custom providers are stored in `settings.json` in the same app data directory. If you save an API key, it is stored locally in plaintext, so use a machine/user profile you trust.
 
+### macOS sleep prevention
+
+On macOS, Mastra Code starts the built-in `caffeinate` utility while the agent is actively running, then stops it as soon as the run completes, errors, aborts, or the TUI exits. Idle sessions do not keep your machine awake.
+
+To disable this behavior, set `MASTRACODE_DISABLE_CAFFEINATE=1` before launching Mastra Code:
+
+```bash
+export MASTRACODE_DISABLE_CAFFEINATE=1
+```
+
 ### Plan persistence
 
 When you approve a plan (via `submit_plan`), it is saved as a markdown file in the app data directory:
