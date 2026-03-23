@@ -9,7 +9,9 @@ export const fileStatTool = createTool({
   description:
     'Get file or directory metadata from the workspace. Returns existence, type, size, and modification time.',
   inputSchema: z.object({
-    path: z.string().describe('The path to check'),
+    path: z
+      .string()
+      .describe('The relative path to check (e.g., "src/index.ts"). Always use relative paths — never start with "/".'),
   }),
   execute: async ({ path }, context) => {
     const { filesystem } = requireFilesystem(context);
