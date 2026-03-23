@@ -1,13 +1,11 @@
-import { InfoIcon } from 'lucide-react';
-import { ModelUsageCostCard } from './model-usage-cost-card';
-import { TracesVolumeCard } from './traces-volume-card';
 import { LatencyCard } from './latency-card';
+import { AgentRunsKpiCard, TotalTokensKpiCard, AvgScoreKpiCard } from './metrics-kpi-cards';
+import { ModelUsageCostCard } from './model-usage-cost-card';
 import { ScoresCard } from './scores-card';
 import { TokenUsageByAgentCard } from './token-usage-by-agent-card';
-import { AgentRunsKpiCard, ModelCostKpiCard, TotalTokensKpiCard, AvgScoreKpiCard } from './metrics-kpi-cards';
-import { MetricsFlexGrid } from '@/ds/components/MetricsFlexGrid';
+import { TracesVolumeCard } from './traces-volume-card';
 import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
-import { Notice } from '@/ds/components/Notice';
+import { MetricsFlexGrid } from '@/ds/components/MetricsFlexGrid';
 
 export function MetricsDashboard() {
   return (
