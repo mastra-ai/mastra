@@ -11,18 +11,15 @@ import { providerMapToIcon } from '../provider-map-icon';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { ToolsIcon, WorkflowIcon, ProcessorIcon } from '@/ds/icons';
 import { extractPrompt } from '../../utils/extractPrompt';
-import { AgentSourceIcon } from '../agent-source-icon';
-
 export type AgentTableColumn = {
   id: string;
 } & AgentTableData;
 
-const NameCell = ({ row, showSourceIcon }: { row: Row<AgentTableColumn>; showSourceIcon?: boolean }) => {
+const NameCell = ({ row }: { row: Row<AgentTableColumn> }) => {
   const { Link, paths } = useLinkComponent();
 
   return (
     <EntryCell
-      icon={showSourceIcon ? <AgentSourceIcon source={row.original.source} /> : undefined}
       name={
         <Link className="w-full" href={paths.agentLink(row.original.id)}>
           {row.original.name}
@@ -132,12 +129,12 @@ const attachedEntitiesColumn: ColumnDef<AgentTableColumn> = {
   },
 };
 
-export const getColumns = (experimentalFeaturesEnabled: boolean): ColumnDef<AgentTableColumn>[] => {
+export const getColumns = (): ColumnDef<AgentTableColumn>[] => {
   return [
     {
       header: 'Name',
       accessorKey: 'name',
-      cell: ({ row }) => <NameCell row={row} showSourceIcon={experimentalFeaturesEnabled} />,
+      cell: ({ row }) => <NameCell row={row} />,
     },
     modelColumn,
     attachedEntitiesColumn,

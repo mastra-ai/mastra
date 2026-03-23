@@ -1,7 +1,6 @@
 import {
   AgentPlaygroundView,
   AgentEditFormProvider,
-  SchemaRequestContextProvider,
   useAgent,
   useStoredAgent,
   useAgentCmsForm,
@@ -98,38 +97,35 @@ function AgentPlayground() {
   }
 
   return (
-    <SchemaRequestContextProvider>
-      <AgentEditFormProvider
-        form={form}
-        mode="edit"
-        agentId={agentId}
-        isSubmitting={isSubmitting}
+    <AgentEditFormProvider
+      form={form}
+      mode="edit"
+      agentId={agentId}
+      isSubmitting={isSubmitting}
+      isSavingDraft={isSavingDraft}
+      handlePublish={handlePublish}
+      handleSaveDraft={handleSaveDraft}
+      isCodeAgentOverride={isCodeAgentOverride}
+      readOnly={isViewingPreviousVersion}
+    >
+      <AgentPlaygroundView
+        agentId={agentId!}
+        agentName={codeAgent?.name}
+        modelVersion={codeAgent?.modelVersion}
+        hasMemory={hasMemory}
+        activeVersionId={activeVersionId}
+        selectedVersionId={selectedVersionId ?? undefined}
+        latestVersionId={latestVersion?.id}
+        onVersionSelect={handleVersionSelect}
+        isDirty={isDirty}
         isSavingDraft={isSavingDraft}
-        handlePublish={handlePublish}
-        handleSaveDraft={handleSaveDraft}
-        isCodeAgentOverride={isCodeAgentOverride}
+        isPublishing={isSubmitting}
+        hasDraft={hasDraft}
         readOnly={isViewingPreviousVersion}
-      >
-        <AgentPlaygroundView
-          agentId={agentId!}
-          agentName={codeAgent?.name}
-          modelVersion={codeAgent?.modelVersion}
-          hasMemory={hasMemory}
-          activeVersionId={activeVersionId}
-          selectedVersionId={selectedVersionId ?? undefined}
-          latestVersionId={latestVersion?.id}
-          requestContextSchema={codeAgent?.requestContextSchema}
-          onVersionSelect={handleVersionSelect}
-          isDirty={isDirty}
-          isSavingDraft={isSavingDraft}
-          isPublishing={isSubmitting}
-          hasDraft={hasDraft}
-          readOnly={isViewingPreviousVersion}
-          onSaveDraft={handleSaveDraft}
-          onPublish={handlePublish}
-        />
-      </AgentEditFormProvider>
-    </SchemaRequestContextProvider>
+        onSaveDraft={handleSaveDraft}
+        onPublish={handlePublish}
+      />
+    </AgentEditFormProvider>
   );
 }
 
