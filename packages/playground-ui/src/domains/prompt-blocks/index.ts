@@ -16,6 +16,8 @@ export {
   type PromptBlockFormValues,
 } from './components/prompt-block-edit-page/utils/form-validation';
 
+export { PromptsList, type PromptsListProps } from './components/prompts-list/prompts-list';
+
 // Hooks
 export {
   useStoredPromptBlocks,

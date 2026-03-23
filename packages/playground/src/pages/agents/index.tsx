@@ -5,17 +5,65 @@ import {
   MainContentContent,
   Icon,
   Button,
+  ButtonWithTooltip,
   HeaderAction,
-  useLinkComponent,
   DocsIcon,
   useAgents,
   AgentsTable,
+  AgentsList,
   AgentIcon,
+  ListSearch,
+  MainHeader,
+  EntityListPageLayout,
 } from '@mastra/playground-ui';
+import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
+import { BookIcon } from 'lucide-react';
+import { useState } from 'react';
+import { Link } from 'react-router';
 
 function Agents() {
-  const { Link } = useLinkComponent();
   const { data: agents = {}, isLoading, error } = useAgents();
+  const { variant } = useExperimentalUI('entity-list-page');
+  const [search, setSearch] = useState('');
+
+  if (variant === 'new-proposal') {
+    return (
+      <EntityListPageLayout>
+        <EntityListPageLayout.Top>
+          <MainHeader withMargins={false}>
+            <MainHeader.Column>
+              <MainHeader.Title isLoading={isLoading}>
+                <AgentIcon /> Agents
+              </MainHeader.Title>
+            </MainHeader.Column>
+            <MainHeader.Column className="flex justify-end gap-2">
+              <ButtonWithTooltip
+                as="a"
+                href="https://mastra.ai/en/docs/agents/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+                tooltipContent="Go to Agents documentation"
+              >
+                <BookIcon />
+              </ButtonWithTooltip>
+            </MainHeader.Column>
+          </MainHeader>
+          <div className="max-w-[30rem]">
+            <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
+          </div>
+        </EntityListPageLayout.Top>
+
+        <AgentsList
+          agents={agents}
+          isLoading={isLoading}
+          error={error}
+          search={search}
+          onSearch={setSearch}
+          hideToolbar
+        />
+      </EntityListPageLayout>
+    );
+  }
 
   return (
     <MainContentLayout>
