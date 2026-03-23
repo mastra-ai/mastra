@@ -33,7 +33,7 @@ export interface AgentCMSBlockProps {
   block: InstructionBlock;
   onBlockChange: (block: InstructionBlock) => void;
   onDelete?: (index: number) => void;
-  onConvertToRef?: (index: number, blockId: string) => void;
+  onConvertToRef?: (sourceBlockId: string, promptBlockId: string) => void;
   placeholder?: string;
   className?: string;
   schema?: JsonSchema;
@@ -185,7 +185,7 @@ const InlineBlockContent = ({
         },
       );
     },
-    [block.content, createStoredPromptBlock, onConvertToRef],
+    [block.content, block.rules, createStoredPromptBlock, onConvertToRef],
   );
 
   return (
@@ -284,7 +284,7 @@ export const AgentCMSBlock = ({
           index={index}
           block={block}
           onBlockChange={onBlockChange}
-          onConvertToRef={onConvertToRef ? (blockId: string) => onConvertToRef(index, blockId) : undefined}
+          onConvertToRef={onConvertToRef ? (promptBlockId: string) => onConvertToRef(block.id, promptBlockId) : undefined}
           placeholder={placeholder}
           dragHandleProps={dragHandleProps}
           onDelete={onDelete ? () => onDelete(index) : undefined}

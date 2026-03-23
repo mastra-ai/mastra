@@ -94,10 +94,10 @@ export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema
     onChange(newItems);
   };
 
-  // Called from InlineBlockContent after it creates a prompt block and gets back the blockId
-  const handleConvertToRef = (index: number, blockId: string) => {
-    const refBlock = createRefInstructionBlock(blockId);
-    const newItems = items.map((item, idx) => (idx === index ? refBlock : item));
+  // Called from InlineBlockContent after it creates a prompt block and gets back the promptBlockId
+  const handleConvertToRef = (sourceBlockId: string, promptBlockId: string) => {
+    const refBlock = createRefInstructionBlock(promptBlockId);
+    const newItems = items.map(item => (item.id === sourceBlockId ? refBlock : item));
     onChange(newItems);
   };
 
