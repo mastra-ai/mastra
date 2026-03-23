@@ -1,10 +1,9 @@
-import { MetricsCard } from '@/ds/components/MetricsCard';
-import { MetricsLineChart } from '@/ds/components/MetricsLineChart';
-import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
-
 import { useLatencyMetrics } from '../hooks/use-latency-metrics';
 import type { LatencyPoint } from '../hooks/use-latency-metrics';
 import { CHART_COLORS } from './metrics-utils';
+import { MetricsCard } from '@/ds/components/MetricsCard';
+import { MetricsLineChart } from '@/ds/components/MetricsLineChart';
+import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 
 const latencySeries = [
   {
