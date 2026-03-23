@@ -41,8 +41,16 @@ function createMockWorkspaceSkills(): WorkspaceSkills {
 
   return {
     list: vi.fn().mockResolvedValue([mockSkillMetadata]),
-    get: vi.fn().mockImplementation((path: string) => Promise.resolve(skills.get(path) || null)),
-    has: vi.fn().mockImplementation((path: string) => Promise.resolve(skills.has(path))),
+    get: vi
+      .fn()
+      .mockImplementation((identifier: string) =>
+        Promise.resolve(skills.get(identifier) || [...skills.values()].find(s => s.name === identifier) || null),
+      ),
+    has: vi
+      .fn()
+      .mockImplementation((identifier: string) =>
+        Promise.resolve(skills.has(identifier) || [...skills.values()].some(s => s.name === identifier)),
+      ),
     refresh: vi.fn().mockResolvedValue(undefined),
     maybeRefresh: vi.fn().mockResolvedValue(undefined),
     search: vi.fn().mockResolvedValue([]),
