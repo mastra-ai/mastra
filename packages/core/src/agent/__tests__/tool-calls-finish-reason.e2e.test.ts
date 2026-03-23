@@ -12,7 +12,7 @@ import { openai as openai_v6 } from '@ai-sdk/openai-v6';
 import { createGatewayMock } from '@internal/test-utils';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 
