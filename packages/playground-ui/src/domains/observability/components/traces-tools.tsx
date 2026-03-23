@@ -183,9 +183,12 @@ export function TracesTools({
   const [subValueSearch, setSubValueSearch] = useState('');
   const [contextFieldSearch, setContextFieldSearch] = useState('');
 
-  const resetSubSearch = useCallback((setter: (v: string) => void) => (open: boolean) => {
-    if (!open) setter('');
-  }, []);
+  const resetSubSearch = useCallback(
+    (setter: (v: string) => void) => (open: boolean) => {
+      if (!open) setter('');
+    },
+    [],
+  );
 
   const datePresetLabel = DATE_PRESETS.find(p => p.value === datePreset)?.label ?? 'All';
 
@@ -211,12 +214,8 @@ export function TracesTools({
   };
 
   const applyCustomRange = () => {
-    const fromDate = draftDateFrom
-      ? buildDateWithTime(draftDateFrom, draftTimeFrom) ?? draftDateFrom
-      : undefined;
-    const toDate = draftDateTo
-      ? buildDateWithTime(draftDateTo, draftTimeTo) ?? draftDateTo
-      : undefined;
+    const fromDate = draftDateFrom ? (buildDateWithTime(draftDateFrom, draftTimeFrom) ?? draftDateFrom) : undefined;
+    const toDate = draftDateTo ? (buildDateWithTime(draftDateTo, draftTimeTo) ?? draftDateTo) : undefined;
     onDateChange?.(fromDate, 'from');
     onDateChange?.(toDate, 'to');
     setCustomRangeOpen(false);
@@ -324,11 +323,7 @@ export function TracesTools({
                     disabled={isLoading}
                     fromDate={draftDateFrom}
                   />
-                  <TimePicker
-                    className="mx-4 mb-3 w-auto"
-                    defaultValue={draftTimeTo}
-                    onValueChange={setDraftTimeTo}
-                  />
+                  <TimePicker className="mx-4 mb-3 w-auto" defaultValue={draftTimeTo} onValueChange={setDraftTimeTo} />
                 </div>
               </div>
               <div className={cn('flex justify-between items-center px-4 pb-3')}>
@@ -398,7 +393,9 @@ export function TracesTools({
                   value={filterSearch}
                   onChange={e => setFilterSearch(e.target.value)}
                   onKeyDown={e => e.stopPropagation()}
-                  className={cn('bg-transparent text-ui-sm text-neutral4 placeholder:text-neutral3 outline-none w-full')}
+                  className={cn(
+                    'bg-transparent text-ui-sm text-neutral4 placeholder:text-neutral3 outline-none w-full',
+                  )}
                 />
               </div>
             </div>
@@ -436,9 +433,7 @@ export function TracesTools({
               <DropdownMenu.Sub onOpenChange={resetSubSearch(setEntitySearch)}>
                 <DropdownMenu.SubTrigger>
                   Entity Type
-                  {selectedEntity?.value !== 'all' && (
-                    <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>
-                  )}
+                  {selectedEntity?.value !== 'all' && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
                 </DropdownMenu.SubTrigger>
                 <PortalSubContent>
                   {entityOptions.length >= SUBMENU_SEARCH_THRESHOLD && (
@@ -452,7 +447,9 @@ export function TracesTools({
                     }}
                   >
                     {entityOptions
-                      .filter(option => !entitySearch || option.label.toLowerCase().includes(entitySearch.toLowerCase()))
+                      .filter(
+                        option => !entitySearch || option.label.toLowerCase().includes(entitySearch.toLowerCase()),
+                      )
                       .map(option => (
                         <DropdownMenu.RadioItem key={option.value} value={option.value}>
                           {option.label}
@@ -503,9 +500,7 @@ export function TracesTools({
               <DropdownMenu.Sub onOpenChange={resetSubSearch(setMetadataKeySearch)}>
                 <DropdownMenu.SubTrigger>
                   Metadata
-                  {metadataCount > 0 && (
-                    <span className={cn('ml-auto text-ui-sm text-accent1')}>{metadataCount}</span>
-                  )}
+                  {metadataCount > 0 && <span className={cn('ml-auto text-ui-sm text-accent1')}>{metadataCount}</span>}
                 </DropdownMenu.SubTrigger>
                 <PortalSubContent className={cn('max-h-[20rem]')}>
                   {metadataKeys.length >= SUBMENU_SEARCH_THRESHOLD && (
@@ -540,7 +535,9 @@ export function TracesTools({
                             </DropdownMenu.CheckboxItem>
                             <DropdownMenu.Separator />
                             {values
-                              .filter(value => !subValueSearch || value.toLowerCase().includes(subValueSearch.toLowerCase()))
+                              .filter(
+                                value => !subValueSearch || value.toLowerCase().includes(subValueSearch.toLowerCase()),
+                              )
                               .map(value => (
                                 <DropdownMenu.CheckboxItem
                                   key={value}
@@ -576,9 +573,7 @@ export function TracesTools({
                   ? fields.filter(f => f.label.toLowerCase().includes(q) || group.toLowerCase().includes(q))
                   : fields;
                 // Only show fields that have available values
-                const fieldsWithValues = visibleFields.filter(
-                  f => (availableContextValues?.[f.id] ?? []).length > 0,
-                );
+                const fieldsWithValues = visibleFields.filter(f => (availableContextValues?.[f.id] ?? []).length > 0);
                 if (fieldsWithValues.length === 0) return null;
                 const activeInGroup = fieldsWithValues.filter(f => contextFilters?.[f.id]?.trim()).length;
                 return (
