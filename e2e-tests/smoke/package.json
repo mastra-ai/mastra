@@ -8,7 +8,8 @@
     "build:studio": "npx mastra build --studio",
     "test": "vitest run --reporter=verbose",
     "test:ui": "playwright test",
-    "test:all": "vitest run --reporter=verbose && playwright test"
+    "test:all": "vitest run --reporter=verbose && playwright test",
+    "report:slack": "npx tsx scripts/slack-report.ts"
   },
   "dependencies": {
     "@mastra/core": "alpha",

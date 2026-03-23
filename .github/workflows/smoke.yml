@@ -1,0 +1,97 @@
+# Copy this file to .github/workflows/smoke.yml in your fork.
+#
+# Required secrets:
+#   OPENAI_API_KEY   – OpenAI API key (sk-...)
+#   SLACK_BOT_TOKEN  – Slack Bot User OAuth Token (xoxb-...)
+#   SLACK_USER_ID    – Your Slack member ID (U...)
+#
+# Set your fork's default branch to the branch containing this workflow
+# (e.g. roamin/easy-smoke) for the cron schedule to fire.
+
+name: Smoke Tests
+
+on:
+  schedule:
+    - cron: '0 8 * * 1-5' # weekdays 8am UTC
+  workflow_dispatch: # manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: e2e-tests/smoke
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # ── Check for new alpha versions ──────────────────────────
+      - name: Update alpha packages
+        run: pnpm update "@mastra/*" mastra --ignore-workspace
+
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --quiet pnpm-lock.yaml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No new alpha versions. Skipping tests."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "New alpha versions detected:"
+            git diff pnpm-lock.yaml | grep -E '^\+.*version:' | head -20 || true
+          fi
+
+      # ── Install & build ───────────────────────────────────────
+      - name: Install dependencies
+        if: steps.diff.outputs.changed == 'true'
+        run: pnpm install --ignore-workspace
+
+      - name: Install Playwright browsers
+        if: steps.diff.outputs.changed == 'true'
+        run: npx playwright install --with-deps chromium
+
+      # ── Run tests ─────────────────────────────────────────────
+      - name: Run smoke tests
+        id: tests
+        if: steps.diff.outputs.changed == 'true'
+        run: pnpm test:ui
+        continue-on-error: true
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      # ── Report to Slack ───────────────────────────────────────
+      - name: Report to Slack
+        if: steps.diff.outputs.changed == 'true'
+        run: pnpm report:slack
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_USER_ID: ${{ secrets.SLACK_USER_ID }}
+
+      # ── Upload artifacts (backup) ────────────────────────────
+      - name: Upload test artifacts
+        if: steps.diff.outputs.changed == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-results
+          path: e2e-tests/smoke/test-results/
+          retention-days: 30
+
+      # ── Commit updated lockfile ───────────────────────────────
+      - name: Commit updated lockfile
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml
+          git commit -m "chore: update alpha packages to latest versions"
+          git push

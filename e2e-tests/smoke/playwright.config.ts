@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { existsSync } from 'node:fs';
 
 const PORT = process.env.STUDIO_PORT || '4555';
 const BASE_URL = `http://127.0.0.1:${PORT}`;
@@ -10,12 +11,15 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   workers: 1,
-  reporter: process.env.CI ? 'list' : 'html',
+  reporter: process.env.CI
+    ? [['list'], ['json', { outputFile: 'test-results/report.json' }]]
+    : 'html',
   timeout: 60_000,
 
   use: {
     baseURL: BASE_URL,
     trace: 'on-first-retry',
+    video: process.env.CI ? 'retain-on-failure' : 'off',
   },
 
   projects: [
@@ -26,7 +30,7 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: `MASTRA_STUDIO_PATH=.mastra/output/studio PORT=${PORT} MASTRA_HOST=0.0.0.0 node --env-file=.env .mastra/output/index.mjs`,
+    command: `MASTRA_STUDIO_PATH=.mastra/output/studio PORT=${PORT} MASTRA_HOST=0.0.0.0 node ${existsSync('.env') ? '--env-file=.env' : ''} .mastra/output/index.mjs`,
     url: `${BASE_URL}/api/workflows`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
