@@ -666,6 +666,7 @@ interface InteractivePromptArgs {
     showBanner?: boolean;
   };
   skip?: {
+    directory?: boolean;
     llmProvider?: boolean;
     llmApiKey?: boolean;
     gitInit?: boolean;
@@ -683,11 +684,13 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
   const mastraProject = await p.group(
     {
       directory: () =>
-        p.text({
-          message: 'Where should we create the Mastra files? (default: src/)',
-          placeholder: 'src/',
-          defaultValue: 'src/',
-        }),
+        skip?.directory
+          ? undefined
+          : p.text({
+              message: 'Where should we create the Mastra files? (default: src/)',
+              placeholder: 'src/',
+              defaultValue: 'src/',
+            }),
       llmProvider: () =>
         skip?.llmProvider
           ? undefined
@@ -950,54 +953,32 @@ export function generateAgentsMarkdown({ skills, mcpServer }: { skills?: string[
 
   let content = `# AGENTS.md
 
-This document provides guidance for AI coding agents working in this repository.
+You are a TypeScript developer experienced with the Mastra framework. You build AI agents, tools, workflows, and scorers. You follow strict TypeScript practices and always consult up-to-date Mastra documentation before making changes.
+
 `;
 
   // Add critical Mastra skill section if skills were installed
   if (hasSkills) {
     content += `
-## CRITICAL: Mastra Skill Required
+## CRITICAL: Load \`mastra\` skill
 
-**BEFORE doing ANYTHING with Mastra code or answering Mastra questions, load the Mastra skill FIRST.**
-
-See [Mastra Skills section](#mastra-skills) for loading instructions.
+**BEFORE doing ANYTHING with Mastra, load the \`mastra\` skill FIRST.** Never rely on cached knowledge as Mastra's APIs change frequently between versions. Use the skill to read up-to-date documentation from \`node_modules\`.
 `;
   }
 
   content += `
 ## Project Overview
 
-This is a **Mastra** project written in TypeScript. Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
+This is a **Mastra** project written in TypeScript. Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack. The Node.js runtime is \`>=22.13.0\`.
 
 ## Commands
 
-Use these commands to interact with the project.
-
-### Installation
-
 \`\`\`bash
-npm install
-\`\`\`
-
-### Development
-
-Start the Mastra Studio at localhost:4111 by running the \`dev\` script:
-
-\`\`\`bash
-npm run dev
-\`\`\`
-
-### Build
-
-In order to build a production-ready server, run the \`build\` script:
-
-\`\`\`bash
-npm run build
+npm run dev # Start Mastra Studio at localhost:4111 (long-running, use a separate terminal)
+npm run build # Build a production-ready server
 \`\`\`
 
 ## Project Structure
-
-Folders organize your agent's resources, like agents, tools, and workflows.
 
 | Folder                 | Description                                                                                                                              |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1020,38 +1001,21 @@ Top-level files define how your Mastra project is configured, built, and connect
 | \`package.json\`        | Defines project metadata, dependencies, and available npm scripts.                                                |
 | \`tsconfig.json\`       | Configures TypeScript options such as path aliases, compiler settings, and build output.                          |
 
+## Boundaries
+
+### Always do
+
+- Load the \`mastra\` skill before any Mastra-related work
+- Register new agents, tools, workflows, and scorers in \`src/mastra/index.ts\`
+- Use schemas for tool inputs and outputs
+- Run \`npm run build\` to verify changes compile
+
+### Never do
+
+- Never commit \`.env\` files or secrets
+- Never modify \`node_modules\` or Mastra's database files directly
+- Never hardcode API keys (always use environment variables)
 `;
-
-  // Add skills section if skills were installed
-  if (hasSkills) {
-    content += `## Mastra Skills
-
-Skills are modular capabilities that extend agent functionalities. They provide pre-built tools, integrations, and workflows that agents can leverage to accomplish tasks more effectively.
-
-This project has skills installed for the following agents:
-
-${skills
-  .map(
-    agent =>
-      `- ${agent
-        .split('-')
-        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(' ')}`,
-  )
-  .join('\n')}
-
-### Loading Skills
-
-1. **Load the Mastra skill FIRST** - Use \`/mastra\` command or Skill tool
-2. **Never rely on cached knowledge** - Mastra APIs change frequently between versions
-3. **Always verify against current docs** - The skill provides up-to-date documentation
-
-**Why this matters:** Your training data about Mastra is likely outdated. Constructor signatures, APIs, and patterns change rapidly. Loading the skill ensures you use current, correct APIs.
-
-Skills are automatically available to agents in your project once installed. Agents can access and use these skills without additional configuration.
-
-`;
-  }
 
   // Add MCP section if MCP server was configured
   if (hasMcp) {
@@ -1089,24 +1053,6 @@ Learn more in the [MCP Documentation](https://mastra.ai/docs/mcp/overview).
 }
 
 /**
- * Generate content for CLAUDE.md file
- */
-export function generateClaudeMarkdown({ mcpServer }: { mcpServer?: Editor }): string {
-  return `# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-This is a Mastra project - an AI framework for building agents, workflows, and tools. The project structure follows Mastra conventions with agents, tools, and workflows organized in the \`src/mastra/\` directory.
-
-For complete setup and usage instructions, see [AGENTS.md](./AGENTS.md), which includes:
-- Quick start commands
-- Project structure details
-- Mastra skills usage${mcpServer ? '\n- MCP Docs Server configuration' : ''}
-- Links to relevant documentation
-`;
-}
-
-/**
  * Write AGENTS.md file to project root
  */
 export async function writeAgentsMarkdown(options: { skills?: string[]; mcpServer?: Editor }): Promise<void> {
@@ -1122,12 +1068,7 @@ export async function writeAgentsMarkdown(options: { skills?: string[]; mcpServe
 /**
  * Write CLAUDE.md file to project root
  */
-export async function writeClaudeMarkdown(options: { skills?: string[]; mcpServer?: Editor }): Promise<void> {
-  const content = generateClaudeMarkdown(options);
-  const formattedContent = await prettier.format(content, {
-    parser: 'markdown',
-    singleQuote: true,
-  });
+export async function writeClaudeMarkdown(): Promise<void> {
   const filePath = path.join(process.cwd(), 'CLAUDE.md');
-  await fs.writeFile(filePath, formattedContent);
+  await fs.writeFile(filePath, '@AGENTS.md');
 }
