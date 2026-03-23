@@ -21,6 +21,7 @@ export interface AgentCMSRefBlockProps {
   index: number;
   block: RefInstructionBlock;
   onDelete?: (index: number) => void;
+  onDereference?: (index: number, content: string) => void;
   className?: string;
   schema?: JsonSchema;
 }
@@ -29,10 +30,11 @@ interface RefBlockContentProps {
   block: RefInstructionBlock;
   dragHandleProps?: DraggableProvidedDragHandleProps | null;
   onDelete?: () => void;
+  onDereference?: (content: string) => void;
   schema?: JsonSchema;
 }
 
-const RefBlockContent = ({ block, dragHandleProps, onDelete, schema }: RefBlockContentProps) => {
+const RefBlockContent = ({ block, dragHandleProps, onDelete, onDereference, schema }: RefBlockContentProps) => {
   const { data: promptBlock, isLoading } = useStoredPromptBlock(block.promptBlockId);
   const { updateStoredPromptBlock } = useStoredPromptBlockMutations(block.promptBlockId);
   const { navigate, paths } = useLinkComponent();
@@ -147,6 +149,21 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, schema }: RefBlockC
                       </Icon>
                       Open original
                     </button>
+                    {onDereference && (
+                      <button
+                        type="button"
+                        className="flex items-center gap-2 w-full px-2 py-1.5 text-left rounded hover:bg-surface4/50 transition-colors text-neutral5 text-ui-xs"
+                        onClick={() => {
+                          debouncedSave.flush();
+                          onDereference(localContent);
+                        }}
+                      >
+                        <Icon className="!h-3.5 !w-3.5 text-neutral3">
+                          <X />
+                        </Icon>
+                        De-reference block
+                      </button>
+                    )}
                     {onDelete && (
                       <button
                         type="button"
@@ -156,7 +173,7 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, schema }: RefBlockC
                         <Icon className="!h-3.5 !w-3.5">
                           <X />
                         </Icon>
-                        De-reference block
+                        Remove block
                       </button>
                     )}
                   </div>
@@ -201,7 +218,7 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, schema }: RefBlockC
   );
 };
 
-export const AgentCMSRefBlock = ({ index, block, onDelete, className, schema }: AgentCMSRefBlockProps) => {
+export const AgentCMSRefBlock = ({ index, block, onDelete, onDereference, className, schema }: AgentCMSRefBlockProps) => {
   return (
     <ContentBlock index={index} draggableId={block.id} className={cn('', className)}>
       {(dragHandleProps: DraggableProvidedDragHandleProps | null) => (
@@ -209,6 +226,7 @@ export const AgentCMSRefBlock = ({ index, block, onDelete, className, schema }: 
           block={block}
           dragHandleProps={dragHandleProps}
           onDelete={onDelete ? () => onDelete(index) : undefined}
+          onDereference={onDereference ? (content: string) => onDereference(index, content) : undefined}
           schema={schema}
         />
       )}

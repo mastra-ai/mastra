@@ -33,6 +33,7 @@ export interface AgentCMSBlockProps {
   block: InstructionBlock;
   onBlockChange: (block: InstructionBlock) => void;
   onDelete?: (index: number) => void;
+  onDereference?: (index: number, content: string) => void;
   onConvertToRef?: (sourceBlockId: string, promptBlockId: string) => void;
   placeholder?: string;
   className?: string;
@@ -267,6 +268,7 @@ export const AgentCMSBlock = ({
   block,
   onBlockChange,
   onDelete,
+  onDereference,
   onConvertToRef,
   placeholder,
   className,
@@ -274,7 +276,16 @@ export const AgentCMSBlock = ({
   autoFocus,
 }: AgentCMSBlockProps) => {
   if (block.type === 'prompt_block_ref') {
-    return <AgentCMSRefBlock index={index} block={block} onDelete={onDelete} className={className} schema={schema} />;
+    return (
+      <AgentCMSRefBlock
+        index={index}
+        block={block}
+        onDelete={onDelete}
+        onDereference={onDereference}
+        className={className}
+        schema={schema}
+      />
+    );
   }
 
   return (

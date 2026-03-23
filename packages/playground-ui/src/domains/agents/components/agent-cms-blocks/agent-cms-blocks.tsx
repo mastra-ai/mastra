@@ -94,6 +94,13 @@ export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema
     onChange(newItems);
   };
 
+  // Replace a ref block with an inline block containing the current content
+  const handleDereference = (index: number, content: string) => {
+    const newBlock = createInstructionBlock(content);
+    const newItems = items.map((item, idx) => (idx === index ? newBlock : item));
+    onChange(newItems);
+  };
+
   // Called from InlineBlockContent after it creates a prompt block and gets back the promptBlockId
   const handleConvertToRef = (sourceBlockId: string, promptBlockId: string) => {
     const refBlock = createRefInstructionBlock(promptBlockId);
@@ -120,6 +127,7 @@ export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema
                   block={block}
                   onBlockChange={updatedBlock => handleBlockChange(index, updatedBlock)}
                   onDelete={handleDelete}
+                  onDereference={handleDereference}
                   onConvertToRef={handleConvertToRef}
                   placeholder={placeholder}
                   schema={schema}
