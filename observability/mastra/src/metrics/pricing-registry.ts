@@ -4,6 +4,8 @@ import path from 'node:path';
 import { PricingModel, PricingTier } from './pricing-model';
 import type { PricingMeter, PricingConditionOperator, PricingConditionField } from './types';
 
+const DATA_FILE_NAME = 'pricing-data.jsonl';
+
 type MinifiedMeterKey = 'it' | 'ot' | 'icrt' | 'icwt' | 'iat' | 'oat' | 'ort';
 type MinifiedConditionFieldKey = 'tit';
 
@@ -136,10 +138,10 @@ function expandPricingModelRow(row: MinifiedPricingModelRow): PricingModel {
 function resolvePricingModelPath(): string {
   const packageRoot = getPackageRoot();
   const candidates = [
-    path.join(packageRoot, 'dist', 'metrics', 'pricing-data.jsonl'),
-    path.join(packageRoot, 'src', 'metrics', 'pricing-data.jsonl'),
-    path.join(process.cwd(), 'observability', 'mastra', 'src', 'metrics', 'pricing-data.jsonl'),
-    path.join(process.cwd(), 'src', 'metrics', 'pricing-data.jsonl'),
+    path.join(packageRoot, 'dist', 'metrics', DATA_FILE_NAME),
+    path.join(packageRoot, 'src', 'metrics', DATA_FILE_NAME),
+    path.join(process.cwd(), 'observability', 'mastra', 'src', 'metrics', DATA_FILE_NAME),
+    path.join(process.cwd(), 'src', 'metrics', DATA_FILE_NAME),
   ];
 
   for (const candidate of candidates) {

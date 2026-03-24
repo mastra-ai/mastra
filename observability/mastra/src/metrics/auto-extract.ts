@@ -71,24 +71,34 @@ function emitUsageMetrics(
     metrics.emit(name, value, undefined, { costContext });
   };
 
-  emit(TokenMetrics.TOTAL_INPUT, usage.inputTokens ?? 0);
-  emit(TokenMetrics.TOTAL_OUTPUT, usage.outputTokens ?? 0);
+  const emitIfDefined = (name: TokenMetrics, value: number | undefined) => {
+    if (value != null) {
+      emit(name, value);
+    }
+  };
+
+  const emitIfPositive = (name: TokenMetrics, value: number | undefined) => {
+    if (value != null && value > 0) {
+      emit(name, value);
+    }
+  };
+
+  emitIfDefined(TokenMetrics.TOTAL_INPUT, usage.inputTokens);
+  emitIfDefined(TokenMetrics.TOTAL_OUTPUT, usage.outputTokens);
 
   if (usage.inputDetails) {
-    if ((usage.inputDetails.text ?? 0) > 0) emit(TokenMetrics.INPUT_TEXT, usage.inputDetails.text ?? 0);
-    if ((usage.inputDetails.cacheRead ?? 0) > 0) emit(TokenMetrics.INPUT_CACHE_READ, usage.inputDetails.cacheRead ?? 0);
-    if ((usage.inputDetails.cacheWrite ?? 0) > 0)
-      emit(TokenMetrics.INPUT_CACHE_WRITE, usage.inputDetails.cacheWrite ?? 0);
-    if ((usage.inputDetails.audio ?? 0) > 0) emit(TokenMetrics.INPUT_AUDIO, usage.inputDetails.audio ?? 0);
-    if ((usage.inputDetails.image ?? 0) > 0) emit(TokenMetrics.INPUT_IMAGE, usage.inputDetails.image ?? 0);
+    emitIfPositive(TokenMetrics.INPUT_TEXT, usage.inputDetails.text);
+    emitIfPositive(TokenMetrics.INPUT_CACHE_READ, usage.inputDetails.cacheRead);
+    emitIfPositive(TokenMetrics.INPUT_CACHE_WRITE, usage.inputDetails.cacheWrite);
+    emitIfPositive(TokenMetrics.INPUT_AUDIO, usage.inputDetails.audio);
+    emitIfPositive(TokenMetrics.INPUT_IMAGE, usage.inputDetails.image);
   }
 
   if (usage.outputDetails) {
-    if ((usage.outputDetails.text ?? 0) > 0) emit(TokenMetrics.OUTPUT_TEXT, usage.outputDetails.text ?? 0);
-    if ((usage.outputDetails.reasoning ?? 0) > 0)
-      emit(TokenMetrics.OUTPUT_REASONING, usage.outputDetails.reasoning ?? 0);
-    if ((usage.outputDetails.audio ?? 0) > 0) emit(TokenMetrics.OUTPUT_AUDIO, usage.outputDetails.audio ?? 0);
-    if ((usage.outputDetails.image ?? 0) > 0) emit(TokenMetrics.OUTPUT_IMAGE, usage.outputDetails.image ?? 0);
+    emitIfPositive(TokenMetrics.OUTPUT_TEXT, usage.outputDetails.text);
+    emitIfPositive(TokenMetrics.OUTPUT_REASONING, usage.outputDetails.reasoning);
+    emitIfPositive(TokenMetrics.OUTPUT_AUDIO, usage.outputDetails.audio);
+    emitIfPositive(TokenMetrics.OUTPUT_IMAGE, usage.outputDetails.image);
   }
 }
 

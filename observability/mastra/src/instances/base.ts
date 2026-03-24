@@ -352,9 +352,11 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   getMetricsContext(span?: AnySpan): MetricsContext {
     const correlationContext = span?.getCorrelationContext?.();
+    const metadata: Record<string, unknown> | undefined = span?.metadata ? structuredClone(span.metadata) : undefined;
 
     return new MetricsContextImpl({
       correlationContext,
+      metadata,
       cardinalityFilter: this.cardinalityFilter,
       observabilityBus: this.observabilityBus,
     });

@@ -291,6 +291,64 @@ describe('AutoExtractedMetrics', () => {
     });
   });
 
+  it('should skip total token metrics when aggregate counts are missing', () => {
+    setup();
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        model: 'gpt-4o-mini',
+        provider: 'openai',
+        usage: {
+          inputDetails: {
+            text: 400,
+            cacheRead: 50,
+          },
+          outputDetails: {
+            text: 150,
+            reasoning: 30,
+          },
+        },
+      },
+    });
+
+    vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricingRegistry);
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const metricNames = emittedMetrics.map(m => m.metric.name);
+    expect(metricNames).not.toContain('mastra_model_total_input_tokens');
+    expect(metricNames).not.toContain('mastra_model_total_output_tokens');
+    expect(metricNames).toContain('mastra_model_input_text_tokens');
+    expect(metricNames).toContain('mastra_model_input_cache_read_tokens');
+    expect(metricNames).toContain('mastra_model_output_text_tokens');
+    expect(metricNames).toContain('mastra_model_output_reasoning_tokens');
+  });
+
+  it('should emit zero-valued total token metrics when aggregate counts are explicitly provided', () => {
+    setup();
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        model: 'gpt-4o-mini',
+        provider: 'openai',
+        usage: {
+          inputTokens: 0,
+          outputTokens: 0,
+        },
+      },
+    });
+
+    vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricingRegistry);
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const byName = (name: string) => emittedMetrics.find(m => m.metric.name === name);
+    expect(byName('mastra_model_total_input_tokens')!.metric.value).toBe(0);
+    expect(byName('mastra_model_total_output_tokens')!.metric.value).toBe(0);
+  });
+
   it('should skip undefined token detail fields silently', () => {
     setup();
     const span = createMockSpan({

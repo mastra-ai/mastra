@@ -3,6 +3,8 @@ import path from 'node:path';
 import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsup';
 
+const DATA_FILE_NAME = 'pricing-data.jsonl';
+
 export default defineConfig({
   entry: ['src/index.ts'],
   format: ['esm', 'cjs'],
@@ -16,14 +18,14 @@ export default defineConfig({
   onSuccess: async () => {
     await generateTypes(process.cwd());
 
-    const srcRollup = path.join(process.cwd(), 'src', 'metrics', 'pricing-data.jsonl');
+    const srcData = path.join(process.cwd(), 'src', 'metrics', DATA_FILE_NAME);
     const distMetricsDir = path.join(process.cwd(), 'dist', 'metrics');
-    const distRollup = path.join(distMetricsDir, 'pricing-model.jsonl');
+    const distData = path.join(distMetricsDir, DATA_FILE_NAME);
 
-    if (fs.existsSync(srcRollup)) {
+    if (fs.existsSync(srcData)) {
       fs.mkdirSync(distMetricsDir, { recursive: true });
-      fs.copyFileSync(srcRollup, distRollup);
-      console.info('✓ Copied metrics/pricing-data.jsonl to dist/metrics/');
+      fs.copyFileSync(srcData, distData);
+      console.info(`✓ Copied metrics/${DATA_FILE_NAME} to dist/metrics/`);
     }
   },
 });
