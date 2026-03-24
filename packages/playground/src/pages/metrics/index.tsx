@@ -18,9 +18,6 @@ export default function Metrics() {
   const { experimentalFeaturesEnabled } = useExperimentalFeatures();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  if (!experimentalFeaturesEnabled) {
-    return null;
-  }
   const urlPreset = searchParams.get(PERIOD_PARAM);
   const initialPreset: DatePreset = isValidPreset(urlPreset) ? urlPreset : '24h';
 
@@ -41,6 +38,10 @@ export default function Metrics() {
     },
     [setSearchParams],
   );
+
+  if (!experimentalFeaturesEnabled) {
+    return null;
+  }
 
   return (
     <MetricsProvider initialPreset={initialPreset} onPresetChange={handlePresetChange}>
