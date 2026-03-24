@@ -8,8 +8,20 @@ export interface ModelByInputTokensConfig {
 }
 
 function isTieredModelTarget(model: unknown): model is TieredModelTarget {
+  if (typeof model === 'string') {
+    return true;
+  }
+
+  if (!model || typeof model !== 'object') {
+    return false;
+  }
+
   return (
-    typeof model === 'string' || (!!model && typeof model === 'object' && 'provider' in model && 'modelId' in model)
+    'modelId' in model ||
+    'id' in model ||
+    'providerId' in model ||
+    'provider' in model ||
+    ('doGenerate' in model && 'doStream' in model)
   );
 }
 

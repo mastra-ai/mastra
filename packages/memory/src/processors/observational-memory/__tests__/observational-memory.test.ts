@@ -11250,4 +11250,45 @@ describe('ModelByInputTokens with ObservationalMemory', () => {
       modelId: 'gpt-4o-mini',
     });
   });
+
+  it('should accept OpenAI-compatible model config targets', () => {
+    const modelSelector = new ModelByInputTokens({
+      upTo: {
+        5000: {
+          id: 'openai/gpt-4o-mini',
+          url: 'https://example.com/v1',
+        },
+        10000: {
+          providerId: 'openai',
+          modelId: 'gpt-4o',
+        },
+      },
+    });
+
+    expect(modelSelector.resolve(1000)).toEqual({
+      id: 'openai/gpt-4o-mini',
+      url: 'https://example.com/v1',
+    });
+    expect(modelSelector.resolve(9000)).toEqual({
+      providerId: 'openai',
+      modelId: 'gpt-4o',
+    });
+  });
+
+  it('should accept model instance targets', () => {
+    const modelInstance = {
+      provider: 'openai',
+      modelId: 'gpt-4o-mini',
+      doGenerate: async () => ({}) as any,
+      doStream: async () => ({}) as any,
+    } as any;
+
+    const modelSelector = new ModelByInputTokens({
+      upTo: {
+        5000: modelInstance,
+      },
+    });
+
+    expect(modelSelector.resolve(1000)).toBe(modelInstance);
+  });
 });
