@@ -2592,6 +2592,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         },
                         "type": "tool-invocation",
                       },
+                      {
+                        "type": "step-start",
+                      },
                     ],
                   },
                   "createdAt": 2024-01-01T00:00:00.003Z,
