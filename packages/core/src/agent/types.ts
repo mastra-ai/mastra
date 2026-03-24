@@ -51,8 +51,6 @@ export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { LLMStepResult } from '../stream/types';
 export type ZodSchema = ZodSchemaV3 | ZodTypev4;
 
-export type ZodSchema = ZodSchemaV3 | ZodTypev4;
-
 /**
  * Accepts Mastra tools, Vercel AI SDK tools, and provider-defined tools
  * (e.g., google.tools.googleSearch()).
