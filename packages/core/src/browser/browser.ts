@@ -5,44 +5,25 @@
  *
  * ## Architecture
  *
- * Each browser capability is exposed as a single method with a flat input schema.
- * Providers implement these methods using whatever low-level approach they need.
+ * Each browser provider defines its own tools via the `getTools()` method.
+ * This allows different providers to offer different capabilities:
  *
- * There are 17 flat tools:
- * - Core (9): goto, snapshot, click, type, press, select, scroll, screenshot, close
- * - Extended (7): hover, back, upload, dialog, wait, tabs, drag
- * - Escape Hatch (1): evaluate
+ * - **AgentBrowser**: 17 deterministic tools using refs ([ref=e1], [ref=e2])
+ * - **StagehandBrowser**: AI-powered tools (act, extract, observe)
  *
  * ## Two Paradigms
  *
  * Browser providers fall into two paradigms:
  *
- * 1. **Deterministic** (Playwright, agent-browser) - Uses refs (@e1, @e2) and selectors
+ * 1. **Deterministic** (Playwright, agent-browser) - Uses refs and selectors
  * 2. **AI-powered** (Stagehand) - Uses natural language instructions
  *
- * Both can extend this base class - they just implement the methods differently.
+ * Both extend this base class and implement `getTools()` to return their tools.
  */
 
 import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger/constants';
-
-import type {
-  GotoInput,
-  SnapshotInput,
-  ClickInput,
-  TypeInput,
-  PressInput,
-  SelectInput,
-  ScrollInput,
-  ScreenshotInput,
-  HoverInput,
-  UploadInput,
-  DialogInput,
-  WaitInput,
-  TabsInput,
-  DragInput,
-  EvaluateInput,
-} from './schemas';
+import type { Tool } from '../tools/tool';
 
 // =============================================================================
 // Status & Lifecycle Types
@@ -378,96 +359,17 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   // ---------------------------------------------------------------------------
-  // Abstract Browser Methods — Core (9)
+  // Abstract Tools Method
   // ---------------------------------------------------------------------------
 
   /**
-   * Navigate to a URL.
+   * Get the browser tools for this provider.
+   *
+   * Each provider returns its own set of tools. For example:
+   * - AgentBrowser returns 17 deterministic tools using refs
+   * - StagehandBrowser might return AI-powered tools (act, extract, observe)
+   *
+   * @returns Record of tool name to tool definition
    */
-  abstract goto(input: GotoInput): Promise<unknown>;
-
-  /**
-   * Get accessibility tree snapshot.
-   */
-  abstract snapshot(input: SnapshotInput): Promise<unknown>;
-
-  /**
-   * Click an element.
-   */
-  abstract click(input: ClickInput): Promise<unknown>;
-
-  /**
-   * Type text into an element.
-   */
-  abstract type(input: TypeInput): Promise<unknown>;
-
-  /**
-   * Press a keyboard key.
-   */
-  abstract press(input: PressInput): Promise<unknown>;
-
-  /**
-   * Select an option from a dropdown.
-   */
-  abstract select(input: SelectInput): Promise<unknown>;
-
-  /**
-   * Scroll the page or element.
-   */
-  abstract scroll(input: ScrollInput): Promise<unknown>;
-
-  /**
-   * Take a screenshot.
-   */
-  abstract screenshot(input: ScreenshotInput): Promise<unknown>;
-
-  // Note: close() is already defined as a lifecycle method above
-
-  // ---------------------------------------------------------------------------
-  // Abstract Browser Methods — Extended (7)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Hover over an element.
-   */
-  abstract hover(input: HoverInput): Promise<unknown>;
-
-  /**
-   * Go back in browser history.
-   */
-  abstract back(): Promise<unknown>;
-
-  /**
-   * Upload file(s) to a file input.
-   */
-  abstract upload(input: UploadInput): Promise<unknown>;
-
-  /**
-   * Handle browser dialogs.
-   */
-  abstract dialog(input: DialogInput): Promise<unknown>;
-
-  /**
-   * Wait for an element or condition.
-   */
-  abstract wait(input: WaitInput): Promise<unknown>;
-
-  /**
-   * Manage browser tabs.
-   */
-  abstract tabs(input: TabsInput): Promise<unknown>;
-
-  /**
-   * Drag an element to another element.
-   */
-  abstract drag(input: DragInput): Promise<unknown>;
-
-  // ---------------------------------------------------------------------------
-  // Abstract Browser Methods — Escape Hatch (1)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Execute JavaScript in the browser.
-   */
-  abstract evaluate(input: EvaluateInput): Promise<unknown>;
+  abstract getTools(): Record<string, Tool<any, any>>;
 }

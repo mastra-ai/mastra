@@ -1,5 +1,5 @@
 /**
- * Browser Tool Schemas (Flat)
+ * AgentBrowser Tool Schemas
  *
  * 17 flat schemas for browser tools. Each tool has a single-purpose schema
  * without discriminated unions, making them easier for LLMs to understand.
@@ -27,7 +27,7 @@ export const gotoInputSchema = z.object({
     .describe('When to consider navigation complete (default: domcontentloaded)'),
   timeout: z.number().optional().describe('Navigation timeout in milliseconds'),
 });
-export type GotoInput = z.infer<typeof gotoInputSchema>;
+export type GotoInput = z.output<typeof gotoInputSchema>;
 
 /**
  * browser_snapshot - Get accessibility tree snapshot
@@ -36,7 +36,7 @@ export const snapshotInputSchema = z.object({
   interactiveOnly: z.boolean().optional().describe('Only include interactive elements (default: true)'),
   maxDepth: z.number().optional().describe('Maximum depth of the tree to return'),
 });
-export type SnapshotInput = z.infer<typeof snapshotInputSchema>;
+export type SnapshotInput = z.output<typeof snapshotInputSchema>;
 
 /**
  * browser_click - Click an element
@@ -50,7 +50,7 @@ export const clickInputSchema = z.object({
     .optional()
     .describe('Modifier keys to hold'),
 });
-export type ClickInput = z.infer<typeof clickInputSchema>;
+export type ClickInput = z.output<typeof clickInputSchema>;
 
 /**
  * browser_type - Type text into an element
@@ -61,7 +61,7 @@ export const typeInputSchema = z.object({
   clear: z.boolean().optional().describe('Clear existing content before typing (default: false)'),
   delay: z.number().optional().describe('Delay between keystrokes in ms'),
 });
-export type TypeInput = z.infer<typeof typeInputSchema>;
+export type TypeInput = z.output<typeof typeInputSchema>;
 
 /**
  * browser_press - Press a keyboard key
@@ -73,7 +73,7 @@ export const pressInputSchema = z.object({
     .optional()
     .describe('Modifier keys to hold'),
 });
-export type PressInput = z.infer<typeof pressInputSchema>;
+export type PressInput = z.output<typeof pressInputSchema>;
 
 /**
  * browser_select - Select option from dropdown
@@ -84,7 +84,7 @@ export const selectInputSchema = z.object({
   label: z.string().optional().describe('Option label to select'),
   index: z.number().optional().describe('Option index to select (0-based)'),
 });
-export type SelectInput = z.infer<typeof selectInputSchema>;
+export type SelectInput = z.output<typeof selectInputSchema>;
 
 /**
  * browser_scroll - Scroll the page or element
@@ -94,7 +94,7 @@ export const scrollInputSchema = z.object({
   amount: z.number().optional().describe('Scroll amount in pixels (default: 300)'),
   ref: z.string().optional().describe('Element ref to scroll (scrolls page if omitted)'),
 });
-export type ScrollInput = z.infer<typeof scrollInputSchema>;
+export type ScrollInput = z.output<typeof scrollInputSchema>;
 
 /**
  * browser_screenshot - Take a screenshot
@@ -103,13 +103,13 @@ export const screenshotInputSchema = z.object({
   ref: z.string().optional().describe('Element ref to screenshot (full page if omitted)'),
   fullPage: z.boolean().optional().describe('Capture full scrollable page (default: false)'),
 });
-export type ScreenshotInput = z.infer<typeof screenshotInputSchema>;
+export type ScreenshotInput = z.output<typeof screenshotInputSchema>;
 
 /**
  * browser_close - Close the browser
  */
 export const closeInputSchema = z.object({});
-export type CloseInput = z.infer<typeof closeInputSchema>;
+export type CloseInput = z.output<typeof closeInputSchema>;
 
 // =============================================================================
 // Extended Tools (7)
@@ -121,13 +121,13 @@ export type CloseInput = z.infer<typeof closeInputSchema>;
 export const hoverInputSchema = z.object({
   ref: z.string().describe('Element ref from snapshot'),
 });
-export type HoverInput = z.infer<typeof hoverInputSchema>;
+export type HoverInput = z.output<typeof hoverInputSchema>;
 
 /**
  * browser_back - Go back in browser history
  */
 export const backInputSchema = z.object({});
-export type BackInput = z.infer<typeof backInputSchema>;
+export type BackInput = z.output<typeof backInputSchema>;
 
 /**
  * browser_upload - Upload file(s) to a file input
@@ -136,7 +136,7 @@ export const uploadInputSchema = z.object({
   ref: z.string().describe('File input element ref'),
   files: z.array(z.string()).describe('File paths to upload'),
 });
-export type UploadInput = z.infer<typeof uploadInputSchema>;
+export type UploadInput = z.output<typeof uploadInputSchema>;
 
 /**
  * browser_dialog - Handle browser dialogs (alert, confirm, prompt)
@@ -145,7 +145,7 @@ export const dialogInputSchema = z.object({
   action: z.enum(['accept', 'dismiss']).describe('Accept or dismiss the dialog'),
   text: z.string().optional().describe('Text to enter for prompt dialogs'),
 });
-export type DialogInput = z.infer<typeof dialogInputSchema>;
+export type DialogInput = z.output<typeof dialogInputSchema>;
 
 /**
  * browser_wait - Wait for an element or condition
@@ -158,7 +158,7 @@ export const waitInputSchema = z.object({
     .describe('State to wait for (default: visible)'),
   timeout: z.number().optional().describe('Maximum wait time in ms (default: 30000)'),
 });
-export type WaitInput = z.infer<typeof waitInputSchema>;
+export type WaitInput = z.output<typeof waitInputSchema>;
 
 /**
  * browser_tabs - Manage browser tabs
@@ -168,7 +168,7 @@ export const tabsInputSchema = z.object({
   index: z.number().optional().describe('Tab index for switch/close'),
   url: z.string().optional().describe('URL to open in new tab'),
 });
-export type TabsInput = z.infer<typeof tabsInputSchema>;
+export type TabsInput = z.output<typeof tabsInputSchema>;
 
 /**
  * browser_drag - Drag an element to another element
@@ -177,7 +177,7 @@ export const dragInputSchema = z.object({
   sourceRef: z.string().describe('Element ref to drag from'),
   targetRef: z.string().describe('Element ref to drag to'),
 });
-export type DragInput = z.infer<typeof dragInputSchema>;
+export type DragInput = z.output<typeof dragInputSchema>;
 
 // =============================================================================
 // Escape Hatch (1)
@@ -190,10 +190,10 @@ export const evaluateInputSchema = z.object({
   script: z.string().describe('JavaScript code to execute'),
   arg: z.any().optional().describe('Argument to pass to the script'),
 });
-export type EvaluateInput = z.infer<typeof evaluateInputSchema>;
+export type EvaluateInput = z.output<typeof evaluateInputSchema>;
 
 // =============================================================================
-// Exports
+// All Schemas
 // =============================================================================
 
 export const browserSchemas = {

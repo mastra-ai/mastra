@@ -1,4 +1,8 @@
 import { MastraBrowser } from '@mastra/core/browser';
+import type { ScreencastOptions, ScreencastStream } from '@mastra/core/browser';
+import type { Tool } from '@mastra/core/tools';
+import type { BrowserManagerLike, BrowserPage, BrowserLocator, LaunchOptions } from './browser-types';
+import { loadBrowserManager } from './browser-types';
 import type {
   GotoInput,
   SnapshotInput,
@@ -15,11 +19,8 @@ import type {
   TabsInput,
   DragInput,
   EvaluateInput,
-  ScreencastOptions,
-  ScreencastStream,
-} from '@mastra/core/browser';
-import type { BrowserManagerLike, BrowserPage, BrowserLocator, LaunchOptions } from './browser-types';
-import { loadBrowserManager } from './browser-types';
+} from './schemas';
+import { createAgentBrowserTools } from './tools';
 import type { BrowserConfig } from './types';
 
 /**
@@ -68,6 +69,18 @@ export class AgentBrowser extends MastraBrowser {
       await this.browserManager.close();
       this.browserManager = null;
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tools
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Get the browser tools for this provider.
+   * Returns 17 flat tools for browser automation.
+   */
+  getTools(): Record<string, Tool<any, any>> {
+    return createAgentBrowserTools(this);
   }
 
   // ---------------------------------------------------------------------------

@@ -6,7 +6,6 @@ import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
-import { createBrowserTools } from '../browser';
 import type { MastraBrowser } from '../browser/browser';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
@@ -1359,8 +1358,8 @@ export class Agent<
       if (!this.#browser) {
         return baseTools;
       }
-      // Use createBrowserTools factory to get browser tools
-      const browserTools = createBrowserTools(this.#browser);
+      // Get browser tools from the provider
+      const browserTools = this.#browser.getTools();
       return { ...browserTools, ...baseTools } as TTools;
     };
 
@@ -2266,8 +2265,8 @@ export class Agent<
       return convertedBrowserTools;
     }
 
-    // Create browser tools using the factory
-    const browserTools = createBrowserTools(this.#browser);
+    // Get browser tools from the provider
+    const browserTools = this.#browser.getTools();
 
     if (Object.keys(browserTools).length > 0) {
       this.logger.debug(`[Agent:${this.name}] - Adding browser tools: ${Object.keys(browserTools).join(', ')}`, {

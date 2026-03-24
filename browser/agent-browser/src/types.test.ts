@@ -2,9 +2,9 @@
  * Schema Tests
  *
  * Tests for the 17 flat browser tool schemas.
- * These schemas are defined in @mastra/core/browser.
  */
 
+import { describe, expect, it } from 'vitest';
 import {
   gotoInputSchema,
   snapshotInputSchema,
@@ -23,8 +23,7 @@ import {
   tabsInputSchema,
   dragInputSchema,
   evaluateInputSchema,
-} from '@mastra/core/browser';
-import { describe, expect, it } from 'vitest';
+} from './schemas';
 
 // =============================================================================
 // Core Tools (9)

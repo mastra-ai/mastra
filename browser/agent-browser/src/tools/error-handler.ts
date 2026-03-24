@@ -2,9 +2,9 @@
  * Browser Tool Error Handler
  */
 
-import { createError } from '../errors';
+import { createError } from '@mastra/core/browser';
 
-export function handleBrowserError(error: unknown, context: string): ReturnType<typeof createError> {
+export function handleBrowserError(error: unknown, context: string) {
   const msg = error instanceof Error ? error.message : String(error);
 
   if (msg.includes('timeout') || msg.includes('Timeout') || msg.includes('aborted')) {
