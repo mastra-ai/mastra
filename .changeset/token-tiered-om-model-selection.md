@@ -3,24 +3,23 @@
 '@mastra/memory': minor
 ---
 
-Added `ModelByInputTokens` helper for token-threshold-based model selection in Observational Memory.
+Added `ModelByInputTokens` in `@mastra/memory` for token-threshold-based model selection in Observational Memory.
 
-When configured, OM automatically selects a cheaper model for small inputs and a stronger model for large inputs based on the actual token count of the content being processed by the Observer or Reflector.
+When configured, OM automatically selects different observer or reflector models based on the actual input token count at the time the OM call runs.
 
 Example usage:
 
 ```ts
-import { Memory } from '@mastra/memory'
-import { ModelByInputTokens } from '@mastra/core/llm'
+import { Memory, ModelByInputTokens } from '@mastra/memory'
 
 const memory = new Memory({
   options: {
     observationalMemory: {
       model: new ModelByInputTokens({
         upTo: {
-          10_000: 'google/gemini-2.5-flash',   // Fast for small inputs
-          40_000: 'openai/gpt-4o',             // Stronger for medium inputs
-          1_000_000: 'openai/gpt-4.5',          // Most capable for large inputs
+          10_000: 'google/gemini-2.5-flash',
+          40_000: 'openai/gpt-4o',
+          1_000_000: 'openai/gpt-4.5',
         },
       }),
     },
@@ -28,6 +27,4 @@ const memory = new Memory({
 })
 ```
 
-The `upTo` keys are inclusive upper bounds. OM sets the input token count in the request context automatically before resolving the model. If the input exceeds the largest configured threshold, an error is thrown.
-
-**Behavior note:** When observation fails (e.g., due to ModelByInputTokens threshold exceeded), OM calls `abort()` which triggers a TripWire. The agent returns an empty text result with `tripwire` metadata containing the error reason. This allows the agent to gracefully handle observation failures while still surfacing the error through the tripwire mechanism.
+The `upTo` keys are inclusive upper bounds. OM resolves the matching tier directly at the observer or reflector call site. If the input exceeds the largest configured threshold, OM throws an error.
