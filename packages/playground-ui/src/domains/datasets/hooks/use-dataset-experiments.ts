@@ -1,9 +1,8 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
 import { useMastraClient } from '@mastra/react';
-import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
-import { useEffect } from 'react';
-import { useInView } from '@/hooks/use-in-view';
+import { useQuery } from '@tanstack/react-query';
+import { useInfiniteScrollQuery } from '@/hooks/use-infinite-scroll-query';
 
 export interface DatasetExperimentsFilters {
   status?: string;
@@ -58,8 +57,6 @@ export const useDatasetExperiment = (datasetId: string, experimentId: string) =>
   });
 };
 
-const RESULTS_PER_PAGE = 100;
-
 interface UseDatasetExperimentResultsParams {
   datasetId: string;
   experimentId: string;
@@ -76,42 +73,16 @@ export const useDatasetExperimentResults = ({
   experimentStatus,
 }: UseDatasetExperimentResultsParams) => {
   const client = useMastraClient();
-  const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
-  const query = useInfiniteQuery({
+  return useInfiniteScrollQuery({
     queryKey: ['dataset-experiment-results', datasetId, experimentId, experimentStatus],
-    queryFn: async ({ pageParam }) => {
-      return client.listDatasetExperimentResults(datasetId, experimentId, {
-        page: pageParam,
-        perPage: RESULTS_PER_PAGE,
-      });
-    },
-    initialPageParam: 0,
-    getNextPageParam: (lastPage, _, lastPageParam) => {
-      if (!lastPage?.results?.length) {
-        return undefined;
-      }
-      const totalFetched = (lastPageParam + 1) * RESULTS_PER_PAGE;
-      const total = lastPage?.pagination?.total ?? 0;
-      if (totalFetched >= total) {
-        return undefined;
-      }
-      return lastPageParam + 1;
-    },
+    queryFn: page => client.listDatasetExperimentResults(datasetId, experimentId, { page, perPage: 100 }),
+    getItems: page => page?.results ?? [],
+    getTotal: page => page?.pagination?.total ?? 0,
     enabled: Boolean(datasetId) && Boolean(experimentId),
+    perPage: 100,
     refetchInterval: experimentStatus === 'running' || experimentStatus === 'pending' ? 2000 : false,
-    select: data => {
-      return data.pages.flatMap(page => page?.results ?? []);
-    },
   });
-
-  useEffect(() => {
-    if (isEndOfListInView && query.hasNextPage && !query.isFetchingNextPage) {
-      void query.fetchNextPage();
-    }
-  }, [isEndOfListInView, query.hasNextPage, query.isFetchingNextPage]);
-
-  return { ...query, setEndOfListElement };
 };
 
 /**
