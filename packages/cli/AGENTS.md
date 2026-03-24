@@ -38,7 +38,7 @@ This file applies to work in `packages/cli/`.
 
 ## Verification
 
-- Run `pnpm typecheck`, `pnpm test`, and `pnpm build:lib` after non-trivial changes, and avoid broader monorepo verification unless the CLI change clearly spans other packages.
+- Run `pnpm typecheck`, `pnpm test`, and `pnpm build:cli` after non-trivial changes, and avoid broader monorepo verification unless the CLI change clearly spans other packages.
 - Do a manual CLI check when changing command wiring or scaffolding behavior.
 
 ## Dependencies

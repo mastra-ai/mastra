@@ -140,9 +140,9 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
     .filter((part): part is StreamedSystemReminderPart => part !== undefined);
 
   for (const reminder of systemReminderParts) {
-    const reminderKey = `${reminder.reminderType ?? ''}:${reminder.path ?? ''}:${reminder.message}`;
-    if (!state.seenSystemReminderKeys.has(reminderKey)) {
-      state.seenSystemReminderKeys.add(reminderKey);
+    const reminderKey = `${message.id}:${reminder.reminderType ?? ''}:${reminder.path ?? ''}:${reminder.message}`;
+    if (!state.currentRunSystemReminderKeys.has(reminderKey)) {
+      state.currentRunSystemReminderKeys.add(reminderKey);
       addInlineReminder(ctx, reminder);
     }
   }
@@ -257,6 +257,7 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: HarnessMessa
     state.streamingMessage = undefined;
     state.seenToolCallIds.clear();
     state.subagentToolCallIds.clear();
+    state.currentRunSystemReminderKeys.clear();
   }
   state.ui.requestRender();
 }

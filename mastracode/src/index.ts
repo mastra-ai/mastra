@@ -167,7 +167,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           const harnessContext = requestContext.get('harness') as
             | { state?: { projectPath?: string }; getState?: () => { projectPath?: string } }
             | undefined;
-          const projectPath = harnessContext?.getState?.()?.projectPath ?? harnessContext?.state?.projectPath ?? process.cwd();
+          const projectPath = harnessContext?.getState?.()?.projectPath ?? harnessContext?.state?.projectPath ?? project.rootPath;
           return getStaticallyLoadedInstructionPaths(projectPath);
         },
       }),

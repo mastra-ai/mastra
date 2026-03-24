@@ -39,6 +39,7 @@ This file applies to work in `packages/playground-ui/`.
 
 - Run `pnpm test` for component logic changes.
 - Run `pnpm build` after source or styling changes.
+- Run the required `e2e-frontend-validation` step for frontend changes before merging.
 - Use Storybook or a targeted app check for visual behavior instead of broader monorepo builds.
 
 ## Dependencies

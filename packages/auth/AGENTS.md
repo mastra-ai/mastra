@@ -38,7 +38,7 @@ This file applies to work in `packages/auth/`.
 
 ## Verification
 
-- Run `pnpm test`, `pnpm build:lib`, and `pnpm lint` after source changes.
+- Run `pnpm test`, `pnpm build:auth`, and `pnpm lint` after source changes.
 
 ## Dependencies
 

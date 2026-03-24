@@ -24,7 +24,7 @@ describe('handleMessageUpdate system reminders', () => {
       chatContainer,
       followUpComponents: [],
       ui: { requestRender: vi.fn() },
-      seenSystemReminderKeys: new Set(),
+      currentRunSystemReminderKeys: new Set(),
       pendingTools: new Map(),
       seenToolCallIds: new Set(),
       subagentToolCallIds: new Set(),
@@ -70,7 +70,7 @@ describe('handleMessageUpdate system reminders', () => {
     expect(rendered).toContain('Loading instruction file contents');
   });
 
-  it('deduplicates repeated streamed reminders with the same path and type', () => {
+  it('deduplicates repeated streamed reminders within the same assistant run', () => {
     const message = createAssistantMessage([
       {
         type: 'system_reminder',
@@ -83,5 +83,28 @@ describe('handleMessageUpdate system reminders', () => {
     handleMessageUpdate(ctx, message);
 
     expect(state.chatContainer.children).toHaveLength(1);
+  });
+
+  it('allows the same reminder to render again in a later assistant run', () => {
+    const firstMessage = createAssistantMessage([
+      {
+        type: 'system_reminder',
+        reminderType: 'dynamic-agents-md',
+        path: '/repo/src/agents/nested/AGENTS.md',
+      } as never,
+    ]);
+
+    const secondMessage = {
+      ...firstMessage,
+      id: 'msg-2',
+    } as HarnessMessage;
+
+    handleMessageUpdate(ctx, firstMessage);
+    expect(state.chatContainer.children).toHaveLength(1);
+
+    state.currentRunSystemReminderKeys.clear();
+
+    handleMessageUpdate(ctx, secondMessage);
+    expect(state.chatContainer.children).toHaveLength(2);
   });
 });
