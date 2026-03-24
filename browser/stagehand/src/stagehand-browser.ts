@@ -96,6 +96,16 @@ export class StagehandBrowser extends MastraBrowser {
 
     this.stagehand = new Stagehand(stagehandOptions);
     await this.stagehand.init();
+
+    // Listen for browser/context close events to detect external closure
+    // Cast to access Playwright's BrowserContext.on() which Stagehand wraps
+    const context = this.stagehand.context as unknown as { on?: (event: string, cb: () => void) => void };
+    if (context?.on) {
+      context.on('close', () => {
+        this.logger.debug?.('Browser context closed event received');
+        this.handleBrowserDisconnected();
+      });
+    }
   }
 
   protected override async doClose(): Promise<void> {
@@ -160,6 +170,7 @@ export class StagehandBrowser extends MastraBrowser {
       this.status = 'closed';
       this.stagehand = null;
       this.logger.debug?.('Browser was externally closed, status set to closed');
+      this.notifyBrowserClosed();
     }
   }
 

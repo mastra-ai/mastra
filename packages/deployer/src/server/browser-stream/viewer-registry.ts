@@ -43,6 +43,9 @@ export class ViewerRegistry {
   /** Map of agentId to cleanup function for onBrowserReady callback */
   private browserReadyCleanups = new Map<string, () => void>();
 
+  /** Map of agentId to cleanup function for onBrowserClosed callback */
+  private browserClosedCleanups = new Map<string, () => void>();
+
   /** Map of agentId to last known URL (for dedup) */
   private lastUrls = new Map<string, string>();
 
@@ -93,11 +96,16 @@ export class ViewerRegistry {
       this.lastUrls.delete(agentId);
       this.lastViewports.delete(agentId);
 
-      // Clean up browser ready callback if pending
-      const cleanup = this.browserReadyCleanups.get(agentId);
-      if (cleanup) {
-        cleanup();
+      // Clean up browser callbacks if pending
+      const readyCleanup = this.browserReadyCleanups.get(agentId);
+      if (readyCleanup) {
+        readyCleanup();
         this.browserReadyCleanups.delete(agentId);
+      }
+      const closedCleanup = this.browserClosedCleanups.get(agentId);
+      if (closedCleanup) {
+        closedCleanup();
+        this.browserClosedCleanups.delete(agentId);
       }
 
       await this.stopScreencast(agentId);
@@ -209,27 +217,52 @@ export class ViewerRegistry {
       return;
     }
 
+    // Register callback for browser restarts (external close + re-launch)
+    // This ensures screencast reconnects after browser is externally closed
+    if (!this.browserReadyCleanups.has(agentId)) {
+      const cleanup = toolset.onBrowserReady(() => {
+        // Only start if we still have viewers
+        if (!this.viewers.has(agentId)) {
+          return;
+        }
+
+        // Stop any existing (likely dead) screencast before starting new one
+        const existingStream = this.screencasts.get(agentId);
+        if (existingStream) {
+          console.info(`[ViewerRegistry] Stopping old screencast for ${agentId} before reconnecting...`);
+          this.screencasts.delete(agentId);
+          // Stop async, don't wait - the old CDP session is probably dead anyway
+          existingStream.stop().catch(() => {});
+        }
+
+        console.info(`[ViewerRegistry] Browser ready for ${agentId}, starting screencast...`);
+        this.doStartScreencast(agentId, toolset).catch(error => {
+          console.error(`[ViewerRegistry] Failed to start screencast on browser ready for ${agentId}:`, error);
+        });
+      });
+      this.browserReadyCleanups.set(agentId, cleanup);
+    }
+
+    // Register callback for browser closed (external close detection)
+    // This ensures UI shows "browser closed" overlay immediately
+    if (!this.browserClosedCleanups.has(agentId)) {
+      const cleanup = toolset.onBrowserClosed(() => {
+        console.info(`[ViewerRegistry] Browser closed for ${agentId}, notifying viewers...`);
+        // Clean up screencast reference (CDP session is dead)
+        this.screencasts.delete(agentId);
+        // Broadcast browser_closed status to UI
+        this.broadcastStatus(agentId, { status: 'browser_closed' });
+      });
+      this.browserClosedCleanups.set(agentId, cleanup);
+    }
+
     // Check if browser is already running
     if (toolset.isBrowserRunning()) {
       // Browser is running, start screencast immediately
       await this.doStartScreencast(agentId, toolset);
     } else {
-      // Browser not running - register callback to start when it becomes ready
+      // Browser not running - callback will fire when it becomes ready
       console.info(`[ViewerRegistry] Browser not running for ${agentId}, waiting for browser to start...`);
-
-      // Register callback for when browser launches
-      const cleanup = toolset.onBrowserReady(() => {
-        // Only start if we still have viewers
-        if (this.viewers.has(agentId) && !this.screencasts.has(agentId)) {
-          console.info(`[ViewerRegistry] Browser ready for ${agentId}, starting screencast...`);
-          this.doStartScreencast(agentId, toolset).catch(error => {
-            console.error(`[ViewerRegistry] Failed to start screencast on browser ready for ${agentId}:`, error);
-          });
-        }
-      });
-
-      // Store cleanup function
-      this.browserReadyCleanups.set(agentId, cleanup);
     }
   }
 

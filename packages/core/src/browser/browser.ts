@@ -270,6 +270,7 @@ export abstract class MastraBrowser extends MastraBase {
       try {
         await this.doClose();
         this.status = 'closed';
+        this.notifyBrowserClosed();
       } catch (err) {
         this.status = 'error';
         this.error = err instanceof Error ? err.message : String(err);
@@ -340,6 +341,7 @@ export abstract class MastraBrowser extends MastraBase {
   // ---------------------------------------------------------------------------
 
   private _onReadyCallbacks: Set<() => void> = new Set();
+  private _onClosedCallbacks: Set<() => void> = new Set();
 
   /**
    * Register a callback to be invoked when the browser becomes ready.
@@ -360,6 +362,18 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   /**
+   * Register a callback to be invoked when the browser closes.
+   * Useful for screencast to broadcast browser_closed status.
+   * @returns Cleanup function to unregister the callback
+   */
+  onBrowserClosed(callback: () => void): () => void {
+    this._onClosedCallbacks.add(callback);
+    return () => {
+      this._onClosedCallbacks.delete(callback);
+    };
+  }
+
+  /**
    * Notify all registered callbacks that browser is ready.
    * Called internally after launch completes.
    * Note: Callbacks remain registered and will fire again on subsequent launches.
@@ -375,6 +389,20 @@ export abstract class MastraBrowser extends MastraBase {
     }
     // Do NOT clear callbacks - they should persist across browser restarts
     // so screencast can reconnect after external closure + re-launch
+  }
+
+  /**
+   * Notify all registered callbacks that browser has closed.
+   * Called by handleBrowserDisconnected() and close().
+   */
+  protected notifyBrowserClosed(): void {
+    for (const callback of this._onClosedCallbacks) {
+      try {
+        callback();
+      } catch {
+        // Ignore callback errors
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------

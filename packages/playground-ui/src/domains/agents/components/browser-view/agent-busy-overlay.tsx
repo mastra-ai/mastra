@@ -1,7 +1,9 @@
 import { Loader2 } from 'lucide-react';
 
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
+  // AgentBrowser tools
   browser_navigate: 'Navigating',
+  browser_goto: 'Navigating',
   browser_click: 'Clicking',
   browser_type: 'Typing',
   browser_scroll: 'Scrolling',
@@ -9,6 +11,13 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   browser_snapshot: 'Reading page',
   browser_close: 'Closing',
   browser_select: 'Selecting',
+  // StagehandBrowser tools
+  stagehand_navigate: 'Navigating',
+  stagehand_act: 'Acting',
+  stagehand_extract: 'Extracting',
+  stagehand_observe: 'Observing',
+  stagehand_screenshot: 'Capturing',
+  stagehand_close: 'Closing',
 };
 
 export interface AgentBusyOverlayProps {
@@ -23,7 +32,9 @@ export interface AgentBusyOverlayProps {
  * Mouse moves still show cursor on top of the overlay.
  */
 export function AgentBusyOverlay({ toolName }: AgentBusyOverlayProps) {
-  const displayName = toolName ? (TOOL_DISPLAY_NAMES[toolName] ?? toolName.replace('browser_', '')) : 'Working';
+  const displayName = toolName
+    ? (TOOL_DISPLAY_NAMES[toolName] ?? toolName.replace(/^(browser_|stagehand_)/, ''))
+    : 'Working';
 
   return (
     <div className="absolute inset-0 bg-surface1/40 flex items-center justify-center z-10 cursor-not-allowed">

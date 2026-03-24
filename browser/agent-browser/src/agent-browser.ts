@@ -70,6 +70,21 @@ export class AgentBrowser extends MastraBrowser {
     }
 
     await this.browserManager.launch(launchOptions);
+
+    // Listen for browser context close events to detect external closure
+    // Cast to access Playwright's BrowserContext.on() which the underlying library wraps
+    try {
+      const page = this.browserManager.getPage();
+      const context = page.context() as unknown as { on?: (event: string, cb: () => void) => void };
+      if (context?.on) {
+        context.on('close', () => {
+          this.logger.debug?.('Browser context closed event received');
+          this.handleBrowserDisconnected();
+        });
+      }
+    } catch {
+      // Ignore errors getting page/context during launch
+    }
   }
 
   protected override async doClose(): Promise<void> {
@@ -148,6 +163,7 @@ export class AgentBrowser extends MastraBrowser {
       this.status = 'closed';
       this.browserManager = null;
       this.logger.debug?.('Browser was externally closed, status set to closed');
+      this.notifyBrowserClosed();
     }
   }
 

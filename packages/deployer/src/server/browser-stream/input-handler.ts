@@ -102,14 +102,63 @@ export function handleInputMessage(
   switch (message.type) {
     case 'mouse':
       void injectMouse(toolset, message).catch(err => {
-        console.warn('[InputHandler] Mouse injection error:', err);
+        if (isDisconnectionError(err)) {
+          notifyBrowserClosed(toolset);
+        } else if (!isExpectedInjectionError(err)) {
+          console.warn('[InputHandler] Mouse injection error:', err);
+        }
       });
       break;
     case 'keyboard':
       void injectKeyboard(toolset, message).catch(err => {
-        console.warn('[InputHandler] Keyboard injection error:', err);
+        if (isDisconnectionError(err)) {
+          notifyBrowserClosed(toolset);
+        } else if (!isExpectedInjectionError(err)) {
+          console.warn('[InputHandler] Keyboard injection error:', err);
+        }
       });
       break;
+  }
+}
+
+// --- Error handling ---
+
+/**
+ * Check if an error indicates browser disconnection (target closed).
+ * These errors mean the browser was externally closed.
+ */
+function isDisconnectionError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes('no cdp session') ||
+    msg.includes('target closed') ||
+    msg.includes('browser has been closed') ||
+    msg.includes('page has been closed') ||
+    msg.includes('session closed') ||
+    msg.includes('browser has disconnected')
+  );
+}
+
+/**
+ * Check if an injection error is expected (browser not ready yet).
+ * These are silently ignored to avoid log spam.
+ */
+function isExpectedInjectionError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  return msg.includes('no cdp session');
+}
+
+/**
+ * Notify the browser that it was closed externally.
+ * This triggers the onBrowserClosed callbacks to update the UI.
+ */
+function notifyBrowserClosed(toolset: MastraBrowser): void {
+  // Call handleBrowserDisconnected if available (it's public on the implementations)
+  const browser = toolset as unknown as { handleBrowserDisconnected?: () => void };
+  if (typeof browser.handleBrowserDisconnected === 'function') {
+    browser.handleBrowserDisconnected();
   }
 }
 

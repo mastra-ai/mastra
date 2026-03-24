@@ -1,10 +1,10 @@
 import { createContext, useContext, useCallback, useState, useMemo } from 'react';
 import type { ReactNode } from 'react';
 
-const BROWSER_TOOL_PREFIX = 'browser_';
+const BROWSER_TOOL_PREFIXES = ['browser_', 'stagehand_'];
 
 export function isBrowserTool(toolName: string): boolean {
-  return toolName.startsWith(BROWSER_TOOL_PREFIX);
+  return BROWSER_TOOL_PREFIXES.some(prefix => toolName.startsWith(prefix));
 }
 
 export interface BrowserToolCallEntry {

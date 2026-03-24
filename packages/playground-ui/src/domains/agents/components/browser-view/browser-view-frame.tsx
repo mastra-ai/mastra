@@ -136,6 +136,7 @@ export function BrowserViewFrame({
 
   const isLoading = (status === 'connecting' || status === 'browser_starting' || status === 'streaming') && !hasFrame;
   const isReconnecting = status === 'disconnected' && hasFrame;
+  const isBrowserClosed = status === 'browser_closed' && hasFrame;
   const hasError = status === 'error';
 
   return (
@@ -179,12 +180,52 @@ export function BrowserViewFrame({
         </div>
       )}
 
+      {/* Browser closed overlay - shown when browser window is closed */}
+      {isBrowserClosed && (
+        <div className="absolute inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3 px-6 py-4 text-center">
+            <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center">
+              <svg
+                className="w-7 h-7 text-white/80"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.5}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-lg font-medium text-white">Browser Closed</span>
+              <span className="text-sm text-white/70">Send a message to restart the browser</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Error overlay */}
       {hasError && (
-        <div className="absolute inset-0 bg-surface1/90 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-2 px-4 text-center">
-            <span className="text-sm text-accent2">Connection Error</span>
-            {error && <span className="text-xs text-neutral4">{error}</span>}
+        <div className="absolute inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3 px-6 py-4 text-center">
+            <div className="w-14 h-14 rounded-full bg-red-500/20 flex items-center justify-center">
+              <svg
+                className="w-7 h-7 text-red-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.5}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+                />
+              </svg>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-lg font-medium text-white">Connection Error</span>
+              {error && <span className="text-sm text-white/70">{error}</span>}
+            </div>
           </div>
         </div>
       )}

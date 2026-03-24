@@ -5,7 +5,9 @@ import { CodeEditor } from '@/ds/components/CodeEditor';
 import { cn } from '@/lib/utils';
 
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
+  // AgentBrowser tools
   browser_navigate: 'Navigate',
+  browser_goto: 'goto',
   browser_click: 'Click',
   browser_type: 'Type',
   browser_scroll: 'Scroll',
@@ -13,19 +15,37 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   browser_snapshot: 'Snapshot',
   browser_close: 'Close',
   browser_select: 'Select',
+  // StagehandBrowser tools
+  stagehand_navigate: 'Navigate',
+  stagehand_act: 'Act',
+  stagehand_extract: 'Extract',
+  stagehand_observe: 'Observe',
+  stagehand_screenshot: 'Screenshot',
+  stagehand_close: 'Close',
 };
 
 const KEY_ARG_MAP: Record<string, string> = {
+  // AgentBrowser tools
   browser_navigate: 'url',
+  browser_goto: 'url',
   browser_click: 'ref',
   browser_type: 'text',
   browser_scroll: 'direction',
   browser_close: 'reason',
   browser_select: 'value',
+  // StagehandBrowser tools
+  stagehand_navigate: 'url',
+  stagehand_act: 'action',
+  stagehand_extract: 'instruction',
+  stagehand_observe: 'instruction',
 };
 
 function getDisplayName(toolName: string): string {
-  return TOOL_DISPLAY_NAMES[toolName] ?? toolName.replace('browser_', '');
+  if (TOOL_DISPLAY_NAMES[toolName]) {
+    return TOOL_DISPLAY_NAMES[toolName];
+  }
+  // Strip known prefixes for fallback
+  return toolName.replace(/^(browser_|stagehand_)/, '');
 }
 
 function getKeyArgSummary(toolName: string, args: Record<string, unknown>): string | null {
