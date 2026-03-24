@@ -30,6 +30,7 @@ import { useInView } from '@/hooks/use-in-view';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
+import { extractErrorText } from '../utils/trace-utils';
 
 const TRACES_PER_PAGE = 25;
 
@@ -689,7 +690,7 @@ export function AgentTracesPanel({ agentId }: { agentId: string }) {
                   </EntityList.TextCell>
                   <EntityList.TextCell>
                     <span className={cn('truncate block', isError && 'text-red-500')}>
-                      {isError ? String(trace.error ?? 'Error') : extractOutputPreview(trace.output)}
+                      {isError ? extractErrorText(trace.error) : extractOutputPreview(trace.output)}
                     </span>
                   </EntityList.TextCell>
                   <EntityList.TextCell>{formatDuration(trace.startedAt, trace.endedAt)}</EntityList.TextCell>
