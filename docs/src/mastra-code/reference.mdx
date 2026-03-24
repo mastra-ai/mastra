@@ -193,7 +193,7 @@ const reviewAgent = new Agent({
   id: 'review-agent',
   name: 'Review Agent',
   instructions: 'You are a code review specialist.',
-  model: 'anthropic/claude-sonnet-4',
+  model: 'anthropic/claude-sonnet-4-6',
 })
 
 const { harness } = createMastraCode({
@@ -202,7 +202,7 @@ const { harness } = createMastraCode({
       id: 'review',
       name: 'Review',
       default: true,
-      defaultModelId: 'anthropic/claude-sonnet-4',
+      defaultModelId: 'anthropic/claude-sonnet-4-6',
       color: '#f59e0b',
       agent: reviewAgent,
     },

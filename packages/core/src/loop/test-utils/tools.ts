@@ -2,7 +2,7 @@ import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { dynamicTool, jsonSchema, stepCountIs } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, mockValues, mockId } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { loop } from '../loop';
 import { createMessageListWithUserMessage, createTestModels, defaultSettings, testUsage } from './utils';
@@ -294,8 +294,6 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       it('should include dynamic tool call and result content', async () => {
         await result.consumeStream();
 
-        console.log(JSON.stringify(result.content, null, 2));
-
         expect(result.content).toMatchInlineSnapshot(`
           [
             {
@@ -329,8 +327,6 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
       it('should include dynamic tool call and result in the full stream', async () => {
         const fullStream = await convertAsyncIterableToArray(result.fullStream as any);
-
-        console.log(JSON.stringify(fullStream, null, 2));
 
         expect(fullStream).toMatchInlineSnapshot(`
             [
@@ -1313,6 +1309,85 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       expect(contentToolResults.length).toBe(1);
       expect(firstCallStep.toolResults.length).toBe(contentToolResults.length);
       expect(firstCallStep.toolResults[0].toolName).toBe('test-tool');
+    });
+  });
+
+  describe('message part ordering should match stream order', () => {
+    it('should persist tool-invocation parts between text parts when stream is text → tool-call → text', async () => {
+      // Simulates a provider-executed tool (e.g. web_search) that arrives between two
+      // text segments. The persisted message parts must reflect the actual stream order,
+      // not batch all tool calls at the end.
+      const messageList = createMessageListWithUserMessage();
+      const result = loopFn({
+        methodType: 'stream',
+        runId,
+        messageList,
+        models: createTestModels({
+          stream: convertArrayToReadableStream([
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            // First text segment
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Before the search.' },
+            { type: 'text-end', id: 'text-1' },
+            // Provider-executed tool call + result
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'web_search',
+              input: '{ "query": "test" }',
+              providerExecuted: true,
+            },
+            {
+              type: 'tool-result',
+              toolCallId: 'call-1',
+              toolName: 'web_search',
+              result: { url: 'https://example.com', title: 'Example' },
+              providerExecuted: true,
+            },
+            // Second text segment
+            { type: 'text-start', id: 'text-2' },
+            { type: 'text-delta', id: 'text-2', delta: 'After the search.' },
+            { type: 'text-end', id: 'text-2' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: testUsage,
+            },
+          ]),
+        }),
+        tools: {
+          web_search: {
+            type: 'provider-defined',
+            id: 'test.web_search',
+            name: 'web_search',
+            inputSchema: z.object({ query: z.string() }),
+            outputSchema: z.object({ url: z.string(), title: z.string() }),
+            args: {},
+          },
+        },
+        ...defaultSettings(),
+      });
+
+      await result.consumeStream();
+
+      // Get the persisted assistant message parts
+      const assistantMessages = messageList.get.all.db().filter(m => m.role === 'assistant');
+      const parts = assistantMessages.flatMap(m => (m.content as any).parts ?? []);
+
+      // Extract the types in order
+      const partTypes = parts.map((p: any) =>
+        p.type === 'tool-invocation' ? `tool:${p.toolInvocation.toolName}` : p.type,
+      );
+
+      // The tool invocation must appear between the two text parts, not at the end.
+      // A 'step-start' part may appear when the provider tool result triggers a new loop step.
+      const meaningful = partTypes.filter((t: string) => t !== 'step-start');
+      expect(meaningful).toEqual(['text', 'tool:web_search', 'text']);
     });
   });
 }

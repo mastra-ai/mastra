@@ -2,7 +2,7 @@ import { openai } from '@ai-sdk/openai-v5';
 import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { createGatewayMock } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import z from 'zod';
+import { z } from 'zod/v4';
 import { MessageList } from '../../agent/message-list';
 import { RequestContext } from '../../request-context';
 import { MastraLLMVNext } from './model.loop';

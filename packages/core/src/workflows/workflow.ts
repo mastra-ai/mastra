@@ -25,6 +25,7 @@ import {
   getOrCreateSpan,
   resolveObservabilityContext,
 } from '../observability';
+import { executeWithContext } from '../observability/utils';
 import { ProcessorRunner, ProcessorState } from '../processors';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
@@ -838,9 +839,11 @@ function createStepFromProcessor<TProcessorId extends string>(
       };
 
       // Helper to execute phase with proper span lifecycle management
+      // Uses executeWithContext to set the processor span as the active OTEL context,
+      // so auto-instrumented operations inside processors nest correctly under the span.
       const executePhaseWithSpan = async <T>(fn: () => Promise<T>): Promise<T> => {
         try {
-          const result = await fn();
+          const result = await executeWithContext({ span: processorSpan, fn });
           processorSpan?.end({ output: result });
           return result;
         } catch (error) {
@@ -1002,7 +1005,7 @@ function createStepFromProcessor<TProcessorId extends string>(
             if (part && (part as ChunkType).type.startsWith('data-') && !processor.processDataParts) {
               return { ...passThrough, part };
             }
-            if (processor.processOutputStream) {
+            if (processor.processOutputStream && part) {
               // Manage per-processor span lifecycle across stream chunks
               // Use unique key to store span on shared state object
               const spanKey = `__outputStreamSpan_${processor.id}`;

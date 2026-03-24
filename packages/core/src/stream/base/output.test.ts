@@ -175,6 +175,33 @@ describe('MastraModelOutput', () => {
       const messageList = new MessageList({ threadId: 'test-thread' });
 
       const stream = createChunkStream([createStepFinishChunk(runId), createFinishChunk(runId)]);
+      const agentRunSpan = {
+        id: 'mastra-agent-span-id',
+        externalTraceId: 'mastra-trace-id',
+        isInternal: false,
+        isValid: true,
+      };
+      const workflowStepSpan = {
+        id: 'mastra-workflow-step-span-id',
+        externalTraceId: 'mastra-trace-id',
+        isInternal: true,
+        isValid: true,
+        parent: agentRunSpan,
+      };
+      const modelGenerationSpan = {
+        id: 'mastra-model-span-id',
+        externalTraceId: 'mastra-trace-id',
+        isInternal: false,
+        isValid: true,
+        parent: workflowStepSpan,
+      };
+      const modelStepSpan = {
+        id: 'mastra-model-step-span-id',
+        externalTraceId: 'mastra-trace-id',
+        isInternal: false,
+        isValid: true,
+        parent: modelGenerationSpan,
+      };
 
       const output = new MastraModelOutput({
         model: { modelId: 'test-model', provider: 'test', version: 'v3' },
@@ -184,10 +211,7 @@ describe('MastraModelOutput', () => {
         options: {
           runId,
           tracingContext: {
-            currentSpan: {
-              id: 'mastra-root-span-id',
-              externalTraceId: 'mastra-trace-id',
-            },
+            currentSpan: modelStepSpan,
           } as any,
         },
       });
@@ -196,7 +220,7 @@ describe('MastraModelOutput', () => {
       const result = await output.getFullOutput();
 
       expect(result.traceId).toBe('mastra-trace-id');
-      expect(result.spanId).toBe('mastra-root-span-id');
+      expect(result.spanId).toBe('mastra-agent-span-id');
     });
   });
 });

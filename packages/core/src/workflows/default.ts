@@ -1,5 +1,5 @@
 import { TripWire } from '../agent/trip-wire';
-import type { RequestContext } from '../di';
+import { RequestContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { SerializedError } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
@@ -619,11 +619,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }
 
   /**
-   * Deserialize a plain object back to a RequestContext Map.
+   * Deserialize a plain object back to a RequestContext instance.
    * Used to restore context after durable execution replay.
    */
   protected deserializeRequestContext(obj: Record<string, any>): RequestContext {
-    return new Map(Object.entries(obj)) as unknown as RequestContext;
+    const ctx = new RequestContext();
+    for (const [key, value] of Object.entries(obj)) {
+      ctx.set(key, value);
+    }
+    return ctx;
   }
 
   /**

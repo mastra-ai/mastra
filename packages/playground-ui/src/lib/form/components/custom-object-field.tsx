@@ -1,7 +1,8 @@
+import type { ParsedField } from '@autoform/core';
+import { getLabel } from '@autoform/core';
+import { useAutoForm } from '@autoform/react';
 import React from 'react';
 import { CustomAutoFormField } from './custom-auto-form-field';
-import { useAutoForm } from '@autoform/react';
-import { getLabel, ParsedField } from '@autoform/core';
 
 export const CustomObjectField: React.FC<{
   field: ParsedField;

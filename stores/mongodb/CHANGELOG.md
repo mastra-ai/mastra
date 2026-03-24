@@ -1,5 +1,51 @@
 # @mastra/mongodb
 
+## 1.6.0-alpha.0
+
+### Minor Changes
+
+- Added datasets and experiments storage support to the MongoDB store. ([#14556](https://github.com/mastra-ai/mastra/pull/14556))
+
+  **Datasets** — Full dataset management with versioned items. Create, update, and delete datasets and their items with automatic version tracking. Supports batch insert/delete operations, time-travel queries to retrieve items at any past version, and item history tracking.
+
+  **Experiments** — Run and track experiments against datasets. Full CRUD for experiments and per-item experiment results, with pagination, filtering, and cascade deletion.
+
+  Both domains are automatically available when using `MongoDBStore` — no additional configuration needed.
+
+  ```ts
+  const store = new MongoDBStore({ uri: 'mongodb://localhost:27017', dbName: 'my-app' });
+
+  // Datasets
+  const dataset = await store.getStorage('datasets').createDataset({ name: 'my-dataset' });
+  await store.getStorage('datasets').addItem({ datasetId: dataset.id, input: { prompt: 'hello' } });
+
+  // Experiments
+  const experiment = await store.getStorage('experiments').createExperiment({ name: 'run-1', datasetId: dataset.id });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`be37de4`](https://github.com/mastra-ai/mastra/commit/be37de4391bd1d5486ce38efacbf00ca51637262), [`f3ce603`](https://github.com/mastra-ai/mastra/commit/f3ce603fd76180f4a5be90b6dc786d389b6b3e98), [`2871451`](https://github.com/mastra-ai/mastra/commit/2871451703829aefa06c4a5d6eca7fd3731222ef), [`d3930ea`](https://github.com/mastra-ai/mastra/commit/d3930eac51c30b0ecf7eaa54bb9430758b399777)]:
+  - @mastra/core@1.16.0-alpha.2
+
+## 1.5.6
+
+### Patch Changes
+
+- Added dated message boundary delimiters when activating buffered observations for improved cache stability. ([#14367](https://github.com/mastra-ai/mastra/pull/14367))
+
+- Updated dependencies [[`51970b3`](https://github.com/mastra-ai/mastra/commit/51970b3828494d59a8dd4df143b194d37d31e3f5), [`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`085e371`](https://github.com/mastra-ai/mastra/commit/085e3718a7d0fe9a210fe7dd1c867b9bdfe8d16b), [`b77aa19`](https://github.com/mastra-ai/mastra/commit/b77aa1981361c021f2c881bee8f0c703687f00da), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8b4ce84`](https://github.com/mastra-ai/mastra/commit/8b4ce84aed0808b9805cc4fd7147c1f8a2ef7a36), [`8d4cfe6`](https://github.com/mastra-ai/mastra/commit/8d4cfe6b9a7157d3876206227ec9f04cde6dbc4a), [`dd6ca1c`](https://github.com/mastra-ai/mastra/commit/dd6ca1cdea3b8b6182f4cf61df41070ba0cc0deb), [`ce26fe2`](https://github.com/mastra-ai/mastra/commit/ce26fe2166dd90254f8bee5776e55977143e97de), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a), [`4cb4edf`](https://github.com/mastra-ai/mastra/commit/4cb4edf3c909d197ec356c1790d13270514ffef6), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f), [`b26307f`](https://github.com/mastra-ai/mastra/commit/b26307f050df39629511b0e831b8fc26973ce8b1), [`68a019d`](https://github.com/mastra-ai/mastra/commit/68a019d30d22251ddd628a2947d60215c03c350a)]:
+  - @mastra/core@1.14.0
+
+## 1.5.6-alpha.0
+
+### Patch Changes
+
+- Added dated message boundary delimiters when activating buffered observations for improved cache stability. ([#14367](https://github.com/mastra-ai/mastra/pull/14367))
+
+- Updated dependencies [[`4444280`](https://github.com/mastra-ai/mastra/commit/444428094253e916ec077e66284e685fde67021e), [`dbb879a`](https://github.com/mastra-ai/mastra/commit/dbb879af0b809c668e9b3a9d8bac97d806caa267), [`8de3555`](https://github.com/mastra-ai/mastra/commit/8de355572c6fd838f863a3e7e6fe24d0947b774f)]:
+  - @mastra/core@1.14.0-alpha.2
+
 ## 1.5.5
 
 ### Patch Changes

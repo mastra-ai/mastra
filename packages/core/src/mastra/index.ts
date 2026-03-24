@@ -662,7 +662,7 @@ export class Mastra<
     if (config?.scorers) {
       Object.entries(config.scorers).forEach(([key, scorer]) => {
         if (scorer != null) {
-          this.addScorer(scorer, key);
+          this.addScorer(scorer, key, { source: 'code' });
         }
       });
     }
@@ -944,7 +944,7 @@ export class Mastra<
       .listScorers()
       .then(scorers => {
         for (const [, entry] of Object.entries(scorers || {})) {
-          this.addScorer(entry.scorer);
+          this.addScorer(entry.scorer, undefined, { source: 'code' });
         }
       })
       .catch(err => {
@@ -2525,7 +2525,7 @@ export class Mastra<
 
   /**
    * Direct metrics API for use outside trace context.
-   * Metrics emitted via this API will not have auto-labels from spans.
+   * Metrics emitted via this API will not have auto correlation or cost context from spans.
    * Use for background jobs, startup metrics, or other non-traced scenarios.
    */
   get metrics(): MetricsContext {

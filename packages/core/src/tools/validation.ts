@@ -570,7 +570,7 @@ function redactSensitiveKeys(obj: unknown): unknown {
  * Validates request context data against a schema.
  * This is used to validate the request context before tool execution.
  *
- * @param schema The schema to validate against (PublicSchema which accepts Zod v3/v4, JSONSchema, etc.)
+ * @param schema The schema to validate against (PublicSchema which accepts Zod, JSONSchema, etc.)
  * @param requestContext The request context to validate
  * @param identifier Optional identifier (tool/step ID) for better error messages
  * @returns The validated data or a validation error
