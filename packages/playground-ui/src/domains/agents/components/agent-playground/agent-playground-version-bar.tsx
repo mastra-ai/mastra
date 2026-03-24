@@ -5,6 +5,7 @@ import { useAgentVersions } from '../../hooks/use-agent-versions';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Combobox } from '@/ds/components/Combobox';
+import { CopyButton } from '@/ds/components/CopyButton';
 import {
   Dialog,
   DialogContent,
@@ -127,6 +128,8 @@ export function AgentPlaygroundVersionBar({
             No versions yet
           </Txt>
         )}
+
+        {currentValue && <CopyButton content={currentValue} tooltip="Copy version ID" size="sm" />}
 
         <HoverPopover>
           <PopoverTrigger asChild>

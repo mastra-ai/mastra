@@ -1,5 +1,62 @@
 # @mastra/core
 
+## 1.16.0-alpha.2
+
+### Minor Changes
+
+- Added tool suspension handling to the Harness. ([#14611](https://github.com/mastra-ai/mastra/pull/14611))
+
+  When a tool calls `suspend()` during execution, the harness now emits a `tool_suspended` event, reports `agent_end` with reason `'suspended'`, and exposes `respondToToolSuspension()` to resume execution with user-provided data.
+
+  ```ts
+  harness.subscribe(event => {
+    if (event.type === 'tool_suspended') {
+      // event.toolName, event.suspendPayload, event.resumeSchema
+    }
+  });
+
+  // Resume after collecting user input
+  await harness.respondToToolSuspension({ resumeData: { confirmed: true } });
+  ```
+
+- Improved observability metrics and logs storage support. ([#14607](https://github.com/mastra-ai/mastra/pull/14607))
+  - Added typed observability storage fields for shared correlation context and cost data.
+  - Added storage-layer metric listing and richer metric aggregations that can return estimated cost alongside values.
+  - Improved observability filter parity across log and metric storage APIs.
+
+### Patch Changes
+
+- Fixed `Harness.destroy()` to properly clean up heartbeats and workspace on teardown. ([#14568](https://github.com/mastra-ai/mastra/pull/14568))
+
+- Fix Zod v3 and Zod v4 compatibility across public structured-output APIs. ([#14464](https://github.com/mastra-ai/mastra/pull/14464))
+
+  Mastra agent and client APIs accept schemas from either `zod/v3` or `zod/v4`, matching the documented peer dependency range and preserving TypeScript compatibility for both Zod versions.
+
+- Updated dependencies [[`d3930ea`](https://github.com/mastra-ai/mastra/commit/d3930eac51c30b0ecf7eaa54bb9430758b399777)]:
+  - @mastra/schema-compat@1.2.7-alpha.0
+
+## 1.16.0-alpha.1
+
+### Minor Changes
+
+- Added agent version support for experiments. When triggering an experiment, you can now pass an `agentVersion` parameter to pin which agent version to use. The agent version is stored with the experiment and returned in experiment responses. ([#14562](https://github.com/mastra-ai/mastra/pull/14562))
+
+  ```ts
+  const client = new MastraClient();
+
+  await client.triggerDatasetExperiment({
+    datasetId: 'my-dataset',
+    targetType: 'agent',
+    targetId: 'my-agent',
+    version: 3, // pin to dataset version 3
+    agentVersion: 'ver_abc123', // pin to a specific agent version
+  });
+  ```
+
+### Patch Changes
+
+- Improved custom OpenAI-compatible model configuration guidance in the models docs. ([#14594](https://github.com/mastra-ai/mastra/pull/14594))
+
 ## 1.16.0-alpha.0
 
 ### Minor Changes

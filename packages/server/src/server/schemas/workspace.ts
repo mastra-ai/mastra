@@ -7,7 +7,7 @@
  * - Skills operations (list, get, search, references)
  */
 
-import z from 'zod';
+import { z } from 'zod/v4';
 
 // =============================================================================
 // Filesystem Path Schemas
