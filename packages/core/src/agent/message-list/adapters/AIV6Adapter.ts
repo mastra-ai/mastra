@@ -1,8 +1,6 @@
 import * as AIV5 from '@internal/ai-sdk-v5';
-import type { FilePart, ImagePart } from '@internal/ai-v6';
 import * as AIV6 from '@internal/ai-v6';
 
-import { MastraError, ErrorCategory, ErrorDomain } from '../../../error';
 import type {
   MastraDBMessage,
   MastraMessagePart,
