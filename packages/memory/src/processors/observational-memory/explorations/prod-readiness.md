@@ -12,7 +12,7 @@ The most severe issue is **data loss in resource-scoped OM** — concurrent obse
 
 ### Static Maps
 
-There are 5 static Maps on the `ObservationalMemory` class, shared across all instances within a single Node.js process but invisible to other replicas:
+There are 4 static Maps on the `ObservationalMemory` class, shared across all instances within a single Node.js process but invisible to other replicas:
 
 | Static Map                 | Purpose                                                             | Horizontal Scaling Problem                                                                                                       |
 | -------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -45,7 +45,7 @@ A `Set<string>` that prevents re-observation within a single process lifetime. O
 
 This is the most critical class of problems. The pattern throughout the codebase is:
 
-```
+```text
 1. Read record from DB (getObservationalMemory)
 2. Modify in memory (call observer/reflector LLM, generate observations)
 3. Write back to DB (updateActiveObservations)
@@ -98,7 +98,7 @@ The in-process `withLock()` mutex prevents this within a single process but not 
 
 ### Scenario 4: Serverless Cold Start
 
-1. Lambda A triggers async buffering, populates all 5 static maps, fires background LLM call
+1. Lambda A triggers async buffering, populates all 4 static maps, fires background LLM call
 2. Lambda A is frozen/recycled before the background call completes
 3. Lambda B starts cold — all static maps are empty
 4. Lambda B reads DB: `isBufferingObservation = true` (stale flag from Lambda A)
@@ -122,7 +122,7 @@ This is a classic TOCTOU (time-of-check-to-time-of-use) race on the storage flag
 
 `setThreadOMMetadata` + `updateThread` follows the same read-modify-write pattern:
 
-```
+```text
 1. getThreadById (read)
 2. setThreadOMMetadata (modify in memory)
 3. updateThread (write)
@@ -165,6 +165,6 @@ Two concurrent observations for the same thread will clobber each other's `sugge
 
 1. **Compare-and-swap or optimistic concurrency** on `updateActiveObservations` — reject writes if the record version has changed
 2. **Distributed locks** (Redis, database advisory locks) replacing `withLock()`
-3. **Database-backed coordination state** replacing the 5 static Maps
+3. **Database-backed coordination state** replacing the 4 static Maps
 4. **Idempotent activation** — `swapBufferedToActive` should be safe to call twice with the same chunks
 5. **Atomic flag transitions** — `isReflecting` and `isBufferingObservation` flags should use conditional updates (e.g., `UPDATE ... SET isReflecting = true WHERE isReflecting = false`)

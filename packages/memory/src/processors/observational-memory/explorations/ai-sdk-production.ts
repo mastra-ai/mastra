@@ -297,8 +297,9 @@ async function main() {
         }
       }
 
-      // Check if reflection is needed after activation
-      if (status.shouldReflect) {
+      // Re-read status after activation before deciding to reflect
+      const postActivationStatus = await om.getStatus({ threadId, messages: messageList.get.all.db() });
+      if (postActivationStatus.shouldReflect) {
         await om.reflect(threadId);
       }
 
