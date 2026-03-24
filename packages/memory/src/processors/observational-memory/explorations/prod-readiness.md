@@ -14,12 +14,12 @@ The most severe issue is **data loss in resource-scoped OM** — concurrent obse
 
 There are 4 static Maps on the `ObservationalMemory` class, shared across all instances within a single Node.js process but invisible to other replicas:
 
-| Static Map                 | Purpose                                                             | Horizontal Scaling Problem                                                                                                       |
-| -------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `asyncBufferingOps`        | Tracks in-flight async buffering Promises                           | Replica B can't await Replica A's in-flight operation. May activate incomplete buffered content.                                 |
-| `lastBufferedBoundary`     | Token boundary where buffering was last triggered                   | Replica B doesn't know the boundary, re-triggers buffering for the same messages, creating duplicate buffered chunks in storage. |
-| `lastBufferedAtTime`       | Timestamp cursor for which messages have been buffered              | Same — Replica B re-buffers already-buffered messages.                                                                           |
-| `reflectionBufferCycleIds` | CycleId for in-flight buffered reflections                          | Minor — affects UI marker display only.                                                                                          |
+| Static Map                 | Purpose                                                | Horizontal Scaling Problem                                                                                                       |
+| -------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `asyncBufferingOps`        | Tracks in-flight async buffering Promises              | Replica B can't await Replica A's in-flight operation. May activate incomplete buffered content.                                 |
+| `lastBufferedBoundary`     | Token boundary where buffering was last triggered      | Replica B doesn't know the boundary, re-triggers buffering for the same messages, creating duplicate buffered chunks in storage. |
+| `lastBufferedAtTime`       | Timestamp cursor for which messages have been buffered | Same — Replica B re-buffers already-buffered messages.                                                                           |
+| `reflectionBufferCycleIds` | CycleId for in-flight buffered reflections             | Minor — affects UI marker display only.                                                                                          |
 
 On serverless cold start or process recycle, all 4 maps start empty. Any in-flight work from the previous invocation is invisible to the new process.
 

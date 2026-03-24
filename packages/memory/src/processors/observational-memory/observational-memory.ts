@@ -30,7 +30,6 @@ export function getLatestStepParts(parts: MastraDBMessage['content']['parts']): 
   return parts;
 }
 
-
 /**
  * Returns true when a message contains at least one part with visible user/assistant
  * content (text, tool-invocation, reasoning, image, file).  Messages that only carry

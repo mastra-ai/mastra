@@ -25,7 +25,19 @@ if (OM_DEBUG_LOG) {
   const _origConsoleError = console.error;
   console.error = (...args: unknown[]) => {
     omDebug(
-      `[console.error] ${args.map(a => { if (a instanceof Error) return a.stack ?? a.message; if (typeof a === 'object' && a !== null) { try { return JSON.stringify(a); } catch { return String(a); } } return String(a); }).join(' ')}`,
+      `[console.error] ${args
+        .map(a => {
+          if (a instanceof Error) return a.stack ?? a.message;
+          if (typeof a === 'object' && a !== null) {
+            try {
+              return JSON.stringify(a);
+            } catch {
+              return String(a);
+            }
+          }
+          return String(a);
+        })
+        .join(' ')}`,
     );
     _origConsoleError.apply(console, args);
   };

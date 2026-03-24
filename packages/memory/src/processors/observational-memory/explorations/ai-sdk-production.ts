@@ -261,8 +261,7 @@ async function main() {
           // blockAfter gate — defer to async if below blockAfter
           const config = om.getObservationConfig();
           const shouldDefer =
-            config.bufferTokens &&
-            (!config.blockAfter || statusAfterActivation.pendingTokens < config.blockAfter);
+            config.bufferTokens && (!config.blockAfter || statusAfterActivation.pendingTokens < config.blockAfter);
 
           if (shouldDefer) {
             stepLog.push(
