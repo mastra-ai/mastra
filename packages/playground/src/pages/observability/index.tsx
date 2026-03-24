@@ -39,7 +39,9 @@ export default function Observability() {
     label: 'All',
     type: 'all' as const,
   });
-  const [selectedDateFrom, setSelectedDateFrom] = useState<Date | undefined>(undefined);
+  const [selectedDateFrom, setSelectedDateFrom] = useState<Date | undefined>(
+    () => new Date(Date.now() - 24 * 60 * 60 * 1000),
+  );
   const [selectedDateTo, setSelectedDateTo] = useState<Date | undefined>(undefined);
   const [groupByThread, setGroupByThread] = useState<boolean>(false);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
@@ -106,10 +108,11 @@ export default function Observability() {
     if (!deferredSearchQuery.trim()) return allTraces;
     const q = deferredSearchQuery.trim().toLowerCase();
     return allTraces.filter(t => {
+      if (t.traceId?.toLowerCase().includes(q)) return true;
       if (t.name?.toLowerCase().includes(q)) return true;
       if (t.entityId?.toLowerCase().includes(q)) return true;
       if (t.entityName?.toLowerCase().includes(q)) return true;
-      const meta = (t as any).metadata;
+      const meta = t.metadata;
       if (meta && typeof meta === 'object') {
         for (const val of Object.values(meta)) {
           if (String(val).toLowerCase().includes(q)) return true;
@@ -130,7 +133,7 @@ export default function Observability() {
     let changed = false;
     const acc = metadataAccRef.current;
     for (const trace of allTraces) {
-      const meta = (trace as any).metadata;
+      const meta = trace.metadata;
       if (meta && typeof meta === 'object') {
         for (const [key, value] of Object.entries(meta)) {
           if (value == null) continue;
@@ -160,7 +163,7 @@ export default function Observability() {
     const acc = contextAccRef.current;
     for (const trace of allTraces) {
       for (const field of CONTEXT_FIELD_IDS) {
-        const value = (trace as any)[field];
+        const value = trace[field];
         if (value != null && typeof value === 'string' && value.trim()) {
           if (!acc[field]) {
             acc[field] = new Set();
