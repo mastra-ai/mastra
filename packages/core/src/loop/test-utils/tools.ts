@@ -1514,7 +1514,11 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       // causing the LLM to see them as parallel calls from a single turn.
       const call1Idx = partTypes.findIndex((t: string) => t.includes('call-1'));
       const call2Idx = partTypes.findIndex((t: string) => t.includes('call-2'));
-      const stepStartsBetween = partTypes.slice(call1Idx, call2Idx).filter((t: string) => t === 'step-start');
+      expect(call1Idx).toBeGreaterThanOrEqual(0);
+      expect(call2Idx).toBeGreaterThanOrEqual(0);
+      expect(call2Idx).toBeGreaterThan(call1Idx);
+
+      const stepStartsBetween = partTypes.slice(call1Idx + 1, call2Idx).filter((t: string) => t === 'step-start');
       expect(stepStartsBetween.length).toBeGreaterThanOrEqual(1);
     });
   });
