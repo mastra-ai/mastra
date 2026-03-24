@@ -1,17 +1,15 @@
 'use client';
 
+import { EyeIcon, XIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { EyeIcon, ListTreeIcon } from 'lucide-react';
-import { getShortId } from '@/ds/components/Text';
-import { Section } from '@/ds/components/Section';
-import { XIcon } from 'lucide-react';
-import { Button } from '@/ds/components/Button';
-import { Column } from '@/ds/components/Columns/column';
-import { MainHeader } from '@/ds/components/MainHeader';
 import { useExperimentTrace } from '../hooks/use-experiment-trace';
 import { formatTraceSpans } from '../utils/format-trace-spans';
 import { ExperimentTraceTimeline } from './experiment-trace-timeline';
 import { ExperimentTraceTimelineTools } from './experiment-trace-timeline-tools';
+import { Button } from '@/ds/components/Button';
+import { Column } from '@/ds/components/Columns/column';
+import { MainHeader } from '@/ds/components/MainHeader';
+import { getShortId } from '@/ds/components/Text';
 
 export type ExperimentResultTracePanelProps = {
   traceId: string;
@@ -84,7 +82,7 @@ export function ExperimentResultTracePanel({
   return (
     <>
       <Column.Toolbar>
-        <Button variant="standard" size="default" onClick={onClose} aria-label="Close trace panel">
+        <Button onClick={onClose} aria-label="Close trace panel">
           <XIcon />
         </Button>
       </Column.Toolbar>

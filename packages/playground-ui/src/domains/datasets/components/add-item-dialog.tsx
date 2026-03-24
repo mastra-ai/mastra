@@ -1,12 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
-import { Button } from '@/ds/components/Button';
-import { Label } from '@/ds/components/Label';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { toast } from '@/lib/toast';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
+import { Button } from '@/ds/components/Button';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
+import { Label } from '@/ds/components/Label';
+import { toast } from '@/lib/toast';
 
 /** Schema validation error from API */
 interface SchemaValidationError {
@@ -168,10 +168,10 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
             </div>
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" variant="standard" size="default" onClick={handleCancel}>
+              <Button type="button" onClick={handleCancel}>
                 Cancel
               </Button>
-              <Button type="submit" variant="cta" size="default" disabled={addItem.isPending}>
+              <Button type="submit" variant="primary" disabled={addItem.isPending}>
                 {addItem.isPending ? 'Adding...' : 'Add Item'}
               </Button>
             </div>

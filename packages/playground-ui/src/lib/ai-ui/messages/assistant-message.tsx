@@ -1,12 +1,12 @@
 import { ActionBarPrimitive, MessagePrimitive, useMessage } from '@assistant-ui/react';
 import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
 
-import { ErrorAwareText } from './error-aware-text';
-import { IconButton } from '@/ds/components/IconButton';
 import { ToolFallback } from '../tools/tool-fallback';
+import { ErrorAwareText } from './error-aware-text';
 import { Reasoning } from './reasoning';
-import { cn } from '@/lib/utils';
 import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provider-logo';
+import { IconButton } from '@/ds/components/IconButton';
+import { cn } from '@/lib/utils';
 
 /**
  * Content item type for assistant message content parts.
@@ -78,25 +78,20 @@ const AssistantActionBar = () => {
     >
       <MessagePrimitive.If speaking={false}>
         <ActionBarPrimitive.Speak asChild>
-          <IconButton variant="light" size="md" tooltip="Read aloud">
+          <IconButton tooltip="Read aloud">
             <AudioLinesIcon />
           </IconButton>
         </ActionBarPrimitive.Speak>
       </MessagePrimitive.If>
       <MessagePrimitive.If speaking>
         <ActionBarPrimitive.StopSpeaking asChild>
-          <IconButton variant="light" size="md" tooltip="Stop">
+          <IconButton tooltip="Stop">
             <StopCircleIcon />
           </IconButton>
         </ActionBarPrimitive.StopSpeaking>
       </MessagePrimitive.If>
       <ActionBarPrimitive.Copy asChild>
-        <IconButton
-          variant="light"
-          size="md"
-          tooltip="Copy"
-          className="bg-transparent text-neutral3 hover:text-neutral6"
-        >
+        <IconButton tooltip="Copy">
           <MessagePrimitive.If copied>
             <CheckIcon />
           </MessagePrimitive.If>

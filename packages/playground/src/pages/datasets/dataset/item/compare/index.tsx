@@ -21,6 +21,8 @@ import {
   Columns,
   Column,
   ButtonsGroup,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { Database, ArrowLeft, GitCompareIcon, History, ArrowLeftIcon, DiffIcon, ColumnsIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
@@ -43,12 +45,22 @@ function DatasetItemsComparePage() {
   const { datasetId } = useParams<{ datasetId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const itemIds = searchParams.get('items')?.split(',').filter(Boolean) ?? [];
-  const { data: dataset } = useDataset(datasetId ?? '');
+  const { data: dataset, error } = useDataset(datasetId ?? '');
   const { Link: FrameworkLink } = useLinkComponent();
   const [isDiffView, setIsDiffView] = useState<boolean>(false);
 
   const { data: itemA } = useDatasetItem(datasetId ?? '', itemIds[0] ?? '');
   const { data: itemB } = useDatasetItem(datasetId ?? '', itemIds[1] ?? '');
+
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="datasets" />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   if (!datasetId || itemIds.length < 2) {
     return (
@@ -125,11 +137,11 @@ function DatasetItemsComparePage() {
             </MainHeader.Column>
             <MainHeader.Column>
               <ButtonsGroup>
-                <Button as={Link} to={`/datasets/${datasetId}`} variant="standard" size="default">
+                <Button as={Link} to={`/datasets/${datasetId}`}>
                   <ArrowLeftIcon />
                   Back to Dataset
                 </Button>
-                <Button variant="cta" size="default" onClick={() => setIsDiffView(v => !v)}>
+                <Button variant="primary" onClick={() => setIsDiffView(v => !v)}>
                   {isDiffView ? (
                     <>
                       <ColumnsIcon /> Default View
@@ -208,11 +220,9 @@ function CompareItemColumn({
           onValueChange={onItemChange}
           options={options}
           placeholder="Select item"
-          variant="experimental"
-          size="default"
           labelIsHidden={true}
         />
-        <Button as={Link} to={`/datasets/${datasetId}/items/${itemId}`} variant="standard" size="default">
+        <Button as={Link} to={`/datasets/${datasetId}/items/${itemId}`}>
           <History />
           Versions
         </Button>

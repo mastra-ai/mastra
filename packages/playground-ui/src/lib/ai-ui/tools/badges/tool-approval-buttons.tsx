@@ -1,7 +1,7 @@
+import { Check, X } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons';
 import { useToolCall } from '@/services/tool-call-provider';
-import { Check, X } from 'lucide-react';
 
 export interface ToolApprovalButtonsProps {
   toolCallId: string;

@@ -31,7 +31,13 @@ async function listScorersFromSystem({
 
   const scorersMap = new Map<
     string,
-    MastraScorerEntry & { agentIds: string[]; agentNames: string[]; workflowIds: string[]; isRegistered: boolean }
+    MastraScorerEntry & {
+      agentIds: string[];
+      agentNames: string[];
+      workflowIds: string[];
+      isRegistered: boolean;
+      source: 'code' | 'stored';
+    }
   >();
 
   // Helper function to process an agent's scorers
@@ -58,6 +64,7 @@ async function listScorersFromSystem({
             agentNames: [agent.name],
             agentIds: [agent.id],
             isRegistered: false,
+            source: scorer.scorer.source ?? 'code',
           });
         }
       }
@@ -124,6 +131,7 @@ async function listScorersFromSystem({
             ...scorer,
             workflowIds: [workflowId],
             isRegistered: false,
+            source: scorer.scorer.source ?? 'code',
           });
         }
       }
@@ -142,6 +150,7 @@ async function listScorersFromSystem({
         agentNames: [],
         workflowIds: [],
         isRegistered: true,
+        source: scorer.source ?? 'code',
       });
     }
   }
@@ -176,13 +185,13 @@ export const LIST_SCORERS_ROUTE = createRoute({
   description: 'Returns a list of all registered scorers with their configuration and associated agents and workflows',
   tags: ['Scoring'],
   requiresAuth: true,
-  handler: async ({ mastra, requestContext }) => {
+  handler: (async ({ mastra, requestContext }: any) => {
     const scorers = await listScorersFromSystem({
       mastra,
       requestContext,
     });
     return scorers;
-  },
+  }) as any,
 });
 
 export const GET_SCORER_ROUTE = createRoute({
@@ -195,7 +204,7 @@ export const GET_SCORER_ROUTE = createRoute({
   description: 'Returns details for a specific scorer including its configuration and associations',
   tags: ['Scoring'],
   requiresAuth: true,
-  handler: async ({ mastra, scorerId, requestContext }) => {
+  handler: (async ({ mastra, scorerId, requestContext }: any) => {
     const scorers = await listScorersFromSystem({
       mastra,
       requestContext,
@@ -208,7 +217,7 @@ export const GET_SCORER_ROUTE = createRoute({
     }
 
     return scorer;
-  },
+  }) as any,
 });
 
 export const LIST_SCORES_BY_RUN_ID_ROUTE = createRoute({

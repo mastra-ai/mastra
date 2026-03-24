@@ -83,10 +83,13 @@ export const HEAD = handle(app);
       apiPrefix: `'/api'`,
       basePath: '',
       hideCloudCta: `'true'`,
+      templates: `'false'`,
       cloudApiEndpoint: `''`,
       experimentalFeatures: `'false'`,
       telemetryDisabled: `''`,
       requestContextPresets: `''`,
+      themeToggle: `'false'`,
+      experimentalUI: `'false'`,
     });
 
     writeFileSync(indexPath, html);

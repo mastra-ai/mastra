@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent';
 import { MessageList } from '../../agent/message-list';
@@ -14,10 +14,13 @@ import type { Event } from '../../events';
 import type { Mastra } from '../../mastra';
 import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
-import type { Processor } from '../../processors';
-import { ProcessorRunner, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
+import { executeWithContext } from '../../observability/utils';
+import type { OutputResult, Processor } from '../../processors';
+import { ProcessorRunner, ProcessorState, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
 import type { ProcessorStepOutput } from '../../processors/step-schema';
-import type { InferSchemaOutput, SchemaWithValidation } from '../../stream/base/schema';
+import { toStandardSchema } from '../../schema';
+import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../../schema';
+
 import { WorkflowRunOutput } from '../../stream/RunOutput';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
@@ -41,7 +44,9 @@ import type {
   DefaultEngineType,
   StepMetadata,
 } from '../../workflows/types';
-import { PUBSUB_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { forwardAgentStreamChunk } from '../stream-utils';
+import type { StreamChunkWriter } from '../stream-utils';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk } from './helpers';
 import type { TripwireChunk } from './helpers';
@@ -161,20 +166,20 @@ function isProcessor(obj: unknown): obj is Processor {
  */
 export function createStep<
   TStepId extends string,
-  TStateSchema extends z.ZodTypeAny | undefined,
-  TInputSchema extends z.ZodTypeAny,
-  TOutputSchema extends z.ZodTypeAny,
-  TResumeSchema extends z.ZodTypeAny | undefined = undefined,
-  TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TStateSchema extends PublicSchema | undefined,
+  TInputSchema extends PublicSchema,
+  TOutputSchema extends PublicSchema,
+  TResumeSchema extends PublicSchema | undefined = undefined,
+  TSuspendSchema extends PublicSchema | undefined = undefined,
 >(
   params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
 ): Step<
   TStepId,
-  TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
-  z.infer<TInputSchema>,
-  z.infer<TOutputSchema>,
-  TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
-  TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
+  TStateSchema extends PublicSchema ? InferPublicSchema<TStateSchema> : unknown,
+  InferPublicSchema<TInputSchema>,
+  InferPublicSchema<TOutputSchema>,
+  TResumeSchema extends PublicSchema ? InferPublicSchema<TResumeSchema> : unknown,
+  TSuspendSchema extends PublicSchema ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType
 >;
 
@@ -233,8 +238,8 @@ export function createStep<TProcessorId extends string>(
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
-  InferSchemaOutput<typeof ProcessorStepSchema>,
-  InferSchemaOutput<typeof ProcessorStepOutputSchema>,
+  InferStandardSchemaOutput<typeof ProcessorStepSchema>,
+  InferStandardSchemaOutput<typeof ProcessorStepOutputSchema>,
   unknown,
   unknown,
   DefaultEngineType
@@ -247,20 +252,20 @@ export function createStep<TProcessorId extends string>(
  */
 export function createStep<
   TStepId extends string,
-  TStateSchema extends z.ZodTypeAny | undefined,
-  TInputSchema extends z.ZodTypeAny,
-  TOutputSchema extends z.ZodTypeAny,
-  TResumeSchema extends z.ZodTypeAny | undefined = undefined,
-  TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TStateSchema extends PublicSchema<any> | undefined,
+  TInputSchema extends PublicSchema<any>,
+  TOutputSchema extends PublicSchema<any>,
+  TResumeSchema extends PublicSchema<any> | undefined = undefined,
+  TSuspendSchema extends PublicSchema<any> | undefined = undefined,
 >(
   params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
 ): Step<
   TStepId,
-  TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
-  z.infer<TInputSchema>,
-  z.infer<TOutputSchema>,
-  TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
-  TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
+  TStateSchema extends PublicSchema<any> ? InferPublicSchema<TStateSchema> : unknown,
+  InferPublicSchema<TInputSchema>,
+  InferPublicSchema<TOutputSchema>,
+  TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
+  TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType
 >;
 
@@ -294,22 +299,59 @@ export function createStep(params: any, agentOrToolOptions?: any): Step<any, any
 // Internal Implementations
 // ============================================
 
-function createStepFromParams(
-  params: StepParams<any, any, any, any, any, any, any>,
-): Step<any, any, any, any, any, any, DefaultEngineType, any> {
+function createStepFromParams<
+  TStepId extends string,
+  TStateSchema extends PublicSchema<any> | undefined,
+  TInputSchema extends PublicSchema<any>,
+  TOutputSchema extends PublicSchema<any>,
+  TResumeSchema extends PublicSchema<any> | undefined = undefined,
+  TSuspendSchema extends PublicSchema<any> | undefined = undefined,
+  TRequestContextSchema extends PublicSchema<any> | undefined = undefined,
+>(
+  params: StepParams<
+    TStepId,
+    TStateSchema,
+    TInputSchema,
+    TOutputSchema,
+    TResumeSchema,
+    TSuspendSchema,
+    TRequestContextSchema
+  >,
+): Step<
+  TStepId,
+  TStateSchema extends PublicSchema<any> ? InferPublicSchema<TStateSchema> : unknown,
+  InferPublicSchema<TInputSchema>,
+  InferPublicSchema<TOutputSchema>,
+  TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
+  TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
+  DefaultEngineType,
+  TRequestContextSchema extends PublicSchema<any> ? InferPublicSchema<TRequestContextSchema> : unknown
+> {
+  // Type assertion needed because toStandardSchema returns StandardSchemaWithJSON<unknown>
+  // but we need it to match the inferred generic types. The public overloads ensure
+  // type safety for consumers.
   return {
     id: params.id,
     description: params.description,
-    inputSchema: params.inputSchema,
-    stateSchema: params.stateSchema,
-    outputSchema: params.outputSchema,
-    resumeSchema: params.resumeSchema,
-    suspendSchema: params.suspendSchema,
-    requestContextSchema: params.requestContextSchema,
+    inputSchema: toStandardSchema(params.inputSchema),
+    stateSchema: params.stateSchema ? toStandardSchema(params.stateSchema) : undefined,
+    outputSchema: toStandardSchema(params.outputSchema),
+    resumeSchema: params.resumeSchema ? toStandardSchema(params.resumeSchema) : undefined,
+    suspendSchema: params.suspendSchema ? toStandardSchema(params.suspendSchema) : undefined,
+    requestContextSchema: params.requestContextSchema ? toStandardSchema(params.requestContextSchema) : undefined,
     scorers: params.scorers,
     retries: params.retries,
     metadata: params.metadata,
-    execute: params.execute.bind(params),
+    execute: params.execute.bind(params) as Step<
+      TStepId,
+      TStateSchema extends PublicSchema<any> ? InferPublicSchema<TStateSchema> : unknown,
+      InferPublicSchema<TInputSchema>,
+      InferPublicSchema<TOutputSchema>,
+      TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
+      TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
+      DefaultEngineType,
+      TRequestContextSchema extends PublicSchema<any> ? InferPublicSchema<TRequestContextSchema> : unknown
+    >['execute'],
   };
 }
 
@@ -323,9 +365,11 @@ async function processAgentStream(params: {
   pubsub: { publish: (channel: string, data: any) => Promise<void> };
   runId: string;
   toolData: { name: string; args: unknown };
+  writer?: StreamChunkWriter;
+  streamFormat?: 'legacy' | 'vnext';
   logger?: { debug: (msg: string, data?: unknown) => void };
 }): Promise<{ tripwireChunk: TripwireChunk | null }> {
-  const { fullStream, isV2Model, pubsub, runId, toolData, logger } = params;
+  const { fullStream, isV2Model, pubsub, runId, toolData, logger, writer, streamFormat } = params;
 
   // Publish stream start event
   try {
@@ -363,6 +407,10 @@ async function processAgentStream(params: {
           logger?.debug('Failed to publish stream delta event', { runId, error: err });
         }
       }
+    }
+
+    if (streamFormat !== 'legacy') {
+      await forwardAgentStreamChunk({ writer, chunk });
     }
   }
 
@@ -411,16 +459,18 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     | undefined;
   // Determine output schema based on structuredOutput option
   const outputSchema = (options?.structuredOutput?.schema ??
-    z.object({ text: z.string() })) as unknown as SchemaWithValidation<TStepOutput>;
+    z.object({ text: z.string() })) as unknown as PublicSchema<TStepOutput>;
   const { retries, scorers, metadata, ...agentOptions } = options ?? {};
 
   return {
     id: params.id,
     description: params.getDescription(),
-    inputSchema: z.object({
-      prompt: z.string(),
-    }),
-    outputSchema,
+    inputSchema: toStandardSchema(
+      z.object({
+        prompt: z.string(),
+      }),
+    ),
+    outputSchema: toStandardSchema(outputSchema),
     retries,
     scorers,
     metadata,
@@ -429,9 +479,11 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       runId,
       mastra,
       [PUBSUB_SYMBOL]: pubsub,
+      [STREAM_FORMAT_SYMBOL]: streamFormat,
       requestContext,
       abortSignal,
       abort,
+      writer,
       ...obsFields
     }) => {
       const observabilityContext = resolveObservabilityContext(obsFields);
@@ -463,6 +515,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
 
       if (isV2Model) {
         // V2+ model path: use .stream() which returns MastraModelOutput
+        // @ts-expect-error - TODO: fix this
         const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
           ...(agentOptions ?? {}),
           ...observabilityContext,
@@ -508,6 +561,8 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         runId,
         toolData,
         logger,
+        writer,
+        streamFormat,
       });
 
       // Handle tripwire if detected
@@ -594,8 +649,8 @@ function createStepFromProcessor<TProcessorId extends string>(
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
-  InferSchemaOutput<typeof ProcessorStepSchema>,
-  InferSchemaOutput<typeof ProcessorStepOutputSchema>,
+  InferStandardSchemaOutput<typeof ProcessorStepSchema>,
+  InferStandardSchemaOutput<typeof ProcessorStepOutputSchema>,
   unknown,
   unknown,
   DefaultEngineType
@@ -653,17 +708,26 @@ function createStepFromProcessor<TProcessorId extends string>(
     }
   };
 
+  // Note: Zod v4 schemas natively implement StandardSchemaWithJSON at runtime,
+  // but TypeScript type inference has issues with the complex discriminated union types.
+  // We use type assertions here since toStandardSchema returns the schema directly
+  // when it already implements StandardSchemaWithJSON.
   return {
     id: `processor:${processor.id}`,
     description: processor.name ?? `Processor ${processor.id}`,
-    inputSchema: ProcessorStepSchema,
-    outputSchema: ProcessorStepOutputSchema,
+    inputSchema: toStandardSchema(ProcessorStepSchema) as StandardSchemaWithJSON<z.infer<typeof ProcessorStepSchema>>,
+    outputSchema: toStandardSchema(ProcessorStepOutputSchema) as StandardSchemaWithJSON<
+      z.infer<typeof ProcessorStepOutputSchema>
+    >,
     execute: async ({ inputData, requestContext, ...obsFields }) => {
       const observabilityContext = resolveObservabilityContext(obsFields);
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
-      const input = inputData as ProcessorStepOutput & { abortSignal?: AbortSignal };
+      const input = inputData as ProcessorStepOutput & {
+        processorStates?: Map<string, ProcessorState>;
+        abortSignal?: AbortSignal;
+      };
       const {
         phase,
         messages,
@@ -673,6 +737,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         part,
         streamParts,
         state,
+        result: outputResult,
         finishReason,
         toolCalls,
         text,
@@ -686,6 +751,10 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
+        messageId,
+        rotateResponseMessageId,
+        // Shared processor states map for accessing persisted state
+        processorStates,
         // Abort signal for cancelling in-flight processor work (e.g. OM observations)
         abortSignal,
       } = input;
@@ -694,6 +763,13 @@ function createStepFromProcessor<TProcessorId extends string>(
       const abort = (reason?: string, options?: { retry?: boolean; metadata?: unknown }): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
       };
+      let currentMessageId = messageId;
+      const rotateCurrentResponseMessageId = rotateResponseMessageId
+        ? () => {
+            currentMessageId = rotateResponseMessageId();
+            return currentMessageId;
+          }
+        : undefined;
 
       // Early return if processor doesn't implement this phase - no span created
       // This prevents empty spans for phases the processor doesn't handle
@@ -736,15 +812,33 @@ function createStepFromProcessor<TProcessorId extends string>(
         processorSpan ? { currentSpan: processorSpan } : observabilityContext.tracingContext,
       );
 
+      // If processorStates map is provided (from ProcessorRunner), use it to get this processor's state
+      // Otherwise fall back to the state passed in inputData
+      let processorState: Record<string, unknown>;
+      if (processorStates) {
+        // Get or create the ProcessorState for this processor
+        let ps = processorStates.get(processor.id);
+        if (!ps) {
+          ps = new ProcessorState();
+          processorStates.set(processor.id, ps);
+        }
+        processorState = ps.customState;
+      } else {
+        processorState = state ?? {};
+      }
+
       // Base context for all processor methods - includes requestContext for memory processors
       // and observabilityContext for proper span nesting when processors call internal agents
+      // state is per-processor state that persists across all method calls within this request
       const baseContext = {
         abort,
         retryCount: retryCount ?? 0,
         requestContext,
         ...processorObservabilityContext,
-        state: state ?? {},
+        state: processorState,
         abortSignal,
+        messageId: currentMessageId,
+        rotateResponseMessageId: rotateCurrentResponseMessageId,
       };
 
       // Pass-through data that should flow to the next processor in a chain
@@ -764,6 +858,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         systemMessages,
         streamParts,
         state,
+        result: outputResult,
         finishReason,
         toolCalls,
         text,
@@ -777,12 +872,16 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
+        messageId: currentMessageId,
+        rotateResponseMessageId: rotateCurrentResponseMessageId,
       };
 
       // Helper to execute phase with proper span lifecycle management
+      // Uses executeWithContext to set the processor span as the active OTEL context,
+      // so auto-instrumented operations inside processors nest correctly under the span.
       const executePhaseWithSpan = async <T>(fn: () => Promise<T>): Promise<T> => {
         try {
-          const result = await fn();
+          const result = await executeWithContext({ span: processorSpan, fn });
           processorSpan?.end({ output: result });
           return result;
         } catch (error) {
@@ -898,6 +997,8 @@ function createStepFromProcessor<TProcessorId extends string>(
                 modelSettings,
                 structuredOutput,
                 steps: steps ?? [],
+                messageId: currentMessageId,
+                rotateResponseMessageId: rotateCurrentResponseMessageId,
               });
 
               const validatedResult = await ProcessorRunner.validateAndFormatProcessInputStepResult(result, {
@@ -920,18 +1021,25 @@ function createStepFromProcessor<TProcessorId extends string>(
               }
 
               // Preserve messages in return - passThrough doesn't include messages,
-              // so we must explicitly include it to avoid losing it for subsequent steps
-              return { ...passThrough, messages, ...validatedResult };
+              // so we must explicitly include it to avoid losing it for subsequent steps.
+              return {
+                ...passThrough,
+                messages,
+                ...validatedResult,
+                ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
+              };
             }
             return { ...passThrough, messages };
           }
 
           case 'outputStream': {
-            if (processor.processOutputStream) {
+            if (processor.processOutputStream && part) {
               // Manage per-processor span lifecycle across stream chunks
               // Use unique key to store span on shared state object
               const spanKey = `__outputStreamSpan_${processor.id}`;
-              const mutableState = (state ?? {}) as Record<string, unknown>;
+              // Use processorState (from the shared processorStates Map) so state persists
+              // across processOutputStream and processOutputResult calls
+              const mutableState = processorState;
               let processorSpan = mutableState[spanKey] as
                 | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
                 | undefined;
@@ -1016,10 +1124,18 @@ function createStepFromProcessor<TProcessorId extends string>(
               const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
               const check = passThrough.messageList.makeMessageSourceChecker();
 
+              const defaultResult: OutputResult = {
+                text: '',
+                usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                finishReason: 'unknown',
+                steps: [],
+              };
+
               const result = await processor.processOutputResult({
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
                 messageList: passThrough.messageList,
+                result: (passThrough.result as OutputResult) ?? defaultResult,
               });
 
               if (result instanceof MessageList) {
@@ -1149,7 +1265,15 @@ function createStepFromProcessor<TProcessorId extends string>(
       });
     },
     component: 'PROCESSOR',
-  };
+  } satisfies Step<
+    `processor:${TProcessorId}`,
+    unknown,
+    InferStandardSchemaOutput<typeof ProcessorStepSchema>,
+    InferStandardSchemaOutput<typeof ProcessorStepOutputSchema>,
+    unknown,
+    unknown,
+    DefaultEngineType
+  >;
 }
 
 export function createWorkflow<
@@ -1311,8 +1435,8 @@ export class EventedRun<
     cleanup?: () => void;
     workflowSteps: Record<string, StepWithComponent>;
     validateInputs?: boolean;
-    inputSchema?: SchemaWithValidation<TInput>;
-    stateSchema?: SchemaWithValidation<TState>;
+    inputSchema?: StandardSchemaWithJSON<TInput>;
+    stateSchema?: StandardSchemaWithJSON<TState>;
     workflowEngineType: WorkflowEngineType;
   }) {
     super(params);

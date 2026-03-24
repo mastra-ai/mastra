@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
@@ -12,7 +12,7 @@ export const getProcessOutputTool = createTool({
 Use this after starting a background command with execute_command (background: true) to check if the process is still running and read its output.`,
   toModelOutput: sandboxToModelOutput,
   inputSchema: z.object({
-    pid: z.number().describe('The process ID returned when the background command was started'),
+    pid: z.string().describe('The process ID returned when the background command was started'),
     tail: z
       .number()
       .optional()
@@ -58,6 +58,7 @@ Use this after starting a background command with execute_command (background: t
               await context.writer!.custom({
                 type: 'data-sandbox-stdout',
                 data: { output: data, timestamp: Date.now(), toolCallId },
+                transient: true,
               });
             }
           : undefined,
@@ -66,6 +67,7 @@ Use this after starting a background command with execute_command (background: t
               await context.writer!.custom({
                 type: 'data-sandbox-stderr',
                 data: { output: data, timestamp: Date.now(), toolCallId },
+                transient: true,
               });
             }
           : undefined,

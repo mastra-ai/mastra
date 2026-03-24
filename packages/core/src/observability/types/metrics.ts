@@ -1,8 +1,13 @@
+import type { CorrelationContext } from './core';
+
 // ============================================================================
 // Metric Type
 // ============================================================================
 
-/** Types of metrics */
+/**
+ * @deprecated MetricType is no longer stored. All metrics are raw events
+ * with aggregation determined at query time.
+ */
 export type MetricType = 'counter' | 'gauge' | 'histogram';
 
 // ============================================================================
@@ -11,22 +16,36 @@ export type MetricType = 'counter' | 'gauge' | 'histogram';
 
 /**
  * MetricsContext - API for emitting metrics.
- * Provides counter, gauge, and histogram metric types.
+ * Use `emit()` to record a metric observation.
  */
+export interface MetricEmitOptions {
+  /** Canonical model/cost context for this specific metric row */
+  costContext?: CostContext;
+}
+
 export interface MetricsContext {
+  /** Emit a metric observation. */
+  emit(name: string, value: number, labels?: Record<string, string>, options?: MetricEmitOptions): void;
+
+  /** @deprecated Use `emit()` instead. */
   counter(name: string): Counter;
+  /** @deprecated Use `emit()` instead. */
   gauge(name: string): Gauge;
+  /** @deprecated Use `emit()` instead. */
   histogram(name: string): Histogram;
 }
 
+/** @deprecated Use MetricsContext.emit() instead. */
 export interface Counter {
   add(value: number, additionalLabels?: Record<string, string>): void;
 }
 
+/** @deprecated Use MetricsContext.emit() instead. */
 export interface Gauge {
   set(value: number, additionalLabels?: Record<string, string>): void;
 }
 
+/** @deprecated Use MetricsContext.emit() instead. */
 export interface Histogram {
   record(value: number, additionalLabels?: Record<string, string>): void;
 }
@@ -36,12 +55,23 @@ export interface Histogram {
 // ============================================================================
 
 /**
+ * Typed context used for cost estimations.
+ */
+export interface CostContext {
+  provider?: string;
+  model?: string;
+  estimatedCost?: number;
+  costUnit?: string;
+  costMetadata?: Record<string, unknown>;
+}
+
+/**
  * Metric data transported via the event bus.
  * Represents a single metric observation.
  * Must be JSON-serializable (Date serializes via toJSON()).
  *
- * Environment fields (organizationId, environment, serviceName) are stored
- * in metadata, following the same pattern as tracing spans.
+ * Canonical correlation fields travel in `correlationContext` and canonical
+ * pricing/model fields travel in `costContext`.
  *
  * Note: Histogram aggregation (bucket counts, sum, count) is computed at
  * the storage layer, not in the individual metric event.
@@ -53,20 +83,22 @@ export interface ExportedMetric {
   /** Metric name (e.g., mastra_agent_duration_ms) */
   name: string;
 
-  /** Type of metric */
-  metricType: MetricType;
-
   /** Metric value (single observation) */
   value: number;
 
   /** Metric labels for dimensional filtering */
   labels: Record<string, string>;
 
+  /** Context for correlation to traces */
+  correlationContext?: CorrelationContext;
+
+  /** Context for cost estimation */
+  costContext?: CostContext;
+
   /**
    * User-defined metadata.
-   * Environment fields are stored here: organizationId, environment,
-   * serviceName, etc. These are kept separate from labels to avoid
-   * cardinality issues.
+   * This is reserved for non-canonical metadata that does not belong
+   * in record context or cost context.
    */
   metadata?: Record<string, unknown>;
 }

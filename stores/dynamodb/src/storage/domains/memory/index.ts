@@ -396,6 +396,24 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         direction,
       });
 
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
+      // When perPage is 0, we only need included messages — skip thread load entirely
+      if (perPage === 0 && include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        const list = new MessageList().add(includeMessages, 'memory');
+        return {
+          messages: this._sortMessages(list.get.all.db(), field, direction),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
       const query = this.service.entities.message.query.byThread({ entity: 'message', threadId });
       const results = await query.go();
@@ -453,8 +471,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       if (include && include.length > 0) {
         // Use the existing _getIncludedMessages helper, but adapt it for listMessages format
-        const selectBy = { include };
-        includeMessages = await this._getIncludedMessages(selectBy);
+        includeMessages = await this._getIncludedMessages({ include });
 
         // Deduplicate: only add messages that aren't already in the paginated results
         for (const includeMsg of includeMessages) {
@@ -470,17 +487,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       let finalMessages = list.get.all.db();
 
       // Sort all messages (paginated + included) for final output
-      finalMessages = finalMessages.sort((a, b) => {
-        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
-        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
-
-        // Handle tiebreaker for stable sorting
-        if (aValue === bValue) {
-          return a.id.localeCompare(b.id);
-        }
-
-        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-      });
+      finalMessages = this._sortMessages(finalMessages, field, direction);
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
@@ -721,90 +728,107 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   }
 
   // Helper method to get included messages with context
-  private async _getIncludedMessages(selectBy: any): Promise<MastraDBMessage[]> {
-    if (!selectBy?.include?.length) {
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    return messages.sort((a, b) => {
+      const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+      const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+
+      if (aValue === bValue) {
+        return a.id.localeCompare(b.id);
+      }
+
+      return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+    });
+  }
+
+  private async _getIncludedMessages({
+    include,
+  }: {
+    include: StorageListMessagesInput['include'];
+  }): Promise<MastraDBMessage[]> {
+    if (!include?.length) {
       return [];
     }
 
-    const includeMessages: MastraDBMessage[] = [];
+    // Phase 1: Batch-fetch target message metadata in parallel.
+    // This replaces sequential per-include get() + full thread load.
+    const targetResults = await Promise.all(
+      include.map(inc =>
+        this.service.entities.message
+          .get({ entity: 'message', id: inc.id })
+          .go()
+          .then((r: { data: any }) => ({ id: inc.id, data: r.data }))
+          .catch(() => ({ id: inc.id, data: null })),
+      ),
+    );
 
-    for (const includeItem of selectBy.include) {
-      try {
-        const { id, withPreviousMessages = 0, withNextMessages = 0 } = includeItem;
-
-        // Step 1: Get the target message by ID to find its threadId
-        const targetResult = await this.service.entities.message.get({ entity: 'message', id }).go();
-        if (!targetResult.data) {
-          this.logger.warn('Target message not found', { id });
-          continue;
-        }
-
-        const targetMessageData = targetResult.data as any;
-        const searchThreadId = targetMessageData.threadId;
-
-        this.logger.debug('Getting included messages for', {
-          id,
-          searchThreadId,
-          withPreviousMessages,
-          withNextMessages,
-        });
-
-        // Step 2: Get all messages for the target thread
-        const query = this.service.entities.message.query.byThread({ entity: 'message', threadId: searchThreadId });
-        const results = await query.go();
-        const allMessages = results.data
-          .map((data: any) => this.parseMessageData(data))
-          .filter((msg: any): msg is MastraDBMessage => 'content' in msg && typeof msg.content === 'object');
-
-        this.logger.debug('Found messages in thread', {
-          threadId: searchThreadId,
-          messageCount: allMessages.length,
-          messageIds: allMessages.map((m: MastraDBMessage) => m.id),
-        });
-
-        // Sort by createdAt ASC to get proper order, with ID tiebreaker for stable ordering
-        allMessages.sort((a: MastraDBMessage, b: MastraDBMessage) => {
-          const timeA = a.createdAt.getTime();
-          const timeB = b.createdAt.getTime();
-          if (timeA === timeB) {
-            return a.id.localeCompare(b.id);
-          }
-          return timeA - timeB;
-        });
-
-        // Find the target message index
-        const targetIndex = allMessages.findIndex((msg: MastraDBMessage) => msg.id === id);
-        if (targetIndex === -1) {
-          this.logger.warn('Target message not found in thread', { id, threadId: searchThreadId });
-          continue;
-        }
-
-        this.logger.debug('Found target message at index', { id, targetIndex, totalMessages: allMessages.length });
-
-        // Get context messages (previous and next)
-        const startIndex = Math.max(0, targetIndex - withPreviousMessages);
-        const endIndex = Math.min(allMessages.length, targetIndex + withNextMessages + 1);
-        const contextMessages = allMessages.slice(startIndex, endIndex);
-
-        this.logger.debug('Context messages', {
-          startIndex,
-          endIndex,
-          contextCount: contextMessages.length,
-          contextIds: contextMessages.map((m: MastraDBMessage) => m.id),
-        });
-
-        includeMessages.push(...contextMessages);
-      } catch (error) {
-        this.logger.warn('Failed to get included message', { messageId: includeItem.id, error });
+    const targetMap = new Map<string, { threadId: string }>();
+    for (const { id, data } of targetResults) {
+      if (data) {
+        targetMap.set(id, { threadId: (data as any).threadId });
       }
     }
 
-    this.logger.debug('Total included messages', {
-      count: includeMessages.length,
-      ids: includeMessages.map((m: MastraDBMessage) => m.id),
-    });
+    if (targetMap.size === 0) return [];
 
-    return includeMessages;
+    // Phase 2: Load each thread only once (cache across includes from the same thread).
+    // DynamoDB's byThread GSI returns messages sorted by createdAt (sort key).
+    const threadCache = new Map<string, MastraDBMessage[]>();
+    const uniqueThreadIds = [...new Set([...targetMap.values()].map(t => t.threadId))];
+
+    await Promise.all(
+      uniqueThreadIds.map(async threadId => {
+        try {
+          const query = this.service.entities.message.query.byThread({ entity: 'message', threadId });
+          const results = await query.go();
+          const messages = results.data
+            .map((data: any) => this.parseMessageData(data))
+            .filter(
+              (msg: MastraDBMessage | MastraMessageV1): msg is MastraDBMessage =>
+                'content' in msg && typeof msg.content === 'object',
+            );
+
+          // Sort by createdAt ASC with ID tiebreaker for stable ordering
+          messages.sort((a: MastraDBMessage, b: MastraDBMessage) => {
+            const timeA = a.createdAt.getTime();
+            const timeB = b.createdAt.getTime();
+            if (timeA === timeB) return a.id.localeCompare(b.id);
+            return timeA - timeB;
+          });
+
+          threadCache.set(threadId, messages);
+        } catch {
+          // Thread load failed, skip
+        }
+      }),
+    );
+
+    // Phase 3: Slice context windows from cached thread data.
+    const includeMessages: MastraDBMessage[] = [];
+
+    for (const includeItem of include) {
+      const { id, withPreviousMessages = 0, withNextMessages = 0 } = includeItem;
+      const target = targetMap.get(id);
+      if (!target) continue;
+
+      const allMessages = threadCache.get(target.threadId);
+      if (!allMessages) continue;
+
+      const targetIndex = allMessages.findIndex((msg: MastraDBMessage) => msg.id === id);
+      if (targetIndex === -1) continue;
+
+      const startIndex = Math.max(0, targetIndex - withPreviousMessages);
+      const endIndex = Math.min(allMessages.length, targetIndex + withNextMessages + 1);
+      includeMessages.push(...allMessages.slice(startIndex, endIndex));
+    }
+
+    // Deduplicate
+    const seen = new Set<string>();
+    return includeMessages.filter(msg => {
+      if (seen.has(msg.id)) return false;
+      seen.add(msg.id);
+      return true;
+    });
   }
 
   async updateMessages(args: {

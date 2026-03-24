@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Clear the module registry so vi.mock factories take effect even when
@@ -39,6 +40,17 @@ vi.mock('@ai-sdk/anthropic', () => ({
   }),
 }));
 
+// Mock @ai-sdk/openai
+vi.mock('@ai-sdk/openai', () => ({
+  createOpenAI: vi.fn((_opts: Record<string, unknown>) => {
+    const openai = ((modelId: string) => ({ __provider: 'openai-direct', modelId })) as unknown as {
+      responses: (modelId: string) => Record<string, unknown>;
+    };
+    openai.responses = (modelId: string) => ({ __provider: 'openai-direct', modelId });
+    return openai;
+  }),
+}));
+
 // Mock ai SDK's wrapLanguageModel to pass through with a marker
 vi.mock('ai', () => ({
   wrapLanguageModel: vi.fn(({ model }: { model: Record<string, unknown> }) => ({
@@ -49,20 +61,52 @@ vi.mock('ai', () => ({
 
 // Mock ModelRouterLanguageModel
 vi.mock('@mastra/core/llm', () => ({
-  ModelRouterLanguageModel: vi.fn(function (this: Record<string, unknown>, modelId: string) {
+  ModelRouterLanguageModel: vi.fn(function (
+    this: Record<string, unknown>,
+    config: string | { id: string; url?: string; apiKey?: string; headers?: Record<string, string> },
+  ) {
     this.__provider = 'model-router';
-    this.modelId = modelId;
+    this.modelId = typeof config === 'string' ? config : config.id;
+    this.url = typeof config === 'string' ? undefined : config.url;
+    this.apiKey = typeof config === 'string' ? undefined : config.apiKey;
+    this.headers = typeof config === 'string' ? undefined : config.headers;
   }),
 }));
 
+const mockLoadSettings = vi.hoisted(() =>
+  vi.fn<() => { customProviders: Array<{ name: string; url: string; apiKey?: string }> }>(() => ({
+    customProviders: [],
+  })),
+);
+
+vi.mock('../../onboarding/settings.js', () => ({
+  loadSettings: mockLoadSettings,
+  getCustomProviderId: (name: string) =>
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, ''),
+}));
+
 import { opencodeClaudeMaxProvider } from '../../providers/claude-max.js';
-import { resolveModel, getAnthropicApiKey } from '../model.js';
+import { openaiCodexProvider } from '../../providers/openai-codex.js';
+import { resolveModel, getAnthropicApiKey, getOpenAIApiKey } from '../model.js';
+
+function makeRequestContext({ threadId, resourceId }: { threadId?: string; resourceId?: string } = {}) {
+  const requestContext = new RequestContext();
+  requestContext.set('harness', {
+    threadId,
+    resourceId,
+  });
+  return requestContext;
+}
 
 describe('resolveModel', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLoadSettings.mockReturnValue({ customProviders: [] });
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.MOONSHOT_AI_API_KEY;
   });
@@ -72,18 +116,22 @@ describe('resolveModel', () => {
   });
 
   describe('anthropic/* models', () => {
-    it('prefers Claude Max OAuth when logged in, even if API key is present', () => {
-      process.env.ANTHROPIC_API_KEY = 'sk-test-key-123';
-      mockAuthStorageInstance.isLoggedIn.mockImplementation((p: string) => p === 'anthropic');
+    it('prefers Claude Max OAuth when stored OAuth credential exists', () => {
+      mockAuthStorageInstance.get.mockReturnValue({
+        type: 'oauth',
+        access: 'oauth-access-token',
+        refresh: 'oauth-refresh-token',
+        expires: Date.now() + 60_000,
+      });
 
       resolveModel('anthropic/claude-sonnet-4-20250514');
 
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514');
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { headers: undefined });
     });
 
-    it('falls back to API key when not logged in via OAuth', () => {
-      process.env.ANTHROPIC_API_KEY = 'sk-test-key-123';
-      mockAuthStorageInstance.isLoggedIn.mockReturnValue(false);
+    it('uses API key when stored credential is api_key, even if isLoggedIn reports true', () => {
+      mockAuthStorageInstance.isLoggedIn.mockImplementation((p: string) => p === 'anthropic');
+      mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-stored-key-456' });
 
       const result = resolveModel('anthropic/claude-sonnet-4-20250514') as Record<string, unknown>;
 
@@ -91,6 +139,16 @@ describe('resolveModel', () => {
       expect(result.__wrapped).toBe(true);
       expect(result.modelId).toBe('claude-sonnet-4-20250514');
       expect(opencodeClaudeMaxProvider).not.toHaveBeenCalled();
+    });
+
+    it('does not use env API key when no stored Anthropic credential exists', () => {
+      process.env.ANTHROPIC_API_KEY = 'sk-test-key-123';
+      mockAuthStorageInstance.get.mockReturnValue(undefined);
+
+      const result = resolveModel('anthropic/claude-sonnet-4-20250514') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('claude-max-oauth');
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { headers: undefined });
     });
 
     it('uses stored API key credential when not logged in via OAuth', () => {
@@ -106,12 +164,31 @@ describe('resolveModel', () => {
     });
 
     it('falls back to OAuth provider when no auth is configured (to prompt login)', () => {
-      mockAuthStorageInstance.isLoggedIn.mockReturnValue(false);
       mockAuthStorageInstance.get.mockReturnValue(undefined);
 
       resolveModel('anthropic/claude-sonnet-4-20250514');
 
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514');
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { headers: undefined });
+    });
+
+    it('passes harness headers to the Anthropic OAuth provider', () => {
+      mockAuthStorageInstance.get.mockReturnValue({
+        type: 'oauth',
+        access: 'oauth-access-token',
+        refresh: 'oauth-refresh-token',
+        expires: Date.now() + 60_000,
+      });
+
+      resolveModel('anthropic/claude-sonnet-4-20250514', {
+        requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
+      });
+
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', {
+        headers: {
+          'x-thread-id': 'thread-123',
+          'x-resource-id': 'resource-456',
+        },
+      });
     });
 
     it('reloads auth storage before resolving', () => {
@@ -122,16 +199,51 @@ describe('resolveModel', () => {
   });
 
   describe('openai/* models', () => {
-    it('uses codex provider when logged in via OAuth', () => {
-      mockAuthStorageInstance.isLoggedIn.mockReturnValue(true);
+    it('uses codex provider when stored OAuth credential exists', () => {
+      mockAuthStorageInstance.get.mockReturnValue({
+        type: 'oauth',
+        access: 'openai-oauth-access-token',
+        refresh: 'openai-oauth-refresh-token',
+        expires: Date.now() + 60_000,
+      });
       const result = resolveModel('openai/gpt-4o') as Record<string, unknown>;
       expect(result.__provider).toBe('openai-codex');
+      expect(openaiCodexProvider).toHaveBeenCalled();
     });
 
-    it('uses model router when not logged in via OAuth', () => {
-      mockAuthStorageInstance.isLoggedIn.mockReturnValue(false);
+    it('uses direct OpenAI API key provider when stored API key credential exists', () => {
+      mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-openai-key' });
+      const result = resolveModel('openai/gpt-4o') as Record<string, unknown>;
+      expect(result.__provider).toBe('openai-direct');
+      expect(result.__wrapped).toBe(true);
+      expect(result.modelId).toBe('gpt-4o');
+    });
+
+    it('uses model router when no OpenAI auth is configured', () => {
+      mockAuthStorageInstance.get.mockReturnValue(undefined);
       const result = resolveModel('openai/gpt-4o') as Record<string, unknown>;
       expect(result.__provider).toBe('model-router');
+    });
+
+    it('passes harness headers to the OpenAI OAuth provider', () => {
+      mockAuthStorageInstance.get.mockReturnValue({
+        type: 'oauth',
+        access: 'openai-oauth-access-token',
+        refresh: 'openai-oauth-refresh-token',
+        expires: Date.now() + 60_000,
+      });
+
+      resolveModel('openai/gpt-4o', {
+        requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
+      });
+
+      expect(openaiCodexProvider).toHaveBeenCalledWith('gpt-4o', {
+        thinkingLevel: undefined,
+        headers: {
+          'x-thread-id': 'thread-123',
+          'x-resource-id': 'resource-456',
+        },
+      });
     });
   });
 
@@ -139,6 +251,43 @@ describe('resolveModel', () => {
     it('uses model router for unknown providers', () => {
       const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
       expect(result.__provider).toBe('model-router');
+    });
+
+    it('passes harness headers to model router providers', () => {
+      const result = resolveModel('google/gemini-2.0-flash', {
+        requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
+      }) as Record<string, unknown>;
+
+      expect(result.__provider).toBe('model-router');
+      expect(result.headers).toEqual({
+        'x-thread-id': 'thread-123',
+        'x-resource-id': 'resource-456',
+      });
+    });
+
+    it('passes harness headers to custom providers', () => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [
+          {
+            name: 'Acme',
+            url: 'https://llm.acme.dev/v1',
+            apiKey: 'acme-secret',
+          },
+        ],
+      });
+
+      const result = resolveModel('acme/reasoner-v1', {
+        requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
+      }) as Record<string, unknown>;
+
+      expect(result.__provider).toBe('model-router');
+      expect(result.modelId).toBe('acme/reasoner-v1');
+      expect(result.url).toBe('https://llm.acme.dev/v1');
+      expect(result.apiKey).toBe('acme-secret');
+      expect(result.headers).toEqual({
+        'x-thread-id': 'thread-123',
+        'x-resource-id': 'resource-456',
+      });
     });
   });
 });
@@ -155,12 +304,7 @@ describe('getAnthropicApiKey', () => {
     process.env = { ...originalEnv };
   });
 
-  it('returns env var when ANTHROPIC_API_KEY is set', () => {
-    process.env.ANTHROPIC_API_KEY = 'sk-env-key';
-    expect(getAnthropicApiKey()).toBe('sk-env-key');
-  });
-
-  it('returns stored API key when no env var is set', () => {
+  it('returns stored API key when set', () => {
     mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-stored-key' });
     expect(getAnthropicApiKey()).toBe('sk-stored-key');
   });
@@ -175,9 +319,26 @@ describe('getAnthropicApiKey', () => {
     expect(getAnthropicApiKey()).toBeUndefined();
   });
 
-  it('prefers env var over stored credential', () => {
+  it('ignores env var when no stored credential exists', () => {
     process.env.ANTHROPIC_API_KEY = 'sk-env-key';
-    mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-stored-key' });
-    expect(getAnthropicApiKey()).toBe('sk-env-key');
+    mockAuthStorageInstance.get.mockReturnValue(undefined);
+    expect(getAnthropicApiKey()).toBeUndefined();
+  });
+});
+
+describe('getOpenAIApiKey', () => {
+  it('returns stored API key when set', () => {
+    mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-openai-key' });
+    expect(getOpenAIApiKey()).toBe('sk-openai-key');
+  });
+
+  it('returns undefined when no API key is available', () => {
+    mockAuthStorageInstance.get.mockReturnValue(undefined);
+    expect(getOpenAIApiKey()).toBeUndefined();
+  });
+
+  it('returns undefined when stored credential is OAuth type', () => {
+    mockAuthStorageInstance.get.mockReturnValue({ type: 'oauth', access: 'token', refresh: 'r', expires: 0 });
+    expect(getOpenAIApiKey()).toBeUndefined();
   });
 });

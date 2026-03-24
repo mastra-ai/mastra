@@ -1,7 +1,7 @@
 'use client';
 
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
-import { TextAndIcon } from '@/ds/components/Text';
+import { format } from 'date-fns/format';
 import {
   FileOutputIcon,
   Calendar1Icon,
@@ -11,12 +11,12 @@ import {
   OctagonAlertIcon,
   XIcon,
 } from 'lucide-react';
-import { format } from 'date-fns/format';
-import { SideDialog } from '@/ds/components/SideDialog';
 import { Column } from '@/ds/components/Columns/column';
-import { PrevNextNav } from '@/ds/components/PrevNextNav';
 import { ItemList } from '@/ds/components/ItemList';
 import { MainHeader } from '@/ds/components/MainHeader';
+import { PrevNextNav } from '@/ds/components/PrevNextNav';
+import { SideDialog } from '@/ds/components/SideDialog';
+import { TextAndIcon } from '@/ds/components/Text';
 import { Button, ButtonsGroup, Notice } from '@/index';
 
 const scoreColumns = [
@@ -59,11 +59,11 @@ export function ExperimentResultPanel({
           nextAriaLabel="View next result details"
         />
         <ButtonsGroup>
-          <Button variant="standard" size="default" onClick={onShowTrace} disabled={!result.traceId}>
+          <Button onClick={onShowTrace} disabled={!result.traceId}>
             <PanelRightIcon />
             Show Trace
           </Button>
-          <Button variant="standard" size="default" onClick={onClose} aria-label="Close result details panel">
+          <Button onClick={onClose} aria-label="Close result details panel">
             <XIcon />
           </Button>
         </ButtonsGroup>

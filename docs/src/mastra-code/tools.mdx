@@ -144,10 +144,11 @@ Request access to directories outside the project root. The user is prompted to 
 
 Search the web for documentation, error messages, package APIs, and other information.
 
-This tool is available through two providers:
+This tool is available through three providers:
 
-- **Tavily**: When the `TAVILY_API_KEY` environment variable is set.
-- **Anthropic web search**: Built into Anthropic models, used as a fallback when no Tavily key is configured.
+- **Tavily**: When the `TAVILY_API_KEY` environment variable is set (takes priority).
+- **Anthropic web search**: Built into Anthropic models, used when no Tavily key is configured.
+- **OpenAI web search**: Built into OpenAI models, used when no Tavily key is configured.
 
 | Parameter | Type | Required | Description |
 | - | - | - | - |

@@ -1,12 +1,13 @@
 'use client';
 
-import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { Button } from '@/ds/components/Button';
-import { MoreVertical, Pencil, Copy, Trash2, Play, DatabaseIcon, Calendar1Icon, HistoryIcon } from 'lucide-react';
-import { MainHeader } from '@/ds/components/MainHeader';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { format } from 'date-fns/format';
+import { MoreVertical, Pencil, Copy, Trash2, Play, DatabaseIcon, Calendar1Icon, HistoryIcon } from 'lucide-react';
+import { Button } from '@/ds/components/Button';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { MainHeader } from '@/ds/components/MainHeader';
 import { TextAndIcon } from '@/ds/components/Text';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
 
 export type DatasetHeaderProps = {
   dataset?: any;
@@ -15,6 +16,7 @@ export type DatasetHeaderProps = {
   onDuplicateClick?: () => void;
   onDeleteClick?: () => void;
   experimentTriggerSlot?: React.ReactNode;
+  disableExperimentTrigger?: boolean;
   onExperimentClick?: () => void;
   className?: string;
 };
@@ -31,6 +33,7 @@ export function DatasetHeader({
   onDuplicateClick,
   onDeleteClick,
   experimentTriggerSlot,
+  disableExperimentTrigger = false,
   onExperimentClick,
   className,
 }: DatasetHeaderProps) {
@@ -53,16 +56,43 @@ export function DatasetHeader({
       <MainHeader.Column>
         <ButtonsGroup>
           {experimentTriggerSlot ? (
-            experimentTriggerSlot
+            disableExperimentTrigger ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-not-allowed">
+                    <div className="pointer-events-none opacity-50" inert aria-disabled="true">
+                      {experimentTriggerSlot}
+                    </div>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>Add items to the dataset before running an experiment</TooltipContent>
+              </Tooltip>
+            ) : (
+              experimentTriggerSlot
+            )
           ) : onExperimentClick ? (
-            <Button variant="outline" size="sm" onClick={onExperimentClick}>
-              <Play />
-              Run Experiment
-            </Button>
+            disableExperimentTrigger ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-not-allowed">
+                    <Button disabled tabIndex={-1}>
+                      <Play />
+                      Run Experiment
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>Add items to the dataset before running an experiment</TooltipContent>
+              </Tooltip>
+            ) : (
+              <Button onClick={onExperimentClick}>
+                <Play />
+                Run Experiment
+              </Button>
+            )
           ) : null}
           <DropdownMenu>
             <DropdownMenu.Trigger asChild>
-              <Button variant="standard" size="default" aria-label="Dataset actions menu">
+              <Button size="default" aria-label="Dataset actions menu">
                 <MoreVertical />
               </Button>
             </DropdownMenu.Trigger>

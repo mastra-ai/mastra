@@ -1,15 +1,16 @@
-import { MastraUIMessage } from '@mastra/react';
-import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
-import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
-import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuiState } from '@assistant-ui/react';
-import { cn } from '@/lib/utils';
+import type { MastraUIMessage } from '@mastra/react';
 import { CheckIcon, ChevronUpIcon, CopyIcon, TerminalSquare } from 'lucide-react';
-import { IconButton } from '@/ds/components/IconButton';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
+import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
+import { ToolApprovalButtons } from './tool-approval-buttons';
+import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
 import { Badge } from '@/ds/components/Badge';
+import { IconButton } from '@/ds/components/IconButton';
 import { Icon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
-import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
+import { cn } from '@/lib/utils';
 
 // Matches the shape returned by workspace.getInfo() — flat, not nested under "workspace"
 interface WorkspaceMetadata {
@@ -217,9 +218,11 @@ export const SandboxExecutionBadge = ({
   // Combine streaming output into a single string
   const streamingContent = sandboxChunks.map(chunk => chunk.data?.output || '').join('');
 
-  // While running, show live streaming output.
-  // Once the tool completes, show the final result — it's what the LLM saw.
-  const outputContent = typeof result === 'string' ? result : streamingContent;
+  // During a live session, prefer the full streaming output the user watched build up.
+  // After hydration from storage (no streaming chunks available), fall back to the
+  // truncated tool result. With transient stdout/stderr chunks, streaming data won't
+  // survive a page refresh, so the result is the only option on reload.
+  const outputContent = streamingContent || (typeof result === 'string' ? result : '');
 
   const displayName =
     toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND

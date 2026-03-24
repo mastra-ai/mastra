@@ -1,7 +1,7 @@
-import { AgentIcon, GithubIcon, McpServerIcon, ToolsIcon } from '@/ds/icons';
-import { cn } from '@/lib/utils';
 import { NetworkIcon, WorkflowIcon } from 'lucide-react';
 import { getRepoName } from './shared';
+import { AgentIcon, GithubIcon, McpServerIcon, ToolsIcon } from '@/ds/icons';
+import { cn } from '@/lib/utils';
 
 type Template = {
   slug: string;

@@ -1,16 +1,18 @@
-import { useMemo } from 'react';
-import { Combobox, ComboboxOption } from '@/ds/components/Combobox';
 import { Info } from 'lucide-react';
-import { useLLMProviders } from '../hooks/use-llm-providers';
+import { useMemo } from 'react';
 import { useFilteredProviders } from '../hooks/use-filtered-providers';
-import { ProviderLogo } from './provider-logo';
+import { useLLMProviders } from '../hooks/use-llm-providers';
 import { cleanProviderId, findProviderById } from '../utils';
+import { ProviderLogo } from './provider-logo';
+import { Combobox } from '@/ds/components/Combobox';
+import type { ComboboxProps, ComboboxOption } from '@/ds/components/Combobox';
 import { Skeleton } from '@/ds/components/Skeleton';
 
 export interface LLMProvidersProps {
   value: string;
   onValueChange: (value: string) => void;
-  variant?: 'default' | 'light';
+  variant?: ComboboxProps['variant'];
+  size?: ComboboxProps['size'];
   className?: string;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -20,7 +22,8 @@ export interface LLMProvidersProps {
 export const LLMProviders = ({
   value,
   onValueChange,
-  variant = 'default',
+  variant = 'inputLike',
+  size = 'default',
   className,
   open,
   onOpenChange,
@@ -83,6 +86,7 @@ export const LLMProviders = ({
       searchPlaceholder="Search providers..."
       emptyText="No providers found"
       variant={variant}
+      size={size}
       className={className}
       open={open}
       onOpenChange={onOpenChange}

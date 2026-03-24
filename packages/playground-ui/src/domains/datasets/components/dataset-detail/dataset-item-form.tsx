@@ -1,9 +1,9 @@
 'use client';
 
+import { Pencil } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Label } from '@/ds/components/Label';
-import { Pencil } from 'lucide-react';
 
 /** Schema validation error from API */
 export interface SchemaValidationError {
@@ -97,10 +97,10 @@ export function EditModeContent({
         </div>
 
         <div className="flex gap-2 pt-4">
-          <Button variant="cta" size="default" onClick={onSave} disabled={isSaving}>
+          <Button variant="primary" onClick={onSave} disabled={isSaving}>
             {isSaving ? 'Saving...' : 'Save Changes'}
           </Button>
-          <Button variant="standard" size="default" onClick={onCancel} disabled={isSaving}>
+          <Button onClick={onCancel} disabled={isSaving}>
             Cancel
           </Button>
         </div>

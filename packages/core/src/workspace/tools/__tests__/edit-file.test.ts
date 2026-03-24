@@ -26,7 +26,7 @@ describe('workspace_edit_file', () => {
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute(
       {
-        path: '/test.txt',
+        path: 'test.txt',
         old_string: 'World',
         new_string: 'Universe',
       },
@@ -35,7 +35,7 @@ describe('workspace_edit_file', () => {
 
     expect(typeof result).toBe('string');
     expect(result).toContain('Replaced 1 occurrence');
-    expect(result).toContain('/test.txt');
+    expect(result).toContain('test.txt');
 
     const content = await fs.readFile(path.join(tempDir, 'test.txt'), 'utf-8');
     expect(content).toBe('Hello Universe');
@@ -48,7 +48,7 @@ describe('workspace_edit_file', () => {
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute(
       {
-        path: '/test.txt',
+        path: 'test.txt',
         old_string: 'foo',
         new_string: 'bar',
       },
@@ -66,7 +66,7 @@ describe('workspace_edit_file', () => {
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute(
       {
-        path: '/test.txt',
+        path: 'test.txt',
         old_string: 'hello',
         new_string: 'hi',
       },
@@ -84,7 +84,7 @@ describe('workspace_edit_file', () => {
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute(
       {
-        path: '/test.txt',
+        path: 'test.txt',
         old_string: 'hello',
         new_string: 'hi',
         replace_all: true,
