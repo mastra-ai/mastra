@@ -4,6 +4,11 @@
 '@mastra/pg': patch
 ---
 
-Added `getReviewSummary()` method to the experiments storage domain for aggregating review pipeline status across experiment results.
+Add `getReviewSummary()` to experiments storage for aggregating review status counts
 
-Returns per-experiment counts of `needs-review`, `reviewed`, and `complete` items, enabling the Evaluation dashboard to display review pipeline health without expensive client-side fan-out queries.
+Query experiment results grouped by experiment ID, returning counts of `needs-review`, `reviewed`, and `complete` items in a single query instead of fetching all results client-side.
+
+```ts
+const summary = await storage.experiments.getReviewSummary();
+// [{ experimentId: 'exp-1', needsReview: 3, reviewed: 5, complete: 2, total: 10 }, ...]
+```
