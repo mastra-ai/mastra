@@ -3,37 +3,52 @@
 '@mastra/core': patch
 ---
 
-feat(memory): add cross-thread recall browsing, search, and retrieval config refactor
+feat(memory): add cross-thread recall browsing and observation search
 
-**Retrieval config refactor:**
-- `retrieval` option now accepts `true` (current-thread browsing), `{ vector: true }` (+ semantic search), `{ scope: 'resource' }` (cross-thread browsing), or `{ vector: true, scope: 'resource' }` (cross-thread browsing + search)
-- `retrieval: true` (boolean) remains backward compatible — scoped to current thread
-- Vector/embedder resolved from Memory instance at runtime — no complex objects stored in config
+You can now browse recall history across a resource, list available threads, and semantically search observation groups instead of raw message chunks.
 
-**Retrieval scope:**
-- `scope: 'thread'` (default) — recall tool only accesses the current thread
-- `scope: 'resource'` — recall tool can list threads, browse other threads, and search across all threads
-- Schema and tool description adapt based on scope (thread-scoped tools don't expose cross-thread params)
+```ts
+const memory = new Memory({
+  storage,
+  vector,
+  embedder,
+  options: {
+    threads: {
+      generateTitle: false,
+    },
+    semanticRecall: false,
+  },
+});
 
-**Observe-time indexing:**
-- New messages are automatically embedded and indexed after observation completes (fire-and-forget)
-- Enabled when `retrieval: { vector: true }` and Memory has vector store + embedder configured
-- `indexMessagesList()` method added to Memory class for direct message array indexing
-- `onIndexMessages` callback passed from Memory to ObservationalMemory processor
+const tools = await memory.listTools({
+  threadId: 'thread_123',
+  resourceId: 'resource_abc',
+  observationalMemory: {
+    retrieval: { vector: true, scope: 'resource' },
+  },
+});
 
-**Recall tool enhancements:**
-- `mode: "threads"` — list all threads for the current user with IDs, titles, and dates (resource scope only)
-- `mode: "search"` — semantic vector search to find messages by content (thread-scoped or cross-thread)
-- `threadId` parameter — browse messages in any thread (resource scope only)
-- `before`/`after` date filters — narrow thread listing and search results by date range
-- `recallThreadFromStart()` — read a thread from the beginning without requiring a cursor
-- Clear error message when search is used without vector/embedder configured
+const result = await tools.recall.execute({
+  mode: 'search',
+  query: 'graph reflection anchor ids',
+  limit: 5,
+});
+```
 
-**Memory class additions:**
-- `searchMessages()` — embed a query and search the vector index filtered by resource
-- `indexMessages()` — backfill vector index for a thread's messages (for migration)
-- `indexMessagesList()` — index a provided array of messages directly
-- Memory constructor now stores vector/embedder even when `semanticRecall` is not configured
+**What changed:**
+- `retrieval` now supports `true`, `{ vector: true }`, `{ scope: 'resource' }`, and `{ vector: true, scope: 'resource' }`
+- `mode: "threads"` lists threads for the current resource
+- `mode: "search"` searches indexed observation groups in the current thread or across the resource
+- `threadId`, `before`, and `after` help narrow browsing and search results
+- Search results render richer observation context, including source message ranges and whether the match came from the current thread or older memory
 
-**System prompt updates:**
-- Updated `OBSERVATION_RETRIEVAL_INSTRUCTIONS` with documentation for thread browsing, search, date filtering, and cross-thread navigation workflows
+**Indexing behavior:**
+- observation groups are indexed automatically when retrieval search is enabled and a vector store + embedder are configured
+- historical observation groups can be backfilled into the vector store for existing threads
+- observation indexing keeps source ranges so recall can point back to the original raw messages
+
+**Implementation details:**
+- tool schemas and descriptions adapt to thread vs resource scope
+- thread-scoped recall can list the current thread without requiring a resource ID
+- search overfetches before applying thread/date filters so filtered results still return relevant matches
+- observational-memory instructions now cover thread browsing, search, date filtering, and cross-thread navigation
