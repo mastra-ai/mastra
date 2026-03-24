@@ -163,15 +163,15 @@ import { Memory, ModelByInputTokens } from '@mastra/memory'
 const memory = new Memory({
   options: {
     observationalMemory: {
-      // Observer uses different models based on input token count
-      model: new ModelByInputTokens({
-        upTo: {
-          10_000: 'google/gemini-2.5-flash', // Fast and cheap for small inputs
-          40_000: 'openai/gpt-4o', // Stronger for medium inputs
-          1_000_000: 'openai/gpt-4.5', // Most capable for very large inputs
-        },
-      }),
-      // Reflector also uses token-tiered selection
+      observation: {
+        model: new ModelByInputTokens({
+          upTo: {
+            10_000: 'google/gemini-2.5-flash', // Fast and cheap for small inputs
+            40_000: 'openai/gpt-4o', // Stronger for medium inputs
+            1_000_000: 'openai/gpt-4.5', // Most capable for very large inputs
+          },
+        }),
+      },
       reflection: {
         model: new ModelByInputTokens({
           upTo: {
