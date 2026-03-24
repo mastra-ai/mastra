@@ -49,6 +49,8 @@ export function DatasetsList({ datasets, isLoading, error, search = '' }: Datase
         <EntityList.TopCell className="text-center">Created</EntityList.TopCell>
       </EntityList.Top>
 
+      {filteredData.length === 0 && search ? <EntityList.NoMatch message="No Datasets match your search" /> : null}
+
       {filteredData.map(ds => {
         const name = truncateString(ds.name, 50);
         const description = truncateString(ds.description ?? '', 200);
