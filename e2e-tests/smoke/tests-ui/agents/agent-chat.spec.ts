@@ -163,9 +163,11 @@ test.describe('Agent Chat', () => {
     // Should navigate back to the exact same thread URL
     await expect(page).toHaveURL(firstThreadUrl, { timeout: 10_000 });
 
-    // The previous message should be visible in the reloaded thread
-    const thread = page.getByTestId('thread-wrapper');
-    await expect(thread.getByText('First thread message for reload test')).toBeVisible({ timeout: 10_000 });
+    // The previous user message should be visible in the reloaded thread
+    // Scope to the first message (user) to avoid matching the assistant response
+    // which may echo back the same text (causes strict mode violation)
+    const userMessage = page.getByTestId('thread-wrapper').locator('[data-message-index="0"]');
+    await expect(userMessage.getByText('First thread message for reload test')).toBeVisible({ timeout: 10_000 });
   });
 
   test('tool call displayed in chat message', async ({ page }) => {
