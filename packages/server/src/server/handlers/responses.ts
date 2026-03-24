@@ -97,6 +97,19 @@ function jsonResponse(data: ResponseObject, status: number = 200): Response {
   });
 }
 
+function getStreamedMessageOutputItem(response: ResponseObject, responseId: string) {
+  return (
+    response.output.find(
+      (item): item is Extract<ResponseObject['output'][number], { type: 'message' }> =>
+        item.type === 'message' && item.id === responseId,
+    ) ??
+    response.output.find(
+      (item): item is Extract<ResponseObject['output'][number], { type: 'message' }> => item.type === 'message',
+    ) ??
+    null
+  );
+}
+
 /**
  * Resolves the memory thread that should back the current response request.
  *
@@ -656,7 +669,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
               text: completedState.text,
             });
 
-            const completedItem = response.output[0] ?? {
+            const completedItem = getStreamedMessageOutputItem(response, responseId) ?? {
               id: responseId,
               type: 'message' as const,
               role: 'assistant' as const,

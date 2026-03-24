@@ -3,7 +3,6 @@ import type {
   ClientOptions,
   CreateResponseParams,
   ResponseOutputItem,
-  ResponseOutputMessage,
   ResponsesDeleteResponse,
   ResponsesResponse,
   ResponsesStreamEvent,
@@ -24,6 +23,17 @@ function attachOutputText(response: ResponsePayload): ResponsesResponse {
   return {
     ...response,
     output_text: getOutputText(response.output),
+  };
+}
+
+function hydrateOutputItem(item: ResponseOutputItem): ResponseOutputItem {
+  if (item.type !== 'message') {
+    return item;
+  }
+
+  return {
+    ...item,
+    content: item.content ?? [],
   };
 }
 
@@ -52,10 +62,7 @@ function hydrateStreamEvent(event: ResponsesStreamEvent | ResponsePayload): Resp
   ) {
     return {
       ...event,
-      item: {
-        ...(event.item as ResponseOutputMessage),
-        content: 'content' in (event.item as object) ? ((event.item as any).content ?? []) : [],
-      },
+      item: hydrateOutputItem(event.item as ResponseOutputItem),
     } as ResponsesStreamEvent;
   }
 

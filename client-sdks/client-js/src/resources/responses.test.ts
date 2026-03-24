@@ -415,6 +415,52 @@ describe('Responses Resource', () => {
     });
   });
 
+  it('preserves non-message output items in stream events', async () => {
+    mockSseResponse([
+      {
+        type: 'response.output_item.done',
+        sequence_number: 1,
+        output_index: 0,
+        item: {
+          id: 'call_123',
+          type: 'function_call',
+          call_id: 'call_123',
+          name: 'weather',
+          arguments: '{"city":"Lagos"}',
+          status: 'completed',
+        },
+      },
+    ]);
+
+    const stream = await client.responses.create({
+      model: 'openai/gpt-5',
+      agent_id: 'support-agent',
+      input: 'Use the weather tool',
+      stream: true,
+    });
+
+    const events = [];
+    for await (const event of stream) {
+      events.push(event);
+    }
+
+    expect(events).toEqual([
+      {
+        type: 'response.output_item.done',
+        sequence_number: 1,
+        output_index: 0,
+        item: {
+          id: 'call_123',
+          type: 'function_call',
+          call_id: 'call_123',
+          name: 'weather',
+          arguments: '{"city":"Lagos"}',
+          status: 'completed',
+        },
+      },
+    ]);
+  });
+
   it('retrieves a stored response', async () => {
     mockJsonResponse({
       id: 'resp_123',

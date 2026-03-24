@@ -205,13 +205,7 @@ export type ResponsesInProgressEvent = {
 export type ResponsesOutputItemAddedEvent = {
   type: 'response.output_item.added';
   output_index: number;
-  item: {
-    id: string;
-    type: 'message';
-    role: 'assistant';
-    status: 'in_progress' | 'completed' | 'incomplete';
-    content: ResponseOutputText[];
-  };
+  item: ResponseOutputItem;
   sequence_number?: number;
 };
 
@@ -254,7 +248,7 @@ export type ResponsesContentPartDoneEvent = {
 export type ResponsesOutputItemDoneEvent = {
   type: 'response.output_item.done';
   output_index: number;
-  item: ResponseOutputMessage;
+  item: ResponseOutputItem;
   sequence_number?: number;
 };
 

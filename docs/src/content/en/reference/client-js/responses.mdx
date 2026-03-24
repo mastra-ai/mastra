@@ -11,7 +11,7 @@ The Responses API adds an OpenAI-style namespace to `MastraClient` so you can ca
 
 These routes are a Mastra agent-backed adapter layer. They expose an OpenAI-like Responses surface while still executing through registered Mastra agents, agent memory, and Mastra storage.
 
-`model` is always the target model string, such as `openai/gpt-5`, and `agent_id` selects the registered Mastra agent that executes the request. Initial requests must provide `agent_id`. Stored follow-up turns can omit it when continuing with `previous_response_id`.
+`model` is the target model string, such as `openai/gpt-5`, and `agent_id` selects the registered Mastra agent that executes the request. Initial requests must provide `agent_id`. Stored follow-up turns can omit it when continuing with `previous_response_id`.
 
 If you want to compare this with the official `openai` SDK migration path, see the [OpenAI Responses migration example](https://github.com/mastra-ai/mastra/tree/main/examples/openai-responses-migration).
 
@@ -235,3 +235,5 @@ The client SDK adds an `output_text` convenience field to non-streaming response
 `tools` contains the configured tool definitions for the response. Executed tool activity is represented in `output`, where you can inspect `function_call`, `function_call_output`, and assistant `message` items in order.
 
 Streaming events preserve the server-provided `sequence_number` field and surface `response.content_part.*` plus `response.output_item.done` when the server emits them.
+
+When tool activity is part of the response, `response.output_item.added` and `response.output_item.done` can carry non-message output items such as `function_call` in addition to assistant `message` items.

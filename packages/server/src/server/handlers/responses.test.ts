@@ -92,7 +92,11 @@ function createLegacyGenerateResult(text: string) {
   } as unknown as Awaited<ReturnType<Agent['generateLegacy']>>;
 }
 
-function createStreamResult(text: string, providerMetadata?: Record<string, Record<string, unknown> | undefined>) {
+function createStreamResult(
+  text: string,
+  providerMetadata?: Record<string, Record<string, unknown> | undefined>,
+  dbMessages?: Array<Record<string, unknown>>,
+) {
   const fullStream = new ReadableStream({
     start(controller) {
       controller.enqueue({
@@ -117,6 +121,10 @@ function createStreamResult(text: string, providerMetadata?: Record<string, Reco
     finishReason: Promise.resolve('stop'),
     totalUsage: Promise.resolve({ inputTokens: 12, outputTokens: 4, totalTokens: 16 }),
     providerMetadata: Promise.resolve(providerMetadata),
+    response: Promise.resolve({
+      id: 'stream-model-response',
+      dbMessages,
+    }),
   } as unknown as Awaited<ReturnType<Agent['stream']>>;
 }
 
@@ -532,6 +540,70 @@ describe('Responses Handlers', () => {
 
     const body = await response.text();
     expect(body).toContain('"providerOptions":{"openai":{"responseId":"resp_provider_stream_123"}}');
+  });
+
+  it('streams tool-backed turns with the assistant message as the completed output item', async () => {
+    vi.spyOn(toolAgent, 'stream').mockResolvedValue(
+      createStreamResult('The weather is sunny.', undefined, [
+        createDbMessage({
+          id: 'assistant-tool-call',
+          role: 'assistant',
+          createdAt: new Date('2026-03-23T10:10:00.000Z'),
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call_stream_1',
+                toolName: 'weather',
+                args: { city: 'Lagos' },
+                result: { weather: 'sunny' },
+              },
+            },
+          ],
+        }),
+        createDbMessage({
+          id: 'tool-result-stream-1',
+          role: 'tool',
+          type: 'tool-result',
+          createdAt: new Date('2026-03-23T10:10:01.000Z'),
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call_stream_1',
+                toolName: 'weather',
+                result: { weather: 'sunny' },
+              },
+            },
+          ],
+        }),
+        createDbMessage({
+          id: 'assistant-final-stream',
+          role: 'assistant',
+          createdAt: new Date('2026-03-23T10:10:02.000Z'),
+          parts: [{ type: 'text', text: 'The weather is sunny.' }],
+        }),
+      ]),
+    );
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'tool-agent',
+      input: 'What is the weather in Lagos?',
+      store: true,
+      stream: true,
+    })) as Response;
+
+    const body = await response.text();
+    expect(body).toContain('"type":"response.output_item.done"');
+    expect(body).toContain('"item":{"id":"');
+    expect(body).toContain('"type":"message"');
+    expect(body).toContain('"text":"The weather is sunny."');
+    expect(body).toContain('"type":"function_call"');
+    expect(body).toContain('"type":"function_call_output"');
   });
 
   it('deletes a stored response', async () => {
