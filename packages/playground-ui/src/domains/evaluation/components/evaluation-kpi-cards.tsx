@@ -9,10 +9,12 @@ interface EvaluationKpiCardsProps {
   experiments?: DatasetExperiment[];
   avgScore?: number | null;
   prevAvgScore?: number | null;
+  totalNeedsReview?: number;
   isLoadingScorers: boolean;
   isLoadingDatasets: boolean;
   isLoadingExperiments: boolean;
   isLoadingScores: boolean;
+  isLoadingReview?: boolean;
 }
 
 function computeExperimentComparison(experiments?: DatasetExperiment[]) {
@@ -37,10 +39,12 @@ export function EvaluationKpiCards({
   experiments,
   avgScore,
   prevAvgScore,
+  totalNeedsReview,
   isLoadingScorers,
   isLoadingDatasets,
   isLoadingExperiments,
   isLoadingScores,
+  isLoadingReview,
 }: EvaluationKpiCardsProps) {
   const totalScorers = scorers ? Object.keys(scorers).length : undefined;
   const totalDatasets = datasets?.length;
@@ -115,6 +119,24 @@ export function EvaluationKpiCards({
               <MetricsKpiCard.Change changePct={expComparison.changePct} prevValue={expComparison.prevValue} />
             ) : (
               <MetricsKpiCard.NoChange />
+            )}
+          </>
+        ) : (
+          <MetricsKpiCard.NoData />
+        )}
+      </MetricsKpiCard>
+
+      <MetricsKpiCard>
+        <MetricsKpiCard.Label>Needs Review</MetricsKpiCard.Label>
+        {isLoadingReview ? (
+          <MetricsKpiCard.Loading />
+        ) : totalNeedsReview != null ? (
+          <>
+            <MetricsKpiCard.Value>{String(totalNeedsReview)}</MetricsKpiCard.Value>
+            {totalNeedsReview > 0 ? (
+              <MetricsKpiCard.NoChange message="items pending review" />
+            ) : (
+              <MetricsKpiCard.NoChange message="All caught up" />
             )}
           </>
         ) : (

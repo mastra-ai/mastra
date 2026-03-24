@@ -43,6 +43,7 @@ import {
   batchInsertItemsResponseSchema,
   batchDeleteItemsResponseSchema,
   updateExperimentResultBodySchema,
+  reviewSummaryResponseSchema,
 } from '../schemas/datasets';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -509,6 +510,37 @@ export const LIST_ALL_EXPERIMENTS_ROUTE = createRoute({
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
       }
       return handleError(error, 'Error listing experiments');
+    }
+  },
+});
+
+export const EXPERIMENT_REVIEW_SUMMARY_ROUTE = createRoute({
+  method: 'GET',
+  path: '/experiments/review-summary',
+  responseType: 'json',
+  responseSchema: reviewSummaryResponseSchema,
+  summary: 'Get review summary for all experiments',
+  description: 'Returns review status counts (needs-review, reviewed, complete) aggregated per experiment',
+  tags: ['Experiments'],
+  requiresAuth: true,
+  handler: async ({ mastra }) => {
+    assertDatasetsAvailable();
+    try {
+      const storage = mastra.getStorage();
+      if (!storage) {
+        throw new HTTPException(500, { message: 'Storage not configured' });
+      }
+      const experimentsStore = await storage.getStore('experiments');
+      if (!experimentsStore) {
+        throw new HTTPException(500, { message: 'Experiments storage not available' });
+      }
+      const counts = await experimentsStore.getReviewSummary();
+      return { counts };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error getting review summary');
     }
   },
 });

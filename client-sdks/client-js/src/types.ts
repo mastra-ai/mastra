@@ -2371,3 +2371,11 @@ export interface DeletePromptBlockVersionResponse {
   success: boolean;
   message: string;
 }
+
+export interface ExperimentReviewCounts {
+  experimentId: string;
+  total: number;
+  needsReview: number;
+  reviewed: number;
+  complete: number;
+}

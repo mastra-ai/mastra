@@ -29,18 +29,26 @@ export function useEvaluationScoreMetrics() {
         return { summaryData: [], overTimeData: [], scorerNames: [], avgScore: null, prevAvgScore: null };
       }
 
+      // Fetch scores from the new observability scores API.
+      // Fetch per-scorer to keep queries bounded.
       const allResults = await Promise.all(
-        scorerIds.map(scorerId => client.listScoresByScorerId({ scorerId, perPage: 100 })),
+        scorerIds.map(scorerId =>
+          client.listScores({
+            filters: { scorerId },
+            pagination: { page: 0, perPage: 100 },
+            orderBy: { field: 'timestamp', direction: 'DESC' },
+          }),
+        ),
       );
 
-      const allScores: Array<{ scorerId: string; score: number; createdAt: string }> = [];
+      const allScores: Array<{ scorerId: string; score: number; timestamp: string }> = [];
       for (let i = 0; i < scorerIds.length; i++) {
         const scores = allResults[i]?.scores ?? [];
         for (const s of scores) {
           allScores.push({
-            scorerId: scorerIds[i],
+            scorerId: s.scorerId,
             score: s.score,
-            createdAt: s.createdAt,
+            timestamp: typeof s.timestamp === 'string' ? s.timestamp : new Date(s.timestamp).toISOString(),
           });
         }
       }
@@ -50,7 +58,7 @@ export function useEvaluationScoreMetrics() {
       }
 
       // Split scores into current period (recent half) and previous period (older half)
-      const sorted = [...allScores].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      const sorted = [...allScores].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
       const midpoint = Math.floor(sorted.length / 2);
       const prevScores = sorted.slice(0, midpoint);
 
@@ -85,27 +93,48 @@ export function useEvaluationScoreMetrics() {
         prevAvgScore = Math.round(prevAvgScore * 100) / 100;
       }
 
-      // Group by hour + scorer for over-time chart
+      // Group by time bucket + scorer for over-time chart
+      // Pick bucket size based on data range: minutes, hours, or days
+      const timestamps = allScores.map(s => new Date(s.timestamp).getTime());
+      const rangeMs = Math.max(...timestamps) - Math.min(...timestamps);
+      let bucketMs: number;
+      if (rangeMs < 3_600_000) {
+        bucketMs = 60_000; // < 1 hour: minute buckets
+      } else if (rangeMs < 86_400_000) {
+        bucketMs = 3_600_000; // < 1 day: hour buckets
+      } else {
+        bucketMs = 86_400_000; // multi-day: day buckets
+      }
+
       const bucketMap = new Map<number, Map<string, number[]>>();
       for (const s of allScores) {
-        const ts = new Date(s.createdAt);
-        const bucket = Math.floor(ts.getTime() / 3_600_000) * 3_600_000;
+        const ts = new Date(s.timestamp);
+        const bucket = Math.floor(ts.getTime() / bucketMs) * bucketMs;
         if (!bucketMap.has(bucket)) bucketMap.set(bucket, new Map());
         const scorerMap = bucketMap.get(bucket)!;
         if (!scorerMap.has(s.scorerId)) scorerMap.set(s.scorerId, []);
         scorerMap.get(s.scorerId)!.push(s.score);
       }
 
-      const overTimeData: EvaluationScoresOverTimePoint[] = Array.from(bucketMap.entries())
-        .sort(([a], [b]) => a - b)
+      const sortedBuckets = Array.from(bucketMap.entries()).sort(([a], [b]) => a - b);
+      // Determine date range to decide label format
+      const minTs = sortedBuckets.length > 0 ? sortedBuckets[0][0] : 0;
+      const maxTs = sortedBuckets.length > 0 ? sortedBuckets[sortedBuckets.length - 1][0] : 0;
+      const spanDays = (maxTs - minTs) / 86_400_000;
+
+      const overTimeData: EvaluationScoresOverTimePoint[] = sortedBuckets
         .map(([bucket, scorerMap]) => {
-          const point: EvaluationScoresOverTimePoint = {
-            time: new Date(bucket).toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: false,
-            }),
-          };
+          const d = new Date(bucket);
+          let timeLabel: string;
+          if (spanDays > 1) {
+            // Multi-day: show "Mar 20 14:00"
+            timeLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+              ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+          } else {
+            // Single day: just show time
+            timeLabel = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+          }
+          const point: EvaluationScoresOverTimePoint = { time: timeLabel };
           for (const name of scorerNames) {
             const vals = scorerMap.get(name);
             if (vals && vals.length > 0) {

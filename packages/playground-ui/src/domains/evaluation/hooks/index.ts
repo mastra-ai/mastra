@@ -4,3 +4,4 @@ export {
   type EvaluationScorerSummary,
   type EvaluationScoresOverTimePoint,
 } from './use-evaluation-score-metrics';
+export { useReviewSummary } from './use-review-summary';

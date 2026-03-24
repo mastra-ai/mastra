@@ -132,6 +132,7 @@ import type {
   DatasetItem,
   DatasetExperiment,
   DatasetExperimentResult,
+  ExperimentReviewCounts,
   CreateDatasetParams,
   UpdateDatasetParams,
   AddDatasetItemParams,
@@ -1619,6 +1620,13 @@ export class MastraClient extends BaseResource {
     if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
     const qs = searchParams.toString();
     return this.request(`/experiments${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets review status counts aggregated per experiment
+   */
+  public getExperimentReviewSummary(): Promise<{ counts: ExperimentReviewCounts[] }> {
+    return this.request(`/experiments/review-summary`);
   }
 
   /**

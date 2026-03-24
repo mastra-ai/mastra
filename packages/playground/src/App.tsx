@@ -70,8 +70,11 @@ import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
 import Observability from './pages/observability';
+import ObservabilityOverview from './pages/observability-overview';
+import Primitives from './pages/primitives';
 import PromptBlocks from './pages/prompt-blocks';
 import RequestContext from './pages/request-context';
+import Resources from './pages/resources';
 import Scorer from './pages/scorers/scorer';
 import { StudioSettingsPage } from './pages/settings';
 import { SignUp } from './pages/signup';
@@ -198,10 +201,13 @@ const routes = [
             { path: '/templates/:templateSlug', element: <Template /> },
           ]),
 
+      { path: '/primitives', element: <Primitives /> },
       { path: '/evaluation', element: <Evaluation /> },
       { path: '/evaluation/scorers/:scorerId', element: <Scorer /> },
       { path: '/metrics', element: <Metrics /> },
+      { path: '/observability-overview', element: <ObservabilityOverview /> },
       { path: '/observability', element: <Observability /> },
+      { path: '/resources', element: <Resources /> },
       { path: '/agents', element: <Agents /> },
       {
         path: '/cms/agents/create',

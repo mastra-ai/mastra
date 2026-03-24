@@ -15,6 +15,7 @@ import {
 import type {
   Experiment,
   ExperimentResult,
+  ExperimentReviewCounts,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
@@ -580,6 +581,41 @@ export class ExperimentsPG extends ExperimentsStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_EXPERIMENT_RESULTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  // --- Aggregation ---
+
+  async getReviewSummary(): Promise<ExperimentReviewCounts[]> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
+      const rows = await this.#db.client.manyOrNone(
+        `SELECT
+          "experimentId",
+          COUNT(*)::int as total,
+          SUM(CASE WHEN status = 'needs-review' THEN 1 ELSE 0 END)::int as "needsReview",
+          SUM(CASE WHEN status = 'reviewed' THEN 1 ELSE 0 END)::int as reviewed,
+          SUM(CASE WHEN status = 'complete' THEN 1 ELSE 0 END)::int as complete
+        FROM ${tableName}
+        GROUP BY "experimentId"`,
+      );
+
+      return (rows || []).map(row => ({
+        experimentId: row.experimentId as string,
+        total: Number(row.total ?? 0),
+        needsReview: Number(row.needsReview ?? 0),
+        reviewed: Number(row.reviewed ?? 0),
+        complete: Number(row.complete ?? 0),
+      }));
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_REVIEW_SUMMARY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
