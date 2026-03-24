@@ -22,10 +22,12 @@ export default defineConfig({
     const distMetricsDir = path.join(process.cwd(), 'dist', 'metrics');
     const distData = path.join(distMetricsDir, DATA_FILE_NAME);
 
-    if (fs.existsSync(srcData)) {
-      fs.mkdirSync(distMetricsDir, { recursive: true });
-      fs.copyFileSync(srcData, distData);
-      console.info(`✓ Copied metrics/${DATA_FILE_NAME} to dist/metrics/`);
+    if (!fs.existsSync(srcData)) {
+      throw new Error(`Missing required metrics data file: ${srcData}`);
     }
+
+    fs.mkdirSync(distMetricsDir, { recursive: true });
+    fs.copyFileSync(srcData, distData);
+    console.info(`✓ Copied metrics/${DATA_FILE_NAME} to dist/metrics/`);
   },
 });
