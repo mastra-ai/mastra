@@ -7,7 +7,7 @@ import { LLMProviders, LLMModels } from '@/domains/llm';
 import { useDatasetReviewItems, useDatasetCompletedItems } from '../hooks/use-dataset-review-items';
 import { ReviewItemCard } from './review-item-card';
 import type { ReviewItem } from './review-item-card';
-import { BulkTagPicker } from './bulk-tag-picker';
+import { BulkTagPicker } from '@/domains/shared/components/bulk-tag-picker';
 import { ProposalTag } from './proposal-tag';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
