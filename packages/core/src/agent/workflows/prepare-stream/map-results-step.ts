@@ -24,7 +24,7 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   requestContext: RequestContext;
   memory?: MastraMemory;
   memoryConfig?: MemoryConfigInternal;
-  agentSpan: Span<SpanType.AGENT_RUN>;
+  agentSpan?: Span<SpanType.AGENT_RUN>;
   agentId: string;
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;

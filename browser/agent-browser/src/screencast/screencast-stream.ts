@@ -110,4 +110,16 @@ export class ScreencastStream extends (EventEmitter as new () => TypedEmitter<Sc
   isActive(): boolean {
     return this.active;
   }
+
+  /**
+   * Register a callback for frame events.
+   * This provides compatibility with the MastraBrowser ScreencastStream interface.
+   *
+   * @param callback - Function to call when a new frame is received
+   */
+  onFrame(callback: (frame: { data: string; timestamp: number }) => void): void {
+    this.on('frame', frame => {
+      callback({ data: frame.data, timestamp: frame.timestamp });
+    });
+  }
 }

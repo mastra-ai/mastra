@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
-import { z } from 'zod/v3';
+import { z } from 'zod/v4';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
+import type { MastraBrowser } from './browser/browser';
 import { ErrorCategory, ErrorDomain, MastraError } from './error';
 import type { MastraLanguageModel, MastraLegacyLanguageModel } from './llm/model/shared.types';
 import type { IMastraLogger } from './logger';
@@ -313,6 +314,11 @@ export interface ToolOptions extends Partial<ObservabilityContext> {
    * workspace.filesystem and workspace.sandbox for file operations and command execution.
    */
   workspace?: Workspace;
+  /**
+   * Browser available for tool execution. When provided, tools can access
+   * browser capabilities for web automation, screenshots, and data extraction.
+   */
+  browser?: MastraBrowser;
 }
 
 /**

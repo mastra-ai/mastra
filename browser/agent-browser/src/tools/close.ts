@@ -1,42 +1,24 @@
-import { closeInputSchema, closeOutputSchema } from '@mastra/core/browser';
-import type { CloseOutput } from '@mastra/core/browser';
-import { createTool } from '@mastra/core/tools';
-
 /**
- * Creates a close tool that closes the browser session.
- *
- * Use this tool when you've completed your browser automation tasks
- * and want to clean up resources.
- *
- * @param closeBrowser - Async function that closes the browser
- * @returns A Mastra tool for closing the browser
+ * browser_close - Close the browser
  */
-export function createCloseTool(closeBrowser: () => Promise<void>) {
+
+import { createTool } from '@mastra/core/tools';
+import type { AgentBrowser } from '../agent-browser';
+import { closeInputSchema } from '../schemas';
+import { BROWSER_TOOLS } from './constants';
+import { handleBrowserError } from './error-handler';
+
+export function createCloseTool(browser: AgentBrowser) {
   return createTool({
-    id: 'browser_close',
-    description: 'Close the browser session and release resources. Use this when you have completed all browser tasks.',
+    id: BROWSER_TOOLS.CLOSE,
+    description: 'Close the browser. Only use when done with all browsing.',
     inputSchema: closeInputSchema,
-    outputSchema: closeOutputSchema,
-    execute: async (input): Promise<CloseOutput> => {
+    execute: async () => {
       try {
-        if (input.reason) {
-          console.info(`[browser_close] Closing browser: ${input.reason}`);
-        }
-
-        await closeBrowser();
-
-        return {
-          success: true,
-          message: 'Browser closed successfully',
-        };
+        await browser.close();
+        return { success: true, hint: 'Browser closed. It will be re-launched automatically on next use.' };
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[browser_close] Error closing browser:', errorMessage);
-
-        return {
-          success: false,
-          message: `Failed to close browser: ${errorMessage}`,
-        };
+        return handleBrowserError(error, 'Close');
       }
     },
   });

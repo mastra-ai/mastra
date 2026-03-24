@@ -1,176 +1,377 @@
+/**
+ * Schema Tests
+ *
+ * Tests for the 17 flat browser tool schemas.
+ */
+
+import { describe, expect, it } from 'vitest';
 import {
-  navigateInputSchema,
+  gotoInputSchema,
   snapshotInputSchema,
   clickInputSchema,
   typeInputSchema,
+  pressInputSchema,
+  selectInputSchema,
   scrollInputSchema,
   screenshotInputSchema,
   closeInputSchema,
-  selectInputSchema,
-} from '@mastra/core/browser';
-import { describe, expect, it } from 'vitest';
+  hoverInputSchema,
+  backInputSchema,
+  uploadInputSchema,
+  dialogInputSchema,
+  waitInputSchema,
+  tabsInputSchema,
+  dragInputSchema,
+  evaluateInputSchema,
+} from './schemas';
 
-describe('navigateInputSchema', () => {
-  it('accepts a valid URL', () => {
-    const result = navigateInputSchema.safeParse({ url: 'https://example.com' });
+// =============================================================================
+// Core Tools (9)
+// =============================================================================
+
+describe('gotoInputSchema', () => {
+  it('accepts valid URL', () => {
+    const result = gotoInputSchema.safeParse({ url: 'https://example.com' });
     expect(result.success).toBe(true);
   });
 
-  it('rejects an invalid URL', () => {
-    const result = navigateInputSchema.safeParse({ url: 'not-a-url' });
-    expect(result.success).toBe(false);
-  });
-
-  it('defaults waitUntil to domcontentloaded', () => {
-    const result = navigateInputSchema.parse({ url: 'https://example.com' });
-    expect(result.waitUntil).toBe('domcontentloaded');
-  });
-
-  it('accepts valid waitUntil values', () => {
-    for (const value of ['load', 'domcontentloaded', 'networkidle'] as const) {
-      const result = navigateInputSchema.safeParse({ url: 'https://example.com', waitUntil: value });
-      expect(result.success).toBe(true);
-    }
+  it('accepts URL with waitUntil', () => {
+    const result = gotoInputSchema.safeParse({ url: 'https://example.com', waitUntil: 'networkidle' });
+    expect(result.success).toBe(true);
   });
 
   it('rejects invalid waitUntil values', () => {
-    const result = navigateInputSchema.safeParse({ url: 'https://example.com', waitUntil: 'never' });
+    const result = gotoInputSchema.safeParse({ url: 'https://example.com', waitUntil: 'never' });
+    expect(result.success).toBe(false);
+  });
+
+  it('requires url', () => {
+    const result = gotoInputSchema.safeParse({});
     expect(result.success).toBe(false);
   });
 });
 
 describe('snapshotInputSchema', () => {
-  it('accepts empty input with defaults', () => {
-    const result = snapshotInputSchema.parse({});
-    expect(result.interactiveOnly).toBe(true);
-    expect(result.maxElements).toBe(50);
-    expect(result.offset).toBe(0);
+  it('accepts empty input', () => {
+    const result = snapshotInputSchema.safeParse({});
+    expect(result.success).toBe(true);
   });
 
-  it('accepts custom values', () => {
-    const result = snapshotInputSchema.parse({ interactiveOnly: false, maxElements: 100, offset: 25 });
-    expect(result.interactiveOnly).toBe(false);
-    expect(result.maxElements).toBe(100);
-    expect(result.offset).toBe(25);
+  it('accepts interactiveOnly option', () => {
+    const result = snapshotInputSchema.safeParse({ interactiveOnly: true });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts maxDepth option', () => {
+    const result = snapshotInputSchema.safeParse({ maxDepth: 5 });
+    expect(result.success).toBe(true);
   });
 });
 
 describe('clickInputSchema', () => {
-  it('requires a ref', () => {
+  it('accepts ref', () => {
+    const result = clickInputSchema.safeParse({ ref: '@e5' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts ref with button', () => {
+    const result = clickInputSchema.safeParse({ ref: '@e5', button: 'right' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts ref with clickCount for double-click', () => {
+    const result = clickInputSchema.safeParse({ ref: '@e5', clickCount: 2 });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts ref with modifiers', () => {
+    const result = clickInputSchema.safeParse({ ref: '@e5', modifiers: ['Control', 'Shift'] });
+    expect(result.success).toBe(true);
+  });
+
+  it('requires ref', () => {
     const result = clickInputSchema.safeParse({});
-    expect(result.success).toBe(false);
-  });
-
-  it('accepts a ref with default button', () => {
-    const result = clickInputSchema.parse({ ref: '@e5' });
-    expect(result.ref).toBe('@e5');
-    expect(result.button).toBe('left');
-  });
-
-  it('accepts all button types', () => {
-    for (const button of ['left', 'right', 'middle'] as const) {
-      const result = clickInputSchema.safeParse({ ref: '@e1', button });
-      expect(result.success).toBe(true);
-    }
-  });
-
-  it('rejects invalid button', () => {
-    const result = clickInputSchema.safeParse({ ref: '@e1', button: 'back' });
     expect(result.success).toBe(false);
   });
 });
 
 describe('typeInputSchema', () => {
-  it('requires ref and text', () => {
-    expect(typeInputSchema.safeParse({}).success).toBe(false);
-    expect(typeInputSchema.safeParse({ ref: '@e1' }).success).toBe(false);
-    expect(typeInputSchema.safeParse({ text: 'hello' }).success).toBe(false);
+  it('accepts ref and text', () => {
+    const result = typeInputSchema.safeParse({ ref: '@e5', text: 'hello world' });
+    expect(result.success).toBe(true);
   });
 
-  it('accepts ref and text with clearFirst default', () => {
-    const result = typeInputSchema.parse({ ref: '@e3', text: 'hello' });
-    expect(result.clearFirst).toBe(false);
+  it('accepts clear option', () => {
+    const result = typeInputSchema.safeParse({ ref: '@e5', text: 'new text', clear: true });
+    expect(result.success).toBe(true);
   });
-});
 
-describe('scrollInputSchema', () => {
-  it('requires a direction', () => {
-    const result = scrollInputSchema.safeParse({});
+  it('accepts delay option', () => {
+    const result = typeInputSchema.safeParse({ ref: '@e5', text: 'slow', delay: 100 });
+    expect(result.success).toBe(true);
+  });
+
+  it('requires ref', () => {
+    const result = typeInputSchema.safeParse({ text: 'hello' });
     expect(result.success).toBe(false);
   });
 
-  it('accepts all direction values', () => {
-    for (const direction of ['up', 'down', 'left', 'right'] as const) {
-      const result = scrollInputSchema.safeParse({ direction });
-      expect(result.success).toBe(true);
-    }
-  });
-
-  it('defaults amount to page', () => {
-    const result = scrollInputSchema.parse({ direction: 'down' });
-    expect(result.amount).toBe('page');
-  });
-
-  it('accepts numeric amount', () => {
-    const result = scrollInputSchema.parse({ direction: 'down', amount: 300 });
-    expect(result.amount).toBe(300);
-  });
-
-  it('accepts an optional ref for element scrolling', () => {
-    const result = scrollInputSchema.parse({ direction: 'down', ref: '@e10' });
-    expect(result.ref).toBe('@e10');
+  it('requires text', () => {
+    const result = typeInputSchema.safeParse({ ref: '@e5' });
+    expect(result.success).toBe(false);
   });
 });
 
-describe('screenshotInputSchema', () => {
-  it('accepts empty input with defaults', () => {
-    const result = screenshotInputSchema.parse({});
-    expect(result.fullPage).toBe(false);
-    expect(result.format).toBe('png');
-    expect(result.quality).toBe(80);
+describe('pressInputSchema', () => {
+  it('accepts key', () => {
+    const result = pressInputSchema.safeParse({ key: 'Enter' });
+    expect(result.success).toBe(true);
   });
 
-  it('rejects quality outside 0-100', () => {
-    expect(screenshotInputSchema.safeParse({ quality: -1 }).success).toBe(false);
-    expect(screenshotInputSchema.safeParse({ quality: 101 }).success).toBe(false);
+  it('accepts key combinations', () => {
+    const result = pressInputSchema.safeParse({ key: 'Control+a' });
+    expect(result.success).toBe(true);
   });
 
-  it('accepts an element ref', () => {
-    const result = screenshotInputSchema.parse({ ref: '@e2' });
-    expect(result.ref).toBe('@e2');
+  it('accepts key with modifiers array', () => {
+    const result = pressInputSchema.safeParse({ key: 'a', modifiers: ['Control'] });
+    expect(result.success).toBe(true);
+  });
+
+  it('requires key', () => {
+    const result = pressInputSchema.safeParse({});
+    expect(result.success).toBe(false);
   });
 });
 
 describe('selectInputSchema', () => {
-  it('accepts selection by value', () => {
-    const result = selectInputSchema.parse({ ref: '@e5', value: 'opt1' });
-    expect(result.ref).toBe('@e5');
-    expect(result.value).toBe('opt1');
+  it('accepts ref with value', () => {
+    const result = selectInputSchema.safeParse({ ref: '@e5', value: 'option1' });
+    expect(result.success).toBe(true);
   });
 
-  it('accepts selection by label', () => {
-    const result = selectInputSchema.parse({ ref: '@e5', label: 'Option One' });
-    expect(result.label).toBe('Option One');
+  it('accepts ref with label', () => {
+    const result = selectInputSchema.safeParse({ ref: '@e5', label: 'Option One' });
+    expect(result.success).toBe(true);
   });
 
-  it('accepts selection by index', () => {
-    const result = selectInputSchema.parse({ ref: '@e5', index: 0 });
-    expect(result.index).toBe(0);
+  it('accepts ref with index', () => {
+    const result = selectInputSchema.safeParse({ ref: '@e5', index: 0 });
+    expect(result.success).toBe(true);
   });
 
-  it('requires a ref', () => {
-    expect(selectInputSchema.safeParse({ value: 'opt1' }).success).toBe(false);
+  it('requires ref', () => {
+    const result = selectInputSchema.safeParse({ value: 'option1' });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('scrollInputSchema', () => {
+  it('accepts direction', () => {
+    const result = scrollInputSchema.safeParse({ direction: 'down' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts direction with amount', () => {
+    const result = scrollInputSchema.safeParse({ direction: 'down', amount: 500 });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts ref to scroll into view', () => {
+    const result = scrollInputSchema.safeParse({ direction: 'down', ref: '@e5' });
+    expect(result.success).toBe(true);
+  });
+
+  it('requires direction', () => {
+    const result = scrollInputSchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects invalid direction', () => {
+    const result = scrollInputSchema.safeParse({ direction: 'diagonal' });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('screenshotInputSchema', () => {
+  it('accepts empty input', () => {
+    const result = screenshotInputSchema.safeParse({});
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts ref', () => {
+    const result = screenshotInputSchema.safeParse({ ref: '@e5' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts fullPage option', () => {
+    const result = screenshotInputSchema.safeParse({ fullPage: true });
+    expect(result.success).toBe(true);
   });
 });
 
 describe('closeInputSchema', () => {
   it('accepts empty input', () => {
-    const result = closeInputSchema.parse({});
-    expect(result.reason).toBeUndefined();
+    const result = closeInputSchema.safeParse({});
+    expect(result.success).toBe(true);
+  });
+});
+
+// =============================================================================
+// Extended Tools (7)
+// =============================================================================
+
+describe('hoverInputSchema', () => {
+  it('accepts ref', () => {
+    const result = hoverInputSchema.safeParse({ ref: '@e5' });
+    expect(result.success).toBe(true);
   });
 
-  it('accepts an optional reason', () => {
-    const result = closeInputSchema.parse({ reason: 'Task complete' });
-    expect(result.reason).toBe('Task complete');
+  it('requires ref', () => {
+    const result = hoverInputSchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('backInputSchema', () => {
+  it('accepts empty input', () => {
+    const result = backInputSchema.safeParse({});
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('uploadInputSchema', () => {
+  it('accepts ref and files', () => {
+    const result = uploadInputSchema.safeParse({ ref: '@e5', files: ['/path/to/file.txt'] });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts multiple files', () => {
+    const result = uploadInputSchema.safeParse({ ref: '@e5', files: ['/path/to/file1.txt', '/path/to/file2.txt'] });
+    expect(result.success).toBe(true);
+  });
+
+  it('requires ref', () => {
+    const result = uploadInputSchema.safeParse({ files: ['/path/to/file.txt'] });
+    expect(result.success).toBe(false);
+  });
+
+  it('requires files', () => {
+    const result = uploadInputSchema.safeParse({ ref: '@e5' });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('dialogInputSchema', () => {
+  it('accepts accept action', () => {
+    const result = dialogInputSchema.safeParse({ action: 'accept' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts dismiss action', () => {
+    const result = dialogInputSchema.safeParse({ action: 'dismiss' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts accept with text for prompts', () => {
+    const result = dialogInputSchema.safeParse({ action: 'accept', text: 'user input' });
+    expect(result.success).toBe(true);
+  });
+
+  it('requires action', () => {
+    const result = dialogInputSchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('waitInputSchema', () => {
+  it('accepts ref', () => {
+    const result = waitInputSchema.safeParse({ ref: '@e5' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts ref with state', () => {
+    const result = waitInputSchema.safeParse({ ref: '@e5', state: 'visible' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts timeout', () => {
+    const result = waitInputSchema.safeParse({ ref: '@e5', timeout: 5000 });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts empty input for simple delay', () => {
+    const result = waitInputSchema.safeParse({});
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('tabsInputSchema', () => {
+  it('accepts list action', () => {
+    const result = tabsInputSchema.safeParse({ action: 'list' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts new action', () => {
+    const result = tabsInputSchema.safeParse({ action: 'new' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts new action with url', () => {
+    const result = tabsInputSchema.safeParse({ action: 'new', url: 'https://example.com' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts switch action with index', () => {
+    const result = tabsInputSchema.safeParse({ action: 'switch', index: 1 });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts close action', () => {
+    const result = tabsInputSchema.safeParse({ action: 'close' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts close action with index', () => {
+    const result = tabsInputSchema.safeParse({ action: 'close', index: 2 });
+    expect(result.success).toBe(true);
+  });
+
+  it('requires action', () => {
+    const result = tabsInputSchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('dragInputSchema', () => {
+  it('accepts sourceRef and targetRef', () => {
+    const result = dragInputSchema.safeParse({ sourceRef: '@e5', targetRef: '@e10' });
+    expect(result.success).toBe(true);
+  });
+
+  it('requires sourceRef', () => {
+    const result = dragInputSchema.safeParse({ targetRef: '@e10' });
+    expect(result.success).toBe(false);
+  });
+
+  it('requires targetRef', () => {
+    const result = dragInputSchema.safeParse({ sourceRef: '@e5' });
+    expect(result.success).toBe(false);
+  });
+});
+
+// =============================================================================
+// Escape Hatch (1)
+// =============================================================================
+
+describe('evaluateInputSchema', () => {
+  it('accepts script', () => {
+    const result = evaluateInputSchema.safeParse({ script: 'return document.title' });
+    expect(result.success).toBe(true);
+  });
+
+  it('requires script', () => {
+    const result = evaluateInputSchema.safeParse({});
+    expect(result.success).toBe(false);
   });
 });

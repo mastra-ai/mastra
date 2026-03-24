@@ -1,11 +1,11 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
-import { TextAndIcon } from '@/ds/components/Text';
-import { MainHeader } from '@/ds/components/MainHeader';
-import { Calendar1Icon, HistoryIcon, FileCodeIcon } from 'lucide-react';
 import { format } from 'date-fns/format';
+import { Calendar1Icon, HistoryIcon, FileCodeIcon } from 'lucide-react';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { MainHeader } from '@/ds/components/MainHeader';
+import { TextAndIcon } from '@/ds/components/Text';
 
 /**
  * Header component for dataset item details

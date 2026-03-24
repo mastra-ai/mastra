@@ -1,111 +1,24 @@
-import { createError, selectInputSchema, selectOutputSchema } from '@mastra/core/browser';
-import type { BrowserToolError, SelectOutput } from '@mastra/core/browser';
-import { createTool } from '@mastra/core/tools';
-
-import type { BrowserManagerLike } from '../browser-types.js';
-
 /**
- * Creates a select tool for interacting with dropdown/select elements.
- *
- * This tool handles both native <select> elements and attempts to work with
- * custom dropdown implementations by using Playwright's selectOption().
- *
- * @param getBrowser - Async function that returns the BrowserManager instance
- * @param defaultTimeout - Default timeout in milliseconds
- * @returns A Mastra tool for selecting dropdown options
+ * browser_select - Select option from dropdown
  */
-export function createSelectTool(getBrowser: () => Promise<BrowserManagerLike>, defaultTimeout: number) {
+
+import { createTool } from '@mastra/core/tools';
+import type { AgentBrowser } from '../agent-browser';
+import { selectInputSchema } from '../schemas';
+import { BROWSER_TOOLS } from './constants';
+import { handleBrowserError } from './error-handler';
+
+export function createSelectTool(browser: AgentBrowser) {
   return createTool({
-    id: 'browser_select',
-    description: 'Select an option from a dropdown/select element. Use value, label, or index to specify which option.',
+    id: BROWSER_TOOLS.SELECT,
+    description: 'Select an option from a dropdown by value, label, or index.',
     inputSchema: selectInputSchema,
-    outputSchema: selectOutputSchema,
-    execute: async (input): Promise<SelectOutput | BrowserToolError> => {
-      const browser = await getBrowser();
-
-      // Validate that at least one selection method is provided
-      if (!input.value && !input.label && input.index === undefined) {
-        return createError(
-          'browser_error',
-          'Must provide value, label, or index to select an option.',
-          'Specify which option to select using value, label, or index parameter.',
-        );
-      }
-
-      // Resolve ref to Playwright locator
-      const locator = browser.getLocatorFromRef(input.ref);
-
-      if (!locator) {
-        return createError(
-          'stale_ref',
-          `Ref ${input.ref} not found. The page may have changed.`,
-          'Take a new snapshot to get current element refs.',
-        );
-      }
-
+    execute: async input => {
+      await browser.ensureReady();
       try {
-        // Build selection options
-        const selectOptions: { value?: string; label?: string; index?: number } = {};
-        if (input.value) selectOptions.value = input.value;
-        if (input.label) selectOptions.label = input.label;
-        if (input.index !== undefined) selectOptions.index = input.index;
-
-        // Use Playwright's selectOption for native selects
-        const selectedValues = await locator.selectOption(selectOptions, {
-          timeout: defaultTimeout,
-        });
-
-        // Get selected value info
-        const selectedValue = selectedValues[0] || '';
-
-        // Try to get the label of the selected option
-        let selectedLabel = '';
-        try {
-          selectedLabel = await locator.evaluate((el: any) => {
-            const option = el.options?.[el.selectedIndex];
-            return option ? option.text : '';
-          });
-        } catch {
-          // Ignore if we can't get the label
-        }
-
-        const page = browser.getPage();
-        const url = page.url();
-
-        return {
-          success: true,
-          selectedValue,
-          selectedLabel,
-          url,
-          hint: 'Take a new snapshot if you need to interact with more elements.',
-        };
+        return await browser.select(input);
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-
-        // Not a select element - suggest clicking instead
-        if (errorMessage.includes('not a <select> element') || errorMessage.includes('selectOption')) {
-          return createError(
-            'browser_error',
-            `Element ${input.ref} is not a native select. It may be a custom dropdown.`,
-            'For custom dropdowns: 1) Click the dropdown to open it, 2) Take a snapshot, 3) Click the desired option.',
-          );
-        }
-
-        // Option not found
-        if (errorMessage.includes('No option') || errorMessage.includes('not found')) {
-          return createError(
-            'element_not_found',
-            `Option not found in ${input.ref}.`,
-            'Take a snapshot and check available options in the select element.',
-          );
-        }
-
-        // Timeout
-        if (errorMessage.includes('Timeout')) {
-          return createError('timeout', `Selection on ${input.ref} timed out.`, 'Element may be loading. Try again.');
-        }
-
-        return createError('browser_error', `Selection failed: ${errorMessage}`);
+        return handleBrowserError(error, 'Select');
       }
     },
   });

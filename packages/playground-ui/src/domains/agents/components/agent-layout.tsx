@@ -1,7 +1,7 @@
 import { Panel, useDefaultLayout, Group } from 'react-resizable-panels';
 import { getMainContentContentClassName } from '@/ds/components/MainContent';
-import { PanelSeparator } from '@/lib/resize/separator';
 import { CollapsiblePanel } from '@/lib/resize/collapsible-panel';
+import { PanelSeparator } from '@/lib/resize/separator';
 
 export interface AgentLayoutProps {
   agentId: string;

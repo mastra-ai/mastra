@@ -1,6 +1,3 @@
-import { useState } from 'react';
-import { Txt } from '@/ds/components/Txt';
-import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
 import {
   CirclePause,
   HourglassIcon,
@@ -11,8 +8,11 @@ import {
   RefreshCw,
   Tag,
 } from 'lucide-react';
+import { useState } from 'react';
 import { WorkflowCard } from './workflow-card';
 import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Txt } from '@/ds/components/Txt';
+import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
 
 export interface TripwireInfo {
   reason?: string;

@@ -8,16 +8,14 @@ function createMockManager(overrides?: Partial<BrowserManagerLike>): BrowserMana
   return {
     launch: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
-    getPage: vi
-      .fn()
-      .mockReturnValue({
-        url: () => '',
-        title: async () => '',
-        goto: vi.fn(),
-        screenshot: vi.fn(),
-        evaluate: vi.fn(),
-        viewportSize: () => null,
-      }),
+    getPage: vi.fn().mockReturnValue({
+      url: () => '',
+      title: async () => '',
+      goto: vi.fn(),
+      screenshot: vi.fn(),
+      evaluate: vi.fn(),
+      viewportSize: () => null,
+    }),
     getLocatorFromRef: vi.fn().mockReturnValue(null),
     getCDPSession: vi.fn().mockResolvedValue({ send: vi.fn() }),
     getSnapshot: vi.fn().mockResolvedValue({ tree: '' }),

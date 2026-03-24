@@ -1,102 +1,24 @@
-import { createError, scrollInputSchema, scrollOutputSchema } from '@mastra/core/browser';
-import type { BrowserToolError, ScrollOutput } from '@mastra/core/browser';
-import { createTool } from '@mastra/core/tools';
-
-import type { BrowserManagerLike } from '../browser-types.js';
-
 /**
- * Creates a scroll tool that scrolls the page viewport or an element.
- *
- * The tool supports four directions (up, down, left, right) and three amount modes:
- * - "page": Full viewport height/width scroll
- * - "half": Half viewport height/width scroll
- * - number: Specific pixel amount
- *
- * If a ref is provided, scrolls within that element instead of the viewport.
- *
- * @param getBrowser - Async function that returns the BrowserManager instance
- * @returns A Mastra tool for scrolling the page or elements
+ * browser_scroll - Scroll the page or element
  */
-export function createScrollTool(getBrowser: () => Promise<BrowserManagerLike>) {
+
+import { createTool } from '@mastra/core/tools';
+import type { AgentBrowser } from '../agent-browser';
+import { scrollInputSchema } from '../schemas';
+import { BROWSER_TOOLS } from './constants';
+import { handleBrowserError } from './error-handler';
+
+export function createScrollTool(browser: AgentBrowser) {
   return createTool({
-    id: 'browser_scroll',
-    description: 'Scroll the page viewport or an element in a direction.',
+    id: BROWSER_TOOLS.SCROLL,
+    description: 'Scroll the page or a specific element.',
     inputSchema: scrollInputSchema,
-    outputSchema: scrollOutputSchema,
-    execute: async (input): Promise<ScrollOutput | BrowserToolError> => {
+    execute: async input => {
+      await browser.ensureReady();
       try {
-        const browser = await getBrowser();
-        const page = browser.getPage();
-
-        // Get viewport size for calculating page/half scroll amounts
-        const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
-
-        // Calculate scroll amount in pixels
-        let pixels: number;
-        if (typeof input.amount === 'number') {
-          pixels = input.amount;
-        } else if (input.amount === 'half') {
-          pixels = Math.floor(viewport.height / 2);
-        } else {
-          // 'page' is the default
-          pixels = viewport.height;
-        }
-
-        // Calculate delta based on direction
-        let deltaX = 0;
-        let deltaY = 0;
-        switch (input.direction) {
-          case 'up':
-            deltaY = -pixels;
-            break;
-          case 'down':
-            deltaY = pixels;
-            break;
-          case 'left':
-            deltaX = -pixels;
-            break;
-          case 'right':
-            deltaX = pixels;
-            break;
-        }
-
-        if (input.ref) {
-          // Scroll within a specific element
-          const locator = browser.getLocatorFromRef(input.ref);
-
-          if (!locator) {
-            return createError(
-              'stale_ref',
-              `Ref ${input.ref} not found. The page may have changed.`,
-              'Take a new snapshot to get current element refs.',
-            );
-          }
-
-          // Scroll the element
-          await locator.evaluate(
-            (el, { dx, dy }) => {
-              el.scrollBy(dx, dy);
-            },
-            { dx: deltaX, dy: deltaY },
-          );
-        } else {
-          // Scroll the viewport
-          await page.evaluate(`window.scrollBy(${deltaX}, ${deltaY})`);
-        }
-
-        // Get new scroll position (always returns viewport position)
-
-        const position = (await page.evaluate(
-          '({ x: Math.round(window.scrollX), y: Math.round(window.scrollY) })',
-        )) as {
-          x: number;
-          y: number;
-        };
-
-        return { success: true, position };
+        return await browser.scroll(input);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return createError('browser_error', `Scroll failed: ${message}`);
+        return handleBrowserError(error, 'Scroll');
       }
     },
   });

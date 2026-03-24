@@ -116,7 +116,7 @@ export interface HarnessSubagent {
 
 /**
  * Schema type for harness state.
- * Accepts any PublicSchema variant: Zod v3/v4, JSON Schema, AI SDK Schema, or Standard Schema.
+ * Accepts any PublicSchema variant: Zod v4, JSON Schema, AI SDK Schema, or Standard Schema.
  */
 export type HarnessStateSchema<T> = PublicSchema<T>;
 
@@ -722,6 +722,7 @@ export type HarnessEvent =
       messagesActivated: number;
       generationCount: number;
     }
+  | { type: 'om_thread_title_updated'; cycleId: string; threadId: string; oldTitle?: string; newTitle: string }
   | { type: 'sandbox_access_request'; questionId: string; path: string; reason: string }
   | {
       type: 'ask_question';
@@ -821,7 +822,8 @@ export type HarnessMessageContent =
       error: string;
       tokensAttempted?: number;
       operationType?: 'observation' | 'reflection';
-    };
+    }
+  | { type: 'om_thread_title_updated'; threadId: string; oldTitle?: string; newTitle: string };
 
 // =============================================================================
 // Request Context

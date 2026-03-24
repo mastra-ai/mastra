@@ -1,8 +1,8 @@
-import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
-import { Button } from '@/ds/components/Button/Button';
 import { XIcon } from 'lucide-react';
-import { Icon } from '@/ds/icons/Icon';
+import { Button } from '@/ds/components/Button/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
+import { Icon } from '@/ds/icons/Icon';
 
 export type ScoreEntityOption = { value: string; label: string; type: 'AGENT' | 'WORKFLOW' | 'ALL' };
 

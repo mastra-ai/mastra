@@ -1,5 +1,9 @@
+import assistantUi from '@assistant-ui/react-ui/tailwindcss';
+import containerQueries from '@tailwindcss/container-queries';
+import typography from '@tailwindcss/typography';
 import type { Config } from 'tailwindcss';
 import defaultFont from 'tailwindcss/defaultTheme';
+import animate from 'tailwindcss-animate';
 import {
   FontSizes,
   LineHeights,
@@ -12,10 +16,6 @@ import {
   Shadows,
   Glows,
 } from './src/ds/tokens';
-import animate from 'tailwindcss-animate';
-import assistantUi from '@assistant-ui/react-ui/tailwindcss';
-import containerQueries from '@tailwindcss/container-queries';
-import typography from '@tailwindcss/typography';
 
 export default {
   darkMode: ['class'],

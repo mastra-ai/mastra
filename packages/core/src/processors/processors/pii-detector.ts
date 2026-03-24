@@ -1,6 +1,6 @@
 import * as crypto from 'node:crypto';
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';

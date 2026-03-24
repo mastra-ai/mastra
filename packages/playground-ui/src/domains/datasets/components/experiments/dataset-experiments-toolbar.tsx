@@ -1,11 +1,11 @@
 'use client';
 
-import { Button } from '@/ds/components/Button';
-import { Chip } from '@/ds/components/Chip';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
 import { GitCompare, MoveRightIcon, XIcon } from 'lucide-react';
 import type { DatasetExperimentsFilters } from '../../hooks/use-dataset-experiments';
+import { Button } from '@/ds/components/Button';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Chip } from '@/ds/components/Chip';
+import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
 
 const STATUS_OPTIONS = [
   { value: 'all', label: 'All statuses' },

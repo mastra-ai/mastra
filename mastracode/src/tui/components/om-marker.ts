@@ -55,6 +55,11 @@ export type OMMarkerData =
       operationType: 'observation' | 'reflection';
       tokensActivated: number;
       observationTokens: number;
+    }
+  | {
+      type: 'om_thread_title_updated';
+      oldTitle?: string;
+      newTitle: string;
     };
 
 /**
@@ -79,7 +84,7 @@ export class OMMarkerComponent extends Container {
   }
 }
 function formatMarker(data: OMMarkerData): string {
-  const isReflection = data.operationType === 'reflection';
+  const isReflection = 'operationType' in data && data.operationType === 'reflection';
   const label = isReflection ? 'Reflection' : 'Observation';
 
   switch (data.type) {
@@ -128,6 +133,9 @@ function formatMarker(data: OMMarkerData): string {
       const msgTokens = formatTokens(data.tokensActivated);
       const obsTokens = formatTokens(data.observationTokens);
       return theme.fg('success', `  ✓ Activated ${kind}: -${msgTokens} msg tokens, +${obsTokens} obs tokens`);
+    }
+    case 'om_thread_title_updated': {
+      return theme.fg('muted', `  thread title updated: ${data.newTitle}`);
     }
   }
 }

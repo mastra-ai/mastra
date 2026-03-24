@@ -143,7 +143,7 @@ export function useLogout() {
     mutationFn: () => makeLogoutRequest(client as any),
     onSuccess: () => {
       // Invalidate all auth-related queries
-      queryClient.invalidateQueries({ queryKey: ['auth'] });
+      void queryClient.invalidateQueries({ queryKey: ['auth'] });
     },
   });
 }
