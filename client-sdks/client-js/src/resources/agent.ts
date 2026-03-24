@@ -18,8 +18,8 @@ import type { FullOutput, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodType } from 'zod/v3';
 import type {
+  ZodSchema,
   GenerateLegacyParams,
   GetAgentResponse,
   GetToolResponse,
@@ -240,15 +240,15 @@ export class Agent extends BaseResource {
     params: GenerateLegacyParams<undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateReturn<any, undefined, undefined>>;
   // Use `any` in overload return types to avoid "Type instantiation is excessively deep" errors
-  async generateLegacy<Output extends JSONSchema7 | ZodType>(
+  async generateLegacy<Output extends JSONSchema7 | ZodSchema>(
     params: GenerateLegacyParams<Output> & { output: Output; experimental_output?: never },
   ): Promise<GenerateReturn<any, any, any>>;
-  async generateLegacy<StructuredOutput extends JSONSchema7 | ZodType>(
+  async generateLegacy<StructuredOutput extends JSONSchema7 | ZodSchema>(
     params: GenerateLegacyParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
   ): Promise<GenerateReturn<any, any, any>>;
   async generateLegacy<
-    Output extends JSONSchema7 | ZodType | undefined = undefined,
-    _StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
+    Output extends JSONSchema7 | ZodSchema | undefined = undefined,
+    _StructuredOutput extends JSONSchema7 | ZodSchema | undefined = undefined,
   >(params: GenerateLegacyParams<Output>): Promise<GenerateReturn<any, any, any>> {
     const processedParams = {
       ...params,
@@ -731,7 +731,7 @@ export class Agent extends BaseResource {
    * @param params - Stream parameters including prompt
    * @returns Promise containing the enhanced Response object with processDataStream method
    */
-  async streamLegacy<T extends JSONSchema7 | ZodType | undefined = undefined>(
+  async streamLegacy<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
     params: StreamLegacyParams<T>,
   ): Promise<
     Response & {
