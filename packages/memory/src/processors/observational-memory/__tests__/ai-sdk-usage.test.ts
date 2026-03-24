@@ -13,6 +13,7 @@ import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 
+import { BufferingCoordinator } from '../buffering-coordinator';
 import { ObservationalMemory } from '../observational-memory';
 
 // =============================================================================
@@ -185,6 +186,14 @@ function createOM(storage: InMemoryMemory, opts?: { messageTokens?: number; buff
     },
   });
 }
+
+// Reset BufferingCoordinator static maps between tests to prevent cross-test leakage
+beforeEach(() => {
+  BufferingCoordinator.asyncBufferingOps.clear();
+  BufferingCoordinator.lastBufferedBoundary.clear();
+  BufferingCoordinator.lastBufferedAtTime.clear();
+  BufferingCoordinator.reflectionBufferCycleIds.clear();
+});
 
 // =============================================================================
 // CASE 1 — Simple single-turn (ai-sdk-usage.ts: chat())
