@@ -393,7 +393,7 @@ describe('OM Error State', { timeout: 30_000 }, () => {
     expect(textContent).toBe('');
   });
 
-  it('should emit tripwire when observer fails and no parts are persisted', async () => {
+  it('should emit tripwire when observer fails and no observation marker parts are persisted', async () => {
     // When observation fails, OM calls abort() which triggers a TripWire.
     // The stream completes with a tripwire part, not an error throw.
     const threadId = 'test-error-persist';
@@ -423,6 +423,17 @@ describe('OM Error State', { timeout: 30_000 }, () => {
 
     // Tripwire should be emitted (not an error thrown)
     expect(tripwireEmitted).toBe(true);
+
+    const memoryStore = await store.getStore('memory');
+    const result = await memoryStore!.listMessages({ threadId });
+    const persistedObservationMarkerParts = result.messages.flatMap((message: any) => {
+      const parts = message.content?.parts || [];
+      return parts.filter(
+        (part: any) => typeof part.type === 'string' && /^data-om-(observation|reflection)-/.test(part.type),
+      );
+    });
+
+    expect(persistedObservationMarkerParts).toHaveLength(0);
   });
 });
 

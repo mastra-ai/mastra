@@ -11233,4 +11233,31 @@ describe('ModelByInputTokens with ObservationalMemory', () => {
     expect(modelSelector.resolve(5000)).toBe('openai/gpt-4o-mini');
     expect(() => modelSelector.resolve(5001)).toThrow('exceeds the largest configured threshold');
   });
+
+  it('should reject thresholds with missing model targets', () => {
+    expect(
+      () =>
+        new ModelByInputTokens({
+          upTo: {
+            5000: undefined as any,
+          },
+        }),
+    ).toThrow('requires a valid model target for threshold 5000');
+  });
+
+  it('should accept object model targets', () => {
+    const modelSelector = new ModelByInputTokens({
+      upTo: {
+        5000: {
+          provider: 'openai',
+          modelId: 'gpt-4o-mini',
+        },
+      },
+    });
+
+    expect(modelSelector.resolve(1000)).toEqual({
+      provider: 'openai',
+      modelId: 'gpt-4o-mini',
+    });
+  });
 });

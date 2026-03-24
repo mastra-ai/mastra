@@ -7,6 +7,12 @@ export interface ModelByInputTokensConfig {
   upTo: Record<number, TieredModelTarget>;
 }
 
+function isTieredModelTarget(model: unknown): model is TieredModelTarget {
+  return (
+    typeof model === 'string' || (!!model && typeof model === 'object' && 'provider' in model && 'modelId' in model)
+  );
+}
+
 function normalizeThresholds(config: ModelByInputTokensConfig) {
   const entries = Object.entries(config.upTo);
 
@@ -14,10 +20,14 @@ function normalizeThresholds(config: ModelByInputTokensConfig) {
     throw new Error('ModelByInputTokens requires at least one threshold in "upTo"');
   }
 
-  for (const [limitStr] of entries) {
+  for (const [limitStr, model] of entries) {
     const limit = Number(limitStr);
     if (!Number.isFinite(limit) || limit <= 0) {
       throw new Error(`ModelByInputTokens threshold keys must be positive numbers. Got: ${limitStr}`);
+    }
+
+    if (!isTieredModelTarget(model)) {
+      throw new Error(`ModelByInputTokens requires a valid model target for threshold ${limitStr}`);
     }
   }
 
