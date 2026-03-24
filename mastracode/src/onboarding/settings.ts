@@ -67,8 +67,6 @@ export interface GlobalSettings {
     version: number;
     modePackId: string | null;
     omPackId: string | null;
-    /** ISO timestamp when the user acknowledged the Claude Max OAuth ToS warning. */
-    claudeMaxOAuthWarningAcknowledgedAt: string | null;
   };
   // Global model preferences (applied to new threads)
   models: {
@@ -130,7 +128,6 @@ const DEFAULTS: GlobalSettings = {
     version: 0,
     modePackId: null,
     omPackId: null,
-    claudeMaxOAuthWarningAcknowledgedAt: null,
   },
   models: {
     activeModelPackId: null,

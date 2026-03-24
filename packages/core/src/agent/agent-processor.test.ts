@@ -2,7 +2,7 @@ import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { Processor, ProcessOutputStepArgs } from '../processors/index';
 import { isProcessorWorkflow } from '../processors/index';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
