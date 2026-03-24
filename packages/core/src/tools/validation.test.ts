@@ -1503,13 +1503,30 @@ describe('validateToolInput - Value-Based Null Detection (GitHub #14476)', () =>
   // return messages like "must be string" or "must be object".
 
   it('should detect null values even when error message does not contain "null"', () => {
+    // Use a custom refinement whose error message deliberately avoids "null".
+    // This simulates non-Zod Standard Schema validators (e.g. JSON Schema)
+    // that report errors like "must be string" instead of "received null".
     const schema = z.object({
       name: z.string(),
-      description: z.string().optional(),
-      tags: z.array(z.string()).optional(),
+      description: z
+        .string()
+        .optional()
+        .superRefine((val, ctx) => {
+          if (typeof val !== 'string' && val !== undefined) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'must be a valid string value' });
+          }
+        }),
+      tags: z
+        .array(z.string())
+        .optional()
+        .superRefine((val, ctx) => {
+          if (!Array.isArray(val) && val !== undefined) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'expected an array of strings' });
+          }
+        }),
     });
 
-    // LLM sends null for optional fields
+    // LLM sends null for optional fields — error messages won't contain "null"
     const input = { name: 'test', description: null, tags: null };
 
     const result = validateToolInput(schema, input);
@@ -1519,11 +1536,33 @@ describe('validateToolInput - Value-Based Null Detection (GitHub #14476)', () =>
   });
 
   it('should handle null in nested optional fields with non-null error messages', () => {
+    // Custom refinements that produce errors without "null" in the message
     const schema = z.object({
       config: z.object({
-        timeout: z.number().optional(),
-        retries: z.number().optional(),
-        label: z.string().optional(),
+        timeout: z
+          .number()
+          .optional()
+          .superRefine((val, ctx) => {
+            if (typeof val !== 'number' && val !== undefined) {
+              ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'must be a numeric value' });
+            }
+          }),
+        retries: z
+          .number()
+          .optional()
+          .superRefine((val, ctx) => {
+            if (typeof val !== 'number' && val !== undefined) {
+              ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'must be a numeric value' });
+            }
+          }),
+        label: z
+          .string()
+          .optional()
+          .superRefine((val, ctx) => {
+            if (typeof val !== 'string' && val !== undefined) {
+              ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'must be a valid string value' });
+            }
+          }),
       }),
     });
 
