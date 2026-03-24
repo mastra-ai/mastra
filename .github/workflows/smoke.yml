@@ -23,6 +23,15 @@ permissions:
 jobs:
   smoke:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        zod-version: ['3', '4']
+        include:
+          - zod-version: '3'
+            zod-spec: '^3.25.76'
+          - zod-version: '4'
+            zod-spec: '^4.3.6'
     defaults:
       run:
         working-directory: e2e-tests/smoke
@@ -37,8 +46,20 @@ jobs:
           node-version: 22
 
       # ── Install & update ────────────────────────────────────
+      - name: Set zod version
+        run: |
+          node -e "
+            const pkg = JSON.parse(require('fs').readFileSync('package.json', 'utf8'));
+            pkg.devDependencies.zod = '${{ matrix.zod-spec }}';
+            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          echo "Set zod to ${{ matrix.zod-spec }}"
+
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-workspace
+        run: pnpm install --no-frozen-lockfile --ignore-workspace
+
+      - name: Save lockfile baseline
+        run: cp pnpm-lock.yaml /tmp/lockfile-baseline.yaml
 
       - name: Update alpha packages
         run: pnpm update "@mastra/*" mastra --ignore-workspace
@@ -49,14 +70,52 @@ jobs:
           if [ "${{ inputs.force }}" = "true" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "Force flag set. Running tests."
-          elif git diff --quiet pnpm-lock.yaml; then
+          elif diff -q pnpm-lock.yaml /tmp/lockfile-baseline.yaml > /dev/null 2>&1; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "No new alpha versions. Skipping tests."
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "New alpha versions detected:"
-            git diff pnpm-lock.yaml | grep -E '^\+.*version:' | head -20 || true
+            diff pnpm-lock.yaml /tmp/lockfile-baseline.yaml | grep -E '^[<>].*version:' | head -20 || true
           fi
+
+      # ── Collect Mastra package versions ────────────────────
+      - name: Collect package versions
+        id: versions
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          MASTRA_VERSIONS=$(node -e "
+            const lock = require('fs').readFileSync('pnpm-lock.yaml', 'utf8');
+            const lines = lock.split('\n');
+            const deps = JSON.parse(require('fs').readFileSync('package.json', 'utf8'));
+            const allDeps = { ...deps.dependencies, ...deps.devDependencies };
+            const mastraPkgs = Object.keys(allDeps).filter(n => n.startsWith('@mastra/') || n === 'mastra');
+            const versions = [];
+            for (let i = 0; i < lines.length; i++) {
+              for (const pkg of mastraPkgs) {
+                if (lines[i].trim().startsWith(\"'\" + pkg + \"':\") || lines[i].trim().startsWith(pkg + ':')) {
+                  // Look for 'version:' in the next few lines
+                  for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+                    const vm = lines[j].match(/^\\s+version:\\s*'?([^('\\s]+)/);
+                    if (vm) { versions.push(pkg + '@' + vm[1]); break; }
+                  }
+                }
+              }
+            }
+            // Deduplicate (take first occurrence per package)
+            const seen = new Set();
+            const unique = versions.filter(v => { const n = v.split('@').slice(0, -1).join('@'); if (seen.has(n)) return false; seen.add(n); return true; });
+            console.log(unique.join(', '));
+          ")
+          echo "mastra_versions=$MASTRA_VERSIONS" >> "$GITHUB_OUTPUT"
+          echo "Mastra packages: $MASTRA_VERSIONS"
+
+          ZOD_RESOLVED=$(node -e "
+            const pkg = JSON.parse(require('fs').readFileSync('node_modules/zod/package.json', 'utf8'));
+            console.log(pkg.version);
+          ")
+          echo "zod_resolved=$ZOD_RESOLVED" >> "$GITHUB_OUTPUT"
+          echo "Zod resolved: $ZOD_RESOLVED"
 
       # ── Build ───────────────────────────────────────────────
       - name: Build project
@@ -93,24 +152,27 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_USER_ID: ${{ secrets.SLACK_USER_ID }}
           WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ZOD_VERSION: ${{ steps.versions.outputs.zod_resolved }}
+          MASTRA_VERSIONS: ${{ steps.versions.outputs.mastra_versions }}
 
       # ── Upload artifacts (backup) ────────────────────────────
       - name: Upload test artifacts
         if: steps.diff.outputs.changed == 'true' && always()
         uses: actions/upload-artifact@v6
         with:
-          name: smoke-test-results
+          name: smoke-test-results-zod${{ matrix.zod-version }}
           path: |
             e2e-tests/smoke/reports/
             e2e-tests/smoke/test-results/
           retention-days: 30
 
-      # ── Commit updated lockfile ───────────────────────────────
+      # ── Commit updated lockfile (zod 4 only) ──────────────────
       - name: Commit updated lockfile
-        if: steps.diff.outputs.changed == 'true'
+        if: steps.diff.outputs.changed == 'true' && matrix.zod-version == '4'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -- package.json
           git add pnpm-lock.yaml
           if git diff --cached --quiet; then
             echo "No lockfile changes to commit."

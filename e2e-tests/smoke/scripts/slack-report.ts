@@ -12,6 +12,9 @@
  *   REPORT_PATH      – path to Playwright JSON report (default: reports/ui-results.json)
  *   API_REPORT_PATH  – path to Vitest JSON report (default: reports/api-results.json)
  *   VIDEO_DIR        – path to Playwright test-results dir (default: test-results)
+ *   ZOD_VERSION      – resolved zod version (e.g. 3.25.76 or 4.3.6)
+ *   MASTRA_VERSIONS  – comma-separated list of Mastra package versions
+ *   WORKFLOW_RUN_URL – link to the GitHub Actions run
  */
 
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
@@ -345,13 +348,16 @@ async function main() {
       : `UI: ${uiStats.passed}/${uiStats.total} passed`)
     : null;
 
+  const zodVersion = process.env.ZOD_VERSION;
+  const zodLabel = zodVersion ? ` (zod ${zodVersion})` : '';
+
   const headline = isGreen
-    ? `${emoji} *Smoke Tests* — all green`
-    : `${emoji} *Smoke Tests* — ${totalFailed} failed`;
+    ? `${emoji} *Smoke Tests${zodLabel}* — all green`
+    : `${emoji} *Smoke Tests${zodLabel}* — ${totalFailed} failed`;
 
   const statusLines = [apiLine, uiLine].filter(Boolean).join('  ·  ');
 
-  // Context line: timestamp, run link, skipped/flaky counts
+  // Context line: timestamp, run link, versions, skipped/flaky counts
   const contextParts = [timeStr];
   if (process.env.WORKFLOW_RUN_URL) contextParts.push(`<${process.env.WORKFLOW_RUN_URL}|View run>`);
   const totalSkipped = apiStats.skipped + uiStats.skipped;
@@ -368,6 +374,15 @@ async function main() {
       text: { type: 'mrkdwn', text: `${headline}\n${statusLines}` },
     },
   ];
+
+  // Mastra package versions block
+  const mastraVersions = process.env.MASTRA_VERSIONS;
+  if (mastraVersions) {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `📦 ${mastraVersions}` }],
+    });
+  }
 
   if (!isGreen && allFailures.length > 0) {
     blocks.push({ type: 'divider' });
