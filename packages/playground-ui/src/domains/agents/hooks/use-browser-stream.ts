@@ -230,7 +230,8 @@ export function useBrowserStream(options: UseBrowserStreamOptions): UseBrowserSt
     };
   }, [clearReconnectTimeout]);
 
-  const isActive = status === 'connecting' || status === 'connected' || status === 'browser_starting' || status === 'streaming';
+  const isActive =
+    status === 'connecting' || status === 'connected' || status === 'browser_starting' || status === 'streaming';
 
   return {
     status,

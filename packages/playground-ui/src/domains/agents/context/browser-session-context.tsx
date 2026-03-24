@@ -1,4 +1,5 @@
-import { createContext, useContext, useCallback, useState, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useCallback, useState, useMemo } from 'react';
+import type { ReactNode } from 'react';
 import type { StreamStatus } from '../hooks/use-browser-stream';
 
 interface BrowserSessionContextValue {

@@ -139,6 +139,25 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   // ---------------------------------------------------------------------------
+  // URL Access
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Get the current page URL without launching the browser.
+   * @returns The current URL string, or null if browser is not running
+   */
+  override getCurrentUrl(): string | null {
+    if (!this.isBrowserRunning() || !this.browserManager) {
+      return null;
+    }
+    try {
+      return this.browserManager.getPage().url();
+    } catch {
+      return null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // 1. browser_goto - Navigate to URL
   // ---------------------------------------------------------------------------
 

@@ -1,4 +1,4 @@
-import type { BrowserToolsetLike } from '@mastra/core/agent';
+import type { MastraBrowser } from '@mastra/core/browser';
 import type { ClientInputMessage, MouseInputMessage, KeyboardInputMessage } from './types.js';
 
 /**
@@ -9,12 +9,12 @@ import type { ClientInputMessage, MouseInputMessage, KeyboardInputMessage } from
  * Silently ignores malformed or unrecognized messages.
  *
  * @param data - Raw string data from WebSocket message
- * @param getToolset - Function to retrieve BrowserToolsetLike for an agent
+ * @param getToolset - Function to retrieve MastraBrowser for an agent
  * @param agentId - The agent ID this WebSocket connection is for
  */
 export function handleInputMessage(
   data: string,
-  getToolset: (agentId: string) => BrowserToolsetLike | undefined,
+  getToolset: (agentId: string) => MastraBrowser | undefined,
   agentId: string,
 ): void {
   let message: unknown;
@@ -81,7 +81,7 @@ function isValidKeyboardMessage(obj: Record<string, unknown>): boolean {
 
 // --- Injection ---
 
-async function injectMouse(toolset: BrowserToolsetLike, msg: MouseInputMessage): Promise<void> {
+async function injectMouse(toolset: MastraBrowser, msg: MouseInputMessage): Promise<void> {
   await toolset.injectMouseEvent({
     type: msg.eventType,
     x: msg.x,
@@ -94,7 +94,7 @@ async function injectMouse(toolset: BrowserToolsetLike, msg: MouseInputMessage):
   });
 }
 
-async function injectKeyboard(toolset: BrowserToolsetLike, msg: KeyboardInputMessage): Promise<void> {
+async function injectKeyboard(toolset: MastraBrowser, msg: KeyboardInputMessage): Promise<void> {
   await toolset.injectKeyboardEvent({
     type: msg.eventType,
     key: msg.key,

@@ -1,7 +1,7 @@
 import { X, ChevronDown, ChevronUp, Minus } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { StatusBadge } from '@/ds/components/StatusBadge';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
+import { StatusBadge } from '@/ds/components/StatusBadge';
+import { cn } from '@/lib/utils';
 
 interface BrowserViewHeaderProps {
   url: string | null;

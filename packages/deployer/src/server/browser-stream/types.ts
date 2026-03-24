@@ -1,4 +1,4 @@
-import type { BrowserToolsetLike } from '@mastra/core/agent';
+import type { MastraBrowser } from '@mastra/core/browser';
 
 /**
  * Status message sent to connected viewers.
@@ -24,7 +24,7 @@ export interface BrowserStreamConfig {
    * Function to retrieve the BrowserToolset for a given agent ID.
    * Returns undefined if no browser is available for this agent.
    */
-  getToolset: (agentId: string) => BrowserToolsetLike | undefined;
+  getToolset: (agentId: string) => MastraBrowser | undefined;
 }
 
 /**

@@ -1,3 +1,6 @@
-import lint from '@internal/lint';
+import { createConfig } from '@internal/lint/eslint';
 
-export default [...lint.configs.library];
+const config = await createConfig();
+
+/** @type {import("eslint").Linter.Config[]} */
+export default [...config];

@@ -93,12 +93,15 @@ export interface ScreencastOptions {
 
 /**
  * A screencast stream that emits frames.
+ * Uses EventEmitter pattern for frame delivery.
  */
 export interface ScreencastStream {
   /** Stop the screencast */
   stop(): Promise<void>;
-  /** Register a frame handler */
-  onFrame(callback: (frame: { data: string; timestamp: number }) => void): void;
+  /** Register event handlers */
+  on(event: 'frame', handler: (frame: { data: string; viewport: { width: number; height: number } }) => void): this;
+  on(event: 'stop', handler: (reason: string) => void): this;
+  on(event: 'error', handler: (error: Error) => void): this;
 }
 
 // =============================================================================
@@ -231,6 +234,9 @@ export abstract class MastraBrowser extends MastraBase {
         if (this.config.onLaunch) {
           await this.config.onLaunch({ browser: this });
         }
+
+        // Notify onBrowserReady callbacks
+        this.notifyBrowserReady();
       } catch (err) {
         this.status = 'error';
         this.error = err instanceof Error ? err.message : String(err);
@@ -316,6 +322,57 @@ export abstract class MastraBrowser extends MastraBase {
    */
   isBrowserRunning(): boolean {
     return this.status === 'ready';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Browser Ready Callbacks
+  // ---------------------------------------------------------------------------
+
+  private _onReadyCallbacks: Set<() => void> = new Set();
+
+  /**
+   * Register a callback to be invoked when the browser becomes ready.
+   * If browser is already running, callback is invoked immediately.
+   * @returns Cleanup function to unregister the callback
+   */
+  onBrowserReady(callback: () => void): () => void {
+    if (this.isBrowserRunning()) {
+      // Browser already ready - invoke immediately
+      callback();
+      return () => {};
+    }
+
+    this._onReadyCallbacks.add(callback);
+    return () => {
+      this._onReadyCallbacks.delete(callback);
+    };
+  }
+
+  /**
+   * Notify all registered callbacks that browser is ready.
+   * Called internally after launch completes.
+   */
+  protected notifyBrowserReady(): void {
+    for (const callback of this._onReadyCallbacks) {
+      try {
+        callback();
+      } catch {
+        // Ignore callback errors
+      }
+    }
+    this._onReadyCallbacks.clear();
+  }
+
+  // ---------------------------------------------------------------------------
+  // URL Access (optional - providers that support it should override)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Get the current page URL without launching the browser.
+   * @returns The current URL string, or null if browser is not running or not supported
+   */
+  getCurrentUrl(): string | null {
+    return null;
   }
 
   // ---------------------------------------------------------------------------

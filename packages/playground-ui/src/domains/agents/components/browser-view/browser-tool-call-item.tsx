@@ -1,8 +1,8 @@
-import { useState } from 'react';
 import { ChevronRight, Check, X, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { CodeEditor } from '@/ds/components/CodeEditor';
+import { useState } from 'react';
 import type { BrowserToolCallEntry } from '../../context/browser-tool-calls-context';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { cn } from '@/lib/utils';
 
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
   browser_navigate: 'Navigate',
@@ -58,7 +58,9 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
         onClick={() => setIsExpanded(prev => !prev)}
         className="flex items-center gap-2 w-full px-3 py-0.5 text-left hover:bg-surface3 transition-colors"
       >
-        <ChevronRight className={cn('h-3 w-3 text-neutral3 transition-transform shrink-0', isExpanded && 'rotate-90')} />
+        <ChevronRight
+          className={cn('h-3 w-3 text-neutral3 transition-transform shrink-0', isExpanded && 'rotate-90')}
+        />
 
         <StatusDot status={entry.status} />
 

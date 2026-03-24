@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { cn } from '@/lib/utils';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { useBrowserStream, type StreamStatus } from '../../hooks/use-browser-stream';
-import { useMouseInteraction } from '../../hooks/use-mouse-interaction';
-import { useKeyboardInteraction } from '../../hooks/use-keyboard-interaction';
+import { useBrowserStream } from '../../hooks/use-browser-stream';
+import type { StreamStatus } from '../../hooks/use-browser-stream';
 import { useClickRipple } from '../../hooks/use-click-ripple';
 import { useInputCoordination } from '../../hooks/use-input-coordination';
+import { useKeyboardInteraction } from '../../hooks/use-keyboard-interaction';
+import { useMouseInteraction } from '../../hooks/use-mouse-interaction';
 import { AgentBusyOverlay } from './agent-busy-overlay';
 import { ClickRippleOverlay } from './click-ripple-overlay';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { cn } from '@/lib/utils';
 
 interface BrowserViewFrameProps {
   agentId: string;
@@ -21,7 +22,13 @@ interface BrowserViewFrameProps {
  * Browser view frame component that displays screencast stream.
  * Uses useRef pattern for img.src updates to bypass React virtual DOM.
  */
-export function BrowserViewFrame({ agentId, className, onStatusChange, onUrlChange, onFirstFrame }: BrowserViewFrameProps) {
+export function BrowserViewFrame({
+  agentId,
+  className,
+  onStatusChange,
+  onUrlChange,
+  onFirstFrame,
+}: BrowserViewFrameProps) {
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [hasFrame, setHasFrame] = useState(false);

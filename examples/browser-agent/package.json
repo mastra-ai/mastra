@@ -8,6 +8,7 @@
     "@ai-sdk/openai": "npm:@ai-sdk/openai@2.0.15",
     "@mastra/core": "latest",
     "@mastra/agent-browser": "latest",
+    "@mastra/stagehand": "latest",
     "@mastra/memory": "latest",
     "zod": "^4.3.6",
     "mastra": "latest"
@@ -16,6 +17,7 @@
     "overrides": {
       "@mastra/core": "link:../../packages/core",
       "@mastra/agent-browser": "link:../../browser/agent-browser",
+      "@mastra/stagehand": "link:../../browser/stagehand",
       "@mastra/memory": "link:../../packages/memory",
       "mastra": "link:../../packages/cli"
     }

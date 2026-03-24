@@ -23,9 +23,7 @@ export interface AgentBusyOverlayProps {
  * Mouse moves still show cursor on top of the overlay.
  */
 export function AgentBusyOverlay({ toolName }: AgentBusyOverlayProps) {
-  const displayName = toolName
-    ? (TOOL_DISPLAY_NAMES[toolName] ?? toolName.replace('browser_', ''))
-    : 'Working';
+  const displayName = toolName ? (TOOL_DISPLAY_NAMES[toolName] ?? toolName.replace('browser_', '')) : 'Working';
 
   return (
     <div className="absolute inset-0 bg-surface1/40 flex items-center justify-center z-10 cursor-not-allowed">

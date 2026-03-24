@@ -1,8 +1,8 @@
-import { useRef, useEffect, useState } from 'react';
 import { ChevronUp } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useRef, useEffect, useState } from 'react';
 import { useBrowserToolCalls } from '../../context/browser-tool-calls-context';
 import { BrowserToolCallItem } from './browser-tool-call-item';
+import { cn } from '@/lib/utils';
 
 interface BrowserToolCallHistoryProps {
   className?: string;
@@ -36,9 +36,7 @@ export function BrowserToolCallHistory({ className }: BrowserToolCallHistoryProp
         <ChevronUp
           className={cn('h-3.5 w-3.5 text-neutral3 transition-transform', isExpanded ? 'rotate-180' : 'rotate-90')}
         />
-        <span className="text-xs font-medium text-neutral4">
-          Browser Actions ({toolCalls.length})
-        </span>
+        <span className="text-xs font-medium text-neutral4">Browser Actions ({toolCalls.length})</span>
       </button>
 
       {isExpanded && (

@@ -86,13 +86,13 @@ StagehandBrowser exposes 6 AI-powered tools:
 
 ## Comparison with AgentBrowser
 
-| Feature | AgentBrowser | StagehandBrowser |
-|---------|--------------|------------------|
-| Approach | Deterministic refs ([ref=e1]) | Natural language |
-| Token cost | Low | Higher (LLM calls) |
-| Speed | Fast | Slower |
-| Reliability | High (exact refs) | Variable (AI interpretation) |
-| Best for | Structured workflows | Unknown/dynamic pages |
+| Feature     | AgentBrowser                  | StagehandBrowser             |
+| ----------- | ----------------------------- | ---------------------------- |
+| Approach    | Deterministic refs ([ref=e1]) | Natural language             |
+| Token cost  | Low                           | Higher (LLM calls)           |
+| Speed       | Fast                          | Slower                       |
+| Reliability | High (exact refs)             | Variable (AI interpretation) |
+| Best for    | Structured workflows          | Unknown/dynamic pages        |
 
 ## License
 

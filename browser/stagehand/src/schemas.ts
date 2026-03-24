@@ -45,7 +45,9 @@ export const observeInputSchema = z.object({
   instruction: z
     .string()
     .optional()
-    .describe('Natural language instruction for what to find (e.g., "find all buttons"). If omitted, finds all interactive elements.'),
+    .describe(
+      'Natural language instruction for what to find (e.g., "find all buttons"). If omitted, finds all interactive elements.',
+    ),
   onlyVisible: z.boolean().optional().describe('Only return visible elements (default: true)'),
   timeout: z.number().optional().describe('Timeout in milliseconds'),
 });

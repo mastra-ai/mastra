@@ -3,8 +3,8 @@
  */
 
 import { createTool } from '@mastra/core/tools';
-import type { StagehandBrowser } from '../stagehand-browser';
 import { actInputSchema } from '../schemas';
+import type { StagehandBrowser } from '../stagehand-browser';
 import { STAGEHAND_TOOLS } from './constants';
 
 export function createActTool(browser: StagehandBrowser) {

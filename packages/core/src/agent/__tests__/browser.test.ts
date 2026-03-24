@@ -2,7 +2,7 @@ import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import type { BrowserToolsetLike } from '../../browser';
+import type { MastraBrowser } from '../../browser';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 
@@ -25,7 +25,7 @@ function createMockModel() {
   });
 }
 
-function createMockBrowser(toolNames: string[] = ['browser_navigate', 'browser_snapshot']): BrowserToolsetLike {
+function createMockBrowser(toolNames: string[] = ['browser_navigate', 'browser_snapshot']): MastraBrowser {
   const tools: Record<string, any> = {};
   for (const name of toolNames) {
     tools[name] = createTool({
@@ -38,16 +38,13 @@ function createMockBrowser(toolNames: string[] = ['browser_navigate', 'browser_s
   }
 
   return {
-    tools,
+    getTools: () => tools,
     isBrowserRunning: vi.fn().mockReturnValue(false),
-    onBrowserReady: vi.fn().mockReturnValue(() => {}),
     startScreencast: vi.fn().mockResolvedValue({ on: vi.fn(), stop: vi.fn() }),
     startScreencastIfBrowserActive: vi.fn().mockResolvedValue(null),
-    getCurrentUrl: vi.fn().mockReturnValue(null),
-    close: vi.fn().mockResolvedValue(undefined),
     injectMouseEvent: vi.fn().mockResolvedValue(undefined),
     injectKeyboardEvent: vi.fn().mockResolvedValue(undefined),
-  };
+  } as unknown as MastraBrowser;
 }
 
 describe('Agent browser integration', () => {

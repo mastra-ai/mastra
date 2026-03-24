@@ -27,11 +27,4 @@ export {
   stagehandSchemas,
 } from './schemas.js';
 
-export type {
-  ActInput,
-  ExtractInput,
-  ObserveInput,
-  NavigateInput,
-  ScreenshotInput,
-  CloseInput,
-} from './schemas.js';
+export type { ActInput, ExtractInput, ObserveInput, NavigateInput, ScreenshotInput, CloseInput } from './schemas.js';

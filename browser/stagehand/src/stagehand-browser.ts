@@ -7,9 +7,9 @@
 
 import { MastraBrowser } from '@mastra/core/browser';
 import type { Tool } from '@mastra/core/tools';
-import type { StagehandBrowserConfig, StagehandAction, CdpUrlProvider } from './types';
 import type { ActInput, ExtractInput, ObserveInput, NavigateInput, ScreenshotInput } from './schemas';
 import { createStagehandTools } from './tools';
+import type { StagehandBrowserConfig, StagehandAction, CdpUrlProvider } from './types';
 
 // Stagehand type - we use any to avoid import issues, actual runtime behavior is fine
 type StagehandInstance = any;

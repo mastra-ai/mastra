@@ -6,7 +6,12 @@ describe('mapClientToViewport', () => {
     // elemRect 800x600, viewport 1600x1200 -> scale = min(0.5, 0.5) = 0.5
     // rendered: 800x600, offset: (0, 0)
     // click at (400, 300) -> imageX=400, imageY=300 -> viewport (800, 600)
-    const result = mapClientToViewport(400, 300, { left: 0, top: 0, width: 800, height: 600 }, { width: 1600, height: 1200 });
+    const result = mapClientToViewport(
+      400,
+      300,
+      { left: 0, top: 0, width: 800, height: 600 },
+      { width: 1600, height: 1200 },
+    );
     expect(result).not.toBeNull();
     expect(result!.x).toBeCloseTo(800, 1);
     expect(result!.y).toBeCloseTo(600, 1);
@@ -19,7 +24,12 @@ describe('mapClientToViewport', () => {
     // offsetX = (800-800)/2=0, offsetY = (600-450)/2=75
     // click at center (400, 300) -> imageX=400, imageY=300-75=225
     // viewport: (400/0.4167, 225/0.4167) = (960, 540)
-    const result = mapClientToViewport(400, 300, { left: 0, top: 0, width: 800, height: 600 }, { width: 1920, height: 1080 });
+    const result = mapClientToViewport(
+      400,
+      300,
+      { left: 0, top: 0, width: 800, height: 600 },
+      { width: 1920, height: 1080 },
+    );
     expect(result).not.toBeNull();
     expect(result!.x).toBeCloseTo(960, 0);
     expect(result!.y).toBeCloseTo(540, 0);
@@ -32,7 +42,12 @@ describe('mapClientToViewport', () => {
     // offsetX = (800-400)/2=200, offsetY = (600-600)/2=0
     // click at (400, 300) -> imageX=400-200=200, imageY=300
     // viewport: (200/0.5, 300/0.5) = (400, 600)
-    const result = mapClientToViewport(400, 300, { left: 0, top: 0, width: 800, height: 600 }, { width: 800, height: 1200 });
+    const result = mapClientToViewport(
+      400,
+      300,
+      { left: 0, top: 0, width: 800, height: 600 },
+      { width: 800, height: 1200 },
+    );
     expect(result).not.toBeNull();
     expect(result!.x).toBeCloseTo(400, 1);
     expect(result!.y).toBeCloseTo(600, 1);
@@ -41,35 +56,60 @@ describe('mapClientToViewport', () => {
   it('returns null for click in left pillarbox region', () => {
     // letterbox case: offsetX = 200
     // click at (100, 300) -> imageX = 100-200 = -100 < 0 -> null
-    const result = mapClientToViewport(100, 300, { left: 0, top: 0, width: 800, height: 600 }, { width: 800, height: 1200 });
+    const result = mapClientToViewport(
+      100,
+      300,
+      { left: 0, top: 0, width: 800, height: 600 },
+      { width: 800, height: 1200 },
+    );
     expect(result).toBeNull();
   });
 
   it('returns null for click in top letterbox region', () => {
     // pillarbox case: offsetY = 75
     // click at (400, 50) -> imageY = 50-75 = -25 < 0 -> null
-    const result = mapClientToViewport(400, 50, { left: 0, top: 0, width: 800, height: 600 }, { width: 1920, height: 1080 });
+    const result = mapClientToViewport(
+      400,
+      50,
+      { left: 0, top: 0, width: 800, height: 600 },
+      { width: 1920, height: 1080 },
+    );
     expect(result).toBeNull();
   });
 
   it('returns null for click in right pillarbox region', () => {
     // letterbox case: offsetX=200, renderedWidth=400
     // click at (700, 300) -> imageX=700-200=500 > 400 -> null
-    const result = mapClientToViewport(700, 300, { left: 0, top: 0, width: 800, height: 600 }, { width: 800, height: 1200 });
+    const result = mapClientToViewport(
+      700,
+      300,
+      { left: 0, top: 0, width: 800, height: 600 },
+      { width: 800, height: 1200 },
+    );
     expect(result).toBeNull();
   });
 
   it('returns null for click in bottom letterbox region', () => {
     // pillarbox case: offsetY=75, renderedHeight=450
     // click at (400, 560) -> imageY=560-75=485 > 450 -> null
-    const result = mapClientToViewport(400, 560, { left: 0, top: 0, width: 800, height: 600 }, { width: 1920, height: 1080 });
+    const result = mapClientToViewport(
+      400,
+      560,
+      { left: 0, top: 0, width: 800, height: 600 },
+      { width: 1920, height: 1080 },
+    );
     expect(result).toBeNull();
   });
 
   it('maps top-left corner of rendered area to viewport (0, 0)', () => {
     // letterbox case: offsetX=200, offsetY=0, scale=0.5
     // click at (200, 0) -> imageX=0, imageY=0 -> viewport (0, 0)
-    const result = mapClientToViewport(200, 0, { left: 0, top: 0, width: 800, height: 600 }, { width: 800, height: 1200 });
+    const result = mapClientToViewport(
+      200,
+      0,
+      { left: 0, top: 0, width: 800, height: 600 },
+      { width: 800, height: 1200 },
+    );
     expect(result).not.toBeNull();
     expect(result!.x).toBeCloseTo(0, 1);
     expect(result!.y).toBeCloseTo(0, 1);
@@ -79,7 +119,12 @@ describe('mapClientToViewport', () => {
     // letterbox case: offsetX=200, offsetY=0, scale=0.5, renderedWidth=400, renderedHeight=600
     // click at (200+400, 0+600) = (600, 600) -> imageX=400, imageY=600
     // viewport: (400/0.5, 600/0.5) = (800, 1200)
-    const result = mapClientToViewport(600, 600, { left: 0, top: 0, width: 800, height: 600 }, { width: 800, height: 1200 });
+    const result = mapClientToViewport(
+      600,
+      600,
+      { left: 0, top: 0, width: 800, height: 600 },
+      { width: 800, height: 1200 },
+    );
     expect(result).not.toBeNull();
     expect(result!.x).toBeCloseTo(800, 1);
     expect(result!.y).toBeCloseTo(1200, 1);
@@ -90,7 +135,12 @@ describe('mapClientToViewport', () => {
     // scale = 0.5, no letterbox
     // click at (500, 350) -> relX=500-100=400, relY=350-50=300
     // viewport: (400/0.5, 300/0.5) = (800, 600)
-    const result = mapClientToViewport(500, 350, { left: 100, top: 50, width: 800, height: 600 }, { width: 1600, height: 1200 });
+    const result = mapClientToViewport(
+      500,
+      350,
+      { left: 100, top: 50, width: 800, height: 600 },
+      { width: 1600, height: 1200 },
+    );
     expect(result).not.toBeNull();
     expect(result!.x).toBeCloseTo(800, 1);
     expect(result!.y).toBeCloseTo(600, 1);

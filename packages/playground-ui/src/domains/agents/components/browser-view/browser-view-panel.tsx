@@ -1,12 +1,12 @@
-import { useState, useCallback } from 'react';
 import { Globe } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { StatusBadge } from '@/ds/components/StatusBadge';
-import { BrowserViewFrame } from './browser-view-frame';
-import { BrowserViewHeader } from './browser-view-header';
-import { BrowserToolCallHistory } from './browser-tool-call-history';
+import { useState, useCallback } from 'react';
 import { useBrowserSession } from '../../context/browser-session-context';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
+import { BrowserToolCallHistory } from './browser-tool-call-history';
+import { BrowserViewFrame } from './browser-view-frame';
+import { BrowserViewHeader } from './browser-view-header';
+import { StatusBadge } from '@/ds/components/StatusBadge';
+import { cn } from '@/lib/utils';
 
 type ViewState = 'expanded' | 'minimized' | 'tucked';
 
@@ -133,7 +133,12 @@ export function BrowserViewPanel({ agentId }: BrowserViewPanelProps) {
             />
           )}
           <div className={cn('shrink-0', isMinimized && 'flex-1 min-h-0 p-1')}>
-            <BrowserViewFrame agentId={agentId} onStatusChange={handleStatusChange} onUrlChange={handleUrlChange} onFirstFrame={handleFirstFrame} />
+            <BrowserViewFrame
+              agentId={agentId}
+              onStatusChange={handleStatusChange}
+              onUrlChange={handleUrlChange}
+              onFirstFrame={handleFirstFrame}
+            />
           </div>
           {isExpanded && <BrowserToolCallHistory className="flex-1 min-h-0" />}
         </div>

@@ -1,4 +1,5 @@
-import { createContext, useContext, useCallback, useState, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useCallback, useState, useMemo } from 'react';
+import type { ReactNode } from 'react';
 
 const BROWSER_TOOL_PREFIX = 'browser_';
 
@@ -39,7 +40,10 @@ export function BrowserToolCallsProvider({ children }: { children: ReactNode }) 
     });
   }, []);
 
-  const toolCalls = useMemo(() => Array.from(toolCallMap.values()).sort((a, b) => a.timestamp - b.timestamp), [toolCallMap]);
+  const toolCalls = useMemo(
+    () => Array.from(toolCallMap.values()).sort((a, b) => a.timestamp - b.timestamp),
+    [toolCallMap],
+  );
 
   const value = useMemo(() => ({ toolCalls, registerToolCall }), [toolCalls, registerToolCall]);
 
