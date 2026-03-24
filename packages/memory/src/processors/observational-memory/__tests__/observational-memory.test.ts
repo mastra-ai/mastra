@@ -2,7 +2,7 @@ import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { injectAnchorIds, parseAnchorId, stripEphemeralAnchorIds } from '../anchor-ids';
 import { ModelByInputTokens } from '../model-by-input-tokens';
@@ -6600,6 +6600,46 @@ describe('Async Buffering Processor Logic', () => {
       // Should not throw
       (om as any).sealMessagesForBuffering([msg]);
       expect(msg.content.metadata).toBeUndefined();
+    });
+  });
+
+  describe('runAsyncBufferedObservation — persist failure', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+      (ObservationalMemory as any).sealedMessageIds.clear();
+    });
+
+    it('should return early and not track sealed IDs when persistMessages fails', async () => {
+      const storage = createInMemoryStorage();
+      const om = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 50000,
+          bufferTokens: 10000,
+        },
+        reflection: { observationTokens: 20000 },
+      });
+
+      const threadId = 'thread-1';
+      await storage.initializeObservationalMemory({
+        threadId,
+        resourceId: 'resource-1',
+        scope: 'thread',
+        config: {},
+      });
+      const record = await storage.getObservationalMemory(threadId, 'resource-1');
+
+      const messages = createTestMessages(20);
+
+      vi.spyOn((om as any).messageHistory, 'persistMessages').mockRejectedValue(new Error('Storage write failed'));
+      const doBufferedSpy = vi.spyOn(om as any, 'doAsyncBufferedObservation');
+
+      await (om as any).runAsyncBufferedObservation(record, threadId, messages, `obs:thread:${threadId}`);
+
+      expect((ObservationalMemory as any).sealedMessageIds.has(threadId)).toBe(false);
+      expect(doBufferedSpy).not.toHaveBeenCalled();
     });
   });
 
