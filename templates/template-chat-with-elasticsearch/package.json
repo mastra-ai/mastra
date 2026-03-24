@@ -1,0 +1,34 @@
+{
+  "name": "template-chat-with-elasticsearch",
+  "version": "1.0.0",
+  "description": "A Mastra template for chatting with Elasticsearch using natural language queries.",
+  "main": "index.js",
+  "scripts": {
+    "seed": "tsx src/seed.ts",
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.32.1+sha512.a706938f0e89ac1456b6563eab4edf1d1faf3368d1191fc5c59790e96dc918e4456ab2e67d613de1043d2e8c81f87303e6b40d4ffeca9df15ef1ad567348f2be",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@elastic/elasticsearch": "^8.17.1",
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/mcp": "latest",
+    "@mastra/memory": "latest",
+    "dotenv": "^16.4.5",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.7",
+    "mastra": "latest",
+    "tsx": "^4.19.4",
+    "typescript": "^5.9.3"
+  }
+}
