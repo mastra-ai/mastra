@@ -548,11 +548,16 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
   /** Process a span through output processors and export it, returning undefined if filtered out. */
   getSpanForExport(span: AnySpan): AnyExportedSpan | undefined {
+    const processedSpan = this.getProcessedSpan(span);
+    return processedSpan?.exportSpan(this.config.includeInternalSpans);
+  }
+
+  /** Process a span through output processors, returning undefined if filtered out. */
+  getProcessedSpan(span: AnySpan): AnySpan | undefined {
     if (!span.isValid) return undefined;
     if (span.isInternal && !this.config.includeInternalSpans) return undefined;
 
-    const processedSpan = this.processSpan(span);
-    return processedSpan?.exportSpan(this.config.includeInternalSpans);
+    return this.processSpan(span);
   }
 
   /**
@@ -573,10 +578,12 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * then routes the exported tracing event through the ObservabilityBus.
    */
   protected emitSpanEnded(span: AnySpan): void {
-    const exportedSpan = this.getSpanForExport(span);
-    if (exportedSpan) {
+    const processedSpan = this.getProcessedSpan(span);
+    const exportedSpan = processedSpan?.exportSpan(this.config.includeInternalSpans);
+
+    if (exportedSpan && processedSpan) {
       try {
-        emitAutoExtractedMetrics(span, this.getMetricsContext(span));
+        emitAutoExtractedMetrics(processedSpan, this.getMetricsContext(processedSpan));
       } catch (err) {
         this.logger.error('[Observability] Auto-extraction error:', err);
       }
