@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { SkillIcon } from '@/ds/icons/SkillIcon';
 import {
   FileText,
   Code,
@@ -13,10 +11,12 @@ import {
   FileCode2,
   FolderOpen,
 } from 'lucide-react';
+import { useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
-import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import type { Skill, SkillSource } from '../types';
+import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { SkillIcon } from '@/ds/icons/SkillIcon';
 
 export interface SkillDetailProps {
   skill: Skill;

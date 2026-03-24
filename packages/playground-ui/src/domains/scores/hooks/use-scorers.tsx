@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
-import { toast } from '@/lib/toast';
-import { GetScorerResponse } from '@mastra/client-js';
+import type { GetScorerResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { useMergedRequestContext } from '@/domains/request-context';
+import { toast } from '@/lib/toast';
 
 type UseScoresByScorerIdProps = {
   scorerId: string;
@@ -46,7 +46,7 @@ export const useScorer = (scorerId: string) => {
       }
     };
 
-    fetchScorer();
+    void fetchScorer();
   }, [scorerId]);
 
   return { scorer, isLoading, error };

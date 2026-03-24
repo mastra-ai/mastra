@@ -1,9 +1,9 @@
 'use client';
 
+import { Pencil } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Label } from '@/ds/components/Label';
-import { Pencil } from 'lucide-react';
 
 /** Schema validation error from API */
 export interface SchemaValidationError {

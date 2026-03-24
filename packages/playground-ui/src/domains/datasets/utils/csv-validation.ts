@@ -3,8 +3,8 @@
  * Validates mapped data before import, including schema validation
  */
 
-import { ZodSchema, ZodError, ZodIssue } from 'zod';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
+import type { ZodSchema, ZodError, ZodIssue } from 'zod';
 import { resolveSerializedZodOutput } from '@/lib/form/utils';
 
 /** Column mapping configuration */

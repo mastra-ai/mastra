@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useMastraClient } from '@mastra/react';
 import {
   ThumbsUp,
   ThumbsDown,
@@ -11,33 +11,33 @@ import {
   Pencil,
   Check,
   CheckCircle,
+  GaugeIcon,
 } from 'lucide-react';
-import { useMastraClient } from '@mastra/react';
-
-import { Txt } from '@/ds/components/Txt';
-import { Button, ButtonWithTooltip } from '@/ds/components/Button';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { usePlaygroundModel } from '../../context/playground-model-context';
+import { useReviewQueue } from '../../context/review-queue-context';
+import type { ReviewItem } from '../../context/review-queue-context';
+import { useCompletedItems } from '../../hooks/use-completed-items';
+import { useReviewItems } from '../../hooks/use-review-items';
+import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
+import { LLMProviders, LLMModels, cleanProviderId } from '@/domains/llm';
 import { Badge } from '@/ds/components/Badge';
-import { TooltipProvider } from '@/ds/components/Tooltip';
-import { Icon } from '@/ds/icons/Icon';
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Textarea } from '@/ds/components/Textarea';
+import { Button, ButtonWithTooltip } from '@/ds/components/Button';
+import { Checkbox } from '@/ds/components/Checkbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/ds/components/Dialog';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { Input } from '@/ds/components/Input';
 import { Label } from '@/ds/components/Label';
-import { Spinner } from '@/ds/components/Spinner';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
-import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/ds/components/Dialog';
-import { Checkbox } from '@/ds/components/Checkbox';
-import { cn } from '@/lib/utils';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Spinner } from '@/ds/components/Spinner';
+import { Textarea } from '@/ds/components/Textarea';
+import { TooltipProvider } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
 import { toast } from '@/lib/toast';
-
-import { useReviewQueue, type ReviewItem } from '../../context/review-queue-context';
-import { useReviewItems } from '../../hooks/use-review-items';
-import { useCompletedItems } from '../../hooks/use-completed-items';
-import { usePlaygroundModel } from '../../context/playground-model-context';
-import { LLMProviders, LLMModels, cleanProviderId } from '@/domains/llm';
-import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { cn } from '@/lib/utils';
 
 function formatUnknown(value: unknown): string {
   if (typeof value === 'string') return value;
@@ -537,6 +537,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     <Button
                       variant="outline"
                       size="sm"
+                      aria-label={`Create Scorer from ${filteredItems.length} item${filteredItems.length !== 1 ? 's' : ''}`}
                       onClick={() => {
                         onCreateScorer(
                           filteredItems.map(item => ({
@@ -546,7 +547,10 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                         );
                       }}
                     >
-                      Create Scorer ({filteredItems.length})
+                      <Icon size="sm">
+                        <GaugeIcon />
+                      </Icon>
+                      Create Scorer
                     </Button>
                   )}
                   <Txt variant="ui-xs" className="text-neutral3">
@@ -593,7 +597,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                       onRemove={() => removeItem(item.id)}
                       onComplete={async () => {
                         await completeItem(item.id);
-                        refetchCompleted();
+                        void refetchCompleted();
                       }}
                       tagVocabulary={datasetTagVocabulary}
                     />

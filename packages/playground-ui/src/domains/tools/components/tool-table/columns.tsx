@@ -1,9 +1,9 @@
+import type { ColumnDef, Row } from '@tanstack/react-table';
+import type { ToolWithAgents } from '../../utils/prepareToolsTable';
 import { Badge } from '@/ds/components/Badge';
 import { Cell, EntryCell } from '@/ds/components/Table';
-import { ColumnDef, Row } from '@tanstack/react-table';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 
-import { ToolWithAgents } from '../../utils/prepareToolsTable';
 import { useLinkComponent } from '@/lib/framework';
 
 const NameCell = ({ row }: { row: Row<ToolWithAgents> }) => {

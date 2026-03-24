@@ -1,6 +1,3 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useMastraClient } from '@mastra/react';
-import { usePlaygroundStore } from '@/store/playground-store';
 import type {
   ListAgentVersionsParams,
   CreateAgentVersionParams,
@@ -10,6 +7,9 @@ import type {
   ActivateAgentVersionResponse,
   DeleteAgentVersionResponse,
 } from '@mastra/client-js';
+import { useMastraClient } from '@mastra/react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export type { ListAgentVersionsParams, CreateAgentVersionParams };
 
@@ -53,8 +53,8 @@ export const useCreateAgentVersion = ({ agentId }: { agentId: string }) => {
     mutationFn: (params?: CreateAgentVersionParams) =>
       client.getStoredAgent(agentId).createVersion(params, requestContext),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
-      queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
     },
   });
 };
@@ -70,8 +70,8 @@ export const useActivateAgentVersion = ({ agentId }: { agentId: string }) => {
   return useMutation<ActivateAgentVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredAgent(agentId).activateVersion(versionId, requestContext),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
-      queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
     },
   });
 };
@@ -87,8 +87,8 @@ export const useRestoreAgentVersion = ({ agentId }: { agentId: string }) => {
   return useMutation<AgentVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredAgent(agentId).restoreVersion(versionId, requestContext),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
-      queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
     },
   });
 };
@@ -104,7 +104,7 @@ export const useDeleteAgentVersion = ({ agentId }: { agentId: string }) => {
   return useMutation<DeleteAgentVersionResponse, Error, string>({
     mutationFn: (versionId: string) => client.getStoredAgent(agentId).deleteVersion(versionId, requestContext),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
     },
   });
 };

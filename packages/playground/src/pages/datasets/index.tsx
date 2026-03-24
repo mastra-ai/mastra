@@ -5,27 +5,79 @@ import {
   MainContentContent,
   Icon,
   Button,
+  ButtonWithTooltip,
   HeaderAction,
   useDatasets,
   DatasetsTable,
+  DatasetsList,
   CreateDatasetDialog,
   useLinkComponent,
   DocsIcon,
+  ListSearch,
+  MainHeader,
+  EntityListPageLayout,
 } from '@mastra/playground-ui';
-import { Plus, Database } from 'lucide-react';
+import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
+import { BookIcon, Database, Plus } from 'lucide-react';
 import { useState } from 'react';
 
 function Datasets() {
-  const { Link } = useLinkComponent();
+  const { Link: FrameworkLink } = useLinkComponent();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { navigate, paths } = useLinkComponent();
   const { data, isLoading, error } = useDatasets();
+  const { variant } = useExperimentalUI('entity-list-page');
+  const [search, setSearch] = useState('');
   const datasets = data?.datasets ?? [];
 
   const handleDatasetCreated = (datasetId: string) => {
     setIsCreateDialogOpen(false);
     navigate(paths.datasetLink(datasetId));
   };
+
+  if (variant === 'new-proposal') {
+    return (
+      <>
+        <EntityListPageLayout>
+          <EntityListPageLayout.Top>
+            <MainHeader withMargins={false}>
+              <MainHeader.Column>
+                <MainHeader.Title isLoading={isLoading}>
+                  <Database /> Datasets
+                </MainHeader.Title>
+              </MainHeader.Column>
+              <MainHeader.Column className="flex justify-end gap-2">
+                <ButtonWithTooltip
+                  as="a"
+                  href="https://mastra.ai/reference/datasets/dataset"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  tooltipContent="Go to Dataset documentation"
+                >
+                  <BookIcon />
+                </ButtonWithTooltip>
+                <Button variant="primary" onClick={() => setIsCreateDialogOpen(true)}>
+                  <Plus />
+                  Create Dataset
+                </Button>
+              </MainHeader.Column>
+            </MainHeader>
+            <div className="max-w-[30rem]">
+              <ListSearch onSearch={setSearch} label="Filter datasets" placeholder="Filter by name or description" />
+            </div>
+          </EntityListPageLayout.Top>
+
+          <DatasetsList datasets={datasets} isLoading={isLoading} error={error} search={search} />
+        </EntityListPageLayout>
+
+        <CreateDatasetDialog
+          open={isCreateDialogOpen}
+          onOpenChange={setIsCreateDialogOpen}
+          onSuccess={handleDatasetCreated}
+        />
+      </>
+    );
+  }
 
   return (
     <MainContentLayout>
@@ -43,7 +95,13 @@ function Datasets() {
             </Icon>
             Create Dataset
           </Button>
-          <Button as={Link} to="https://mastra.ai/reference/datasets/dataset" target="_blank" variant="ghost" size="md">
+          <Button
+            as={FrameworkLink}
+            to="https://mastra.ai/reference/datasets/dataset"
+            target="_blank"
+            variant="ghost"
+            size="md"
+          >
             <DocsIcon />
             Datasets documentation
           </Button>

@@ -2,11 +2,11 @@
 
 import type { ClientScoreRowData } from '@mastra/client-js';
 import { GaugeIcon, FileCodeIcon, FileOutputIcon, ReceiptText, XIcon } from 'lucide-react';
+import { Button } from '@/ds/components/Button';
 import { Column } from '@/ds/components/Columns/column';
+import { MainHeader } from '@/ds/components/MainHeader';
 import { PrevNextNav } from '@/ds/components/PrevNextNav';
 import { SideDialog } from '@/ds/components/SideDialog';
-import { Button } from '@/ds/components/Button';
-import { MainHeader } from '@/ds/components/MainHeader';
 import { Sections } from '@/index';
 
 export type ExperimentScorePanelProps = {

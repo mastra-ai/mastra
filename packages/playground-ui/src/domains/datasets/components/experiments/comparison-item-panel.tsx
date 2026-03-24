@@ -2,16 +2,16 @@
 
 import type { CompareExperimentsResponse } from '@mastra/client-js';
 import { AlertTriangleIcon, FileCodeIcon, FileInputIcon, FileOutputIcon, TargetIcon, XIcon } from 'lucide-react';
-import { Column } from '@/ds/components/Columns';
-import { PrevNextNav } from '@/ds/components/PrevNextNav';
-import { MainHeader } from '@/ds/components/MainHeader';
-import { SideDialog } from '@/ds/components/SideDialog';
-import { Sections } from '@/ds/components/Sections';
+import { ScoreDelta } from './score-delta';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { Notice } from '@/ds/components/Notice';
-import { ScoreDelta } from './score-delta';
 import { Chip } from '@/ds/components/Chip';
+import { Column } from '@/ds/components/Columns';
+import { MainHeader } from '@/ds/components/MainHeader';
+import { Notice } from '@/ds/components/Notice';
+import { PrevNextNav } from '@/ds/components/PrevNextNav';
+import { Sections } from '@/ds/components/Sections';
+import { SideDialog } from '@/ds/components/SideDialog';
 
 type ComparisonItem = CompareExperimentsResponse['items'][number];
 
