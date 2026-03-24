@@ -51,6 +51,8 @@ export function PromptsList({ promptBlocks, isLoading, error, search = '' }: Pro
         <EntityList.TopCell className="text-center">Is Published</EntityList.TopCell>
       </EntityList.Top>
 
+      {filteredData.length === 0 && search ? <EntityList.NoMatch message="No Prompts match your search" /> : null}
+
       {filteredData.map(block => {
         const name = truncateString(block.name, 50);
         const description = truncateString(block.description ?? '', 200);
