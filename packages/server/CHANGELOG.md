@@ -1,5 +1,40 @@
 # @mastra/server
 
+## 1.16.0-alpha.4
+
+### Patch Changes
+
+- Added `ModelByInputTokens` in `@mastra/memory` for token-threshold-based model selection in Observational Memory. ([#14614](https://github.com/mastra-ai/mastra/pull/14614))
+
+  When configured, OM automatically selects different observer or reflector models based on the actual input token count at the time the OM call runs.
+
+  Example usage:
+
+  ```ts
+  import { Memory, ModelByInputTokens } from '@mastra/memory';
+
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        model: new ModelByInputTokens({
+          upTo: {
+            10_000: 'google/gemini-2.5-flash',
+            40_000: 'openai/gpt-4o',
+            1_000_000: 'openai/gpt-4.5',
+          },
+        }),
+      },
+    },
+  });
+  ```
+
+  The `upTo` keys are inclusive upper bounds. OM resolves the matching tier directly at the observer or reflector call site. If the input exceeds the largest configured threshold, OM throws an error.
+
+  Improved Observational Memory tracing so traces show the observer and reflector spans and make it easier to see which resolved model was used at runtime.
+
+- Updated dependencies [[`f14604c`](https://github.com/mastra-ai/mastra/commit/f14604c7ef01ba794e1a8d5c7bae5415852aacec), [`e06b520`](https://github.com/mastra-ai/mastra/commit/e06b520bdd5fdef844760c5e692c7852cbc5c240), [`dd9c4e0`](https://github.com/mastra-ai/mastra/commit/dd9c4e0a47962f1413e9b72114fcad912e19a0a6)]:
+  - @mastra/core@1.16.0-alpha.4
+
 ## 1.16.0-alpha.3
 
 ### Patch Changes
