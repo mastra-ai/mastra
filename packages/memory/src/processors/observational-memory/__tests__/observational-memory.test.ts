@@ -12973,6 +12973,13 @@ describe('Observer output threadTitle propagation', () => {
     const threadId = 'title-thread';
     const resourceId = 'title-resource';
 
+    const capturedParts: any[] = [];
+    const mockWriter = {
+      custom: async (part: any) => {
+        capturedParts.push(part);
+      },
+    };
+
     let observerCallCount = 0;
     const mockModel = createStreamCapableMockModel({
       doGenerate: async () => {
@@ -13040,6 +13047,7 @@ describe('Observer output threadTitle propagation', () => {
       threadId,
       resourceId,
       messages: msgs as any[],
+      writer: mockWriter as any,
     });
 
     // Verify observer was called
@@ -13051,5 +13059,17 @@ describe('Observer output threadTitle propagation', () => {
     expect(omMetadata.threadTitle).toBe('React Dashboard Project');
     expect(omMetadata.currentTask).toBe('Building the dashboard');
     expect(omMetadata.suggestedResponse).toBe('Let me help with that.');
+
+    const threadUpdatePart = capturedParts.find(part => part?.type === 'data-om-thread-update');
+    expect(threadUpdatePart).toMatchObject({
+      type: 'data-om-thread-update',
+      data: {
+        threadId,
+        oldTitle: 'Test Thread',
+        newTitle: 'React Dashboard Project',
+      },
+    });
+    expect(threadUpdatePart?.data.cycleId).toEqual(expect.any(String));
+    expect(threadUpdatePart?.data.timestamp).toEqual(expect.any(String));
   });
 });

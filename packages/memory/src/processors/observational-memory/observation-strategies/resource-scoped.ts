@@ -2,7 +2,12 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 
 import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
-import { createObservationEndMarker, createObservationFailedMarker, createObservationStartMarker } from '../markers';
+import {
+  createObservationEndMarker,
+  createObservationFailedMarker,
+  createObservationStartMarker,
+  createThreadUpdateMarker,
+} from '../markers';
 import { getLastObservedMessageCursor, sortThreadsByOldestMessage } from '../message-utils';
 import { buildMessageRange } from '../observational-memory';
 import { getMaxThreshold } from '../thresholds';
@@ -13,6 +18,7 @@ import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from '.
 
 export class ResourceScopedObservationStrategy extends ObservationStrategy {
   private readonly startedAt = new Date().toISOString();
+  private cycleId?: string;
   private readonly resourceId: string;
 
   private threadsWithMessages = new Map<string, MastraDBMessage[]>();
@@ -171,6 +177,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
   }
 
   async emitStartMarkers(cycleId: string) {
+    this.cycleId = cycleId;
     const allThreadIds = Array.from(this.threadsWithMessages.keys());
 
     for (const [threadId, msgs] of this.threadsWithMessages) {
@@ -331,11 +338,15 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
 
   async persist(processed: ProcessedObservation) {
     const { record } = this.opts;
+    const threadUpdateMarkers: Array<ReturnType<typeof createThreadUpdateMarker>> = [];
 
     if (processed.threadMetadataUpdates) {
       for (const update of processed.threadMetadataUpdates) {
         const thread = await this.storage.getThreadById({ threadId: update.threadId });
         if (thread) {
+          const oldTitle = thread.title?.trim();
+          const newTitle = update.threadTitle?.trim();
+          const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
           const newMetadata = setThreadOMMetadata(thread.metadata, {
             lastObservedAt: update.lastObservedAt,
             suggestedResponse: update.suggestedResponse,
@@ -345,11 +356,26 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           });
           await this.storage.updateThread({
             id: update.threadId,
-            title: thread.title ?? '',
+            title: shouldUpdateThreadTitle ? newTitle : (thread.title ?? ''),
             metadata: newMetadata,
           });
+
+          if (shouldUpdateThreadTitle) {
+            threadUpdateMarkers.push(
+              createThreadUpdateMarker({
+                cycleId: this.cycleId ?? crypto.randomUUID(),
+                threadId: update.threadId,
+                oldTitle,
+                newTitle,
+              }),
+            );
+          }
         }
       }
+    }
+
+    for (const marker of threadUpdateMarkers) {
+      await this.streamMarker(marker);
     }
 
     await this.storage.updateActiveObservations({

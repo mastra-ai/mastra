@@ -2,7 +2,12 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
-import { createObservationEndMarker, createObservationFailedMarker, createObservationStartMarker } from '../markers';
+import {
+  createObservationEndMarker,
+  createObservationFailedMarker,
+  createObservationStartMarker,
+  createThreadUpdateMarker,
+} from '../markers';
 import { getLastObservedMessageCursor } from '../message-utils';
 
 import { buildMessageRange } from '../observational-memory';
@@ -13,6 +18,7 @@ import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from '.
 export class SyncObservationStrategy extends ObservationStrategy {
   private readonly startedAt = new Date().toISOString();
   private readonly lastMessage: MastraDBMessage | undefined;
+  private cycleId?: string;
   private tokensToObserve = 0;
   private observerResult!: ObserverOutput;
 
@@ -70,6 +76,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
   }
 
   async emitStartMarkers(cycleId: string) {
+    this.cycleId = cycleId;
     if (this.lastMessage?.id) {
       const startMarker = createObservationStartMarker({
         cycleId,
@@ -149,7 +156,12 @@ export class SyncObservationStrategy extends ObservationStrategy {
     const { record, threadId, messages } = this.opts;
 
     const thread = await this.storage.getThreadById({ threadId });
+    let threadUpdateMarker: ReturnType<typeof createThreadUpdateMarker> | undefined;
+
     if (thread) {
+      const oldTitle = thread.title?.trim();
+      const newTitle = processed.threadTitle?.trim();
+      const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
       const newMetadata = setThreadOMMetadata(thread.metadata, {
         suggestedResponse: processed.suggestedContinuation,
         currentTask: processed.currentTask,
@@ -158,9 +170,22 @@ export class SyncObservationStrategy extends ObservationStrategy {
       });
       await this.storage.updateThread({
         id: threadId,
-        title: thread.title ?? '',
+        title: shouldUpdateThreadTitle ? newTitle : (thread.title ?? ''),
         metadata: newMetadata,
       });
+
+      if (shouldUpdateThreadTitle) {
+        threadUpdateMarker = createThreadUpdateMarker({
+          cycleId: this.cycleId ?? crypto.randomUUID(),
+          threadId,
+          oldTitle,
+          newTitle,
+        });
+      }
+    }
+
+    if (threadUpdateMarker) {
+      await this.streamMarker(threadUpdateMarker);
     }
 
     await this.storage.updateActiveObservations({
