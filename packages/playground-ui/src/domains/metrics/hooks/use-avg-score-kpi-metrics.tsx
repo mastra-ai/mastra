@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
+import { useQuery } from '@tanstack/react-query';
+
 import { useMetricsFilters } from './use-metrics-filters';
 
 /** Avg Score — average score from the old scores storage */

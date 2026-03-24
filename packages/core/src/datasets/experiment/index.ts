@@ -70,6 +70,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     description,
     metadata,
     requestContext: globalRequestContext,
+    agentVersion,
   } = config;
 
   const startedAt = new Date();
@@ -229,6 +230,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         targetType: targetType ?? 'agent',
         targetId: targetId ?? 'inline',
         totalItems: items.length,
+        agentVersion,
       });
     }
     // Update status to running (both sync and async paths)

@@ -96,6 +96,8 @@ export function ProcessorsList({ processors, isLoading, error, search = '' }: Pr
         <EntityList.TopCellSmart short="Used by" long="Used by Agents" className="text-center" />
       </EntityList.Top>
 
+      {filteredData.length === 0 && search ? <EntityList.NoMatch message="No Processors match your search" /> : null}
+
       {filteredData.map(processor => {
         const name = truncateString(processor.name || processor.id, 50);
         const description = truncateString(processor.description ?? '', 200);

@@ -1,9 +1,9 @@
-import { MetricsCard } from '@/ds/components/MetricsCard';
-import { HorizontalBars } from '@/ds/components/HorizontalBars';
-import { CHART_COLORS, formatCompact } from './metrics-utils';
-import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 import { useTraceVolumeMetrics } from '../hooks/use-trace-volume-metrics';
 import type { VolumeRow } from '../hooks/use-trace-volume-metrics';
+import { CHART_COLORS, formatCompact } from './metrics-utils';
+import { HorizontalBars } from '@/ds/components/HorizontalBars';
+import { MetricsCard } from '@/ds/components/MetricsCard';
+import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 
 function VolumeBars({ data }: { data: VolumeRow[] }) {
   return (

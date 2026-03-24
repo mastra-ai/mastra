@@ -6,17 +6,13 @@ export { useTotalTokensKpiMetrics } from '../hooks/use-total-tokens-kpi-metrics'
 export { useAvgScoreKpiMetrics } from '../hooks/use-avg-score-kpi-metrics';
 export { useMetricsFilters } from '../hooks/use-metrics-filters';
 export { DateRangeSelector } from './date-range-selector';
-export { ChartCard, CustomTooltip } from './chart-card';
 export { MetricsCard } from '@/ds/components/MetricsCard';
 export { MetricsDataTable } from '@/ds/components/MetricsDataTable/metrics-data-table';
 export { MetricsKpiCard } from '@/ds/components/MetricsKpiCard';
-export { ModelIcon } from './model-icon';
 export { ModelUsageCostCard } from './model-usage-cost-card';
 export { useModelUsageCostMetrics } from '../hooks/use-model-usage-cost-metrics';
 export type { ModelUsageRow } from '../hooks/use-model-usage-cost-metrics';
-export { BarListContent, StackedRunsBars } from './bar-list';
 export { HorizontalBars } from '@/ds/components/HorizontalBars';
-export { DashboardLineChart } from './dashboard-line-chart';
 export { TracesVolumeCard } from './traces-volume-card';
 export { useTraceVolumeMetrics } from '../hooks/use-trace-volume-metrics';
 export type { VolumeRow } from '../hooks/use-trace-volume-metrics';
@@ -29,4 +25,4 @@ export type { ScorerSummary, ScoresOverTimePoint } from '../hooks/use-scores-met
 export { TokenUsageByAgentCard } from './token-usage-by-agent-card';
 export { useTokenUsageByAgentMetrics } from '../hooks/use-token-usage-by-agent-metrics';
 export type { TokenUsageByAgentRow } from '../hooks/use-token-usage-by-agent-metrics';
-export { formatCompact, formatDollars, CHART_COLORS, LABEL_COLOR } from './metrics-utils';
+export { formatCompact, CHART_COLORS } from './metrics-utils';

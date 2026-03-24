@@ -598,9 +598,11 @@ export default function Workspace() {
               onViewFileResult={id => {
                 updateSearchParams({ file: id, tab: 'files' });
               }}
-              onViewSkillResult={skillName => {
+              onViewSkillResult={(skillName, skillPath) => {
                 if (effectiveWorkspaceId) {
-                  void navigate(`/workspaces/${effectiveWorkspaceId}/skills/${encodeURIComponent(skillName)}`);
+                  void navigate(
+                    `/workspaces/${effectiveWorkspaceId}/skills/${encodeURIComponent(skillName)}?path=${encodeURIComponent(skillPath)}`,
+                  );
                 }
               }}
             />
@@ -742,7 +744,7 @@ function WorkspaceSearchPanel({
   canVector: boolean;
   showInitWarning: boolean;
   onViewFileResult: (id: string) => void;
-  onViewSkillResult: (skillName: string) => void;
+  onViewSkillResult: (skillName: string, skillPath: string) => void;
 }) {
   const searchWorkspace = useSearchWorkspace();
   const searchSkills = useSearchWorkspaceSkills();
@@ -789,7 +791,7 @@ function WorkspaceSearchPanel({
             onSearch={params => searchSkills.mutate({ ...params, workspaceId })}
             results={searchSkills.data?.results ?? []}
             isSearching={searchSkills.isPending}
-            onResultClick={result => onViewSkillResult(result.skillName)}
+            onResultClick={result => onViewSkillResult(result.skillName, result.skillPath)}
           />
         </div>
       )}

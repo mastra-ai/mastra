@@ -16,10 +16,10 @@ import {
   MainHeader,
   EntityListPageLayout,
 } from '@mastra/playground-ui';
-import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
 import { BookIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
 
 function Agents() {
   const { data: agents = {}, isLoading, error } = useAgents();
@@ -53,14 +53,7 @@ function Agents() {
           </div>
         </EntityListPageLayout.Top>
 
-        <AgentsList
-          agents={agents}
-          isLoading={isLoading}
-          error={error}
-          search={search}
-          onSearch={setSearch}
-          hideToolbar
-        />
+        <AgentsList agents={agents} isLoading={isLoading} error={error} search={search} />
       </EntityListPageLayout>
     );
   }

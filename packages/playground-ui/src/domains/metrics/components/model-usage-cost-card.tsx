@@ -1,6 +1,6 @@
+import { useModelUsageCostMetrics } from '../hooks/use-model-usage-cost-metrics';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import { MetricsDataTable } from '@/ds/components/MetricsDataTable/metrics-data-table';
-import { useModelUsageCostMetrics } from '../hooks/use-model-usage-cost-metrics';
 
 export function ModelUsageCostCard() {
   const { data: rows, isLoading, isError } = useModelUsageCostMetrics();

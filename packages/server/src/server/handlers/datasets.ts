@@ -592,6 +592,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         targetId,
         scorerIds,
         version,
+        agentVersion,
         maxConcurrency,
         requestContext: rawRequestContext,
       } = params as {
@@ -599,6 +600,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         targetId: string;
         scorerIds?: string[];
         version?: number;
+        agentVersion?: string;
         maxConcurrency?: number;
         requestContext?: Record<string, unknown> | RequestContext;
       };
@@ -611,6 +613,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         targetId,
         scorers: scorerIds,
         version,
+        agentVersion,
         maxConcurrency,
         requestContext,
       });

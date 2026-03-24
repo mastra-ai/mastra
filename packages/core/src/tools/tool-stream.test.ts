@@ -1,6 +1,6 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';

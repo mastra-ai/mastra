@@ -34,6 +34,7 @@ import { ExperimentalUIManager } from '@/domains/experimental-ui/experimental-ui
 type SidebarLink = NavLink & {
   requiredPermission?: string;
   requiredAnyPermission?: string[];
+  requiresExperimentalFeatures?: boolean;
 };
 
 type SidebarSection = Omit<NavSection, 'links'> & {

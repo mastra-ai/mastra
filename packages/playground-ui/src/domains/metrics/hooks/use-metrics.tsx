@@ -1,6 +1,6 @@
+import { differenceInDays, format } from 'date-fns';
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import type { ReactNode } from 'react';
-import { differenceInDays, format } from 'date-fns';
 
 const DATE_PRESETS = [
   { label: 'Last 24 hours', value: '24h' },

@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
+import { useQuery } from '@tanstack/react-query';
+
 import { useMetricsFilters } from './use-metrics-filters';
 
 /** Total Tokens — sum of all input + output tokens */

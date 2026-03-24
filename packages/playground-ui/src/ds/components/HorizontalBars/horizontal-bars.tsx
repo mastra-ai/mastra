@@ -1,5 +1,5 @@
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
 import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
 import { cn } from '@/lib/utils';
 
 type Segment = { label: string; color: string };

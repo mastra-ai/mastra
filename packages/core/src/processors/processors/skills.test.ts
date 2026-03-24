@@ -46,64 +46,66 @@ const mockSkillMetadata1: SkillMetadata = {
   name: mockSkill1.name,
   description: mockSkill1.description,
   license: mockSkill1.license,
+  path: mockSkill1.path,
 };
 
 const mockSkillMetadata2: SkillMetadata = {
   name: mockSkill2.name,
   description: mockSkill2.description,
+  path: mockSkill2.path,
 };
 
 // Create mock WorkspaceSkills
 function createMockWorkspaceSkills(): WorkspaceSkills {
   const skills = new Map<string, Skill>([
-    [mockSkill1.name, mockSkill1],
-    [mockSkill2.name, mockSkill2],
+    [mockSkill1.path, mockSkill1],
+    [mockSkill2.path, mockSkill2],
   ]);
 
   const references = new Map<string, Map<string, string>>([
-    [mockSkill1.name, new Map([['api.md', '# API Reference\nSome API docs.']])],
-    [mockSkill2.name, new Map([['guide.md', '# Testing Guide\nHow to write tests.']])],
+    [mockSkill1.path, new Map([['api.md', '# API Reference\nSome API docs.']])],
+    [mockSkill2.path, new Map([['guide.md', '# Testing Guide\nHow to write tests.']])],
   ]);
 
   const scripts = new Map<string, Map<string, string>>([
-    [mockSkill1.name, new Map([['lint.sh', '#!/bin/bash\neslint .']])],
+    [mockSkill1.path, new Map([['lint.sh', '#!/bin/bash\neslint .']])],
   ]);
 
   const assets = new Map<string, Map<string, Buffer>>([
-    [mockSkill1.name, new Map([['template.json', Buffer.from('{"type": "template"}')]])],
+    [mockSkill1.path, new Map([['template.json', Buffer.from('{"type": "template"}')]])],
   ]);
 
   return {
     list: vi.fn().mockResolvedValue([mockSkillMetadata1, mockSkillMetadata2]),
-    get: vi.fn().mockImplementation((name: string) => Promise.resolve(skills.get(name) || null)),
-    has: vi.fn().mockImplementation((name: string) => Promise.resolve(skills.has(name))),
+    get: vi.fn().mockImplementation((skillPath: string) => Promise.resolve(skills.get(skillPath) || null)),
+    has: vi.fn().mockImplementation((skillPath: string) => Promise.resolve(skills.has(skillPath))),
     refresh: vi.fn().mockResolvedValue(undefined),
     maybeRefresh: vi.fn().mockResolvedValue(undefined),
     search: vi.fn().mockResolvedValue([]),
     getReference: vi
       .fn()
-      .mockImplementation((skillName: string, path: string) =>
-        Promise.resolve(references.get(skillName)?.get(path) ?? null),
+      .mockImplementation((skillPath: string, path: string) =>
+        Promise.resolve(references.get(skillPath)?.get(path) ?? null),
       ),
     getScript: vi
       .fn()
-      .mockImplementation((skillName: string, path: string) =>
-        Promise.resolve(scripts.get(skillName)?.get(path) ?? null),
+      .mockImplementation((skillPath: string, path: string) =>
+        Promise.resolve(scripts.get(skillPath)?.get(path) ?? null),
       ),
     getAsset: vi
       .fn()
-      .mockImplementation((skillName: string, path: string) =>
-        Promise.resolve(assets.get(skillName)?.get(path) ?? null),
+      .mockImplementation((skillPath: string, path: string) =>
+        Promise.resolve(assets.get(skillPath)?.get(path) ?? null),
       ),
     listReferences: vi
       .fn()
-      .mockImplementation((skillName: string) => Promise.resolve(Array.from(references.get(skillName)?.keys() || []))),
+      .mockImplementation((skillPath: string) => Promise.resolve(Array.from(references.get(skillPath)?.keys() || []))),
     listScripts: vi
       .fn()
-      .mockImplementation((skillName: string) => Promise.resolve(Array.from(scripts.get(skillName)?.keys() || []))),
+      .mockImplementation((skillPath: string) => Promise.resolve(Array.from(scripts.get(skillPath)?.keys() || []))),
     listAssets: vi
       .fn()
-      .mockImplementation((skillName: string) => Promise.resolve(Array.from(assets.get(skillName)?.keys() || []))),
+      .mockImplementation((skillPath: string) => Promise.resolve(Array.from(assets.get(skillPath)?.keys() || []))),
   };
 }
 

@@ -1,5 +1,5 @@
 import { zodToJsonSchema as schemaCompatZodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
-import type { ZodType } from 'zod';
+import type { ZodType } from 'zod/v4';
 
 /**
  * Check if a value is a Zod schema type.

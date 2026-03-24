@@ -17,7 +17,7 @@
  *      continue from where it left off.
  */
 import { describe, expect, it, vi } from 'vitest';
-import z from 'zod';
+import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';

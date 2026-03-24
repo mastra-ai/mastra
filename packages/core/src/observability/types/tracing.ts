@@ -12,7 +12,7 @@ import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { LanguageModelUsage, ProviderMetadata, StepStartPayload } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
-import type { CustomSamplerOptions, ObservabilityInstance } from './core';
+import type { CustomSamplerOptions, ObservabilityInstance, CorrelationContext } from './core';
 import type { FeedbackInput } from './feedback';
 import type { ScoreInput } from './scores';
 
@@ -473,6 +473,12 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
 
   /** Find the closest parent span of a specific type by walking up the parent chain */
   findParent<T extends SpanType>(spanType: T): Span<T> | undefined;
+
+  /**
+   * Optional hook for implementations that expose canonical correlation
+   * context directly from the span instance.
+   */
+  getCorrelationContext?(): CorrelationContext;
 
   /** Returns a lightweight span ready for export */
   exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> | undefined;

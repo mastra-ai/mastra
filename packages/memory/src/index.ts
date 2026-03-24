@@ -40,6 +40,7 @@ import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/schema-compa
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
+import type { ObservationalMemoryConfig } from './processors/observational-memory';
 import { recallTool } from './tools/om-tools';
 import {
   updateWorkingMemoryTool,
@@ -47,21 +48,42 @@ import {
   deepMergeWorkingMemory,
 } from './tools/working-memory';
 
+export {
+  ModelByInputTokens,
+  type ModelByInputTokensConfig,
+} from './processors/observational-memory/model-by-input-tokens';
+
 /**
  * Normalize a `boolean | object` observational memory config.
  * Returns the options object if enabled, undefined if disabled.
  * Inlined here to avoid importing runtime exports that don't exist on older @mastra/core versions.
  */
-type NormalizedObservationalMemoryConfig = ObservationalMemoryOptions & {
-  retrieval?: boolean;
+type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model' | 'observation' | 'reflection'> & {
+  model?: ObservationalMemoryConfig['model'];
+  observation?: ObservationalMemoryConfig['observation'];
+  reflection?: ObservationalMemoryConfig['reflection'];
 };
 
+type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
+  observationalMemory?: boolean | MemoryObservationalMemoryOptions;
+};
+
+type MemoryConstructorConfig = Omit<SharedMemoryConfig, 'options'> & {
+  options?: MemoryOptions;
+};
+
+type RuntimeMemoryConfig = Omit<MemoryConfig, 'observationalMemory'> & {
+  observationalMemory?: boolean | MemoryObservationalMemoryOptions;
+};
+
+type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions;
+
 function normalizeObservationalMemoryConfig(
-  config: boolean | ObservationalMemoryOptions | undefined,
+  config: boolean | MemoryObservationalMemoryOptions | undefined,
 ): NormalizedObservationalMemoryConfig | undefined {
   if (config === true) return { model: 'google/gemini-2.5-flash' };
   if (config === false || config === undefined) return undefined;
-  if (typeof config === 'object' && (config as ObservationalMemoryOptions).enabled === false) return undefined;
+  if (typeof config === 'object' && config.enabled === false) return undefined;
   return config as NormalizedObservationalMemoryConfig;
 }
 
@@ -81,8 +103,8 @@ const VECTOR_DELETE_BATCH_SIZE = 100;
  * and message injection.
  */
 export class Memory extends MastraMemory {
-  constructor(config: Omit<SharedMemoryConfig, 'working'> = {}) {
-    super({ name: 'Memory', ...config });
+  constructor(config: MemoryConstructorConfig = {}) {
+    super({ name: 'Memory', ...config } as { name: string } & SharedMemoryConfig);
 
     const mergedConfig = this.getMergedThreadConfig({
       workingMemory: config.options?.workingMemory || {
@@ -92,7 +114,7 @@ export class Memory extends MastraMemory {
         enabled: false,
         template: this.defaultWorkingMemoryTemplate,
       },
-      observationalMemory: config.options?.observationalMemory,
+      observationalMemory: config.options?.observationalMemory as ObservationalMemoryOptions | boolean | undefined,
     });
     this.threadConfig = mergedConfig;
   }
@@ -1956,9 +1978,17 @@ Notes:
     );
 
     // Get effective config (runtime config merged with instance config)
-    const memoryContext = context?.get('MastraMemory') as { memoryConfig?: MemoryConfig } | undefined;
+    const memoryContext = context?.get('MastraMemory') as { memoryConfig?: RuntimeMemoryConfig } | undefined;
     const runtimeMemoryConfig = memoryContext?.memoryConfig;
-    const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
+    const effectiveConfig = runtimeMemoryConfig
+      ? this.getMergedThreadConfig({
+          ...runtimeMemoryConfig,
+          observationalMemory: runtimeMemoryConfig.observationalMemory as
+            | ObservationalMemoryOptions
+            | boolean
+            | undefined,
+        })
+      : this.threadConfig;
 
     // Add ObservationalMemory processor if configured and not already present
     const omConfig = normalizeObservationalMemoryConfig(effectiveConfig.observationalMemory);
