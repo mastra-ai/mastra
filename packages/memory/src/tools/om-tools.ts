@@ -266,8 +266,10 @@ export async function searchMessagesForResource({
 
   const MAX_TOPK = 20;
   const clampedTopK = Math.min(Math.max(topK, 1), MAX_TOPK);
+  const effectiveTopK = threadScope || before || after ? Math.max(clampedTopK * 3, clampedTopK + 10) : clampedTopK;
+  const searchTopK = Math.min(MAX_TOPK, effectiveTopK);
 
-  const { results } = await memory.searchMessages({ query, resourceId, topK: clampedTopK });
+  const { results } = await memory.searchMessages({ query, resourceId, topK: searchTopK });
 
   if (results.length === 0) {
     return {
@@ -306,7 +308,9 @@ export async function searchMessagesForResource({
     return { results: 'No matching messages found.', count: 0 };
   }
 
-  const sections = filteredMatches.map(match => {
+  const limitedMatches = filteredMatches.slice(0, clampedTopK);
+
+  const sections = limitedMatches.map(match => {
     const thread = threadMap.get(match.threadId);
     const title = thread?.title || '(untitled)';
     const isCurrentThread = match.threadId === currentThreadId;
@@ -346,7 +350,7 @@ export async function searchMessagesForResource({
 
   return {
     results: limited,
-    count: filteredMatches.length,
+    count: limitedMatches.length,
   };
 }
 
@@ -1024,14 +1028,14 @@ export const recallTool = (
       if (!memory) {
         throw new Error('Memory instance is required for recall');
       }
-      if (!resourceId) {
-        throw new Error('Resource ID is required for recall');
-      }
 
       // Search mode
       if (mode === 'search') {
         if (!query) {
           throw new Error('query is required for mode="search"');
+        }
+        if (!resourceId) {
+          throw new Error('Resource ID is required for recall');
         }
         return searchMessagesForResource({
           memory,
@@ -1062,6 +1066,9 @@ export const recallTool = (
             page: 0,
             hasMore: false,
           };
+        }
+        if (!resourceId) {
+          throw new Error('Resource ID is required for recall');
         }
         return listThreadsForResource({
           memory,

@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { Memory } from '../index';
 import {
@@ -1368,6 +1368,70 @@ describe('om-tools', () => {
   });
 
   describe('searchMessagesForResource', () => {
+    it('should allow thread-scoped mode="threads" without resourceId', async () => {
+      const tool = recallTool(undefined, { retrievalScope: 'thread' });
+      const memory = {
+        getThreadById: async ({ threadId }: { threadId: string }) => ({
+          id: threadId,
+          title: 'Current Thread',
+          resourceId: 'res',
+          createdAt: new Date('2024-01-01'),
+          updatedAt: new Date('2024-01-02'),
+        }),
+      };
+
+      const result = await tool.execute?.({ mode: 'threads' }, { memory, agent: { threadId: 'thread-a' } } as any);
+
+      expect(result).toMatchObject({ count: 1, hasMore: false });
+      expect((result as any).threads).toContain('Current Thread');
+    });
+
+    it('should overfetch before applying thread and date filters', async () => {
+      const threads = [
+        {
+          id: 'thread-a',
+          title: 'Current Thread',
+          resourceId: 'res',
+          createdAt: new Date('2024-01-10'),
+          updatedAt: new Date('2024-01-10'),
+        },
+        {
+          id: 'thread-b',
+          title: 'Older Thread',
+          resourceId: 'res',
+          createdAt: new Date('2024-01-20'),
+          updatedAt: new Date('2024-01-20'),
+        },
+      ];
+
+      const searchMessages = vi.fn().mockResolvedValue({
+        results: [
+          { threadId: 'thread-a', groupId: 'group-a', range: 'msg-1:msg-2', score: 0.99, text: 'Current thread hit' },
+          { threadId: 'thread-b', groupId: 'group-b', range: 'msg-3:msg-4', score: 0.88, text: 'Older thread hit' },
+        ],
+      });
+
+      const memory = {
+        listThreads: async () => ({ threads, total: threads.length, hasMore: false, page: 0 }),
+        searchMessages,
+        getThreadById: async ({ threadId }: { threadId: string }) => threads.find(t => t.id === threadId) || null,
+      };
+
+      const result = await searchMessagesForResource({
+        memory: memory as any,
+        resourceId: 'res',
+        currentThreadId: 'thread-a',
+        query: 'older thread',
+        topK: 1,
+        after: '2024-01-15',
+      });
+
+      expect(searchMessages).toHaveBeenCalledWith({ query: 'older thread', resourceId: 'res', topK: 11 });
+      expect(result.count).toBe(1);
+      expect(result.results).toContain('Older Thread');
+      expect(result.results).not.toContain('Current Thread');
+    });
+
     function makeMockMemory({
       searchResults = [],
       messages = [],
@@ -1502,6 +1566,53 @@ describe('om-tools', () => {
       expect(result.count).toBe(1);
       expect(result.results).toContain('- thread: thread-a');
       expect(result.results).toContain('_Observation text unavailable._');
+    });
+
+    it('should apply thread and date filters before the final topK slice', async () => {
+      const threads = [
+        {
+          id: 'thread-a',
+          title: 'Current Thread',
+          resourceId: 'res',
+          createdAt: new Date('2024-01-01'),
+          updatedAt: new Date('2024-01-01'),
+        },
+        {
+          id: 'thread-b',
+          title: 'Filtered In',
+          resourceId: 'res',
+          createdAt: new Date('2024-01-02'),
+          updatedAt: new Date('2024-01-02'),
+        },
+        {
+          id: 'thread-c',
+          title: 'Filtered Out',
+          resourceId: 'res',
+          createdAt: new Date('2024-01-03'),
+          updatedAt: new Date('2024-01-03'),
+        },
+      ];
+
+      const memory = makeMockMemory({
+        searchResults: [
+          { threadId: 'thread-c', groupId: 'group-1', range: 'msg-1:msg-2', score: 0.99, text: 'out' },
+          { threadId: 'thread-c', groupId: 'group-2', range: 'msg-3:msg-4', score: 0.98, text: 'out' },
+          { threadId: 'thread-b', groupId: 'group-3', range: 'msg-5:msg-6', score: 0.97, text: 'in' },
+        ],
+        threads,
+      });
+
+      const result = await searchMessagesForResource({
+        memory,
+        resourceId: 'res',
+        query: 'test',
+        topK: 1,
+        before: '2024-01-03T00:00:00Z',
+      });
+
+      expect(result.count).toBe(1);
+      expect(result.results).toContain('Filtered In');
+      expect(result.results).not.toContain('Filtered Out');
     });
 
     it('should apply a final token cap to the assembled markdown output', async () => {
