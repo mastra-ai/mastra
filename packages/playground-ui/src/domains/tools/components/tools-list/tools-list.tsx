@@ -57,6 +57,8 @@ export function ToolsList({ tools, agents, isLoading, error, search = '' }: Tool
         />
       </EntityList.Top>
 
+      {filteredData.length === 0 && search ? <EntityList.NoMatch message="No Tools match your search" /> : null}
+
       {filteredData.map(tool => {
         const name = truncateString(tool.id, 50);
         const description = truncateString(tool.description ?? '', 200);
