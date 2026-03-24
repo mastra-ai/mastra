@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed duplicate assistant messages when client-side tools send results back from the browser. The MessageHistory processor now matches input and DB messages by toolCallId instead of message ID, updates the DB tool state from 'call' to 'result', and removes the duplicate. This prevents exponential token growth across round-trips. (Fixes #14602)
+Fixed an issue where browser/client-side tool results created duplicate assistant messages in memory on every round-trip, causing prompt size to grow exponentially (20K → 54K → 118K → 147K tokens). Assistant messages now remain deduplicated and tool results are correctly persisted, so prompt size stays stable across round-trips. (Fixes #14602)

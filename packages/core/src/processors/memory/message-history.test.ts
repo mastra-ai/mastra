@@ -78,6 +78,15 @@ class MockStorage extends MemoryStorage {
   }
   async deleteThread(_args: { threadId: string }) {}
   async saveMessages(args: { messages: MastraDBMessage[] }) {
+    // Upsert: update existing messages by ID, append new ones
+    for (const msg of args.messages) {
+      const idx = this.messages.findIndex(m => m.id === msg.id);
+      if (idx !== -1) {
+        this.messages[idx] = msg;
+      } else {
+        this.messages.push(msg);
+      }
+    }
     return { messages: args.messages };
   }
   async updateMessages(args: any) {
@@ -741,6 +750,79 @@ describe('MessageHistory', () => {
       // call-2 still in 'call' state
       expect(parts[1].toolInvocation.state).toBe('call');
       expect(parts[1].toolInvocation.result).toBeUndefined();
+    });
+
+    it('should persist updated state so subsequent reads return result', async () => {
+      const toolCallId = 'call-1';
+
+      const dbMessage: MastraDBMessage = {
+        id: 'server-111',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId, toolName: 'renderGame', args: { x: 1 } },
+            },
+          ],
+        },
+        threadId: 'thread-1',
+        createdAt: new Date(Date.now() - 5000),
+      };
+
+      mockStorage.setMessages([dbMessage]);
+      processor = new MessageHistory({ storage: mockStorage });
+
+      const browserMessage: MastraDBMessage = {
+        id: 'browser-222',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId,
+                toolName: 'renderGame',
+                args: { x: 1 },
+                result: { ok: true },
+              },
+            },
+          ],
+        },
+        threadId: 'thread-1',
+        createdAt: new Date(Date.now() - 4000),
+      };
+
+      // First call: reconciles and persists
+      const messageList1 = new MessageList();
+      messageList1.add(browserMessage, 'input');
+      await processor.processInput({
+        messages: [browserMessage],
+        messageList: messageList1,
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      // Second call: fresh messageList, no input — reads only from storage
+      const messageList2 = new MessageList();
+      const result2 = await processor.processInput({
+        messages: [],
+        messageList: messageList2,
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const allMessages = result2 instanceof MessageList ? result2.get.all.db() : result2;
+      const assistantMessages = allMessages.filter(m => m.role === 'assistant');
+
+      expect(assistantMessages).toHaveLength(1);
+      expect(assistantMessages[0].id).toBe('server-111');
+      const toolPart = assistantMessages[0].content.parts?.[0] as any;
+      expect(toolPart.toolInvocation.state).toBe('result');
+      expect(toolPart.toolInvocation.result).toEqual({ ok: true });
     });
   });
 

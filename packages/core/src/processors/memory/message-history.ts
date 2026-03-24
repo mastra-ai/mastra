@@ -89,9 +89,22 @@ export class MessageHistory implements Processor {
 
     if (toolResultsByCallId.size === 0) return;
 
+    // Count total tool-invocation result parts per input message for completeness tracking.
+    // An input message is only removed if ALL its tool results were matched to DB calls.
+    const totalToolPartsPerMsg = new Map<string, number>();
+    for (const msg of inputMessages) {
+      if (msg.role !== 'assistant' || !msg.content?.parts) continue;
+      const count = msg.content.parts.filter(
+        p => p.type === 'tool-invocation' && p.toolInvocation?.state === 'result',
+      ).length;
+      if (count > 0) {
+        totalToolPartsPerMsg.set(msg.id, count);
+      }
+    }
+
     // Match DB messages with pending 'call' state to input results by toolCallId
     const updatedDbMessages: MastraDBMessage[] = [];
-    const inputMsgIdsToRemove = new Set<string>();
+    const matchedCountPerMsg = new Map<string, number>();
 
     for (const dbMsg of dbMessages) {
       if (dbMsg.role !== 'assistant' || !dbMsg.content?.parts) continue;
@@ -114,7 +127,7 @@ export class MessageHistory implements Processor {
           },
         } as MastraMessagePart;
 
-        inputMsgIdsToRemove.add(match.inputMsgId);
+        matchedCountPerMsg.set(match.inputMsgId, (matchedCountPerMsg.get(match.inputMsgId) ?? 0) + 1);
         dbMsgUpdated = true;
       }
 
@@ -128,9 +141,19 @@ export class MessageHistory implements Processor {
     // Persist updated DB messages (storage uses upsert — ON CONFLICT DO UPDATE)
     await this.storage.saveMessages({ messages: updatedDbMessages });
 
-    // Remove the browser's duplicate assistant messages from the messageList
-    // so only the updated DB copy (added later as 'memory' source) remains
-    messageList.removeByIds([...inputMsgIdsToRemove]);
+    // Only remove an input message if ALL its tool-invocation parts were matched.
+    // If some parts had no DB match, keep the input message to avoid losing results.
+    const inputMsgIdsToRemove: string[] = [];
+    for (const [msgId, matched] of matchedCountPerMsg) {
+      const total = totalToolPartsPerMsg.get(msgId) ?? 0;
+      if (matched === total) {
+        inputMsgIdsToRemove.push(msgId);
+      }
+    }
+
+    if (inputMsgIdsToRemove.length > 0) {
+      messageList.removeByIds(inputMsgIdsToRemove);
+    }
   }
 
   async processInput(
