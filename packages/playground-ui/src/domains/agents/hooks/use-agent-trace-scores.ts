@@ -11,33 +11,47 @@ type UseAgentTraceScoresParams = {
 };
 
 /**
- * Fetches scores for an agent filtered by scorer, then indexes them by traceId.
- * Used to enrich trace rows with score values when a scorer filter is active.
+ * Fetches all scores for an agent filtered by scorer, paginating until
+ * every page has been consumed, then indexes them by traceId.
  */
 export function useAgentTraceScores({ agentId, scorerId, enabled }: UseAgentTraceScoresParams) {
   const client = useMastraClient();
 
-  const { data: scoresData, isLoading } = useQuery({
+  const { data: allScores, isLoading } = useQuery({
     queryKey: ['agent-trace-scores', agentId, scorerId],
-    queryFn: () =>
-      client.listScores({
-        filters: {
-          entityType: EntityType.AGENT,
-          entityName: agentId,
-          ...(scorerId && { scorerId }),
-        },
-        pagination: { page: 0, perPage: 100 },
-        orderBy: { field: 'score', direction: 'ASC' },
-      }),
+    queryFn: async () => {
+      const perPage = 100;
+      let page = 0;
+      const scores: ScoreRecord[] = [];
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const res = await client.listScores({
+          filters: {
+            entityType: EntityType.AGENT,
+            entityName: agentId,
+            ...(scorerId && { scorerId }),
+          },
+          pagination: { page, perPage },
+          orderBy: { field: 'score', direction: 'ASC' },
+        });
+
+        scores.push(...(res?.scores ?? []));
+        if (!res?.pagination?.hasMore) break;
+        page++;
+      }
+
+      return scores;
+    },
     enabled: enabled && Boolean(scorerId),
     refetchInterval: 10_000,
   });
 
   const scoresByTraceId = useMemo(() => {
     const map = new Map<string, ScoreRecord[]>();
-    if (!scoresData?.scores) return map;
+    if (!allScores) return map;
 
-    for (const score of scoresData.scores) {
+    for (const score of allScores) {
       const existing = map.get(score.traceId);
       if (existing) {
         existing.push(score);
@@ -46,7 +60,7 @@ export function useAgentTraceScores({ agentId, scorerId, enabled }: UseAgentTrac
       }
     }
     return map;
-  }, [scoresData?.scores]);
+  }, [allScores]);
 
   return { scoresByTraceId, isLoading };
 }
