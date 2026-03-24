@@ -1,8 +1,8 @@
 // Main exports
-export { AgentBrowser } from './agent-browser.js';
+export { AgentBrowser } from './agent-browser';
 
 // Type exports
-export type { BrowserConfig, CdpUrlProvider } from './types.js';
+export type { BrowserConfig, CdpUrlProvider } from './types';
 export type {
   BrowserLocator,
   BrowserPage,
@@ -13,15 +13,15 @@ export type {
   ScreencastFrame,
   BrowserTab,
   EnhancedSnapshot,
-} from './browser-types.js';
+} from './browser-types';
 
-// Screencast exports
-export { ScreencastStream, SCREENCAST_DEFAULTS, MAX_RETRIES } from './screencast/index.js';
-export type { ScreencastOptions, ScreencastFrameData, ScreencastError, ScreencastEvents } from './screencast/index.js';
+// Screencast exports (re-exported from core)
+export { ScreencastStreamImpl, SCREENCAST_DEFAULTS } from '@mastra/core/browser';
+export type { ScreencastOptions, ScreencastFrameData, ScreencastEvents } from '@mastra/core/browser';
 
 // Tool exports
-export { createAgentBrowserTools, BROWSER_TOOLS } from './tools/index.js';
-export type { BrowserToolName } from './tools/index.js';
+export { createAgentBrowserTools, BROWSER_TOOLS } from './tools';
+export type { BrowserToolName } from './tools';
 
 // Schema exports
 export {
@@ -47,7 +47,7 @@ export {
   evaluateInputSchema,
   // All schemas
   browserSchemas,
-} from './schemas.js';
+} from './schemas';
 
 export type {
   GotoInput,
@@ -67,4 +67,4 @@ export type {
   TabsInput,
   DragInput,
   EvaluateInput,
-} from './schemas.js';
+} from './schemas';

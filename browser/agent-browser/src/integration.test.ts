@@ -8,8 +8,8 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { AgentBrowser } from './agent-browser.js';
-import { loadBrowserManager } from './browser-types.js';
+import { AgentBrowser } from './agent-browser';
+import { loadBrowserManager } from './browser-types';
 
 // Check if we can actually launch a browser
 let canLaunchBrowser = true;

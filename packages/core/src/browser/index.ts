@@ -9,9 +9,18 @@ export type {
   BrowserConfig,
   ScreencastOptions,
   ScreencastStream,
+  ScreencastFrameData,
+  ScreencastEvents,
   MouseEventParams,
   KeyboardEventParams,
 } from './browser';
+
+// ============================================================================
+// Screencast
+// ============================================================================
+
+export { ScreencastStream as ScreencastStreamImpl, SCREENCAST_DEFAULTS } from './screencast';
+export type { CdpSessionLike, CdpSessionProvider } from './screencast';
 
 // ============================================================================
 // Error handling

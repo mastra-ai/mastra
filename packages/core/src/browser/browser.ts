@@ -25,6 +25,13 @@ import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger/constants';
 import type { Tool } from '../tools/tool';
 
+// Re-export screencast types from the screencast module
+import type { ScreencastOptions as ScreencastOptionsType } from './screencast/types';
+export type { ScreencastOptions, ScreencastFrameData, ScreencastEvents } from './screencast/types';
+
+// Alias for internal use
+type ScreencastOptions = ScreencastOptionsType;
+
 // =============================================================================
 // Status & Lifecycle Types
 // =============================================================================
@@ -72,24 +79,8 @@ export interface BrowserConfig {
 }
 
 // =============================================================================
-// Screencast Types
+// Screencast Types (re-exported from ./screencast/types)
 // =============================================================================
-
-/**
- * Options for starting a screencast stream.
- */
-export interface ScreencastOptions {
-  /** Image format */
-  format?: 'jpeg' | 'png';
-  /** Quality (0-100, for jpeg) */
-  quality?: number;
-  /** Max width in pixels */
-  maxWidth?: number;
-  /** Max height in pixels */
-  maxHeight?: number;
-  /** Capture every Nth frame */
-  everyNthFrame?: number;
-}
 
 /**
  * A screencast stream that emits frames.
@@ -98,6 +89,8 @@ export interface ScreencastOptions {
 export interface ScreencastStream {
   /** Stop the screencast */
   stop(): Promise<void>;
+  /** Check if screencast is active */
+  isActive(): boolean;
   /** Register event handlers */
   on(event: 'frame', handler: (frame: { data: string; viewport: { width: number; height: number } }) => void): this;
   on(event: 'stop', handler: (reason: string) => void): this;

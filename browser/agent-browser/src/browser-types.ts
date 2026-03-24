@@ -52,6 +52,8 @@ export interface BrowserLocator {
 
 export interface BrowserCDPSession {
   send(method: string, params?: Record<string, unknown>): Promise<unknown>;
+  on(event: string, handler: (...args: any[]) => void): void;
+  off?(event: string, handler: (...args: any[]) => void): void;
 }
 
 export interface BrowserKeyboard {

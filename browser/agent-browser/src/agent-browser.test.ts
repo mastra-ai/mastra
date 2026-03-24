@@ -81,7 +81,11 @@ const { mockPage, mockLocator, mockManager } = vi.hoisted(() => {
         ['@e2', mockLocator],
       ]),
     ),
-    getCDPSession: vi.fn().mockResolvedValue({ send: vi.fn() }),
+    getCDPSession: vi.fn().mockResolvedValue({
+      send: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+    }),
     getSnapshot: vi.fn().mockResolvedValue({ snapshot: '- @e1 button "Click"', tree: '- @e1 button "Click"' }),
     startScreencast: vi.fn().mockResolvedValue(undefined),
     stopScreencast: vi.fn().mockResolvedValue(undefined),
@@ -110,7 +114,7 @@ vi.mock('agent-browser/dist/browser.js', () => ({
 }));
 
 // Import AFTER vi.mock
-import { AgentBrowser } from './agent-browser.js';
+import { AgentBrowser } from './agent-browser';
 
 describe('AgentBrowser', () => {
   let browser: AgentBrowser;

@@ -3,7 +3,7 @@ import { Agent } from '@mastra/core/agent';
 import { AgentBrowser } from '@mastra/agent-browser';
 
 export const agentBrowserToolset = new AgentBrowser({
-  headless: false,
+  headless: true, // Changed to true for testing screencast in headless mode
   timeout: 15_000,
 });
 

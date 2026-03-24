@@ -1,5 +1,5 @@
 // Main exports
-export { StagehandBrowser } from './stagehand-browser.js';
+export { StagehandBrowser } from './stagehand-browser';
 
 // Type exports
 export type {
@@ -10,11 +10,11 @@ export type {
   ObserveResult,
   ModelConfiguration,
   CdpUrlProvider,
-} from './types.js';
+} from './types';
 
 // Tool exports
-export { createStagehandTools, STAGEHAND_TOOLS } from './tools/index.js';
-export type { StagehandToolName } from './tools/index.js';
+export { createStagehandTools, STAGEHAND_TOOLS } from './tools';
+export type { StagehandToolName } from './tools';
 
 // Schema exports
 export {
@@ -25,6 +25,6 @@ export {
   screenshotInputSchema,
   closeInputSchema,
   stagehandSchemas,
-} from './schemas.js';
+} from './schemas';
 
-export type { ActInput, ExtractInput, ObserveInput, NavigateInput, ScreenshotInput, CloseInput } from './schemas.js';
+export type { ActInput, ExtractInput, ObserveInput, NavigateInput, ScreenshotInput, CloseInput } from './schemas';

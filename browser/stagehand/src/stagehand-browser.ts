@@ -1,18 +1,19 @@
 /**
- * StagehandBrowser - AI-powered browser automation using Stagehand
+ * StagehandBrowser - AI-powered browser automation using Stagehand v3
  *
  * Uses natural language instructions for browser interactions.
  * Fundamentally different from AgentBrowser's deterministic refs approach.
+ *
+ * Stagehand v3 is CDP-native and provides direct CDP access for screencast/input injection.
  */
 
-import { MastraBrowser } from '@mastra/core/browser';
+import { Stagehand } from '@browserbasehq/stagehand';
+import { MastraBrowser, ScreencastStreamImpl } from '@mastra/core/browser';
+import type { ScreencastOptions, ScreencastStream, MouseEventParams, KeyboardEventParams } from '@mastra/core/browser';
 import type { Tool } from '@mastra/core/tools';
 import type { ActInput, ExtractInput, ObserveInput, NavigateInput, ScreenshotInput } from './schemas';
 import { createStagehandTools } from './tools';
 import type { StagehandBrowserConfig, StagehandAction, CdpUrlProvider } from './types';
-
-// Stagehand type - we use any to avoid import issues, actual runtime behavior is fine
-type StagehandInstance = any;
 
 /**
  * Resolve a CDP URL provider to a string
@@ -25,7 +26,7 @@ async function resolveCdpUrl(provider: CdpUrlProvider): Promise<string> {
 }
 
 /**
- * StagehandBrowser - AI-powered browser using Stagehand
+ * StagehandBrowser - AI-powered browser using Stagehand v3
  *
  * Unlike AgentBrowser which uses refs ([ref=e1]), StagehandBrowser uses
  * natural language instructions for all interactions.
@@ -35,7 +36,7 @@ export class StagehandBrowser extends MastraBrowser {
   override readonly name = 'StagehandBrowser';
   override readonly provider = 'browserbase/stagehand';
 
-  private stagehand: StagehandInstance = null;
+  private stagehand: Stagehand | null = null;
   private stagehandConfig: StagehandBrowserConfig;
 
   constructor(config: StagehandBrowserConfig = {}) {
@@ -49,20 +50,17 @@ export class StagehandBrowser extends MastraBrowser {
   // ---------------------------------------------------------------------------
 
   protected override async doLaunch(): Promise<void> {
-    // Dynamic import to avoid bundling issues
     const { Stagehand } = await import('@browserbasehq/stagehand');
 
     const config = this.stagehandConfig;
 
-    // Build Stagehand configuration
+    // Build Stagehand v3 configuration
     const stagehandOptions: any = {
       env: config.env ?? 'LOCAL',
-      modelName: typeof config.model === 'string' ? config.model : config.model?.modelName,
-      modelClientOptions:
-        typeof config.model === 'object' ? { apiKey: config.model.apiKey, baseURL: config.model.baseURL } : undefined,
+      // v3 uses "provider/model" format
+      model: typeof config.model === 'string' ? config.model : config.model?.modelName,
       selfHeal: config.selfHeal ?? true,
       domSettleTimeoutMs: config.domSettleTimeout,
-      enableCaching: config.cacheDir ? true : false,
       verbose: config.verbose ?? 1,
       systemPrompt: config.systemPrompt,
     };
@@ -105,11 +103,54 @@ export class StagehandBrowser extends MastraBrowser {
   // Internal Helpers
   // ---------------------------------------------------------------------------
 
-  private requireStagehand(): StagehandInstance {
+  private requireStagehand(): Stagehand {
     if (!this.stagehand) {
       throw new Error('Browser not launched');
     }
     return this.stagehand;
+  }
+
+  /**
+   * Get the current page from Stagehand v3.
+   * In v3, pages are accessed via stagehand.context.pages()
+   */
+  private getPage(): any {
+    if (!this.stagehand) return null;
+
+    try {
+      const context = this.stagehand.context;
+      if (context) {
+        const pages = context.pages();
+        if (pages && pages.length > 0) {
+          return pages[0];
+        }
+      }
+    } catch {
+      // Ignore errors - page may not be available
+    }
+
+    return null;
+  }
+
+  /**
+   * Get a CDP session for the current page.
+   * In Stagehand v3, we access the CDP session via page.getSessionForFrame()
+   */
+  private getCdpSession(): any {
+    const page = this.getPage();
+    if (!page) return null;
+
+    try {
+      // Stagehand v3 Page exposes getSessionForFrame(mainFrameId)
+      const mainFrameId = page.mainFrameId?.();
+      if (mainFrameId && page.getSessionForFrame) {
+        return page.getSessionForFrame(mainFrameId);
+      }
+    } catch {
+      // Ignore errors
+    }
+
+    return null;
   }
 
   // ---------------------------------------------------------------------------
@@ -136,22 +177,21 @@ export class StagehandBrowser extends MastraBrowser {
     error?: string;
   }> {
     const stagehand = this.requireStagehand();
-    const url = stagehand.page?.url() ?? '';
+    const page = this.getPage();
+    const url = page?.url() ?? '';
 
     try {
-      const actOptions = {
-        action: input.instruction,
+      // v3 API: stagehand.act(instruction, options?)
+      const result = await stagehand.act(input.instruction, {
         variables: input.variables,
-        timeoutMs: input.timeout,
-      };
-
-      const result = await stagehand.act(actOptions);
+        timeout: input.timeout,
+      });
 
       return {
         success: result.success,
         message: result.message,
-        action: result.action,
-        url: stagehand.page?.url() ?? url,
+        action: result.actionDescription,
+        url: page?.url() ?? url,
         hint: 'Use observe() to discover available actions or extract() to get page data.',
       };
     } catch (error) {
@@ -177,21 +217,17 @@ export class StagehandBrowser extends MastraBrowser {
     error?: string;
   }> {
     const stagehand = this.requireStagehand();
-    const url = stagehand.page?.url() ?? '';
+    const page = this.getPage();
+    const url = page?.url() ?? '';
 
     try {
-      // If schema is provided, pass it; otherwise just use instruction
-      const extractOptions = {
-        instruction: input.instruction,
-        schema: input.schema,
-      };
-
-      const result = await stagehand.extract(extractOptions);
+      // v3 API: stagehand.extract(instruction, schema?, options?)
+      const result = await stagehand.extract(input.instruction, input.schema);
 
       return {
         success: true,
         data: result,
-        url: stagehand.page?.url() ?? url,
+        url: page?.url() ?? url,
         hint: 'Data extracted successfully. Use act() to perform actions based on this data.',
       };
     } catch (error) {
@@ -216,15 +252,14 @@ export class StagehandBrowser extends MastraBrowser {
     error?: string;
   }> {
     const stagehand = this.requireStagehand();
-    const url = stagehand.page?.url() ?? '';
+    const page = this.getPage();
+    const url = page?.url() ?? '';
 
     try {
-      const observeOptions = {
-        instruction: input.instruction,
-        onlyVisible: input.onlyVisible,
-      };
-
-      const actions = await stagehand.observe(observeOptions);
+      // v3 API: stagehand.observe() or stagehand.observe(instruction, options?)
+      const actions = input.instruction
+        ? await stagehand.observe(input.instruction)
+        : await stagehand.observe();
 
       return {
         success: true,
@@ -234,7 +269,7 @@ export class StagehandBrowser extends MastraBrowser {
           method: a.method,
           arguments: a.arguments,
         })) as StagehandAction[],
-        url: stagehand.page?.url() ?? url,
+        url: page?.url() ?? url,
         hint:
           actions.length > 0
             ? `Found ${actions.length} actions. Use act() with a specific instruction to execute one.`
@@ -266,8 +301,7 @@ export class StagehandBrowser extends MastraBrowser {
     hint: string;
     error?: string;
   }> {
-    const stagehand = this.requireStagehand();
-    const page = stagehand.page;
+    const page = this.getPage();
 
     if (!page) {
       return {
@@ -313,10 +347,18 @@ export class StagehandBrowser extends MastraBrowser {
     base64: string;
     error?: string;
   }> {
-    const stagehand = this.requireStagehand();
+    const page = this.getPage();
+
+    if (!page) {
+      return {
+        success: false,
+        base64: '',
+        error: 'No page available',
+      };
+    }
 
     try {
-      const buffer = await stagehand.screenshot({
+      const buffer = await page.screenshot({
         fullPage: input.fullPage ?? false,
       });
 
@@ -332,5 +374,87 @@ export class StagehandBrowser extends MastraBrowser {
         error: msg,
       };
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // URL Tracking (for Studio browser view)
+  // ---------------------------------------------------------------------------
+
+  override getCurrentUrl(): string | null {
+    const page = this.getPage();
+    if (!page) return null;
+
+    try {
+      return page.url();
+    } catch {
+      return null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Screencast (for Studio live view)
+  // Uses Stagehand v3's native CDP access
+  // ---------------------------------------------------------------------------
+
+  override async startScreencast(options?: ScreencastOptions): Promise<ScreencastStream> {
+    const cdpSession = this.getCdpSession();
+    if (!cdpSession) {
+      throw new Error('No CDP session available for screencast');
+    }
+
+    // Create a CDP session provider adapter
+    const provider = {
+      getCdpSession: async () => cdpSession,
+      isBrowserRunning: () => this.isBrowserRunning(),
+    };
+
+    const stream = new ScreencastStreamImpl(provider, options);
+    await stream.start();
+    return stream as unknown as ScreencastStream;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Event Injection (for Studio live view interactivity)
+  // ---------------------------------------------------------------------------
+
+  override async injectMouseEvent(event: MouseEventParams): Promise<void> {
+    const cdpSession = this.getCdpSession();
+    if (!cdpSession) {
+      throw new Error('No CDP session available');
+    }
+
+    const buttonMap: Record<string, number> = {
+      none: 0,
+      left: 0,
+      middle: 1,
+      right: 2,
+    };
+
+    await cdpSession.send('Input.dispatchMouseEvent', {
+      type: event.type,
+      x: event.x,
+      y: event.y,
+      button: event.button ?? 'none',
+      buttons: buttonMap[event.button ?? 'none'] ?? 0,
+      clickCount: event.clickCount ?? 1,
+      deltaX: event.deltaX ?? 0,
+      deltaY: event.deltaY ?? 0,
+      modifiers: event.modifiers ?? 0,
+    });
+  }
+
+  override async injectKeyboardEvent(event: KeyboardEventParams): Promise<void> {
+    const cdpSession = this.getCdpSession();
+    if (!cdpSession) {
+      throw new Error('No CDP session available');
+    }
+
+    await cdpSession.send('Input.dispatchKeyEvent', {
+      type: event.type,
+      key: event.key,
+      code: event.code,
+      text: event.text,
+      modifiers: event.modifiers ?? 0,
+    });
   }
 }

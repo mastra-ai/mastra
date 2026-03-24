@@ -1,5 +1,5 @@
-import { MastraBrowser } from '@mastra/core/browser';
-import type { ScreencastOptions, ScreencastStream } from '@mastra/core/browser';
+import { MastraBrowser, ScreencastStreamImpl } from '@mastra/core/browser';
+import type { ScreencastOptions, ScreencastStream, MouseEventParams, KeyboardEventParams } from '@mastra/core/browser';
 import type { Tool } from '@mastra/core/tools';
 import type { BrowserManagerLike, BrowserPage, BrowserLocator, LaunchOptions } from './browser-types';
 import { loadBrowserManager } from './browser-types';
@@ -823,9 +823,32 @@ export class AgentBrowser extends MastraBrowser {
   // ---------------------------------------------------------------------------
 
   async startScreencast(_options?: ScreencastOptions): Promise<ScreencastStream> {
-    const { ScreencastStream: ScreencastStreamClass } = await import('./screencast/index.js');
     if (!this.browserManager) throw new Error('Browser not launched');
-    return new ScreencastStreamClass(this.browserManager, _options);
+
+    // Create CDP session provider adapter for BrowserManager
+    const browserManager = this.browserManager;
+    const provider = {
+      getCdpSession: async () => browserManager.getCDPSession(),
+      isBrowserRunning: () => browserManager.isLaunched(),
+    };
+
+    const stream = new ScreencastStreamImpl(provider, _options);
+    await stream.start();
+    return stream as unknown as ScreencastStream;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Event Injection (for Studio live view interactivity)
+  // ---------------------------------------------------------------------------
+
+  override async injectMouseEvent(event: MouseEventParams): Promise<void> {
+    if (!this.browserManager) throw new Error('Browser not launched');
+    await this.browserManager.injectMouseEvent(event);
+  }
+
+  override async injectKeyboardEvent(event: KeyboardEventParams): Promise<void> {
+    if (!this.browserManager) throw new Error('Browser not launched');
+    await this.browserManager.injectKeyboardEvent(event);
   }
 }
 

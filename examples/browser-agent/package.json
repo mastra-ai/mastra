@@ -11,7 +11,8 @@
     "@mastra/stagehand": "latest",
     "@mastra/memory": "latest",
     "zod": "^4.3.6",
-    "mastra": "latest"
+    "mastra": "latest",
+    "ws": "^8.17.0"
   },
   "pnpm": {
     "overrides": {
