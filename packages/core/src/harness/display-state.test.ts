@@ -357,6 +357,70 @@ describe('tool lifecycle', () => {
       expect(approval!.args).toEqual({ command: 'rm -rf /' });
     });
   });
+
+  describe('tool_suspended', () => {
+    it('sets pendingSuspension', () => {
+      emit(harness, {
+        type: 'tool_suspended',
+        toolCallId: 't1',
+        toolName: 'confirmAction',
+        args: { action: 'deploy' },
+        suspendPayload: { reason: 'Needs confirmation' },
+        resumeSchema: undefined,
+      });
+      const suspension = harness.getDisplayState().pendingSuspension;
+      expect(suspension).not.toBeNull();
+      expect(suspension!.toolCallId).toBe('t1');
+      expect(suspension!.toolName).toBe('confirmAction');
+      expect(suspension!.args).toEqual({ action: 'deploy' });
+      expect(suspension!.suspendPayload).toEqual({ reason: 'Needs confirmation' });
+    });
+
+    it('clears pendingSuspension on agent_start', () => {
+      emit(harness, {
+        type: 'tool_suspended',
+        toolCallId: 't1',
+        toolName: 'confirmAction',
+        args: {},
+        suspendPayload: {},
+        resumeSchema: undefined,
+      });
+      expect(harness.getDisplayState().pendingSuspension).not.toBeNull();
+
+      emit(harness, { type: 'agent_start' });
+      expect(harness.getDisplayState().pendingSuspension).toBeNull();
+    });
+
+    it('preserves pendingSuspension on agent_end with reason suspended', () => {
+      emit(harness, {
+        type: 'tool_suspended',
+        toolCallId: 't1',
+        toolName: 'confirmAction',
+        args: {},
+        suspendPayload: {},
+        resumeSchema: undefined,
+      });
+      expect(harness.getDisplayState().pendingSuspension).not.toBeNull();
+
+      emit(harness, { type: 'agent_end', reason: 'suspended' });
+      expect(harness.getDisplayState().pendingSuspension).not.toBeNull();
+    });
+
+    it('clears pendingSuspension on agent_end with non-suspended reason', () => {
+      emit(harness, {
+        type: 'tool_suspended',
+        toolCallId: 't1',
+        toolName: 'confirmAction',
+        args: {},
+        suspendPayload: {},
+        resumeSchema: undefined,
+      });
+      expect(harness.getDisplayState().pendingSuspension).not.toBeNull();
+
+      emit(harness, { type: 'agent_end', reason: 'complete' });
+      expect(harness.getDisplayState().pendingSuspension).toBeNull();
+    });
+  });
 });
 
 // ===========================================================================
