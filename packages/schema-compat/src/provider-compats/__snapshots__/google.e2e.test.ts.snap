@@ -218,6 +218,7 @@ constraints: a valid uuid",
       "anyOf": [
         {
           "additionalProperties": false,
+          "description": "give an valid object",
           "properties": {
             "amount": {
               "type": "number",
@@ -234,6 +235,7 @@ constraints: a valid uuid",
         },
         {
           "additionalProperties": false,
+          "description": "give an valid object",
           "properties": {
             "permissions": {
               "items": {
@@ -252,18 +254,18 @@ constraints: a valid uuid",
           "type": "object",
         },
       ],
-      "description": "give an valid object",
     },
     "unionPrimitives": {
       "anyOf": [
         {
+          "description": "sample text or number",
           "type": "string",
         },
         {
+          "description": "sample text or number",
           "type": "number",
         },
       ],
-      "description": "sample text or number",
     },
   },
   "required": [
@@ -298,6 +300,7 @@ constraints: a valid uuid",
     "nativeEnum",
     "unionPrimitives",
     "unionObjects",
+    "default",
   ],
   "type": "object",
 }
@@ -307,26 +310,26 @@ exports[`Google e2e test > should pass 2`] = `
 {
   "value": {
     "arrayMax": [
-      "test",
+      "a",
     ],
     "arrayMin": [
-      "test",
+      "a",
     ],
-    "date": 2023-01-01T00:00:00.000Z,
-    "dateAfter": 2025-01-01T00:00:00.000Z,
-    "dateBefore": 2020-01-01T00:00:00.000Z,
-    "default": "test",
+    "date": 2023-10-10T12:00:00.000Z,
+    "dateAfter": 2024-05-01T12:00:00.000Z,
+    "dateBefore": 2023-01-01T12:00:00.000Z,
+    "default": "default",
     "enum": "A",
     "exampleArray": [
-      "test",
+      "a",
     ],
     "nativeEnum": "B",
     "nullable": "",
-    "number": 10,
-    "numberGt": 5,
+    "number": 42,
+    "numberGt": 4,
     "numberGte": 1,
-    "numberInt": 42,
-    "numberLt": 4,
+    "numberInt": 5,
+    "numberLt": 5,
     "numberLte": 1,
     "numberMultipleOf": 4,
     "object": {
@@ -341,18 +344,18 @@ exports[`Google e2e test > should pass 2`] = `
       },
     },
     "objectPassthrough": {},
-    "string": "Sample",
+    "string": "hello",
     "stringCuid": "c123456789",
     "stringEmail": "test@example.com",
     "stringEmoji": "😀",
-    "stringMax": "123456789",
-    "stringMin": "12345",
+    "stringMax": "hello",
+    "stringMin": "hello",
     "stringRegex": "test-123",
     "stringUrl": "https://example.com",
     "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
     "unionObjects": {
-      "amount": 5,
-      "inventoryItemName": "widget",
+      "amount": 10,
+      "inventoryItemName": "apple",
     },
     "unionPrimitives": 42,
   },

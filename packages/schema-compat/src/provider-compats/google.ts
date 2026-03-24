@@ -86,6 +86,18 @@ function fixNullableUnionTypes(schema: Record<string, any>): Record<string, any>
     result.allOf = result.allOf.map((s: any) => fixNullableUnionTypes(s));
   }
 
+  // Gemini requires anyOf to be the only field in the schema — strip all siblings
+  if (result.anyOf && Array.isArray(result.anyOf)) {
+    if (result.description) {
+      for (const item of result.anyOf) {
+        if (typeof item === 'object' && item !== null && !item.description) {
+          item.description = result.description;
+        }
+      }
+    }
+    return { anyOf: result.anyOf };
+  }
+
   return result;
 }
 
