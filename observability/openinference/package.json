@@ -49,6 +49,9 @@
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
+  "peerDependencies": {
+    "@opentelemetry/api": "^1.9.0"
+  },
   "homepage": "https://mastra.ai",
   "repository": {
     "type": "git",

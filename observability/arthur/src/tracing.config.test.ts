@@ -8,16 +8,19 @@ vi.mock('@mastra/otel-exporter', () => ({
       exportTracingEvent: vi.fn(),
       shutdown: vi.fn(),
       setDisabled: vi.fn(),
+      logger: {
+        warn: vi.fn(),
+        error: vi.fn(),
+        info: vi.fn(),
+        debug: vi.fn(),
+      },
     };
   }),
 }));
 
 describe('ArthurExporterConfig', () => {
-  let warnSpy: ReturnType<typeof vi.spyOn>;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     // Clean env vars between tests
     delete process.env.ARTHUR_API_KEY;
     delete process.env.ARTHUR_BASE_URL;
@@ -194,35 +197,35 @@ describe('ArthurExporterConfig', () => {
   });
 
   it('warns when taskId is not provided', () => {
-    new ArthurExporter({
+    const exporter = new ArthurExporter({
       apiKey: 'test-api-key',
       endpoint: 'https://app.arthur.ai',
     });
 
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect((exporter as any).logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('No taskId provided'),
     );
   });
 
   it('does not warn when taskId is provided via config', () => {
-    new ArthurExporter({
+    const exporter = new ArthurExporter({
       apiKey: 'test-api-key',
       endpoint: 'https://app.arthur.ai',
       taskId: 'test-task-id',
     });
 
-    expect(warnSpy).not.toHaveBeenCalled();
+    expect((exporter as any).logger.warn).not.toHaveBeenCalled();
   });
 
   it('reads taskId from ARTHUR_TASK_ID env var', () => {
     process.env.ARTHUR_TASK_ID = 'env-task-id';
 
-    new ArthurExporter({
+    const exporter = new ArthurExporter({
       apiKey: 'test-api-key',
       endpoint: 'https://app.arthur.ai',
     });
 
-    expect(warnSpy).not.toHaveBeenCalled();
+    expect((exporter as any).logger.warn).not.toHaveBeenCalled();
   });
 
   it('sets arthur.task.id resource attribute when taskId is provided', async () => {

@@ -7,6 +7,7 @@ import { DuckDBStore } from '@mastra/duckdb';
 
 import { mastraAuth, rbacProvider } from './auth';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+import { ArthurExporter } from '@mastra/arthur';
 import { z } from 'zod';
 import { ComposioToolProvider } from '@mastra/editor/composio';
 
@@ -133,6 +134,15 @@ export const mastra = new Mastra({
         serviceName: 'mastra',
         exporters: [new DefaultExporter()],
         spanOutputProcessors: [new SensitiveDataFilter()],
+      },
+      arthur: {
+        serviceName: 'mastra-example-agent',
+        exporters: [
+          new ArthurExporter({
+            apiKey: process.env.ARTHUR_API_KEY,
+            endpoint: process.env.ARTHUR_BASE_URL,
+          }),
+        ],
       },
     },
   }),

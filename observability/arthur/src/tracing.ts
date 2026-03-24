@@ -5,7 +5,7 @@ import { OpenInferenceOTLPTraceExporter } from '@mastra/openinference';
 
 const LOG_PREFIX = '[ArthurExporter]';
 
-export type ArthurExporterConfig = Omit<OtelExporterConfig, 'provider'> & {
+export type ArthurExporterConfig = Omit<OtelExporterConfig, 'provider' | 'exporter'> & {
   /**
    * Arthur API key for authentication.
    * Falls back to ARTHUR_API_KEY environment variable.
@@ -35,13 +35,6 @@ export class ArthurExporter extends OtelExporter {
     const apiKey = config.apiKey ?? process.env.ARTHUR_API_KEY;
     const endpoint = config.endpoint ?? process.env.ARTHUR_BASE_URL;
     const taskId = config.taskId ?? process.env.ARTHUR_TASK_ID;
-
-    if (!taskId) {
-      console.warn(
-        `${LOG_PREFIX} No taskId provided. Set ARTHUR_TASK_ID environment variable, pass taskId in config, ` +
-          `or ensure serviceName is set in the observability config to identify traces in Arthur.`,
-      );
-    }
 
     const headers: Record<string, string> = {
       ...config.headers,
@@ -99,5 +92,12 @@ export class ArthurExporter extends OtelExporter {
         },
       } satisfies OtelExporterConfig['provider'],
     } satisfies OtelExporterConfig);
+
+    if (!taskId) {
+      this.logger.warn(
+        `${LOG_PREFIX} No taskId provided. Set ARTHUR_TASK_ID environment variable, pass taskId in config, ` +
+          `or ensure serviceName is set in the observability config to identify traces in Arthur.`,
+      );
+    }
   }
 }

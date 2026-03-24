@@ -86,7 +86,7 @@ function convertUsageMetricsToOpenInference(attributes: Record<string, any>): Re
 
   // Total tokens (compute if we have both input and output)
   if (inputTokens !== undefined && outputTokens !== undefined) {
-    result[LLM_TOKEN_COUNT_TOTAL] = inputTokens + outputTokens;
+    result[LLM_TOKEN_COUNT_TOTAL] = Number(inputTokens) + Number(outputTokens);
   }
 
   // Cache tokens (prompt details)
