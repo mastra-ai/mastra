@@ -96,9 +96,15 @@ CREATE TABLE IF NOT EXISTS metric_events (
   -- Metric-specific scalars
   name VARCHAR NOT NULL,
   value DOUBLE NOT NULL,
+  provider VARCHAR,
+  model VARCHAR,
+  estimatedCost DOUBLE,
+  costUnit VARCHAR,
 
   -- JSON fields
+  tags JSON,
   labels JSON,
+  costMetadata JSON,
   metadata JSON,
   scope JSON
 )`;
@@ -181,6 +187,8 @@ CREATE TABLE IF NOT EXISTS feedback_events (
   traceId VARCHAR NOT NULL,
   spanId VARCHAR,
   experimentId VARCHAR,
+  userId VARCHAR,
+  sourceId VARCHAR,
 
   -- Feedback-specific scalars
   source VARCHAR NOT NULL,

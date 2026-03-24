@@ -68,8 +68,6 @@ function rowToLogRecord(row: Record<string, unknown>): Record<string, unknown> {
     tags: parseJsonArray(row.tags),
     metadata: parseJson(row.metadata),
     scope: parseJson(row.scope),
-    createdAt: toDate(row.timestamp),
-    updatedAt: null,
   };
 }
 

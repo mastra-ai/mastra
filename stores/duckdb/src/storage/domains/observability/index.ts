@@ -1,7 +1,6 @@
 import { ObservabilityStorage } from '@mastra/core/storage';
 import type {
   CreateSpanArgs,
-  UpdateSpanArgs,
   GetSpanArgs,
   GetSpanResponse,
   GetRootSpanArgs,
@@ -11,12 +10,13 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   BatchCreateSpansArgs,
-  BatchUpdateSpansArgs,
   BatchDeleteTracesArgs,
   BatchCreateLogsArgs,
   ListLogsArgs,
   ListLogsResponse,
   BatchCreateMetricsArgs,
+  ListMetricsArgs,
+  ListMetricsResponse,
   CreateScoreArgs,
   BatchCreateScoresArgs,
   ListScoresArgs,
@@ -49,7 +49,7 @@ import type {
   GetEnvironmentsResponse,
   GetTagsArgs,
   GetTagsResponse,
-  TracingStorageStrategy,
+  ObservabilityStorageStrategy,
 } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
 import { ALL_DDL } from './ddl';
@@ -92,9 +92,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
     }
   }
 
-  public override get tracingStrategy(): {
-    preferred: TracingStorageStrategy;
-    supported: TracingStorageStrategy[];
+  public override get observabilityStrategy(): {
+    preferred: ObservabilityStorageStrategy;
+    supported: ObservabilityStorageStrategy[];
   } {
     return {
       preferred: 'event-sourced' as const,
@@ -106,14 +106,8 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   async createSpan(args: CreateSpanArgs): Promise<void> {
     return tracingOps.createSpan(this.db, args);
   }
-  async updateSpan(args: UpdateSpanArgs): Promise<void> {
-    return tracingOps.updateSpan(this.db, args);
-  }
   async batchCreateSpans(args: BatchCreateSpansArgs): Promise<void> {
     return tracingOps.batchCreateSpans(this.db, args);
-  }
-  async batchUpdateSpans(args: BatchUpdateSpansArgs): Promise<void> {
-    return tracingOps.batchUpdateSpans(this.db, args);
   }
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
     return tracingOps.batchDeleteTraces(this.db, args);
@@ -142,6 +136,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   // Metrics
   async batchCreateMetrics(args: BatchCreateMetricsArgs): Promise<void> {
     return metricOps.batchCreateMetrics(this.db, args);
+  }
+  async listMetrics(args: ListMetricsArgs): Promise<ListMetricsResponse> {
+    return metricOps.listMetrics(this.db, args);
   }
   async getMetricAggregate(args: GetMetricAggregateArgs): Promise<GetMetricAggregateResponse> {
     return metricOps.getMetricAggregate(this.db, args);

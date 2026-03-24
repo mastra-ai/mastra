@@ -87,8 +87,6 @@ export async function listScores(db: DuckDBConnection, args: ListScoresArgs): Pr
       experimentId: (r.experimentId as string) ?? null,
       scoreTraceId: (r.scoreTraceId as string) ?? null,
       metadata: parseJson(r.metadata) as Record<string, unknown> | null,
-      createdAt: toDate(r.timestamp),
-      updatedAt: null,
     };
   });
 

@@ -87,8 +87,7 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(span.endedAt).toBeNull();
     });
 
-    it('reconstructs span with update and end events', async () => {
-      // Start
+    it('reconstructs a completed span from start and end rows only', async () => {
       await storage.createSpan({
         span: {
           traceId: 'trace-2',
@@ -116,19 +115,9 @@ describe('ObservabilityStorageDuckDB', () => {
           tags: null,
           links: null,
           input: { city: 'NYC' },
-          output: null,
+          output: { temp: 72 },
           error: null,
           startedAt: new Date('2026-01-01T00:00:00Z'),
-          endedAt: null,
-        },
-      });
-
-      // Update with output
-      await storage.updateSpan({
-        traceId: 'trace-2',
-        spanId: 'span-2',
-        updates: {
-          output: { temp: 72 },
           endedAt: new Date('2026-01-01T00:00:01Z'),
         },
       });
@@ -139,6 +128,19 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(span.name).toBe('tool-call');
       expect(span.output).toEqual({ temp: 72 });
       expect(span.endedAt).toBeInstanceOf(Date);
+    });
+
+    it('does not support span updates for event-sourced tracing', async () => {
+      await expect(
+        storage.updateSpan({
+          traceId: 'trace-2',
+          spanId: 'span-2',
+          updates: {
+            output: { temp: 72 },
+            endedAt: new Date('2026-01-01T00:00:01Z'),
+          },
+        }),
+      ).rejects.toThrow('does not support updating spans');
     });
 
     it('batch creates and lists traces', async () => {
@@ -322,6 +324,11 @@ describe('ObservabilityStorageDuckDB', () => {
             name: 'mastra_agent_duration_ms',
             value: 100,
             labels: { status: 'ok' },
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            estimatedCost: 0.1,
+            costUnit: 'usd',
+            tags: ['prod'],
             entityType: EntityType.AGENT,
             entityName: 'weatherAgent',
           },
@@ -330,6 +337,11 @@ describe('ObservabilityStorageDuckDB', () => {
             name: 'mastra_agent_duration_ms',
             value: 200,
             labels: { status: 'ok' },
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            estimatedCost: 0.2,
+            costUnit: 'usd',
+            tags: ['prod'],
             entityType: EntityType.AGENT,
             entityName: 'weatherAgent',
           },
@@ -338,6 +350,11 @@ describe('ObservabilityStorageDuckDB', () => {
             name: 'mastra_agent_duration_ms',
             value: 500,
             labels: { status: 'error' },
+            provider: 'anthropic',
+            model: 'claude-3-7-sonnet',
+            estimatedCost: 0.5,
+            costUnit: 'usd',
+            tags: ['prod'],
             entityType: EntityType.AGENT,
             entityName: 'codeAgent',
           },
@@ -346,6 +363,7 @@ describe('ObservabilityStorageDuckDB', () => {
             name: 'mastra_tool_calls_started',
             value: 1,
             labels: {},
+            tags: ['prod'],
             entityType: EntityType.TOOL,
             entityName: 'search',
           },
@@ -359,6 +377,30 @@ describe('ObservabilityStorageDuckDB', () => {
         aggregation: 'sum',
       });
       expect(result.value).toBe(800); // 100 + 200 + 500
+      expect(result.estimatedCost).toBeCloseTo(0.8);
+      expect(result.costUnit).toBe('usd');
+    });
+
+    it('listMetrics returns paginated metric records with shared filters', async () => {
+      const result = await storage.listMetrics({
+        filters: {
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          tags: ['prod'],
+        },
+        pagination: { page: 0, perPage: 1 },
+        orderBy: { field: 'timestamp', direction: 'ASC' },
+      });
+
+      expect(result.pagination.total).toBe(2);
+      expect(result.pagination.hasMore).toBe(true);
+      expect(result.metrics).toHaveLength(1);
+      expect(result.metrics[0]!.provider).toBe('openai');
+      expect(result.metrics[0]!.model).toBe('gpt-4o-mini');
+      expect(result.metrics[0]!.estimatedCost).toBeCloseTo(0.1);
+      expect(result.metrics[0]!.costUnit).toBe('usd');
+      expect(result.metrics[0]!.tags).toEqual(['prod']);
+      expect(result.metrics[0]!.labels).toEqual({ status: 'ok' });
     });
 
     it('getMetricAggregate returns avg', async () => {
@@ -388,8 +430,29 @@ describe('ObservabilityStorageDuckDB', () => {
       const code = result.groups.find(g => g.dimensions.entityName === 'codeAgent');
       expect(weather).toBeDefined();
       expect(weather!.value).toBe(150); // (100+200)/2
+      expect(weather!.estimatedCost).toBeCloseTo(0.3);
+      expect(weather!.costUnit).toBe('usd');
       expect(code).toBeDefined();
       expect(code!.value).toBe(500);
+      expect(code!.estimatedCost).toBeCloseTo(0.5);
+      expect(code!.costUnit).toBe('usd');
+    });
+
+    it('getMetricBreakdown groups by label keys', async () => {
+      const result = await storage.getMetricBreakdown({
+        name: ['mastra_agent_duration_ms'],
+        groupBy: ['status'],
+        aggregation: 'count',
+      });
+
+      expect(result.groups).toHaveLength(2);
+      const ok = result.groups.find(g => g.dimensions.status === 'ok');
+      const error = result.groups.find(g => g.dimensions.status === 'error');
+
+      expect(ok?.value).toBe(2);
+      expect(ok?.estimatedCost).toBeCloseTo(0.3);
+      expect(error?.value).toBe(1);
+      expect(error?.estimatedCost).toBeCloseTo(0.5);
     });
 
     it('getMetricTimeSeries returns bucketed data', async () => {
@@ -401,6 +464,23 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(result.series.length).toBeGreaterThanOrEqual(1);
       const mainSeries = result.series[0]!;
       expect(mainSeries.points.length).toBeGreaterThanOrEqual(1);
+      expect(mainSeries.costUnit).toBe('usd');
+      expect(mainSeries.points[0]!.estimatedCost).toBeCloseTo(0.8);
+    });
+
+    it('filters metrics by canonical cost fields', async () => {
+      const result = await storage.getMetricAggregate({
+        name: ['mastra_agent_duration_ms'],
+        aggregation: 'sum',
+        filters: {
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          costUnit: 'usd',
+        },
+      });
+
+      expect(result.value).toBe(300);
+      expect(result.estimatedCost).toBeCloseTo(0.3);
     });
 
     it('getMetricPercentiles returns percentile series', async () => {
@@ -430,12 +510,37 @@ describe('ObservabilityStorageDuckDB', () => {
             labels: { agent: 'weatherAgent', status: 'ok' },
             entityType: EntityType.AGENT,
             entityName: 'weatherAgent',
+            serviceName: 'metric-service',
+            environment: 'metric-env',
+            tags: ['metric-tag'],
           },
           {
             timestamp: new Date(),
             name: 'mastra_tool_calls_started',
             value: 1,
             labels: { tool: 'search' },
+            entityType: EntityType.TOOL,
+            entityName: 'metricTool',
+            serviceName: 'metric-service',
+            environment: 'metric-env',
+            tags: ['metric-tag'],
+          },
+        ],
+      });
+
+      await storage.batchCreateLogs({
+        logs: [
+          {
+            timestamp: new Date(),
+            level: 'info',
+            message: 'discovery-log',
+            data: null,
+            entityType: EntityType.INPUT_PROCESSOR,
+            entityName: 'logProcessor',
+            serviceName: 'log-service',
+            environment: 'log-env',
+            tags: ['log-tag'],
+            metadata: null,
           },
         ],
       });
@@ -506,27 +611,41 @@ describe('ObservabilityStorageDuckDB', () => {
     it('getEntityTypes returns distinct entity types', async () => {
       const result = await storage.getEntityTypes({});
       expect(result.entityTypes).toContain('agent');
+      expect(result.entityTypes).toContain('tool');
+      expect(result.entityTypes).toContain('input_processor');
     });
 
     it('getEntityNames returns entity names', async () => {
       const result = await storage.getEntityNames({ entityType: EntityType.AGENT });
       expect(result.names).toContain('weatherAgent');
+
+      const toolNames = await storage.getEntityNames({ entityType: EntityType.TOOL });
+      expect(toolNames.names).toContain('metricTool');
+
+      const processorNames = await storage.getEntityNames({ entityType: EntityType.INPUT_PROCESSOR });
+      expect(processorNames.names).toContain('logProcessor');
     });
 
     it('getServiceNames returns service names', async () => {
       const result = await storage.getServiceNames({});
       expect(result.serviceNames).toContain('my-service');
+      expect(result.serviceNames).toContain('metric-service');
+      expect(result.serviceNames).toContain('log-service');
     });
 
     it('getEnvironments returns environments', async () => {
       const result = await storage.getEnvironments({});
       expect(result.environments).toContain('production');
+      expect(result.environments).toContain('metric-env');
+      expect(result.environments).toContain('log-env');
     });
 
     it('getTags returns distinct tags', async () => {
       const result = await storage.getTags({});
       expect(result.tags).toContain('v1');
       expect(result.tags).toContain('experiment');
+      expect(result.tags).toContain('metric-tag');
+      expect(result.tags).toContain('log-tag');
     });
   });
 
@@ -589,6 +708,8 @@ describe('ObservabilityStorageDuckDB', () => {
           value: 1,
           comment: 'Great!',
           experimentId: null,
+          userId: 'user-1',
+          sourceId: 'source-1',
           metadata: null,
         },
       });
@@ -603,6 +724,8 @@ describe('ObservabilityStorageDuckDB', () => {
           value: 4,
           comment: null,
           experimentId: 'exp-1',
+          userId: 'user-2',
+          sourceId: 'source-2',
           metadata: null,
         },
       });
@@ -615,6 +738,8 @@ describe('ObservabilityStorageDuckDB', () => {
       });
       expect(filtered.feedback).toHaveLength(1);
       expect(filtered.feedback[0]!.value).toBe(1);
+      expect(filtered.feedback[0]!.userId).toBe('user-1');
+      expect(filtered.feedback[0]!.sourceId).toBe('source-1');
     });
   });
 });

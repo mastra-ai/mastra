@@ -72,21 +72,6 @@ export function buildWhereClause(
       continue;
     }
 
-    if (key === 'search') {
-      conditions.push(`message ILIKE ?`);
-      params.push(`%${value}%`);
-      continue;
-    }
-
-    if (key === 'dataKeys') {
-      const keys = value as string[];
-      for (const k of keys) {
-        conditions.push(`json_extract(data, ?) IS NOT NULL`);
-        params.push(buildJsonPath(k));
-      }
-      continue;
-    }
-
     if (key === 'status') {
       // Derived field for traces
       const status = value as string;

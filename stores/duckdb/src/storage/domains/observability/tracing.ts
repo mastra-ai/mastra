@@ -1,6 +1,5 @@
 import type {
   CreateSpanArgs,
-  UpdateSpanArgs,
   GetSpanArgs,
   GetSpanResponse,
   GetRootSpanArgs,
@@ -10,13 +9,13 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   BatchCreateSpansArgs,
-  BatchUpdateSpansArgs,
   BatchDeleteTracesArgs,
+  SpanRecord,
 } from '@mastra/core/storage';
 import { toTraceSpans } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
-import { v, jsonV, rowToSpanRecord } from './helpers';
+import { v, jsonV, parseJson, parseJsonArray, toDate, toDateOrNull } from './helpers';
 
 // ============================================================================
 // Columns & Reconstruction
@@ -61,8 +60,8 @@ const COLUMNS_SQL = COLUMNS.join(', ');
 
 /**
  * Reconstruction query uses `arg_max(field, timestamp) FILTER (WHERE field IS NOT NULL)`
- * so that partial update events (with NULLs for unchanged fields) don't overwrite
- * values set by earlier events.
+ * so that the final end event supplies the terminal span fields without wiping
+ * stable values emitted on the start event.
  */
 function argMaxNonNull(col: string): string {
   return `arg_max(${col}, timestamp) FILTER (WHERE ${col} IS NOT NULL) as ${col}`;
@@ -103,6 +102,44 @@ const SPAN_RECONSTRUCT_SELECT = `
   FROM span_events
 `;
 
+function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
+  return {
+    traceId: row.traceId as string,
+    spanId: row.spanId as string,
+    name: row.name as string,
+    spanType: row.spanType as SpanRecord['spanType'],
+    parentSpanId: (row.parentSpanId as string) ?? null,
+    isEvent: row.isEvent as boolean,
+    startedAt: toDate(row.startedAt),
+    endedAt: toDateOrNull(row.endedAt),
+    experimentId: (row.experimentId as string) ?? null,
+    entityType: (row.entityType as SpanRecord['entityType']) ?? null,
+    entityId: (row.entityId as string) ?? null,
+    entityName: (row.entityName as string) ?? null,
+    userId: (row.userId as string) ?? null,
+    organizationId: (row.organizationId as string) ?? null,
+    resourceId: (row.resourceId as string) ?? null,
+    runId: (row.runId as string) ?? null,
+    sessionId: (row.sessionId as string) ?? null,
+    threadId: (row.threadId as string) ?? null,
+    requestId: (row.requestId as string) ?? null,
+    environment: (row.environment as string) ?? null,
+    source: (row.source as string) ?? null,
+    serviceName: (row.serviceName as string) ?? null,
+    attributes: parseJson(row.attributes) as Record<string, unknown> | null,
+    metadata: parseJson(row.metadata) as Record<string, unknown> | null,
+    tags: parseJsonArray(row.tags) as string[] | null,
+    scope: parseJson(row.scope) as Record<string, unknown> | null,
+    links: parseJsonArray(row.links),
+    input: parseJson(row.input) as Record<string, unknown> | null,
+    output: parseJson(row.output) as Record<string, unknown> | null,
+    error: parseJson(row.error) as Record<string, unknown> | null,
+    requestContext: parseJson(row.requestContext) as Record<string, unknown> | null,
+    createdAt: toDate(row.startedAt),
+    updatedAt: null,
+  };
+}
+
 function buildHasChildErrorClause(hasChildError: boolean | undefined): string {
   if (hasChildError === undefined) return '';
   const base = `SELECT 1 FROM reconstructed_spans c WHERE c.traceId = root_spans.traceId AND c.spanId != root_spans.spanId AND c.error IS NOT NULL`;
@@ -116,16 +153,15 @@ function buildHasChildErrorClause(hasChildError: boolean | undefined): string {
 /**
  * A span event row to be inserted into the span_events table.
  *
- * `timestamp` is the event ordering key, computed internally from the eventType:
- *   - 'start'  → the span's actual start time
- *   - 'update' → now (wall-clock time the update was recorded)
- *   - 'end'    → now (wall-clock time the end was recorded)
+ * `timestamp` is the event ordering key:
+ *   - 'start' → the span's actual start time
+ *   - 'end'   → the span's actual end time
  *
  * The reconstruction query derives `startedAt` from
  * `min(timestamp) FILTER (WHERE eventType = 'start')`.
  */
 interface SpanEventRow {
-  eventType: 'start' | 'update' | 'end';
+  eventType: 'start' | 'end';
   timestamp: Date;
   traceId: string;
   spanId: string;
@@ -206,10 +242,47 @@ async function insertSpanEvents(db: DuckDBConnection, rows: SpanEventRow[]): Pro
 // Public API
 // ============================================================================
 
-function createSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
+function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
   return {
     eventType: 'start',
     timestamp: s.startedAt,
+    traceId: s.traceId,
+    spanId: s.spanId,
+    parentSpanId: s.parentSpanId ?? null,
+    name: s.name,
+    spanType: s.spanType,
+    isEvent: s.isEvent,
+    endedAt: null,
+    experimentId: s.experimentId ?? null,
+    entityType: s.entityType ?? null,
+    entityId: s.entityId ?? null,
+    entityName: s.entityName ?? null,
+    userId: s.userId ?? null,
+    organizationId: s.organizationId ?? null,
+    resourceId: s.resourceId ?? null,
+    runId: s.runId ?? null,
+    sessionId: s.sessionId ?? null,
+    threadId: s.threadId ?? null,
+    requestId: s.requestId ?? null,
+    environment: s.environment ?? null,
+    source: s.source ?? null,
+    serviceName: s.serviceName ?? null,
+    attributes: (s.attributes as Record<string, unknown>) ?? null,
+    metadata: (s.metadata as Record<string, unknown>) ?? null,
+    tags: s.tags ?? null,
+    scope: (s.scope as Record<string, unknown>) ?? null,
+    links: null,
+    input: (s.input as Record<string, unknown>) ?? null,
+    output: null,
+    error: null,
+    requestContext: (s.requestContext as Record<string, unknown>) ?? null,
+  };
+}
+
+function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
+  return {
+    eventType: 'end',
+    timestamp: s.endedAt!,
     traceId: s.traceId,
     spanId: s.spanId,
     parentSpanId: s.parentSpanId ?? null,
@@ -243,66 +316,25 @@ function createSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
   };
 }
 
-function updateSpanRow(args: UpdateSpanArgs): SpanEventRow {
-  const u = args.updates;
-  return {
-    eventType: u.endedAt ? 'end' : 'update',
-    timestamp: new Date(),
-    traceId: args.traceId,
-    spanId: args.spanId,
-    parentSpanId: null,
-    name: u.name ?? null,
-    spanType: u.spanType ?? null,
-    isEvent: u.isEvent ?? null,
-    endedAt: u.endedAt ?? null,
-    experimentId: null,
-    entityType: null,
-    entityId: null,
-    entityName: null,
-    userId: null,
-    organizationId: null,
-    resourceId: null,
-    runId: null,
-    sessionId: null,
-    threadId: null,
-    requestId: null,
-    environment: null,
-    source: null,
-    serviceName: null,
-    attributes: (u.attributes as Record<string, unknown>) ?? null,
-    metadata: (u.metadata as Record<string, unknown>) ?? null,
-    tags: null,
-    scope: (u.scope as Record<string, unknown>) ?? null,
-    links: u.links ?? null,
-    input: (u.input as Record<string, unknown>) ?? null,
-    output: (u.output as Record<string, unknown>) ?? null,
-    error: (u.error as Record<string, unknown>) ?? null,
-    requestContext: null,
-  };
-}
-
 /** Insert a 'start' event for a new span. */
 export async function createSpan(db: DuckDBConnection, args: CreateSpanArgs): Promise<void> {
-  await insertSpanEvents(db, [createSpanRow(args.span)]);
-}
-
-/** Insert an 'update' or 'end' event for an existing span. */
-export async function updateSpan(db: DuckDBConnection, args: UpdateSpanArgs): Promise<void> {
-  await insertSpanEvents(db, [updateSpanRow(args)]);
+  const rows = [createStartSpanRow(args.span)];
+  if (args.span.endedAt) {
+    rows.push(createEndSpanRow(args.span));
+  }
+  await insertSpanEvents(db, rows);
 }
 
 /** Insert 'start' events for multiple spans in a single statement. */
 export async function batchCreateSpans(db: DuckDBConnection, args: BatchCreateSpansArgs): Promise<void> {
   if (args.records.length === 0) return;
-  await insertSpanEvents(db, args.records.map(createSpanRow));
-}
-
-/** Insert 'update'/'end' events for multiple spans in a single statement. */
-export async function batchUpdateSpans(db: DuckDBConnection, args: BatchUpdateSpansArgs): Promise<void> {
-  if (args.records.length === 0) return;
-  const rows = args.records.map(record =>
-    updateSpanRow({ traceId: record.traceId, spanId: record.spanId, updates: record.updates }),
-  );
+  const rows = args.records.flatMap(record => {
+    const events = [createStartSpanRow(record)];
+    if (record.endedAt) {
+      events.push(createEndSpanRow(record));
+    }
+    return events;
+  });
   await insertSpanEvents(db, rows);
 }
 

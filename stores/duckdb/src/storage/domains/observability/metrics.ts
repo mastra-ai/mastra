@@ -1,5 +1,7 @@
 import type {
   BatchCreateMetricsArgs,
+  ListMetricsArgs,
+  ListMetricsResponse,
   GetMetricAggregateArgs,
   GetMetricAggregateResponse,
   GetMetricBreakdownArgs,
@@ -17,30 +19,31 @@ import type {
   AggregationType,
   AggregationInterval,
 } from '@mastra/core/storage';
+import { parseFieldKey } from '@mastra/core/utils';
 import type { DuckDBConnection } from '../../db/index';
-import { buildJsonPath, buildWhereClause } from './filters';
-import { v, jsonV } from './helpers';
+import { buildJsonPath, buildOrderByClause, buildPaginationClause, buildWhereClause } from './filters';
+import { parseJson, parseJsonArray, toDate, v, jsonV } from './helpers';
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-function getAggregationSql(aggregation: AggregationType): string {
+function getAggregationSql(aggregation: AggregationType, measure = 'value'): string {
   switch (aggregation) {
     case 'sum':
-      return 'SUM(value)';
+      return `SUM(${measure})`;
     case 'avg':
-      return 'AVG(value)';
+      return `AVG(${measure})`;
     case 'min':
-      return 'MIN(value)';
+      return `MIN(${measure})`;
     case 'max':
-      return 'MAX(value)';
+      return `MAX(${measure})`;
     case 'count':
-      return 'CAST(COUNT(value) AS DOUBLE)';
+      return `CAST(COUNT(${measure}) AS DOUBLE)`;
     case 'last':
-      return 'arg_max(value, timestamp)';
+      return `arg_max(${measure}, timestamp)`;
     default:
-      return 'SUM(value)';
+      return `SUM(${measure})`;
   }
 }
 
@@ -69,15 +72,10 @@ function buildMetricNameFilter(name: string | string[]): { clause: string; param
   return { clause: `name = ?`, params: [name] };
 }
 
-// ============================================================================
-// Write
-// ============================================================================
-
 const METRIC_COLUMNS = [
   'timestamp',
   'name',
   'value',
-  'labels',
   'traceId',
   'spanId',
   'entityType',
@@ -100,23 +98,50 @@ const METRIC_COLUMNS = [
   'source',
   'serviceName',
   'experimentId',
+  'provider',
+  'model',
+  'estimatedCost',
+  'costUnit',
+  'tags',
+  'labels',
+  'costMetadata',
   'metadata',
   'scope',
 ] as const;
 
 type MetricColumn = (typeof METRIC_COLUMNS)[number];
 
-const METRIC_GROUP_BY_EXCLUDED: MetricColumn[] = ['value', 'labels', 'metadata', 'scope'];
-
 const METRIC_COLUMNS_SQL = METRIC_COLUMNS.join(', ');
-const METRIC_GROUP_BY_COLUMNS = new Set(METRIC_COLUMNS.filter(col => !METRIC_GROUP_BY_EXCLUDED.includes(col)));
+const METRIC_COLUMN_SET = new Set<string>(METRIC_COLUMNS);
+const METRIC_LABEL_ONLY_GROUP_BY_EXCLUDED = new Set<MetricColumn>(['metadata', 'scope', 'costMetadata', 'tags']);
 
-function normalizeGroupByColumns(groupBy: string[]): MetricColumn[] {
-  const invalid = groupBy.filter(col => !METRIC_GROUP_BY_COLUMNS.has(col as MetricColumn));
-  if (invalid.length > 0) {
-    throw new Error(`Invalid groupBy column(s): ${invalid.join(', ')}`);
-  }
-  return groupBy as MetricColumn[];
+type ResolvedGroupBy =
+  | { kind: 'column'; key: string; selectSql: string; groupSql: string; resultKey: string }
+  | { kind: 'label'; key: string; selectSql: string; groupSql: string; resultKey: string };
+
+type CostSummary = {
+  estimatedCost: number | null;
+  costUnit: string | null;
+};
+
+function getCostSummarySelect(prefix = ''): string {
+  const ref = (column: string) => `${prefix}${column}`;
+  return [
+    `SUM(${ref('estimatedCost')}) FILTER (WHERE ${ref('estimatedCost')} IS NOT NULL) AS estimatedCost`,
+    `,`,
+    `CASE`,
+    `  WHEN COUNT(DISTINCT ${ref('costUnit')}) FILTER (WHERE ${ref('costUnit')} IS NOT NULL) = 1`,
+    `  THEN MIN(${ref('costUnit')}) FILTER (WHERE ${ref('costUnit')} IS NOT NULL)`,
+    `  ELSE NULL`,
+    `END AS costUnit`,
+  ].join(' ');
+}
+
+function normalizeCostSummaryRow(row: Record<string, unknown>): CostSummary {
+  return {
+    estimatedCost: row.estimatedCost === null || row.estimatedCost === undefined ? null : Number(row.estimatedCost),
+    costUnit: row.costUnit === null || row.costUnit === undefined ? null : String(row.costUnit),
+  };
 }
 
 function buildCombinedWhereClause(
@@ -136,6 +161,79 @@ function buildCombinedWhereClause(
   return { clause: `WHERE ${conditions.join(' AND ')}`, params };
 }
 
+function resolveGroupBy(groupBy: string[]): ResolvedGroupBy[] {
+  return groupBy.map(key => {
+    const parsed = parseFieldKey(key);
+
+    if (METRIC_COLUMN_SET.has(parsed)) {
+      if (METRIC_LABEL_ONLY_GROUP_BY_EXCLUDED.has(parsed as MetricColumn)) {
+        throw new Error(`Invalid groupBy column(s): ${key}`);
+      }
+
+      return {
+        kind: 'column',
+        key,
+        selectSql: `${parsed} AS "${key}"`,
+        groupSql: parsed,
+        resultKey: key,
+      };
+    }
+
+    const labelPath = buildJsonPath(key).replace(/'/g, "''");
+    const labelExpr = `json_extract_string(labels, '${labelPath}')`;
+    return {
+      kind: 'label',
+      key,
+      selectSql: `${labelExpr} AS "${key}"`,
+      groupSql: labelExpr,
+      resultKey: key,
+    };
+  });
+}
+
+function rowToMetricRecord(row: Record<string, unknown>): Record<string, unknown> {
+  return {
+    timestamp: toDate(row.timestamp),
+    name: row.name as string,
+    value: Number(row.value),
+    traceId: (row.traceId as string) ?? null,
+    spanId: (row.spanId as string) ?? null,
+    entityType: (row.entityType as string) ?? null,
+    entityId: (row.entityId as string) ?? null,
+    entityName: (row.entityName as string) ?? null,
+    parentEntityType: (row.parentEntityType as string) ?? null,
+    parentEntityId: (row.parentEntityId as string) ?? null,
+    parentEntityName: (row.parentEntityName as string) ?? null,
+    rootEntityType: (row.rootEntityType as string) ?? null,
+    rootEntityId: (row.rootEntityId as string) ?? null,
+    rootEntityName: (row.rootEntityName as string) ?? null,
+    userId: (row.userId as string) ?? null,
+    organizationId: (row.organizationId as string) ?? null,
+    resourceId: (row.resourceId as string) ?? null,
+    runId: (row.runId as string) ?? null,
+    sessionId: (row.sessionId as string) ?? null,
+    threadId: (row.threadId as string) ?? null,
+    requestId: (row.requestId as string) ?? null,
+    environment: (row.environment as string) ?? null,
+    source: (row.source as string) ?? null,
+    serviceName: (row.serviceName as string) ?? null,
+    experimentId: (row.experimentId as string) ?? null,
+    provider: (row.provider as string) ?? null,
+    model: (row.model as string) ?? null,
+    estimatedCost: row.estimatedCost === null || row.estimatedCost === undefined ? null : Number(row.estimatedCost),
+    costUnit: (row.costUnit as string) ?? null,
+    costMetadata: parseJson(row.costMetadata) as Record<string, unknown> | null,
+    tags: parseJsonArray(row.tags) as string[] | null,
+    labels: (parseJson(row.labels) as Record<string, string> | null) ?? {},
+    metadata: parseJson(row.metadata) as Record<string, unknown> | null,
+    scope: parseJson(row.scope) as Record<string, unknown> | null,
+  };
+}
+
+// ============================================================================
+// Write
+// ============================================================================
+
 /** Insert multiple metric events in a single statement. */
 export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreateMetricsArgs): Promise<void> {
   if (args.metrics.length === 0) return;
@@ -145,7 +243,6 @@ export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreate
       v(m.timestamp),
       v(m.name),
       v(m.value),
-      v(JSON.stringify(m.labels ?? {})),
       v(m.traceId ?? null),
       v(m.spanId ?? null),
       v(m.entityType ?? null),
@@ -168,12 +265,47 @@ export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreate
       v(m.source ?? null),
       v(m.serviceName ?? null),
       v(m.experimentId ?? null),
-      jsonV(m.metadata),
-      jsonV(m.scope),
+      v(m.provider ?? null),
+      v(m.model ?? null),
+      v(m.estimatedCost ?? null),
+      v(m.costUnit ?? null),
+      jsonV(m.tags ?? null),
+      v(JSON.stringify(m.labels ?? {})),
+      jsonV(m.costMetadata ?? null),
+      jsonV(m.metadata ?? null),
+      jsonV(m.scope ?? null),
     ].join(', ')})`;
   });
 
   await db.execute(`INSERT INTO metric_events (${METRIC_COLUMNS_SQL}) VALUES ${tuples.join(',\n')}`);
+}
+
+/** Query metric events with filtering, ordering, and pagination. */
+export async function listMetrics(db: DuckDBConnection, args: ListMetricsArgs): Promise<ListMetricsResponse> {
+  const filters = args.filters ?? {};
+  const page = Number(args.pagination?.page ?? 0);
+  const perPage = Number(args.pagination?.perPage ?? 10);
+  const orderBy = { field: args.orderBy?.field ?? 'timestamp', direction: args.orderBy?.direction ?? 'DESC' } as const;
+
+  const { clause: filterClause, params: filterParams } = buildWhereClause(filters as Record<string, unknown>);
+  const orderByClause = buildOrderByClause(orderBy);
+  const { clause: paginationClause, params: paginationParams } = buildPaginationClause({ page, perPage });
+
+  const countResult = await db.query<{ total: number }>(
+    `SELECT COUNT(*) AS total FROM metric_events ${filterClause}`,
+    filterParams,
+  );
+  const total = Number(countResult[0]?.total ?? 0);
+
+  const rows = await db.query<Record<string, unknown>>(
+    `SELECT * FROM metric_events ${filterClause} ${orderByClause} ${paginationClause}`,
+    [...filterParams, ...paginationParams],
+  );
+
+  return {
+    pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
+    metrics: rows.map(row => rowToMetricRecord(row)) as ListMetricsResponse['metrics'],
+  };
 }
 
 // ============================================================================
@@ -196,9 +328,12 @@ export async function getMetricAggregate(
     filterClause,
     filterParams,
   );
-  const sql = `SELECT ${aggSql} as value FROM metric_events ${whereClause}`;
-  const result = await db.query<{ value: number | null }>(sql, allParams);
-  const value = result[0]?.value ?? null;
+
+  const sql = `SELECT ${aggSql} AS value, ${getCostSummarySelect()} FROM metric_events ${whereClause}`;
+  const result = await db.query<Record<string, unknown>>(sql, allParams);
+  const row = result[0] ?? {};
+  const value = row.value === null || row.value === undefined ? null : Number(row.value);
+  const costSummary = normalizeCostSummaryRow(row);
 
   if (args.comparePeriod && args.filters?.timestamp) {
     const ts = args.filters.timestamp;
@@ -224,6 +359,7 @@ export async function getMetricAggregate(
           prevStart = new Date(ts.start.getTime() - duration);
           prevEnd = new Date(ts.end.getTime() - duration);
       }
+
       const prevFilters = {
         ...(args.filters ?? {}),
         timestamp: {
@@ -242,20 +378,43 @@ export async function getMetricAggregate(
         prevFilterClause,
         prevFilterParams,
       );
-      const prevSql = `SELECT ${aggSql} as value FROM metric_events ${prevWhereClause}`;
-      const prevResult = await db.query<{ value: number | null }>(prevSql, prevParams);
-      const previousValue = prevResult[0]?.value ?? null;
+
+      const prevSql = `SELECT ${aggSql} AS value, ${getCostSummarySelect()} FROM metric_events ${prevWhereClause}`;
+      const prevResult = await db.query<Record<string, unknown>>(prevSql, prevParams);
+      const prevRow = prevResult[0] ?? {};
+      const previousValue = prevRow.value === null || prevRow.value === undefined ? null : Number(prevRow.value);
+      const previousCostSummary = normalizeCostSummaryRow(prevRow);
 
       let changePercent: number | null = null;
       if (previousValue !== null && previousValue !== 0 && value !== null) {
         changePercent = ((value - previousValue) / Math.abs(previousValue)) * 100;
       }
 
-      return { value, previousValue, changePercent };
+      let costChangePercent: number | null = null;
+      if (
+        previousCostSummary.estimatedCost !== null &&
+        previousCostSummary.estimatedCost !== 0 &&
+        costSummary.estimatedCost !== null
+      ) {
+        costChangePercent =
+          ((costSummary.estimatedCost - previousCostSummary.estimatedCost) /
+            Math.abs(previousCostSummary.estimatedCost)) *
+          100;
+      }
+
+      return {
+        value,
+        estimatedCost: costSummary.estimatedCost,
+        costUnit: costSummary.costUnit,
+        previousValue,
+        previousEstimatedCost: previousCostSummary.estimatedCost,
+        changePercent,
+        costChangePercent,
+      };
     }
   }
 
-  return { value };
+  return { value, estimatedCost: costSummary.estimatedCost, costUnit: costSummary.costUnit };
 }
 
 /** Aggregate a metric grouped by one or more dimensions. */
@@ -268,28 +427,33 @@ export async function getMetricBreakdown(
   const { clause: filterClause, params: filterParams } = buildWhereClause(
     args.filters as Record<string, unknown> | undefined,
   );
+  const { clause: whereClause, params: allParams } = buildCombinedWhereClause(
+    nameClause,
+    nameParams,
+    filterClause,
+    filterParams,
+  );
 
-  const allConditions = [nameClause];
-  const allParams = [...nameParams];
-  if (filterClause) {
-    allConditions.push(filterClause.replace('WHERE ', ''));
-    allParams.push(...filterParams);
-  }
-
-  const whereClause = `WHERE ${allConditions.join(' AND ')}`;
-  const groupBy = normalizeGroupByColumns(args.groupBy);
-  const groupByCols = groupBy.join(', ');
-
-  const sql = `SELECT ${groupByCols}, ${aggSql} as value FROM metric_events ${whereClause} GROUP BY ${groupByCols} ORDER BY value DESC`;
-  const rows = await db.query(sql, allParams);
+  const resolvedGroupBy = resolveGroupBy(args.groupBy);
+  const selectGroupBy = resolvedGroupBy.map(entry => entry.selectSql).join(', ');
+  const groupByCols = resolvedGroupBy.map(entry => entry.groupSql).join(', ');
+  const sql = `SELECT ${selectGroupBy}, ${aggSql} AS value, ${getCostSummarySelect()} FROM metric_events ${whereClause} GROUP BY ${groupByCols} ORDER BY value DESC`;
+  const rows = await db.query<Record<string, unknown>>(sql, allParams);
 
   const groups = rows.map(row => {
-    const r = row as Record<string, unknown>;
-    const dimensions: Record<string, string> = {};
-    for (const col of groupBy) {
-      dimensions[col] = String(r[col] ?? '');
+    const dimensions: Record<string, string | null> = {};
+    for (const entry of resolvedGroupBy) {
+      const value = row[entry.resultKey];
+      dimensions[entry.key] = value === null || value === undefined ? null : String(value);
     }
-    return { dimensions, value: Number(r.value ?? 0) };
+
+    const costSummary = normalizeCostSummaryRow(row);
+    return {
+      dimensions,
+      value: Number(row.value ?? 0),
+      estimatedCost: costSummary.estimatedCost,
+      costUnit: costSummary.costUnit,
+    };
   });
 
   return { groups };
@@ -306,63 +470,99 @@ export async function getMetricTimeSeries(
   const { clause: filterClause, params: filterParams } = buildWhereClause(
     args.filters as Record<string, unknown> | undefined,
   );
-
-  const allConditions = [nameClause];
-  const allParams = [...nameParams];
-  if (filterClause) {
-    allConditions.push(filterClause.replace('WHERE ', ''));
-    allParams.push(...filterParams);
-  }
-
-  const whereClause = `WHERE ${allConditions.join(' AND ')}`;
+  const { clause: whereClause, params: allParams } = buildCombinedWhereClause(
+    nameClause,
+    nameParams,
+    filterClause,
+    filterParams,
+  );
 
   if (args.groupBy && args.groupBy.length > 0) {
-    const groupBy = normalizeGroupByColumns(args.groupBy);
-    const groupByCols = groupBy.join(', ');
+    const resolvedGroupBy = resolveGroupBy(args.groupBy);
+    const selectGroupBy = resolvedGroupBy.map(entry => entry.selectSql).join(', ');
+    const groupByCols = resolvedGroupBy.map(entry => entry.groupSql).join(', ');
     const sql = `
-      SELECT time_bucket(INTERVAL '${intervalSql}', timestamp) as bucket,
-             ${groupByCols}, ${aggSql} as value
+      SELECT time_bucket(INTERVAL '${intervalSql}', timestamp) AS bucket,
+             ${selectGroupBy},
+             ${aggSql} AS value,
+             ${getCostSummarySelect()}
       FROM metric_events ${whereClause}
       GROUP BY bucket, ${groupByCols}
       ORDER BY bucket
     `;
-    const rows = await db.query(sql, allParams);
+    const rows = await db.query<Record<string, unknown>>(sql, allParams);
 
-    const seriesMap = new Map<string, { timestamp: Date; value: number }[]>();
+    const seriesMap = new Map<
+      string,
+      {
+        name: string;
+        costUnits: Set<string>;
+        points: { timestamp: Date; value: number; estimatedCost: number | null }[];
+      }
+    >();
+
     for (const row of rows) {
-      const r = row as Record<string, unknown>;
-      const key = groupBy.map(col => String(r[col] ?? '')).join('|');
-      if (!seriesMap.has(key)) seriesMap.set(key, []);
-      seriesMap.get(key)!.push({
-        timestamp: new Date(r.bucket as string),
-        value: Number(r.value ?? 0),
+      const name = resolvedGroupBy
+        .map(entry => {
+          const value = row[entry.resultKey];
+          return value === null || value === undefined ? '' : String(value);
+        })
+        .join('|');
+      const costSummary = normalizeCostSummaryRow(row);
+
+      if (!seriesMap.has(name)) {
+        seriesMap.set(name, {
+          name,
+          costUnits: new Set(),
+          points: [],
+        });
+      }
+
+      if (costSummary.costUnit) {
+        seriesMap.get(name)!.costUnits.add(costSummary.costUnit);
+      }
+
+      seriesMap.get(name)!.points.push({
+        timestamp: row.bucket instanceof Date ? row.bucket : new Date(String(row.bucket)),
+        value: Number(row.value ?? 0),
+        estimatedCost: costSummary.estimatedCost,
       });
     }
 
     return {
-      series: Array.from(seriesMap.entries()).map(([name, points]) => ({ name, points })),
+      series: Array.from(seriesMap.values()).map(series => ({
+        name: series.name,
+        costUnit: series.costUnits.size === 1 ? Array.from(series.costUnits)[0]! : null,
+        points: series.points,
+      })),
     };
   }
 
   const sql = `
-    SELECT time_bucket(INTERVAL '${intervalSql}', timestamp) as bucket,
-           ${aggSql} as value
+    SELECT time_bucket(INTERVAL '${intervalSql}', timestamp) AS bucket,
+           ${aggSql} AS value,
+           ${getCostSummarySelect()}
     FROM metric_events ${whereClause}
     GROUP BY bucket
     ORDER BY bucket
   `;
-  const rows = await db.query(sql, allParams);
-
+  const rows = await db.query<Record<string, unknown>>(sql, allParams);
   const metricName = Array.isArray(args.name) ? args.name.join(',') : args.name;
+  const overallCostUnits = new Set(
+    rows.map(row => row.costUnit).filter((value): value is string => typeof value === 'string'),
+  );
+
   return {
     series: [
       {
         name: metricName,
+        costUnit: overallCostUnits.size === 1 ? Array.from(overallCostUnits)[0]! : null,
         points: rows.map(row => {
-          const r = row as Record<string, unknown>;
+          const costSummary = normalizeCostSummaryRow(row);
           return {
-            timestamp: r.bucket instanceof Date ? r.bucket : new Date(String(r.bucket)),
-            value: Number(r.value ?? 0),
+            timestamp: row.bucket instanceof Date ? row.bucket : new Date(String(row.bucket)),
+            value: Number(row.value ?? 0),
+            estimatedCost: costSummary.estimatedCost,
           };
         }),
       },
@@ -392,23 +592,20 @@ export async function getMetricPercentiles(
   const series = [];
   for (const p of args.percentiles) {
     const sql = `
-      SELECT time_bucket(INTERVAL '${intervalSql}', timestamp) as bucket,
-             percentile_cont(${p}) WITHIN GROUP (ORDER BY value) as pvalue
+      SELECT time_bucket(INTERVAL '${intervalSql}', timestamp) AS bucket,
+             percentile_cont(${p}) WITHIN GROUP (ORDER BY value) AS pvalue
       FROM metric_events ${whereClause}
       GROUP BY bucket
       ORDER BY bucket
     `;
-    const rows = await db.query(sql, allParams);
+    const rows = await db.query<Record<string, unknown>>(sql, allParams);
 
     series.push({
       percentile: p,
-      points: rows.map(row => {
-        const r = row as Record<string, unknown>;
-        return {
-          timestamp: new Date(r.bucket as string),
-          value: Number(r.pvalue ?? 0),
-        };
-      }),
+      points: rows.map(row => ({
+        timestamp: row.bucket instanceof Date ? row.bucket : new Date(String(row.bucket)),
+        value: Number(row.pvalue ?? 0),
+      })),
     });
   }
 
@@ -447,7 +644,7 @@ export async function getMetricLabelKeys(
   args: GetMetricLabelKeysArgs,
 ): Promise<GetMetricLabelKeysResponse> {
   const rows = await db.query<{ key: string }>(
-    `SELECT DISTINCT unnest(json_keys(labels)) as key FROM metric_events WHERE name = ? AND labels IS NOT NULL`,
+    `SELECT DISTINCT unnest(json_keys(labels)) AS key FROM metric_events WHERE name = ? AND labels IS NOT NULL`,
     [args.metricName],
   );
   return { keys: rows.map(r => r.key) };
@@ -460,7 +657,7 @@ export async function getMetricLabelValues(
 ): Promise<GetMetricLabelValuesResponse> {
   const labelPath = buildJsonPath(args.labelKey);
   const conditions = [`name = ?`, `json_extract_string(labels, ?) IS NOT NULL`];
-  const params: unknown[] = [labelPath, args.metricName, labelPath];
+  const params: unknown[] = [args.metricName, labelPath];
 
   if (args.prefix) {
     conditions.push(`json_extract_string(labels, ?) LIKE ?`);
@@ -471,8 +668,8 @@ export async function getMetricLabelValues(
   if (args.limit) params.push(args.limit);
 
   const rows = await db.query<{ val: string }>(
-    `SELECT DISTINCT json_extract_string(labels, ?) as val FROM metric_events WHERE ${conditions.join(' AND ')} ORDER BY val ${limitClause}`,
-    params,
+    `SELECT DISTINCT json_extract_string(labels, ?) AS val FROM metric_events WHERE ${conditions.join(' AND ')} ORDER BY val ${limitClause}`,
+    [labelPath, ...params],
   );
 
   return { values: rows.map(r => r.val) };

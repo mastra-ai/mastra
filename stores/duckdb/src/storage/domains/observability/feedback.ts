@@ -12,16 +12,18 @@ import { v, jsonV, toDate, parseJson } from './helpers';
 export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackArgs): Promise<void> {
   const f = args.feedback;
   await db.execute(
-    `INSERT INTO feedback_events (timestamp, traceId, spanId, source, feedbackType, value, comment, experimentId, metadata)
+    `INSERT INTO feedback_events (timestamp, traceId, spanId, experimentId, userId, sourceId, source, feedbackType, value, comment, metadata)
      VALUES (${[
        v(f.timestamp),
        v(f.traceId),
        v(f.spanId ?? null),
+       v(f.experimentId ?? null),
+       v(f.userId ?? null),
+       v(f.sourceId ?? null),
        v(f.source),
        v(f.feedbackType),
        v(String(f.value)),
        v(f.comment ?? null),
-       v(f.experimentId ?? null),
        jsonV(f.metadata),
      ].join(', ')})`,
   );
@@ -37,17 +39,19 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
         v(f.timestamp),
         v(f.traceId),
         v(f.spanId ?? null),
+        v(f.experimentId ?? null),
+        v(f.userId ?? null),
+        v(f.sourceId ?? null),
         v(f.source),
         v(f.feedbackType),
         v(String(f.value)),
         v(f.comment ?? null),
-        v(f.experimentId ?? null),
         jsonV(f.metadata),
       ].join(', ')})`,
   );
 
   await db.execute(
-    `INSERT INTO feedback_events (timestamp, traceId, spanId, source, feedbackType, value, comment, experimentId, metadata)
+    `INSERT INTO feedback_events (timestamp, traceId, spanId, experimentId, userId, sourceId, source, feedbackType, value, comment, metadata)
      VALUES ${tuples.join(',\n       ')}`,
   );
 }
@@ -85,14 +89,14 @@ export async function listFeedback(db: DuckDBConnection, args: ListFeedbackArgs)
       timestamp: toDate(r.timestamp),
       traceId: r.traceId as string,
       spanId: (r.spanId as string) ?? null,
+      experimentId: (r.experimentId as string) ?? null,
+      userId: (r.userId as string) ?? null,
+      sourceId: (r.sourceId as string) ?? null,
       source: r.source as string,
       feedbackType: r.feedbackType as string,
       value,
       comment: (r.comment as string) ?? null,
-      experimentId: (r.experimentId as string) ?? null,
       metadata: parseJson(r.metadata) as Record<string, unknown> | null,
-      createdAt: toDate(r.timestamp),
-      updatedAt: null,
     };
   });
 
