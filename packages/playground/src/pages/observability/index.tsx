@@ -1,20 +1,15 @@
 import { EntityType } from '@mastra/core/observability';
 import type { EntityOptions, DatePreset } from '@mastra/playground-ui';
 import {
-  HeaderTitle,
-  Header,
-  MainContentLayout,
+  EntityListPageLayout,
+  MainHeader,
+  ButtonWithTooltip,
   TracesList,
   tracesListColumns,
-  PageHeader,
   TracesTools,
   CONTEXT_FIELD_IDS,
   TraceDialog,
   parseError,
-  Icon,
-  HeaderAction,
-  Button,
-  DocsIcon,
   EntryListSkeleton,
   getToNextEntryFn,
   getToPreviousEntryFn,
@@ -29,13 +24,11 @@ import {
   is403ForbiddenError,
 } from '@mastra/playground-ui';
 
-import { EyeIcon } from 'lucide-react';
+import { BookIcon, EyeIcon } from 'lucide-react';
 import { useDeferredValue, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { useTrace } from '@/domains/observability/hooks/use-trace';
 import { useTraces } from '@/domains/observability/hooks/use-traces';
-
-import { cn } from '@/lib/utils';
 
 export default function Observability() {
   const navigate = useNavigate();
@@ -306,33 +299,31 @@ export default function Observability() {
   // 403 check - permission denied for traces
   if (TracesError && is403ForbiddenError(TracesError)) {
     return (
-      <MainContentLayout>
-        <Header>
-          <HeaderTitle>
-            <Icon>
-              <EyeIcon />
-            </Icon>
-            Observability
-          </HeaderTitle>
-
-          <HeaderAction>
-            <Button
-              as={Link}
-              to="https://mastra.ai/en/docs/observability/tracing/overview"
-              target="_blank"
-              variant="ghost"
-              size="md"
-            >
-              <DocsIcon />
-              Observability documentation
-            </Button>
-          </HeaderAction>
-        </Header>
-
+      <EntityListPageLayout>
+        <EntityListPageLayout.Top>
+          <MainHeader withMargins={false}>
+            <MainHeader.Column>
+              <MainHeader.Title>
+                <EyeIcon /> Observability
+              </MainHeader.Title>
+            </MainHeader.Column>
+            <MainHeader.Column className="flex justify-end gap-2">
+              <ButtonWithTooltip
+                as="a"
+                href="https://mastra.ai/en/docs/observability/tracing/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+                tooltipContent="Go to Observability documentation"
+              >
+                <BookIcon />
+              </ButtonWithTooltip>
+            </MainHeader.Column>
+          </MainHeader>
+        </EntityListPageLayout.Top>
         <div className="flex h-full items-center justify-center">
           <PermissionDenied resource="traces" />
         </div>
-      </MainContentLayout>
+      </EntityListPageLayout>
     );
   }
 
@@ -359,84 +350,73 @@ export default function Observability() {
 
   return (
     <>
-      <MainContentLayout>
-        <Header>
-          <HeaderTitle>
-            <Icon>
-              <EyeIcon />
-            </Icon>
-            Observability
-          </HeaderTitle>
+      <EntityListPageLayout className="grid-rows-[auto_1fr] overflow-y-auto">
+        <EntityListPageLayout.Top>
+          <MainHeader withMargins={false}>
+            <MainHeader.Column>
+              <MainHeader.Title isLoading={isTracesLoading}>
+                <EyeIcon /> Observability
+              </MainHeader.Title>
+            </MainHeader.Column>
+            <MainHeader.Column className="flex justify-end gap-2">
+              <ButtonWithTooltip
+                as="a"
+                href="https://mastra.ai/en/docs/observability/tracing/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+                tooltipContent="Go to Observability documentation"
+              >
+                <BookIcon />
+              </ButtonWithTooltip>
+            </MainHeader.Column>
+          </MainHeader>
 
-          <HeaderAction>
-            <Button
-              as={Link}
-              to="https://mastra.ai/en/docs/observability/tracing/overview"
-              target="_blank"
-              variant="ghost"
-              size="md"
-            >
-              <DocsIcon />
-              Observability documentation
-            </Button>
-          </HeaderAction>
-        </Header>
+          <TracesTools
+            onEntityChange={handleSelectedEntityChange}
+            onReset={handleReset}
+            selectedEntity={selectedEntityOption}
+            entityOptions={entityOptions}
+            onDateChange={handleDataChange}
+            selectedDateFrom={selectedDateFrom}
+            selectedDateTo={selectedDateTo}
+            isLoading={isTracesLoading || isLoadingAgents || isLoadingWorkflows}
+            groupByThread={groupByThread}
+            onGroupByThreadChange={setGroupByThread}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            selectedTags={selectedTags}
+            availableTags={availableTags}
+            onTagsChange={setSelectedTags}
+            errorOnly={errorOnly}
+            onErrorOnlyChange={setErrorOnly}
+            selectedMetadata={selectedMetadata}
+            availableMetadata={availableMetadata}
+            onMetadataChange={setSelectedMetadata}
+            datePreset={datePreset}
+            onDatePresetChange={setDatePreset}
+            contextFilters={contextFilters}
+            availableContextValues={availableContextValues}
+            onContextFiltersChange={setContextFilters}
+          />
+        </EntityListPageLayout.Top>
 
-        <div className={cn(`grid overflow-y-scroll h-full`)}>
-          <div className={cn('w-full max-w-[100rem] px-12 mx-auto grid grid-rows-[auto_auto_1fr] gap-8 h-full')}>
-            <PageHeader
-              title="Observability"
-              description="Explore observability traces for your entities"
-              icon={<EyeIcon />}
-            />
-
-            <TracesTools
-              onEntityChange={handleSelectedEntityChange}
-              onReset={handleReset}
-              selectedEntity={selectedEntityOption}
-              entityOptions={entityOptions}
-              onDateChange={handleDataChange}
-              selectedDateFrom={selectedDateFrom}
-              selectedDateTo={selectedDateTo}
-              isLoading={isTracesLoading || isLoadingAgents || isLoadingWorkflows}
-              groupByThread={groupByThread}
-              onGroupByThreadChange={setGroupByThread}
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              selectedTags={selectedTags}
-              availableTags={availableTags}
-              onTagsChange={setSelectedTags}
-              errorOnly={errorOnly}
-              onErrorOnlyChange={setErrorOnly}
-              selectedMetadata={selectedMetadata}
-              availableMetadata={availableMetadata}
-              onMetadataChange={setSelectedMetadata}
-              datePreset={datePreset}
-              onDatePresetChange={setDatePreset}
-              contextFilters={contextFilters}
-              availableContextValues={availableContextValues}
-              onContextFiltersChange={setContextFilters}
-            />
-
-            {isTracesLoading ? (
-              <EntryListSkeleton columns={tracesListColumns} />
-            ) : (
-              <TracesList
-                traces={traces}
-                selectedTraceId={selectedTraceId}
-                onTraceClick={handleTraceClick}
-                errorMsg={error?.error}
-                setEndOfListElement={setEndOfListElement}
-                filtersApplied={Boolean(filtersApplied)}
-                isFetchingNextPage={isFetchingNextPage}
-                hasNextPage={hasNextPage}
-                groupByThread={groupByThread}
-                threadTitles={threadTitles}
-              />
-            )}
-          </div>
-        </div>
-      </MainContentLayout>
+        {isTracesLoading ? (
+          <EntryListSkeleton columns={tracesListColumns} />
+        ) : (
+          <TracesList
+            traces={traces}
+            selectedTraceId={selectedTraceId}
+            onTraceClick={handleTraceClick}
+            errorMsg={error?.error}
+            setEndOfListElement={setEndOfListElement}
+            filtersApplied={Boolean(filtersApplied)}
+            isFetchingNextPage={isFetchingNextPage}
+            hasNextPage={hasNextPage}
+            groupByThread={groupByThread}
+            threadTitles={threadTitles}
+          />
+        )}
+      </EntityListPageLayout>
       <TraceDialog
         traceSpans={Trace?.spans}
         traceId={selectedTraceId}
