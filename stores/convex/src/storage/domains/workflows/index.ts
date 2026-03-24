@@ -114,7 +114,7 @@ export class WorkflowsConvex extends WorkflowsStorage {
     const { workflowName, fromDate, toDate, perPage, page, resourceId, status } = args;
 
     // Pass known filters to queryTable for server-side filtering instead of fetching all rows
-    const filters: Array<{ field: string; value: unknown }> = [];
+    const filters: Array<{ field: string; value: string }> = [];
     if (workflowName) {
       filters.push({ field: 'workflow_name', value: workflowName });
     }
