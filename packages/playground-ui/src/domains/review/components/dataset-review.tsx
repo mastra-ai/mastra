@@ -142,16 +142,47 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
 
   const rateItem = useCallback(
     (itemId: string, rating: 'positive' | 'negative' | undefined) => {
+      const item = items.find(i => i.id === itemId);
+      if (item?.traceId && rating !== undefined) {
+        client
+          .createFeedback({
+            feedback: {
+              traceId: item.traceId,
+              source: 'studio',
+              feedbackType: 'rating',
+              value: rating === 'positive' ? 1 : -1,
+              experimentId: item.experimentId ?? undefined,
+              sourceId: item.id,
+            },
+          })
+          .catch(() => {});
+      }
       setLocalItems(prev => prev.map(i => (i.id === itemId ? { ...i, rating } : i)));
     },
-    [],
+    [items, client],
   );
 
   const commentItem = useCallback(
     (itemId: string, comment: string) => {
+      const item = items.find(i => i.id === itemId);
+      if (item?.traceId) {
+        client
+          .createFeedback({
+            feedback: {
+              traceId: item.traceId,
+              source: 'studio',
+              feedbackType: 'comment',
+              value: comment,
+              comment,
+              experimentId: item.experimentId ?? undefined,
+              sourceId: item.id,
+            },
+          })
+          .catch(() => {});
+      }
       setLocalItems(prev => prev.map(i => (i.id === itemId ? { ...i, comment } : i)));
     },
-    [],
+    [items, client],
   );
 
   const removeItem = useCallback(
