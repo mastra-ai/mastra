@@ -144,17 +144,37 @@ async function getAllObservationalMemoryTexts(
   threadId: string | null,
   resourceId: string,
 ): Promise<{ texts: string[]; error: Error | null }> {
+  const BATCH_SIZE = 1000;
+  const texts: string[] = [];
+  const seenRecordKeys = new Set<string>();
+
   try {
-    const records = await memoryStore.getObservationalMemoryHistory(threadId, resourceId, 1000);
-    return {
-      texts: records
-        .map((record: any) => record.activeObservations)
-        .filter((value: unknown): value is string => Boolean(value)),
-      error: null,
-    };
+    for (let limit = BATCH_SIZE; ; limit += BATCH_SIZE) {
+      const records = await memoryStore.getObservationalMemoryHistory(threadId, resourceId, limit);
+      let newRecordCount = 0;
+
+      for (const record of records) {
+        const recordKey =
+          record?.id ??
+          `${record?.generationCount ?? 'unknown'}:${record?.createdAt instanceof Date ? record.createdAt.toISOString() : String(record?.createdAt ?? '')}`;
+        if (seenRecordKeys.has(recordKey)) continue;
+        seenRecordKeys.add(recordKey);
+        newRecordCount++;
+
+        if (typeof record?.activeObservations === 'string' && record.activeObservations.trim()) {
+          texts.push(record.activeObservations);
+        }
+      }
+
+      if (records.length < limit || newRecordCount === 0) {
+        break;
+      }
+    }
+
+    return { texts, error: null };
   } catch (error) {
     return {
-      texts: [],
+      texts,
       error: error instanceof Error ? error : new Error(String(error)),
     };
   }
@@ -266,20 +286,30 @@ async function main() {
         continue;
       }
 
+      let indexedForThread = 0;
+      let groupErrorCount = 0;
+
       for (const group of groups) {
-        await (memory as any).indexObservation({
-          text: group.content,
-          groupId: group.id,
-          range: group.range,
-          threadId: thread.id,
-          resourceId: RESOURCE_ID,
-        });
-        totalIndexed++;
+        try {
+          await (memory as any).indexObservation({
+            text: group.content,
+            groupId: group.id,
+            range: group.range,
+            threadId: thread.id,
+            resourceId: RESOURCE_ID,
+          });
+          totalIndexed++;
+          indexedForThread++;
+        } catch (err: any) {
+          groupErrorCount++;
+          console.log(`\n    group ${group.id} ERROR: ${err.message}`);
+        }
       }
 
       console.log(
-        `${groups.length} groups from ${observationResult.texts.length} OM records` +
-          (duplicateCount > 0 ? ` (${duplicateCount} duplicates skipped)` : ''),
+        `${indexedForThread}/${groups.length} groups indexed from ${observationResult.texts.length} OM records` +
+          (duplicateCount > 0 ? ` (${duplicateCount} duplicates skipped)` : '') +
+          (groupErrorCount > 0 ? ` (${groupErrorCount} group errors skipped)` : ''),
       );
     } catch (err: any) {
       console.log(`ERROR: ${err.message}`);
