@@ -1,5 +1,5 @@
 import { CheckCircle, ChevronDown, Sparkles } from 'lucide-react';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useMastraClient } from '@mastra/react';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
@@ -63,8 +63,8 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
   const [localItems, setLocalItems] = useState<ReviewItem[]>([]);
   const items = localItems.length > 0 ? localItems : reviewItems ?? [];
 
-  // Sync server data to local on load
-  useMemo(() => {
+  // Sync server data to local on initial load
+  useEffect(() => {
     if (reviewItems && localItems.length === 0) {
       setLocalItems(reviewItems);
     }
