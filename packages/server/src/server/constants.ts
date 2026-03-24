@@ -33,25 +33,41 @@ export type WorkspaceToolName =
   | (typeof WORKSPACE_TOOLS.SANDBOX)[keyof typeof WORKSPACE_TOOLS.SANDBOX];
 
 /**
+ * A tool config value that may be a static boolean or a dynamic function.
+ * Inlined from @mastra/core/workspace for compatibility.
+ *
+ * Uses `(...args: any[]) => any` for the function branch so it stays
+ * assignable from all core context variants (ToolConfigContext,
+ * ToolConfigWithArgsContext) without importing them. resolveToolConfig
+ * never calls these functions — it uses safe boolean defaults instead.
+ */
+
+type DynamicToolConfigValue = boolean | ((...args: any[]) => any);
+
+/**
  * Configuration for a single workspace tool.
  */
 export interface WorkspaceToolConfig {
-  enabled?: boolean;
-  requireApproval?: boolean;
-  requireReadBeforeWrite?: boolean;
+  enabled?: DynamicToolConfigValue;
+  requireApproval?: DynamicToolConfigValue;
+  requireReadBeforeWrite?: DynamicToolConfigValue;
 }
 
 /**
  * Configuration for workspace tools.
  */
 export type WorkspaceToolsConfig = {
-  enabled?: boolean;
-  requireApproval?: boolean;
+  enabled?: DynamicToolConfigValue;
+  requireApproval?: DynamicToolConfigValue;
 } & Partial<Record<WorkspaceToolName, WorkspaceToolConfig>>;
 
 /**
  * Resolve the effective configuration for a workspace tool.
  * Inlined from @mastra/core/workspace for compatibility.
+ *
+ * Dynamic function values are resolved to safe defaults (enabled=true,
+ * requireApproval=true) since this synchronous fallback path only runs
+ * on older core versions that won't produce function values.
  */
 export function resolveToolConfig(
   toolsConfig: WorkspaceToolsConfig | undefined,
@@ -63,22 +79,23 @@ export function resolveToolConfig(
 
   if (toolsConfig) {
     if (toolsConfig.enabled !== undefined) {
-      enabled = toolsConfig.enabled;
+      enabled = typeof toolsConfig.enabled === 'function' ? true : toolsConfig.enabled;
     }
     if (toolsConfig.requireApproval !== undefined) {
-      requireApproval = toolsConfig.requireApproval;
+      requireApproval = typeof toolsConfig.requireApproval === 'function' ? true : toolsConfig.requireApproval;
     }
 
     const perToolConfig = toolsConfig[toolName];
     if (perToolConfig) {
       if (perToolConfig.enabled !== undefined) {
-        enabled = perToolConfig.enabled;
+        enabled = typeof perToolConfig.enabled === 'function' ? true : perToolConfig.enabled;
       }
       if (perToolConfig.requireApproval !== undefined) {
-        requireApproval = perToolConfig.requireApproval;
+        requireApproval = typeof perToolConfig.requireApproval === 'function' ? true : perToolConfig.requireApproval;
       }
       if (perToolConfig.requireReadBeforeWrite !== undefined) {
-        requireReadBeforeWrite = perToolConfig.requireReadBeforeWrite;
+        requireReadBeforeWrite =
+          typeof perToolConfig.requireReadBeforeWrite === 'function' ? true : perToolConfig.requireReadBeforeWrite;
       }
     }
   }

@@ -313,7 +313,7 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
     try {
       const mod = await import('@mastra/core/workspace');
       if (typeof mod.createWorkspaceTools === 'function') {
-        return Object.keys(mod.createWorkspaceTools(workspace));
+        return Object.keys(await mod.createWorkspaceTools(workspace));
       }
     } catch {
       // Older core version without workspace module — fall through
