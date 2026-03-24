@@ -1,5 +1,45 @@
 # @mastra/core
 
+## 1.16.0-alpha.3
+
+### Minor Changes
+
+- Added `agentId` to the agent tool execution context. Tools executed by an agent can now access `context.agent.agentId` to identify which agent is calling them. This enables tools to look up agent metadata, share workspace configuration with sub-agents, or customize behavior per agent. ([#14502](https://github.com/mastra-ai/mastra/pull/14502))
+
+- Add optional `?path=` query param to workspace skill routes for disambiguating same-named skills. ([#14430](https://github.com/mastra-ai/mastra/pull/14430))
+
+  Skill routes continue to use `:skillName` in the URL path (no breaking change). When two skills share the same name (e.g. from different directories), pass the optional `?path=` query parameter to select the exact skill:
+
+  ```
+  GET /workspaces/:workspaceId/skills/:skillName?path=skills/brand-guidelines
+  ```
+
+  `SkillMetadata` now includes a `path` field, and the `list()` method returns all same-named skills for disambiguation. The client SDK's `getSkill()` accepts an optional `skillPath` parameter for disambiguation.
+
+### Patch Changes
+
+- **Workspace skills now surface all same-named skills for disambiguation.** ([#14430](https://github.com/mastra-ai/mastra/pull/14430))
+
+  When multiple skills share the same name (e.g., a local `brand-guidelines` skill and one from `node_modules`), `list()` now returns all of them instead of only the tie-break winner. This lets agents and UIs see every available skill, along with its path and source type.
+
+  **Tie-breaking behavior:**
+  - `get(name)` still returns a single skill using source-type priority: local > managed > external
+  - If two skills share the same name _and_ source type, `get(name)` throws an error — rename one or move it to a different source type
+  - `get(path)` bypasses tie-breaking entirely and returns the exact skill
+
+  Agents and UIs now receive all same-named skills with their paths, which improves disambiguation in prompts and tool calls.
+
+  ```ts
+  const skills = await workspace.skills.list();
+  // Returns both local and external "brand-guidelines" skills
+
+  const exact = await workspace.skills.get('node_modules/@myorg/skills/brand-guidelines');
+  // Fetches the external copy directly by path
+  ```
+
+- Updated dependencies [[`47358d9`](https://github.com/mastra-ai/mastra/commit/47358d960bb2b931321de7e798f341ab0df81f44)]:
+  - @mastra/schema-compat@1.2.7-alpha.1
+
 ## 1.16.0-alpha.2
 
 ### Minor Changes
