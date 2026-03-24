@@ -1390,4 +1390,132 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       expect(meaningful).toEqual(['text', 'tool:web_search', 'text']);
     });
   });
+
+  describe('step-start between consecutive tool-only loop iterations', () => {
+    it('should insert step-start between tool calls from different loop iterations', async () => {
+      const messageList = createMessageListWithUserMessage();
+
+      let responseCount = 0;
+      const result = await loopFn({
+        methodType: 'stream',
+        runId,
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockLanguageModelV2({
+              doStream: async () => {
+                switch (responseCount++) {
+                  case 0:
+                    // Iteration 1: tool call only
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-0',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        },
+                        {
+                          type: 'tool-call',
+                          id: 'call-1',
+                          toolCallId: 'call-1',
+                          toolName: 'weather',
+                          input: '{ "city": "London" }',
+                        },
+                        {
+                          type: 'finish',
+                          finishReason: 'tool-calls',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  case 1:
+                    // Iteration 2: another tool call only
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-1',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(100),
+                        },
+                        {
+                          type: 'tool-call',
+                          id: 'call-2',
+                          toolCallId: 'call-2',
+                          toolName: 'weather',
+                          input: '{ "city": "Paris" }',
+                        },
+                        {
+                          type: 'finish',
+                          finishReason: 'tool-calls',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  case 2:
+                    // Iteration 3: text response (ends the loop)
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-2',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(200),
+                        },
+                        { type: 'text-start', id: 'text-1' },
+                        { type: 'text-delta', id: 'text-1', delta: 'Both cities are nice.' },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  default:
+                    throw new Error(`Unexpected response count: ${responseCount}`);
+                }
+              },
+            }),
+          },
+        ],
+        tools: {
+          weather: {
+            inputSchema: z.object({ city: z.string() }),
+            execute: async ({ city }: { city: string }) => ({
+              city,
+              temperature: 72,
+            }),
+          },
+        },
+        messageList,
+        stopWhen: stepCountIs(4),
+        ...defaultSettings(),
+        _internal: {
+          now: mockValues(0, 50, 100, 150, 200, 250, 300),
+          generateId: mockId({ prefix: 'id' }),
+        },
+      });
+
+      await result.consumeStream();
+
+      // Get the single merged assistant message
+      const assistantMessages = messageList.get.all.db().filter(m => m.role === 'assistant');
+      const parts = assistantMessages.flatMap(m => m.content.parts ?? []);
+
+      const partTypes = parts.map((p: any) =>
+        p.type === 'tool-invocation' ? `tool:${p.toolInvocation.toolName}:${p.toolInvocation.toolCallId}` : p.type,
+      );
+
+      // There must be a step-start between the two tool calls from different iterations
+      // Without the fix, consecutive tool-only turns would be merged without a boundary,
+      // causing the LLM to see them as parallel calls from a single turn.
+      const call1Idx = partTypes.findIndex((t: string) => t.includes('call-1'));
+      const call2Idx = partTypes.findIndex((t: string) => t.includes('call-2'));
+      const stepStartsBetween = partTypes.slice(call1Idx, call2Idx).filter((t: string) => t === 'step-start');
+      expect(stepStartsBetween.length).toBeGreaterThanOrEqual(1);
+    });
+  });
 }
