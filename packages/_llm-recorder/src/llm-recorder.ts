@@ -596,10 +596,12 @@ function pickBestCandidate(candidates: { index: number; rating: number }[]): num
  * between test runs (e.g. different prompt wording, extra metadata fields)
  * but the intent is clearly the same recording.
  *
- * `usedHashes` tracks recordings already consumed by fuzzy matches so that
- * multiple similar requests (e.g. binary audio transcription calls that all
+ * `usedHashes` tracks recordings already consumed by **binary** fuzzy matches
+ * so that multiple similar requests (e.g. audio transcription calls that all
  * serialize to near-identical strings) don't all resolve to the same recording.
- * Exact hash matches are exempt — they are deterministic and always correct.
+ * It is only applied to binary request matching — non-binary recordings are
+ * intentionally reusable across tests (e.g. v1/v2 model variants sharing one
+ * recording).  Exact hash matches are always exempt.
  */
 function findRecording(
   recordings: LLMRecording[],
@@ -658,14 +660,15 @@ function findRecording(
   // Prefer recordings that match the request URL to avoid cross-API mismatches.
   // When multiple candidates score within a narrow band, prefer the earliest
   // unused one to preserve recording order.
+  //
+  // NOTE: usedHashes is NOT applied here.  Non-binary recordings are intentionally
+  // reusable across tests — e.g. v1 and v2 model variants share the same recording.
   const incoming = serializeRequestContent(url, body);
 
   type Candidate = { index: number; rating: number; urlMatch: boolean };
   const candidates: Candidate[] = [];
 
   for (let i = 0; i < recordings.length; i++) {
-    if (usedHashes?.has(recordings[i]!.hash)) continue;
-
     const candidate = serializeRequestContent(recordings[i]!.request.url, recordings[i]!.request.body);
     const rating = stringSimilarity.compareTwoStrings(incoming, candidate);
     if (rating >= SIMILARITY_THRESHOLD) {
@@ -682,7 +685,6 @@ function findRecording(
   const pick = pickBestCandidate(urlCandidates) ?? pickBestCandidate(candidates);
 
   if (pick != null) {
-    usedHashes?.add(recordings[pick]!.hash);
     return recordings[pick]!;
   }
 
