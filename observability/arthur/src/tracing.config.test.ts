@@ -13,11 +13,15 @@ vi.mock('@mastra/otel-exporter', () => ({
 }));
 
 describe('ArthurExporterConfig', () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     // Clean env vars between tests
     delete process.env.ARTHUR_API_KEY;
     delete process.env.ARTHUR_BASE_URL;
+    delete process.env.ARTHUR_TASK_ID;
   });
 
   it('configures with explicit apiKey and endpoint', async () => {
@@ -187,5 +191,69 @@ describe('ArthurExporterConfig', () => {
     expect((exporter as any).setDisabled).toHaveBeenCalledWith(
       expect.stringContaining('Endpoint is required'),
     );
+  });
+
+  it('warns when taskId is not provided', () => {
+    new ArthurExporter({
+      apiKey: 'test-api-key',
+      endpoint: 'https://app.arthur.ai',
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('No taskId provided'),
+    );
+  });
+
+  it('does not warn when taskId is provided via config', () => {
+    new ArthurExporter({
+      apiKey: 'test-api-key',
+      endpoint: 'https://app.arthur.ai',
+      taskId: 'test-task-id',
+    });
+
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('reads taskId from ARTHUR_TASK_ID env var', () => {
+    process.env.ARTHUR_TASK_ID = 'env-task-id';
+
+    new ArthurExporter({
+      apiKey: 'test-api-key',
+      endpoint: 'https://app.arthur.ai',
+    });
+
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('sets arthur.task.id resource attribute when taskId is provided', async () => {
+    const { OtelExporter } = await import('@mastra/otel-exporter');
+    const otelExporterSpy = vi.mocked(OtelExporter);
+
+    new ArthurExporter({
+      apiKey: 'test-api-key',
+      endpoint: 'https://app.arthur.ai',
+      taskId: 'my-task-123',
+    });
+
+    expect(otelExporterSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceAttributes: {
+          'arthur.task.id': 'my-task-123',
+        },
+      }),
+    );
+  });
+
+  it('does not set arthur.task.id when taskId is absent', async () => {
+    const { OtelExporter } = await import('@mastra/otel-exporter');
+    const otelExporterSpy = vi.mocked(OtelExporter);
+
+    new ArthurExporter({
+      apiKey: 'test-api-key',
+      endpoint: 'https://app.arthur.ai',
+    });
+
+    const call = otelExporterSpy.mock.calls[0]?.[0] as any;
+    expect(call.resourceAttributes).not.toHaveProperty('arthur.task.id');
   });
 });
