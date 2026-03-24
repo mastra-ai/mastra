@@ -16,14 +16,14 @@ export default defineConfig({
   onSuccess: async () => {
     await generateTypes(process.cwd());
 
-    const srcRollup = path.join(process.cwd(), 'src', 'metrics', 'rollup.jsonl');
+    const srcRollup = path.join(process.cwd(), 'src', 'metrics', 'pricing-model.jsonl');
     const distMetricsDir = path.join(process.cwd(), 'dist', 'metrics');
-    const distRollup = path.join(distMetricsDir, 'rollup.jsonl');
+    const distRollup = path.join(distMetricsDir, 'pricing-model.jsonl');
 
     if (fs.existsSync(srcRollup)) {
       fs.mkdirSync(distMetricsDir, { recursive: true });
       fs.copyFileSync(srcRollup, distRollup);
-      console.info('✓ Copied metrics/rollup.jsonl to dist/metrics/');
+      console.info('✓ Copied metrics/pricing-model.jsonl to dist/metrics/');
     }
   },
 });

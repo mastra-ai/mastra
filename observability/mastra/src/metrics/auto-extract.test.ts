@@ -6,15 +6,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { AnySpan, MetricEvent } from '@mastra/core/observability';
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { ObservabilityBus } from '../bus';
 import { MetricsContextImpl } from '../context/metrics';
 import { emitAutoExtractedMetrics } from './auto-extract';
 import { CardinalityFilter } from './cardinality';
-import { createCostEstimatorFromText } from './estimator';
+import * as estimatorModule from './estimator';
+import { PricingRegistry } from './pricing-registry';
 
-const fixturePath = path.join(import.meta.dirname, '__fixtures__', 'rollup-test.jsonl');
-const costEstimator = createCostEstimatorFromText(fs.readFileSync(fixturePath, 'utf-8'));
+const fixturePath = path.join(import.meta.dirname, '__fixtures__', 'pricing-data-test.jsonl');
+const pricingRegistry = PricingRegistry.fromText(fs.readFileSync(fixturePath, 'utf-8'));
 
 function createMockSpan(overrides: Partial<AnySpan> = {}): AnySpan {
   return {
@@ -79,6 +80,7 @@ describe('AutoExtractedMetrics', () => {
 
   afterEach(async () => {
     emittedMetrics.length = 0;
+    vi.restoreAllMocks();
     await bus?.shutdown();
   });
 
@@ -171,7 +173,9 @@ describe('AutoExtractedMetrics', () => {
       },
     });
 
-    emitAutoExtractedMetrics(span, createMetricsContext(span), costEstimator);
+    vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricingRegistry);
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
 
     const metricNames = emittedMetrics.map(m => m.metric.name);
     expect(metricNames).toContain('mastra_model_duration_ms');
@@ -192,10 +196,8 @@ describe('AutoExtractedMetrics', () => {
     expect(inputTokens!.metric.costContext).toEqual({
       provider: 'openai',
       model: 'gpt-4',
-      estimatedCost: undefined,
-      costUnit: undefined,
       costMetadata: {
-        estimationStatus: 'no_matching_model',
+        error: 'no_matching_model',
       },
     });
     const outputTokens = emittedMetrics.find(m => m.metric.name === 'mastra_model_total_output_tokens');
@@ -230,7 +232,9 @@ describe('AutoExtractedMetrics', () => {
       },
     });
 
-    emitAutoExtractedMetrics(span, createMetricsContext(span), costEstimator);
+    vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricingRegistry);
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
 
     const byName = (name: string) => emittedMetrics.find(m => m.metric.name === name);
     expect(byName('mastra_model_total_input_tokens')!.metric.value).toBe(500);
@@ -244,22 +248,46 @@ describe('AutoExtractedMetrics', () => {
     expect(byName('mastra_model_output_reasoning_tokens')!.metric.value).toBe(30);
     expect(byName('mastra_model_output_audio_tokens')!.metric.value).toBe(10);
     expect(byName('mastra_model_output_image_tokens')!.metric.value).toBe(10);
-    expect(byName('mastra_model_total_input_tokens')!.metric.costContext).toEqual({
+    expect(byName('mastra_model_total_input_tokens')!.metric.costContext).toBeUndefined();
+    expect(byName('mastra_model_total_output_tokens')!.metric.costContext).toBeUndefined();
+    expect(byName('mastra_model_input_text_tokens')!.metric.costContext).toMatchObject({
       provider: 'openai',
       model: 'gpt-4o-mini',
-      estimatedCost: 0.000075,
-      costUnit: 'usd',
+      costUnit: 'USD',
       costMetadata: {
-        estimationStatus: 'ok',
-        pricingRowId: 'openai-gpt-4o-mini',
-        matchedTierIndex: 0,
+        pricing_id: 'openai-gpt-4o-mini',
+        tier_index: 0,
+      },
+    });
+    expect(byName('mastra_model_input_text_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.00006);
+    expect(byName('mastra_model_input_cache_read_tokens')!.metric.costContext).toMatchObject({
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      costUnit: 'USD',
+      costMetadata: {
+        pricing_id: 'openai-gpt-4o-mini',
+        tier_index: 0,
       },
     });
     expect(byName('mastra_model_input_cache_read_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.00000375);
-    expect(byName('mastra_model_output_reasoning_tokens')!.metric.costContext?.costMetadata).toEqual({
-      estimationStatus: 'no_pricing_for_usage_type',
-      pricingRowId: 'openai-gpt-4o-mini',
-      matchedTierIndex: 0,
+    expect(byName('mastra_model_output_text_tokens')!.metric.costContext).toMatchObject({
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      costUnit: 'USD',
+      costMetadata: {
+        pricing_id: 'openai-gpt-4o-mini',
+        tier_index: 0,
+      },
+    });
+    expect(byName('mastra_model_output_text_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.00009);
+    expect(byName('mastra_model_output_reasoning_tokens')!.metric.costContext).toEqual({
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      costMetadata: {
+        pricing_id: 'openai-gpt-4o-mini',
+        tier_index: 0,
+        error: 'no_pricing_for_usage_type',
+      },
     });
   });
 
@@ -278,7 +306,9 @@ describe('AutoExtractedMetrics', () => {
       },
     });
 
-    emitAutoExtractedMetrics(span, createMetricsContext(span), costEstimator);
+    vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricingRegistry);
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
 
     const metricNames = emittedMetrics.map(m => m.metric.name);
     expect(metricNames).toContain('mastra_model_duration_ms');
@@ -287,6 +317,112 @@ describe('AutoExtractedMetrics', () => {
     expect(metricNames).not.toContain('mastra_model_input_text_tokens');
     expect(metricNames).not.toContain('mastra_model_input_cache_read_tokens');
     expect(metricNames).not.toContain('mastra_model_output_reasoning_tokens');
+  });
+
+  it('should still emit token metrics when cost estimation throws', () => {
+    setup();
+    vi.spyOn(estimatorModule, 'estimateCosts').mockImplementation(() => {
+      throw new Error('boom');
+    });
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        model: 'gpt-4o-mini',
+        provider: 'openai',
+        usage: {
+          inputTokens: 100,
+          outputTokens: 50,
+        },
+      },
+    });
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const inputTokens = emittedMetrics.find(m => m.metric.name === 'mastra_model_total_input_tokens');
+    const outputTokens = emittedMetrics.find(m => m.metric.name === 'mastra_model_total_output_tokens');
+    expect(inputTokens).toBeDefined();
+    expect(outputTokens).toBeDefined();
+    expect(inputTokens!.metric.value).toBe(100);
+    expect(outputTokens!.metric.value).toBe(50);
+    expect(inputTokens!.metric.costContext).toBeUndefined();
+    expect(outputTokens!.metric.costContext).toBeUndefined();
+  });
+
+  it('should keep total output cost only when no output detail row has a successful cost', () => {
+    setup();
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        model: 'gpt-4o-mini',
+        provider: 'openai',
+        usage: {
+          inputTokens: 100,
+          outputTokens: 80,
+          inputDetails: {
+            text: 100,
+          },
+          outputDetails: {
+            text: 50,
+            reasoning: 30,
+          },
+        },
+      },
+    });
+
+    vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricingRegistry);
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const byName = (name: string) => emittedMetrics.find(m => m.metric.name === name);
+    expect(byName('mastra_model_total_input_tokens')!.metric.costContext).toBeUndefined();
+    expect(byName('mastra_model_input_text_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.000015);
+    expect(byName('mastra_model_total_output_tokens')!.metric.costContext).toBeUndefined();
+    expect(byName('mastra_model_output_text_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.00003);
+    expect(byName('mastra_model_output_reasoning_tokens')!.metric.costContext).toEqual({
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      costMetadata: {
+        pricing_id: 'openai-gpt-4o-mini',
+        tier_index: 0,
+        error: 'no_pricing_for_usage_type',
+      },
+    });
+  });
+
+  it('should use detail costs for both modes when all non-zero detail meters are priced', () => {
+    setup();
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        model: 'claude-sonnet-4-5',
+        provider: 'anthropic',
+        usage: {
+          inputTokens: 160,
+          outputTokens: 40,
+          inputDetails: {
+            text: 120,
+            cacheRead: 40,
+          },
+          outputDetails: {
+            text: 40,
+          },
+        },
+      },
+    });
+
+    vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricingRegistry);
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const byName = (name: string) => emittedMetrics.find(m => m.metric.name === name);
+    expect(byName('mastra_model_total_input_tokens')!.metric.costContext).toBeUndefined();
+    expect(byName('mastra_model_total_output_tokens')!.metric.costContext).toBeUndefined();
+    expect(byName('mastra_model_input_text_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.00036);
+    expect(byName('mastra_model_input_cache_read_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.000012);
+    expect(byName('mastra_model_output_text_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.0006);
   });
 
   it('should NOT emit metrics for unsupported span types', () => {

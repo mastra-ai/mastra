@@ -3,22 +3,9 @@
  */
 
 import { SpanType } from '@mastra/core/observability';
-import type {
-  AnySpan,
-  CostContext,
-  MetricsContext,
-  ModelGenerationAttributes,
-  UsageStats,
-} from '@mastra/core/observability';
-import { estimateMetricCost } from './estimator';
-import type { CostEstimator } from './estimator';
-
-const defaultCostEstimator: CostEstimator = {
-  estimateCost: () => {
-    throw new Error('estimateCost is not used by auto-extract');
-  },
-  estimateMetricCost,
-};
+import type { AnySpan, CostContext, MetricsContext, ModelGenerationAttributes } from '@mastra/core/observability';
+import { estimateCosts } from './estimator';
+import { TokenMetrics } from './types';
 
 /** Emit duration metrics for a live span. */
 export function emitDurationMetrics(span: AnySpan, metrics: MetricsContext): void {
@@ -34,11 +21,7 @@ export function emitDurationMetrics(span: AnySpan, metrics: MetricsContext): voi
 }
 
 /** Emit token usage metrics for a model-generation span. */
-export function emitTokenMetrics(
-  span: AnySpan,
-  metrics: MetricsContext,
-  costEstimator: CostEstimator = defaultCostEstimator,
-): void {
+export function emitTokenMetrics(span: AnySpan, metrics: MetricsContext): void {
   if (span.type !== SpanType.MODEL_GENERATION) {
     return;
   }
@@ -48,97 +31,65 @@ export function emitTokenMetrics(
     return;
   }
 
-  emitUsageMetrics(attrs, attrs.usage, metrics, costEstimator);
+  emitUsageMetrics(attrs, attrs.usage, metrics);
 }
 
 /** Emit all auto-extracted metrics for a live span end. */
-export function emitAutoExtractedMetrics(
-  span: AnySpan,
-  metrics: MetricsContext,
-  costEstimator: CostEstimator = defaultCostEstimator,
-): void {
+export function emitAutoExtractedMetrics(span: AnySpan, metrics: MetricsContext): void {
   emitDurationMetrics(span, metrics);
-  emitTokenMetrics(span, metrics, costEstimator);
+  emitTokenMetrics(span, metrics);
 }
 
 function emitUsageMetrics(
   attrs: ModelGenerationAttributes,
-  usage: UsageStats,
+  usage: NonNullable<ModelGenerationAttributes['usage']>,
   metrics: MetricsContext,
-  costEstimator: CostEstimator,
 ): void {
-  const emit = (name: string, value: number) =>
-    metrics.emit(name, value, undefined, {
-      costContext: buildCostContext({
-        attrs,
-        metricName: name,
-        value,
+  let metricCosts = new Map<TokenMetrics, CostContext>();
+  try {
+    const provider = attrs.provider;
+    const model = attrs.responseModel ?? attrs.model;
+
+    if (provider && model) {
+      metricCosts = estimateCosts({
+        provider,
+        model,
         usage,
-        costEstimator,
-      }),
-    });
-  const emitNonZero = (name: string, value: number) => {
-    if (value > 0) emit(name, value);
+      });
+    }
+  } catch {
+    metricCosts = new Map();
+  }
+
+  const emit = (name: TokenMetrics, value: number) => {
+    const costContext = metricCosts.get(name);
+    if (!costContext) {
+      metrics.emit(name, value);
+      return;
+    }
+
+    metrics.emit(name, value, undefined, { costContext });
   };
 
-  emit('mastra_model_total_input_tokens', usage.inputTokens ?? 0);
-  emit('mastra_model_total_output_tokens', usage.outputTokens ?? 0);
+  emit(TokenMetrics.TOTAL_INPUT, usage.inputTokens ?? 0);
+  emit(TokenMetrics.TOTAL_OUTPUT, usage.outputTokens ?? 0);
 
   if (usage.inputDetails) {
-    emitNonZero('mastra_model_input_text_tokens', usage.inputDetails.text ?? 0);
-    emitNonZero('mastra_model_input_cache_read_tokens', usage.inputDetails.cacheRead ?? 0);
-    emitNonZero('mastra_model_input_cache_write_tokens', usage.inputDetails.cacheWrite ?? 0);
-    emitNonZero('mastra_model_input_audio_tokens', usage.inputDetails.audio ?? 0);
-    emitNonZero('mastra_model_input_image_tokens', usage.inputDetails.image ?? 0);
+    if ((usage.inputDetails.text ?? 0) > 0) emit(TokenMetrics.INPUT_TEXT, usage.inputDetails.text ?? 0);
+    if ((usage.inputDetails.cacheRead ?? 0) > 0) emit(TokenMetrics.INPUT_CACHE_READ, usage.inputDetails.cacheRead ?? 0);
+    if ((usage.inputDetails.cacheWrite ?? 0) > 0)
+      emit(TokenMetrics.INPUT_CACHE_WRITE, usage.inputDetails.cacheWrite ?? 0);
+    if ((usage.inputDetails.audio ?? 0) > 0) emit(TokenMetrics.INPUT_AUDIO, usage.inputDetails.audio ?? 0);
+    if ((usage.inputDetails.image ?? 0) > 0) emit(TokenMetrics.INPUT_IMAGE, usage.inputDetails.image ?? 0);
   }
 
   if (usage.outputDetails) {
-    emitNonZero('mastra_model_output_text_tokens', usage.outputDetails.text ?? 0);
-    emitNonZero('mastra_model_output_reasoning_tokens', usage.outputDetails.reasoning ?? 0);
-    emitNonZero('mastra_model_output_audio_tokens', usage.outputDetails.audio ?? 0);
-    emitNonZero('mastra_model_output_image_tokens', usage.outputDetails.image ?? 0);
+    if ((usage.outputDetails.text ?? 0) > 0) emit(TokenMetrics.OUTPUT_TEXT, usage.outputDetails.text ?? 0);
+    if ((usage.outputDetails.reasoning ?? 0) > 0)
+      emit(TokenMetrics.OUTPUT_REASONING, usage.outputDetails.reasoning ?? 0);
+    if ((usage.outputDetails.audio ?? 0) > 0) emit(TokenMetrics.OUTPUT_AUDIO, usage.outputDetails.audio ?? 0);
+    if ((usage.outputDetails.image ?? 0) > 0) emit(TokenMetrics.OUTPUT_IMAGE, usage.outputDetails.image ?? 0);
   }
-}
-
-function buildCostContext({
-  attrs,
-  metricName,
-  value,
-  usage,
-  costEstimator,
-}: {
-  attrs: ModelGenerationAttributes;
-  metricName: string;
-  value: number;
-  usage: UsageStats;
-  costEstimator: CostEstimator;
-}): CostContext | undefined {
-  const provider = attrs.provider;
-  const model = attrs.responseModel ?? attrs.model;
-
-  if (!provider && !model) {
-    return undefined;
-  }
-
-  const estimate = costEstimator.estimateMetricCost({
-    provider,
-    model,
-    metricName,
-    value,
-    totalInputTokens: usage.inputTokens,
-    totalOutputTokens: usage.outputTokens,
-  });
-
-  return {
-    provider,
-    model,
-    estimatedCost: estimate.estimatedCost ?? undefined,
-    costUnit: estimate.costUnit ?? undefined,
-    costMetadata: {
-      estimationStatus: estimate.status,
-      ...(estimate.costMetadata ?? {}),
-    },
-  };
 }
 
 function getDurationMetricName(span: AnySpan): string | null {
@@ -146,11 +97,14 @@ function getDurationMetricName(span: AnySpan): string | null {
     case SpanType.AGENT_RUN:
       return 'mastra_agent_duration_ms';
     case SpanType.TOOL_CALL:
+    case SpanType.MCP_TOOL_CALL:
       return 'mastra_tool_duration_ms';
     case SpanType.WORKFLOW_RUN:
       return 'mastra_workflow_duration_ms';
     case SpanType.MODEL_GENERATION:
       return 'mastra_model_duration_ms';
+    case SpanType.PROCESSOR_RUN:
+      return 'mastra_processor_duration_ms';
     default:
       return null;
   }

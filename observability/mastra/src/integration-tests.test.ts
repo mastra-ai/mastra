@@ -1279,11 +1279,6 @@ describe('Tracing Integration Tests', () => {
       expect(inputTokens[0]!.costContext).toBeDefined();
       expect(typeof inputTokens[0]!.costContext?.provider).toBe('string');
       expect(typeof inputTokens[0]!.costContext?.model).toBe('string');
-      expect(inputTokens[0]!.costContext?.costMetadata).toEqual(
-        expect.objectContaining({
-          estimationStatus: expect.any(String),
-        }),
-      );
 
       const outputTokens = testExporter.getMetricsByName('mastra_model_total_output_tokens');
       expect(outputTokens.length).toBeGreaterThanOrEqual(1);
@@ -1291,11 +1286,6 @@ describe('Tracing Integration Tests', () => {
       expect(outputTokens[0]!.costContext).toBeDefined();
       expect(typeof outputTokens[0]!.costContext?.provider).toBe('string');
       expect(typeof outputTokens[0]!.costContext?.model).toBe('string');
-      expect(outputTokens[0]!.costContext?.costMetadata).toEqual(
-        expect.objectContaining({
-          estimationStatus: expect.any(String),
-        }),
-      );
 
       // Auto-extracted tool call metrics
       const toolDuration = testExporter.getMetricsByName('mastra_tool_duration_ms');
