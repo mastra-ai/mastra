@@ -390,6 +390,7 @@ async function processOutputStream<OUTPUT = undefined>({
               parts: [
                 {
                   type: 'file' as const,
+                  // @ts-expect-error - data type mismatch, see TODO
                   data: chunk.payload.data, // TODO: incorrect string type
                   mimeType: chunk.payload.mimeType,
                 },
