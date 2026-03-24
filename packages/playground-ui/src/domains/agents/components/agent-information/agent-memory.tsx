@@ -20,9 +20,11 @@ import { cn } from '@/lib/utils';
 interface AgentMemoryProps {
   agentId: string;
   threadId: string;
+  memoryType?: 'local' | 'gateway';
 }
 
-export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
+export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps) {
+  const isGatewayMemory = memoryType === 'gateway';
   const { threadInput: chatInputValue } = useThreadInput();
 
   const { paths, navigate } = useLinkComponent();
@@ -126,7 +128,8 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
         </div>
       )}
 
-      {/* Memory Search Section */}
+      {/* Memory Search Section - hidden for gateway memory */}
+      {!isGatewayMemory && (
       <div className="p-4 border-b border-border1">
         <div className="mb-2">
           <div className="flex items-center gap-2 mb-2">
@@ -171,14 +174,32 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
           </div>
         )}
       </div>
+      )}
 
-      {/* Working Memory Section */}
+      {/* Working Memory & Config Section - hidden for gateway memory */}
+      {!isGatewayMemory && (
       <div className="flex-1 overflow-y-auto">
         <AgentWorkingMemory agentId={agentId} />
         <div className="border-t border-border1">
           <AgentMemoryConfig agentId={agentId} />
         </div>
       </div>
+      )}
+
+      {/* Gateway Memory indicator */}
+      {isGatewayMemory && (
+        <div className="p-4 border-b border-border1">
+          <div className="bg-surface3 border border-border1 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-500/20 text-green-400">Gateway</span>
+              <h3 className="text-sm font-medium text-neutral5">Memory Gateway</h3>
+            </div>
+            <p className="text-xs text-neutral3">
+              Memory is managed by the Mastra Gateway. Threads and observations are stored remotely.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
