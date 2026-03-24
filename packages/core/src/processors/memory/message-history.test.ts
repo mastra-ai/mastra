@@ -458,6 +458,292 @@ describe('MessageHistory', () => {
     });
   });
 
+  describe('reconcileClientToolResults', () => {
+    it('should deduplicate when browser and DB have different IDs for same tool call', async () => {
+      const toolCallId = 'call-1';
+
+      // DB has assistant message with tool in 'call' state (saved during initial stream)
+      const dbMessage: MastraDBMessage = {
+        id: 'server-111',
+        role: 'assistant',
+        content: {
+          format: 2,
+          content: 'Let me create that.',
+          parts: [
+            { type: 'text', text: 'Let me create that.' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId,
+                toolName: 'renderGame',
+                args: { type: 'platformer' },
+              },
+            },
+          ],
+        },
+        threadId: 'thread-1',
+        createdAt: new Date(Date.now() - 5000),
+      };
+
+      const userMessage: MastraDBMessage = {
+        id: 'user-1',
+        role: 'user',
+        content: { format: 2, content: 'create a game', parts: [{ type: 'text', text: 'create a game' }] },
+        threadId: 'thread-1',
+        createdAt: new Date(Date.now() - 10000),
+      };
+
+      mockStorage.setMessages([userMessage, dbMessage]);
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+
+      processor = new MessageHistory({ storage: mockStorage });
+
+      // Browser sends back assistant message with tool result — different ID
+      const browserMessage: MastraDBMessage = {
+        id: 'browser-222',
+        role: 'assistant',
+        content: {
+          format: 2,
+          content: 'Let me create that.',
+          parts: [
+            { type: 'text', text: 'Let me create that.' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId,
+                toolName: 'renderGame',
+                args: { type: 'platformer' },
+                result: { success: true, gameId: 42 },
+              },
+            },
+          ],
+        },
+        threadId: 'thread-1',
+        createdAt: new Date(Date.now() - 4000),
+      };
+
+      const messageList = new MessageList();
+      messageList.add(browserMessage, 'input');
+
+      const result = await processor.processInput({
+        messages: [browserMessage],
+        messageList,
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const allMessages = result instanceof MessageList ? result.get.all.db() : result;
+      const assistantMessages = allMessages.filter(m => m.role === 'assistant');
+
+      // Only one assistant message (DB copy, now updated), not two
+      expect(assistantMessages).toHaveLength(1);
+      expect(assistantMessages[0].id).toBe('server-111');
+
+      // Tool state updated from 'call' to 'result'
+      const toolPart = assistantMessages[0].content.parts?.find((p: any) => p.type === 'tool-invocation') as any;
+      expect(toolPart.toolInvocation.state).toBe('result');
+      expect(toolPart.toolInvocation.result).toEqual({ success: true, gameId: 42 });
+      expect(toolPart.toolInvocation.args).toEqual({ type: 'platformer' });
+
+      // DB was updated via saveMessages
+      expect(saveSpy).toHaveBeenCalledWith({
+        messages: expect.arrayContaining([expect.objectContaining({ id: 'server-111' })]),
+      });
+    });
+
+    it('should handle multiple tool calls in one assistant message', async () => {
+      const dbMessage: MastraDBMessage = {
+        id: 'server-111',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'toolA', args: { a: 1 } },
+            },
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'call-2', toolName: 'toolB', args: { b: 2 } },
+            },
+          ],
+        },
+        threadId: 'thread-1',
+        createdAt: new Date(Date.now() - 5000),
+      };
+
+      mockStorage.setMessages([dbMessage]);
+      processor = new MessageHistory({ storage: mockStorage });
+
+      const browserMessage: MastraDBMessage = {
+        id: 'browser-222',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-1',
+                toolName: 'toolA',
+                args: { a: 1 },
+                result: 'resultA',
+              },
+            },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-2',
+                toolName: 'toolB',
+                args: { b: 2 },
+                result: 'resultB',
+              },
+            },
+          ],
+        },
+        threadId: 'thread-1',
+        createdAt: new Date(Date.now() - 4000),
+      };
+
+      const messageList = new MessageList();
+      messageList.add(browserMessage, 'input');
+
+      const result = await processor.processInput({
+        messages: [browserMessage],
+        messageList,
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const allMessages = result instanceof MessageList ? result.get.all.db() : result;
+      const assistantMessages = allMessages.filter(m => m.role === 'assistant');
+
+      expect(assistantMessages).toHaveLength(1);
+      expect(assistantMessages[0].id).toBe('server-111');
+
+      const parts = assistantMessages[0].content.parts as any[];
+      expect(parts[0].toolInvocation.state).toBe('result');
+      expect(parts[0].toolInvocation.result).toBe('resultA');
+      expect(parts[0].toolInvocation.args).toEqual({ a: 1 });
+      expect(parts[1].toolInvocation.state).toBe('result');
+      expect(parts[1].toolInvocation.result).toBe('resultB');
+      expect(parts[1].toolInvocation.args).toEqual({ b: 2 });
+    });
+
+    it('should not modify messages when no client-side tool results are present', async () => {
+      const dbMessage: MastraDBMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+        threadId: 'thread-1',
+        createdAt: new Date(Date.now() - 5000),
+      };
+
+      mockStorage.setMessages([dbMessage]);
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+
+      processor = new MessageHistory({ storage: mockStorage });
+
+      const userMsg: MastraDBMessage = {
+        id: 'msg-2',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Hi' }] },
+        threadId: 'thread-1',
+        createdAt: new Date(),
+      };
+
+      const messageList = new MessageList();
+      messageList.add(userMsg, 'input');
+
+      const result = await processor.processInput({
+        messages: [userMsg],
+        messageList,
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const allMessages = result instanceof MessageList ? result.get.all.db() : result;
+      expect(allMessages).toHaveLength(2);
+
+      // saveMessages should not have been called by reconciliation
+      expect(saveSpy).not.toHaveBeenCalled();
+    });
+
+    it('should only update matching tool calls and leave others unchanged', async () => {
+      const dbMessage: MastraDBMessage = {
+        id: 'server-111',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'toolA', args: { a: 1 } },
+            },
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'call-2', toolName: 'toolB', args: { b: 2 } },
+            },
+          ],
+        },
+        threadId: 'thread-1',
+        createdAt: new Date(Date.now() - 5000),
+      };
+
+      mockStorage.setMessages([dbMessage]);
+      processor = new MessageHistory({ storage: mockStorage });
+
+      // Browser only has result for call-1, not call-2
+      const browserMessage: MastraDBMessage = {
+        id: 'browser-222',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-1',
+                toolName: 'toolA',
+                args: { a: 1 },
+                result: 'resultA',
+              },
+            },
+          ],
+        },
+        threadId: 'thread-1',
+        createdAt: new Date(Date.now() - 4000),
+      };
+
+      const messageList = new MessageList();
+      messageList.add(browserMessage, 'input');
+
+      const result = await processor.processInput({
+        messages: [browserMessage],
+        messageList,
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const allMessages = result instanceof MessageList ? result.get.all.db() : result;
+      const assistantMessages = allMessages.filter(m => m.role === 'assistant');
+
+      expect(assistantMessages).toHaveLength(1);
+      const parts = assistantMessages[0].content.parts as any[];
+      // call-1 updated to 'result'
+      expect(parts[0].toolInvocation.state).toBe('result');
+      expect(parts[0].toolInvocation.result).toBe('resultA');
+      // call-2 still in 'call' state
+      expect(parts[1].toolInvocation.state).toBe('call');
+      expect(parts[1].toolInvocation.result).toBeUndefined();
+    });
+  });
+
   describe('processOutputResult', () => {
     it('should save user, assistant, and tool messages', async () => {
       const mockStorage = {

@@ -1,5 +1,5 @@
 import type { Processor } from '..';
-import type { MastraDBMessage, MessageList } from '../../agent';
+import type { MastraDBMessage, MastraMessagePart, MessageList } from '../../agent';
 import { parseMemoryRequestContext } from '../../memory';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import type { ObservabilityContext } from '../../observability';
@@ -61,6 +61,78 @@ export class MessageHistory implements Processor {
     return null;
   }
 
+  /**
+   * Reconcile client-side tool results with DB messages.
+   *
+   * When a client-side tool (no execute function) sends results back from the browser,
+   * the input assistant message may have a different ID than the DB copy. This method
+   * matches them by toolCallId, updates the DB message state from 'call' to 'result',
+   * persists the update, and removes the browser's duplicate from the messageList.
+   */
+  private async reconcileClientToolResults(messageList: MessageList, dbMessages: MastraDBMessage[]): Promise<void> {
+    const inputMessages = messageList.get.all.db();
+
+    // Collect completed tool results from input assistant messages
+    const toolResultsByCallId = new Map<string, { inputMsgId: string; part: MastraMessagePart }>();
+    for (const msg of inputMessages) {
+      if (msg.role !== 'assistant' || !msg.content?.parts) continue;
+      for (const part of msg.content.parts) {
+        if (
+          part.type === 'tool-invocation' &&
+          part.toolInvocation?.state === 'result' &&
+          part.toolInvocation?.toolCallId
+        ) {
+          toolResultsByCallId.set(part.toolInvocation.toolCallId, { inputMsgId: msg.id, part });
+        }
+      }
+    }
+
+    if (toolResultsByCallId.size === 0) return;
+
+    // Match DB messages with pending 'call' state to input results by toolCallId
+    const updatedDbMessages: MastraDBMessage[] = [];
+    const inputMsgIdsToRemove = new Set<string>();
+
+    for (const dbMsg of dbMessages) {
+      if (dbMsg.role !== 'assistant' || !dbMsg.content?.parts) continue;
+      let dbMsgUpdated = false;
+
+      for (let i = 0; i < dbMsg.content.parts.length; i++) {
+        const dbPart = dbMsg.content.parts[i]!;
+        if (dbPart.type !== 'tool-invocation' || dbPart.toolInvocation?.state !== 'call') continue;
+
+        const match = toolResultsByCallId.get(dbPart.toolInvocation.toolCallId);
+        if (!match) continue;
+
+        // Update DB message part in-place: call → result, preserving original args
+        const matchInvocation = (match.part as Extract<MastraMessagePart, { type: 'tool-invocation' }>).toolInvocation;
+        dbMsg.content.parts[i] = {
+          ...match.part,
+          toolInvocation: {
+            ...matchInvocation,
+            args: dbPart.toolInvocation.args,
+          },
+        } as MastraMessagePart;
+
+        inputMsgIdsToRemove.add(match.inputMsgId);
+        dbMsgUpdated = true;
+      }
+
+      if (dbMsgUpdated) {
+        updatedDbMessages.push(dbMsg);
+      }
+    }
+
+    if (updatedDbMessages.length === 0) return;
+
+    // Persist updated DB messages (storage uses upsert — ON CONFLICT DO UPDATE)
+    await this.storage.saveMessages({ messages: updatedDbMessages });
+
+    // Remove the browser's duplicate assistant messages from the messageList
+    // so only the updated DB copy (added later as 'memory' source) remains
+    messageList.removeByIds([...inputMsgIdsToRemove]);
+  }
+
   async processInput(
     args: {
       messages: MastraDBMessage[];
@@ -94,7 +166,12 @@ export class MessageHistory implements Processor {
       return msg.role !== 'system';
     });
 
-    // 3. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)
+    // 3. Reconcile client-side tool results: when the browser sends back an assistant
+    // message with completed tool results, match them to DB messages by toolCallId,
+    // update DB state from 'call' to 'result', and remove the browser duplicate.
+    await this.reconcileClientToolResults(messageList, filteredMessages);
+
+    // 4. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)
     // This includes messages added by previous processors like SemanticRecall
     const existingMessages = messageList.get.all.db();
     const messageIds = new Set(existingMessages.map((m: MastraDBMessage) => m.id).filter(Boolean));
@@ -127,7 +204,8 @@ export class MessageHistory implements Processor {
    *
    * Note: We preserve 'call' state tool invocations because:
    * - For server-side tools, 'call' should have been converted to 'result' by the time OUTPUT is processed
-   * - For client-side tools (no execute function), 'call' is the final state from the server's perspective
+   * - For client-side tools (no execute function), 'call' is the initial state from the server's perspective.
+   *   When the browser sends back tool results, reconcileClientToolResults() updates these to 'result'.
    */
   private filterMessagesForPersistence(messages: MastraDBMessage[]): MastraDBMessage[] {
     return messages
