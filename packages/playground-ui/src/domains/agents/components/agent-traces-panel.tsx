@@ -4,8 +4,11 @@ import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { format, isToday, isYesterday } from 'date-fns';
 import { XIcon, CheckIcon, Loader2, DatabaseIcon, ArrowUpIcon, ArrowDownIcon } from 'lucide-react';
-import { useState, useCallback, useEffect, useMemo, type Dispatch, type SetStateAction } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 
+import { useAgentTraceScores } from '../hooks/use-agent-trace-scores';
+import { useAgentTracesFilters } from '../hooks/use-agent-traces-filters';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { TraceDialog } from '@/domains/observability/components/trace-dialog';
@@ -27,9 +30,6 @@ import { useInView } from '@/hooks/use-in-view';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
-
-import { useAgentTraceScores } from '../hooks/use-agent-trace-scores';
-import { useAgentTracesFilters } from '../hooks/use-agent-traces-filters';
 
 const TRACES_PER_PAGE = 25;
 
@@ -245,7 +245,14 @@ function AgentTracesToolbar({
               name="filter-scorer"
               options={[{ value: 'all', label: 'All scorers' }, ...scorerOptions]}
               value={filters.scorerId ?? 'all'}
-              onValueChange={v => filters.setScorerId(v === 'all' ? undefined : v)}
+              onValueChange={v => {
+                if (v === 'all') {
+                  filters.setScorerId(undefined);
+                  filters.setScoreThreshold(undefined);
+                } else {
+                  filters.setScorerId(v);
+                }
+              }}
             />
           )}
 
@@ -263,7 +270,13 @@ function AgentTracesToolbar({
                 value={filters.scoreThreshold ?? ''}
                 onChange={e => {
                   const v = e.target.value;
-                  filters.setScoreThreshold(v === '' ? undefined : Number(v));
+                  if (v === '') {
+                    filters.setScoreThreshold(undefined);
+                    return;
+                  }
+                  const n = parseFloat(v);
+                  if (!Number.isFinite(n) || n < 0 || n > 1) return;
+                  filters.setScoreThreshold(n);
                 }}
                 className="w-20 h-7 rounded-md border border-border1 bg-surface1 px-2 text-ui-xs text-neutral1 focus:outline-none focus:ring-1 focus:ring-accent1"
               />
@@ -388,7 +401,7 @@ export function AgentTracesPanel({ agentId }: { agentId: string }) {
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
   useEffect(() => {
     if (isEndOfListInView && hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
+      void fetchNextPage();
     }
   }, [isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
