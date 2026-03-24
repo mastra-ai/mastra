@@ -235,6 +235,66 @@ export class BackgroundTaskManager {
     return tasks;
   }
 
+  /**
+   * Returns a promise that resolves when the next task from the given set
+   * reaches a terminal state (completed, failed, cancelled, timed_out).
+   * Used by the agentic loop to wait for background task results.
+   */
+  async waitForNextTask(
+    taskIds: Set<string>,
+    options?: {
+      timeoutMs?: number;
+      /** Called periodically while waiting, with the elapsed time in ms */
+      onProgress?: (elapsedMs: number) => void;
+      /** How often to call onProgress, in ms. Default: 3000 */
+      progressIntervalMs?: number;
+    },
+  ): Promise<BackgroundTask> {
+    const isTerminal = (status: string) =>
+      status === 'completed' || status === 'failed' || status === 'cancelled' || status === 'timed_out';
+
+    // Check if any are already done
+    for (const id of taskIds) {
+      const task = this.tasks.get(id);
+      if (task && isTerminal(task.status)) {
+        return task;
+      }
+    }
+
+    // Wait for the next one to complete
+    return new Promise((resolve, reject) => {
+      const startTime = Date.now();
+
+      const timeout = options?.timeoutMs
+        ? setTimeout(() => {
+            clearInterval(pollInterval);
+            if (progressInterval) clearInterval(progressInterval);
+            reject(new Error('Timed out waiting for background task'));
+          }, options.timeoutMs)
+        : undefined;
+
+      // Progress callback — fires periodically while waiting
+      const progressInterval = options?.onProgress
+        ? setInterval(() => {
+            options.onProgress!(Date.now() - startTime);
+          }, options.progressIntervalMs ?? 3000)
+        : undefined;
+
+      const pollInterval = setInterval(() => {
+        for (const id of taskIds) {
+          const task = this.tasks.get(id);
+          if (task && isTerminal(task.status)) {
+            clearInterval(pollInterval);
+            if (timeout) clearTimeout(timeout);
+            if (progressInterval) clearInterval(progressInterval);
+            resolve(task);
+            return;
+          }
+        }
+      }, 50);
+    });
+  }
+
   async shutdown(): Promise<void> {
     this.shuttingDown = true;
 

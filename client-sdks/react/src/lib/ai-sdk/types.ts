@@ -24,6 +24,7 @@ export type MastraUIMessageMetadata = {
         passed: boolean;
         suppressFeedback?: boolean;
       };
+      pendingBackgroundTasksCount?: number;
       requireApprovalMetadata?: {
         [toolName: string]: {
           toolCallId: string;
@@ -47,6 +48,7 @@ export type MastraUIMessageMetadata = {
         passed: boolean;
         suppressFeedback?: boolean;
       };
+      pendingBackgroundTasksCount?: number;
       requireApprovalMetadata?: {
         [toolName: string]: {
           toolCallId: string;

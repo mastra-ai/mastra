@@ -72,6 +72,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     backgroundTaskManager: _internal?.backgroundTaskManager,
     agentBackgroundConfig: _internal?.agentBackgroundConfig,
     backgroundTaskManagerConfig: _internal?.backgroundTaskManagerConfig,
+    pendingBackgroundTasks: _internal?.pendingBackgroundTasks ?? new Set(),
   };
 
   let startTimestamp = internalToUse.now?.();

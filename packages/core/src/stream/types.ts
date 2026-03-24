@@ -695,6 +695,10 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & {
       type: 'background-task-failed';
       payload: { taskId: string; toolName: string; toolCallId: string; error: { message: string } };
+    })
+  | (BaseChunkType & {
+      type: 'background-task-waiting';
+      payload: { taskIds: string[]; pendingCount: number; elapsedMs: number };
     });
 
 export type WorkflowStreamEvent =

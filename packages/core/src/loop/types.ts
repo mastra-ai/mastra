@@ -67,6 +67,8 @@ export type StreamInternal = {
   agentBackgroundConfig?: AgentBackgroundConfig;
   // Manager-level background task config
   backgroundTaskManagerConfig?: BackgroundTaskManagerConfig;
+  // Set of background task IDs dispatched but not yet completed
+  pendingBackgroundTasks?: Set<string>;
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {

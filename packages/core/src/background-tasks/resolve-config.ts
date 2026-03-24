@@ -71,6 +71,12 @@ function resolveAgentToolConfig(
     return { enabled: true };
   }
 
+  if (toolName.startsWith('agent-')) {
+    toolName = toolName.substring('agent-'.length);
+  } else if (toolName.startsWith('workflow-')) {
+    toolName = toolName.substring('workflow-'.length);
+  }
+
   const entry: AgentBackgroundToolConfig | undefined = agentConfig.tools[toolName];
   if (entry === undefined) return undefined;
   if (typeof entry === 'boolean') return { enabled: entry };

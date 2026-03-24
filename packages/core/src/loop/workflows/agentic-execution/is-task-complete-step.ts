@@ -35,6 +35,12 @@ export function createIsTaskCompleteStep<Tools extends ToolSet = ToolSet, OUTPUT
       // Increment iteration count
       currentIteration++;
 
+      // Skip scorers if a background task result was just injected —
+      // the LLM hasn't processed it yet, so scoring now would be premature
+      if (inputData.backgroundTaskPending) {
+        return inputData;
+      }
+
       // Only run isTaskComplete check if scorers are configured
       const hasIsTaskCompleteScorers = isTaskComplete?.scorers && isTaskComplete.scorers.length > 0;
 

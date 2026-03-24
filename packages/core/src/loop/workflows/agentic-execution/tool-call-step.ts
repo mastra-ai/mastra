@@ -551,67 +551,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // --- Background task dispatch ---
         const backgroundTaskManager = _internal?.backgroundTaskManager;
         if (backgroundTaskManager && typeof args === 'object' && args !== null) {
-          // Wire all three hooks using the closure context:
-          // 1. Stream chunk emitter — background task chunks appear on the active stream
-          backgroundTaskManager.setStreamChunkEmitter((_agentId, chunk) => {
-            try {
-              controller.enqueue({
-                ...(chunk as any),
-                runId,
-                from: ChunkFrom.AGENT,
-              });
-            } catch {
-              // Controller may be closed if stream ended — ignore
-            }
-          });
-
-          // 2. Tool resolver — uses the tool object from the current closure
-          backgroundTaskManager.setToolResolver((toolName_: string) => {
-            const stepTools = (_internal?.stepTools as Tools) || tools;
-            const resolvedTool =
-              stepTools?.[toolName_] ||
-              Object.values(stepTools || {})?.find((t: any) => 'id' in t && t.id === toolName_);
-            if (!resolvedTool?.execute) {
-              throw new Error(`Tool "${toolName_}" not found for background execution`);
-            }
-            return {
-              execute: (bgArgs: Record<string, unknown>, opts?: { abortSignal?: AbortSignal }) =>
-                resolvedTool.execute!(bgArgs, { ...toolOptions, abortSignal: opts?.abortSignal } as any),
-            };
-          });
-
-          // 3. Result injector — injects completed/failed results into the message list
-          backgroundTaskManager.setResultInjector(async params => {
-            const content =
-              params.status === 'completed'
-                ? typeof params.result === 'string'
-                  ? params.result
-                  : JSON.stringify(params.result ?? '')
-                : `Background task failed: ${params.error?.message ?? 'Unknown error'}`;
-
-            messageList.add(
-              [
-                {
-                  role: 'tool' as const,
-                  content: [
-                    {
-                      type: 'tool-result' as const,
-                      toolCallId: params.toolCallId,
-                      toolName: params.toolName,
-                      result: content,
-                    },
-                  ],
-                },
-              ],
-              'response',
-            );
-
-            // Flush to memory if available
-            if (_internal?.saveQueueManager && _internal?.threadId) {
-              await _internal.saveQueueManager.flushMessages(messageList, _internal.threadId, _internal.memoryConfig);
-            }
-          });
-
           const toolBgConfig = (tool as any).background as ToolBackgroundConfig | undefined;
           const agentBgConfig = _internal?.agentBackgroundConfig;
           const managerConfig = _internal?.backgroundTaskManagerConfig;
@@ -624,7 +563,71 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             managerConfig,
           });
 
+          console.dir(
+            { bgResolved, toolName: inputData.toolName, toolBgConfig, agentBgConfig, managerConfig },
+            { depth: null },
+          );
+
           if (bgResolved.runInBackground) {
+            // Wire all three hooks using the closure context:
+            // 1. Stream chunk emitter — background task chunks appear on the active stream
+            backgroundTaskManager.setStreamChunkEmitter((_agentId, chunk) => {
+              console.dir({ bgManagerChunk: chunk }, { depth: null });
+              try {
+                controller.enqueue({
+                  ...(chunk as any),
+                  runId,
+                  from: ChunkFrom.AGENT,
+                });
+              } catch {
+                // Controller may be closed if stream ended — ignore
+              }
+            });
+
+            // 2. Tool resolver — uses the tool object from the current closure
+            backgroundTaskManager.setToolResolver((toolName_: string) => {
+              const stepTools = (_internal?.stepTools as Tools) || tools;
+              const resolvedTool =
+                stepTools?.[toolName_] ||
+                Object.values(stepTools || {})?.find((t: any) => 'id' in t && t.id === toolName_);
+              if (!resolvedTool?.execute) {
+                throw new Error(`Tool "${toolName_}" not found for background execution`);
+              }
+              return {
+                execute: (bgArgs: Record<string, unknown>, opts?: { abortSignal?: AbortSignal }) =>
+                  resolvedTool.execute!(bgArgs, { ...toolOptions, abortSignal: opts?.abortSignal } as any),
+              };
+            });
+
+            // 3. Result injector — injects completed/failed results into the message list
+            backgroundTaskManager.setResultInjector(async params => {
+              messageList.add(
+                [
+                  {
+                    role: 'tool' as const,
+                    content: [
+                      {
+                        type: 'tool-result' as const,
+                        toolCallId: params.toolCallId,
+                        toolName: params.toolName,
+                        result:
+                          params.status === 'failed'
+                            ? `Background task failed: ${params.error?.message ?? 'Unknown error'}`
+                            : params.result,
+                        isError: params.status === 'failed',
+                      },
+                    ],
+                  },
+                ],
+                'response',
+              );
+
+              // Flush to memory if available
+              if (_internal?.saveQueueManager && _internal?.threadId) {
+                await _internal.saveQueueManager.flushMessages(messageList, _internal.threadId, _internal.memoryConfig);
+              }
+            });
+
             const { task, fallbackToSync } = await backgroundTaskManager.enqueue({
               toolName: inputData.toolName,
               toolCallId: inputData.toolCallId,
@@ -637,6 +640,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             });
 
             if (!fallbackToSync) {
+              // Track the pending task so the loop waits for it
+              if (!_internal!.pendingBackgroundTasks) {
+                _internal!.pendingBackgroundTasks = new Set();
+              }
+              _internal!.pendingBackgroundTasks.add(task.id);
+
               // Emit background-task-started chunk
               controller.enqueue({
                 type: 'background-task-started' as any,

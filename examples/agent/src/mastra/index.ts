@@ -29,6 +29,7 @@ import {
   agentWithSequentialModeration,
   supervisorAgent,
   subscriptionOrchestratorAgent,
+  cryptoResearchAgent,
 } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/evals';
 import { myWorkflowX, nestedWorkflow, findUserWorkflow } from './workflows/other';
@@ -81,6 +82,7 @@ const config = {
     agentWithSequentialModeration,
     supervisorAgent,
     subscriptionOrchestratorAgent,
+    cryptoResearchAgent,
   },
   processors: {
     moderationProcessor,
@@ -116,6 +118,10 @@ const config = {
 
 export const mastra = new Mastra({
   ...config,
+  backgroundTasks: {
+    globalConcurrency: 10,
+    perAgentConcurrency: 5,
+  },
   editor: new MastraEditor({
     toolProviders: {
       composio: new ComposioToolProvider({ apiKey: '' }),

@@ -243,6 +243,22 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       ];
     }
 
+    case 'background-task-waiting': {
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+
+      return [
+        ...result.slice(0, -1),
+        {
+          ...lastMessage,
+          metadata: {
+            ...lastMessage.metadata,
+            pendingBackgroundTasksCount: chunk.payload.pendingCount,
+          },
+        },
+      ];
+    }
+
     case 'text-delta': {
       const lastMessage = result[result.length - 1];
       if (!lastMessage || lastMessage.role !== 'assistant') return result;
