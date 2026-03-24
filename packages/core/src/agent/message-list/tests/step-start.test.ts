@@ -111,6 +111,8 @@ describe('MessageList.stepStart', () => {
     // The message should now be in the response source (drainable for saving)
     const unsaved = messageList.drainUnsavedMessages();
     expect(unsaved.length).toBeGreaterThan(0);
-    expect(unsaved.find(m => m.id === msg.id)).toBeDefined();
+    const drained = unsaved.find(m => m.id === msg.id);
+    expect(drained).toBeDefined();
+    expect(drained?.content.parts.at(-1)).toEqual({ type: 'step-start' });
   });
 });
