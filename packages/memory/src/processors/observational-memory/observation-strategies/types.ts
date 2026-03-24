@@ -28,6 +28,7 @@ export interface ObserverOutput {
   observations: string;
   currentTask?: string;
   suggestedContinuation?: string;
+  threadTitle?: string;
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
 }
 
@@ -43,8 +44,10 @@ export interface ProcessedObservation {
     lastObservedAt: string;
     suggestedResponse?: string;
     currentTask?: string;
+    threadTitle?: string;
     lastObservedMessageCursor?: { createdAt: string; id: string };
   }>;
   suggestedContinuation?: string;
   currentTask?: string;
+  threadTitle?: string;
 }

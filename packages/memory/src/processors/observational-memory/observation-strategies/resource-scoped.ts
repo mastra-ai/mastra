@@ -22,13 +22,13 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
   private messagesByThread = new Map<string, MastraDBMessage[]>();
   private multiThreadResults = new Map<
     string,
-    { observations: string; currentTask?: string; suggestedContinuation?: string }
+    { observations: string; currentTask?: string; suggestedContinuation?: string; threadTitle?: string }
   >();
   private totalBatchUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
   private observationResults: Array<{
     threadId: string;
     threadMessages: MastraDBMessage[];
-    result: { observations: string; currentTask?: string; suggestedContinuation?: string };
+    result: { observations: string; currentTask?: string; suggestedContinuation?: string; threadTitle?: string };
   }> = [];
   private priorMetadataByThread = new Map<
     string,
@@ -291,6 +291,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         lastObservedAt: threadLastObservedAt.toISOString(),
         suggestedResponse: result.suggestedContinuation,
         currentTask: result.currentTask,
+        threadTitle: result.threadTitle,
         lastObservedMessageCursor: getLastObservedMessageCursor(threadMessages),
       });
 
@@ -339,6 +340,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
             lastObservedAt: update.lastObservedAt,
             suggestedResponse: update.suggestedResponse,
             currentTask: update.currentTask,
+            threadTitle: update.threadTitle,
             lastObservedMessageCursor: update.lastObservedMessageCursor,
           });
           await this.storage.updateThread({

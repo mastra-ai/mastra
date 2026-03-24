@@ -87,7 +87,10 @@ export class BufferingCoordinator {
     const reflBufKey = this.getReflectionBufferKey(lockKey);
 
     if (activatedMessageIds) {
-      // Partial cleanup: nothing to do for sealed IDs (flag-based, no static map)
+      // Partial cleanup after activation: clear stale boundary/time state for
+      // the observation buffer key so the next buffer cycle isn't suppressed.
+      BufferingCoordinator.lastBufferedBoundary.delete(obsBufKey);
+      BufferingCoordinator.lastBufferedAtTime.delete(obsBufKey);
     } else {
       // Full cleanup: remove all static state for this thread
       BufferingCoordinator.lastBufferedAtTime.delete(obsBufKey);

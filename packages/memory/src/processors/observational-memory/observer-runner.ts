@@ -74,6 +74,7 @@ export class ObserverRunner {
     observations: string;
     currentTask?: string;
     suggestedContinuation?: string;
+    threadTitle?: string;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     const agent = this.getAgent();
@@ -120,6 +121,7 @@ export class ObserverRunner {
       observations: parsed.observations,
       currentTask: parsed.currentTask,
       suggestedContinuation: parsed.suggestedContinuation,
+      threadTitle: parsed.threadTitle,
       usage: usage
         ? { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens: usage.totalTokens }
         : undefined,
@@ -137,7 +139,7 @@ export class ObserverRunner {
     requestContext?: RequestContext,
     priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
   ): Promise<{
-    results: Map<string, { observations: string; currentTask?: string; suggestedContinuation?: string }>;
+    results: Map<string, { observations: string; currentTask?: string; suggestedContinuation?: string; threadTitle?: string }>;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     const agent = new Agent({
@@ -197,12 +199,13 @@ export class ObserverRunner {
       }
     }
 
-    const results = new Map<string, { observations: string; currentTask?: string; suggestedContinuation?: string }>();
+    const results = new Map<string, { observations: string; currentTask?: string; suggestedContinuation?: string; threadTitle?: string }>();
     for (const [threadId, threadResult] of parsed.threads) {
       results.set(threadId, {
         observations: threadResult.observations,
         currentTask: threadResult.currentTask,
         suggestedContinuation: threadResult.suggestedContinuation,
+        threadTitle: threadResult.threadTitle,
       });
     }
 

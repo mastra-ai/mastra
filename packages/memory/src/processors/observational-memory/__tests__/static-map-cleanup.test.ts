@@ -54,12 +54,13 @@ describe('BufferingCoordinator static map cleanup', () => {
       expect(BC.reflectionBufferCycleIds.has(reflBufKey)).toBe(false);
     });
 
-    it('partial cleanup is a no-op (sealed IDs are now flag-based)', () => {
+    it('partial cleanup clears stale observation boundary/time for the buffer key', () => {
       const lockKey = 'thread:thread-1';
       const obsBufKey = `obs:${lockKey}`;
 
       // Seed some state
       BC.lastBufferedAtTime.set(obsBufKey, new Date());
+      BC.lastBufferedBoundary.set(obsBufKey, 'boundary-value');
 
       const coordinator = new BufferingCoordinator({
         observationConfig: { messageTokens: 30000 } as any,
@@ -67,11 +68,13 @@ describe('BufferingCoordinator static map cleanup', () => {
         scope: 'thread',
       });
 
-      // Partial cleanup: pass activatedMessageIds — should not clear static maps
+      // Partial cleanup: pass activatedMessageIds — should clear stale observation state
       coordinator.cleanupStaticMaps('thread-1', null, ['msg-1', 'msg-3']);
 
-      // Static maps should be untouched (partial cleanup only affected sealedMessageIds, which is gone)
-      expect(BC.lastBufferedAtTime.has(obsBufKey)).toBe(true);
+      // After activation, stale observation boundary/time should be cleared
+      // so the next buffer cycle isn't suppressed or delayed
+      expect(BC.lastBufferedAtTime.has(obsBufKey)).toBe(false);
+      expect(BC.lastBufferedBoundary.has(obsBufKey)).toBe(false);
     });
   });
 });

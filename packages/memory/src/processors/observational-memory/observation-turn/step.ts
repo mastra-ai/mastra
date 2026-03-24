@@ -84,6 +84,7 @@ export class ObservationStep {
       // maybeReflect handles both sync (above full threshold) and async buffered
       // reflection (above bufferActivation point but below full threshold).
       const record = this.turn.record;
+      const preReflectGeneration = record.generationCount;
       const obsTokens = record.observationTokenCount ?? 0;
       await om.reflector.maybeReflect({
         record,
@@ -93,6 +94,9 @@ export class ObservationStep {
         requestContext: this.turn.requestContext,
       });
       await this.turn.refreshRecord();
+      if (this.turn.record.generationCount > preReflectGeneration) {
+        reflected = true;
+      }
     }
 
     // ── Check for incomplete tool calls ────────────────────────
@@ -157,6 +161,7 @@ export class ObservationStep {
 
       // Threshold observation (step > 0 only, skip if tool calls pending)
       if (statusSnapshot.shouldObserve && !hasIncompleteToolCalls) {
+        const preObsGeneration = this.turn.record.generationCount;
         const obsResult = await this.runThresholdObservation();
         if (obsResult.succeeded) {
           observed = true;
@@ -187,6 +192,9 @@ export class ObservationStep {
           }
 
           await this.turn.refreshRecord();
+          if (this.turn.record.generationCount > preObsGeneration) {
+            reflected = true;
+          }
         }
       }
 

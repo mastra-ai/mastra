@@ -90,6 +90,11 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         ? (safeCaptureJson(messageList.serialize()) as ReturnType<MessageList['serialize']>)
         : null;
 
+      // ── Read-only fast path: skip turn creation and observation lifecycle ──
+      if (readOnly) {
+        return messageList;
+      }
+
       // ── Create turn on first step (or when state is reset) ──
       // The turn is stashed in customState so that the output processor instance
       // (which is a separate ObservationalMemoryProcessor) can retrieve it in
@@ -109,7 +114,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       }
 
       // ── Run step preparation (activation, threshold, observation, filtering) ──
-      if (!readOnly) {
+      {
         const step = this.turn.step(stepNumber);
         let ctx;
         try {

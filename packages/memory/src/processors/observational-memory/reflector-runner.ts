@@ -313,6 +313,9 @@ export class ReflectorRunner {
           await this.persistMarkerToStorage(failedMarker, record.threadId ?? '', record.resourceId ?? undefined);
         }
         omError('[OM] Async buffered reflection failed', error);
+        // Clear the boundary so a failed reflection doesn't permanently block
+        // future async reflection attempts (line 554 checks this map).
+        BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
       })
       .finally(() => {
         BufferingCoordinator.asyncBufferingOps.delete(bufferKey);

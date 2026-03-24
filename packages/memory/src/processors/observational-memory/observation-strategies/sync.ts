@@ -141,6 +141,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
       lastObservedAt,
       suggestedContinuation: output.suggestedContinuation,
       currentTask: output.currentTask,
+      threadTitle: output.threadTitle,
     };
   }
 
@@ -152,6 +153,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
       const newMetadata = setThreadOMMetadata(thread.metadata, {
         suggestedResponse: processed.suggestedContinuation,
         currentTask: processed.currentTask,
+        threadTitle: processed.threadTitle,
         lastObservedMessageCursor: getLastObservedMessageCursor(messages),
       });
       await this.storage.updateThread({

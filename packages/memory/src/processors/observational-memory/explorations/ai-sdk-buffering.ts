@@ -210,7 +210,7 @@ async function main() {
 
   const threadId = 'buffer-demo-thread';
   const memory = createMemory();
-  const om = (await (memory as any).getOMEngine()) as ObservationalMemory;
+  const om = (await memory.omEngine)!;
   if (!om) throw new Error('Failed to initialize OM engine from Memory.');
 
   // ── Seed: establish baseline observations ──────────────────────────────

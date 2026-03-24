@@ -40,6 +40,7 @@ import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/schema-compa
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
+import type { ObservationalMemory } from './processors/observational-memory';
 import { recallTool } from './tools/om-tools';
 import {
   updateWorkingMemoryTool,
@@ -81,9 +82,15 @@ const VECTOR_DELETE_BATCH_SIZE = 100;
  * and message injection.
  */
 export class Memory extends MastraMemory {
-  /** Cached OM engine instance — created lazily by getOMEngine(). */
-  private _omEngine: any | null = null;
-  private _omEngineInitPromise: Promise<any | null> | null = null;
+  private _omEngine: Promise<ObservationalMemory | null> | undefined;
+
+  /** The shared ObservationalMemory engine. Lazily created on first access. */
+  get omEngine(): Promise<ObservationalMemory | null> {
+    if (!this._omEngine) {
+      this._omEngine = this._initOMEngine();
+    }
+    return this._omEngine;
+  }
 
   constructor(config: Omit<SharedMemoryConfig, 'working'> = {}) {
     super({ name: 'Memory', ...config });
@@ -1102,7 +1109,7 @@ ${workingMemory}`;
     let continuationMessage: MastraDBMessage | undefined;
     let otherThreadsContext: string | undefined;
 
-    const omEngine = await this.getOMEngine();
+    const omEngine = await this.omEngine;
     if (omEngine) {
       omRecord = await omEngine.getRecord(threadId, resourceId);
       if (omRecord?.activeObservations) {
@@ -1215,63 +1222,73 @@ ${workingMemory}`;
   }
 
   /**
-   * Get or create the cached ObservationalMemory engine instance.
-   * Returns null if OM is not configured.
+   * One-time initialization of the shared ObservationalMemory engine.
+   * Called lazily by the `omEngine` getter on first access.
    */
-  private async getOMEngine(): Promise<any | null> {
-    if (this._omEngine !== null) return this._omEngine;
-    if (this._omEngineInitPromise) return this._omEngineInitPromise;
+  private async _initOMEngine(): Promise<ObservationalMemory | null> {
+    const omConfig = normalizeObservationalMemoryConfig(this.threadConfig.observationalMemory);
+    if (!omConfig) return null;
 
-    this._omEngineInitPromise = (async () => {
-      const omConfig = normalizeObservationalMemoryConfig(this.threadConfig.observationalMemory);
-      if (!omConfig) {
-        this._omEngine = null;
-        return null;
-      }
+    const memoryStore = await this.storage.getStore('memory');
+    if (!memoryStore || !memoryStore.supportsObservationalMemory) return null;
 
-      const memoryStore = await this.storage.getStore('memory');
-      if (!memoryStore || !memoryStore.supportsObservationalMemory) {
-        this._omEngine = null;
-        return null;
-      }
+    const coreSupportsOM = coreFeatures.has('observationalMemory');
+    if (!coreSupportsOM) {
+      throw new Error(
+        'Observational memory is enabled but the installed version of @mastra/core does not support it. ' +
+          'Please upgrade @mastra/core to a version that includes observational memory support.',
+      );
+    }
 
-      const { ObservationalMemory } = await import('./processors/observational-memory');
+    if (omConfig.observation?.bufferTokens !== false && !coreFeatures.has('asyncBuffering')) {
+      throw new Error(
+        'Observational memory async buffering is enabled by default but the installed version of @mastra/core does not support it. ' +
+          'Either upgrade @mastra/core, @mastra/memory, and your storage adapter (@mastra/libsql, @mastra/pg, or @mastra/mongodb) to the latest version, ' +
+          'or explicitly disable async buffering by setting `observation: { bufferTokens: false }` in your observationalMemory config.',
+      );
+    }
 
-      this._omEngine = new ObservationalMemory({
-        storage: memoryStore,
-        scope: omConfig.scope,
-        shareTokenBudget: omConfig.shareTokenBudget,
-        model: omConfig.model,
-        observation: omConfig.observation
-          ? {
-              model: omConfig.observation.model,
-              messageTokens: omConfig.observation.messageTokens,
-              modelSettings: omConfig.observation.modelSettings,
-              maxTokensPerBatch: omConfig.observation.maxTokensPerBatch,
-              providerOptions: omConfig.observation.providerOptions,
-              bufferTokens: omConfig.observation.bufferTokens,
-              bufferActivation: omConfig.observation.bufferActivation,
-              blockAfter: omConfig.observation.blockAfter,
-              instruction: omConfig.observation.instruction,
-            }
-          : undefined,
-        reflection: omConfig.reflection
-          ? {
-              model: omConfig.reflection.model,
-              observationTokens: omConfig.reflection.observationTokens,
-              modelSettings: omConfig.reflection.modelSettings,
-              providerOptions: omConfig.reflection.providerOptions,
-              bufferActivation: omConfig.reflection.bufferActivation,
-              blockAfter: omConfig.reflection.blockAfter,
-              instruction: omConfig.reflection.instruction,
-            }
-          : undefined,
-      });
+    if (!coreFeatures.has('request-response-id-rotation')) {
+      throw new Error(
+        'Observational memory requires @mastra/core support for request-response-id-rotation. Please bump @mastra/core to a newer version.',
+      );
+    }
 
-      return this._omEngine;
-    })();
+    const { ObservationalMemory: OMClass } = await import('./processors/observational-memory');
 
-    return this._omEngineInitPromise;
+    return new OMClass({
+      storage: memoryStore,
+      scope: omConfig.scope,
+      retrieval: omConfig.retrieval,
+      shareTokenBudget: omConfig.shareTokenBudget,
+      model: omConfig.model,
+      observation: omConfig.observation
+        ? {
+            model: omConfig.observation.model,
+            messageTokens: omConfig.observation.messageTokens,
+            modelSettings: omConfig.observation.modelSettings,
+            maxTokensPerBatch: omConfig.observation.maxTokensPerBatch,
+            providerOptions: omConfig.observation.providerOptions,
+            bufferTokens: omConfig.observation.bufferTokens,
+            bufferActivation: omConfig.observation.bufferActivation,
+            blockAfter: omConfig.observation.blockAfter,
+            previousObserverTokens: omConfig.observation.previousObserverTokens,
+            instruction: omConfig.observation.instruction,
+            threadTitle: omConfig.observation.threadTitle,
+          }
+        : undefined,
+      reflection: omConfig.reflection
+        ? {
+            model: omConfig.reflection.model,
+            observationTokens: omConfig.reflection.observationTokens,
+            modelSettings: omConfig.reflection.modelSettings,
+            providerOptions: omConfig.reflection.providerOptions,
+            bufferActivation: omConfig.reflection.bufferActivation,
+            blockAfter: omConfig.reflection.blockAfter,
+            instruction: omConfig.reflection.instruction,
+          }
+        : undefined,
+    });
   }
 
   public defaultWorkingMemoryTemplate = `
@@ -2137,7 +2154,7 @@ Notes:
     // Get base processors from parent class
     const processors = await super.getInputProcessors(configuredProcessors, context);
 
-    const om = await this.createOMProcessor(configuredProcessors, context);
+    const om = await this.createOMProcessor(configuredProcessors);
     if (om) {
       processors.push(om);
     }
@@ -2156,7 +2173,7 @@ Notes:
   ): Promise<OutputProcessor[]> {
     const processors = await super.getOutputProcessors(configuredProcessors, context);
 
-    const om = await this.createOMProcessor(configuredProcessors, context);
+    const om = await this.createOMProcessor(configuredProcessors);
     if (om) {
       processors.push(om as unknown as OutputProcessor);
     }
@@ -2165,108 +2182,22 @@ Notes:
   }
 
   /**
-   * Creates an ObservationalMemory processor instance if configured and not already present.
-   * A new instance is created per call — processorStates (e.g., sealedIds) are shared
-   * via the ProcessorRunner's state map keyed by processor ID, not by instance identity.
+   * Creates an ObservationalMemory processor wrapping the shared engine.
+   * Returns null if OM is not configured, not supported, or already present
+   * in the user's configured processors.
    */
   private async createOMProcessor(
     configuredProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow)[] = [],
-    context?: RequestContext,
   ): Promise<InputProcessor | null> {
-    // Check if ObservationalMemory is already configured by the user
     const hasObservationalMemory = configuredProcessors.some(
       p => !('workflow' in p) && p.id === 'observational-memory',
     );
+    if (hasObservationalMemory) return null;
 
-    // Get effective config (runtime config merged with instance config)
-    const memoryContext = context?.get('MastraMemory') as { memoryConfig?: MemoryConfig } | undefined;
-    const runtimeMemoryConfig = memoryContext?.memoryConfig;
-    const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
+    const engine = await this.omEngine;
+    if (!engine) return null;
 
-    // Add ObservationalMemory processor if configured and not already present
-    const omConfig = normalizeObservationalMemoryConfig(effectiveConfig.observationalMemory);
-    if (!omConfig || hasObservationalMemory) {
-      return null;
-    }
-
-    const coreSupportsOM = coreFeatures.has('observationalMemory');
-
-    if (!coreSupportsOM) {
-      throw new Error(
-        'Observational memory is enabled but the installed version of @mastra/core does not support it. ' +
-          'Please upgrade @mastra/core to a version that includes observational memory support.',
-      );
-    }
-
-    const memoryStore = await this.storage.getStore('memory');
-    if (!memoryStore) {
-      throw new Error(
-        'Using Mastra Memory observational memory requires a storage adapter but no attached adapter was detected.',
-      );
-    }
-
-    if (!memoryStore.supportsObservationalMemory) {
-      throw new Error(
-        `Observational memory is enabled but the storage adapter (${memoryStore.constructor.name}) does not support it. ` +
-          `If you're using @mastra/libsql, @mastra/pg, or @mastra/mongodb, upgrade to the latest version. ` +
-          `Otherwise, use one of those adapters or disable observational memory.`,
-      );
-    }
-
-    // Async buffering is on by default. Check that core + storage support it
-    // unless the user explicitly disabled it with bufferTokens: false.
-    if (omConfig.observation?.bufferTokens !== false && !coreFeatures.has('asyncBuffering')) {
-      throw new Error(
-        'Observational memory async buffering is enabled by default but the installed version of @mastra/core does not support it. ' +
-          'Either upgrade @mastra/core, @mastra/memory, and your storage adapter (@mastra/libsql, @mastra/pg, or @mastra/mongodb) to the latest version, ' +
-          'or explicitly disable async buffering by setting `observation: { bufferTokens: false }` in your observationalMemory config.',
-      );
-    }
-
-    if (!coreFeatures.has('request-response-id-rotation')) {
-      throw new Error(
-        'Observational memory requires @mastra/core support for request-response-id-rotation. Please bump @mastra/core to a newer version.',
-      );
-    }
-
-    // Dynamic import to avoid loading OM code when not needed and to prevent
-    // import errors when paired with an older @mastra/core version
-    const { ObservationalMemory, ObservationalMemoryProcessor } = await import('./processors/observational-memory');
-
-    const engine = new ObservationalMemory({
-      storage: memoryStore,
-      scope: omConfig.scope,
-      retrieval: omConfig.retrieval,
-      shareTokenBudget: omConfig.shareTokenBudget,
-      model: omConfig.model,
-      observation: omConfig.observation
-        ? {
-            model: omConfig.observation.model,
-            messageTokens: omConfig.observation.messageTokens,
-            modelSettings: omConfig.observation.modelSettings,
-            maxTokensPerBatch: omConfig.observation.maxTokensPerBatch,
-            providerOptions: omConfig.observation.providerOptions,
-            bufferTokens: omConfig.observation.bufferTokens,
-            bufferActivation: omConfig.observation.bufferActivation,
-            blockAfter: omConfig.observation.blockAfter,
-            previousObserverTokens: omConfig.observation.previousObserverTokens,
-            instruction: omConfig.observation.instruction,
-            threadTitle: omConfig.observation.threadTitle,
-          }
-        : undefined,
-      reflection: omConfig.reflection
-        ? {
-            model: omConfig.reflection.model,
-            observationTokens: omConfig.reflection.observationTokens,
-            modelSettings: omConfig.reflection.modelSettings,
-            providerOptions: omConfig.reflection.providerOptions,
-            bufferActivation: omConfig.reflection.bufferActivation,
-            blockAfter: omConfig.reflection.blockAfter,
-            instruction: omConfig.reflection.instruction,
-          }
-        : undefined,
-    });
-
+    const { ObservationalMemoryProcessor } = await import('./processors/observational-memory');
     return new ObservationalMemoryProcessor(engine, this);
   }
 }

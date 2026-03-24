@@ -7,7 +7,6 @@ import { z } from 'zod';
 
 import { Memory } from '../../../index';
 import type { ObservationStep } from '../observation-turn/index';
-import { ObservationalMemory } from '../observational-memory';
 import { seedThreadAndEnsureObservations } from './seed-phase';
 
 /**
@@ -94,7 +93,7 @@ async function main() {
 
   const threadId = 'turn-step-demo-thread';
   const memory = createMemory();
-  const om = (await (memory as any).getOMEngine()) as ObservationalMemory;
+  const om = (await memory.omEngine)!;
   if (!om) throw new Error('Failed to initialize OM engine from Memory.');
 
   // ── Seed: establish baseline observations ──────────────────────────────
