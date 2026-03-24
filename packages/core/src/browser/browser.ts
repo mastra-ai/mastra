@@ -302,17 +302,29 @@ export abstract class MastraBrowser extends MastraBase {
 
   /**
    * Ensure the browser is ready, launching if needed.
+   * If browser was previously closed, it will be re-launched.
    */
   async ensureReady(): Promise<void> {
     if (this.status === 'ready') {
       return;
     }
-    if (this.status === 'pending' || this.status === 'error') {
+    if (this.status === 'pending' || this.status === 'error' || this.status === 'closed') {
+      // Reset to pending to allow re-launch after close
+      if (this.status === 'closed') {
+        this.status = 'pending';
+      }
       await this.launch();
       return;
     }
     if (this.status === 'launching') {
       await this._launchPromise;
+      return;
+    }
+    if (this.status === 'closing') {
+      // Wait for close to complete, then re-launch
+      await this._closePromise;
+      this.status = 'pending';
+      await this.launch();
       return;
     }
     throw new Error(`Browser is ${this.status} and cannot be used`);

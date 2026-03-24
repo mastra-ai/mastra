@@ -25,6 +25,7 @@ export const gotoInputSchema = z.object({
     .enum(['load', 'domcontentloaded', 'networkidle'])
     .optional()
     .describe('When to consider navigation complete (default: domcontentloaded)'),
+  timeout: z.number().optional().describe('Navigation timeout in milliseconds'),
 });
 export type GotoInput = z.infer<typeof gotoInputSchema>;
 
