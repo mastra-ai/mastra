@@ -177,6 +177,7 @@ jobs:
         run: echo "version=$(node -p \"require('./packages/cli/package.json').version\")" >> "$GITHUB_OUTPUT"
 
       - name: Upload studio assets to R2
+        if: ${{ !inputs.dry_run }}
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
