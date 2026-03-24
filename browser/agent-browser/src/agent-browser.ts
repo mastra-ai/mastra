@@ -105,7 +105,11 @@ export class AgentBrowser extends MastraBrowser {
     try {
       const page = this.browserManager.getPage();
       // Will throw if browser is disconnected
-      page.url();
+      const url = page.url();
+      // Save URL for potential restore on relaunch
+      if (url && url !== 'about:blank') {
+        this.lastUrl = url;
+      }
       return true;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -268,6 +272,24 @@ export class AgentBrowser extends MastraBrowser {
       return this.browserManager.getPage().url();
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Navigate to a URL (simple form). Used internally for restoring state on relaunch.
+   */
+  override async navigateTo(url: string): Promise<void> {
+    if (!this.isBrowserRunning()) {
+      return;
+    }
+    try {
+      const page = this.getPage();
+      await page.goto(url, {
+        timeout: this.defaultTimeout,
+        waitUntil: 'domcontentloaded',
+      });
+    } catch {
+      // Silently ignore navigation errors during restore
     }
   }
 

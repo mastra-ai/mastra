@@ -133,7 +133,11 @@ export class StagehandBrowser extends MastraBrowser {
         return false;
       }
       // Will throw if browser is disconnected
-      pages[0]?.url();
+      const url = pages[0]?.url();
+      // Save URL for potential restore on relaunch
+      if (url && url !== 'about:blank') {
+        this.lastUrl = url;
+      }
       return true;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -430,6 +434,23 @@ export class StagehandBrowser extends MastraBrowser {
       return page.url();
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Navigate to a URL (simple version). Used internally for restoring state on relaunch.
+   */
+  override async navigateTo(url: string): Promise<void> {
+    const page = this.getPage();
+    if (!page) return;
+
+    try {
+      await page.goto(url, {
+        timeout: this.config.timeout ?? 30000,
+        waitUntil: 'domcontentloaded',
+      });
+    } catch {
+      // Silently ignore navigation errors during restore
     }
   }
 

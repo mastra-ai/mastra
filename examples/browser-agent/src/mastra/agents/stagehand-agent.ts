@@ -1,5 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
+import { BrowserContextProcessor } from '@mastra/core/browser';
 import { StagehandBrowser } from '@mastra/stagehand';
 
 export const stagehandBrowserToolset = new StagehandBrowser({
@@ -27,4 +28,5 @@ Use stagehand_extract to pull structured data from pages.
 You don't need element refs - just describe what you want to do in plain English!`,
   model: openai('gpt-4o'),
   browser: stagehandBrowserToolset,
+  inputProcessors: [new BrowserContextProcessor()],
 });

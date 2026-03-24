@@ -7,6 +7,7 @@ import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
+import type { BrowserContext } from '../browser/processor';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
   ScorerRunInputForAgent,
@@ -4216,6 +4217,18 @@ export class Agent<
       }
     }
     const requestContext = options.requestContext || new RequestContext();
+
+    // Inject browser context for BrowserContextProcessor
+    if (this.#browser && !requestContext.has('browser')) {
+      const browserCtx: BrowserContext = {
+        provider: this.#browser.provider,
+        sessionId: this.#browser.id,
+        headless: (this.#browser as any).config?.headless,
+        currentUrl: this.#browser.getCurrentUrl() ?? undefined,
+        isRunning: this.#browser.isBrowserRunning(),
+      };
+      requestContext.set('browser', browserCtx);
+    }
 
     // Reserved keys from requestContext take precedence for security.
     // This allows middleware to securely set resourceId/threadId based on authenticated user,

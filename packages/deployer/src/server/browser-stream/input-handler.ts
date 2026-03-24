@@ -118,6 +118,11 @@ export function handleInputMessage(
         }
       });
       break;
+    case 'relaunch':
+      void relaunchBrowser(toolset).catch(err => {
+        console.warn('[InputHandler] Browser relaunch error:', err);
+      });
+      break;
   }
 }
 
@@ -162,6 +167,30 @@ function notifyBrowserClosed(toolset: MastraBrowser): void {
   }
 }
 
+/**
+ * Relaunch the browser by calling ensureReady().
+ * This is triggered when the user clicks the "Browser Closed" overlay.
+ * If there was a previous URL, navigate back to it.
+ */
+async function relaunchBrowser(toolset: MastraBrowser): Promise<void> {
+  const lastUrl = toolset.getLastUrl();
+  console.info(`[InputHandler] Relaunching browser...${lastUrl ? ` (restoring: ${lastUrl})` : ''}`);
+
+  await toolset.ensureReady();
+
+  // Restore the last URL if available
+  if (lastUrl && lastUrl !== 'about:blank') {
+    try {
+      await toolset.navigateTo(lastUrl);
+      console.info(`[InputHandler] Restored previous URL: ${lastUrl}`);
+    } catch {
+      // Silently ignore navigation errors
+    }
+  }
+
+  console.info('[InputHandler] Browser relaunched successfully');
+}
+
 // --- Validation ---
 
 function isValidInputMessage(msg: unknown): msg is ClientInputMessage {
@@ -170,6 +199,7 @@ function isValidInputMessage(msg: unknown): msg is ClientInputMessage {
 
   if (obj.type === 'mouse') return isValidMouseMessage(obj);
   if (obj.type === 'keyboard') return isValidKeyboardMessage(obj);
+  if (obj.type === 'relaunch') return true;
   return false;
 }
 

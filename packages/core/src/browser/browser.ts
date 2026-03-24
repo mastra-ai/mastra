@@ -162,6 +162,9 @@ export abstract class MastraBrowser extends MastraBase {
   /** Error message when status is 'error' */
   error?: string;
 
+  /** Last known URL before browser was closed (for restore on relaunch) */
+  protected lastUrl?: string;
+
   /** Configuration */
   protected readonly config: BrowserConfig;
 
@@ -264,6 +267,12 @@ export abstract class MastraBrowser extends MastraBase {
       await this.config.onClose({ browser: this });
     }
 
+    // Save last URL before closing for potential restore on relaunch
+    const currentUrl = this.getCurrentUrl();
+    if (currentUrl && currentUrl !== 'about:blank') {
+      this.lastUrl = currentUrl;
+    }
+
     this.status = 'closing';
 
     this._closePromise = (async () => {
@@ -290,6 +299,7 @@ export abstract class MastraBrowser extends MastraBase {
   async ensureReady(): Promise<void> {
     if (this.status === 'ready') {
       // Check if browser is still alive (handles external closure)
+      // checkBrowserAlive() should save lastUrl internally if it detects closure
       const stillAlive = await this.checkBrowserAlive();
       if (stillAlive) {
         return;
@@ -415,6 +425,24 @@ export abstract class MastraBrowser extends MastraBase {
    */
   getCurrentUrl(): string | null {
     return null;
+  }
+
+  /**
+   * Get the last known URL before the browser was closed.
+   * Useful for restoring state on relaunch.
+   * @returns The last URL string, or undefined if not available
+   */
+  getLastUrl(): string | undefined {
+    return this.lastUrl;
+  }
+
+  /**
+   * Navigate to a URL (simple form). Override in subclass if supported.
+   * Used internally for restoring state on relaunch.
+   * Named `navigateTo` to avoid conflicts with tool methods that have richer signatures.
+   */
+  async navigateTo(_url: string): Promise<void> {
+    // Default implementation does nothing - providers can override
   }
 
   // ---------------------------------------------------------------------------

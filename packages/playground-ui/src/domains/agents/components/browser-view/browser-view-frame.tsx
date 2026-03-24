@@ -33,6 +33,7 @@ export function BrowserViewFrame({
   const containerRef = useRef<HTMLDivElement>(null);
   const [hasFrame, setHasFrame] = useState(false);
   const [isInteractive, setIsInteractive] = useState(false);
+  const [isRelaunching, setIsRelaunching] = useState(false);
 
   // Memoize onFrame to avoid recreation
   const handleFrame = useCallback((data: string) => {
@@ -60,6 +61,12 @@ export function BrowserViewFrame({
       setIsInteractive(true);
     }
   }, [status]);
+
+  const handleRelaunch = useCallback(() => {
+    if (isRelaunching) return;
+    setIsRelaunching(true);
+    sendMessage(JSON.stringify({ type: 'relaunch' }));
+  }, [isRelaunching, sendMessage]);
 
   const { isAgentBusy, activeToolName } = useInputCoordination();
 
@@ -134,6 +141,13 @@ export function BrowserViewFrame({
     }
   }, [status]);
 
+  // Reset relaunching state when browser becomes active again
+  useEffect(() => {
+    if (status !== 'browser_closed') {
+      setIsRelaunching(false);
+    }
+  }, [status]);
+
   const isLoading = (status === 'connecting' || status === 'browser_starting' || status === 'streaming') && !hasFrame;
   const isReconnecting = status === 'disconnected' && hasFrame;
   const isBrowserClosed = status === 'browser_closed' && hasFrame;
@@ -182,23 +196,50 @@ export function BrowserViewFrame({
 
       {/* Browser closed overlay - shown when browser window is closed */}
       {isBrowserClosed && (
-        <div className="absolute inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center">
+        <div
+          className={cn(
+            'absolute inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center transition-colors',
+            !isRelaunching && 'cursor-pointer hover:bg-black/60',
+          )}
+          onClick={handleRelaunch}
+          role="button"
+          tabIndex={0}
+          onKeyDown={e => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              handleRelaunch();
+            }
+          }}
+        >
           <div className="flex flex-col items-center gap-3 px-6 py-4 text-center">
-            <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center">
-              <svg
-                className="w-7 h-7 text-white/80"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.5}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-lg font-medium text-white">Browser Closed</span>
-              <span className="text-sm text-white/70">Send a message to restart the browser</span>
-            </div>
+            {isRelaunching ? (
+              <>
+                <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center">
+                  <div className="w-6 h-6 border-2 border-white/80 border-t-transparent rounded-full animate-spin" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-lg font-medium text-white">Relaunching...</span>
+                  <span className="text-sm text-white/70">Starting the browser</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center">
+                  <svg
+                    className="w-7 h-7 text-white/80"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={1.5}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-lg font-medium text-white">Browser Closed</span>
+                  <span className="text-sm text-white/70">Click to restart the browser</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

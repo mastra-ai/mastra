@@ -28,3 +28,10 @@ export type { CdpSessionLike, CdpSessionProvider } from './screencast';
 
 export { createError } from './errors';
 export type { ErrorCode, BrowserToolError } from './errors';
+
+// ============================================================================
+// Processor
+// ============================================================================
+
+export { BrowserContextProcessor } from './processor';
+export type { BrowserContext } from './processor';
