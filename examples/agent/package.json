@@ -25,7 +25,6 @@
     "@mastra/loggers": "latest",
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
-    "@mastra/arthur": "link:../../observability/arthur",
     "@mastra/observability": "latest",
     "@mastra/voice-openai": "latest",
     "ai": "^4.3.19",
