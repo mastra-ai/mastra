@@ -2,9 +2,15 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
+import { MemoryStorage } from '@mastra/core/storage';
+import type {
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
+} from '@mastra/core/storage';
 import {
   filterByDateRange,
-  MemoryStorage,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
@@ -12,14 +18,8 @@ import {
   createStorageErrorId,
   normalizePerPage,
   safelyParseJSON,
-} from '@mastra/core/storage';
-import type {
-  StorageListMessagesInput,
-  StorageListMessagesOutput,
-  StorageListThreadsInput,
-  StorageListThreadsOutput,
-  StorageResourceType,
-} from '@mastra/core/storage';
+} from '@mastra/storage';
+import type { StorageResourceType } from '@mastra/storage';
 
 import { ConvexDB, resolveConvexConfig } from '../../db';
 import type { ConvexDomainConfig } from '../../db';

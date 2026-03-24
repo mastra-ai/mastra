@@ -3,23 +3,23 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
+import { MemoryStorage } from '@mastra/core/storage';
+import type {
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
+} from '@mastra/core/storage';
 import {
   createStorageErrorId,
-  MemoryStorage,
   normalizePerPage,
   calculatePagination,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_SCHEMAS,
-} from '@mastra/core/storage';
-import type {
-  StorageResourceType,
-  StorageListMessagesInput,
-  StorageListMessagesOutput,
-  StorageListThreadsInput,
-  StorageListThreadsOutput,
-} from '@mastra/core/storage';
+} from '@mastra/storage';
+import type { StorageResourceType } from '@mastra/storage';
 import { LanceDB, resolveLanceConfig } from '../../db';
 import type { LanceDomainConfig } from '../../db';
 import { getTableSchema, processResultWithTypeConversion } from '../../db/utils';

@@ -4,25 +4,8 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
-import {
-  createStorageErrorId,
-  MemoryStorage,
-  normalizePerPage,
-  calculatePagination,
-  safelyParseJSON,
-  TABLE_MESSAGES,
-  TABLE_RESOURCES,
-  TABLE_THREADS,
-} from '@mastra/core/storage';
-
-/**
- * Local constant for the observational memory table name.
- * Defined locally to avoid a static import that crashes on older @mastra/core
- * versions that don't export TABLE_OBSERVATIONAL_MEMORY.
- */
-const OM_TABLE = 'mastra_observational_memory' as const;
+import { MemoryStorage } from '@mastra/core/storage';
 import type {
-  StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesByResourceIdInput,
   StorageListMessagesOutput,
@@ -42,6 +25,23 @@ import type {
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
 } from '@mastra/core/storage';
+import type { StorageResourceType } from '@mastra/storage';
+import {
+  createStorageErrorId,
+  normalizePerPage,
+  calculatePagination,
+  safelyParseJSON,
+  TABLE_MESSAGES,
+  TABLE_RESOURCES,
+  TABLE_THREADS,
+} from '@mastra/storage';
+
+/**
+ * Local constant for the observational memory table name.
+ * Defined locally to avoid a static import that crashes on older @mastra/core
+ * versions that don't export TABLE_OBSERVATIONAL_MEMORY.
+ */
+const OM_TABLE = 'mastra_observational_memory' as const;
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';

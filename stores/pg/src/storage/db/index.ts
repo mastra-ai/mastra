@@ -8,15 +8,9 @@ import {
   TABLE_SCHEMAS,
   getSqlType,
   getDefaultValue,
-} from '@mastra/core/storage';
-import type {
-  StorageColumn,
-  TABLE_NAMES,
-  CreateIndexOptions,
-  IndexInfo,
-  StorageIndexStats,
-} from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+} from '@mastra/storage';
+import type { StorageColumn, TABLE_NAMES, CreateIndexOptions, IndexInfo, StorageIndexStats } from '@mastra/storage';
+import { parseSqlIdentifier } from '@mastra/storage/sql';
 import { Pool } from 'pg';
 import type { DbClient } from '../client';
 import { PoolAdapter } from '../client';

@@ -1,8 +1,8 @@
 import { createSampleMessageV1, createSampleThread, checkWorkflowSnapshot } from '@internal/storage-test-utils';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
-import type { TABLE_NAMES } from '@mastra/core/storage';
-import { TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT, TABLE_TRACES } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
+import type { TABLE_NAMES } from '@mastra/storage';
+import { TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT, TABLE_TRACES } from '@mastra/storage';
 import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
 

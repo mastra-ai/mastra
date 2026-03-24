@@ -1,15 +1,15 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
+import { ScoresStorage } from '@mastra/core/storage';
 import {
   calculatePagination,
   normalizePerPage,
-  ScoresStorage,
   TABLE_SCORERS,
   transformScoreRow as coreTransformScoreRow,
   createStorageErrorId,
-} from '@mastra/core/storage';
-import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
+} from '@mastra/storage';
+import type { PaginationInfo, StoragePagination } from '@mastra/storage';
 import type { Redis } from '@upstash/redis';
 import { UpstashDB, resolveUpstashConfig } from '../../db';
 import type { UpstashDomainConfig } from '../../db';

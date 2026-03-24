@@ -1,6 +1,8 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
-import type { StorageDomains, CreateIndexOptions } from '@mastra/core/storage';
+import { MastraCompositeStore } from '@mastra/core/storage';
+import type { StorageDomains } from '@mastra/core/storage';
+import { createStorageErrorId } from '@mastra/storage';
+import type { CreateIndexOptions } from '@mastra/storage';
 
 import sql from 'mssql';
 import { MemoryMSSQL } from './domains/memory';

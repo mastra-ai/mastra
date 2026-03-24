@@ -2,10 +2,16 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
+import { MemoryStorage } from '@mastra/core/storage';
+import type {
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
+} from '@mastra/core/storage';
 import {
   createStorageErrorId,
   ensureDate,
-  MemoryStorage,
   serializeDate,
   TABLE_MESSAGES,
   TABLE_THREADS,
@@ -13,14 +19,8 @@ import {
   TABLE_SCHEMAS,
   normalizePerPage,
   calculatePagination,
-} from '@mastra/core/storage';
-import type {
-  StorageResourceType,
-  StorageListMessagesInput,
-  StorageListMessagesOutput,
-  StorageListThreadsInput,
-  StorageListThreadsOutput,
-} from '@mastra/core/storage';
+} from '@mastra/storage';
+import type { StorageResourceType } from '@mastra/storage';
 import { D1DB, resolveD1Config } from '../../db';
 import type { D1DomainConfig } from '../../db';
 import { createSqlBuilder } from '../../sql-builder';

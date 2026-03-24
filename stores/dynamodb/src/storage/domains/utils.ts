@@ -4,8 +4,8 @@ import {
   TABLE_RESOURCES,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCORERS,
-} from '@mastra/core/storage';
-import type { TABLE_NAMES } from '@mastra/core/storage';
+} from '@mastra/storage';
+import type { TABLE_NAMES } from '@mastra/storage';
 import type { Service } from 'electrodb';
 
 /**

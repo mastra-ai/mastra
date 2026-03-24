@@ -2,16 +2,16 @@ import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import { ScoresStorage } from '@mastra/core/storage';
 import {
   createStorageErrorId,
   TABLE_SCORERS,
   SCORERS_SCHEMA,
-  ScoresStorage,
   calculatePagination,
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
-} from '@mastra/core/storage';
-import type { StoragePagination } from '@mastra/core/storage';
+} from '@mastra/storage';
+import type { StoragePagination } from '@mastra/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';

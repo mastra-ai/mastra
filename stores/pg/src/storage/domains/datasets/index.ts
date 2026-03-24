@@ -1,27 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  createStorageErrorId,
-  TABLE_DATASETS,
-  TABLE_DATASET_ITEMS,
-  TABLE_DATASET_VERSIONS,
-  TABLE_EXPERIMENTS,
-  TABLE_EXPERIMENT_RESULTS,
-  TABLE_CONFIGS,
-  TABLE_SCHEMAS,
-  DATASETS_SCHEMA,
-  DATASET_ITEMS_SCHEMA,
-  DATASET_VERSIONS_SCHEMA,
-  DatasetsStorage,
-  calculatePagination,
-  normalizePerPage,
-  safelyParseJSON,
-  ensureDate,
-} from '@mastra/core/storage';
+import { DatasetsStorage } from '@mastra/core/storage';
 import type {
-  DatasetRecord,
-  DatasetItem,
-  DatasetItemRow,
-  DatasetVersion,
   CreateDatasetInput,
   UpdateDatasetInput,
   AddDatasetItemInput,
@@ -34,9 +13,32 @@ import type {
   ListDatasetVersionsOutput,
   BatchInsertItemsInput,
   BatchDeleteItemsInput,
-  CreateIndexOptions,
-  TargetType,
 } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  TABLE_DATASETS,
+  TABLE_DATASET_ITEMS,
+  TABLE_DATASET_VERSIONS,
+  TABLE_EXPERIMENTS,
+  TABLE_EXPERIMENT_RESULTS,
+  TABLE_CONFIGS,
+  TABLE_SCHEMAS,
+  DATASETS_SCHEMA,
+  DATASET_ITEMS_SCHEMA,
+  DATASET_VERSIONS_SCHEMA,
+  calculatePagination,
+  normalizePerPage,
+  safelyParseJSON,
+  ensureDate,
+} from '@mastra/storage';
+import type {
+  DatasetRecord,
+  DatasetItem,
+  DatasetItemRow,
+  DatasetVersion,
+  TargetType,
+  CreateIndexOptions,
+} from '@mastra/storage';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
@@ -89,10 +91,12 @@ export class DatasetsPG extends DatasetsStorage {
     await this.#db.createTable({ tableName: TABLE_DATASET_VERSIONS, schema: DATASET_VERSIONS_SCHEMA });
 
     // Migrate: add new columns to existing tables
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'version', 'INTEGER NOT NULL DEFAULT 0');
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'requestContextSchema', 'JSONB');
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'tags', 'JSONB');
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'targetType', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'targetIds', 'JSONB');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'datasetVersion', 'INTEGER NOT NULL DEFAULT 0');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'requestContext', 'JSONB');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'source', 'JSONB');
 
@@ -102,9 +106,26 @@ export class DatasetsPG extends DatasetsStorage {
 
   async #addColumnIfNotExists(table: string, column: string, sqlType: string): Promise<void> {
     const exists = await this.#db.hasColumn(table, column);
+    const fullTableName = getTableName({ indexName: table, schemaName: getSchemaName(this.#schema) });
+
     if (!exists) {
-      const fullTableName = getTableName({ indexName: table, schemaName: getSchemaName(this.#schema) });
       await this.#db.client.none(`ALTER TABLE ${fullTableName} ADD COLUMN "${column}" ${sqlType}`);
+    }
+
+    if (table === TABLE_DATASETS && column === 'version') {
+      await this.#db.client.none(`
+        ALTER TABLE ${fullTableName}
+        ALTER COLUMN "version" TYPE INTEGER
+        USING "version"::integer
+      `);
+    }
+
+    if (table === TABLE_DATASET_ITEMS && column === 'datasetVersion') {
+      await this.#db.client.none(`
+        ALTER TABLE ${fullTableName}
+        ALTER COLUMN "datasetVersion" TYPE INTEGER
+        USING "datasetVersion"::integer
+      `);
     }
   }
 
@@ -171,7 +192,7 @@ export class DatasetsPG extends DatasetsStorage {
       tags: row.tags ? safelyParseJSON(row.tags) : undefined,
       targetType: (row.targetType as TargetType) || null,
       targetIds: row.targetIds || null,
-      version: row.version as number,
+      version: Number(row.version),
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
       updatedAt: ensureDate(row.updatedAtZ || row.updatedAt)!,
     };
@@ -181,7 +202,7 @@ export class DatasetsPG extends DatasetsStorage {
     return {
       id: row.id as string,
       datasetId: row.datasetId as string,
-      datasetVersion: row.datasetVersion as number,
+      datasetVersion: Number(row.datasetVersion),
       input: safelyParseJSON(row.input),
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
       requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
@@ -196,8 +217,8 @@ export class DatasetsPG extends DatasetsStorage {
     return {
       id: row.id as string,
       datasetId: row.datasetId as string,
-      datasetVersion: row.datasetVersion as number,
-      validTo: row.validTo as number | null,
+      datasetVersion: Number(row.datasetVersion),
+      validTo: row.validTo != null ? Number(row.validTo) : null,
       isDeleted: Boolean(row.isDeleted),
       input: safelyParseJSON(row.input),
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
@@ -213,7 +234,7 @@ export class DatasetsPG extends DatasetsStorage {
     return {
       id: row.id as string,
       datasetId: row.datasetId as string,
-      version: row.version as number,
+      version: Number(row.version),
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
     };
   }
@@ -493,7 +514,7 @@ export class DatasetsPG extends DatasetsStorage {
           `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version"`,
           [args.datasetId],
         );
-        newVersion = row.version as number;
+        newVersion = Number(row.version);
 
         await t.none(
           `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,false,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
@@ -590,7 +611,7 @@ export class DatasetsPG extends DatasetsStorage {
           `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version"`,
           [args.datasetId],
         );
-        newVersion = row.version as number;
+        newVersion = Number(row.version);
 
         // 2. Close old row (set validTo = newVersion)
         await t.none(
@@ -676,7 +697,7 @@ export class DatasetsPG extends DatasetsStorage {
           `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version"`,
           [datasetId],
         );
-        const newVersion = row.version as number;
+        const newVersion = Number(row.version);
 
         // 2. Close old row
         await t.none(
@@ -756,7 +777,7 @@ export class DatasetsPG extends DatasetsStorage {
           `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version"`,
           [input.datasetId],
         );
-        newVersion = row.version as number;
+        newVersion = Number(row.version);
 
         // 2. N item inserts
         for (const { id, input: itemInput } of itemsWithIds) {
@@ -849,7 +870,7 @@ export class DatasetsPG extends DatasetsStorage {
           `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version"`,
           [input.datasetId],
         );
-        const newVersion = row.version as number;
+        const newVersion = Number(row.version);
 
         // 2. For each item: close old row + insert tombstone
         for (const item of currentItems) {

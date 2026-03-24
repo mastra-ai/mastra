@@ -1,20 +1,11 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  ScorerDefinitionsStorage,
-  createStorageErrorId,
-  normalizePerPage,
-  calculatePagination,
-  TABLE_SCORER_DEFINITIONS,
-  TABLE_SCORER_DEFINITION_VERSIONS,
-  TABLE_SCHEMAS,
-} from '@mastra/core/storage';
+import { ScorerDefinitionsStorage } from '@mastra/core/storage';
 import type {
   StorageScorerDefinitionType,
   StorageCreateScorerDefinitionInput,
   StorageUpdateScorerDefinitionInput,
   StorageListScorerDefinitionsInput,
   StorageListScorerDefinitionsOutput,
-  CreateIndexOptions,
 } from '@mastra/core/storage';
 import type {
   ScorerDefinitionVersion,
@@ -22,7 +13,16 @@ import type {
   ListScorerDefinitionVersionsInput,
   ListScorerDefinitionVersionsOutput,
 } from '@mastra/core/storage/domains/scorer-definitions';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import {
+  createStorageErrorId,
+  normalizePerPage,
+  calculatePagination,
+  TABLE_SCORER_DEFINITIONS,
+  TABLE_SCORER_DEFINITION_VERSIONS,
+  TABLE_SCHEMAS,
+} from '@mastra/storage';
+import type { CreateIndexOptions } from '@mastra/storage';
+import { parseSqlIdentifier } from '@mastra/storage/sql';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';

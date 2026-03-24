@@ -1,27 +1,7 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  createStorageErrorId,
-  TABLE_DATASETS,
-  TABLE_DATASET_ITEMS,
-  TABLE_DATASET_VERSIONS,
-  TABLE_EXPERIMENTS,
-  TABLE_EXPERIMENT_RESULTS,
-  DATASETS_SCHEMA,
-  DATASET_ITEMS_SCHEMA,
-  DATASET_VERSIONS_SCHEMA,
-  DatasetsStorage,
-  calculatePagination,
-  normalizePerPage,
-  safelyParseJSON,
-  ensureDate,
-} from '@mastra/core/storage';
+import { DatasetsStorage } from '@mastra/core/storage';
 import type {
-  DatasetRecord,
-  DatasetItem,
-  DatasetItemRow,
-  DatasetVersion,
-  TargetType,
   CreateDatasetInput,
   UpdateDatasetInput,
   AddDatasetItemInput,
@@ -35,6 +15,22 @@ import type {
   BatchInsertItemsInput,
   BatchDeleteItemsInput,
 } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  TABLE_DATASETS,
+  TABLE_DATASET_ITEMS,
+  TABLE_DATASET_VERSIONS,
+  TABLE_EXPERIMENTS,
+  TABLE_EXPERIMENT_RESULTS,
+  DATASETS_SCHEMA,
+  DATASET_ITEMS_SCHEMA,
+  DATASET_VERSIONS_SCHEMA,
+  calculatePagination,
+  normalizePerPage,
+  safelyParseJSON,
+  ensureDate,
+} from '@mastra/storage';
+import type { DatasetRecord, DatasetItem, DatasetItemRow, DatasetVersion, TargetType } from '@mastra/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
@@ -121,7 +117,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
       tags: row.tags ? safelyParseJSON(row.tags) : undefined,
       targetType: (row.targetType as TargetType) || undefined,
       targetIds: row.targetIds ? safelyParseJSON(row.targetIds) : undefined,
-      version: row.version as number,
+      version: Number(row.version),
       createdAt: ensureDate(row.createdAt)!,
       updatedAt: ensureDate(row.updatedAt)!,
     };
@@ -131,7 +127,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     return {
       id: row.id as string,
       datasetId: row.datasetId as string,
-      datasetVersion: row.datasetVersion as number,
+      datasetVersion: Number(row.datasetVersion),
       input: safelyParseJSON(row.input),
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
       requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
@@ -146,8 +142,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
     return {
       id: row.id as string,
       datasetId: row.datasetId as string,
-      datasetVersion: row.datasetVersion as number,
-      validTo: row.validTo as number | null,
+      datasetVersion: Number(row.datasetVersion),
+      validTo: row.validTo != null ? Number(row.validTo) : null,
       isDeleted: Boolean(row.isDeleted),
       input: safelyParseJSON(row.input),
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
@@ -163,7 +159,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     return {
       id: row.id as string,
       datasetId: row.datasetId as string,
-      version: row.version as number,
+      version: Number(row.version),
       createdAt: ensureDate(row.createdAt)!,
     };
   }

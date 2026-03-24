@@ -1,14 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  ScorerDefinitionsStorage,
-  createStorageErrorId,
-  TABLE_SCORER_DEFINITIONS,
-  TABLE_SCORER_DEFINITION_VERSIONS,
-  normalizePerPage,
-  calculatePagination,
-} from '@mastra/core/storage';
+import { ScorerDefinitionsStorage } from '@mastra/core/storage';
 import type {
   StorageScorerDefinitionType,
   StorageCreateScorerDefinitionInput,
@@ -22,6 +15,13 @@ import type {
   ListScorerDefinitionVersionsInput,
   ListScorerDefinitionVersionsOutput,
 } from '@mastra/core/storage/domains/scorer-definitions';
+import {
+  createStorageErrorId,
+  TABLE_SCORER_DEFINITIONS,
+  TABLE_SCORER_DEFINITION_VERSIONS,
+  normalizePerPage,
+  calculatePagination,
+} from '@mastra/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';

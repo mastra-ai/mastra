@@ -6,15 +6,9 @@ import {
   TABLE_SPANS,
   TABLE_SCHEMAS,
   getDefaultValue,
-} from '@mastra/core/storage';
-import type {
-  StorageColumn,
-  TABLE_NAMES,
-  CreateIndexOptions,
-  IndexInfo,
-  StorageIndexStats,
-} from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+} from '@mastra/storage';
+import type { StorageColumn, TABLE_NAMES, CreateIndexOptions, IndexInfo, StorageIndexStats } from '@mastra/storage';
+import { parseSqlIdentifier } from '@mastra/storage/sql';
 import sql from 'mssql';
 import { getSchemaName, getTableName } from './utils';
 

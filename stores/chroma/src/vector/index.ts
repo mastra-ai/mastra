@@ -1,5 +1,4 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector, validateUpsert, validateTopK } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -13,6 +12,7 @@ import type {
   UpdateVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
+import { createVectorErrorId } from '@mastra/storage';
 import { ChromaClient, CloudClient } from 'chromadb';
 import type { ChromaClientArgs, RecordSet, Where, WhereDocument, Collection, Metadata, Search } from 'chromadb';
 import type { ChromaVectorFilter } from './filter';

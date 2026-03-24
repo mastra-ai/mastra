@@ -1,5 +1,6 @@
 import { createSampleThread } from '@internal/storage-test-utils';
-import type { MemoryStorage, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import type { MemoryStorage } from '@mastra/core/storage';
+import type { StorageColumn, TABLE_NAMES } from '@mastra/storage';
 import { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { PostgresStoreConfig } from '../shared/config';

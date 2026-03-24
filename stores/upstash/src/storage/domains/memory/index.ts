@@ -2,8 +2,17 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
+import { MemoryStorage } from '@mastra/core/storage';
+import type {
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
+  StorageCloneThreadInput,
+  StorageCloneThreadOutput,
+  ThreadCloneMetadata,
+} from '@mastra/core/storage';
 import {
-  MemoryStorage,
   TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_MESSAGES,
@@ -12,19 +21,8 @@ import {
   createStorageErrorId,
   ensureDate,
   filterByDateRange,
-} from '@mastra/core/storage';
-import type {
-  StorageResourceType,
-  StorageListMessagesInput,
-  StorageListMessagesOutput,
-  StorageListThreadsInput,
-  StorageListThreadsOutput,
-  ThreadOrderBy,
-  ThreadSortDirection,
-  StorageCloneThreadInput,
-  StorageCloneThreadOutput,
-  ThreadCloneMetadata,
-} from '@mastra/core/storage';
+} from '@mastra/storage';
+import type { StorageResourceType, ThreadOrderBy, ThreadSortDirection } from '@mastra/storage';
 import type { Redis } from '@upstash/redis';
 import { UpstashDB, resolveUpstashConfig } from '../../db';
 import type { UpstashDomainConfig } from '../../db';

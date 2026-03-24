@@ -1,20 +1,11 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  MCPServersStorage,
-  createStorageErrorId,
-  normalizePerPage,
-  calculatePagination,
-  TABLE_MCP_SERVERS,
-  TABLE_MCP_SERVER_VERSIONS,
-  TABLE_SCHEMAS,
-} from '@mastra/core/storage';
+import { MCPServersStorage } from '@mastra/core/storage';
 import type {
   StorageMCPServerType,
   StorageCreateMCPServerInput,
   StorageUpdateMCPServerInput,
   StorageListMCPServersInput,
   StorageListMCPServersOutput,
-  CreateIndexOptions,
 } from '@mastra/core/storage';
 import type {
   MCPServerVersion,
@@ -22,6 +13,15 @@ import type {
   ListMCPServerVersionsInput,
   ListMCPServerVersionsOutput,
 } from '@mastra/core/storage/domains/mcp-servers';
+import {
+  createStorageErrorId,
+  normalizePerPage,
+  calculatePagination,
+  TABLE_MCP_SERVERS,
+  TABLE_MCP_SERVER_VERSIONS,
+  TABLE_SCHEMAS,
+} from '@mastra/storage';
+import type { CreateIndexOptions } from '@mastra/storage';
 import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';

@@ -6,7 +6,7 @@ import {
   createStoreIndexTests,
   createDomainIndexTests,
 } from '@internal/storage-test-utils';
-import { TABLE_THREADS } from '@mastra/core/storage';
+import { TABLE_THREADS } from '@mastra/storage';
 import sql from 'mssql';
 import { describe, expect, it, vi } from 'vitest';
 

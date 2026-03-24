@@ -2,7 +2,8 @@ import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageDomains } from '@mastra/core/storage';
-import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
+import { MastraCompositeStore } from '@mastra/core/storage';
+import { createStorageErrorId } from '@mastra/storage';
 
 import type { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';

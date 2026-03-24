@@ -1,20 +1,11 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  SkillsStorage,
-  createStorageErrorId,
-  normalizePerPage,
-  calculatePagination,
-  TABLE_SKILLS,
-  TABLE_SKILL_VERSIONS,
-  TABLE_SCHEMAS,
-} from '@mastra/core/storage';
+import { SkillsStorage } from '@mastra/core/storage';
 import type {
   StorageSkillType,
   StorageCreateSkillInput,
   StorageUpdateSkillInput,
   StorageListSkillsInput,
   StorageListSkillsOutput,
-  CreateIndexOptions,
 } from '@mastra/core/storage';
 import type {
   SkillVersion,
@@ -22,6 +13,15 @@ import type {
   ListSkillVersionsInput,
   ListSkillVersionsOutput,
 } from '@mastra/core/storage/domains/skills';
+import {
+  createStorageErrorId,
+  normalizePerPage,
+  calculatePagination,
+  TABLE_SKILLS,
+  TABLE_SKILL_VERSIONS,
+  TABLE_SCHEMAS,
+} from '@mastra/storage';
+import type { CreateIndexOptions } from '@mastra/storage';
 import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';

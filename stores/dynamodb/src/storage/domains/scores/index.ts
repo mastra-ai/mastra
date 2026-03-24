@@ -1,15 +1,15 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
+import { ScoresStorage } from '@mastra/core/storage';
 import {
   createStorageErrorId,
   SCORERS_SCHEMA,
-  ScoresStorage,
   calculatePagination,
   normalizePerPage,
   TABLE_SCORERS,
-} from '@mastra/core/storage';
-import type { StoragePagination } from '@mastra/core/storage';
+} from '@mastra/storage';
+import type { StoragePagination } from '@mastra/storage';
 import type { Service } from 'electrodb';
 import { resolveDynamoDBConfig } from '../../db';
 import type { DynamoDBDomainConfig } from '../../db';

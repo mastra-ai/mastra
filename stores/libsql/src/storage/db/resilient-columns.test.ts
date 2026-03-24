@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client';
-import { TABLE_SCHEMAS } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
+import { TABLE_SCHEMAS } from '@mastra/storage';
+import type { TABLE_NAMES, StorageColumn } from '@mastra/storage';
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { LibSQLDB } from './index';

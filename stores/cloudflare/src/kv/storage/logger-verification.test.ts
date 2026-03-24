@@ -9,7 +9,7 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
-} from '@mastra/core/storage';
+} from '@mastra/storage';
 import { Miniflare } from 'miniflare';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CloudflareStore } from '..';

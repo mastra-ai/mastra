@@ -13,7 +13,7 @@ vi.mock('@mastra/core/error', () => ({
   },
 }));
 
-vi.mock('@mastra/core/utils', () => ({
+vi.mock('@mastra/storage/sql', () => ({
   parseSqlIdentifier: (name: string) => name,
 }));
 

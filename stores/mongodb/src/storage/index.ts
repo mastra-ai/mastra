@@ -1,6 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageDomains } from '@mastra/core/storage';
-import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
+import { MastraCompositeStore } from '@mastra/core/storage';
+import { createStorageErrorId } from '@mastra/storage';
 import type { MongoDBConnector } from './connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from './db';
 import { MongoDBAgentsStorage } from './domains/agents';

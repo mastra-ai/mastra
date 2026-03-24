@@ -1,4 +1,4 @@
-import { TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS } from '@mastra/core/storage';
+import { TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS } from '@mastra/storage';
 import { describe, it, expect } from 'vitest';
 
 import { POSTGRES_IDENTIFIER_MAX_LENGTH, truncateIdentifier, buildConstraintName } from './constraint-utils';

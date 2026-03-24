@@ -8,8 +8,8 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
-} from '@mastra/core/storage';
-import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+} from '@mastra/storage';
+import type { StorageColumn, TABLE_NAMES } from '@mastra/storage';
 import Cloudflare from 'cloudflare';
 import type { CloudflareDomainConfig, ListOptions, RecordTypes } from '../types';
 

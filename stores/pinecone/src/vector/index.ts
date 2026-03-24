@@ -1,5 +1,4 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -12,6 +11,7 @@ import type {
   DeleteVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
+import { createVectorErrorId } from '@mastra/storage';
 import { Pinecone } from '@pinecone-database/pinecone';
 import type {
   IndexStatsDescription,

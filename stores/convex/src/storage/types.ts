@@ -1,4 +1,4 @@
-import type { TABLE_NAMES } from '@mastra/core/storage';
+import type { TABLE_NAMES } from '@mastra/storage';
 
 export type EqualityFilter = {
   field: string;

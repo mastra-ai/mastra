@@ -1,0 +1,30 @@
+export enum EntityType {
+  AGENT = 'agent',
+  EVAL = 'eval',
+  INPUT_PROCESSOR = 'input_processor',
+  INPUT_STEP_PROCESSOR = 'input_step_processor',
+  OUTPUT_PROCESSOR = 'output_processor',
+  OUTPUT_STEP_PROCESSOR = 'output_step_processor',
+  TOOL = 'tool',
+  WORKFLOW_RUN = 'workflow_run',
+  WORKFLOW_STEP = 'workflow_step',
+}
+
+export enum SpanType {
+  AGENT_RUN = 'agent_run',
+  GENERIC = 'generic',
+  MODEL_GENERATION = 'model_generation',
+  MODEL_STEP = 'model_step',
+  MODEL_CHUNK = 'model_chunk',
+  MCP_TOOL_CALL = 'mcp_tool_call',
+  PROCESSOR_RUN = 'processor_run',
+  TOOL_CALL = 'tool_call',
+  WORKFLOW_RUN = 'workflow_run',
+  WORKFLOW_STEP = 'workflow_step',
+  WORKFLOW_CONDITIONAL = 'workflow_conditional',
+  WORKFLOW_CONDITIONAL_EVAL = 'workflow_conditional_eval',
+  WORKFLOW_PARALLEL = 'workflow_parallel',
+  WORKFLOW_LOOP = 'workflow_loop',
+  WORKFLOW_SLEEP = 'workflow_sleep',
+  WORKFLOW_WAIT_EVENT = 'workflow_wait_event',
+}

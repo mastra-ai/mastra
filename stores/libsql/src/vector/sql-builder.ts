@@ -1,5 +1,4 @@
 import type { InValue } from '@libsql/client';
-import { parseFieldKey } from '@mastra/core/utils';
 import type {
   BasicOperator,
   NumericOperator,
@@ -7,6 +6,7 @@ import type {
   ElementOperator,
   LogicalOperator,
 } from '@mastra/core/vector/filter';
+import { parseFieldKey } from '@mastra/storage/sql';
 import type { LibSQLVectorFilter } from './filter';
 
 type OperatorType =

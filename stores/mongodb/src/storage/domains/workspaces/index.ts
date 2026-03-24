@@ -1,14 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  WorkspacesStorage,
-  createStorageErrorId,
-  TABLE_WORKSPACES,
-  TABLE_WORKSPACE_VERSIONS,
-  normalizePerPage,
-  calculatePagination,
-} from '@mastra/core/storage';
+import { WorkspacesStorage } from '@mastra/core/storage';
 import type {
   StorageWorkspaceType,
   StorageCreateWorkspaceInput,
@@ -22,6 +15,13 @@ import type {
   ListWorkspaceVersionsInput,
   ListWorkspaceVersionsOutput,
 } from '@mastra/core/storage/domains/workspaces';
+import {
+  createStorageErrorId,
+  TABLE_WORKSPACES,
+  TABLE_WORKSPACE_VERSIONS,
+  normalizePerPage,
+  calculatePagination,
+} from '@mastra/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';

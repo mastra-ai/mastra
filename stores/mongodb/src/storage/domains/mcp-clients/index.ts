@@ -1,14 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  MCPClientsStorage,
-  createStorageErrorId,
-  TABLE_MCP_CLIENTS,
-  TABLE_MCP_CLIENT_VERSIONS,
-  normalizePerPage,
-  calculatePagination,
-} from '@mastra/core/storage';
+import { MCPClientsStorage } from '@mastra/core/storage';
 import type {
   StorageMCPClientType,
   StorageCreateMCPClientInput,
@@ -22,6 +15,13 @@ import type {
   ListMCPClientVersionsInput,
   ListMCPClientVersionsOutput,
 } from '@mastra/core/storage/domains/mcp-clients';
+import {
+  createStorageErrorId,
+  TABLE_MCP_CLIENTS,
+  TABLE_MCP_CLIENT_VERSIONS,
+  normalizePerPage,
+  calculatePagination,
+} from '@mastra/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';

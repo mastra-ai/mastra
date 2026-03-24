@@ -1,17 +1,17 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { StoragePagination, CreateIndexOptions } from '@mastra/core/storage';
+import { ScoresStorage } from '@mastra/core/storage';
+import type { StoragePagination, CreateIndexOptions } from '@mastra/storage';
 import {
   calculatePagination,
   createStorageErrorId,
   normalizePerPage,
-  ScoresStorage,
   TABLE_SCORERS,
   TABLE_SCHEMAS,
   transformScoreRow as coreTransformScoreRow,
-} from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+} from '@mastra/storage';
+import { parseSqlIdentifier } from '@mastra/storage/sql';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 
@@ -303,15 +303,15 @@ export class ScoresPG extends ScoresStorage {
         record: {
           id,
           ...rest,
-          input: JSON.stringify(input) || '',
-          output: JSON.stringify(output) || '',
-          scorer: scorer ? JSON.stringify(scorer) : null,
-          preprocessStepResult: preprocessStepResult ? JSON.stringify(preprocessStepResult) : null,
-          analyzeStepResult: analyzeStepResult ? JSON.stringify(analyzeStepResult) : null,
-          metadata: metadata ? JSON.stringify(metadata) : null,
-          additionalContext: additionalContext ? JSON.stringify(additionalContext) : null,
-          requestContext: requestContext ? JSON.stringify(requestContext) : null,
-          entity: entity ? JSON.stringify(entity) : null,
+          input,
+          output,
+          scorer: scorer ?? null,
+          preprocessStepResult: preprocessStepResult ?? null,
+          analyzeStepResult: analyzeStepResult ?? null,
+          metadata: metadata ?? null,
+          additionalContext: additionalContext ?? null,
+          requestContext: requestContext ?? null,
+          entity: entity ?? null,
           createdAt: now.toISOString(),
           updatedAt: now.toISOString(),
         },

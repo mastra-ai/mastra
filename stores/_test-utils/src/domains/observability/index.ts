@@ -1,5 +1,7 @@
-import { MastraStorage, TraceStatus } from '@mastra/core/storage';
-import type { ObservabilityStorage, SpanRecord, TraceSpan } from '@mastra/core/storage';
+import { MastraStorage } from '@mastra/core/storage';
+import { TraceStatus } from '@mastra/storage';
+import type { ObservabilityStorage } from '@mastra/core/storage';
+import type { SpanRecord, TraceSpan } from '@mastra/storage';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createSpan, createChildSpan, SpanType, EntityType, DEFAULT_BASE_DATE } from './data';
 

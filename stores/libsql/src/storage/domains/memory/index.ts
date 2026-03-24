@@ -5,7 +5,6 @@ import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
-  StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesByResourceIdInput,
   StorageListMessagesOutput,
@@ -25,16 +24,17 @@ import type {
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
 } from '@mastra/core/storage';
+import { MemoryStorage } from '@mastra/core/storage';
 import {
   createStorageErrorId,
-  MemoryStorage,
   normalizePerPage,
   calculatePagination,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_SCHEMAS,
-} from '@mastra/core/storage';
+} from '@mastra/storage';
+import type { StorageResourceType } from '@mastra/storage';
 
 /**
  * Local constant for the observational memory table name.
@@ -42,7 +42,7 @@ import {
  * versions that don't export TABLE_OBSERVATIONAL_MEMORY.
  */
 const OM_TABLE = 'mastra_observational_memory' as const;
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { parseSqlIdentifier } from '@mastra/storage/sql';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
@@ -65,13 +65,13 @@ export class MemoryLibSQL extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
 
-    // Dynamically import OM schema to avoid crashing on older @mastra/core versions
+    // Dynamically import OM schema to keep the static dependency surface minimal.
     let omSchema: Record<string, any> | undefined;
     try {
-      const { OBSERVATIONAL_MEMORY_TABLE_SCHEMA } = await import('@mastra/core/storage');
+      const { OBSERVATIONAL_MEMORY_TABLE_SCHEMA } = await import('@mastra/storage');
       omSchema = OBSERVATIONAL_MEMORY_TABLE_SCHEMA?.[OM_TABLE];
     } catch {
-      // Older @mastra/core without OM support
+      // OM schema not available
     }
 
     if (omSchema) {

@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId } from '@mastra/core/storage';
+import { createStorageErrorId } from '@mastra/storage';
 import { MongoDBConnector } from '../connectors/MongoDBConnector';
 import type { MongoDBConfig, MongoDBDomainConfig } from '../types';
 

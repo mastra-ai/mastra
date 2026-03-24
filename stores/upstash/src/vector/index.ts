@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   CreateIndexParams,
@@ -12,6 +11,7 @@ import type {
   DeleteVectorsParams,
   UpdateVectorParams,
 } from '@mastra/core/vector';
+import { createVectorErrorId } from '@mastra/storage';
 import { Index } from '@upstash/vector';
 
 import { UpstashFilterTranslator } from './filter';

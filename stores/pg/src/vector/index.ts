@@ -1,6 +1,4 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createVectorErrorId } from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
 import { MastraVector, validateUpsertInput, validateTopK } from '@mastra/core/vector';
 import type {
   IndexStats,
@@ -14,6 +12,8 @@ import type {
   DeleteVectorsParams,
   UpdateVectorParams,
 } from '@mastra/core/vector';
+import { createVectorErrorId } from '@mastra/storage';
+import { parseSqlIdentifier } from '@mastra/storage/sql';
 import { Mutex } from 'async-mutex';
 import * as pg from 'pg';
 import xxhash from 'xxhash-wasm';

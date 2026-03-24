@@ -1,6 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { BlobStore, createStorageErrorId, TABLE_SKILL_BLOBS } from '@mastra/core/storage';
+import { BlobStore } from '@mastra/core/storage';
 import type { StorageBlobEntry } from '@mastra/core/storage';
+import { createStorageErrorId, TABLE_SKILL_BLOBS } from '@mastra/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';

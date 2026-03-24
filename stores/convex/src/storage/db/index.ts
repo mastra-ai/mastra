@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
 
 import { MastraBase } from '@mastra/core/base';
-import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
-import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/storage';
+import type { StorageColumn, TABLE_NAMES } from '@mastra/storage';
 
 import { ConvexAdminClient } from '../client';
 import type { EqualityFilter, IndexHint } from '../types';

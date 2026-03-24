@@ -1,7 +1,6 @@
 import { DuckDBInstance } from '@duckdb/node-api';
 import type { DuckDBValue } from '@duckdb/node-api';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector, validateUpsertInput, validateTopK } from '@mastra/core/vector';
 import type {
   IndexStats,
@@ -15,6 +14,7 @@ import type {
   UpdateVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
+import { createVectorErrorId } from '@mastra/storage';
 import { buildFilterClause } from './filter-builder.js';
 import type { DuckDBVectorConfig, DuckDBVectorFilter } from './types.js';
 
