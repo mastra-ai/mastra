@@ -11170,16 +11170,6 @@ describe('Single-thread replay red tests', () => {
 });
 
 describe('ModelByInputTokens with ObservationalMemory', () => {
-  let om: ObservationalMemory;
-
-  beforeEach(async () => {});
-
-  afterEach(() => {
-    if (om) {
-      (om as any).abortController?.abort();
-    }
-  });
-
   it('should select observer model based on input token count', async () => {
     const modelSelector = new ModelByInputTokens({
       upTo: {
