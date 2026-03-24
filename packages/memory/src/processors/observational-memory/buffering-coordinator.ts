@@ -166,13 +166,18 @@ export class BufferingCoordinator {
       return;
     }
 
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
-        Promise.all(promises),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeoutMs)),
+        Promise.allSettled(promises).then(() => undefined),
+        new Promise<void>(resolve => {
+          timeoutId = setTimeout(resolve, timeoutMs);
+        }),
       ]);
-    } catch {
-      // Timeout or error - continue silently
+    } finally {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
     }
   }
 }

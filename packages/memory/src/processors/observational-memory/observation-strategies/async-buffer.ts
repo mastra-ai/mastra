@@ -108,6 +108,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
         lastObservedAt: processed.lastObservedAt,
         suggestedContinuation: processed.suggestedContinuation,
         currentTask: processed.currentTask,
+        threadTitle: processed.threadTitle,
       },
       lastBufferedAtTime: processed.lastObservedAt,
     });

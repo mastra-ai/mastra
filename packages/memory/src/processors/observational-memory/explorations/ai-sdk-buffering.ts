@@ -172,13 +172,7 @@ async function runTurn(opts: {
     stopWhen: stepCountIs(4),
     system: ctx.systemMessage,
     tools: { get_weather: weatherTool },
-    messages: [
-      ...ctx.messages.map(toAiSdkMessage),
-      {
-        role: 'user',
-        content: `${userPrompt} Use tools if needed, then always end with a concise final answer.`,
-      },
-    ],
+    messages: ctx.messages.map(toAiSdkMessage),
     onFinish: async event => {
       // Persist all response messages (tool calls, tool results, assistant text)
       const responseMessages = convertMessages(event.response.messages)
