@@ -8,6 +8,7 @@ export * from './domains/prompt-blocks/index';
 export * from './domains/tools/index';
 export * from './domains/workflows/index';
 export * from './domains/templates/index';
+export * from './domains/metrics/index';
 export * from './domains/observability/index';
 export * from './domains/datasets/index';
 export * from './ds/components/Threads';
@@ -87,6 +88,10 @@ export * from './ds/components/ItemList';
 export * from './ds/components/Notice';
 export * from './ds/components/Chip';
 export * from './ds/components/Tree';
+export * from './ds/components/EntityList';
+export * from './ds/components/EntityListPageLayout';
+export * from './ds/components/ListSearch';
+export * from './ds/components/ErrorState';
 
 // Form utilities (AutoForm)
 export * from './lib/form';

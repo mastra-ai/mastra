@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -28,7 +29,8 @@ const OM_TABLE = 'mastra_observational_memory' as const;
  */
 let _omTableSchema: Record<string, Record<string, any>> | undefined;
 try {
-  const storage = require('@mastra/core/storage');
+  const __require = typeof require === 'function' ? require : createRequire(import.meta.url);
+  const storage = __require('@mastra/core/storage');
   _omTableSchema = storage.OBSERVATIONAL_MEMORY_TABLE_SCHEMA;
 } catch {
   // OM not available in this version of core
@@ -1182,7 +1184,8 @@ export class MemoryPG extends MemoryStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
       await this.#db.client.tx(async t => {
-        const messageInserts = messages.map(message => {
+        // Insert messages sequentially to avoid concurrent queries on the same pg client
+        for (const message of messages) {
           if (!message.threadId) {
             throw new Error(
               `Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`,
@@ -1193,7 +1196,7 @@ export class MemoryPG extends MemoryStorage {
               `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
             );
           }
-          return t.none(
+          await t.none(
             `INSERT INTO ${tableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              ON CONFLICT (id) DO UPDATE SET
@@ -1213,21 +1216,19 @@ export class MemoryPG extends MemoryStorage {
               message.resourceId,
             ],
           );
-        });
+        }
 
+        // Update thread timestamp
         const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
         const nowStr = new Date().toISOString();
-        const threadUpdate = t.none(
+        await t.none(
           `UPDATE ${threadTableName}
-                        SET
-                            "updatedAt" = $1,
-                            "updatedAtZ" = $2
-                        WHERE id = $3
-                    `,
+            SET
+              "updatedAt" = $1,
+              "updatedAtZ" = $2
+            WHERE id = $3`,
           [nowStr, nowStr, threadId],
         );
-
-        await Promise.all([...messageInserts, threadUpdate]);
       });
 
       const messagesWithParsedContent = messages.map(message => {
@@ -1404,10 +1405,10 @@ export class MemoryPG extends MemoryStorage {
         await t.none(`DELETE FROM ${messageTableName} WHERE id IN (${placeholders})`, messageIds);
 
         if (threadIds.length > 0) {
-          const updatePromises = threadIds.map(threadId =>
-            t.none(`UPDATE ${threadTableName} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id = $1`, [threadId]),
+          await t.none(
+            `UPDATE ${threadTableName} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id IN (${inPlaceholders(threadIds.length)})`,
+            threadIds,
           );
-          await Promise.all(updatePromises);
         }
       });
     } catch (error) {
@@ -2548,12 +2549,13 @@ export class MemoryPG extends MemoryStorage {
       // With streaming, messages grow after buffering, so we rely on lastObservedAt for filtering.
       // New content after lastObservedAt will be picked up in subsequent observations.
 
-      // Atomic update
+      // Atomic update — include message boundary delimiter for cache stability
+      const boundary = `\n\n--- message boundary (${lastObservedAt.toISOString()}) ---\n\n`;
       await this.#db.client.query(
         `UPDATE ${tableName} SET
           "activeObservations" = CASE 
             WHEN "activeObservations" IS NOT NULL AND "activeObservations" != '' 
-            THEN "activeObservations" || E'\\n\\n' || $1
+            THEN "activeObservations" || $10 || $1
             ELSE $1
           END,
           "observationTokenCount" = COALESCE("observationTokenCount", 0) + $2,
@@ -2574,6 +2576,7 @@ export class MemoryPG extends MemoryStorage {
           nowStr,
           nowStr,
           input.id,
+          boundary,
         ],
       );
 

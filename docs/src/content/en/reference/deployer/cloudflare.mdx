@@ -37,7 +37,6 @@ export const mastra = new Mastra({
     ],
     vars: {
       NODE_ENV: 'production',
-      API_KEY: '<api-key>',
     },
     d1_databases: [
       {
@@ -60,6 +59,18 @@ export const mastra = new Mastra({
 ## Constructor options
 
 The `CloudflareDeployer` constructor accepts the same configuration options as `wrangler.jsonc`. See the [Wrangler configuration documentation](https://developers.cloudflare.com/workers/wrangler/configuration/) for all available options.
+
+## Secrets
+
+Environment variables from your `.env` file are **not** written to `wrangler.jsonc`. This prevents secrets from being committed to source control.
+
+To make your `.env` secrets available to your Cloudflare Worker, upload them as [Cloudflare Secrets](https://developers.cloudflare.com/workers/configuration/secrets/):
+
+```bash
+npx wrangler secret bulk .env
+```
+
+Use `vars` in the `CloudflareDeployer` constructor only for non-sensitive configuration values like `NODE_ENV`.
 
 ## Build output
 

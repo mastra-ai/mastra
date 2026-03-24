@@ -24,8 +24,7 @@ export function createReconnectionTests(getContext: () => TestContext): void {
       it(
         'getInfo returns sandbox id for reconnection',
         async () => {
-          const { sandbox, capabilities } = getContext();
-          if (!capabilities.supportsReconnection) return;
+          const { sandbox } = getContext();
           if (!sandbox.getInfo) return;
 
           const info = await sandbox.getInfo();
@@ -41,8 +40,7 @@ export function createReconnectionTests(getContext: () => TestContext): void {
       it(
         'sandbox id is consistent after stop/start',
         async () => {
-          const { sandbox, capabilities } = getContext();
-          if (!capabilities.supportsReconnection) return;
+          const { sandbox } = getContext();
 
           const originalId = sandbox.id;
 
@@ -61,9 +59,7 @@ export function createReconnectionTests(getContext: () => TestContext): void {
       it(
         'files persist after stop/start',
         async () => {
-          const { sandbox, capabilities } = getContext();
-          if (!capabilities.supportsReconnection) return;
-
+          const { sandbox } = getContext();
           if (!sandbox.executeCommand) return;
 
           // Create a file
@@ -93,9 +89,7 @@ export function createReconnectionTests(getContext: () => TestContext): void {
       it(
         'environment is preserved after reconnection',
         async () => {
-          const { sandbox, capabilities } = getContext();
-          if (!capabilities.supportsReconnection) return;
-
+          const { sandbox } = getContext();
           if (!sandbox.executeCommand) return;
 
           // Stop and restart
@@ -112,17 +106,15 @@ export function createReconnectionTests(getContext: () => TestContext): void {
     });
 
     describe('Mount Preservation', () => {
-      it(
+      const { createMountableFilesystem } = getContext();
+
+      it.skipIf(!createMountableFilesystem)(
         'mounts are tracked after reconnection',
         async () => {
-          const { sandbox, capabilities, createMountableFilesystem } = getContext();
-          if (!capabilities.supportsReconnection) return;
-          if (!capabilities.supportsMounting) return;
-
+          const { sandbox, createMountableFilesystem: createFs } = getContext();
           if (!sandbox.mounts || !sandbox.mount) return;
-          if (!createMountableFilesystem) return;
 
-          const filesystem = await createMountableFilesystem();
+          const filesystem = await createFs!();
           if (!filesystem.getMountConfig) return;
 
           const mountPath = '/reconnect-mount-' + Date.now();
@@ -159,8 +151,7 @@ export function createReconnectionTests(getContext: () => TestContext): void {
       it(
         'ensureRunning auto-starts a stopped sandbox',
         async () => {
-          const { sandbox, capabilities } = getContext();
-          if (!capabilities.supportsReconnection) return;
+          const { sandbox } = getContext();
 
           // Stop the sandbox
           await sandbox._stop();
@@ -176,8 +167,7 @@ export function createReconnectionTests(getContext: () => TestContext): void {
       it(
         'executeCommand works after sandbox is stopped and auto-restarted',
         async () => {
-          const { sandbox, capabilities } = getContext();
-          if (!capabilities.supportsReconnection) return;
+          const { sandbox } = getContext();
           if (!sandbox.executeCommand) return;
 
           // Stop the sandbox
@@ -196,8 +186,7 @@ export function createReconnectionTests(getContext: () => TestContext): void {
       it(
         'multiple commands work after stop/auto-restart cycle',
         async () => {
-          const { sandbox, capabilities } = getContext();
-          if (!capabilities.supportsReconnection) return;
+          const { sandbox } = getContext();
           if (!sandbox.executeCommand) return;
 
           // Stop the sandbox
@@ -226,8 +215,7 @@ export function createReconnectionTests(getContext: () => TestContext): void {
       it(
         'survives multiple stop/start cycles',
         async () => {
-          const { sandbox, capabilities } = getContext();
-          if (!capabilities.supportsReconnection) return;
+          const { sandbox } = getContext();
           if (!sandbox.executeCommand) return;
 
           for (let i = 0; i < 3; i++) {
@@ -248,8 +236,7 @@ export function createReconnectionTests(getContext: () => TestContext): void {
       it(
         'concurrent stop calls are safe',
         async () => {
-          const { sandbox, capabilities } = getContext();
-          if (!capabilities.supportsReconnection) return;
+          const { sandbox } = getContext();
 
           // Fire multiple stop calls concurrently — should not throw
           await Promise.all([sandbox._stop(), sandbox._stop(), sandbox._stop()]);
@@ -266,8 +253,7 @@ export function createReconnectionTests(getContext: () => TestContext): void {
       it(
         'concurrent start calls after stop are safe',
         async () => {
-          const { sandbox, capabilities } = getContext();
-          if (!capabilities.supportsReconnection) return;
+          const { sandbox } = getContext();
 
           await sandbox._stop();
           expect(sandbox.status).toBe('stopped');
@@ -289,12 +275,12 @@ export function createReconnectionTests(getContext: () => TestContext): void {
     });
 
     describe('External Kill Recovery', () => {
-      it(
+      const { killSandboxExternally } = getContext();
+
+      it.skipIf(!killSandboxExternally)(
         'recovers from externally killed sandbox via retryOnDead',
         async () => {
-          const { sandbox, capabilities, killSandboxExternally } = getContext();
-          if (!capabilities.supportsReconnection) return;
-          if (!killSandboxExternally) return;
+          const { sandbox } = getContext();
           if (!sandbox.executeCommand) return;
 
           // Verify sandbox works
@@ -304,7 +290,7 @@ export function createReconnectionTests(getContext: () => TestContext): void {
 
           // Kill the sandbox externally — bypasses our wrapper's cleanup,
           // leaving a stale SDK reference that points to a dead sandbox
-          await killSandboxExternally(sandbox);
+          await killSandboxExternally!(sandbox);
 
           // Next command should hit a dead-sandbox error, trigger retryOnDead,
           // which calls handleSandboxTimeout() + ensureRunning() + retry
@@ -316,12 +302,10 @@ export function createReconnectionTests(getContext: () => TestContext): void {
         getContext().testTimeout * 3,
       );
 
-      it(
+      it.skipIf(!killSandboxExternally)(
         'recovers from externally killed sandbox during process spawn',
         async () => {
-          const { sandbox, capabilities, killSandboxExternally } = getContext();
-          if (!capabilities.supportsReconnection) return;
-          if (!killSandboxExternally) return;
+          const { sandbox } = getContext();
           if (!sandbox.processes) return;
 
           // Verify process manager works
@@ -330,7 +314,7 @@ export function createReconnectionTests(getContext: () => TestContext): void {
           expect(result.exitCode).toBe(0);
 
           // Kill externally
-          await killSandboxExternally(sandbox);
+          await killSandboxExternally!(sandbox);
 
           // Process spawn should trigger retryOnDead in the process manager
           const handle2 = await sandbox.processes.spawn('echo after');

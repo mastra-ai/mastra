@@ -8,7 +8,7 @@ import { stepCountIs, tool } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, mockId, mockValues } from '@internal/ai-sdk-v5/test';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 import type { loop } from '../loop';
 import type { ChunkType } from '../../stream/types';
 import {
@@ -2581,35 +2581,20 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     },
                     "parts": [
                       {
-                        "providerExecuted": undefined,
-                        "providerMetadata": undefined,
                         "toolInvocation": {
                           "args": {
                             "value": "value",
                           },
                           "result": "result1",
                           "state": "result",
-                          "step": undefined,
                           "toolCallId": "call-1",
                           "toolName": "tool1",
                         },
                         "type": "tool-invocation",
                       },
                     ],
-                    "toolInvocations": [
-                      {
-                        "args": {
-                          "value": "value",
-                        },
-                        "result": "result1",
-                        "state": "result",
-                        "step": undefined,
-                        "toolCallId": "call-1",
-                        "toolName": "tool1",
-                      },
-                    ],
                   },
-                  "createdAt": 2024-01-01T00:00:00.000Z,
+                  "createdAt": 2024-01-01T00:00:00.003Z,
                   "id": "msg-0",
                   "role": "assistant",
                 },

@@ -1,7 +1,7 @@
 import type { Handler, MiddlewareHandler, HonoRequest, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
-import type { ZodError } from 'zod';
+import type { ZodError } from 'zod/v4';
 import type { IRBACProvider } from '../auth/ee/interfaces/rbac';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
@@ -136,6 +136,25 @@ export type ServerConfig = {
    * @default 'localhost'
    */
   host?: string;
+  /**
+   * Host for Studio API URL. Use this when the server bind address
+   * differs from the public domain (e.g., binding to '0.0.0.0' but accessible at 'my-app.run.app').
+   * When not set, falls back to `host`.
+   */
+  studioHost?: string;
+  /**
+   * Protocol for Studio API URL ('http' or 'https').
+   * Use this when the public protocol differs from the server's local protocol
+   * (e.g., behind a TLS-terminating reverse proxy).
+   * When not set, falls back to auto-detected protocol based on HTTPS config.
+   */
+  studioProtocol?: 'http' | 'https';
+  /**
+   * Port for Studio API URL. Use this when the external port differs
+   * from the server's local port (e.g., server listens on 8080 but is exposed on 443).
+   * When not set, falls back to `port`.
+   */
+  studioPort?: number;
   /**
    * Base path for Mastra Studio UI
    * @default '/'

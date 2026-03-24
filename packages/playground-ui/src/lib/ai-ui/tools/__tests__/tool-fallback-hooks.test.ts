@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { describe, it, expect } from 'vitest';
 
 /**
  * Regression test for GitHub issue #12726

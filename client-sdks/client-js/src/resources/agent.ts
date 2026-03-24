@@ -18,8 +18,8 @@ import type { FullOutput, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodType } from 'zod/v3';
 import type {
+  ZodSchema,
   GenerateLegacyParams,
   GetAgentResponse,
   GetToolResponse,
@@ -45,6 +45,7 @@ import { BaseResource } from './base';
 async function executeToolCallAndRespond<OUTPUT>({
   response,
   params,
+  agentId,
   resourceId,
   threadId,
   requestContext,
@@ -52,6 +53,7 @@ async function executeToolCallAndRespond<OUTPUT>({
 }: {
   params: StreamParams<OUTPUT>;
   response: Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
+  agentId: string;
   resourceId?: string;
   threadId?: string;
   requestContext?: RequestContext<any>;
@@ -77,6 +79,7 @@ async function executeToolCallAndRespond<OUTPUT>({
           requestContext: requestContext as RequestContext,
           tracingContext: { currentSpan: undefined },
           agent: {
+            agentId,
             messages: (response as unknown as { messages: CoreMessage[] }).messages,
             toolCallId: toolCall?.payload.toolCallId,
             suspend: async () => {},
@@ -237,15 +240,15 @@ export class Agent extends BaseResource {
     params: GenerateLegacyParams<undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateReturn<any, undefined, undefined>>;
   // Use `any` in overload return types to avoid "Type instantiation is excessively deep" errors
-  async generateLegacy<Output extends JSONSchema7 | ZodType>(
+  async generateLegacy<Output extends JSONSchema7 | ZodSchema>(
     params: GenerateLegacyParams<Output> & { output: Output; experimental_output?: never },
   ): Promise<GenerateReturn<any, any, any>>;
-  async generateLegacy<StructuredOutput extends JSONSchema7 | ZodType>(
+  async generateLegacy<StructuredOutput extends JSONSchema7 | ZodSchema>(
     params: GenerateLegacyParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
   ): Promise<GenerateReturn<any, any, any>>;
   async generateLegacy<
-    Output extends JSONSchema7 | ZodType | undefined = undefined,
-    _StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
+    Output extends JSONSchema7 | ZodSchema | undefined = undefined,
+    _StructuredOutput extends JSONSchema7 | ZodSchema | undefined = undefined,
   >(params: GenerateLegacyParams<Output>): Promise<GenerateReturn<any, any, any>> {
     const processedParams = {
       ...params,
@@ -282,6 +285,7 @@ export class Agent extends BaseResource {
             requestContext: requestContext as RequestContext,
             tracingContext: { currentSpan: undefined },
             agent: {
+              agentId: this.agentId,
               messages: (response as unknown as { messages: CoreMessage[] }).messages,
               toolCallId: toolCall?.toolCallId,
               suspend: async () => {},
@@ -366,6 +370,7 @@ export class Agent extends BaseResource {
       return executeToolCallAndRespond<OUTPUT>({
         response,
         params,
+        agentId: this.agentId,
         resourceId,
         threadId,
         requestContext: requestContext as RequestContext<any>,
@@ -726,7 +731,7 @@ export class Agent extends BaseResource {
    * @param params - Stream parameters including prompt
    * @returns Promise containing the enhanced Response object with processDataStream method
    */
-  async streamLegacy<T extends JSONSchema7 | ZodType | undefined = undefined>(
+  async streamLegacy<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
     params: StreamLegacyParams<T>,
   ): Promise<
     Response & {
@@ -1216,6 +1221,7 @@ export class Agent extends BaseResource {
                   // TODO: Pass proper tracing context when client-js supports tracing
                   tracingContext: { currentSpan: undefined },
                   agent: {
+                    agentId: this.agentId,
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
                     toolCallId: toolCall?.toolCallId,
                     suspend: async () => {},
@@ -1757,6 +1763,7 @@ export class Agent extends BaseResource {
                   // TODO: Pass proper tracing context when client-js supports tracing
                   tracingContext: { currentSpan: undefined },
                   agent: {
+                    agentId: this.agentId,
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
                     toolCallId: toolCall?.toolCallId,
                     suspend: async () => {},

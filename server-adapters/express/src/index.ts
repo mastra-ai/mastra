@@ -13,6 +13,8 @@ import {
 } from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
+export { createAuthMiddleware } from './auth-middleware';
+export type { ExpressAuthMiddlewareOptions } from './auth-middleware';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
@@ -177,7 +179,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
   }
 
   async getParams(route: ServerRoute, request: Request): Promise<ParsedRequestParams> {
-    const urlParams = request.params;
+    const urlParams = request.params as Record<string, string>;
     // Express's req.query can contain string | string[] | ParsedQs | ParsedQs[]
     const queryParams = normalizeQueryParams(request.query as Record<string, unknown>);
     let body: unknown;

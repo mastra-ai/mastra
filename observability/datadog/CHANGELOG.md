@@ -1,5 +1,66 @@
 # @mastra/datadog
 
+## 1.0.9-alpha.0
+
+### Patch Changes
+
+- Fixed error info tags being recorded as [object Object] in Datadog. Error details (message, id, domain, category) are now stored as separate flattened tags (error.message, error.id, error.domain, error.category) instead of a nested object, making error information properly visible in Datadog LLM Observability. ([#14570](https://github.com/mastra-ai/mastra/pull/14570))
+
+- Updated dependencies [[`7dbd611`](https://github.com/mastra-ai/mastra/commit/7dbd611a85cb1e0c0a1581c57564268cb183d86e), [`41aee84`](https://github.com/mastra-ai/mastra/commit/41aee84561ceebe28bad1ecba8702d92838f67f0)]:
+  - @mastra/core@1.16.0-alpha.1
+
+## 1.0.8
+
+### Patch Changes
+
+- Fix cache token extraction in multi-step agent runs. Prefer AI SDK aggregated `inputTokenDetails` over `providerMetadata` (which only reflects the last step). Also fix truthiness checks to correctly handle zero values for cache and reasoning tokens. ([#14492](https://github.com/mastra-ai/mastra/pull/14492))
+
+  Fix Datadog metric keys to match dd-trace expected format: `cacheReadTokens`, `cacheWriteTokens`, `reasoningOutputTokens`.
+
+- Fixed span duration accuracy in Datadog LLM Observability traces. Previously, all spans in a trace appeared to have the same end time because dd-trace's `llmobs.trace()` does not honor `endTime` in span options. Now uses `ddSpan.finish()` to explicitly set each span's correct end time, so tools, LLM calls, and agent runs show their actual durations in Datadog. ([#14490](https://github.com/mastra-ai/mastra/pull/14490))
+
+- Updated dependencies [[`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5), [`da93115`](https://github.com/mastra-ai/mastra/commit/da931155c1a9bc63d455d3d86b4ec984db5991fe), [`62d1d3c`](https://github.com/mastra-ai/mastra/commit/62d1d3cc08fe8182e7080237fd975de862ec8c91), [`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`5ac24c4`](https://github.com/mastra-ai/mastra/commit/5ac24c4fa5275b9c837641d98ed1d988f6b7c327), [`8681ecb`](https://github.com/mastra-ai/mastra/commit/8681ecb86184d5907267000e4576cc442a9a83fc), [`4e699e0`](https://github.com/mastra-ai/mastra/commit/4e699e0c97a3991f9bbf793c78284149944f646a), [`28d0249`](https://github.com/mastra-ai/mastra/commit/28d0249295782277040ad1e0d243e695b7ab1ce4), [`681ee1c`](https://github.com/mastra-ai/mastra/commit/681ee1c811359efd1b8bebc4bce35b9bb7b14bec), [`bb0f09d`](https://github.com/mastra-ai/mastra/commit/bb0f09dbac58401b36069f483acf5673202db5b5), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8), [`5f7e9d0`](https://github.com/mastra-ai/mastra/commit/5f7e9d0db664020e1f3d97d7d18c6b0b9d4843d0), [`d7f14c3`](https://github.com/mastra-ai/mastra/commit/d7f14c3285cd253ecdd5f58139b7b6cbdf3678b5), [`0efe12a`](https://github.com/mastra-ai/mastra/commit/0efe12a5f008a939a1aac71699486ba40138054e)]:
+  - @mastra/core@1.15.0
+  - @mastra/observability@1.5.1
+
+## 1.0.8-alpha.1
+
+### Patch Changes
+
+- Fix cache token extraction in multi-step agent runs. Prefer AI SDK aggregated `inputTokenDetails` over `providerMetadata` (which only reflects the last step). Also fix truthiness checks to correctly handle zero values for cache and reasoning tokens. ([#14492](https://github.com/mastra-ai/mastra/pull/14492))
+
+  Fix Datadog metric keys to match dd-trace expected format: `cacheReadTokens`, `cacheWriteTokens`, `reasoningOutputTokens`.
+
+- Fixed span duration accuracy in Datadog LLM Observability traces. Previously, all spans in a trace appeared to have the same end time because dd-trace's `llmobs.trace()` does not honor `endTime` in span options. Now uses `ddSpan.finish()` to explicitly set each span's correct end time, so tools, LLM calls, and agent runs show their actual durations in Datadog. ([#14490](https://github.com/mastra-ai/mastra/pull/14490))
+
+- Updated dependencies [[`9e1a3ed`](https://github.com/mastra-ai/mastra/commit/9e1a3ed07cfafb5e8e19a796ce0bee817002d7c0), [`5ac24c4`](https://github.com/mastra-ai/mastra/commit/5ac24c4fa5275b9c837641d98ed1d988f6b7c327), [`a579f7a`](https://github.com/mastra-ai/mastra/commit/a579f7a31e582674862b5679bc79af7ccf7429b8)]:
+  - @mastra/core@1.15.0-alpha.2
+  - @mastra/observability@1.5.1-alpha.1
+
+## 1.0.8-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`cb611a1`](https://github.com/mastra-ai/mastra/commit/cb611a1e89a4f4cf74c97b57e0c27bb56f2eceb5), [`62d1d3c`](https://github.com/mastra-ai/mastra/commit/62d1d3cc08fe8182e7080237fd975de862ec8c91), [`8681ecb`](https://github.com/mastra-ai/mastra/commit/8681ecb86184d5907267000e4576cc442a9a83fc), [`4e699e0`](https://github.com/mastra-ai/mastra/commit/4e699e0c97a3991f9bbf793c78284149944f646a), [`28d0249`](https://github.com/mastra-ai/mastra/commit/28d0249295782277040ad1e0d243e695b7ab1ce4), [`bb0f09d`](https://github.com/mastra-ai/mastra/commit/bb0f09dbac58401b36069f483acf5673202db5b5), [`5f7e9d0`](https://github.com/mastra-ai/mastra/commit/5f7e9d0db664020e1f3d97d7d18c6b0b9d4843d0)]:
+  - @mastra/core@1.15.0-alpha.0
+  - @mastra/observability@1.5.1-alpha.0
+
+## 1.0.7
+
+### Patch Changes
+
+- Updated dependencies [[`ea86967`](https://github.com/mastra-ai/mastra/commit/ea86967449426e0a3673253bd1c2c052a99d970d), [`db21c21`](https://github.com/mastra-ai/mastra/commit/db21c21a6ae5f33539262cc535342fa8757eb359), [`11f5dbe`](https://github.com/mastra-ai/mastra/commit/11f5dbe9a1e7ad8ef3b1ea34fb4a9fa3631d1587), [`950eb07`](https://github.com/mastra-ai/mastra/commit/950eb07b7e7354629630e218d49550fdd299c452), [`6751354`](https://github.com/mastra-ai/mastra/commit/67513544d1a64be891d9de7624d40aadc895d56e), [`c958cd3`](https://github.com/mastra-ai/mastra/commit/c958cd36627c1eea122ec241b2b15492977a263a), [`86f2426`](https://github.com/mastra-ai/mastra/commit/86f242631d252a172d2f9f9a2ea0feb8647a76b0), [`950eb07`](https://github.com/mastra-ai/mastra/commit/950eb07b7e7354629630e218d49550fdd299c452)]:
+  - @mastra/core@1.13.0
+  - @mastra/observability@1.5.0
+
+## 1.0.7-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`ea86967`](https://github.com/mastra-ai/mastra/commit/ea86967449426e0a3673253bd1c2c052a99d970d), [`db21c21`](https://github.com/mastra-ai/mastra/commit/db21c21a6ae5f33539262cc535342fa8757eb359), [`11f5dbe`](https://github.com/mastra-ai/mastra/commit/11f5dbe9a1e7ad8ef3b1ea34fb4a9fa3631d1587), [`950eb07`](https://github.com/mastra-ai/mastra/commit/950eb07b7e7354629630e218d49550fdd299c452), [`6751354`](https://github.com/mastra-ai/mastra/commit/67513544d1a64be891d9de7624d40aadc895d56e), [`c958cd3`](https://github.com/mastra-ai/mastra/commit/c958cd36627c1eea122ec241b2b15492977a263a), [`86f2426`](https://github.com/mastra-ai/mastra/commit/86f242631d252a172d2f9f9a2ea0feb8647a76b0), [`950eb07`](https://github.com/mastra-ai/mastra/commit/950eb07b7e7354629630e218d49550fdd299c452)]:
+  - @mastra/core@1.13.0-alpha.0
+  - @mastra/observability@1.5.0-alpha.0
+
 ## 1.0.6
 
 ### Patch Changes

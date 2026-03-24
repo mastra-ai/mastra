@@ -1,13 +1,13 @@
 'use client';
 
 import { BracesIcon, XIcon } from 'lucide-react';
-import { getShortId } from '@/ds/components/Text';
-import { Column } from '@/ds/components/Columns/column';
-import { PrevNextNav } from '@/ds/components/PrevNextNav';
-import { Button } from '@/ds/components/Button';
-import { MainHeader } from '@/ds/components/MainHeader';
 import { useExperimentTrace } from '../hooks/use-experiment-trace';
 import { ExperimentTraceSpanDetails } from './experiment-trace-span-details';
+import { Button } from '@/ds/components/Button';
+import { Column } from '@/ds/components/Columns/column';
+import { MainHeader } from '@/ds/components/MainHeader';
+import { PrevNextNav } from '@/ds/components/PrevNextNav';
+import { getShortId } from '@/ds/components/Text';
 
 export type ExperimentResultSpanPaneProps = {
   traceId: string;

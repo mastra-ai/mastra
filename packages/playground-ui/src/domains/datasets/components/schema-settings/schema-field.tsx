@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { Switch } from '@/ds/components/Switch';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { cn } from '@/lib/utils';
 import type { JSONSchema7 } from 'json-schema';
+import { useState, useEffect, useRef } from 'react';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Switch } from '@/ds/components/Switch';
+import { cn } from '@/lib/utils';
 
 interface SchemaFieldProps {
   label: string;
