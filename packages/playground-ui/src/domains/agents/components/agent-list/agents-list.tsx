@@ -76,6 +76,8 @@ export function AgentsList({ agents, isLoading, error, search = '' }: AgentsList
         />
       </EntityList.Top>
 
+      {filteredData.length === 0 && search ? <EntityList.NoMatch message="No Agents match your search" /> : null}
+
       {filteredData.map(agent => {
         const name = truncateString(agent.name, 50);
         const instructions = truncateString(extractPrompt(agent.instructions), 200);
