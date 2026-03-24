@@ -49,6 +49,17 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Studio',
+      items: [
+        {
+          type: 'doc',
+          id: 'studio/overview',
+          label: 'Overview',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Agents',
       items: [
         {
@@ -244,37 +255,6 @@ const sidebars = {
           type: 'doc',
           id: 'mcp/publishing-mcp-server',
           label: 'Publishing an MCP Server',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'RAG',
-      items: [
-        {
-          type: 'doc',
-          id: 'rag/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'rag/chunking-and-embedding',
-          label: 'Chunking and Embedding',
-        },
-        {
-          type: 'doc',
-          id: 'rag/vector-databases',
-          label: 'Vector Databases',
-        },
-        {
-          type: 'doc',
-          id: 'rag/retrieval',
-          label: 'Retrieval',
-        },
-        {
-          type: 'doc',
-          id: 'rag/graph-rag',
-          label: 'GraphRAG',
         },
       ],
     },
@@ -640,6 +620,37 @@ const sidebars = {
           type: 'doc',
           id: 'evals/running-in-ci',
           label: 'Running in CI',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'RAG',
+      items: [
+        {
+          type: 'doc',
+          id: 'rag/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'rag/chunking-and-embedding',
+          label: 'Chunking and Embedding',
+        },
+        {
+          type: 'doc',
+          id: 'rag/vector-databases',
+          label: 'Vector Databases',
+        },
+        {
+          type: 'doc',
+          id: 'rag/retrieval',
+          label: 'Retrieval',
+        },
+        {
+          type: 'doc',
+          id: 'rag/graph-rag',
+          label: 'GraphRAG',
         },
       ],
     },
