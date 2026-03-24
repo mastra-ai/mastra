@@ -1,7 +1,5 @@
 import { cn } from '@/lib/utils';
 
-type DialogMode = 'view' | 'create' | 'edit' | 'delete' | 'save';
-
 export type SideDialogHeaderProps = {
   children?: React.ReactNode;
   className?: string;

@@ -1,7 +1,7 @@
-import { cn } from '@/lib/utils';
 import { getStatusIcon } from './shared';
 import type { ProcessStep } from './shared';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export type ProcessStepListItemProps = {
   stepId: string;

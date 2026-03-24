@@ -1,9 +1,9 @@
+import type { ObjectWrapperProps } from '@autoform/react';
+import { Braces, ChevronDownIcon } from 'lucide-react';
 import React, { useState } from 'react';
-import { ObjectWrapperProps } from '@autoform/react';
+import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
-import { Braces, ChevronDownIcon } from 'lucide-react';
-import { Button } from '@/ds/components/Button';
 import { cn } from '@/lib/utils';
 
 export const ObjectWrapper: React.FC<ObjectWrapperProps> = ({ label, children }) => {

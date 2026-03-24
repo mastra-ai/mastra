@@ -1,12 +1,12 @@
-import { SideDialog } from '@/ds/components/SideDialog';
-import { type KeyValueListItemData } from '@/ds/components/KeyValueList';
-import { TextAndIcon, getShortId } from '@/ds/components/Text';
-import { PanelTopIcon, ChevronsLeftRightEllipsisIcon, HashIcon, EyeIcon } from 'lucide-react';
-import { SpanRecord } from '@mastra/core/storage';
-import type { ListScoresResponse } from '@mastra/core/evals';
 import type { GetScorerResponse } from '@mastra/client-js';
+import type { ListScoresResponse } from '@mastra/core/evals';
+import type { SpanRecord } from '@mastra/core/storage';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { PanelTopIcon, ChevronsLeftRightEllipsisIcon, HashIcon, EyeIcon } from 'lucide-react';
 import { SpanTabs } from './span-tabs';
+import type { KeyValueListItemData } from '@/ds/components/KeyValueList';
+import { SideDialog } from '@/ds/components/SideDialog';
+import { TextAndIcon, getShortId } from '@/ds/components/Text';
 
 type SpanDialogProps = {
   trace: SpanRecord;

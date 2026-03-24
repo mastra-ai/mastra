@@ -1,5 +1,33 @@
 # @mastra/mongodb
 
+## 1.6.0-alpha.0
+
+### Minor Changes
+
+- Added datasets and experiments storage support to the MongoDB store. ([#14556](https://github.com/mastra-ai/mastra/pull/14556))
+
+  **Datasets** — Full dataset management with versioned items. Create, update, and delete datasets and their items with automatic version tracking. Supports batch insert/delete operations, time-travel queries to retrieve items at any past version, and item history tracking.
+
+  **Experiments** — Run and track experiments against datasets. Full CRUD for experiments and per-item experiment results, with pagination, filtering, and cascade deletion.
+
+  Both domains are automatically available when using `MongoDBStore` — no additional configuration needed.
+
+  ```ts
+  const store = new MongoDBStore({ uri: 'mongodb://localhost:27017', dbName: 'my-app' });
+
+  // Datasets
+  const dataset = await store.getStorage('datasets').createDataset({ name: 'my-dataset' });
+  await store.getStorage('datasets').addItem({ datasetId: dataset.id, input: { prompt: 'hello' } });
+
+  // Experiments
+  const experiment = await store.getStorage('experiments').createExperiment({ name: 'run-1', datasetId: dataset.id });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`be37de4`](https://github.com/mastra-ai/mastra/commit/be37de4391bd1d5486ce38efacbf00ca51637262), [`f3ce603`](https://github.com/mastra-ai/mastra/commit/f3ce603fd76180f4a5be90b6dc786d389b6b3e98), [`2871451`](https://github.com/mastra-ai/mastra/commit/2871451703829aefa06c4a5d6eca7fd3731222ef), [`d3930ea`](https://github.com/mastra-ai/mastra/commit/d3930eac51c30b0ecf7eaa54bb9430758b399777)]:
+  - @mastra/core@1.16.0-alpha.2
+
 ## 1.5.6
 
 ### Patch Changes

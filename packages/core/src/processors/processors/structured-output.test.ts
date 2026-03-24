@@ -1,7 +1,7 @@
 import type { TransformStreamDefaultController } from 'node:stream/web';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import z from 'zod';
+import { z } from 'zod/v4';
 import type { Agent } from '../../agent';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';

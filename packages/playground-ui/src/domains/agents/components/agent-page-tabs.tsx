@@ -1,9 +1,9 @@
 import { EyeIcon, FlaskConical, MessageSquare, ClipboardCheck, GitBranch } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
-import { Icon } from '@/ds/icons/Icon';
 import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
 import { useLinkComponent } from '@/lib/framework';
+import { cn } from '@/lib/utils';
 
 export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'review' | 'traces';
 

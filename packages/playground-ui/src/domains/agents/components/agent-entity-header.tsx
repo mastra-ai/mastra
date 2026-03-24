@@ -1,10 +1,10 @@
-import { EntityHeader } from '@/ds/components/EntityHeader';
-import { Badge } from '@/ds/components/Badge';
 import { CopyIcon, Link2, Check } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { useAgent } from '../hooks/use-agent';
+import { Badge } from '@/ds/components/Badge';
+import { EntityHeader } from '@/ds/components/EntityHeader';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
 export interface AgentEntityHeaderProps {
   agentId: string;

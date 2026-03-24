@@ -30,6 +30,7 @@ export function getLatestStepParts(parts: MastraDBMessage['content']['parts']): 
   return parts;
 }
 
+
 /**
  * Returns true when a message contains at least one part with visible user/assistant
  * content (text, tool-invocation, reasoning, image, file).  Messages that only carry
@@ -72,6 +73,7 @@ import { ObservationTurn } from './observation-turn/index';
 import { optimizeObservationsForContext, formatMessagesForObserver } from './observer-agent';
 import { ObserverRunner } from './observer-runner';
 import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
+import type { CompressionLevel } from './reflector-agent';
 import { ReflectorRunner } from './reflector-runner';
 import {
   calculateDynamicThreshold,
@@ -415,6 +417,7 @@ export class ObservationalMemory {
       emitDebugEvent: e => this.emitDebugEvent(e),
       persistMarkerToStorage: (m, t, r) => this.persistMarkerToStorage(m, t, r),
       persistMarkerToMessage: (m, ml, t, r) => this.persistMarkerToMessage(m, ml, t, r),
+      getCompressionStartLevel: rc => this.getCompressionStartLevel(rc),
     });
 
     // Validate buffer configuration
@@ -504,6 +507,28 @@ export class ObservationalMemory {
       provider: resolved.provider,
       modelId: resolved.modelId,
     };
+  }
+
+  /**
+   * Get the default compression start level based on model behavior.
+   * gemini-2.5-flash is a faithful transcriber that needs explicit pressure to compress effectively.
+   */
+  async getCompressionStartLevel(requestContext?: RequestContext): Promise<CompressionLevel> {
+    try {
+      const resolved = await this.resolveModelContext(this.reflectionConfig.model, requestContext);
+      const modelId = resolved?.modelId ?? '';
+
+      // gemini-2.5-flash is conservative about compression - start at level 2
+      if (modelId.includes('gemini-2.5-flash')) {
+        return 2;
+      }
+
+      // Default for all other models
+      return 1;
+    } catch {
+      // Silently fallback to level 1 on error - not worth disrupting the operation
+      return 1; // safe default
+    }
   }
 
   /**
@@ -1231,12 +1256,6 @@ export class ObservationalMemory {
    *
    * In resource scope mode, filters continuity messages to only show
    * the message for the current thread.
-   */
-  /**
-   * Format observations for injection into the Actor's context.
-   * @param observations - The observations to inject
-   * @param suggestedResponse - Thread-specific suggested response (from thread metadata)
-   * @param unobservedContextBlocks - Formatted <unobserved-context> blocks from other threads
    */
   private formatObservationsForContext(
     observations: string,

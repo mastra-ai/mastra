@@ -19,9 +19,11 @@ import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-regis
 import {
   buildReflectorSystemPrompt,
   buildReflectorPrompt,
+  MAX_COMPRESSION_LEVEL,
   parseReflectorOutput,
   validateCompression,
 } from './reflector-agent';
+import type { CompressionLevel } from './reflector-agent';
 import { getMaxThreshold } from './thresholds';
 import type { TokenCounter } from './token-counter';
 import type {
@@ -63,6 +65,7 @@ export class ReflectorRunner {
     threadId: string,
     resourceId?: string,
   ) => Promise<void>;
+  private readonly getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
 
   constructor(opts: {
     reflectionConfig: ResolvedReflectionConfig;
@@ -83,6 +86,7 @@ export class ReflectorRunner {
       threadId: string,
       resourceId?: string,
     ) => Promise<void>;
+    getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
   }) {
     this.reflectionConfig = opts.reflectionConfig;
     this.observationConfig = opts.observationConfig;
@@ -93,6 +97,7 @@ export class ReflectorRunner {
     this.emitDebugEvent = opts.emitDebugEvent;
     this.persistMarkerToStorage = opts.persistMarkerToStorage;
     this.persistMarkerToMessage = opts.persistMarkerToMessage;
+    this.getCompressionStartLevel = opts.getCompressionStartLevel;
   }
 
   private getAgent(): Agent {
@@ -131,7 +136,7 @@ export class ReflectorRunner {
     observationTokensThreshold?: number,
     abortSignal?: AbortSignal,
     skipContinuationHints?: boolean,
-    compressionStartLevel?: 0 | 1 | 2 | 3,
+    compressionStartLevel?: CompressionLevel,
     requestContext?: RequestContext,
   ): Promise<{
     observations: string;
@@ -145,8 +150,9 @@ export class ReflectorRunner {
 
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
-    let currentLevel: 0 | 1 | 2 | 3 = compressionStartLevel ?? 0;
-    const maxLevel: 0 | 1 | 2 | 3 = 3;
+    const startLevel: CompressionLevel = compressionStartLevel ?? 0;
+    let currentLevel: CompressionLevel = startLevel;
+    const maxLevel: CompressionLevel = Math.min(MAX_COMPRESSION_LEVEL, startLevel + 3) as CompressionLevel;
     let parsed: ReturnType<typeof parseReflectorOutput> = { observations: '', suggestedContinuation: undefined };
     let reflectedTokens = 0;
     let attemptNumber = 0;
@@ -264,7 +270,7 @@ export class ReflectorRunner {
         await streamContext.writer.custom(startMarker).catch(() => {});
       }
 
-      currentLevel = Math.min(currentLevel + 1, maxLevel) as 0 | 1 | 2 | 3;
+      currentLevel = Math.min(currentLevel + 1, maxLevel) as CompressionLevel;
     }
 
     return {
@@ -383,6 +389,7 @@ export class ReflectorRunner {
       void writer.custom(startMarker).catch(() => {});
     }
 
+    const compressionStartLevel = await this.getCompressionStartLevel(requestContext);
     const reflectResult = await this.call(
       activeObservations,
       undefined,
@@ -390,7 +397,7 @@ export class ReflectorRunner {
       compressionTarget,
       undefined,
       true,
-      1,
+      compressionStartLevel,
       requestContext,
     );
 
@@ -645,6 +652,7 @@ export class ReflectorRunner {
       : undefined;
 
     try {
+      const compressionStartLevel = await this.getCompressionStartLevel(requestContext);
       const reflectResult = await this.call(
         record.activeObservations,
         undefined,
@@ -652,7 +660,7 @@ export class ReflectorRunner {
         reflectThreshold,
         abortSignal,
         undefined,
-        undefined,
+        compressionStartLevel,
         requestContext,
       );
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
