@@ -1,7 +1,7 @@
 {
-  "name": "@mastra/arize",
-  "version": "1.0.13",
-  "description": "Arize observability provider for Mastra - includes tracing and future observability features",
+  "name": "@mastra/openinference",
+  "version": "0.1.0",
+  "description": "OpenInference semantic conventions support for Mastra OTLP exporters",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -31,18 +31,16 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
+    "@arizeai/openinference-genai": "0.1.6",
     "@arizeai/openinference-semantic-conventions": "^2.1.7",
-    "@mastra/openinference": "workspace:*",
-    "@mastra/otel-exporter": "workspace:*",
     "@opentelemetry/core": "^2.6.0",
-    "@opentelemetry/resources": "^2.6.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.205.0",
     "@opentelemetry/sdk-trace-base": "^2.6.0",
     "@opentelemetry/semantic-conventions": "^1.40.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@mastra/core": "workspace:*",
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
@@ -51,14 +49,11 @@
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
-  "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
-  },
   "homepage": "https://mastra.ai",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "observability/arize"
+    "directory": "observability/openinference"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"

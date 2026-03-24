@@ -1,7 +1,7 @@
 {
-  "name": "@mastra/arize",
-  "version": "1.0.13",
-  "description": "Arize observability provider for Mastra - includes tracing and future observability features",
+  "name": "@mastra/arthur",
+  "version": "0.1.0",
+  "description": "Arthur AI observability provider for Mastra - exports traces using OpenInference semantic conventions",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -31,13 +31,8 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@arizeai/openinference-semantic-conventions": "^2.1.7",
     "@mastra/openinference": "workspace:*",
-    "@mastra/otel-exporter": "workspace:*",
-    "@opentelemetry/core": "^2.6.0",
-    "@opentelemetry/resources": "^2.6.0",
-    "@opentelemetry/sdk-trace-base": "^2.6.0",
-    "@opentelemetry/semantic-conventions": "^1.40.0"
+    "@mastra/otel-exporter": "workspace:*"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -54,11 +49,11 @@
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
-  "homepage": "https://mastra.ai",
+  "homepage": "https://arthur.ai",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "observability/arize"
+    "directory": "observability/arthur"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
