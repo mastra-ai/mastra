@@ -1831,6 +1831,7 @@ export interface AwaitBufferStatusResponse {
  */
 export interface GetMemoryStatusResponse {
   result: boolean;
+  memoryType?: 'local' | 'gateway';
   observationalMemory?: {
     enabled: boolean;
     hasRecord?: boolean;
@@ -1847,6 +1848,7 @@ export interface GetMemoryStatusResponse {
  * Extended memory config response with OM config
  */
 export interface GetMemoryConfigResponseExtended {
+  memoryType?: 'local' | 'gateway';
   config: MemoryConfig & {
     observationalMemory?: {
       enabled: boolean;

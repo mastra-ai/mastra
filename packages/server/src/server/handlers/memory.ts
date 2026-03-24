@@ -52,6 +52,13 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
 import { handleError } from './error';
+import {
+  getGatewayClient,
+  isGatewayAgentAsync,
+  toLocalThread,
+  toLocalMessage,
+  toLocalOMRecord,
+} from './gateway-memory-client';
 import { validateBody, getEffectiveResourceId, getEffectiveThreadId, validateThreadOwnership } from './utils';
 
 interface MemoryContext extends Context {
@@ -316,11 +323,58 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, resourceId, threadId, requestContext }) => {
     try {
+      // Check if this is a gateway agent first
+      const agent = await getAgentFromContext({ mastra, agentId, requestContext });
+      const isGateway = agent ? await isGatewayAgentAsync(agent) : false;
+      if (agent && isGateway) {
+        const gwClient = getGatewayClient();
+        if (gwClient) {
+          // Gateway memory is available — check for OM status via gateway
+          let omStatus:
+            | {
+                enabled: boolean;
+                hasRecord?: boolean;
+                originType?: string;
+                lastObservedAt?: Date;
+                tokenCount?: number;
+                observationTokenCount?: number;
+                isObserving?: boolean;
+                isReflecting?: boolean;
+              }
+            | undefined;
+
+          if (resourceId && threadId) {
+            try {
+              const { record } = await gwClient.getObservationRecord(threadId, resourceId);
+              if (record) {
+                omStatus = {
+                  enabled: true,
+                  hasRecord: true,
+                  originType: record.originType,
+                  lastObservedAt: record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
+                  tokenCount: record.totalTokensObserved,
+                  observationTokenCount: record.observationTokenCount,
+                  isObserving: record.isObserving,
+                  isReflecting: record.isReflecting,
+                };
+              } else {
+                omStatus = { enabled: true, hasRecord: false };
+              }
+            } catch {
+              omStatus = { enabled: true };
+            }
+          } else {
+            omStatus = { enabled: true };
+          }
+
+          return { result: true, memoryType: 'gateway' as const, observationalMemory: omStatus };
+        }
+      }
+
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
       if (memory) {
         // Check for Observational Memory
-        const agent = await getAgentFromContext({ mastra, agentId, requestContext });
         let omStatus:
           | {
               enabled: boolean;
@@ -364,7 +418,7 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
           }
         }
 
-        return { result: true, observationalMemory: omStatus };
+        return { result: true, memoryType: 'local' as const, observationalMemory: omStatus };
       }
 
       // Only fallback to storage if no agentId was provided
@@ -394,6 +448,23 @@ export const GET_MEMORY_CONFIG_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, requestContext }) => {
     try {
+      // For gateway agents, return config with default OM thresholds
+      // These match @mastra/memory's OBSERVATIONAL_MEMORY_DEFAULTS
+      const agent = await getAgentFromContext({ mastra, agentId, requestContext });
+      if (agent && (await isGatewayAgentAsync(agent)) && getGatewayClient()) {
+        return {
+          memoryType: 'gateway' as const,
+          config: {
+            observationalMemory: {
+              enabled: true,
+              scope: 'thread' as const,
+              messageTokens: 30_000,
+              observationTokens: 40_000,
+            },
+          },
+        };
+      }
+
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
       if (!memory) {
@@ -406,7 +477,6 @@ export const GET_MEMORY_CONFIG_ROUTE = createRoute({
       const config = memory.getMergedThreadConfig({});
 
       // Check for Observational Memory config
-      const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       let omConfig:
         | {
             enabled: boolean;
@@ -450,6 +520,25 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       if (!agent) {
         throw new HTTPException(404, { message: 'Agent not found' });
+      }
+
+      // Gateway OM: proxy to gateway API
+      if (await isGatewayAgentAsync(agent)) {
+        const gwClient = getGatewayClient();
+        if (gwClient && resourceId && threadId) {
+          const [recordResult, historyResult] = await Promise.all([
+            gwClient.getObservationRecord(threadId, resourceId),
+            gwClient.getObservationHistory(threadId, { resourceId, limit: 5 }),
+          ]);
+          return {
+            record: recordResult.record ? toLocalOMRecord(recordResult.record) : null,
+            history: historyResult.records?.length > 0 ? historyResult.records.map(toLocalOMRecord) : undefined,
+          };
+        }
+        if (gwClient && resourceId) {
+          // No threadId — return empty
+          return { record: null, history: undefined };
+        }
       }
 
       const omConfig = await getOMConfigFromAgent(agent, requestContext);
@@ -517,6 +606,16 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Agent not found' });
       }
 
+      // Gateway proxy: fetch current OM record from gateway (no buffering concept)
+      if (await isGatewayAgentAsync(agent)) {
+        const gwClient = getGatewayClient();
+        if (gwClient && resourceId && threadId) {
+          const { record } = await gwClient.getObservationRecord(threadId, resourceId);
+          return { record: record ? toLocalOMRecord(record) : null };
+        }
+        return { record: null };
+      }
+
       const omConfig = await getOMConfigFromAgent(agent, requestContext);
       if (!omConfig?.enabled) {
         throw new HTTPException(400, { message: 'Observational Memory is not enabled for this agent' });
@@ -578,6 +677,30 @@ export const LIST_THREADS_ROUTE = createRoute({
     try {
       // Use effective resourceId (context key takes precedence over client-provided value)
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+
+      // Gateway proxy: list threads from gateway API
+      const agent = await getAgentFromContext({ mastra, agentId, requestContext });
+      const isGateway = agent ? await isGatewayAgentAsync(agent) : false;
+      if (agent && isGateway) {
+        const gwClient = getGatewayClient();
+        if (gwClient) {
+          const effectivePage = page ?? 0;
+          const effectivePerPage = perPage ?? 100;
+          const offset = effectivePage * effectivePerPage;
+          const result = await gwClient.listThreads({
+            resourceId: effectiveResourceId,
+            limit: effectivePerPage,
+            offset,
+          });
+          return {
+            threads: result.threads.map(toLocalThread),
+            page: effectivePage,
+            perPage: effectivePerPage,
+            total: result.total,
+            hasMore: offset + result.threads.length < result.total,
+          };
+        }
+      }
 
       // Build filter object dynamically based on provided parameters
       const filter: { resourceId?: string; metadata?: Record<string, unknown> } | undefined =
@@ -643,6 +766,29 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
       validateBody({ threadId: effectiveThreadId });
 
+      // Gateway proxy: get thread from gateway API
+      const agent = await getAgentFromContext({ mastra, agentId, requestContext });
+      const isGateway = agent ? await isGatewayAgentAsync(agent) : false;
+      if (agent && isGateway) {
+        const gwClient = getGatewayClient();
+        if (gwClient) {
+          const result = await gwClient.getThread(effectiveThreadId!);
+          if (!result) {
+            // Thread hasn't been created on gateway yet (created on first message).
+            // Return a placeholder so the UI doesn't error.
+            return {
+              id: effectiveThreadId!,
+              resourceId: effectiveResourceId ?? '',
+              title: '',
+              metadata: {},
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+          }
+          return toLocalThread(result.thread);
+        }
+      }
+
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (memory) {
         const thread = await memory.getThreadById({ threadId: effectiveThreadId! });
@@ -706,6 +852,29 @@ export const LIST_MESSAGES_ROUTE = createRoute({
 
       if (!effectiveThreadId) {
         throw new HTTPException(400, { message: 'No threadId found' });
+      }
+
+      // Gateway proxy: list messages from gateway API
+      const agent = await getAgentFromContext({ mastra, agentId, requestContext });
+      if (agent && (await isGatewayAgentAsync(agent))) {
+        const gwClient = getGatewayClient();
+        if (gwClient) {
+          const effectivePage = page ?? 0;
+          const effectivePerPage = perPage ?? 100;
+          const offset = effectivePage * effectivePerPage;
+          const result = await gwClient.listMessages(effectiveThreadId, {
+            limit: effectivePerPage,
+            offset,
+            order: orderBy?.direction?.toLowerCase(),
+          });
+          if (!result) {
+            throw new HTTPException(404, { message: 'Thread not found' });
+          }
+          return {
+            messages: result.messages.map(toLocalMessage),
+            uiMessages: result.messages.map(toLocalMessage),
+          };
+        }
       }
 
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
@@ -779,8 +948,15 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
-      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       validateBody({ threadId: effectiveThreadId });
+
+      // Gateway agents: working memory is not a local concept
+      const gwAgent = await getAgentFromContext({ mastra, agentId, requestContext });
+      if (gwAgent && (await isGatewayAgentAsync(gwAgent)) && getGatewayClient()) {
+        return { workingMemory: null, source: 'thread' as const, workingMemoryTemplate: null, threadExists: true };
+      }
+
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (!memory) {
         // Return null working memory when memory is not configured (Issue #11765)
         // This allows the playground UI to gracefully handle agents without memory
@@ -894,6 +1070,23 @@ export const CREATE_THREAD_ROUTE = createRoute({
   handler: async ({ mastra, agentId, resourceId, title, metadata, threadId, requestContext }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+
+      // Gateway proxy: create thread via gateway API
+      const agent = await getAgentFromContext({ mastra, agentId, requestContext });
+      if (agent && (await isGatewayAgentAsync(agent))) {
+        const gwClient = getGatewayClient();
+        if (gwClient) {
+          validateBody({ resourceId: effectiveResourceId });
+          const result = await gwClient.createThread({
+            id: threadId,
+            resourceId: effectiveResourceId!,
+            title,
+            metadata,
+          });
+          return toLocalThread(result.thread);
+        }
+      }
+
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
       if (!memory) {
@@ -931,11 +1124,24 @@ export const UPDATE_THREAD_ROUTE = createRoute({
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      validateBody({ threadId: effectiveThreadId });
+
+      // Gateway proxy: update thread via gateway API
+      const agent = await getAgentFromContext({ mastra, agentId, requestContext });
+      if (agent && (await isGatewayAgentAsync(agent))) {
+        const gwClient = getGatewayClient();
+        if (gwClient) {
+          const result = await gwClient.updateThread(effectiveThreadId!, { title, metadata });
+          if (!result) {
+            throw new HTTPException(404, { message: 'Thread not found' });
+          }
+          return toLocalThread(result.thread);
+        }
+      }
+
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
       const updatedAt = new Date();
-
-      validateBody({ threadId: effectiveThreadId });
 
       if (!memory) {
         throw new HTTPException(400, { message: 'Memory is not initialized' });
@@ -984,6 +1190,16 @@ export const DELETE_THREAD_ROUTE = createRoute({
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
       validateBody({ threadId: effectiveThreadId });
+
+      // Gateway proxy: delete thread via gateway API
+      const agent = await getAgentFromContext({ mastra, agentId, requestContext });
+      if (agent && (await isGatewayAgentAsync(agent))) {
+        const gwClient = getGatewayClient();
+        if (gwClient) {
+          await gwClient.deleteThread(effectiveThreadId!);
+          return { result: 'Thread deleted' };
+        }
+      }
 
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (!memory) {
@@ -1068,6 +1284,13 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
       validateBody({ threadId: effectiveThreadId, workingMemory });
+
+      // Gateway agents: working memory not applicable, no-op
+      const gwAgent = await getAgentFromContext({ mastra, agentId, requestContext });
+      if (gwAgent && (await isGatewayAgentAsync(gwAgent)) && getGatewayClient()) {
+        return { success: true };
+      }
+
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (!memory) {
         throw new HTTPException(400, { message: 'Memory is not initialized' });
@@ -1203,6 +1426,18 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
       validateBody({ searchQuery, resourceId: effectiveResourceId });
+
+      // Gateway agents: semantic search not supported via gateway
+      const agent = await getAgentFromContext({ mastra, agentId, requestContext });
+      if (agent && (await isGatewayAgentAsync(agent)) && getGatewayClient()) {
+        return {
+          results: [],
+          count: 0,
+          query: searchQuery,
+          searchScope: 'resource' as const,
+          searchType: 'semantic' as const,
+        };
+      }
 
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (!memory) {

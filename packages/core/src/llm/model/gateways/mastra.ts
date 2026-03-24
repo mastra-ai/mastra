@@ -1,5 +1,6 @@
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { MastraError } from '../../../error/index.js';
+import { PROVIDER_REGISTRY } from '../provider-registry.js';
 import { MastraModelGateway } from './base.js';
 import type { ProviderConfig, GatewayLanguageModel } from './base.js';
 import { MASTRA_USER_AGENT } from './constants.js';
@@ -13,13 +14,16 @@ export class MastraGateway extends MastraModelGateway {
   }
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
+    const openrouterConfig = PROVIDER_REGISTRY['openrouter'];
+    const models = openrouterConfig?.models ?? [];
+
     return {
       mastra: {
         apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
         apiKeyHeader: 'Authorization',
         name: 'Mastra Gateway',
         gateway: 'mastra',
-        models: [],
+        models: [...models],
         docUrl: 'https://mastra.ai/docs/gateway',
       },
     };

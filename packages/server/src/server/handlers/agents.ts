@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { AgentModelManagerConfig } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { PROVIDER_REGISTRY } from '@mastra/core/llm';
+import { PROVIDER_REGISTRY, defaultGateways, parseModelString } from '@mastra/core/llm';
 import type { ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type {
   InputProcessor,
@@ -525,8 +525,11 @@ async function formatAgentList({
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
-    provider: llm?.getProvider(),
-    modelId: llm?.getModelId(),
+    provider:
+      typeof agent.model === 'string'
+        ? (parseModelString(agent.model).provider ?? llm?.getProvider())
+        : llm?.getProvider(),
+    modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
     modelVersion: model?.specificationVersion,
     defaultOptions,
     modelList,
@@ -757,8 +760,11 @@ async function formatAgent({
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
-    provider: llm?.getProvider(),
-    modelId: llm?.getModelId(),
+    provider:
+      typeof agent.model === 'string'
+        ? (parseModelString(agent.model).provider ?? llm?.getProvider())
+        : llm?.getProvider(),
+    modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
     modelVersion: model?.specificationVersion,
     modelList,
     defaultOptions,
@@ -1167,6 +1173,20 @@ export const GET_PROVIDERS_ROUTE = createRoute({
 
       for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
         allProviders[id] = provider;
+      }
+
+      // Include default gateways (e.g., Mastra Gateway, Netlify)
+      for (const gateway of defaultGateways) {
+        // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
+        if (gateway.id === 'models.dev') continue;
+        try {
+          const gatewayProviders = await gateway.fetchProviders();
+          for (const [providerId, config] of Object.entries(gatewayProviders)) {
+            allProviders[providerId] = config;
+          }
+        } catch (error) {
+          console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
+        }
       }
 
       if (mastra) {
