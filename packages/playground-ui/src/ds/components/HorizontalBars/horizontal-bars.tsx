@@ -36,6 +36,7 @@ export function HorizontalBars({
             </div>
           ))}
         </div>
+
       </div>
       <div className="grid gap-3.5">
         {sorted.map(d => {
