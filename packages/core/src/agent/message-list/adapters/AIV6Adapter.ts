@@ -3,7 +3,6 @@ import type { FilePart, ImagePart } from '@internal/ai-v6';
 import * as AIV6 from '@internal/ai-v6';
 
 import { MastraError, ErrorCategory, ErrorDomain } from '../../../error';
-import { sanitizeToolName } from '../utils/tool-name';
 import type {
   MastraDBMessage,
   MastraMessagePart,
@@ -13,6 +12,7 @@ import type {
   MastraToolInvocationPart,
 } from '../state/types';
 import type { AIV5Type, AIV6Type, MessageSource } from '../types';
+import { sanitizeToolName } from '../utils/tool-name';
 import { AIV5Adapter } from './AIV5Adapter';
 
 type AIV6AdapterContext = {
@@ -61,49 +61,6 @@ function toMastraApproval(
 
 function toMastraProviderMetadata(providerMetadata: AIV6Type.ProviderMetadata | undefined): MastraProviderMetadata | undefined {
   return providerMetadata as MastraProviderMetadata | undefined;
-}
-
-function getDataStringFromAIV6DataPart(part: FilePart | ImagePart): string {
-  let mimeType: string;
-  let data: FilePart['data'] | ImagePart['image'];
-
-  if ('data' in part) {
-    mimeType = part.mediaType || 'application/octet-stream';
-    data = part.data;
-  } else if ('image' in part) {
-    mimeType = part.mediaType || 'image/jpeg';
-    data = part.image;
-  } else {
-    throw new MastraError({
-      id: 'MASTRA_AIV6_DATA_PART_INVALID',
-      domain: ErrorDomain.AGENT,
-      category: ErrorCategory.USER,
-      text: 'Invalid AIV6 data part in getDataStringFromAIV6DataPart',
-      details: { part },
-    });
-  }
-
-  if (data instanceof URL) {
-    return data.toString();
-  }
-
-  if (data instanceof Buffer) {
-    return `data:${mimeType};base64,${data.toString('base64')}`;
-  }
-
-  if (typeof data === 'string') {
-    return data.startsWith('data:') || data.startsWith('http') ? data : `data:${mimeType};base64,${data}`;
-  }
-
-  if (data instanceof Uint8Array) {
-    return `data:${mimeType};base64,${Buffer.from(data).toString('base64')}`;
-  }
-
-  if (data instanceof ArrayBuffer) {
-    return `data:${mimeType};base64,${Buffer.from(data).toString('base64')}`;
-  }
-
-  return '';
 }
 
 function getToolNameFromUIPart(part: AIV6Type.ToolUIPart | AIV6Type.DynamicToolUIPart): string {
