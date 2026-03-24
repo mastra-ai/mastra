@@ -1,5 +1,8 @@
 name: Upload Studio to R2
 
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
     inputs:
@@ -20,11 +23,11 @@ jobs:
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: remote:r
     steps:
-      - name: Checkout repo at tag
+      - name: Initial checkout
         uses: actions/checkout@v5
         with:
-          ref: mastra@${{ inputs.version }}
           fetch-depth: 1
+          ref: mastra@${{ inputs.version }}
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
