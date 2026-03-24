@@ -19,6 +19,7 @@ Set environment variables:
 ```bash
 ARTHUR_API_KEY=your-api-key
 ARTHUR_BASE_URL=https://app.arthur.ai
+ARTHUR_TASK_ID=your-task-id  # optional, associates traces with a specific Arthur task
 ```
 
 ```typescript
