@@ -118,7 +118,8 @@
     "@mastra/daytona": "0.2.0",
     "@mastra/e2b": "0.1.2",
     "@mastra/gcs": "0.2.0",
-    "@mastra/s3": "0.3.0"
+    "@mastra/s3": "0.3.0",
+    "@mastra/auth-okta": "0.0.1"
   },
   "changesets": [
     "all-files-hug",
@@ -135,6 +136,7 @@
     "gpt-5.4-defaults-mastracode",
     "great-onions-give",
     "green-birds-knock",
+    "happy-clowns-change",
     "happy-walls-follow",
     "harness-tool-suspension",
     "hip-paths-remain",
@@ -145,6 +147,7 @@
     "little-frogs-wonder",
     "little-nails-shave",
     "nice-times-end",
+    "okta-auth-security-fixes",
     "open-apples-do",
     "open-dolls-listen",
     "orange-pianos-battle",
@@ -160,7 +163,9 @@
     "sour-kids-smell",
     "strict-regions-return",
     "sunny-candies-jump",
+    "swift-dogs-act",
     "ten-friends-like",
+    "token-tiered-om-model-selection",
     "tough-ducks-peel",
     "warm-clouds-love"
   ]
