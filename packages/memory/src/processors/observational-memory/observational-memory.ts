@@ -1168,7 +1168,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private async getCompressionStartLevel(requestContext?: RequestContext): Promise<CompressionLevel> {
     try {
-      const resolved = await this.resolveModelContext(this.reflectionConfig.model, requestContext);
+      const modelConfig = this.getConcreteModel(
+        this.reflectionConfig.model,
+        this.reflectionConfig.model instanceof ModelByInputTokens ? 1 : undefined,
+      );
+      const resolved = await this.resolveModelContext(modelConfig, requestContext);
       const modelId = resolved?.modelId ?? '';
 
       // gemini-2.5-flash is conservative about compression - start at level 2
