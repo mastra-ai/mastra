@@ -1,6 +1,6 @@
 import { createGatewayMock } from '@internal/test-utils';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Mastra } from '..';
 import { MockMemory } from '../memory/mock';
 import { RequestContext } from '../request-context';

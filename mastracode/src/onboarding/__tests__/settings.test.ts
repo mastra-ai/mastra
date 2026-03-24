@@ -23,7 +23,6 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       version: 0,
       modePackId: null,
       omPackId: null,
-      claudeMaxOAuthWarningAcknowledgedAt: null,
     },
     models: {
       activeModelPackId: 'anthropic',

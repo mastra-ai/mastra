@@ -16,6 +16,7 @@ import type { ScoreEvent } from './scores';
 import type {
   AnySpan,
   CreateSpanOptions,
+  EntityType,
   ExportedSpan,
   Span,
   SpanIds,
@@ -29,6 +30,39 @@ import type {
 // ============================================================================
 // ObservabilityContext
 // ============================================================================
+
+/**
+ * Canonical observability correlation and execution context.
+ * These fields can travel alongside observability signals without being encoded in labels.
+ */
+export interface CorrelationContext {
+  // Correlation
+  traceId?: string;
+  spanId?: string;
+  tags?: string[];
+
+  // Context
+  entityType?: EntityType;
+  entityId?: string;
+  entityName?: string;
+  parentEntityType?: EntityType;
+  parentEntityId?: string;
+  parentEntityName?: string;
+  rootEntityType?: EntityType;
+  rootEntityId?: string;
+  rootEntityName?: string;
+  userId?: string;
+  organizationId?: string;
+  resourceId?: string;
+  runId?: string;
+  sessionId?: string;
+  threadId?: string;
+  requestId?: string;
+  environment?: string;
+  source?: string;
+  serviceName?: string;
+  experimentId?: string;
+}
 
 /**
  * Mixin interface that provides unified observability access.
