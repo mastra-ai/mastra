@@ -2,17 +2,17 @@ import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import { ScoresStorage } from '@mastra/core/storage';
 import {
   createStorageErrorId,
-  ScoresStorage,
   SCORERS_SCHEMA,
   TABLE_SCORERS,
   calculatePagination,
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
   TABLE_SCHEMAS,
-} from '@mastra/core/storage';
-import type { StoragePagination } from '@mastra/core/storage';
+} from '@mastra/storage';
+import type { StoragePagination } from '@mastra/storage';
 import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
 import type { ClickhouseDomainConfig } from '../../db';
 

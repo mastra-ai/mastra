@@ -1,20 +1,11 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  WorkspacesStorage,
-  createStorageErrorId,
-  normalizePerPage,
-  calculatePagination,
-  TABLE_WORKSPACES,
-  TABLE_WORKSPACE_VERSIONS,
-  TABLE_SCHEMAS,
-} from '@mastra/core/storage';
+import { WorkspacesStorage } from '@mastra/core/storage';
 import type {
   StorageWorkspaceType,
   StorageCreateWorkspaceInput,
   StorageUpdateWorkspaceInput,
   StorageListWorkspacesInput,
   StorageListWorkspacesOutput,
-  CreateIndexOptions,
 } from '@mastra/core/storage';
 import type {
   WorkspaceVersion,
@@ -22,6 +13,15 @@ import type {
   ListWorkspaceVersionsInput,
   ListWorkspaceVersionsOutput,
 } from '@mastra/core/storage/domains/workspaces';
+import {
+  createStorageErrorId,
+  normalizePerPage,
+  calculatePagination,
+  TABLE_WORKSPACES,
+  TABLE_WORKSPACE_VERSIONS,
+  TABLE_SCHEMAS,
+} from '@mastra/storage';
+import type { CreateIndexOptions } from '@mastra/storage';
 import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';

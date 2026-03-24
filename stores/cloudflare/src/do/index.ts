@@ -1,7 +1,8 @@
 import type { SqlStorage } from '@cloudflare/workers-types';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
+import { MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
+import { createStorageErrorId } from '@mastra/storage';
 
 import { MemoryStorageDO } from './storage/domains/memory';
 import { ScoresStorageDO } from './storage/domains/scores';

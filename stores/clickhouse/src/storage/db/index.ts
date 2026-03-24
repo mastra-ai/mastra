@@ -9,8 +9,8 @@ import {
   TABLE_SPANS,
   TABLE_SCHEMAS,
   getDefaultValue,
-} from '@mastra/core/storage';
-import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+} from '@mastra/storage';
+import type { StorageColumn, TABLE_NAMES } from '@mastra/storage';
 import type { ClickhouseConfig } from './utils';
 import { TABLE_ENGINES, transformRow } from './utils';
 

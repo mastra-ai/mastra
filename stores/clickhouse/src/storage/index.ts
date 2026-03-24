@@ -1,8 +1,10 @@
 import type { ClickHouseClient, ClickHouseClientConfigOptions } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageDomains, TABLE_SCHEMAS } from '@mastra/core/storage';
+import { MastraCompositeStore } from '@mastra/core/storage';
+import type { StorageDomains } from '@mastra/core/storage';
+import { createStorageErrorId } from '@mastra/storage';
+import type { TABLE_NAMES, TABLE_SCHEMAS } from '@mastra/storage';
 import { MemoryStorageClickhouse } from './domains/memory';
 import { ObservabilityStorageClickhouse } from './domains/observability';
 import { ScoresStorageClickhouse } from './domains/scores';

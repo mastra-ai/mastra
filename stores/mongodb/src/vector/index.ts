@@ -1,5 +1,4 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector, validateUpsertInput, validateVectorValues } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -13,6 +12,7 @@ import type {
   UpdateVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
+import { createVectorErrorId } from '@mastra/storage';
 import { MongoClient } from 'mongodb';
 import type { MongoClientOptions, Document, Db, Collection } from 'mongodb';
 import { v4 as uuidv4 } from 'uuid';

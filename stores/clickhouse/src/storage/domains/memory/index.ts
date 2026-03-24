@@ -4,22 +4,22 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
-  StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
 } from '@mastra/core/storage';
+import { MemoryStorage } from '@mastra/core/storage';
 import {
   createStorageErrorId,
-  MemoryStorage,
   normalizePerPage,
   calculatePagination,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_SCHEMAS,
-} from '@mastra/core/storage';
+} from '@mastra/storage';
+import type { StorageResourceType } from '@mastra/storage';
 import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
 import type { ClickhouseDomainConfig } from '../../db';
 import { transformRow, transformRows } from '../../db/utils';

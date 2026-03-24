@@ -1,7 +1,8 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
+import { MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { createStorageErrorId } from '@mastra/storage';
+import { parseSqlIdentifier } from '@mastra/storage/sql';
 import { Pool } from 'pg';
 import {
   validateConfig,

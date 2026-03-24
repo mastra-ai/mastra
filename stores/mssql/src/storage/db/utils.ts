@@ -1,6 +1,6 @@
-import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
-import { TABLE_SCHEMAS } from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import type { StorageColumn, TABLE_NAMES } from '@mastra/storage';
+import { TABLE_SCHEMAS } from '@mastra/storage';
+import { parseSqlIdentifier } from '@mastra/storage/sql';
 
 export function getSchemaName(schema?: string) {
   return schema ? `[${parseSqlIdentifier(schema, 'schema name')}]` : undefined;

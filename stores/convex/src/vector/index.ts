@@ -1,7 +1,6 @@
 import crypto from 'node:crypto';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   CreateIndexParams,
@@ -15,6 +14,7 @@ import type {
   UpdateVectorParams,
   UpsertVectorParams,
 } from '@mastra/core/vector';
+import { createVectorErrorId } from '@mastra/storage';
 
 import type { ConvexAdminClientConfig } from '../storage/client';
 import { ConvexAdminClient } from '../storage/client';

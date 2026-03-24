@@ -1,5 +1,4 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { createVectorErrorId } from '@mastra/core/storage';
 import type {
   CreateIndexParams,
   DeleteIndexParams,
@@ -13,6 +12,7 @@ import type {
   DeleteVectorsParams,
 } from '@mastra/core/vector';
 import { MastraVector, validateUpsert, validateTopK } from '@mastra/core/vector';
+import { createVectorErrorId } from '@mastra/storage';
 import { Client as OpenSearchClient } from '@opensearch-project/opensearch';
 import type { ClientOptions } from '@opensearch-project/opensearch';
 import { OpenSearchFilterTranslator } from './filter';

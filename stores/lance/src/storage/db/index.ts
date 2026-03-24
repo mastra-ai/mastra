@@ -1,8 +1,8 @@
 import type { Connection } from '@lancedb/lancedb';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId, getDefaultValue } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
+import { createStorageErrorId, getDefaultValue } from '@mastra/storage';
+import type { TABLE_NAMES, StorageColumn } from '@mastra/storage';
 import { Utf8, Int32, Float32, Binary, Schema, Field, Float64 } from 'apache-arrow';
 import type { DataType } from 'apache-arrow';
 import { getPrimaryKeys, getTableSchema, processResultWithTypeConversion, validateKeyTypes } from './utils';

@@ -1,4 +1,3 @@
-import { parseFieldKey } from '@mastra/core/utils';
 import type {
   BasicOperator,
   NumericOperator,
@@ -8,6 +7,7 @@ import type {
   RegexOperator,
   VectorFilter,
 } from '@mastra/core/vector/filter';
+import { parseFieldKey } from '@mastra/storage/sql';
 import type { PGVectorFilter } from './filter';
 
 type OperatorType =

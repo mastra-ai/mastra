@@ -1,7 +1,6 @@
 import type { Db } from '@datastax/astra-db-ts';
 import { DataAPIClient, UUID } from '@datastax/astra-db-ts';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -15,6 +14,7 @@ import type {
   UpdateVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
+import { createVectorErrorId } from '@mastra/storage';
 import type { AstraVectorFilter } from './filter';
 import { AstraFilterTranslator } from './filter';
 

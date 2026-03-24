@@ -1,8 +1,8 @@
 import type { InValue } from '@libsql/client';
 import type { IMastraLogger } from '@mastra/core/logger';
-import { safelyParseJSON, TABLE_SCHEMAS } from '@mastra/core/storage';
-import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { safelyParseJSON, TABLE_SCHEMAS } from '@mastra/storage';
+import type { StorageColumn, TABLE_NAMES } from '@mastra/storage';
+import { parseSqlIdentifier } from '@mastra/storage/sql';
 
 /**
  * Builds a SQL column list for SELECT statements, wrapping JSONB columns with json()

@@ -4,8 +4,28 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
+import { MemoryStorage } from '@mastra/core/storage';
+import type {
+  StorageListMessagesInput,
+  StorageListMessagesByResourceIdInput,
+  StorageListMessagesOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
+  StorageCloneThreadInput,
+  StorageCloneThreadOutput,
+  ThreadCloneMetadata,
+  ObservationalMemoryRecord,
+  BufferedObservationChunk,
+  CreateObservationalMemoryInput,
+  UpdateActiveObservationsInput,
+  UpdateBufferedObservationsInput,
+  SwapBufferedToActiveInput,
+  SwapBufferedToActiveResult,
+  UpdateBufferedReflectionInput,
+  SwapBufferedReflectionToActiveInput,
+  CreateReflectionGenerationInput,
+} from '@mastra/core/storage';
 import {
-  MemoryStorage,
   normalizePerPage,
   calculatePagination,
   TABLE_MESSAGES,
@@ -13,7 +33,8 @@ import {
   TABLE_THREADS,
   TABLE_SCHEMAS,
   createStorageErrorId,
-} from '@mastra/core/storage';
+} from '@mastra/storage';
+import type { StorageResourceType, CreateIndexOptions } from '@mastra/storage';
 
 /**
  * Local constant for the observational memory table name.
@@ -35,29 +56,7 @@ try {
 } catch {
   // OM not available in this version of core
 }
-import type {
-  StorageResourceType,
-  StorageListMessagesInput,
-  StorageListMessagesByResourceIdInput,
-  StorageListMessagesOutput,
-  StorageListThreadsInput,
-  StorageListThreadsOutput,
-  CreateIndexOptions,
-  StorageCloneThreadInput,
-  StorageCloneThreadOutput,
-  ThreadCloneMetadata,
-  ObservationalMemoryRecord,
-  BufferedObservationChunk,
-  CreateObservationalMemoryInput,
-  UpdateActiveObservationsInput,
-  UpdateBufferedObservationsInput,
-  SwapBufferedToActiveInput,
-  SwapBufferedToActiveResult,
-  UpdateBufferedReflectionInput,
-  SwapBufferedReflectionToActiveInput,
-  CreateReflectionGenerationInput,
-} from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { parseSqlIdentifier } from '@mastra/storage/sql';
 import {
   PgDB,
   resolvePgConfig,
@@ -125,13 +124,13 @@ export class MemoryPG extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
 
-    // Dynamically import OM schema to avoid breaking older @mastra/core versions
+    // Dynamically import OM schema to keep the static dependency surface minimal.
     let omSchema: Record<string, any> | undefined;
     try {
-      const { OBSERVATIONAL_MEMORY_TABLE_SCHEMA } = await import('@mastra/core/storage');
+      const { OBSERVATIONAL_MEMORY_TABLE_SCHEMA } = await import('@mastra/storage');
       omSchema = OBSERVATIONAL_MEMORY_TABLE_SCHEMA?.[OM_TABLE];
     } catch {
-      // OM not available in this version of core
+      // OM schema not available
     }
 
     if (omSchema) {
@@ -160,6 +159,7 @@ export class MemoryPG extends MemoryStorage {
           'metadata',
         ],
       });
+      await this.#migrateObservationalMemorySchema();
     }
     await this.#db.alterTable({
       tableName: TABLE_MESSAGES,
@@ -176,6 +176,74 @@ export class MemoryPG extends MemoryStorage {
     }
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+  }
+
+  async #migrateObservationalMemorySchema(): Promise<void> {
+    const tableName = getTableName({
+      indexName: OM_TABLE,
+      schemaName: getSchemaName(this.#schema),
+    });
+
+    const columns = await this.#db.client.manyOrNone<{ column_name: string; data_type: string; udt_name: string }>(
+      `SELECT column_name, data_type, udt_name
+       FROM information_schema.columns
+       WHERE table_schema = $1 AND table_name = $2`,
+      [this.#schema, OM_TABLE],
+    );
+
+    const columnMap = new Map(columns.map(column => [column.column_name, column]));
+    const migrations: string[] = [];
+
+    const integerColumns = [
+      'totalTokensObserved',
+      'pendingMessageTokens',
+      'observationTokenCount',
+      'bufferedReflectionTokens',
+      'bufferedReflectionInputTokens',
+      'reflectedObservationLineCount',
+      'lastBufferedAtTokens',
+    ] as const;
+
+    for (const columnName of integerColumns) {
+      const column = columnMap.get(columnName);
+      if (column && column.data_type !== 'integer') {
+        migrations.push(`
+        ALTER COLUMN "${columnName}" TYPE integer
+        USING COALESCE(NULLIF("${columnName}"::text, ''), '0')::integer
+      `);
+      }
+    }
+
+    const bufferedObservationChunks = columnMap.get('bufferedObservationChunks');
+    if (bufferedObservationChunks && bufferedObservationChunks.data_type !== 'jsonb') {
+      migrations.push(`
+        ALTER COLUMN "bufferedObservationChunks" TYPE jsonb
+        USING CASE
+          WHEN "bufferedObservationChunks" IS NULL OR "bufferedObservationChunks"::text = '' THEN NULL
+          ELSE "bufferedObservationChunks"::jsonb
+        END
+      `);
+    }
+
+    const metadata = columnMap.get('metadata');
+    if (metadata && metadata.data_type !== 'jsonb') {
+      migrations.push(`
+        ALTER COLUMN "metadata" TYPE jsonb
+        USING CASE
+          WHEN "metadata" IS NULL OR "metadata"::text = '' THEN NULL
+          ELSE "metadata"::jsonb
+        END
+      `);
+    }
+
+    if (migrations.length === 0) {
+      return;
+    }
+
+    await this.#db.client.none(`
+      ALTER TABLE ${tableName}
+      ${migrations.join(',\n')}
+    `);
   }
 
   /**
@@ -873,13 +941,13 @@ export class MemoryPG extends MemoryStorage {
 
       if (filter?.dateRange?.start) {
         const startOp = filter.dateRange.startExclusive ? '>' : '>=';
-        conditions.push(`COALESCE("createdAtZ", "createdAt") ${startOp} $${paramIndex++}`);
+        conditions.push(`COALESCE("createdAtZ", "createdAt"::timestamptz) ${startOp} $${paramIndex++}::timestamptz`);
         queryParams.push(filter.dateRange.start);
       }
 
       if (filter?.dateRange?.end) {
         const endOp = filter.dateRange.endExclusive ? '<' : '<=';
-        conditions.push(`COALESCE("createdAtZ", "createdAt") ${endOp} $${paramIndex++}`);
+        conditions.push(`COALESCE("createdAtZ", "createdAt"::timestamptz) ${endOp} $${paramIndex++}::timestamptz`);
         queryParams.push(filter.dateRange.end);
       }
 
@@ -1447,10 +1515,7 @@ export class MemoryPG extends MemoryStorage {
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
     await this.#db.insert({
       tableName: TABLE_RESOURCES,
-      record: {
-        ...resource,
-        metadata: JSON.stringify(resource.metadata),
-      },
+      record: resource,
     });
 
     return resource;
@@ -1562,11 +1627,11 @@ export class MemoryPG extends MemoryStorage {
 
         // Apply date filters
         if (options?.messageFilter?.startDate) {
-          messageQuery += ` AND COALESCE("createdAtZ", "createdAt") >= $${paramIndex++}`;
+          messageQuery += ` AND COALESCE("createdAtZ", "createdAt"::timestamptz) >= $${paramIndex++}::timestamptz`;
           messageParams.push(options.messageFilter.startDate);
         }
         if (options?.messageFilter?.endDate) {
-          messageQuery += ` AND COALESCE("createdAtZ", "createdAt") <= $${paramIndex++}`;
+          messageQuery += ` AND COALESCE("createdAtZ", "createdAt"::timestamptz) <= $${paramIndex++}::timestamptz`;
           messageParams.push(options.messageFilter.endDate);
         }
 

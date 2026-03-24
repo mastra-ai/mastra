@@ -1,15 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  createStorageErrorId,
-  listTracesArgsSchema,
-  ObservabilityStorage,
-  SPAN_SCHEMA,
-  TABLE_SPANS,
-  toTraceSpans,
-  TraceStatus,
-} from '@mastra/core/storage';
+import { listTracesArgsSchema, ObservabilityStorage, toTraceSpans } from '@mastra/core/storage';
 import type {
-  SpanRecord,
   ListTracesArgs,
   ListTracesResponse,
   TracingStorageStrategy,
@@ -25,7 +16,9 @@ import type {
   GetTraceArgs,
   GetTraceResponse,
 } from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { createStorageErrorId, SPAN_SCHEMA, TABLE_SPANS, TraceStatus } from '@mastra/storage';
+import type { SpanRecord } from '@mastra/storage';
+import { parseSqlIdentifier } from '@mastra/storage/sql';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { transformFromSqlRow } from '../../db/utils';

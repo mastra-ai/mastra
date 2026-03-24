@@ -1,15 +1,15 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import { ScoresStorage } from '@mastra/core/storage';
 import {
   createStorageErrorId,
-  ScoresStorage,
   TABLE_SCORERS,
   calculatePagination,
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
-} from '@mastra/core/storage';
-import type { StoragePagination } from '@mastra/core/storage';
+} from '@mastra/storage';
+import type { StoragePagination } from '@mastra/storage';
 import { CloudflareKVDB, resolveCloudflareConfig } from '../../db';
 import type { CloudflareDomainConfig } from '../../types';
 

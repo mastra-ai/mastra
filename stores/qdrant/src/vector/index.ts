@@ -1,5 +1,4 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector, validateUpsertInput } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -13,6 +12,7 @@ import type {
   UpdateVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
+import { createVectorErrorId } from '@mastra/storage';
 import { QdrantClient } from '@qdrant/js-client-rest';
 import type { QdrantClientParams, Schemas } from '@qdrant/js-client-rest';
 

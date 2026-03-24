@@ -8,8 +8,9 @@ import type {
   ScoringEntityType,
   ScoringSource,
 } from '@mastra/core/evals';
-import { TABLE_SCORERS, ScoresStorage, createStorageErrorId } from '@mastra/core/storage';
-import type { StoragePagination } from '@mastra/core/storage';
+import { ScoresStorage } from '@mastra/core/storage';
+import { TABLE_SCORERS, createStorageErrorId } from '@mastra/storage';
+import type { StoragePagination } from '@mastra/storage';
 
 import { ConvexDB, resolveConvexConfig } from '../../db';
 import type { ConvexDomainConfig } from '../../db';

@@ -1,8 +1,8 @@
 import type { SqlStorage } from '@cloudflare/workers-types';
 import { MastraBase } from '@mastra/core/base';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { createStorageErrorId, getDefaultValue, getSqlType, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
+import { createStorageErrorId, getDefaultValue, getSqlType, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/storage';
+import type { TABLE_NAMES, StorageColumn } from '@mastra/storage';
 
 import { deserializeValue } from '../domains/utils';
 import { createSqlBuilder } from '../sql-builder';

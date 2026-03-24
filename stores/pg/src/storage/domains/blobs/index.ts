@@ -1,5 +1,6 @@
-import { BlobStore, TABLE_SKILL_BLOBS, TABLE_SCHEMAS } from '@mastra/core/storage';
+import { BlobStore } from '@mastra/core/storage';
 import type { StorageBlobEntry } from '@mastra/core/storage';
+import { TABLE_SKILL_BLOBS, TABLE_SCHEMAS } from '@mastra/storage';
 
 import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';

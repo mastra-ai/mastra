@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import type { MastraStorage, DatasetsStorage, DatasetRecord, DatasetItem } from '@mastra/core/storage';
+import type { MastraStorage, DatasetsStorage } from '@mastra/core/storage';
+import type { DatasetRecord, DatasetItem } from '@mastra/storage';
 
 export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
   // Skip tests if storage doesn't have datasets domain

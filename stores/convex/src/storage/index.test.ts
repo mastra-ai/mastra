@@ -106,7 +106,7 @@ if (!deploymentUrl || !adminKey) {
 describe('Convex Schema Sync', () => {
   it('mastraThreadsTable should include all fields from TABLE_SCHEMAS[TABLE_THREADS]', async () => {
     // Import the core schema - this defines the canonical field list
-    const { TABLE_SCHEMAS, TABLE_THREADS } = await import('@mastra/core/storage');
+    const { TABLE_SCHEMAS, TABLE_THREADS } = await import('@mastra/storage');
     // Import the Convex schema - this is what users actually use
     const { mastraThreadsTable } = await import('../schema');
 
@@ -125,7 +125,7 @@ describe('Convex Schema Sync', () => {
   });
 
   it('mastraMessagesTable should include all fields from TABLE_SCHEMAS[TABLE_MESSAGES]', async () => {
-    const { TABLE_SCHEMAS, TABLE_MESSAGES } = await import('@mastra/core/storage');
+    const { TABLE_SCHEMAS, TABLE_MESSAGES } = await import('@mastra/storage');
     const { mastraMessagesTable } = await import('../schema');
 
     const coreSchema = TABLE_SCHEMAS[TABLE_MESSAGES];
@@ -140,7 +140,7 @@ describe('Convex Schema Sync', () => {
   });
 
   it('mastraResourcesTable should include all fields from TABLE_SCHEMAS[TABLE_RESOURCES]', async () => {
-    const { TABLE_SCHEMAS, TABLE_RESOURCES } = await import('@mastra/core/storage');
+    const { TABLE_SCHEMAS, TABLE_RESOURCES } = await import('@mastra/storage');
     const { mastraResourcesTable } = await import('../schema');
 
     const coreSchema = TABLE_SCHEMAS[TABLE_RESOURCES];

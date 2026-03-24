@@ -1,14 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  PromptBlocksStorage,
-  createStorageErrorId,
-  TABLE_PROMPT_BLOCKS,
-  TABLE_PROMPT_BLOCK_VERSIONS,
-  normalizePerPage,
-  calculatePagination,
-} from '@mastra/core/storage';
+import { PromptBlocksStorage } from '@mastra/core/storage';
 import type {
   StoragePromptBlockType,
   StorageCreatePromptBlockInput,
@@ -22,6 +15,13 @@ import type {
   ListPromptBlockVersionsInput,
   ListPromptBlockVersionsOutput,
 } from '@mastra/core/storage/domains/prompt-blocks';
+import {
+  createStorageErrorId,
+  TABLE_PROMPT_BLOCKS,
+  TABLE_PROMPT_BLOCK_VERSIONS,
+  normalizePerPage,
+  calculatePagination,
+} from '@mastra/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';

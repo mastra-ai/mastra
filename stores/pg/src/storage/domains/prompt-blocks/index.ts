@@ -1,20 +1,11 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  PromptBlocksStorage,
-  createStorageErrorId,
-  normalizePerPage,
-  calculatePagination,
-  TABLE_PROMPT_BLOCKS,
-  TABLE_PROMPT_BLOCK_VERSIONS,
-  TABLE_SCHEMAS,
-} from '@mastra/core/storage';
+import { PromptBlocksStorage } from '@mastra/core/storage';
 import type {
   StoragePromptBlockType,
   StorageCreatePromptBlockInput,
   StorageUpdatePromptBlockInput,
   StorageListPromptBlocksInput,
   StorageListPromptBlocksOutput,
-  CreateIndexOptions,
 } from '@mastra/core/storage';
 import type {
   PromptBlockVersion,
@@ -22,7 +13,16 @@ import type {
   ListPromptBlockVersionsInput,
   ListPromptBlockVersionsOutput,
 } from '@mastra/core/storage/domains/prompt-blocks';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import {
+  createStorageErrorId,
+  normalizePerPage,
+  calculatePagination,
+  TABLE_PROMPT_BLOCKS,
+  TABLE_PROMPT_BLOCK_VERSIONS,
+  TABLE_SCHEMAS,
+} from '@mastra/storage';
+import type { CreateIndexOptions } from '@mastra/storage';
+import { parseSqlIdentifier } from '@mastra/storage/sql';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';

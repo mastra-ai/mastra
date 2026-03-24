@@ -1,14 +1,15 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { MastraCompositeStore } from '@mastra/core/storage';
+import type { StorageDomains } from '@mastra/core/storage';
 import {
   createStorageErrorId,
-  MastraCompositeStore,
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCORERS,
-} from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageDomains } from '@mastra/core/storage';
+} from '@mastra/storage';
+import type { TABLE_NAMES } from '@mastra/storage';
 import Cloudflare from 'cloudflare';
 import { MemoryStorageCloudflare } from './storage/domains/memory';
 import { ScoresStorageCloudflare } from './storage/domains/scores';

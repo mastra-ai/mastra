@@ -1,5 +1,5 @@
 import type { ConnectionOptions } from 'node:tls';
-import type { CreateIndexOptions } from '@mastra/core/storage';
+import type { CreateIndexOptions } from '@mastra/storage';
 import type { ClientConfig, Pool, PoolConfig } from 'pg';
 
 /**

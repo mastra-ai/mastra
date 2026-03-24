@@ -1,0 +1,73 @@
+{
+  "name": "@mastra/storage",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/storage"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./sql": {
+      "import": {
+        "types": "./dist/sql.d.ts",
+        "default": "./dist/sql.js"
+      },
+      "require": {
+        "types": "./dist/sql.d.ts",
+        "default": "./dist/sql.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "build:lib": "pnpm check && tsup --silent --config tsup.config.ts",
+    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "build:watch": "pnpm build:lib --watch",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "peerDependencies": {
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@types/node": "22.19.15",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
+    "eslint": "^9.39.4",
+    "tsup": "^8.5.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

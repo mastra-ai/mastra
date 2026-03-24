@@ -16,11 +16,13 @@
   "license": "Apache-2.0",
   "peerDependencies": {
     "@mastra/core": "*",
-    "vitest": "*"
+    "vitest": "*",
+    "@mastra/storage": "*"
   },
   "devDependencies": {
     "@mastra/core": "workspace:*",
     "@vitest/coverage-v8": "catalog:",
-    "@vitest/ui": "catalog:"
+    "@vitest/ui": "catalog:",
+    "@mastra/storage": "workspace:*"
   }
 }

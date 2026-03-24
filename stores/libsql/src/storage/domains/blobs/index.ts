@@ -1,6 +1,7 @@
 import type { Client } from '@libsql/client';
-import { BlobStore, TABLE_SKILL_BLOBS, SKILL_BLOBS_SCHEMA } from '@mastra/core/storage';
+import { BlobStore } from '@mastra/core/storage';
 import type { StorageBlobEntry } from '@mastra/core/storage';
+import { TABLE_SKILL_BLOBS, SKILL_BLOBS_SCHEMA } from '@mastra/storage';
 
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';

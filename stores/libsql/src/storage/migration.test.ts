@@ -1,13 +1,7 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
 import { MastraError } from '@mastra/core/error';
-import {
-  OLD_SPAN_SCHEMA,
-  TABLE_SPANS,
-  TABLE_SCHEMAS,
-  TABLE_THREADS,
-  TABLE_WORKFLOW_SNAPSHOT,
-} from '@mastra/core/storage';
+import { OLD_SPAN_SCHEMA, TABLE_SPANS, TABLE_SCHEMAS, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { LibSQLDB } from './db';
 import { LibSQLStore } from './index';

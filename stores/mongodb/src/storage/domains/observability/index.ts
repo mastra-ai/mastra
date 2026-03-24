@@ -1,14 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  createStorageErrorId,
-  listTracesArgsSchema,
-  ObservabilityStorage,
-  TABLE_SPANS,
-  toTraceSpans,
-  TraceStatus,
-} from '@mastra/core/storage';
+import { listTracesArgsSchema, ObservabilityStorage, toTraceSpans } from '@mastra/core/storage';
 import type {
-  SpanRecord,
   UpdateSpanRecord,
   ListTracesArgs,
   ListTracesResponse,
@@ -25,6 +17,8 @@ import type {
   GetTraceArgs,
   GetTraceResponse,
 } from '@mastra/core/storage';
+import { createStorageErrorId, TABLE_SPANS, TraceStatus } from '@mastra/storage';
+import type { SpanRecord } from '@mastra/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';

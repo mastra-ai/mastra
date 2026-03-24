@@ -45,10 +45,12 @@
     "eslint": "^9.39.4",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@mastra/storage": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "@mastra/storage": ">=1.0.0-0 <2.0.0-0"
   },
   "files": [
     "dist",

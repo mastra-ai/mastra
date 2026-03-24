@@ -2,16 +2,16 @@ import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { StoragePagination, CreateIndexOptions } from '@mastra/core/storage';
+import { ScoresStorage } from '@mastra/core/storage';
+import type { StoragePagination, CreateIndexOptions } from '@mastra/storage';
 import {
   createStorageErrorId,
-  ScoresStorage,
   TABLE_SCORERS,
   TABLE_SCHEMAS,
   calculatePagination,
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
-} from '@mastra/core/storage';
+} from '@mastra/storage';
 import type { ConnectionPool } from 'mssql';
 import { MssqlDB, resolveMssqlConfig } from '../../db';
 import type { MssqlDomainConfig } from '../../db';

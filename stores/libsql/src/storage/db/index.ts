@@ -2,15 +2,9 @@ import { createClient } from '@libsql/client';
 import type { Client, InValue } from '@libsql/client';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  createStorageErrorId,
-  getSqlType,
-  TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_SPANS,
-  TABLE_SCHEMAS,
-} from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { createStorageErrorId, getSqlType, TABLE_WORKFLOW_SNAPSHOT, TABLE_SPANS, TABLE_SCHEMAS } from '@mastra/storage';
+import type { TABLE_NAMES, StorageColumn } from '@mastra/storage';
+import { parseSqlIdentifier } from '@mastra/storage/sql';
 import {
   buildSelectColumns,
   createExecuteWriteOperationWithRetry,

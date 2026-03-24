@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId } from '@mastra/core/storage';
-import type { TABLE_NAMES } from '@mastra/core/storage';
+import { createStorageErrorId } from '@mastra/storage';
+import type { TABLE_NAMES } from '@mastra/storage';
 import { Redis } from '@upstash/redis';
 import { getKey, processRecord } from '../domains/utils';
 

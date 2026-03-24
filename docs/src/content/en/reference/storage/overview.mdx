@@ -3,6 +3,7 @@ title: "Reference: Storage overview | Storage"
 description: Core data schema and table structure for Mastra's storage system.
 packages:
   - "@mastra/core"
+  - "@mastra/storage"
 ---
 
 import { SchemaTable } from "@site/src/components/SchemaTable";
@@ -29,6 +30,8 @@ Not every storage adapter implements every domain. Composite storage lets you mi
 | `experiments` | Experiment runs and per-item experiment results. |
 
 The schema definitions below cover the built-in database-backed tables documented for `memory`, `workflows`, `scores`, and `observability`. Other domains, and non-database adapters, use implementation-specific storage structures.
+
+If you are building a storage adapter, import table constants, schema definitions, pagination helpers, SQL identifier parsers, and shared storage data types from `@mastra/storage`. Keep `MastraCompositeStore`, storage domain base classes, and storage interfaces imported from `@mastra/core/storage`.
 
 ## Core schema
 

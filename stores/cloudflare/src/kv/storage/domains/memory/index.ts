@@ -3,24 +3,24 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
-  StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
 } from '@mastra/core/storage';
+import { MemoryStorage } from '@mastra/core/storage';
 import {
   createStorageErrorId,
   ensureDate,
   filterByDateRange,
-  MemoryStorage,
   normalizePerPage,
   calculatePagination,
   serializeDate,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
-} from '@mastra/core/storage';
+} from '@mastra/storage';
+import type { StorageResourceType } from '@mastra/storage';
 import { CloudflareKVDB, resolveCloudflareConfig } from '../../db';
 import type { CloudflareDomainConfig } from '../../types';
 

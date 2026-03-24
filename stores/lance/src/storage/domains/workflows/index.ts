@@ -1,20 +1,16 @@
 import type { Connection } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type {
-  WorkflowRun,
-  StorageListWorkflowRunsInput,
-  WorkflowRuns,
-  UpdateWorkflowStateOptions,
-} from '@mastra/core/storage';
+import type { UpdateWorkflowStateOptions } from '@mastra/core/storage';
+import { WorkflowsStorage } from '@mastra/core/storage';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import {
   createStorageErrorId,
   ensureDate,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
-  WorkflowsStorage,
-} from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+} from '@mastra/storage';
+import type { WorkflowRun, StorageListWorkflowRunsInput, WorkflowRuns } from '@mastra/storage';
 import { LanceDB, resolveLanceConfig } from '../../db';
 import type { LanceDomainConfig } from '../../db';
 

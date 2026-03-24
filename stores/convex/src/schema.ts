@@ -2,9 +2,9 @@
  * Convex schema definitions for Mastra tables.
  *
  * This file dynamically builds Convex table definitions from the canonical
- * TABLE_SCHEMAS in @mastra/core/storage/constants to ensure they stay in sync.
+ * TABLE_SCHEMAS in @mastra/storage to ensure they stay in sync.
  *
- * The import path @mastra/core/storage/constants is specifically designed to
+ * The import path @mastra/storage is specifically designed to
  * avoid pulling in Node.js dependencies, making it safe to use in Convex's
  * sandboxed schema evaluation environment.
  */
@@ -15,7 +15,7 @@ import {
   TABLE_THREADS,
   TABLE_RESOURCES,
   TABLE_SCORERS,
-} from '@mastra/core/storage/constants';
+} from '@mastra/storage';
 import { defineTable } from 'convex/server';
 import { v } from 'convex/values';
 

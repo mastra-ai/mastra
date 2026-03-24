@@ -1,5 +1,4 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createVectorErrorId } from '@mastra/core/storage';
 import type {
   CreateIndexParams,
   DeleteIndexParams,
@@ -13,6 +12,7 @@ import type {
   DeleteVectorsParams,
 } from '@mastra/core/vector';
 import { MastraVector } from '@mastra/core/vector';
+import { createVectorErrorId } from '@mastra/storage';
 import { Turbopuffer } from '@turbopuffer/turbopuffer';
 import type { DistanceMetric, QueryResults, Schema, Vector } from '@turbopuffer/turbopuffer';
 import { TurbopufferFilterTranslator } from './filter';

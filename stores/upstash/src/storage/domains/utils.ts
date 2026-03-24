@@ -1,5 +1,5 @@
-import { serializeDate, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCORERS } from '@mastra/core/storage';
-import type { TABLE_NAMES } from '@mastra/core/storage';
+import { serializeDate, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCORERS } from '@mastra/storage';
+import type { TABLE_NAMES } from '@mastra/storage';
 
 export function getKey(tableName: TABLE_NAMES, keys: Record<string, any>): string {
   const keyParts = Object.entries(keys)

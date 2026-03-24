@@ -1,5 +1,4 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -13,6 +12,7 @@ import type {
   UpdateVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
+import { createVectorErrorId } from '@mastra/storage';
 import type { Bucket, Cluster, Collection, Scope } from 'couchbase';
 import { MutateInSpec, connect, SearchRequest, VectorQuery, VectorSearch } from 'couchbase';
 

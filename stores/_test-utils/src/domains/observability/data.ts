@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { SpanType, EntityType } from '@mastra/core/observability';
-import type { CreateSpanRecord, SpanRecord } from '@mastra/core/storage';
+import type { CreateSpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@mastra/storage';
 
 /**
  * Default base date for testing - can be overridden

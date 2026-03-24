@@ -42,7 +42,8 @@
     "electrodb": "^3.7.2"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "@mastra/storage": ">=1.0.0-0 <2.0.0-0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -55,7 +56,8 @@
     "eslint": "^9.39.4",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@mastra/storage": "workspace:*"
   },
   "homepage": "https://mastra.ai",
   "repository": {

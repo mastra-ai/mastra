@@ -1,4 +1,4 @@
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { parseSqlIdentifier } from '@mastra/storage/sql';
 
 /**
  * Type definition for SQL query parameters

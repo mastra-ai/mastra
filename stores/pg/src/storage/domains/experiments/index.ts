@@ -1,17 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  createStorageErrorId,
-  TABLE_EXPERIMENTS,
-  TABLE_EXPERIMENT_RESULTS,
-  TABLE_SCHEMAS,
-  EXPERIMENTS_SCHEMA,
-  EXPERIMENT_RESULTS_SCHEMA,
-  ExperimentsStorage,
-  calculatePagination,
-  normalizePerPage,
-  safelyParseJSON,
-  ensureDate,
-} from '@mastra/core/storage';
+import { ExperimentsStorage } from '@mastra/core/storage';
 import type {
   Experiment,
   ExperimentResult,
@@ -23,8 +11,20 @@ import type {
   ListExperimentsOutput,
   ListExperimentResultsInput,
   ListExperimentResultsOutput,
-  CreateIndexOptions,
 } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  TABLE_EXPERIMENTS,
+  TABLE_EXPERIMENT_RESULTS,
+  TABLE_SCHEMAS,
+  EXPERIMENTS_SCHEMA,
+  EXPERIMENT_RESULTS_SCHEMA,
+  calculatePagination,
+  normalizePerPage,
+  safelyParseJSON,
+  ensureDate,
+} from '@mastra/storage';
+import type { CreateIndexOptions } from '@mastra/storage';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
@@ -112,15 +112,15 @@ export class ExperimentsPG extends ExperimentsStorage {
       description: (row.description as string) ?? undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       datasetId: (row.datasetId as string | null) ?? null,
-      datasetVersion: row.datasetVersion != null ? (row.datasetVersion as number) : null,
+      datasetVersion: row.datasetVersion != null ? Number(row.datasetVersion) : null,
       agentVersion: (row.agentVersion as string | null) ?? null,
       targetType: row.targetType as Experiment['targetType'],
       targetId: row.targetId as string,
       status: row.status as Experiment['status'],
-      totalItems: row.totalItems as number,
-      succeededCount: row.succeededCount as number,
-      failedCount: row.failedCount as number,
-      skippedCount: (row.skippedCount as number) ?? 0,
+      totalItems: Number(row.totalItems),
+      succeededCount: Number(row.succeededCount),
+      failedCount: Number(row.failedCount),
+      skippedCount: row.skippedCount != null ? Number(row.skippedCount) : 0,
       startedAt: row.startedAt ? ensureDate(row.startedAtZ || row.startedAt)! : null,
       completedAt: row.completedAt ? ensureDate(row.completedAtZ || row.completedAt)! : null,
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
@@ -133,14 +133,14 @@ export class ExperimentsPG extends ExperimentsStorage {
       id: row.id as string,
       experimentId: row.experimentId as string,
       itemId: row.itemId as string,
-      itemDatasetVersion: row.itemDatasetVersion != null ? (row.itemDatasetVersion as number) : null,
+      itemDatasetVersion: row.itemDatasetVersion != null ? Number(row.itemDatasetVersion) : null,
       input: safelyParseJSON(row.input),
       output: row.output ? safelyParseJSON(row.output) : null,
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : null,
       error: row.error ? safelyParseJSON(row.error) : null,
       startedAt: ensureDate(row.startedAtZ || row.startedAt)!,
       completedAt: ensureDate(row.completedAtZ || row.completedAt)!,
-      retryCount: row.retryCount as number,
+      retryCount: Number(row.retryCount),
       traceId: (row.traceId as string | null) ?? null,
       status: (row.status as ExperimentResult['status']) ?? null,
       tags: row.tags ? safelyParseJSON(row.tags) : null,

@@ -42,6 +42,8 @@ This configures instance-level storage, which all agents share by default. You c
 
 Mastra automatically initializes the necessary storage structures on first interaction. See [Storage Overview](/reference/storage/overview) for domain coverage and the schema used by the built-in database-backed domains.
 
+If you're implementing a custom storage adapter package, install `@mastra/storage` for shared table constants, schema definitions, pagination helpers, and SQL utilities. Keep the runtime storage classes and interfaces imported from `@mastra/core/storage`.
+
 ## Supported providers
 
 Each provider page includes installation instructions, configuration parameters, and usage examples:

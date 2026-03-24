@@ -1,16 +1,16 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
+import { ScoresStorage } from '@mastra/core/storage';
 import {
   createStorageErrorId,
-  ScoresStorage,
   TABLE_SCORERS,
   TABLE_SCHEMAS,
   calculatePagination,
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
-} from '@mastra/core/storage';
-import type { StoragePagination } from '@mastra/core/storage';
+} from '@mastra/storage';
+import type { StoragePagination } from '@mastra/storage';
 import { D1DB, resolveD1Config } from '../../db';
 import type { D1DomainConfig } from '../../db';
 import { createSqlBuilder } from '../../sql-builder';
