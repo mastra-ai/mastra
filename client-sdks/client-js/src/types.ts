@@ -1350,6 +1350,8 @@ export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
   isDev: boolean;
   cmsEnabled: boolean;
+  storageType?: string;
+  observabilityStorageType?: string;
 }
 
 // ============================================================================
