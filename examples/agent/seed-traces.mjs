@@ -119,7 +119,7 @@ if (traceIds.length === 0) {
   for (let i = 0; i < traceIds.length; i++) {
     const traceId = traceIds[i];
     // Distribute scores: some low, some mid, some high
-    const scoreValue = parseFloat((Math.random()).toFixed(2));
+    const scoreValue = parseFloat(Math.random().toFixed(2));
     const reasons = [
       'Excellent response with clear explanation',
       'Good but could be more detailed',

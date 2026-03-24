@@ -9,6 +9,7 @@ import type { Dispatch, SetStateAction } from 'react';
 
 import { useAgentTraceScores } from '../hooks/use-agent-trace-scores';
 import { useAgentTracesFilters } from '../hooks/use-agent-traces-filters';
+import { extractErrorText } from '../utils/trace-utils';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { TraceDialog } from '@/domains/observability/components/trace-dialog';
@@ -30,7 +31,6 @@ import { useInView } from '@/hooks/use-in-view';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
-import { extractErrorText } from '../utils/trace-utils';
 
 const TRACES_PER_PAGE = 25;
 
@@ -136,8 +136,7 @@ function formatTimestamp(date: Date | string): string {
 type TraceSpan = SpanRecord & { status?: string };
 
 function StatusIcon({ status }: { status: string | undefined }) {
-  if (status === 'error')
-    return <span className="inline-block size-2.5 rounded-full bg-red-500 shrink-0" />;
+  if (status === 'error') return <span className="inline-block size-2.5 rounded-full bg-red-500 shrink-0" />;
   if (status === 'running')
     return (
       <Icon size="sm" className="text-icon3 animate-spin shrink-0">
@@ -220,10 +219,22 @@ function AgentTracesToolbar({
   filters: ReturnType<typeof useAgentTracesFilters>;
   scorerOptions: { value: string; label: string }[];
 }) {
+  const [scoreThresholdInput, setScoreThresholdInput] = useState(filters.scoreThreshold?.toString() ?? '');
+
+  useEffect(() => {
+    setScoreThresholdInput(filters.scoreThreshold?.toString() ?? '');
+  }, [filters.scoreThreshold, filters.scorerId]);
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
-        <ListSearch key={filters.resetKey} onSearch={filters.setSearch} label="Search traces" placeholder="Search traces..." debounceMs={300} />
+        <ListSearch
+          key={filters.resetKey}
+          onSearch={filters.setSearch}
+          label="Search traces"
+          placeholder="Search traces..."
+          debounceMs={300}
+        />
       </div>
       <div className="flex items-center justify-between gap-3">
         <ButtonsGroup>
@@ -259,25 +270,28 @@ function AgentTracesToolbar({
 
           {filters.scorerId && (
             <div className="flex items-center gap-1.5">
-              <Txt variant="ui-xs" className="text-neutral2 whitespace-nowrap">
+              <label htmlFor="trace-score-threshold" className="text-ui-xs text-neutral2 whitespace-nowrap">
                 Max score
-              </Txt>
+              </label>
               <input
+                id="trace-score-threshold"
                 type="number"
                 step="0.1"
                 min="0"
                 max="1"
                 placeholder="e.g. 0.5"
-                value={filters.scoreThreshold ?? ''}
+                value={scoreThresholdInput}
                 onChange={e => {
                   const v = e.target.value;
+                  setScoreThresholdInput(v);
                   if (v === '') {
                     filters.setScoreThreshold(undefined);
                     return;
                   }
-                  const n = parseFloat(v);
-                  if (!Number.isFinite(n) || n < 0 || n > 1) return;
-                  filters.setScoreThreshold(n);
+                  const n = Number.parseFloat(v);
+                  if (Number.isFinite(n) && n >= 0 && n <= 1) {
+                    filters.setScoreThreshold(n);
+                  }
                 }}
                 className="w-20 h-7 rounded-md border border-border1 bg-surface1 px-2 text-ui-xs text-neutral1 focus:outline-none focus:ring-1 focus:ring-accent1"
               />
@@ -331,11 +345,10 @@ function BulkAddToDatasetBar({
           )}
         </SelectContent>
       </Select>
-      <Button
-        disabled={!selectedDatasetId || isPending}
-        onClick={() => selectedDatasetId && onAdd(selectedDatasetId)}
-      >
-        <Icon size="sm"><DatabaseIcon /></Icon>
+      <Button disabled={!selectedDatasetId || isPending} onClick={() => selectedDatasetId && onAdd(selectedDatasetId)}>
+        <Icon size="sm">
+          <DatabaseIcon />
+        </Icon>
         {isPending ? 'Adding...' : 'Add to dataset'}
       </Button>
     </div>
@@ -549,12 +562,9 @@ export function AgentTracesPanel({ agentId }: { agentId: string }) {
     [displayTraces, checkedTraceIds, batchInsertItems],
   );
 
-  const computeTraceLink = useCallback(
-    (traceId: string, spanId?: string) => {
-      return `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`;
-    },
-    [],
-  );
+  const computeTraceLink = useCallback((traceId: string, spanId?: string) => {
+    return `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`;
+  }, []);
 
   // Trace navigation in dialog
   const toNextTrace = useMemo(
@@ -732,9 +742,7 @@ export function AgentTracesPanel({ agentId }: { agentId: string }) {
         <TraceDialog
           traceSpans={selectedTrace?.spans}
           traceId={selectedTraceId}
-          traceDetails={selectedTrace?.spans?.find(
-            (s: SpanRecord) => s.traceId === selectedTraceId && !s.parentSpanId,
-          )}
+          traceDetails={selectedTrace?.spans?.find((s: SpanRecord) => s.traceId === selectedTraceId && !s.parentSpanId)}
           isOpen={dialogIsOpen}
           onClose={() => {
             setDialogIsOpen(false);
