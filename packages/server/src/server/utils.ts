@@ -8,7 +8,7 @@ import { stringify } from 'superjson';
 
 /**
  * Convert any PublicSchema to a JSON Schema.
- * Uses toStandardSchema to handle all schema types (Zod v3/v4, AI SDK Schema, JSON Schema).
+ * Uses toStandardSchema to handle all schema types (Zod v4, AI SDK Schema, JSON Schema).
  */
 function schemaToJsonSchema(schema: PublicSchema<unknown> | undefined) {
   if (!schema) return undefined;

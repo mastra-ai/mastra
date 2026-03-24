@@ -1,6 +1,6 @@
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MastraError } from './error';
 import { ConsoleLogger } from './logger';
 import { RequestContext } from './request-context';

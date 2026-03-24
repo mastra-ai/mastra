@@ -1,5 +1,25 @@
 # @mastra/react
 
+## 0.2.17-alpha.2
+
+### Patch Changes
+
+- Fix Zod v3 and Zod v4 compatibility across public structured-output APIs. ([#14464](https://github.com/mastra-ai/mastra/pull/14464))
+
+  Mastra agent and client APIs accept schemas from either `zod/v3` or `zod/v4`, matching the documented peer dependency range and preserving TypeScript compatibility for both Zod versions.
+
+- Updated dependencies [[`be37de4`](https://github.com/mastra-ai/mastra/commit/be37de4391bd1d5486ce38efacbf00ca51637262), [`f3ce603`](https://github.com/mastra-ai/mastra/commit/f3ce603fd76180f4a5be90b6dc786d389b6b3e98), [`2871451`](https://github.com/mastra-ai/mastra/commit/2871451703829aefa06c4a5d6eca7fd3731222ef), [`d3930ea`](https://github.com/mastra-ai/mastra/commit/d3930eac51c30b0ecf7eaa54bb9430758b399777)]:
+  - @mastra/core@1.16.0-alpha.2
+  - @mastra/client-js@1.10.0-alpha.2
+
+## 0.2.17-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`7dbd611`](https://github.com/mastra-ai/mastra/commit/7dbd611a85cb1e0c0a1581c57564268cb183d86e), [`41aee84`](https://github.com/mastra-ai/mastra/commit/41aee84561ceebe28bad1ecba8702d92838f67f0)]:
+  - @mastra/core@1.16.0-alpha.1
+  - @mastra/client-js@1.10.0-alpha.1
+
 ## 0.2.17-alpha.0
 
 ### Patch Changes

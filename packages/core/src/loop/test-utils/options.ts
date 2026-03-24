@@ -8,7 +8,7 @@ import { stepCountIs, tool } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, mockId, mockValues } from '@internal/ai-sdk-v5/test';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 import type { loop } from '../loop';
 import type { ChunkType } from '../../stream/types';
 import {

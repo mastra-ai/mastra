@@ -1,5 +1,26 @@
 # @mastra/pg
 
+## 1.8.3-alpha.1
+
+### Patch Changes
+
+- Added agent version support for experiments. When triggering an experiment, you can now pass an `agentVersion` parameter to pin which agent version to use. The agent version is stored with the experiment and returned in experiment responses. ([#14562](https://github.com/mastra-ai/mastra/pull/14562))
+
+  ```ts
+  const client = new MastraClient();
+
+  await client.triggerDatasetExperiment({
+    datasetId: 'my-dataset',
+    targetType: 'agent',
+    targetId: 'my-agent',
+    version: 3, // pin to dataset version 3
+    agentVersion: 'ver_abc123', // pin to a specific agent version
+  });
+  ```
+
+- Updated dependencies [[`7dbd611`](https://github.com/mastra-ai/mastra/commit/7dbd611a85cb1e0c0a1581c57564268cb183d86e), [`41aee84`](https://github.com/mastra-ai/mastra/commit/41aee84561ceebe28bad1ecba8702d92838f67f0)]:
+  - @mastra/core@1.16.0-alpha.1
+
 ## 1.8.3-alpha.0
 
 ### Patch Changes
