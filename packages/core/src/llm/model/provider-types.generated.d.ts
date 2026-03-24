@@ -1606,13 +1606,14 @@ export type ProviderModelsMap = {
   ];
   readonly vivgrid: readonly [
     'deepseek-v3.2',
-    'gemini-3-flash-preview',
-    'gemini-3-pro-preview',
+    'gemini-3.1-flash-lite-preview',
+    'gemini-3.1-pro-preview',
     'glm-5',
     'gpt-5-mini',
     'gpt-5.1-codex',
     'gpt-5.1-codex-max',
     'gpt-5.2-codex',
+    'gpt-5.4',
   ];
   readonly 'moonshotai-cn': readonly [
     'kimi-k2-0711-preview',
@@ -2224,7 +2225,6 @@ export type ProviderModelsMap = {
     'Llama-3_1-Nemotron-Ultra-253B-v1',
     'MiniMax-M2.5',
     'NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4',
-    'Qwen2.5-Coder-32B-Instruct',
     'gpt-oss-120b',
   ];
   readonly baseten: readonly [

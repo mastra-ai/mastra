@@ -228,13 +228,11 @@ describe('AI SDK Voice Integration Tests', () => {
 
       expect(transcribedText).toBeTruthy();
       expect(typeof transcribedText).toBe('string');
-      // Check for either "round trip" or "round-trip"
+      // Exact match not expected due to speech synthesis variations
+      // but key words should be present
       expect(transcribedText.toLowerCase()).toMatch(/round.?trip/);
       console.log('Original:', originalText);
       console.log('Transcribed:', transcribedText);
-
-      // Note: Exact match not expected due to speech synthesis variations
-      // but key words should be present
     }, 20000);
   });
 });
