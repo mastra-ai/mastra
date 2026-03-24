@@ -1180,13 +1180,21 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     return this.tokenCounter.runWithModelContext(modelContext, fn);
   }
 
-  private formatRoutingModel(model: AgentConfig['model'] | undefined): string | undefined {
+  private async formatRoutingModel(
+    model: AgentConfig['model'] | undefined,
+    requestContext?: RequestContext,
+  ): Promise<string | undefined> {
     if (!model) {
       return undefined;
     }
 
     if (typeof model === 'string') {
       return model;
+    }
+
+    const resolvedModel = await this.resolveModelContext(model, requestContext);
+    if (resolvedModel) {
+      return this.formatModelName(resolvedModel);
     }
 
     const runtimeModel = this.getRuntimeModelContext(model as { provider: string; modelId: string } | undefined);
@@ -1206,6 +1214,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const { phase, inputTokens, resolvedModel, selectedThreshold, routingModel, requestContext, tracingContext, fn } =
       options;
 
+    const selectedModel = (await this.formatRoutingModel(resolvedModel, requestContext)) ?? '(unknown)';
+
     if (!tracingContext) {
       return fn();
     }
@@ -1216,7 +1226,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       attributes: {
         omPhase: phase,
         omInputTokens: inputTokens,
-        omSelectedModel: this.formatRoutingModel(resolvedModel) ?? '(unknown)',
+        omSelectedModel: selectedModel,
         ...(selectedThreshold !== undefined ? { omSelectedThreshold: selectedThreshold } : {}),
         ...(routingModel
           ? {
@@ -2904,6 +2914,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     abortSignal: ProcessInputStepArgs['abortSignal'],
     abort: ProcessInputStepArgs['abort'],
     requestContext?: RequestContext,
+    tracingContext?: TracingContext,
   ): Promise<{
     observationSucceeded: boolean;
     updatedRecord: ObservationalMemoryRecord;
@@ -3051,6 +3062,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
               writer,
               abortSignal,
               requestContext,
+              tracingContext,
             });
           } else {
             await this.doSynchronousObservation({
@@ -3060,6 +3072,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
               writer,
               abortSignal,
               requestContext,
+              tracingContext,
             });
           }
           // Check if observation actually updated lastObservedAt
@@ -3641,6 +3654,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
                 writer,
                 messageList,
                 requestContext,
+                tracingContext,
               });
               // Re-fetch record — reflection may have created a new generation with lower obsTokens
               record = await this.getOrCreateRecord(threadId, resourceId);
@@ -3669,6 +3683,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
             writer,
             messageList,
             requestContext,
+            tracingContext,
           });
           // Re-fetch record after reflection may have created a new generation
           record = await this.getOrCreateRecord(threadId, resourceId);
@@ -3800,6 +3815,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
             abortSignal,
             abort,
             requestContext,
+            tracingContext,
           );
 
           if (observationSucceeded) {
@@ -4635,6 +4651,7 @@ ${formattedMessages}
         abortSignal,
         reflectionHooks,
         requestContext,
+        tracingContext,
       });
     } catch (error) {
       // Insert FAILED marker on error
@@ -6029,6 +6046,7 @@ ${formattedMessages}
         abortSignal,
         reflectionHooks,
         requestContext,
+        tracingContext,
       });
     } catch (error) {
       // Insert FAILED markers into each thread's last message on error
@@ -6133,8 +6151,18 @@ ${formattedMessages}
     messageList?: MessageList;
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
     requestContext?: RequestContext;
+    tracingContext?: TracingContext;
   }): Promise<void> {
-    const { record, observationTokens, writer, abortSignal, messageList, reflectionHooks, requestContext } = opts;
+    const {
+      record,
+      observationTokens,
+      writer,
+      abortSignal,
+      messageList,
+      reflectionHooks,
+      requestContext,
+      tracingContext,
+    } = opts;
     const lockKey = this.getLockKey(record.threadId, record.resourceId);
     const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
 
@@ -6253,6 +6281,7 @@ ${formattedMessages}
         undefined,
         undefined,
         requestContext,
+        tracingContext,
       );
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
