@@ -1,6 +1,8 @@
 ---
 '@mastra/core': minor
 '@mastra/memory': minor
+'@mastra/playground-ui': patch
+'@mastra/server': patch
 ---
 
 Added `ModelByInputTokens` in `@mastra/memory` for token-threshold-based model selection in Observational Memory.
@@ -28,3 +30,5 @@ const memory = new Memory({
 ```
 
 The `upTo` keys are inclusive upper bounds. OM resolves the matching tier directly at the observer or reflector call site. If the input exceeds the largest configured threshold, OM throws an error.
+
+Improved Observational Memory tracing so traces show the observer and reflector spans and make it easier to see which resolved model was used at runtime.
