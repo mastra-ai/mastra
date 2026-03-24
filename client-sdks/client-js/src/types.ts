@@ -154,7 +154,7 @@ export type ResponsesDeleteResponse = {
 export type CreateResponseParams = {
   /** Target model identifier, such as `openai/gpt-5`. */
   model: string;
-  /** Optional Mastra agent ID for agent-backed execution and memory-backed persistence. */
+  /** Mastra agent ID for the request. Required on initial requests; stored follow-ups can omit it when using `previous_response_id`. */
   agent_id?: string;
   /** Input text or message history for the current turn. */
   input: string | ResponseInputMessage[];
@@ -164,7 +164,7 @@ export type CreateResponseParams = {
   providerOptions?: Record<string, Record<string, unknown> | undefined>;
   /** When true, returns a streaming Responses API event stream. */
   stream?: boolean;
-  /** Persists the response through the selected agent's memory. Requires `agent_id` and configured agent memory. */
+  /** Persists the response through the selected agent's memory. Requires a memory-backed agent. */
   store?: boolean;
   /** Continues a previously stored response chain. */
   previous_response_id?: string;

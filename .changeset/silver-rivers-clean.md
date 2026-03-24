@@ -7,7 +7,7 @@
 
 You can now call Mastra through a Responses API flow and continue stored turns with
 `previous_response_id`, while keeping `model` as a Mastra model string and using
-`agent_id` for optional agent-backed execution. Advanced provider-native settings can
+`agent_id` to target the registered Mastra agent that handles the request. Advanced provider-native settings can
 also be passed through with `providerOptions`, and provider-returned continuation state
 is surfaced back on the response under the same `providerOptions` field. Stored
 response IDs now map directly to the persisted assistant turn ID in Mastra memory.

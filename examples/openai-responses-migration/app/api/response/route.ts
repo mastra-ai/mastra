@@ -2,7 +2,6 @@ import { MastraClient, type CreateResponseParams } from '@mastra/client-js';
 
 const DEFAULT_AGENT_ID = process.env.MASTRA_AGENT_ID ?? 'support-agent';
 const TOOL_AGENT_ID = process.env.MASTRA_TOOL_AGENT_ID ?? 'tool-agent';
-const AGENT_BACKED_EXAMPLE = 'agent-memory';
 const AGENT_TOOLS_EXAMPLE = 'agent-tools';
 const mastraClient = new MastraClient({
   baseUrl: process.env.MASTRA_BASE_URL ?? 'http://localhost:4111',
@@ -20,7 +19,7 @@ function normalizeDemoRequest(body: DemoRequestBody) {
     requestBody.agent_id = TOOL_AGENT_ID;
   }
 
-  if ((body.example === AGENT_BACKED_EXAMPLE || body.store === true) && requestBody.agent_id == null) {
+  if (requestBody.agent_id == null) {
     requestBody.agent_id = DEFAULT_AGENT_ID;
   }
 

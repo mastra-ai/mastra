@@ -85,10 +85,10 @@ const EXAMPLES: readonly ExampleConfig[] = [
   },
   {
     id: 'provider-backed',
-    label: 'Direct Provider Store',
+    label: 'Provider-backed Agent',
     eyebrow: 'Responses API',
     description:
-      'Provider manages continuation via `providerOptions.openai.previousResponseId`.',
+      'Uses `agent_id` with provider-managed continuation via `providerOptions.openai.previousResponseId`.',
     detail:
       'Each response returns the provider response ID, and the next turn sends it back through `providerOptions` instead of Mastra `previous_response_id`.',
     instructions:
@@ -438,7 +438,7 @@ export function MigrationDemo() {
       ? latestTurn?.providerResponseId ?? null
       : null;
   const completedTurns = turns.filter(turn => turn.status === 'done').length;
-  const statusBadge = currentAnchor ? truncateResponseId(currentAnchor) : 'stateless';
+  const statusBadge = currentAnchor ? truncateResponseId(currentAnchor) : 'awaiting-agent';
 
   useEffect(() => {
     if (!toastMessage) {

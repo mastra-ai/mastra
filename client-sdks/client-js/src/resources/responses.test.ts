@@ -85,7 +85,8 @@ describe('Responses Resource', () => {
     });
 
     const response = await client.responses.create({
-      model: 'support-agent',
+      model: 'openai/gpt-5',
+      agent_id: 'support-agent',
       input: 'Summarize this ticket',
       store: true,
     });
@@ -102,7 +103,8 @@ describe('Responses Resource', () => {
         method: 'POST',
         headers: expect.objectContaining(clientOptions.headers),
         body: JSON.stringify({
-          model: 'support-agent',
+          model: 'openai/gpt-5',
+          agent_id: 'support-agent',
           input: 'Summarize this ticket',
           store: true,
         }),
@@ -126,6 +128,7 @@ describe('Responses Resource', () => {
 
     await client.responses.create({
       model: 'openai/gpt-5',
+      agent_id: 'support-agent',
       input: 'Continue this',
       providerOptions: {
         openai: {
@@ -139,6 +142,7 @@ describe('Responses Resource', () => {
       expect.objectContaining({
         body: JSON.stringify({
           model: 'openai/gpt-5',
+          agent_id: 'support-agent',
           input: 'Continue this',
           providerOptions: {
             openai: {
@@ -281,7 +285,8 @@ describe('Responses Resource', () => {
     ]);
 
     const stream = await client.responses.create({
-      model: 'support-agent',
+      model: 'openai/gpt-5',
+      agent_id: 'support-agent',
       input: 'Say hello',
       stream: true,
     });
@@ -376,7 +381,8 @@ describe('Responses Resource', () => {
     ]);
 
     const stream = await client.responses.stream({
-      model: 'support-agent',
+      model: 'openai/gpt-5',
+      agent_id: 'support-agent',
       input: 'Say hello',
     });
 

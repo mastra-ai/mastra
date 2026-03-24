@@ -265,13 +265,12 @@ describe('Responses Handlers', () => {
     ).rejects.toThrow(HTTPException);
   });
 
-  it('returns 400 when store is requested without agent_id', async () => {
+  it('returns 400 when the request does not target a Mastra agent', async () => {
     await expect(
       CREATE_RESPONSE_ROUTE.handler({
         ...createTestServerContext({ mastra }),
         model: 'openai/gpt-5',
         input: 'Hello',
-        store: true,
         stream: false,
       }),
     ).rejects.toThrow(HTTPException);
@@ -541,38 +540,6 @@ describe('Responses Handlers', () => {
         responseId: created.id,
       }),
     ).rejects.toThrow(HTTPException);
-  });
-
-  it('supports model-only execution without a Mastra agent', async () => {
-    const getModelSpy = vi
-      .spyOn(Agent.prototype, 'getModel')
-      .mockResolvedValue({ specificationVersion: 'v2' } as never);
-    const generateSpy = vi
-      .spyOn(Agent.prototype, 'generate')
-      .mockResolvedValue(createGenerateResult({ text: 'Model only' }));
-
-    const response = (await CREATE_RESPONSE_ROUTE.handler({
-      ...createTestServerContext({ mastra }),
-      model: 'openai/gpt-5',
-      input: 'Hello',
-      stream: false,
-      store: false,
-    })) as Response;
-
-    const created = await readJson(response);
-    expect(created).toMatchObject({
-      model: 'openai/gpt-5',
-      status: 'completed',
-      store: false,
-      output: [
-        {
-          content: [{ text: 'Model only' }],
-        },
-      ],
-    });
-    expect(generateSpy).toHaveBeenCalled();
-    generateSpy.mockRestore();
-    getModelSpy.mockRestore();
   });
 
   it('returns 404 when the requested agent does not exist', async () => {

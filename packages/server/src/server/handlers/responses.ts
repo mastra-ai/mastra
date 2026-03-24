@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Agent } from '@mastra/core/agent';
-import type { MastraDBMessage } from '@mastra/core/agent';
+import type { Agent, MastraDBMessage } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { HTTPException } from '../http-exception';
@@ -164,47 +163,30 @@ function createExecutionMemory(threadContext: ThreadExecutionContext | null) {
 }
 
 /**
- * Resolves the execution agent for the request.
- *
- * When `agent_id` is present, the route uses the registered Mastra agent directly.
- * Without `agent_id`, the route creates a temporary stateless agent that only carries
- * the requested model and request-scoped instructions.
+ * Resolves the registered Mastra agent that owns the response request.
  */
 async function resolveResponseAgent({
   mastra,
-  model,
   agentId,
   previousResponseMatch,
-  instructions,
 }: {
   mastra: Mastra | undefined;
-  model: string;
   agentId?: string;
   previousResponseMatch: StoredResponseMatch | null;
-  instructions?: string;
 }): Promise<Agent<any, any, any, any>> {
   const resolvedAgentId = agentId ?? previousResponseMatch?.metadata.agentId;
 
-  if (resolvedAgentId) {
-    if (!mastra) {
-      throw new HTTPException(500, { message: 'Mastra instance is required for agent-backed responses' });
-    }
-
-    return getAgentFromSystem({ mastra, agentId: resolvedAgentId });
+  if (!resolvedAgentId) {
+    throw new HTTPException(400, {
+      message: 'Responses requests require an agent_id, or a previous_response_id from a stored agent-backed response',
+    });
   }
 
-  const config: ConstructorParameters<typeof Agent>[0] = {
-    id: 'responses-route-agent',
-    name: 'Responses Route Agent',
-    instructions: instructions ?? '',
-    model,
-  };
-
-  if (mastra) {
-    config.mastra = mastra;
+  if (!mastra) {
+    throw new HTTPException(500, { message: 'Mastra instance is required for agent-backed responses' });
   }
 
-  return new Agent(config);
+  return getAgentFromSystem({ mastra, agentId: resolvedAgentId });
 }
 
 /**
@@ -425,18 +407,10 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
 
       const executionInput = normalizeInputToMessages(body.input) as AgentExecutionInput;
 
-      if (body.store && !body.agent_id && !previousResponseMatch?.metadata.agentId) {
-        throw new HTTPException(400, {
-          message: 'Stored responses require an agent_id with memory configured',
-        });
-      }
-
       const agent = await resolveResponseAgent({
         mastra,
-        model: body.model,
         agentId: body.agent_id,
         previousResponseMatch,
-        instructions: body.instructions,
       });
 
       const responseId = createMessageId();

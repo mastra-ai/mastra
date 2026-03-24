@@ -62,7 +62,7 @@ Visit the [configuration reference](/reference/configuration#server-options) for
 
 Mastra also exposes a Responses API-compatible route. By default, the generated server serves it at `/api/v1/responses`, along with `GET /api/v1/responses/:responseId` and `DELETE /api/v1/responses/:responseId`.
 
-Use a Mastra model string such as `openai/gpt-5` for `model`. If you want agent-backed execution, pass a separate `agent_id`. Without `agent_id`, the route runs as a stateless model-only request:
+Use a Mastra model string such as `openai/gpt-5` for `model`, and pass `agent_id` to select the registered Mastra agent that should handle the request. Initial Responses requests must target an agent directly. Stored follow-up turns can omit `agent_id` when continuing with `previous_response_id`:
 
 ```typescript title="client.ts"
 const response = await fetch('http://localhost:4111/api/v1/responses', {
@@ -79,7 +79,7 @@ const response = await fetch('http://localhost:4111/api/v1/responses', {
 })
 ```
 
-Set `stream: true` to receive SSE events compatible with the Responses API event model. Mastra emits the OpenAI-style lifecycle events `response.created`, `response.in_progress`, `response.output_item.added`, `response.content_part.added`, `response.output_text.delta`, `response.output_text.done`, `response.content_part.done`, `response.output_item.done`, and `response.completed`, with `sequence_number` values for deterministic client-side ordering. This compatibility layer only maps the stream Mastra already produces, so it does not require extra model calls. `store: true` is only supported for agent-backed requests where the selected agent has memory configured. Stored responses can then be continued with `previous_response_id`. For stored responses, `response.id` is the persisted assistant turn ID in memory, so `GET /api/v1/responses/:responseId` and `DELETE /api/v1/responses/:responseId` operate on that stored assistant turn. Model-only requests do not persist state.
+Set `stream: true` to receive SSE events compatible with the Responses API event model. Mastra emits the OpenAI-style lifecycle events `response.created`, `response.in_progress`, `response.output_item.added`, `response.content_part.added`, `response.output_text.delta`, `response.output_text.done`, `response.content_part.done`, `response.output_item.done`, and `response.completed`, with `sequence_number` values for deterministic client-side ordering. This compatibility layer only maps the stream Mastra already produces, so it does not require extra model calls. `store: true` is only supported for agent-backed requests where the selected agent has memory configured. Stored responses can then be continued with `previous_response_id`. For stored responses, `response.id` is the persisted assistant turn ID in memory, so `GET /api/v1/responses/:responseId` and `DELETE /api/v1/responses/:responseId` operate on that stored assistant turn.
 
 For advanced provider-native features, the route also passes `providerOptions` through to the underlying agent `generate()` or `stream()` call. Use this as the escape hatch for provider-specific options that Mastra does not normalize at the Responses API layer. When the provider returns provider-native response state, Mastra includes it back on the response object as `providerOptions`, so follow-up requests can reuse values like `openai.responseId`.
 
