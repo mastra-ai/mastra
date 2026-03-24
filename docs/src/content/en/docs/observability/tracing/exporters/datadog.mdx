@@ -133,24 +133,24 @@ Mastra span types are automatically mapped to Datadog LLMObs span kinds:
 
 Other/future Mastra span types will default to 'task' when mapped unless specified.
 
-## Application Performance Monitoring (APM) for server tracing
+## Application Performance Monitoring
 
 The sections above cover Mastra's [LLM Observability](https://docs.datadoghq.com/llm_observability/) integration. To trace your Mastra HTTP server routes (request latency, error tracking, service maps), use `dd-trace` directly for Datadog Application Performance Monitoring (APM).
 
-### Prerequisites for APM
+### Prerequisites
 
 1. **Datadog Agent**: Install a [Datadog Agent](https://docs.datadoghq.com/agent/) on the same host or accessible via network. The agent receives traces from `dd-trace` on `localhost:8126` and forwards them to Datadog. Follow the [agent installation guide](https://docs.datadoghq.com/agent/) to set it up.
 1. **dd-trace package**: Install the tracing library in your project:
 
-```bash npm2yarn
-npm install dd-trace
-```
+    ```bash npm2yarn
+    npm install dd-trace
+    ```
 
 :::note
 APM traces always route through the Datadog Agent. This is different from LLM Observability, which supports agentless mode (direct HTTPS to Datadog).
 :::
 
-### APM only (without LLM Observability)
+### APM only
 
 Import and initialize `dd-trace` at the top of your entry file, before any other imports:
 
@@ -188,7 +188,7 @@ DD_VERSION=1.0.0
 
 `dd-trace` auto-instruments popular HTTP frameworks, including those supported by Mastra's [server adapters](/docs/server/server-adapters). Inbound requests, outbound HTTP calls, and database queries appear as APM traces in Datadog.
 
-### APM and LLM Observability together
+### APM and LLM Observability
 
 Import and initialize `dd-trace` before creating the Mastra instance. The `DatadogExporter` detects the existing tracer and skips re-initialization, adding LLM Observability on top of your APM setup:
 
