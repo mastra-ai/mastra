@@ -19,12 +19,10 @@ type TurnState = {
 };
 
 type ToolState = {
-  type: 'tool';
-  toolCallId: string | null;
-  toolName: string | null;
-  state: string | null;
-  args?: unknown;
-  result?: unknown;
+  callId: string;
+  toolName: string;
+  arguments?: unknown;
+  output?: unknown;
 };
 
 type ExampleId = 'agent-memory' | 'agent-tools' | 'provider-backed';
@@ -189,27 +187,50 @@ function extractProviderResponseId(payload: unknown) {
   return openaiOptions.responseId;
 }
 
-function extractTools(payload: unknown): ToolState[] {
-  if (!isRecord(payload) || !Array.isArray(payload.tools)) {
+function parseToolPayload(value: string) {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+function extractToolActivity(payload: unknown): ToolState[] {
+  if (!isRecord(payload) || !Array.isArray(payload.output)) {
     return [];
   }
 
-  return payload.tools.flatMap(tool => {
-    if (!isRecord(tool) || tool.type !== 'tool') {
-      return [];
+  const tools = new Map<string, ToolState>();
+
+  for (const item of payload.output) {
+    if (!isRecord(item) || typeof item.type !== 'string') {
+      continue;
     }
 
-    return [
-      {
-        type: 'tool',
-        toolCallId: typeof tool.toolCallId === 'string' ? tool.toolCallId : null,
-        toolName: typeof tool.toolName === 'string' ? tool.toolName : null,
-        state: typeof tool.state === 'string' ? tool.state : null,
-        ...(tool.args !== undefined ? { args: tool.args } : {}),
-        ...(tool.result !== undefined ? { result: tool.result } : {}),
-      },
-    ];
-  });
+    if (item.type === 'function_call' && typeof item.call_id === 'string' && typeof item.name === 'string') {
+      const existingTool = tools.get(item.call_id);
+      tools.set(item.call_id, {
+        callId: item.call_id,
+        toolName: item.name,
+        arguments:
+          typeof item.arguments === 'string' ? parseToolPayload(item.arguments) : (existingTool?.arguments ?? undefined),
+        output: existingTool?.output,
+      });
+      continue;
+    }
+
+    if (item.type === 'function_call_output' && typeof item.call_id === 'string') {
+      const existingTool = tools.get(item.call_id);
+      tools.set(item.call_id, {
+        callId: item.call_id,
+        toolName: existingTool?.toolName ?? 'Tool',
+        arguments: existingTool?.arguments,
+        output: typeof item.output === 'string' ? parseToolPayload(item.output) : item.output,
+      });
+    }
+  }
+
+  return [...tools.values()];
 }
 
 function extractTokenCount(payload: unknown, fallbackText: string) {
@@ -562,7 +583,7 @@ export function MigrationDemo() {
             ...turn,
             responseId: extractResponseId(payload),
             providerResponseId: extractProviderResponseId(payload),
-            tools: extractTools(payload),
+            tools: extractToolActivity(payload),
             text,
             raw: JSON.stringify(payload, null, 2),
             model: extractModel(payload, activeExample.model),
@@ -601,7 +622,7 @@ export function MigrationDemo() {
         ) {
           responseId = typeof event.response.id === 'string' ? event.response.id : responseId;
           providerResponseId = extractProviderResponseId(event.response) ?? providerResponseId;
-          tools = extractTools(event.response);
+          tools = extractToolActivity(event.response);
           model = extractModel(event.response, model) ?? model;
 
           if (eventType === 'response.completed') {
@@ -783,24 +804,24 @@ export function MigrationDemo() {
                               {turn.tools.map((tool, index) => (
                                 <div
                                   className="demo-tool"
-                                  key={`${tool.toolCallId ?? tool.toolName ?? 'tool'}-${index}`}
+                                  key={`${tool.callId}-${index}`}
                                 >
                                   <div className="demo-tool__header">
-                                    <span className="demo-tool__name">{tool.toolName ?? 'Tool'}</span>
-                                    <span className="demo-tool__state">{tool.state ?? 'completed'}</span>
+                                    <span className="demo-tool__name">{tool.toolName}</span>
+                                    <span className="demo-tool__state">completed</span>
                                   </div>
 
-                                  {tool.args !== undefined ? (
+                                  {tool.arguments !== undefined ? (
                                     <div className="demo-tool__section">
-                                      <span className="demo-tool__label">Args</span>
-                                      <pre className="demo-tool__value">{formatToolValue(tool.args)}</pre>
+                                      <span className="demo-tool__label">Arguments</span>
+                                      <pre className="demo-tool__value">{formatToolValue(tool.arguments)}</pre>
                                     </div>
                                   ) : null}
 
-                                  {tool.result !== undefined ? (
+                                  {tool.output !== undefined ? (
                                     <div className="demo-tool__section">
-                                      <span className="demo-tool__label">Result</span>
-                                      <pre className="demo-tool__value">{formatToolValue(tool.result)}</pre>
+                                      <span className="demo-tool__label">Output</span>
+                                      <pre className="demo-tool__value">{formatToolValue(tool.output)}</pre>
                                     </div>
                                   ) : null}
                                 </div>
