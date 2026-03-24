@@ -137,7 +137,7 @@ export class AgentVoice extends BaseResource {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: { input: text, options },
+      body: { text, options },
       stream: true,
     });
   }
