@@ -606,12 +606,24 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Agent not found' });
       }
 
-      // Gateway proxy: fetch current OM record from gateway (no buffering concept)
+      // Gateway proxy: poll the gateway OM record until buffering flags clear
       if (await isGatewayAgentAsync(agent)) {
         const gwClient = getGatewayClient();
         if (gwClient && resourceId && threadId) {
-          const { record } = await gwClient.getObservationRecord(threadId, resourceId);
-          return { record: record ? toLocalOMRecord(record) : null };
+          const maxWaitMs = 30_000;
+          const pollIntervalMs = 1_000;
+          const deadline = Date.now() + maxWaitMs;
+
+          let record: ReturnType<typeof toLocalOMRecord> | null = null;
+          while (Date.now() < deadline) {
+            const result = await gwClient.getObservationRecord(threadId, resourceId);
+            record = result.record ? toLocalOMRecord(result.record) : null;
+            if (!record || (!record.isBufferingObservation && !record.isBufferingReflection)) {
+              break;
+            }
+            await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+          }
+          return { record };
         }
         return { record: null };
       }
