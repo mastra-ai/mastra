@@ -11,7 +11,7 @@ export default defineConfig({
     preset: 'smallest',
   },
   sourcemap: true,
-  external: ['@mastra/core'],
+  external: ['@mastra/core', '@vercel/sandbox'],
   onSuccess: async () => {
     await generateTypes(process.cwd());
   },

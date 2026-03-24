@@ -17,40 +17,37 @@ import { VercelSandbox } from './sandbox';
  * Serializable subset of VercelSandboxOptions for editor storage.
  */
 interface VercelProviderConfig {
-  token?: string;
-  teamId?: string;
-  projectName?: string;
-  regions?: string[];
-  maxDuration?: number;
-  memory?: number;
+  runtime?: 'node24' | 'node22' | 'python3.13';
+  vcpus?: 1 | 2 | 4 | 8;
+  timeout?: number;
+  ports?: number[];
   env?: Record<string, string>;
-  commandTimeout?: number;
 }
 
 export const vercelSandboxProvider: SandboxProvider<VercelProviderConfig> = {
   id: 'vercel',
   name: 'Vercel Sandbox',
-  description: 'Serverless sandbox powered by Vercel Functions',
+  description: 'Ephemeral Linux microVM powered by Vercel Sandbox',
   configSchema: {
     type: 'object',
     properties: {
-      token: { type: 'string', description: 'Vercel API token' },
-      teamId: { type: 'string', description: 'Vercel team ID' },
-      projectName: { type: 'string', description: 'Existing Vercel project name' },
-      regions: {
-        type: 'array',
-        description: 'Deployment regions',
-        items: { type: 'string' },
-        default: ['iad1'],
+      runtime: {
+        type: 'string',
+        description: 'Runtime image (node24, node22, python3.13)',
+        default: 'node24',
       },
-      maxDuration: { type: 'number', description: 'Function max duration in seconds', default: 60 },
-      memory: { type: 'number', description: 'Function memory in MB', default: 1024 },
+      vcpus: { type: 'number', description: 'Number of virtual CPUs (1, 2, 4, 8)', default: 2 },
+      timeout: { type: 'number', description: 'Sandbox timeout in ms', default: 300000 },
+      ports: {
+        type: 'array',
+        description: 'Ports to expose publicly',
+        items: { type: 'number' },
+      },
       env: {
         type: 'object',
         description: 'Environment variables',
         additionalProperties: { type: 'string' },
       },
-      commandTimeout: { type: 'number', description: 'Per-invocation timeout in ms', default: 55000 },
     },
   },
   createSandbox: config => new VercelSandbox(config),

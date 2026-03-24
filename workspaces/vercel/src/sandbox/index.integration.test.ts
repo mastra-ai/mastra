@@ -1,49 +1,60 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { VercelSandbox } from './index';
 
-const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
+/**
+ * Integration tests for Vercel Sandbox.
+ *
+ * Requires authentication. Either:
+ * - VERCEL_OIDC_TOKEN (via `vercel link && vercel env pull`)
+ * - VERCEL_TOKEN + VERCEL_TEAM_ID + VERCEL_PROJECT_ID
+ */
+const hasAuth = !!(process.env.VERCEL_OIDC_TOKEN || process.env.VERCEL_TOKEN);
 
-describe.skipIf(!VERCEL_TOKEN)('VercelSandbox Integration', () => {
+describe.skipIf(!hasAuth)('VercelSandbox Integration', () => {
   let sandbox: VercelSandbox;
 
   beforeAll(async () => {
     sandbox = new VercelSandbox({
-      token: VERCEL_TOKEN!,
-      teamId: process.env.VERCEL_TEAM_ID,
+      runtime: 'node24',
+      timeout: 120_000,
     });
     await sandbox._start();
-  }, 180_000);
+  }, 60_000);
 
   afterAll(async () => {
     await sandbox._destroy();
   }, 30_000);
 
   it('should execute echo command', async () => {
-    const result = await sandbox.executeCommand('echo', ['hello world']);
-    expect(result.success).toBe(true);
-    expect(result.stdout.trim()).toBe('hello world');
+    const result = await sandbox.vercel.runCommand('echo', ['hello world']);
     expect(result.exitCode).toBe(0);
+    expect((await result.stdout()).trim()).toBe('hello world');
   });
 
   it('should handle failed commands', async () => {
-    const result = await sandbox.executeCommand('ls', ['/nonexistent-path']);
-    expect(result.success).toBe(false);
+    const result = await sandbox.vercel.runCommand('ls', ['/nonexistent-path']);
     expect(result.exitCode).not.toBe(0);
   });
 
-  it('should write and read from /tmp', async () => {
-    const writeResult = await sandbox.executeCommand('sh', [
-      '-c',
-      'echo "test content" > /tmp/test.txt && cat /tmp/test.txt',
+  it('should write and read files', async () => {
+    await sandbox.vercel.writeFiles([
+      { path: 'test.txt', content: Buffer.from('test content') },
     ]);
-    expect(writeResult.success).toBe(true);
-    expect(writeResult.stdout.trim()).toBe('test content');
+    const buffer = await sandbox.vercel.readFileToBuffer({ path: 'test.txt' });
+    expect(buffer?.toString()).toBe('test content');
+  });
+
+  it('should execute via process manager', async () => {
+    const handle = await sandbox.processes!.spawn('echo "from process manager"');
+    const result = await handle.wait();
+    expect(result.success).toBe(true);
+    expect(result.stdout.trim()).toBe('from process manager');
   });
 
   it('should report correct sandbox info', async () => {
-    const info = await sandbox.getInfo!();
+    const info = await sandbox.getInfo();
     expect(info.provider).toBe('vercel');
     expect(info.status).toBe('running');
-    expect(info.metadata?.deploymentUrl).toBeTruthy();
+    expect(info.metadata?.sandboxId).toBeTruthy();
   });
 });
