@@ -137,6 +137,8 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
       reminderType,
       path,
     });
+    reminderComponent.setExpanded(state.toolOutputExpanded);
+    state.allSystemReminderComponents.push(reminderComponent);
 
     addChildBeforeFollowUps(state, reminderComponent);
     state.ui.requestRender();
@@ -187,6 +189,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   state.pendingTools.clear();
   state.allToolComponents = [];
   state.allSlashCommandComponents = [];
+  state.allSystemReminderComponents = [];
 
   // Local accumulator for detecting task clears during history reconstruction
   let previousTasksAcc: TaskItem[] = [];

@@ -30,6 +30,7 @@ describe('handleMessageUpdate system reminders', () => {
       subagentToolCallIds: new Set(),
       allToolComponents: [],
       allSlashCommandComponents: [],
+      allSystemReminderComponents: [],
       pendingSubagents: new Map(),
       hideThinkingBlock: false,
       toolOutputExpanded: false,
@@ -56,8 +57,10 @@ describe('handleMessageUpdate system reminders', () => {
     );
 
     expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.allSystemReminderComponents).toHaveLength(1);
     const component = state.chatContainer.children[0];
     expect(component).toBeInstanceOf(SystemReminderComponent);
+    expect(state.allSystemReminderComponents[0]).toBe(component);
 
     const rendered = (component as SystemReminderComponent)
       .render(80)

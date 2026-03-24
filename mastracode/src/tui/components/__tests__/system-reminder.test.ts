@@ -103,9 +103,9 @@ describe('SystemReminderComponent', () => {
 
     expect(lines.some(line => line.includes('line 1'))).toBe(true);
     expect(lines.some(line => line.includes('line 4'))).toBe(true);
-    expect(lines.some(line => line.includes('line 5'))).toBe(false);
-    expect(lines.some(line => line.includes('line 6'))).toBe(false);
-    expect(lines.some(line => line.includes('collapsed by default'))).toBe(true);
+    expect(lines.some(line => line.includes('line 5'))).toBe(true);
+    expect(lines.some(line => line.includes('line 6'))).toBe(true);
+    expect(lines.some(line => line.includes('collapsed by default'))).toBe(false);
   });
 
   it('shows full content after expansion', () => {
@@ -117,14 +117,44 @@ describe('SystemReminderComponent', () => {
         'line 4',
         'line 5',
         'line 6',
+        'line 7',
+        'line 8',
+        'line 9',
+        'line 10',
+        'line 11',
+        'line 12',
       ].join('\n'),
     });
 
     comp.setExpanded(true);
     const lines = nonEmpty(renderPlain(comp));
 
-    expect(lines.some(line => line.includes('line 5'))).toBe(true);
-    expect(lines.some(line => line.includes('line 6'))).toBe(true);
+    expect(lines.some(line => line.includes('line 11'))).toBe(true);
+    expect(lines.some(line => line.includes('line 12'))).toBe(true);
     expect(lines.some(line => line.includes('collapsed by default'))).toBe(false);
+  });
+
+  it('collapses after ten lines by default', () => {
+    const comp = new SystemReminderComponent({
+      message: Array.from({ length: 12 }, (_, index) => `line ${index + 1}`).join('\n'),
+    });
+
+    const lines = nonEmpty(renderPlain(comp));
+
+    expect(lines.some(line => line.includes('line 10'))).toBe(true);
+    expect(lines.some(line => line.includes('line 11'))).toBe(false);
+    expect(lines.some(line => line.includes('line 12'))).toBe(false);
+    expect(lines.some(line => line.includes('ctrl+e to expand'))).toBe(true);
+    expect(lines.some(line => line.includes('collapsed by default'))).toBe(false);
+  });
+
+  it('reports expansion state', () => {
+    const comp = new SystemReminderComponent({ message: 'line 1' });
+
+    expect(comp.isExpanded()).toBe(false);
+    comp.setExpanded(true);
+    expect(comp.isExpanded()).toBe(true);
+    comp.toggleExpanded();
+    expect(comp.isExpanded()).toBe(false);
   });
 });

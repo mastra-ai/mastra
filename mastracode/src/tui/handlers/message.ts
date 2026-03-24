@@ -71,6 +71,8 @@ function addInlineReminder(ctx: EventHandlerContext, reminder: StreamedSystemRem
     reminderType: reminder.reminderType,
     path: reminder.path,
   });
+  component.setExpanded(state.toolOutputExpanded);
+  state.allSystemReminderComponents.push(component);
 
   if (state.streamingComponent) {
     const idx = state.chatContainer.children.indexOf(state.streamingComponent as never);

@@ -20,6 +20,7 @@ import type { AssistantMessageComponent } from './components/assistant-message.j
 import { CustomEditor } from './components/custom-editor.js';
 
 import type { GradientAnimator } from './components/obi-loader.js';
+import type { SystemReminderComponent } from './components/system-reminder.js';
 import type { OMMarkerComponent } from './components/om-marker.js';
 import type { OMProgressComponent } from './components/om-progress.js';
 import type { PlanApprovalInlineComponent } from './components/plan-approval-inline.js';
@@ -108,6 +109,8 @@ export interface TUIState {
   allToolComponents: IToolExecutionComponent[];
   /** Track slash command boxes for expand/collapse */
   allSlashCommandComponents: SlashCommandComponent[];
+  /** Track inline system reminders for expand/collapse */
+  allSystemReminderComponents: SystemReminderComponent[];
   /** Track active subagent tasks */
   pendingSubagents: Map<string, SubagentExecutionComponent>;
   toolOutputExpanded: boolean;
@@ -228,6 +231,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     seenSystemReminderKeys: new Set(),
     allToolComponents: [],
     allSlashCommandComponents: [],
+    allSystemReminderComponents: [],
     pendingSubagents: new Map(),
     toolOutputExpanded: false,
     hideThinkingBlock: true,

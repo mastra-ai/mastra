@@ -9,7 +9,7 @@ import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import stripAnsi from 'strip-ansi';
 import { BOX_INDENT, getTermWidth, theme } from '../theme.js';
 
-const MAX_COLLAPSED_LINES = 4;
+const MAX_COLLAPSED_LINES = 10;
 const GENERIC_DYNAMIC_REMINDER_PREFIX = 'When using guidance from a discovered instruction file';
 
 export interface SystemReminderOptions {
@@ -23,6 +23,10 @@ export class SystemReminderComponent extends Container {
   private readonly reminderType?: string;
   private readonly path?: string;
   private expanded = false;
+
+  isExpanded(): boolean {
+    return this.expanded;
+  }
 
   constructor(options: SystemReminderOptions) {
     super();
@@ -88,7 +92,7 @@ export class SystemReminderComponent extends Container {
 
     if (shouldCollapse && !this.expanded) {
       const remaining = wrappedMessageLines.length - visibleMessageLines.length;
-      const hint = hintColor(`... ${remaining} more lines (collapsed by default)`);
+      const hint = hintColor(`... ${remaining} more lines (ctrl+e to expand)`);
       this.addChild(new Text(renderRow(hint, innerWidth, border), BOX_INDENT, 0));
     }
 
