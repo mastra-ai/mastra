@@ -94,9 +94,9 @@ import Tools from '@/pages/tools';
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}/chat/new`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
-  agentSkillLink: (agentId: string, skillName: string, workspaceId?: string) =>
+  agentSkillLink: (agentId: string, skillName: string, skillPath?: string, workspaceId?: string) =>
     workspaceId
-      ? `/workspaces/${workspaceId}/skills/${skillName}?agentId=${encodeURIComponent(agentId)}`
+      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}?agentId=${encodeURIComponent(agentId)}${skillPath ? `&path=${encodeURIComponent(skillPath)}` : ''}`
       : `/workspaces`,
   agentsLink: () => `/agents`,
   agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/new`,
@@ -117,11 +117,15 @@ const paths: LinkComponentProviderProps['paths'] = {
   cmsPromptBlockCreateLink: () => '/cms/prompts/create',
   cmsPromptBlockEditLink: (promptBlockId: string) => `/cms/prompts/${promptBlockId}/edit`,
   toolLink: (toolId: string) => `/tools/${toolId}`,
-  skillLink: (skillName: string, workspaceId?: string) =>
-    workspaceId ? `/workspaces/${workspaceId}/skills/${skillName}` : `/workspaces`,
+  skillLink: (skillName: string, skillPath?: string, workspaceId?: string) =>
+    workspaceId
+      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}${skillPath ? `?path=${encodeURIComponent(skillPath)}` : ''}`
+      : `/workspaces`,
   workspaceLink: (workspaceId?: string) => (workspaceId ? `/workspaces/${workspaceId}` : `/workspaces`),
-  workspaceSkillLink: (skillName: string, workspaceId?: string) =>
-    workspaceId ? `/workspaces/${workspaceId}/skills/${skillName}` : `/workspaces`,
+  workspaceSkillLink: (skillName: string, skillPath?: string, workspaceId?: string) =>
+    workspaceId
+      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}${skillPath ? `?path=${encodeURIComponent(skillPath)}` : ''}`
+      : `/workspaces`,
   workspacesLink: () => `/workspaces`,
   processorsLink: () => `/processors`,
   processorLink: (processorId: string) => `/processors/${processorId}`,

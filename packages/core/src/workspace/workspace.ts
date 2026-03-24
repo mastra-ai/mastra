@@ -615,7 +615,7 @@ export class Workspace<
    * @example
    * ```typescript
    * const skills = await workspace.skills?.list();
-   * const skill = await workspace.skills?.get('brand-guidelines');
+   * const skill = await workspace.skills?.get('skills/brand-guidelines');
    * const results = await workspace.skills?.search('brand colors');
    * ```
    */
