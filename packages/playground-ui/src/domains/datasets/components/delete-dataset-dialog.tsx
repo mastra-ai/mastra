@@ -1,8 +1,8 @@
 'use client';
 
+import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { toast } from '@/lib/toast';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 
 export interface DeleteDatasetDialogProps {
   open: boolean;

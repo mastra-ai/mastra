@@ -6,7 +6,7 @@
  * This file is NOT executed — it's only type-checked by `tsc --noEmit`.
  * If this file compiles without errors, the route contract types work correctly.
  */
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { createRoute } from '../../server-adapter/routes/route-builder';
 import type {

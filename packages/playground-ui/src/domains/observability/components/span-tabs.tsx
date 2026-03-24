@@ -1,20 +1,14 @@
-import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
-import {
-  KeyValueList,
-  KeyValueListItemData,
-  Section,
-  Sections,
-  SpanScoring,
-  SpanScoreList,
-  useLinkComponent,
-} from '@/index';
-import { TraceSpanUsage, type TokenUsage } from './trace-span-usage';
-import { SpanDetails } from './span-details';
-import { CircleGaugeIcon } from 'lucide-react';
-import type { ListScoresResponse } from '@mastra/core/evals';
 import type { GetScorerResponse } from '@mastra/client-js';
-import { SpanRecord } from '@mastra/core/storage';
+import type { ListScoresResponse } from '@mastra/core/evals';
 import { EntityType } from '@mastra/core/observability';
+import type { SpanRecord } from '@mastra/core/storage';
+import { CircleGaugeIcon } from 'lucide-react';
+import { SpanDetails } from './span-details';
+import { TraceSpanUsage } from './trace-span-usage';
+import type { TokenUsage } from './trace-span-usage';
+import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
+import type { KeyValueListItemData } from '@/index';
+import { KeyValueList, Section, Sections, SpanScoring, SpanScoreList } from '@/index';
 
 type SpanTabsProps = {
   trace?: SpanRecord;
@@ -43,8 +37,6 @@ export function SpanTabs({
   scorers,
   isLoadingScorers,
 }: SpanTabsProps) {
-  const { Link } = useLinkComponent();
-
   let entityType;
   if (span?.attributes?.agentId || span?.entityType === EntityType.AGENT) {
     entityType = 'Agent';
@@ -61,7 +53,7 @@ export function SpanTabs({
       <TabContent value="details">
         <Sections>
           {span?.attributes?.usage ? <TraceSpanUsage spanUsage={span.attributes.usage as TokenUsage} /> : null}
-          <KeyValueList data={spanInfo} LinkComponent={Link} />
+          <KeyValueList data={spanInfo} />
           <SpanDetails span={span} />
         </Sections>
       </TabContent>

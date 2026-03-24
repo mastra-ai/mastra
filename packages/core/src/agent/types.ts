@@ -40,7 +40,6 @@ import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
-
 export type {
   MastraDBMessage,
   MastraMessageContentV2,
@@ -50,6 +49,8 @@ export type {
 } from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { LLMStepResult } from '../stream/types';
+export type ZodSchema = ZodSchemaV3 | ZodTypev4;
+
 export type ZodSchema = ZodSchemaV3 | ZodTypev4;
 
 /**

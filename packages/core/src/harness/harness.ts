@@ -80,6 +80,8 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
     | ((params: { decision: 'approve' | 'decline'; requestContext?: RequestContext }) => void)
     | null = null;
   private pendingApprovalToolName: string | null = null;
+  private pendingSuspensionRunId: string | null = null;
+  private pendingSuspensionToolCallId: string | null = null;
   private pendingQuestions = new Map<string, (answer: string) => void>();
   private pendingPlanApprovals = new Map<
     string,
@@ -1327,10 +1329,10 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
       }
 
       const response = await agent.stream(messageInput as any, streamOptions as any);
-      await this.processStream(response, requestContext);
+      const streamResult = await this.processStream(response, requestContext);
 
       if (this.currentOperationId === operationId) {
-        const reason = this.abortRequested ? 'aborted' : 'complete';
+        const reason = streamResult.suspended ? 'suspended' : this.abortRequested ? 'aborted' : 'complete';
         this.emit({ type: 'agent_end', reason });
       }
     } catch (error) {
@@ -1599,7 +1601,7 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
   private async processStream(
     response: { fullStream: AsyncIterable<any> },
     requestContext: RequestContext,
-  ): Promise<{ message: HarnessMessage }> {
+  ): Promise<{ message: HarnessMessage; suspended?: boolean }> {
     let currentMessage: HarnessMessage = {
       id: this.generateId(),
       role: 'assistant',
@@ -1744,13 +1746,13 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
           if (policy === 'allow') {
             const result = await this.handleToolApprove({ toolCallId, requestContext });
             currentMessage = result.message;
-            return { message: currentMessage };
+            return result;
           }
 
           if (policy === 'deny') {
             const result = await this.handleToolDecline({ toolCallId, requestContext });
             currentMessage = result.message;
-            return { message: currentMessage };
+            return result;
           }
 
           this.pendingApprovalToolName = toolName;
@@ -1769,15 +1771,37 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
               requestContext: approval.requestContext ?? requestContext,
             });
             currentMessage = result.message;
-            return { message: currentMessage };
+            return result;
           } else {
             const result = await this.handleToolDecline({
               toolCallId,
               requestContext: approval.requestContext ?? requestContext,
             });
             currentMessage = result.message;
-            return { message: currentMessage };
+            return result;
           }
+        }
+
+        case 'tool-call-suspended': {
+          const suspToolCallId = chunk.payload.toolCallId;
+          const suspToolName = chunk.payload.toolName;
+          const suspArgs = chunk.payload.args;
+          const suspPayload = chunk.payload.suspendPayload;
+          const suspResumeSchema = chunk.payload.resumeSchema;
+
+          this.emit({
+            type: 'tool_suspended',
+            toolCallId: suspToolCallId,
+            toolName: suspToolName,
+            args: suspArgs,
+            suspendPayload: suspPayload,
+            resumeSchema: suspResumeSchema,
+          });
+
+          this.pendingSuspensionRunId = this.currentRunId;
+          this.pendingSuspensionToolCallId = suspToolCallId;
+
+          return { message: currentMessage, suspended: true };
         }
 
         case 'error': {
@@ -2115,6 +2139,7 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
     this.displayState.activeTools = new Map();
     this.displayState.toolInputBuffers = new Map();
     this.displayState.pendingApproval = null;
+    this.displayState.pendingSuspension = null;
     this.displayState.pendingQuestion = null;
     this.displayState.pendingPlanApproval = null;
     this.displayState.activeSubagents = new Map();
@@ -2153,6 +2178,36 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
       this.pendingApprovalResolve({ decision, requestContext });
     }
     this.pendingApprovalResolve = null;
+  }
+
+  /**
+   * Respond to a pending tool suspension from the UI.
+   * Provides resume data so the suspended tool can continue execution.
+   */
+  async respondToToolSuspension({
+    resumeData,
+    requestContext,
+  }: {
+    resumeData: any;
+    requestContext?: RequestContext;
+  }): Promise<void> {
+    if (!this.pendingSuspensionRunId) return;
+
+    this.emit({ type: 'agent_start' });
+
+    try {
+      const streamResult = await this.handleToolResume({
+        resumeData,
+        requestContext,
+      });
+
+      const reason = streamResult.suspended ? 'suspended' : 'complete';
+      this.emit({ type: 'agent_end', reason });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.emit({ type: 'error', error: err });
+      this.emit({ type: 'agent_end', reason: 'error' });
+    }
   }
 
   // ===========================================================================
@@ -2225,7 +2280,7 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
   }: {
     toolCallId?: string;
     requestContext?: RequestContext;
-  }): Promise<{ message: HarnessMessage }> {
+  }): Promise<{ message: HarnessMessage; suspended?: boolean }> {
     if (!this.currentRunId) {
       throw new Error('No active run to approve tool call for');
     }
@@ -2256,7 +2311,7 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
   }: {
     toolCallId?: string;
     requestContext?: RequestContext;
-  }): Promise<{ message: HarnessMessage }> {
+  }): Promise<{ message: HarnessMessage; suspended?: boolean }> {
     if (!this.currentRunId) {
       throw new Error('No active run to decline tool call for');
     }
@@ -2276,6 +2331,40 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
       requestContext,
       toolsets: await this.buildToolsets(requestContext),
     });
+
+    return await this.processStream(response, requestContext);
+  }
+
+  private async handleToolResume({
+    resumeData,
+    requestContext: requestContextInput,
+  }: {
+    resumeData: any;
+    requestContext?: RequestContext;
+  }): Promise<{ message: HarnessMessage; suspended?: boolean }> {
+    if (!this.pendingSuspensionRunId) {
+      throw new Error('No active suspension to resume');
+    }
+
+    const agent = this.getCurrentAgent();
+
+    if (!this.abortController) {
+      this.abortController = new AbortController();
+    }
+
+    const requestContext = await this.buildRequestContext(requestContextInput);
+    const response = await agent.resumeStream(resumeData, {
+      runId: this.pendingSuspensionRunId,
+      toolCallId: this.pendingSuspensionToolCallId ?? undefined,
+      requireToolApproval: true,
+      memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
+      abortSignal: this.abortController.signal,
+      requestContext,
+      toolsets: await this.buildToolsets(requestContext),
+    });
+
+    this.pendingSuspensionRunId = null;
+    this.pendingSuspensionToolCallId = null;
 
     return await this.processStream(response, requestContext);
   }
@@ -2343,11 +2432,15 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
         ds.toolInputBuffers = new Map();
         ds.currentMessage = null;
         ds.pendingApproval = null;
+        ds.pendingSuspension = null;
         break;
 
       case 'agent_end':
         ds.isRunning = false;
         ds.pendingApproval = null;
+        if (event.reason !== 'suspended') {
+          ds.pendingSuspension = null;
+        }
         ds.pendingQuestion = null;
         ds.pendingPlanApproval = null;
         // Mark any still-running tools as errored (handles abort mid-run)
@@ -2468,6 +2561,16 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
           toolCallId: event.toolCallId,
           toolName: event.toolName,
           args: event.args,
+        };
+        break;
+
+      case 'tool_suspended':
+        ds.pendingSuspension = {
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          args: event.args,
+          suspendPayload: event.suspendPayload,
+          resumeSchema: event.resumeSchema,
         };
         break;
 
@@ -2955,6 +3058,15 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
         console.error(`[Heartbeat:${id}] shutdown failed:`, error);
       }
     }
+  }
+
+  // ===========================================================================
+  // Lifecycle
+  // ===========================================================================
+
+  async destroy(): Promise<void> {
+    await this.stopHeartbeats();
+    await this.destroyWorkspace();
   }
 
   // ===========================================================================

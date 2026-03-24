@@ -1,15 +1,16 @@
-import { MastraUIMessage } from '@mastra/react';
-import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
-import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
-import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuiState } from '@assistant-ui/react';
-import { cn } from '@/lib/utils';
+import type { MastraUIMessage } from '@mastra/react';
 import { CheckIcon, ChevronUpIcon, CopyIcon, TerminalSquare } from 'lucide-react';
-import { IconButton } from '@/ds/components/IconButton';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
+import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
+import { ToolApprovalButtons } from './tool-approval-buttons';
+import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
 import { Badge } from '@/ds/components/Badge';
+import { IconButton } from '@/ds/components/IconButton';
 import { Icon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
-import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
+import { cn } from '@/lib/utils';
 
 // Matches the shape returned by workspace.getInfo() — flat, not nested under "workspace"
 interface WorkspaceMetadata {

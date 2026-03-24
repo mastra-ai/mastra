@@ -1,5 +1,112 @@
 # @mastra/server
 
+## 1.16.0-alpha.3
+
+### Patch Changes
+
+- Add optional `?path=` query param to workspace skill routes for disambiguating same-named skills. ([#14430](https://github.com/mastra-ai/mastra/pull/14430))
+
+  Skill routes continue to use `:skillName` in the URL path (no breaking change). When two skills share the same name (e.g. from different directories), pass the optional `?path=` query parameter to select the exact skill:
+
+  ```
+  GET /workspaces/:workspaceId/skills/:skillName?path=skills/brand-guidelines
+  ```
+
+  `SkillMetadata` now includes a `path` field, and the `list()` method returns all same-named skills for disambiguation. The client SDK's `getSkill()` accepts an optional `skillPath` parameter for disambiguation.
+
+- Updated skill search result types and query parameters to use `skillName`/`skillNames` instead of `skillPath`/`skillPaths` for consistency with the name-based public API. ([#14430](https://github.com/mastra-ai/mastra/pull/14430))
+
+- Added storage type detection to the Metrics Dashboard. The `/system/packages` endpoint now returns `observabilityStorageType`, identifying the observability storage backend. The dashboard shows an empty state when the storage does not support metrics (e.g. PostgreSQL, LibSQL), and displays a warning when using in-memory storage since metrics are not persisted across server restarts. Also added a docs link button to the Metrics page header. ([#14620](https://github.com/mastra-ai/mastra/pull/14620))
+
+  ```ts
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient();
+  const system = await client.getSystemPackages();
+
+  // system.observabilityStorageType contains the class name of the observability store:
+  // - 'ObservabilityInMemory' → metrics work but are not persisted across restarts
+  // - 'ObservabilityPG', 'ObservabilityLibSQL', etc. → metrics not supported
+
+  if (system.observabilityStorageType === 'ObservabilityInMemory') {
+    console.warn('Metrics are not persisted — data will be lost on server restart.');
+  }
+
+  const SUPPORTED = new Set(['ObservabilityInMemory']);
+  if (!SUPPORTED.has(system.observabilityStorageType ?? '')) {
+    console.error('Metrics require in-memory observability storage.');
+  }
+  ```
+
+- Updated dependencies [[`423aa6f`](https://github.com/mastra-ai/mastra/commit/423aa6fd12406de6a1cc6b68e463d30af1d790fb), [`4bb5adc`](https://github.com/mastra-ai/mastra/commit/4bb5adc05c88e3a83fe1ea5ecb9eae6e17313124), [`4bb5adc`](https://github.com/mastra-ai/mastra/commit/4bb5adc05c88e3a83fe1ea5ecb9eae6e17313124)]:
+  - @mastra/core@1.16.0-alpha.3
+
+## 1.16.0-alpha.2
+
+### Patch Changes
+
+- Fix Zod v3 and Zod v4 compatibility across public structured-output APIs. ([#14464](https://github.com/mastra-ai/mastra/pull/14464))
+
+  Mastra agent and client APIs accept schemas from either `zod/v3` or `zod/v4`, matching the documented peer dependency range and preserving TypeScript compatibility for both Zod versions.
+
+- Updated dependencies [[`be37de4`](https://github.com/mastra-ai/mastra/commit/be37de4391bd1d5486ce38efacbf00ca51637262), [`f3ce603`](https://github.com/mastra-ai/mastra/commit/f3ce603fd76180f4a5be90b6dc786d389b6b3e98), [`2871451`](https://github.com/mastra-ai/mastra/commit/2871451703829aefa06c4a5d6eca7fd3731222ef), [`d3930ea`](https://github.com/mastra-ai/mastra/commit/d3930eac51c30b0ecf7eaa54bb9430758b399777)]:
+  - @mastra/core@1.16.0-alpha.2
+
+## 1.16.0-alpha.1
+
+### Minor Changes
+
+- Added `getAuthenticatedUser()` to `@mastra/server/auth` so server middleware can resolve the configured auth user without changing route auth behavior. ([#14458](https://github.com/mastra-ai/mastra/pull/14458))
+
+  **Example**
+
+  ```ts
+  import { getAuthenticatedUser } from '@mastra/server/auth';
+
+  const user = await getAuthenticatedUser({
+    mastra,
+    token,
+    request: c.req.raw,
+  });
+  ```
+
+### Patch Changes
+
+- Added agent version support for experiments. When triggering an experiment, you can now pass an `agentVersion` parameter to pin which agent version to use. The agent version is stored with the experiment and returned in experiment responses. ([#14562](https://github.com/mastra-ai/mastra/pull/14562))
+
+  ```ts
+  const client = new MastraClient();
+
+  await client.triggerDatasetExperiment({
+    datasetId: 'my-dataset',
+    targetType: 'agent',
+    targetId: 'my-agent',
+    version: 3, // pin to dataset version 3
+    agentVersion: 'ver_abc123', // pin to a specific agent version
+  });
+  ```
+
+- Updated dependencies [[`7dbd611`](https://github.com/mastra-ai/mastra/commit/7dbd611a85cb1e0c0a1581c57564268cb183d86e), [`41aee84`](https://github.com/mastra-ai/mastra/commit/41aee84561ceebe28bad1ecba8702d92838f67f0)]:
+  - @mastra/core@1.16.0-alpha.1
+
+## 1.16.0-alpha.0
+
+### Minor Changes
+
+- Added dataset-agent association and experiment status tracking for the Evaluate workflow. ([#14470](https://github.com/mastra-ai/mastra/pull/14470))
+  - **Dataset targeting**: Added `targetType` and `targetIds` fields to datasets, enabling association with agents, scorers, or workflows. Datasets can now be linked to multiple entities.
+  - **Experiment status**: Added `status` field to experiment results (`'needs-review'`, `'reviewed'`, `'complete'`) for review queue workflow.
+  - **Dataset experiment routes**: Added API endpoints for triggering experiments from a dataset with configurable target type and target ID.
+  - **LLM data generation**: Added endpoint for generating dataset items using an LLM with configurable count and prompt.
+  - **Failure analysis**: Added endpoint for clustering experiment failures and proposing tags using LLM analysis.
+
+- Added new observability API endpoints and client methods for logs, scores, feedback, metrics (aggregate, breakdown, time series, percentiles), and discovery (metric names, label keys/values, entity types/names, service names, environments, tags) ([#14470](https://github.com/mastra-ai/mastra/pull/14470))
+
+### Patch Changes
+
+- Updated dependencies [[`68ed4e9`](https://github.com/mastra-ai/mastra/commit/68ed4e9f118e8646b60a6112dabe854d0ef53902), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c), [`4a75e10`](https://github.com/mastra-ai/mastra/commit/4a75e106bd31c283a1b3fe74c923610dcc46415b), [`085c1da`](https://github.com/mastra-ai/mastra/commit/085c1daf71b55a97b8ebad26623089e40055021c)]:
+  - @mastra/core@1.16.0-alpha.0
+
 ## 1.15.0
 
 ### Minor Changes

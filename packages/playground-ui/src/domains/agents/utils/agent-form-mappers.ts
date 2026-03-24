@@ -1,5 +1,5 @@
-import type { AgentInstructionBlock, StorageConditionalVariant } from '@mastra/core/storage';
 import type { StoredAgentSkillConfig, StoredWorkspaceRef, ConditionalField } from '@mastra/client-js';
+import type { AgentInstructionBlock, StorageConditionalVariant } from '@mastra/core/storage';
 
 import type {
   EntityConfig,
@@ -168,32 +168,75 @@ export const mapInstructionBlocksToApi = (blocks: InstructionBlock[] | undefined
     return { type: 'prompt_block' as const, content: block.content, rules: block.rules };
   });
 
+/** Normalize block content that may be a string or a legacy `{ content, role }` object. */
+const normalizeBlockContent = (content: unknown): string => {
+  if (typeof content === 'string') return content;
+  if (content && typeof content === 'object' && 'content' in content) {
+    return typeof (content as { content: unknown }).content === 'string'
+      ? (content as { content: string }).content
+      : '';
+  }
+  return '';
+};
+
+/**
+ * Normalize a raw `instructions` value from the API (which can be any
+ * `SystemMessage` variant) into a plain string.  This handles:
+ *  - `string`
+ *  - `CoreSystemMessage` (`{ role: 'system', content: string }`)
+ *  - `string[]` / `CoreSystemMessage[]`
+ */
+const normalizeSystemMessage = (raw: unknown): string => {
+  if (typeof raw === 'string') return raw;
+  if (Array.isArray(raw)) return raw.map(normalizeSystemMessage).filter(Boolean).join('\n\n');
+  if (raw && typeof raw === 'object' && 'content' in raw) {
+    const c = (raw as { content: unknown }).content;
+    return typeof c === 'string' ? c : '';
+  }
+  return '';
+};
+
 /** Map API instruction data to form instruction blocks. */
 export const mapInstructionBlocksFromApi = (
-  instructionsRaw: string | AgentInstructionBlock[] | undefined,
+  instructionsRaw: string | AgentInstructionBlock[] | unknown,
 ): { instructionsString: string; instructionBlocks: InstructionBlock[] } => {
-  const instructionsString = Array.isArray(instructionsRaw)
-    ? instructionsRaw
-        .map((b: AgentInstructionBlock) => (b.type === 'prompt_block' ? b.content : ''))
-        .filter(Boolean)
-        .join('\n\n')
-    : instructionsRaw || '';
+  // If the raw value is an AgentInstructionBlock[] (array of objects with `type`),
+  // process each block individually.
+  const isBlockArray =
+    Array.isArray(instructionsRaw) &&
+    instructionsRaw.length > 0 &&
+    typeof instructionsRaw[0] === 'object' &&
+    'type' in instructionsRaw[0];
 
-  const instructionBlocks: InstructionBlock[] = Array.isArray(instructionsRaw)
-    ? instructionsRaw
-        .filter(
-          (b: AgentInstructionBlock): b is Exclude<AgentInstructionBlock, { type: 'text' }> =>
-            b.type === 'prompt_block' || b.type === 'prompt_block_ref',
-        )
-        .map(b => {
-          if (b.type === 'prompt_block_ref') {
-            return createRefInstructionBlock(b.id);
-          }
-          return createInstructionBlock(b.content, b.rules);
-        })
-    : [createInstructionBlock(instructionsRaw || '')];
+  if (isBlockArray) {
+    const blocks = instructionsRaw as AgentInstructionBlock[];
+    const instructionsString = blocks
+      .map((b: AgentInstructionBlock) => (b.type === 'prompt_block' ? normalizeBlockContent(b.content) : ''))
+      .filter(Boolean)
+      .join('\n\n');
 
-  return { instructionsString, instructionBlocks };
+    const instructionBlocks: InstructionBlock[] = blocks
+      .filter(
+        (b: AgentInstructionBlock): b is Exclude<AgentInstructionBlock, { type: 'text' }> =>
+          b.type === 'prompt_block' || b.type === 'prompt_block_ref',
+      )
+      .map(b => {
+        if (b.type === 'prompt_block_ref') {
+          return createRefInstructionBlock(b.id);
+        }
+        return createInstructionBlock(normalizeBlockContent(b.content), b.rules);
+      });
+
+    return { instructionsString, instructionBlocks };
+  }
+
+  // For any other SystemMessage variant (string, CoreSystemMessage, string[],
+  // CoreSystemMessage[]), normalize to a plain string.
+  const normalized = normalizeSystemMessage(instructionsRaw);
+  return {
+    instructionsString: normalized,
+    instructionBlocks: [createInstructionBlock(normalized)],
+  };
 };
 
 // ---------------------------------------------------------------------------

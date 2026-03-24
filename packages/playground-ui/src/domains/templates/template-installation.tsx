@@ -1,17 +1,17 @@
+import { OctagonXIcon } from 'lucide-react';
 import { Container } from './shared';
 import { Spinner } from '@/ds/components/Spinner';
+import { ProcessStepList, ProcessStepProgressBar } from '@/ds/components/Steps';
+import type { ProcessStep } from '@/ds/components/Steps';
 import { cn } from '@/lib/utils';
-import { ProcessStepList, ProcessStepProgressBar, type ProcessStep } from '@/ds/components/Steps';
-import { OctagonXIcon } from 'lucide-react';
 
 type TemplateInstallationProps = {
   name: string;
   streamResult?: any;
-  runId?: string;
   workflowInfo?: any;
 };
 
-export function TemplateInstallation({ name, streamResult, runId, workflowInfo }: TemplateInstallationProps) {
+export function TemplateInstallation({ name, streamResult, workflowInfo }: TemplateInstallationProps) {
   const phase = streamResult?.phase || 'initializing';
   const workflowState = streamResult?.payload?.workflowState;
   const currentStep = streamResult?.payload?.currentStep;
