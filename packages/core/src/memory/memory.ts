@@ -939,6 +939,7 @@ https://mastra.ai/en/docs/memory/overview`,
     const result: SerializedObservationalMemoryConfig = {
       scope: om.scope,
       shareTokenBudget: om.shareTokenBudget,
+      retrieval: om.retrieval,
     };
 
     // Extract model ID string from the top-level model
@@ -958,6 +959,7 @@ https://mastra.ai/en/docs/memory/overview`,
         bufferTokens: obs.bufferTokens,
         bufferActivation: obs.bufferActivation,
         blockAfter: obs.blockAfter,
+        previousObserverTokens: obs.previousObserverTokens,
       };
       const obsModelId = extractModelIdString(obs.model);
       if (obsModelId) {

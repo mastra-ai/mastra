@@ -1,11 +1,11 @@
+import type { DatasetExperiment } from '@mastra/client-js';
+import { format } from 'date-fns';
+import { LayersIcon, TargetIcon, CalendarIcon, ArrowRightIcon, ArrowLeftIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 import { Chip } from '@/ds/components/Chip';
 import type { ChipProps } from '@/ds/components/Chip';
 import { TextAndIcon } from '@/ds/components/Text';
 import { useLinkComponent } from '@/lib/framework';
-import { LayersIcon, TargetIcon, CalendarIcon, ArrowRightIcon, ArrowLeftIcon } from 'lucide-react';
-import { format } from 'date-fns';
-import type { DatasetExperiment } from '@mastra/client-js';
 
 const typeConfig: Record<
   ExperimentInComparisonInfoProps['type'],

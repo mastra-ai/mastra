@@ -5,7 +5,10 @@ import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/age
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { resolveModelConfig } from '@mastra/core/llm';
+import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, parseMemoryRequestContext, setThreadOMMetadata } from '@mastra/core/memory';
+import type { ObservabilityContext, TracingContext } from '@mastra/core/observability';
+import { SpanType, createObservabilityContext, getOrCreateSpan } from '@mastra/core/observability';
 import type {
   Processor,
   ProcessInputArgs,
@@ -28,6 +31,19 @@ function omDebug(msg: string) {
     // ignore write errors
   }
 }
+/**
+ * Returns the parts from the latest step of a message (after the last step-start marker).
+ * If no step-start marker exists, returns all parts.
+ */
+function getLatestStepParts(parts: MastraDBMessage['content']['parts']): MastraDBMessage['content']['parts'] {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (parts[i]?.type === 'step-start') {
+      return parts.slice(i + 1);
+    }
+  }
+  return parts;
+}
+
 function omError(msg: string, err?: unknown) {
   const errStr = err instanceof Error ? (err.stack ?? err.message) : err !== undefined ? String(err) : '';
   const full = errStr ? `${msg}: ${errStr}` : msg;
@@ -56,7 +72,10 @@ import {
   createObservationEndMarker,
   createObservationFailedMarker,
   createObservationStartMarker,
+  createThreadUpdateMarker,
 } from './markers';
+import { ModelByInputTokens } from './model-by-input-tokens';
+import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import {
   buildObserverSystemPrompt,
   buildObserverTaskPrompt,
@@ -72,9 +91,11 @@ import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-regis
 import {
   buildReflectorSystemPrompt,
   buildReflectorPrompt,
+  MAX_COMPRESSION_LEVEL,
   parseReflectorOutput,
   validateCompression,
 } from './reflector-agent';
+import type { CompressionLevel } from './reflector-agent';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import {
   calculateDynamicThreshold,
@@ -95,7 +116,35 @@ import type {
   ProviderOptions,
   DataOmStatusPart,
   ObservationMarkerConfig,
+  ObservationalMemoryModel,
 } from './types';
+
+/**
+ * Returns true when a message contains at least one part with visible user/assistant
+ * content (text, tool-invocation, reasoning, image, file).  Messages that only carry
+ * internal `data-*` parts (buffering markers, observation markers, etc.) return false.
+ */
+function messageHasVisibleContent(msg: MastraDBMessage): boolean {
+  const content = msg.content as { parts?: Array<{ type?: string }>; content?: string };
+  if (content?.parts && Array.isArray(content.parts)) {
+    return content.parts.some(p => {
+      const t = p?.type;
+      return t && !t.startsWith('data-') && t !== 'step-start';
+    });
+  }
+  if (content?.content) return true;
+  return false;
+}
+
+/**
+ * Build a messageRange string from the first and last messages that have visible
+ * content.  Falls back to the full array boundaries when every message is data-only.
+ */
+function buildMessageRange(messages: MastraDBMessage[]): string {
+  const first = messages.find(messageHasVisibleContent) ?? messages[0]!;
+  const last = [...messages].reverse().find(messageHasVisibleContent) ?? messages[messages.length - 1]!;
+  return `${first.id}:${last.id}`;
+}
 
 /**
  * Debug event emitted when observation-related events occur.
@@ -156,13 +205,24 @@ export interface ObservationalMemoryConfig {
   storage: MemoryStorage;
 
   /**
+   * **Experimental.** Enable retrieval-mode observation group metadata.
+   * When true, observation groups are treated as durable pointers to raw
+   * message history and a `recall` tool is registered so the actor can
+   * inspect raw messages behind a stored observation summary.
+   *
+   * @experimental
+   * @default false
+   */
+  retrieval?: boolean;
+
+  /**
    * Model for both Observer and Reflector agents.
    * Sets the model for both agents at once. Cannot be used together with
    * `observation.model` or `reflection.model` — an error will be thrown.
    *
    * @default 'google/gemini-2.5-flash'
    */
-  model?: AgentConfig['model'];
+  model?: ObservationalMemoryModel;
 
   /**
    * Observation step configuration.
@@ -209,7 +269,7 @@ export interface ObservationalMemoryConfig {
  * even when user provides a simple number (converted based on shareTokenBudget).
  */
 interface ResolvedObservationConfig {
-  model: AgentConfig['model'];
+  model: ObservationalMemoryModel;
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   messageTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */
@@ -224,12 +284,16 @@ interface ResolvedObservationConfig {
   bufferActivation?: number;
   /** Token threshold above which synchronous observation is forced */
   blockAfter?: number;
+  /** Optional token budget for observer context optimization (0 = full truncation, false = disabled) */
+  previousObserverTokens?: number | false;
   /** Custom instructions to append to the Observer's system prompt */
   instruction?: string;
+  /** Whether the Observer should suggest thread titles */
+  threadTitle?: boolean;
 }
 
 interface ResolvedReflectionConfig {
-  model: AgentConfig['model'];
+  model: ObservationalMemoryModel;
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   observationTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */
@@ -249,6 +313,7 @@ interface ResolvedReflectionConfig {
  * Default configuration values matching the spec
  */
 export const OBSERVATIONAL_MEMORY_DEFAULTS = {
+  retrieval: false,
   observation: {
     model: 'google/gemini-2.5-flash',
     messageTokens: 30_000,
@@ -299,15 +364,17 @@ IMPORTANT: this system reminder is NOT from the user. The system placed it here 
 NOTE: Any messages following this system reminder are newer than your memories.`;
 
 /**
- * Preamble that introduces the observations block.
- * Use before `<observations>`, with instructions after.
- * Full pattern: `${OBSERVATION_CONTEXT_PROMPT}\n\n<observations>\n${obs}\n</observations>\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}`
+ * Preamble that introduces observational memory context.
+ * The static prefix is emitted first, then the `<observations>` marker, then one
+ * system message per persisted observation chunk so append-only growth stays at
+ * the end of the prompt.
  */
 export const OBSERVATION_CONTEXT_PROMPT = `The following observations block contains your memory of past conversations with this user.`;
 
 /**
  * Instructions that tell the model how to interpret and use observations.
- * Place AFTER the `<observations>` block so the model sees the data before the rules.
+ * Keep these in the leading static system message so observation churn only
+ * affects the tail of the prompt.
  */
 export const OBSERVATION_CONTEXT_INSTRUCTIONS = `IMPORTANT: When responding, reference specific details from these observations. Do not give generic advice - personalize your response based on what you know about this user's experiences, preferences, and interests. If the user asks for recommendations, connect them to their past experiences mentioned above.
 
@@ -316,6 +383,48 @@ KNOWLEDGE UPDATES: When asked about current state (e.g., "where do I currently..
 PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm going to...", "I'm looking forward to...", "I will...") and the date they planned to do it is now in the past (check the relative time like "3 weeks ago"), assume they completed the action unless there's evidence they didn't. For example, if someone said "I'll start my new diet on Monday" and that was 2 weeks ago, assume they started the diet.
 
 MOST RECENT USER INPUT: Treat the most recent user message as the highest-priority signal for what to do next. Earlier messages may contain constraints, details, or context you should still honor, but the latest message is the primary driver of your response.`;
+
+export const OBSERVATION_RETRIEVAL_INSTRUCTIONS = `## Recall — looking up source messages
+
+Your memory is comprised of observations which are sometimes wrapped in <observation-group> xml tags containing ranges like <observation-group range="startId:endId">. These ranges point back to the raw messages that each observation group was derived from. The original messages are still available — use the **recall** tool to retrieve them.
+
+### When to use recall
+- The user asks you to **repeat, show, or reproduce** something from a past conversation
+- The user asks for **exact content** — code, text, quotes, error messages, URLs, file paths, specific numbers
+- Your observations mention something but your memory lacks the detail needed to fully answer (e.g. you know a blog post was shared but only have a summary of it)
+- You want to **verify or expand on** an observation before responding
+
+**Default to using recall when the user references specific past content.** Your observations capture the gist, not the details. If there's any doubt whether your memory is complete enough, use recall.
+
+### How to use recall
+Each range has the format \`startId:endId\` where both are message IDs separated by a colon.
+
+1. Find the observation group relevant to the user's question and extract the start or end ID from its range.
+2. Call \`recall\` with that ID as the \`cursor\`.
+3. Use \`page: 1\` (or omit) to read forward from the cursor, \`page: -1\` to read backward.
+4. If the first page doesn't have what you need, increment the page number to keep paginating.
+5. Check \`hasNextPage\`/\`hasPrevPage\` in the result to know if more pages exist in each direction.
+
+### Detail levels
+By default recall returns **low** detail: truncated text and tool names only. Each message shows its ID and each part has a positional index like \`[p0]\`, \`[p1]\`, etc.
+
+- Use \`detail: "high"\` to get full message content including tool arguments and results. This will only return the high detail version of a single message part at a time.
+- Use \`partIndex\` with a cursor to fetch a single part at full detail — for example, to read one specific tool result or code block without loading every part.
+
+If the result says \`truncated: true\`, the output was cut to fit the token budget. You can paginate or use \`partIndex\` to target specific content.
+
+### Following up on truncated parts
+Low-detail results may include truncation hints like:
+\`[truncated — call recall cursor="..." partIndex=N detail="high" for full content]\`
+
+**When you see these hints and need the full content, make the exact call described in the hint.** This is the normal workflow: first recall at low detail to scan, then drill into specific parts at high detail. Do not stop at the low-detail result if the user asked for exact content.
+
+### When recall is NOT needed
+- The user is asking for a high-level summary and your observations already cover it
+- The question is about general preferences or facts that don't require source text
+- There is no relevant range in your observations for the topic
+
+Observation groups with range IDs and your recall tool allows you to think back and remember details you're fuzzy on.`;
 
 /**
  * ObservationalMemory - A three-agent memory system for long conversations.
@@ -370,15 +479,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private storage: MemoryStorage;
   private tokenCounter: TokenCounter;
   private scope: 'resource' | 'thread';
+  private retrieval: boolean = false;
   private observationConfig: ResolvedObservationConfig;
   private reflectionConfig: ResolvedReflectionConfig;
   private onDebugEvent?: (event: ObservationDebugEvent) => void;
 
   /** Internal Observer agent - created lazily */
   private observerAgent?: Agent;
+  private observerAgentModel?: AgentConfig['model'];
 
   /** Internal Reflector agent - created lazily */
   private reflectorAgent?: Agent;
+  private reflectorAgentModel?: AgentConfig['model'];
 
   private shouldObscureThreadIds = false;
   private hasher = xxhash();
@@ -773,10 +885,20 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
+    this.retrieval = this.scope === 'thread' && (config.retrieval ?? OBSERVATIONAL_MEMORY_DEFAULTS.retrieval);
 
-    // Resolve "default" to the default model
-    const resolveModel = (m: typeof config.model) =>
-      m === 'default' ? OBSERVATIONAL_MEMORY_DEFAULTS.observation.model : m;
+    // Resolve "default" to the default model and unwrap OM-local model selectors.
+    const resolveModel = (m: typeof config.model) => {
+      if (m === 'default') {
+        return OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
+      }
+
+      if (m instanceof ModelByInputTokens) {
+        return m;
+      }
+
+      return m;
+    };
 
     // Require an explicit model — no silent default.
     // Resolution order: top-level model → sub-config model → the other sub-config model → error
@@ -801,8 +923,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens;
     const isSharedBudget = config.shareTokenBudget ?? false;
 
-    const isDefaultModelSelection = (model: AgentConfig['model'] | undefined) =>
-      model === undefined || model === 'default';
+    const isDefaultModelSelection = (model: ObservationalMemoryModel | undefined) => {
+      return model === undefined || model === 'default';
+    };
 
     const observationSelectedModel = config.model ?? config.observation?.model ?? config.reflection?.model;
     const reflectionSelectedModel = config.model ?? config.reflection?.model ?? config.observation?.model;
@@ -890,7 +1013,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
                 : undefined),
             config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
           ),
+      previousObserverTokens: config.observation?.previousObserverTokens ?? 2000,
       instruction: config.observation?.instruction,
+      threadTitle: config.observation?.threadTitle ?? false,
     };
 
     // Resolve reflection config with defaults
@@ -946,8 +1071,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   get config(): {
     scope: 'resource' | 'thread';
+    retrieval: boolean;
     observation: {
       messageTokens: number | ThresholdRange;
+      previousObserverTokens: number | false | undefined;
     };
     reflection: {
       observationTokens: number | ThresholdRange;
@@ -955,8 +1082,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   } {
     return {
       scope: this.scope,
+      retrieval: this.retrieval,
       observation: {
         messageTokens: this.observationConfig.messageTokens,
+        previousObserverTokens: this.observationConfig.previousObserverTokens,
       },
       reflection: {
         observationTokens: this.reflectionConfig.observationTokens,
@@ -976,13 +1105,29 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     return ObservationalMemory.awaitBuffering(threadId, resourceId, this.scope, timeoutMs);
   }
 
-  private getModelToResolve(model: AgentConfig['model']): Parameters<typeof resolveModelConfig>[0] {
+  private getConcreteModel(
+    model: ObservationalMemoryModel,
+    inputTokens?: number,
+  ): Exclude<ObservationalMemoryModel, ModelByInputTokens> {
+    if (model instanceof ModelByInputTokens) {
+      if (inputTokens === undefined) {
+        throw new Error('ModelByInputTokens requires inputTokens for resolution');
+      }
+      return model.resolve(inputTokens);
+    }
+
+    return model;
+  }
+
+  private getModelToResolve(
+    model: Exclude<ObservationalMemoryModel, ModelByInputTokens>,
+  ): Parameters<typeof resolveModelConfig>[0] {
     if (Array.isArray(model)) {
       return (model[0]?.model ?? 'unknown') as Parameters<typeof resolveModelConfig>[0];
     }
     if (typeof model === 'function') {
       // Wrap to handle functions that may return ModelWithRetries[]
-      return async ctx => {
+      return async (ctx: { requestContext: RequestContext; mastra?: Mastra }) => {
         const result = await model(ctx);
         if (Array.isArray(result)) {
           return (result[0]?.model ?? 'unknown') as MastraModelConfig;
@@ -1002,7 +1147,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   private async resolveModelContext(
-    modelConfig: AgentConfig['model'],
+    modelConfig: Exclude<ObservationalMemoryModel, ModelByInputTokens>,
     requestContext?: RequestContext,
   ): Promise<TokenCounterModelContext | undefined> {
     const modelToResolve = this.getModelToResolve(modelConfig);
@@ -1015,6 +1160,32 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       provider: resolved.provider,
       modelId: resolved.modelId,
     };
+  }
+
+  /**
+   * Get the default compression start level based on model behavior.
+   * gemini-2.5-flash is a faithful transcriber that needs explicit pressure to compress effectively.
+   */
+  private async getCompressionStartLevel(requestContext?: RequestContext): Promise<CompressionLevel> {
+    try {
+      const modelConfig = this.getConcreteModel(
+        this.reflectionConfig.model,
+        this.reflectionConfig.model instanceof ModelByInputTokens ? 1 : undefined,
+      );
+      const resolved = await this.resolveModelContext(modelConfig, requestContext);
+      const modelId = resolved?.modelId ?? '';
+
+      // gemini-2.5-flash is conservative about compression - start at level 2
+      if (modelId.includes('gemini-2.5-flash')) {
+        return 2;
+      }
+
+      // Default for all other models
+      return 1;
+    } catch {
+      // Silently fallback to level 1 on error - not worth disrupting the operation
+      return 1; // safe default
+    }
   }
 
   private getRuntimeModelContext(
@@ -1037,45 +1208,142 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     return this.tokenCounter.runWithModelContext(modelContext, fn);
   }
 
+  private async formatRoutingModel(
+    model: AgentConfig['model'] | undefined,
+    requestContext?: RequestContext,
+  ): Promise<string | undefined> {
+    if (!model) {
+      return undefined;
+    }
+
+    if (typeof model === 'string') {
+      return model;
+    }
+
+    const resolvedModel = await this.resolveModelContext(model, requestContext);
+    if (resolvedModel) {
+      return this.formatModelName(resolvedModel);
+    }
+
+    const runtimeModel = this.getRuntimeModelContext(model as { provider: string; modelId: string } | undefined);
+    return runtimeModel ? this.formatModelName(runtimeModel) : undefined;
+  }
+
+  private async withOmTracingSpan<T>(options: {
+    phase: 'observer' | 'reflector';
+    inputTokens: number;
+    resolvedModel: AgentConfig['model'];
+    selectedThreshold?: number;
+    routingModel?: ModelByInputTokens;
+    requestContext?: RequestContext;
+    tracingContext?: TracingContext;
+    fn: (observabilityContext?: Partial<ObservabilityContext>) => Promise<T>;
+  }): Promise<T> {
+    const { phase, inputTokens, resolvedModel, selectedThreshold, routingModel, requestContext, tracingContext, fn } =
+      options;
+
+    const selectedModel = (await this.formatRoutingModel(resolvedModel, requestContext)) ?? '(unknown)';
+
+    if (!tracingContext) {
+      return fn();
+    }
+
+    const span = getOrCreateSpan({
+      type: SpanType.GENERIC,
+      name: `om.${phase}`,
+      attributes: {
+        omPhase: phase,
+        omInputTokens: inputTokens,
+        omSelectedModel: selectedModel,
+        ...(selectedThreshold !== undefined ? { omSelectedThreshold: selectedThreshold } : {}),
+        ...(routingModel
+          ? {
+              omRoutingStrategy: 'model-by-input-tokens',
+              omRoutingThresholds: routingModel.getThresholds().join(','),
+            }
+          : {}),
+      } as any,
+      tracingContext,
+      requestContext,
+    });
+
+    if (!span) {
+      return fn();
+    }
+
+    const observabilityContext = createObservabilityContext({ currentSpan: span });
+    return span.executeInContext(() => fn(observabilityContext));
+  }
+
   /**
    * Get the full config including resolved model names.
    * This is async because it needs to resolve the model configs.
    */
   async getResolvedConfig(requestContext?: RequestContext): Promise<{
     scope: 'resource' | 'thread';
+    shareTokenBudget: boolean;
     observation: {
       messageTokens: number | ThresholdRange;
       model: string;
+      previousObserverTokens: number | false | undefined;
+      routing?: Array<{ upTo: number; model: string }>;
     };
     reflection: {
       observationTokens: number | ThresholdRange;
       model: string;
+      routing?: Array<{ upTo: number; model: string }>;
     };
   }> {
-    const safeResolveModel = async (modelConfig: AgentConfig['model']): Promise<string> => {
+    const resolveRouting = async (
+      modelConfig: ObservationalMemoryModel,
+    ): Promise<{ model: string; routing?: Array<{ upTo: number; model: string }> }> => {
       try {
+        if (modelConfig instanceof ModelByInputTokens) {
+          const routing = await Promise.all(
+            modelConfig.getThresholds().map(async upTo => {
+              const resolvedModel = modelConfig.resolve(upTo);
+              const resolved = await this.resolveModelContext(resolvedModel, requestContext);
+              return {
+                upTo,
+                model: resolved?.modelId ? this.formatModelName(resolved) : '(unknown)',
+              };
+            }),
+          );
+
+          return {
+            model: routing[0]?.model ?? '(unknown)',
+            routing,
+          };
+        }
+
         const resolved = await this.resolveModelContext(modelConfig, requestContext);
-        return resolved?.modelId ? this.formatModelName(resolved) : '(unknown)';
+        return {
+          model: resolved?.modelId ? this.formatModelName(resolved) : '(unknown)',
+        };
       } catch (error) {
         omError('[OM] Failed to resolve model config', error);
-        return '(unknown)';
+        return { model: '(unknown)' };
       }
     };
 
-    const [observationModelName, reflectionModelName] = await Promise.all([
-      safeResolveModel(this.observationConfig.model),
-      safeResolveModel(this.reflectionConfig.model),
+    const [observationResolved, reflectionResolved] = await Promise.all([
+      resolveRouting(this.observationConfig.model),
+      resolveRouting(this.reflectionConfig.model),
     ]);
 
     return {
       scope: this.scope,
+      shareTokenBudget: this.observationConfig.shareTokenBudget,
       observation: {
         messageTokens: this.observationConfig.messageTokens,
-        model: observationModelName,
+        model: observationResolved.model,
+        previousObserverTokens: this.observationConfig.previousObserverTokens,
+        routing: observationResolved.routing,
       },
       reflection: {
         observationTokens: this.reflectionConfig.observationTokens,
-        model: reflectionModelName,
+        model: reflectionResolved.model,
+        routing: reflectionResolved.routing,
       },
     };
   }
@@ -1153,6 +1421,21 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       }
     }
 
+    // Validate observer context optimization options
+    if (
+      this.observationConfig.previousObserverTokens !== undefined &&
+      this.observationConfig.previousObserverTokens !== false
+    ) {
+      if (
+        !Number.isFinite(this.observationConfig.previousObserverTokens) ||
+        this.observationConfig.previousObserverTokens < 0
+      ) {
+        throw new Error(
+          `observation.previousObserverTokens must be false or a finite number >= 0, got ${this.observationConfig.previousObserverTokens}`,
+        );
+      }
+    }
+
     // Validate reflection bufferActivation (0-1 float range)
     if (this.reflectionConfig.bufferActivation !== undefined) {
       if (this.reflectionConfig.bufferActivation <= 0 || this.reflectionConfig.bufferActivation > 1) {
@@ -1196,16 +1479,25 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   /**
    * Get or create the Observer agent
    */
-  private getObserverAgent(): Agent {
-    if (!this.observerAgent) {
-      const systemPrompt = buildObserverSystemPrompt(false, this.observationConfig.instruction);
+  private getObserverAgent(model: AgentConfig['model']): Agent {
+    if (this.observerAgent && this.observerAgentModel === undefined) {
+      return this.observerAgent;
+    }
+
+    if (!this.observerAgent || this.observerAgentModel !== model) {
+      const systemPrompt = buildObserverSystemPrompt(
+        false,
+        this.observationConfig.instruction,
+        this.observationConfig.threadTitle,
+      );
 
       this.observerAgent = new Agent({
         id: 'observational-memory-observer',
         name: 'Observer',
         instructions: systemPrompt,
-        model: this.observationConfig.model,
+        model,
       });
+      this.observerAgentModel = model;
     }
     return this.observerAgent;
   }
@@ -1213,16 +1505,21 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   /**
    * Get or create the Reflector agent
    */
-  private getReflectorAgent(): Agent {
-    if (!this.reflectorAgent) {
+  private getReflectorAgent(model: AgentConfig['model']): Agent {
+    if (this.reflectorAgent && this.reflectorAgentModel === undefined) {
+      return this.reflectorAgent;
+    }
+
+    if (!this.reflectorAgent || this.reflectorAgentModel !== model) {
       const systemPrompt = buildReflectorSystemPrompt(this.reflectionConfig.instruction);
 
       this.reflectorAgent = new Agent({
         id: 'observational-memory-reflector',
         name: 'Reflector',
         instructions: systemPrompt,
-        model: this.reflectionConfig.model,
+        model,
       });
+      this.reflectorAgentModel = model;
     }
     return this.reflectorAgent;
   }
@@ -1269,6 +1566,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           observation: this.observationConfig,
           reflection: this.reflectionConfig,
           scope: this.scope,
+          retrieval: this.retrieval,
         },
         observedTimezone,
       });
@@ -1660,42 +1958,269 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
+   * Prepare optimized observer context by applying truncation and buffered-reflection inclusion.
+   *
+   * Returns the (possibly optimized) observations string to pass as "Previous Observations"
+   * to the observer prompt. When no optimization options are set, returns the input unchanged.
+   */
+  private prepareObserverContext(
+    existingObservations: string | undefined,
+    record?: ObservationalMemoryRecord | null,
+  ): { context: string | undefined; wasTruncated: boolean } {
+    const { previousObserverTokens } = this.observationConfig;
+    const tokenBudget =
+      previousObserverTokens === undefined || previousObserverTokens === false ? undefined : previousObserverTokens;
+
+    // Fast path: no optimization configured — preserve legacy behavior
+    if (tokenBudget === undefined) {
+      return { context: existingObservations, wasTruncated: false };
+    }
+
+    // When previousObserverTokens is enabled, also use buffered reflections
+    const bufferedReflection =
+      record?.bufferedReflection && record?.reflectedObservationLineCount ? record.bufferedReflection : undefined;
+
+    if (!existingObservations) {
+      return { context: bufferedReflection, wasTruncated: false };
+    }
+
+    // 1. Replace reflected observation lines with the buffered reflection summary.
+    //    reflectedObservationLineCount tracks how many of the oldest lines
+    //    were already summarized by the reflection — swap those out.
+    let observations = existingObservations;
+    if (bufferedReflection && record?.reflectedObservationLineCount) {
+      const allLines = observations.split('\n');
+      const unreflectedLines = allLines.slice(record.reflectedObservationLineCount);
+      const unreflectedContent = unreflectedLines.join('\n').trim();
+      observations = unreflectedContent ? `${bufferedReflection}\n\n${unreflectedContent}` : bufferedReflection;
+    }
+
+    // 2. Truncate the assembled result to fit within budget
+    let wasTruncated = false;
+    if (tokenBudget !== undefined) {
+      if (tokenBudget === 0) {
+        return { context: '', wasTruncated: true };
+      }
+
+      const currentTokens = this.tokenCounter.countObservations(observations);
+      if (currentTokens > tokenBudget) {
+        observations = this.truncateObservationsToTokenBudget(observations, tokenBudget);
+        wasTruncated = true;
+      }
+    }
+
+    return { context: observations, wasTruncated };
+  }
+
+  /**
+   * Truncate observations to fit within a token budget.
+   *
+   * Strategy:
+   * 1. Keep a raw tail of recent observations (end of block).
+   * 2. Add a truncation marker: [X observations truncated here], placed at the hidden gap.
+   * 3. Try to preserve important observations (🔴) from older context, newest-first.
+   * 4. Enforce that at least 50% of kept observations remain raw tail observations.
+   */
+  private truncateObservationsToTokenBudget(observations: string, budget: number): string {
+    if (budget === 0) {
+      return '';
+    }
+
+    const totalTokens = this.tokenCounter.countObservations(observations);
+    if (totalTokens <= budget) {
+      return observations;
+    }
+
+    const lines = observations.split('\n');
+    const totalCount = lines.length;
+
+    // tokenx is lightweight (regex-based), so measure each line directly.
+    const lineTokens: number[] = new Array(totalCount);
+    const isImportant: boolean[] = new Array(totalCount);
+    for (let i = 0; i < totalCount; i++) {
+      lineTokens[i] = this.tokenCounter.countString(lines[i]!);
+      isImportant[i] = lines[i]!.includes('🔴') || lines[i]!.includes('✅');
+    }
+
+    // Precompute suffix sums so tail cost is O(1).
+    const suffixTokens: number[] = new Array(totalCount + 1);
+    suffixTokens[totalCount] = 0;
+    for (let i = totalCount - 1; i >= 0; i--) {
+      suffixTokens[i] = suffixTokens[i + 1]! + lineTokens[i]!;
+    }
+
+    // Collect important-line indexes from the head region.
+    // Built incrementally as tailStart advances.
+    const headImportantIndexes: number[] = [];
+
+    const buildCandidateString = (tailStart: number, selectedImportantIndexes: number[]) => {
+      const keptIndexes = [
+        ...selectedImportantIndexes,
+        ...Array.from({ length: totalCount - tailStart }, (_, i) => tailStart + i),
+      ].sort((a, b) => a - b);
+
+      if (keptIndexes.length === 0) {
+        return `[${totalCount} observations truncated here]`;
+      }
+
+      const outputLines: string[] = [];
+      let previousKeptIndex = -1;
+
+      for (const keptIndex of keptIndexes) {
+        const hiddenCount = keptIndex - previousKeptIndex - 1;
+        if (hiddenCount === 1) {
+          // Keep the original line — the marker would cost more tokens than the line itself
+          outputLines.push(lines[previousKeptIndex + 1]!);
+        } else if (hiddenCount > 1) {
+          outputLines.push(`[${hiddenCount} observations truncated here]`);
+        }
+        outputLines.push(lines[keptIndex]!);
+        previousKeptIndex = keptIndex;
+      }
+
+      const trailingHiddenCount = totalCount - previousKeptIndex - 1;
+      if (trailingHiddenCount === 1) {
+        outputLines.push(lines[totalCount - 1]!);
+      } else if (trailingHiddenCount > 1) {
+        outputLines.push(`[${trailingHiddenCount} observations truncated here]`);
+      }
+
+      return outputLines.join('\n');
+    };
+
+    // Lower-bound cost of kept content (excludes marker lines).
+    // Used for fast rejection — the final countObservations call is the real gatekeeper.
+    const estimateKeptContentCost = (tailStart: number, selectedImportantIndexes: number[]): number => {
+      let cost = suffixTokens[tailStart]!;
+      for (const idx of selectedImportantIndexes) {
+        cost += lineTokens[idx]!;
+      }
+      return cost;
+    };
+
+    let bestCandidate: string | undefined;
+    let bestImportantCount = -1;
+    let bestRawTailLength = -1;
+
+    for (let tailStart = 1; tailStart < totalCount; tailStart++) {
+      // Incrementally track important lines in the head region.
+      if (isImportant[tailStart - 1]) {
+        headImportantIndexes.push(tailStart - 1);
+      }
+
+      const rawTailLength = totalCount - tailStart;
+      const maxImportantByRatio = rawTailLength;
+      let importantToKeep = Math.min(headImportantIndexes.length, maxImportantByRatio);
+
+      const getSelectedImportant = (count: number) =>
+        count > 0 ? headImportantIndexes.slice(Math.max(0, headImportantIndexes.length - count)) : [];
+
+      // Fast rejection: drop important lines if even the kept content exceeds budget.
+      while (
+        importantToKeep > 0 &&
+        estimateKeptContentCost(tailStart, getSelectedImportant(importantToKeep)) > budget
+      ) {
+        importantToKeep -= 1;
+      }
+
+      if (estimateKeptContentCost(tailStart, getSelectedImportant(importantToKeep)) > budget) {
+        continue;
+      }
+
+      // Only build + verify when this candidate could beat the current best.
+      if (
+        importantToKeep > bestImportantCount ||
+        (importantToKeep === bestImportantCount && rawTailLength > bestRawTailLength)
+      ) {
+        const candidate = buildCandidateString(tailStart, getSelectedImportant(importantToKeep));
+        if (this.tokenCounter.countObservations(candidate) <= budget) {
+          bestCandidate = candidate;
+          bestImportantCount = importantToKeep;
+          bestRawTailLength = rawTailLength;
+        }
+      }
+    }
+
+    if (!bestCandidate) {
+      return `[${totalCount} observations truncated here]`;
+    }
+
+    return bestCandidate;
+  }
+
+  /**
    * Call the Observer agent to extract observations.
    */
   private async callObserver(
     existingObservations: string | undefined,
     messagesToObserve: MastraDBMessage[],
     abortSignal?: AbortSignal,
-    options?: { skipContinuationHints?: boolean; requestContext?: RequestContext },
+    options?: {
+      skipContinuationHints?: boolean;
+      requestContext?: RequestContext;
+      tracingContext?: TracingContext;
+      priorCurrentTask?: string;
+      priorSuggestedResponse?: string;
+      priorThreadTitle?: string;
+      wasTruncated?: boolean;
+    },
   ): Promise<{
     observations: string;
     currentTask?: string;
     suggestedContinuation?: string;
+    threadTitle?: string;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
-    const agent = this.getObserverAgent();
-
     const observerMessages = [
       {
         role: 'user' as const,
-        content: buildObserverTaskPrompt(existingObservations, options),
+        content: buildObserverTaskPrompt(existingObservations, {
+          skipContinuationHints: options?.skipContinuationHints,
+          priorCurrentTask: options?.priorCurrentTask,
+          priorSuggestedResponse: options?.priorSuggestedResponse,
+          priorThreadTitle: options?.priorThreadTitle,
+          wasTruncated: options?.wasTruncated,
+          includeThreadTitle: this.observationConfig.threadTitle,
+        }),
       },
       buildObserverHistoryMessage(messagesToObserve),
     ];
 
-    const doGenerate = async () => {
-      return this.withAbortCheck(async () => {
-        const streamResult = await agent.stream(observerMessages, {
-          modelSettings: {
-            ...this.observationConfig.modelSettings,
-          },
-          providerOptions: this.observationConfig.providerOptions as any,
-          ...(abortSignal ? { abortSignal } : {}),
-          ...(options?.requestContext ? { requestContext: options.requestContext } : {}),
-        });
+    const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
+    const requestContext = options?.requestContext;
+    const tracingContext = options?.tracingContext;
+    const routingModel =
+      this.observationConfig.model instanceof ModelByInputTokens ? this.observationConfig.model : undefined;
+    const selectedThreshold = routingModel?.getThresholds().find(threshold => inputTokens <= threshold);
+    const resolvedModel = this.getConcreteModel(this.observationConfig.model, inputTokens);
+    const agent = this.getObserverAgent(resolvedModel);
 
-        return streamResult.getFullOutput();
-      }, abortSignal);
+    const doGenerate = async () => {
+      const result = await this.withOmTracingSpan({
+        phase: 'observer',
+        inputTokens,
+        resolvedModel,
+        selectedThreshold,
+        routingModel,
+        requestContext,
+        tracingContext,
+        fn: async observabilityContext =>
+          this.withAbortCheck(async () => {
+            const streamResult = await agent.stream(observerMessages, {
+              ...observabilityContext,
+              modelSettings: {
+                ...this.observationConfig.modelSettings,
+              },
+              providerOptions: this.observationConfig.providerOptions as any,
+              ...(abortSignal ? { abortSignal } : {}),
+              ...(requestContext ? { requestContext } : {}),
+            });
+
+            return streamResult.getFullOutput();
+          }, abortSignal),
+      });
+
+      return result;
     };
 
     let result = await doGenerate();
@@ -1719,6 +2244,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       observations: parsed.observations,
       currentTask: parsed.currentTask,
       suggestedContinuation: parsed.suggestedContinuation,
+      threadTitle: parsed.threadTitle,
       usage: usage
         ? {
             inputTokens: usage.inputTokens,
@@ -1739,8 +2265,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     existingObservations: string | undefined,
     messagesByThread: Map<string, MastraDBMessage[]>,
     threadOrder: string[],
+    priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
     abortSignal?: AbortSignal,
     requestContext?: RequestContext,
+    wasTruncated?: boolean,
+    tracingContext?: TracingContext,
   ): Promise<{
     results: Map<
       string,
@@ -1748,22 +2277,28 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         observations: string;
         currentTask?: string;
         suggestedContinuation?: string;
+        threadTitle?: string;
       }
     >;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     // Create a multi-thread observer agent with the special system prompt
-    const agent = new Agent({
-      id: 'multi-thread-observer',
-      name: 'multi-thread-observer',
-      model: this.observationConfig.model,
-      instructions: buildObserverSystemPrompt(true, this.observationConfig.instruction),
-    });
+    const systemPrompt = buildObserverSystemPrompt(
+      true,
+      this.observationConfig.instruction,
+      this.observationConfig.threadTitle,
+    );
 
     const observerMessages = [
       {
         role: 'user' as const,
-        content: buildMultiThreadObserverTaskPrompt(existingObservations),
+        content: buildMultiThreadObserverTaskPrompt(
+          existingObservations,
+          threadOrder,
+          priorMetadataByThread,
+          wasTruncated,
+          this.observationConfig.threadTitle,
+        ),
       },
       buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder),
     ];
@@ -1779,19 +2314,45 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       this.observedMessageIds.add(msg.id);
     }
 
-    const doGenerate = async () => {
-      return this.withAbortCheck(async () => {
-        const streamResult = await agent.stream(observerMessages, {
-          modelSettings: {
-            ...this.observationConfig.modelSettings,
-          },
-          providerOptions: this.observationConfig.providerOptions as any,
-          ...(abortSignal ? { abortSignal } : {}),
-          ...(requestContext ? { requestContext } : {}),
-        });
+    const inputTokens = this.tokenCounter.countMessages(allMessages);
+    const routingModel =
+      this.observationConfig.model instanceof ModelByInputTokens ? this.observationConfig.model : undefined;
+    const selectedThreshold = routingModel?.getThresholds().find(threshold => inputTokens <= threshold);
+    const resolvedModel = this.getConcreteModel(this.observationConfig.model, inputTokens);
 
-        return streamResult.getFullOutput();
-      }, abortSignal);
+    const agent = new Agent({
+      id: 'multi-thread-observer',
+      name: 'multi-thread-observer',
+      model: resolvedModel,
+      instructions: systemPrompt,
+    });
+
+    const doGenerate = async () => {
+      const result = await this.withOmTracingSpan({
+        phase: 'observer',
+        inputTokens,
+        resolvedModel,
+        selectedThreshold,
+        routingModel,
+        requestContext,
+        tracingContext,
+        fn: async observabilityContext =>
+          this.withAbortCheck(async () => {
+            const streamResult = await agent.stream(observerMessages, {
+              ...observabilityContext,
+              modelSettings: {
+                ...this.observationConfig.modelSettings,
+              },
+              providerOptions: this.observationConfig.providerOptions as any,
+              ...(abortSignal ? { abortSignal } : {}),
+              ...(requestContext ? { requestContext } : {}),
+            });
+
+            return streamResult.getFullOutput();
+          }, abortSignal),
+      });
+
+      return result;
     };
 
     let result = await doGenerate();
@@ -1815,6 +2376,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         observations: string;
         currentTask?: string;
         suggestedContinuation?: string;
+        threadTitle?: string;
       }
     >();
 
@@ -1823,6 +2385,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         observations: threadResult.observations,
         currentTask: threadResult.currentTask,
         suggestedContinuation: threadResult.suggestedContinuation,
+        threadTitle: threadResult.threadTitle,
       });
     }
 
@@ -1866,16 +2429,20 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     observationTokensThreshold?: number,
     abortSignal?: AbortSignal,
     skipContinuationHints?: boolean,
-    compressionStartLevel?: 0 | 1 | 2 | 3,
+    compressionStartLevel?: CompressionLevel,
     requestContext?: RequestContext,
+    tracingContext?: TracingContext,
   ): Promise<{
     observations: string;
     suggestedContinuation?: string;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
-    const agent = this.getReflectorAgent();
-
     const originalTokens = this.tokenCounter.countObservations(observations);
+    const routingModel =
+      this.reflectionConfig.model instanceof ModelByInputTokens ? this.reflectionConfig.model : undefined;
+    const selectedThreshold = routingModel?.getThresholds().find(threshold => originalTokens <= threshold);
+    const resolvedModel = this.getConcreteModel(this.reflectionConfig.model, originalTokens);
+    const agent = this.getReflectorAgent(resolvedModel);
 
     // Get the target threshold - use provided value or fall back to config
     const targetThreshold = observationTokensThreshold ?? getMaxThreshold(this.reflectionConfig.observationTokens);
@@ -1884,9 +2451,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
     // Attempt reflection with escalating compression levels.
-    // Start at the provided level and retry up to level 3 if compression fails.
-    let currentLevel: 0 | 1 | 2 | 3 = compressionStartLevel ?? 0;
-    const maxLevel: 0 | 1 | 2 | 3 = 3;
+    // Start at the provided level and retry upward, but cap retries relative to the start level
+    // and never go past the highest defined compression level.
+    const startLevel: CompressionLevel = compressionStartLevel ?? 0;
+    let currentLevel: CompressionLevel = startLevel;
+    const maxLevel: CompressionLevel = Math.min(MAX_COMPRESSION_LEVEL, startLevel + 3) as CompressionLevel;
     let parsed: ReturnType<typeof parseReflectorOutput> = { observations: '', suggestedContinuation: undefined };
     let reflectedTokens = 0;
     let attemptNumber = 0;
@@ -1901,45 +2470,56 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       );
 
       let chunkCount = 0;
-      const result = await this.withAbortCheck(async () => {
-        const streamResult = await agent.stream(prompt, {
-          modelSettings: {
-            ...this.reflectionConfig.modelSettings,
-          },
-          providerOptions: this.reflectionConfig.providerOptions as any,
-          ...(abortSignal ? { abortSignal } : {}),
-          ...(requestContext ? { requestContext } : {}),
-          ...(attemptNumber === 1
-            ? {
-                onChunk(chunk: any) {
-                  chunkCount++;
-                  if (chunkCount === 1 || chunkCount % 50 === 0) {
-                    const preview =
-                      chunk.type === 'text-delta'
-                        ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
-                        : chunk.type === 'tool-call'
-                          ? ` tool=${chunk.toolName}`
-                          : '';
-                    omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
+      const result = await this.withOmTracingSpan({
+        phase: 'reflector',
+        inputTokens: originalTokens,
+        resolvedModel,
+        selectedThreshold,
+        routingModel,
+        requestContext,
+        tracingContext,
+        fn: async observabilityContext =>
+          this.withAbortCheck(async () => {
+            const streamResult = await agent.stream(prompt, {
+              ...observabilityContext,
+              modelSettings: {
+                ...this.reflectionConfig.modelSettings,
+              },
+              providerOptions: this.reflectionConfig.providerOptions as any,
+              ...(abortSignal ? { abortSignal } : {}),
+              ...(requestContext ? { requestContext } : {}),
+              ...(attemptNumber === 1
+                ? {
+                    onChunk(chunk: any) {
+                      chunkCount++;
+                      if (chunkCount === 1 || chunkCount % 50 === 0) {
+                        const preview =
+                          chunk.type === 'text-delta'
+                            ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
+                            : chunk.type === 'tool-call'
+                              ? ` tool=${chunk.toolName}`
+                              : '';
+                        omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
+                      }
+                    },
+                    onFinish(event: any) {
+                      omDebug(
+                        `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
+                      );
+                    },
+                    onAbort(event: any) {
+                      omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
+                    },
+                    onError({ error }: { error: unknown }) {
+                      omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
+                    },
                   }
-                },
-                onFinish(event: any) {
-                  omDebug(
-                    `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
-                  );
-                },
-                onAbort(event: any) {
-                  omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
-                },
-                onError({ error }: { error: unknown }) {
-                  omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
-                },
-              }
-            : {}),
-        });
+                : {}),
+            });
 
-        return streamResult.getFullOutput();
-      }, abortSignal);
+            return streamResult.getFullOutput();
+          }, abortSignal),
+      });
 
       omDebug(
         `[OM:callReflector] attempt #${attemptNumber} returned: textLen=${result.text?.length}, textPreview="${result.text?.slice(0, 120)}...", inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}`,
@@ -1953,7 +2533,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         totalUsage.totalTokens += usage.totalTokens ?? 0;
       }
 
-      parsed = parseReflectorOutput(result.text);
+      parsed = parseReflectorOutput(result.text, observations);
 
       // If degenerate repetition detected, treat as compression failure
       if (parsed.degenerate) {
@@ -1979,6 +2559,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         break;
       }
 
+      if (currentLevel >= maxLevel) {
+        break;
+      }
+
+      const nextLevel = (currentLevel + 1) as CompressionLevel;
+
       // Emit failed marker and start marker for next retry
       if (streamContext?.writer) {
         const failedMarker = createObservationFailedMarker({
@@ -1986,7 +2572,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           operationType: 'reflection',
           startedAt: streamContext.startedAt,
           tokensAttempted: originalTokens,
-          error: `Did not compress below threshold (${originalTokens} → ${reflectedTokens}, target: ${targetThreshold}), retrying at level ${currentLevel + 1}`,
+          error: `Did not compress below threshold (${originalTokens} → ${reflectedTokens}, target: ${targetThreshold}), retrying at level ${nextLevel}`,
           recordId: streamContext.recordId,
           threadId: streamContext.threadId,
         });
@@ -2009,7 +2595,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       }
 
       // Escalate to next compression level
-      currentLevel = Math.min(currentLevel + 1, maxLevel) as 0 | 1 | 2 | 3;
+      currentLevel = nextLevel;
     }
 
     return {
@@ -2038,48 +2624,65 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     suggestedResponse?: string,
     unobservedContextBlocks?: string,
     currentDate?: Date,
-  ): string {
-    // Optimize observations to save tokens
-    let optimized = optimizeObservationsForContext(observations);
+    retrieval = false,
+  ): string[] {
+    // Optimize observations to save tokens unless retrieval mode needs durable group metadata preserved.
+    let optimized = retrieval
+      ? (renderObservationGroupsForReflection(observations) ?? observations)
+      : optimizeObservationsForContext(observations);
 
     // Add relative time annotations to date headers if currentDate is provided
     if (currentDate) {
       optimized = addRelativeTimeToObservations(optimized, currentDate);
     }
 
-    let content = `
-${OBSERVATION_CONTEXT_PROMPT}
-
-<observations>
-${optimized}
-</observations>
-
-${OBSERVATION_CONTEXT_INSTRUCTIONS}`;
+    const messages = [
+      `${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${OBSERVATION_RETRIEVAL_INSTRUCTIONS}` : ''}`,
+    ];
 
     // Add unobserved context from other threads (resource scope only)
     if (unobservedContextBlocks) {
-      content += `\n\nThe following content is from OTHER conversations different from the current conversation, they're here for reference,  but they're not necessarily your focus:\nSTART_OTHER_CONVERSATIONS_BLOCK\n${unobservedContextBlocks}\nEND_OTHER_CONVERSATIONS_BLOCK`;
+      messages.push(
+        `The following content is from OTHER conversations different from the current conversation, they're here for reference,  but they're not necessarily your focus:\nSTART_OTHER_CONVERSATIONS_BLOCK\n${unobservedContextBlocks}\nEND_OTHER_CONVERSATIONS_BLOCK`,
+      );
+    }
+
+    const observationChunks = this.splitObservationContextChunks(optimized);
+    if (observationChunks.length > 0) {
+      messages.push('<observations>', ...observationChunks);
     }
 
     // Dynamically inject current-task from thread metadata (not stored in observations)
     if (currentTask) {
-      content += `
-
-<current-task>
-${currentTask}
-</current-task>`;
+      messages.push(`<current-task>\n${currentTask}\n</current-task>`);
     }
 
     if (suggestedResponse) {
-      content += `
-
-<suggested-response>
-${suggestedResponse}
-</suggested-response>
-`;
+      messages.push(`<suggested-response>\n${suggestedResponse}\n</suggested-response>`);
     }
 
-    return content;
+    return messages;
+  }
+
+  private splitObservationContextChunks(observations: string): string[] {
+    const trimmed = observations.trim();
+    if (!trimmed) {
+      return [];
+    }
+
+    return trimmed
+      .split(/\n{2,}--- message boundary \(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\) ---\n{2,}/)
+      .map(chunk => chunk.trim())
+      .filter(Boolean);
+  }
+
+  /**
+   * Create a message boundary delimiter with an ISO 8601 date.
+   * The date should be the lastObservedAt timestamp — the latest message
+   * timestamp that was observed to produce the observations following this boundary.
+   */
+  static createMessageBoundary(date: Date): string {
+    return `\n\n--- message boundary (${date.toISOString()}) ---\n\n`;
   }
 
   /**
@@ -2347,6 +2950,7 @@ ${suggestedResponse}
     abortSignal: ProcessInputStepArgs['abortSignal'],
     abort: ProcessInputStepArgs['abort'],
     requestContext?: RequestContext,
+    tracingContext?: TracingContext,
   ): Promise<{
     observationSucceeded: boolean;
     updatedRecord: ObservationalMemoryRecord;
@@ -2494,6 +3098,7 @@ ${suggestedResponse}
               writer,
               abortSignal,
               requestContext,
+              tracingContext,
             });
           } else {
             await this.doSynchronousObservation({
@@ -2503,6 +3108,7 @@ ${suggestedResponse}
               writer,
               abortSignal,
               requestContext,
+              tracingContext,
             });
           }
           // Check if observation actually updated lastObservedAt
@@ -2737,17 +3343,19 @@ ${suggestedResponse}
       return;
     }
 
-    const observationSystemMessage = this.formatObservationsForContext(
+    const observationSystemMessages = this.formatObservationsForContext(
       record.activeObservations,
       currentTask,
       suggestedResponse,
       unobservedContextBlocks,
       currentDate,
+      this.retrieval,
     );
 
-    // Clear any existing observation system message and add fresh one
+    // Clear any existing observation system messages and re-add them with the
+    // append-only observation chunks at the tail for better cache stability.
     messageList.clearSystemMessages('observational-memory');
-    messageList.addSystem(observationSystemMessage, 'observational-memory');
+    messageList.addSystem(observationSystemMessages, 'observational-memory');
 
     // Add continuation reminder
     const continuationMessage: MastraDBMessage = {
@@ -2885,7 +3493,17 @@ ${suggestedResponse}
    * 5. Filter out already-observed messages
    */
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, requestContext, stepNumber, state: _state, writer, abortSignal, abort, model } = args;
+    const {
+      messageList,
+      requestContext,
+      tracingContext,
+      stepNumber,
+      state: _state,
+      writer,
+      abortSignal,
+      abort,
+      model,
+    } = args;
     const state = _state ?? ({} as Record<string, unknown>);
 
     omDebug(
@@ -3072,6 +3690,7 @@ ${suggestedResponse}
                 writer,
                 messageList,
                 requestContext,
+                tracingContext,
               });
               // Re-fetch record — reflection may have created a new generation with lower obsTokens
               record = await this.getOrCreateRecord(threadId, resourceId);
@@ -3100,6 +3719,7 @@ ${suggestedResponse}
             writer,
             messageList,
             requestContext,
+            tracingContext,
           });
           // Re-fetch record after reflection may have created a new generation
           record = await this.getOrCreateRecord(threadId, resourceId);
@@ -3149,6 +3769,19 @@ ${suggestedResponse}
         state.sealedIds = sealedIds;
         const lockKey = this.getLockKey(threadId, resourceId);
 
+        // Defer observation/buffering if the latest step of the last message has a pending
+        // tool call (state: 'call'). Provider-executed tools (e.g. Anthropic web_search) may
+        // have their result deferred to a later step. We skip this cycle and let the next step
+        // observe with complete data.
+        const lastMessage = allMessages[allMessages.length - 1];
+        const latestStepParts = getLatestStepParts(lastMessage?.content?.parts ?? []);
+        const hasIncompleteToolCalls = latestStepParts.some(
+          part => part?.type === 'tool-invocation' && part.toolInvocation?.state === 'call',
+        );
+        omDebug(
+          `[OM:deferred-check] hasIncompleteToolCalls=${hasIncompleteToolCalls}, latestStepPartsCount=${latestStepParts.length}`,
+        );
+
         // ════════════════════════════════════════════════════════════════════════
         // ASYNC BUFFERING: Trigger background observation at bufferTokens intervals
         // ════════════════════════════════════════════════════════════════════════
@@ -3156,9 +3789,9 @@ ${suggestedResponse}
         if (this.isAsyncObservationEnabled() && totalPendingTokens < threshold) {
           const shouldTrigger = this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey, record, threshold);
           omDebug(
-            `[OM:async-obs] belowThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, shouldTrigger=${shouldTrigger}, isBufferingObs=${record.isBufferingObservation}, lastBufferedAt=${record.lastBufferedAtTokens}`,
+            `[OM:async-obs] belowThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, shouldTrigger=${shouldTrigger}, isBufferingObs=${record.isBufferingObservation}, lastBufferedAt=${record.lastBufferedAtTokens}, hasIncompleteToolCalls=${hasIncompleteToolCalls}`,
           );
-          if (shouldTrigger) {
+          if (shouldTrigger && !hasIncompleteToolCalls) {
             void this.startAsyncBufferedObservation(
               record,
               threadId,
@@ -3167,6 +3800,7 @@ ${suggestedResponse}
               writer,
               unbufferedPendingTokens,
               requestContext,
+              tracingContext,
             );
           }
         } else if (this.isAsyncObservationEnabled()) {
@@ -3175,9 +3809,9 @@ ${suggestedResponse}
           // - Below blockAfter, sync observation won't run, so we need chunks ready
           const shouldTrigger = this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey, record, threshold);
           omDebug(
-            `[OM:async-obs] atOrAboveThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, step=${stepNumber}, shouldTrigger=${shouldTrigger}`,
+            `[OM:async-obs] atOrAboveThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, step=${stepNumber}, shouldTrigger=${shouldTrigger}, hasIncompleteToolCalls=${hasIncompleteToolCalls}`,
           );
-          if (shouldTrigger) {
+          if (shouldTrigger && !hasIncompleteToolCalls) {
             void this.startAsyncBufferedObservation(
               record,
               threadId,
@@ -3186,6 +3820,7 @@ ${suggestedResponse}
               writer,
               unbufferedPendingTokens,
               requestContext,
+              tracingContext,
             );
           }
         }
@@ -3203,7 +3838,7 @@ ${suggestedResponse}
         // ════════════════════════════════════════════════════════════════════════
         // THRESHOLD REACHED: Observe and clean up
         // ════════════════════════════════════════════════════════════════════════
-        if (stepNumber > 0 && totalPendingTokens >= threshold) {
+        if (stepNumber > 0 && !hasIncompleteToolCalls && totalPendingTokens >= threshold) {
           reproCaptureDetails.thresholdReached = true;
           const { observationSucceeded, updatedRecord, activatedMessageIds } = await this.handleThresholdReached(
             messageList,
@@ -3216,6 +3851,7 @@ ${suggestedResponse}
             abortSignal,
             abort,
             requestContext,
+            tracingContext,
           );
 
           if (observationSucceeded) {
@@ -3681,11 +4317,13 @@ ${formattedMessages}
    * Wrap observations in a thread attribution tag.
    * Used in resource scope to track which thread observations came from.
    */
-  private async wrapWithThreadTag(threadId: string, observations: string): Promise<string> {
+  private async wrapWithThreadTag(threadId: string, observations: string, messageRange?: string): Promise<string> {
     // First strip any thread tags the Observer might have added
     const cleanObservations = this.stripThreadTags(observations);
+    const groupedObservations =
+      this.retrieval && messageRange ? wrapInObservationGroup(cleanObservations, messageRange) : cleanObservations;
     const obscuredId = await this.representThreadIDInContext(threadId);
-    return `<thread id="${obscuredId}">\n${cleanObservations}\n</thread>`;
+    return `<thread id="${obscuredId}">\n${groupedObservations}\n</thread>`;
   }
 
   /**
@@ -3698,6 +4336,7 @@ ${formattedMessages}
     existingObservations: string,
     _threadId: string,
     newThreadSection: string,
+    lastObservedAt: Date,
   ): string {
     if (!existingObservations) {
       return newThreadSection;
@@ -3708,8 +4347,8 @@ ${formattedMessages}
     const dateMatch = newThreadSection.match(/Date:\s*([A-Za-z]+\s+\d+,\s+\d+)/);
 
     if (!threadIdMatch || !dateMatch) {
-      // Can't parse, just append
-      return `${existingObservations}\n\n${newThreadSection}`;
+      // Can't parse, just append with message boundary for cache stability
+      return `${existingObservations}${ObservationalMemory.createMessageBoundary(lastObservedAt)}${newThreadSection}`;
     }
 
     const newThreadId = threadIdMatch[1]!;
@@ -3757,8 +4396,8 @@ ${formattedMessages}
       }
     }
 
-    // No existing section with same thread ID and date - append
-    return `${existingObservations}\n\n${newThreadSection}`;
+    // No existing section with same thread ID and date - append with message boundary for cache stability
+    return `${existingObservations}${ObservationalMemory.createMessageBoundary(lastObservedAt)}${newThreadSection}`;
   }
 
   /**
@@ -3791,8 +4430,18 @@ ${formattedMessages}
     abortSignal?: AbortSignal;
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
     requestContext?: RequestContext;
+    tracingContext?: TracingContext;
   }): Promise<void> {
-    const { record, threadId, unobservedMessages, writer, abortSignal, reflectionHooks, requestContext } = opts;
+    const {
+      record,
+      threadId,
+      unobservedMessages,
+      writer,
+      abortSignal,
+      reflectionHooks,
+      requestContext,
+      tracingContext,
+    } = opts;
     // Emit debug event for observation triggered
     this.emitDebugEvent({
       type: 'observation_triggered',
@@ -3871,34 +4520,52 @@ ${formattedMessages}
         }
       }
 
-      const result = await this.callObserver(
+      const { context: observerContext, wasTruncated } = this.prepareObserverContext(
         freshRecord?.activeObservations ?? record.activeObservations,
-        messagesToObserve,
-        abortSignal,
-        { requestContext },
+        freshRecord ?? record,
       );
+      const thread = await this.storage.getThreadById({ threadId });
+      const threadOMMetadata = getThreadOMMetadata(thread?.metadata);
+      const result = await this.callObserver(observerContext, messagesToObserve, abortSignal, {
+        requestContext,
+        tracingContext,
+        priorCurrentTask: threadOMMetadata?.currentTask,
+        priorSuggestedResponse: threadOMMetadata?.suggestedResponse,
+        priorThreadTitle: thread?.title,
+        wasTruncated,
+      });
+
+      // Use the max message timestamp as cursor — only for the messages we actually observed
+      const lastObservedAt = this.getMaxMessageTimestamp(messagesToObserve);
 
       // Build new observations (use freshRecord if available)
       const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
+      const messageRange = this.retrieval ? buildMessageRange(messagesToObserve) : undefined;
       let newObservations: string;
       if (this.scope === 'resource') {
         // In resource scope: wrap with thread tag and replace/append
-        const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
-        newObservations = this.replaceOrAppendThreadSection(existingObservations, threadId, threadSection);
+        const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
+        newObservations = this.replaceOrAppendThreadSection(
+          existingObservations,
+          threadId,
+          threadSection,
+          lastObservedAt,
+        );
       } else {
-        // In thread scope: simple append
+        // In thread scope: append grouped observations with a message boundary delimiter for cache stability
+        const groupedObservations =
+          this.retrieval && messageRange
+            ? wrapInObservationGroup(result.observations, messageRange)
+            : result.observations;
         newObservations = existingObservations
-          ? `${existingObservations}\n\n${result.observations}`
-          : result.observations;
+          ? `${existingObservations}${ObservationalMemory.createMessageBoundary(lastObservedAt)}${groupedObservations}`
+          : groupedObservations;
       }
 
       let totalTokenCount = this.tokenCounter.countObservations(newObservations);
 
       // Calculate tokens generated in THIS cycle only (for UI marker)
       const cycleObservationTokens = this.tokenCounter.countObservations(result.observations);
-
-      // Use the max message timestamp as cursor — only for the messages we actually observed
-      const lastObservedAt = this.getMaxMessageTimestamp(messagesToObserve);
 
       // Collect message IDs being observed for the safeguard
       // Only mark the messages we actually observed, not the ones we kept
@@ -3910,18 +4577,52 @@ ${formattedMessages}
       // This ensures a consistent lock ordering (mastra_threads → mastra_observational_memory)
       // that matches the order used by saveMessages, preventing PostgreSQL deadlocks
       // when concurrent agents share a resourceId.
-      const thread = await this.storage.getThreadById({ threadId });
-      if (thread) {
-        const newMetadata = setThreadOMMetadata(thread.metadata, {
+      // Re-fetch thread to get latest state (thread was fetched earlier for prior metadata).
+      const threadForMetadata = await this.storage.getThreadById({ threadId });
+      if (threadForMetadata) {
+        const newMetadata = setThreadOMMetadata(threadForMetadata.metadata, {
           suggestedResponse: result.suggestedContinuation,
           currentTask: result.currentTask,
           lastObservedMessageCursor: this.getLastObservedMessageCursor(messagesToObserve),
         });
+
         await this.storage.updateThread({
           id: threadId,
-          title: thread.title ?? '',
+          title: threadForMetadata.title || '',
           metadata: newMetadata,
         });
+      }
+
+      // Update thread title independently if observer suggested a meaningful one
+      // Only run if threadTitle config option is enabled
+      if (this.observationConfig.threadTitle && threadForMetadata && result.threadTitle) {
+        const oldTitle = threadForMetadata.title;
+        const newTitle = result.threadTitle;
+
+        // Only update title if:
+        // 1. It's not empty
+        // 2. It's different from the current title
+        // 3. It's not a generic title (length >= 3)
+        if (newTitle.trim().length >= 3 && newTitle !== oldTitle) {
+          await this.storage.updateThread({
+            id: threadId,
+            title: newTitle,
+            metadata: threadForMetadata.metadata ?? {},
+          });
+
+          // Emit thread update marker
+          if (writer) {
+            const threadUpdateMarker = createThreadUpdateMarker({
+              cycleId,
+              threadId,
+              oldTitle: oldTitle ?? undefined,
+              newTitle: newTitle,
+            });
+            await writer.custom(threadUpdateMarker).catch(() => {
+              // Ignore errors from streaming
+            });
+          }
+        }
       }
 
       await this.storage.updateActiveObservations({
@@ -3986,6 +4687,7 @@ ${formattedMessages}
         abortSignal,
         reflectionHooks,
         requestContext,
+        tracingContext,
       });
     } catch (error) {
       // Insert FAILED marker on error
@@ -4003,18 +4705,15 @@ ${formattedMessages}
         // Stream the failed marker to the UI first - this adds the part via stream handler
         if (writer) {
           await writer.custom(failedMarker).catch(() => {
-            // Ignore errors from streaming - observation should continue
+            // Ignore errors from streaming
           });
         }
 
         // Then seal the message (skipPush since writer.custom already added the part)
       }
-      // If aborted, re-throw so the main agent loop can handle cancellation
-      if (abortSignal?.aborted) {
-        throw error;
-      }
-      // Log the error but don't re-throw - observation failure should not crash the agent
-      omError('[OM] Observation failed', error);
+      // Re-throw the error - observation failure should crash the agent
+      // (the FAILED marker was already emitted above for debugging)
+      throw error;
     } finally {
       await this.storage.setObservingFlag(record.id, false);
       unregisterOp(record.id, 'observing');
@@ -4043,6 +4742,7 @@ ${formattedMessages}
     writer?: ProcessorStreamWriter,
     contextWindowTokens?: number,
     requestContext?: RequestContext,
+    tracingContext?: TracingContext,
   ): Promise<void> {
     const bufferKey = this.getObservationBufferKey(lockKey);
 
@@ -4068,6 +4768,7 @@ ${formattedMessages}
       bufferKey,
       writer,
       requestContext,
+      tracingContext,
     ).finally(() => {
       // Clean up the operation tracking
       ObservationalMemory.asyncBufferingOps.delete(bufferKey);
@@ -4092,6 +4793,7 @@ ${formattedMessages}
     bufferKey: string,
     writer?: ProcessorStreamWriter,
     requestContext?: RequestContext,
+    tracingContext?: TracingContext,
   ): Promise<void> {
     // Wait for any existing buffering operation to complete first (mutex behavior)
     const existingOp = ObservationalMemory.asyncBufferingOps.get(bufferKey);
@@ -4211,6 +4913,7 @@ ${formattedMessages}
         startedAt,
         writer,
         requestContext,
+        tracingContext,
       );
 
       // Update the buffer cursor so the next buffer only sees messages newer than this one.
@@ -4252,20 +4955,36 @@ ${formattedMessages}
     startedAt: string,
     writer?: ProcessorStreamWriter,
     requestContext?: RequestContext,
+    tracingContext?: TracingContext,
   ): Promise<void> {
     // Build combined context for the observer: active + buffered chunk observations
     const bufferedChunks = this.getBufferedChunks(record);
     const bufferedChunksText = bufferedChunks.map(c => c.observations).join('\n\n');
     const combinedObservations = this.combineObservationsForBuffering(record.activeObservations, bufferedChunksText);
 
-    // Call observer with combined context
+    // Apply observer context optimization (truncation, buffered-reflection inclusion)
+    const { context: observerContext, wasTruncated } = this.prepareObserverContext(combinedObservations, record);
+
+    // Call observer with optimized context
     // Skip continuation hints during async buffering — they reflect the observer's
     // understanding at buffering time and become stale by activation.
+    // Still provide prior metadata for context continuity.
+    const thread = await this.storage.getThreadById({ threadId });
+    const threadOMMetadata = getThreadOMMetadata(thread?.metadata);
+
     const result = await this.callObserver(
-      combinedObservations,
+      observerContext,
       messagesToBuffer,
       undefined, // No abort signal for background ops
-      { skipContinuationHints: true, requestContext },
+      {
+        skipContinuationHints: true,
+        requestContext,
+        tracingContext,
+        priorCurrentTask: threadOMMetadata?.currentTask,
+        priorSuggestedResponse: threadOMMetadata?.suggestedResponse,
+        priorThreadTitle: thread?.title,
+        wasTruncated,
+      },
     );
 
     // If the observer returned empty observations, skip buffering
@@ -4274,13 +4993,34 @@ ${formattedMessages}
       return;
     }
 
+    // Apply thread title update if the observer suggested one (independent of continuation hints)
+    if (this.observationConfig.threadTitle && result.threadTitle) {
+      const newTitle = result.threadTitle;
+      if (newTitle.length >= 3 && newTitle !== thread?.title) {
+        await this.storage.updateThread({ id: threadId, title: newTitle, metadata: thread?.metadata ?? {} });
+        if (writer) {
+          const marker = createThreadUpdateMarker({
+            cycleId,
+            threadId,
+            oldTitle: thread?.title,
+            newTitle,
+          });
+          void writer.custom(marker).catch(() => {});
+        }
+      }
+    }
+
     // Get the new observations to buffer (just the new content, not merged)
     // The storage adapter will handle appending to existing buffered content
+    const messageRange = this.retrieval ? buildMessageRange(messagesToBuffer) : undefined;
     let newObservations: string;
     if (this.scope === 'resource') {
-      newObservations = await this.wrapWithThreadTag(threadId, result.observations);
+      newObservations = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
     } else {
-      newObservations = result.observations;
+      newObservations =
+        this.retrieval && messageRange
+          ? wrapInObservationGroup(result.observations, messageRange)
+          : result.observations;
     }
 
     const newTokenCount = this.tokenCounter.countObservations(newObservations);
@@ -4350,8 +5090,7 @@ ${formattedMessages}
     if (!bufferedObservations) {
       return activeObservations;
     }
-    // Both exist - combine them with a clear separator
-    return `${activeObservations}\n\n--- BUFFERED (pending activation) ---\n\n${bufferedObservations}`;
+    return `${activeObservations}\n\n${bufferedObservations}`;
   }
 
   /**
@@ -4612,15 +5351,11 @@ ${formattedMessages}
     // Store cycleId so tryActivateBufferedReflection can use it for UI markers
     ObservationalMemory.reflectionBufferCycleIds.set(_bufferKey, cycleId);
 
-    // Slice activeObservations to only the first N lines that fit within the
-    // activation-point token budget. This keeps the reflector prompt small
-    // (avoiding LLM hangs on huge prompts) and matches the portion that will
-    // be replaced at activation time.
     const fullObservations = currentRecord.activeObservations ?? '';
     const allLines = fullObservations.split('\n');
     const totalLines = allLines.length;
 
-    // Calculate how many lines fit within the activation point budget
+    // Approximate tokens per line to pick a slice matching bufferActivation * threshold
     const avgTokensPerLine = totalLines > 0 ? observationTokens / totalLines : 0;
     const activationPointTokens = reflectThreshold * bufferActivation;
     const linesToReflect =
@@ -4629,20 +5364,13 @@ ${formattedMessages}
     const activeObservations = allLines.slice(0, linesToReflect).join('\n');
     const reflectedObservationLineCount = linesToReflect;
     const sliceTokenEstimate = Math.round(avgTokensPerLine * linesToReflect);
-    // Compression target: ask for 75% of the slice size. This is a modest reduction
-    // that LLMs can reliably achieve on dense observation text, unlike the more
-    // aggressive bufferActivation ratio which often fails on already-compressed content.
+    // Compression target: 75% of slice size. This gives breathing room while still making progress.
     const compressionTarget = Math.round(sliceTokenEstimate * 0.75);
 
     omDebug(
       `[OM:reflect] doAsyncBufferedReflection: slicing observations for reflection — totalLines=${totalLines}, avgTokPerLine=${avgTokensPerLine.toFixed(1)}, activationPointTokens=${activationPointTokens}, linesToReflect=${linesToReflect}/${totalLines}, sliceTokenEstimate=${sliceTokenEstimate}, compressionTarget=${compressionTarget}`,
     );
 
-    omDebug(
-      `[OM:reflect] doAsyncBufferedReflection: starting reflector call, recordId=${currentRecord.id}, observationTokens=${sliceTokenEstimate}, compressionTarget=${compressionTarget} (inputTokens), activeObsLength=${activeObservations.length}, reflectedLineCount=${reflectedObservationLineCount}`,
-    );
-
-    // Emit buffering start marker (after slice so we report the actual token count)
     if (writer) {
       const startMarker = createBufferingStartMarker({
         cycleId,
@@ -4656,8 +5384,11 @@ ${formattedMessages}
       void writer.custom(startMarker).catch(() => {});
     }
 
+    omDebug(
+      `[OM:reflect] doAsyncBufferedReflection: starting reflector call, recordId=${currentRecord.id}, observationTokens=${sliceTokenEstimate}, compressionTarget=${compressionTarget} (inputTokens), activeObsLength=${activeObservations.length}, reflectedLineCount=${reflectedObservationLineCount}`,
+    );
+
     // Call reflector with compression target.
-    // Start at compression level 1 (standard guidance), retry at level 2 (aggressive).
     const reflectResult = await this.callReflector(
       activeObservations,
       undefined, // No manual prompt
@@ -4665,7 +5396,7 @@ ${formattedMessages}
       compressionTarget,
       undefined, // No abort signal for background ops
       true, // Skip continuation hints for async buffering
-      1, // Start at compression level 1 for buffered reflection
+      await this.getCompressionStartLevel(requestContext),
       requestContext,
     );
 
@@ -4836,6 +5567,7 @@ ${formattedMessages}
     abortSignal?: AbortSignal;
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
     requestContext?: RequestContext;
+    tracingContext?: TracingContext;
   }): Promise<void> {
     const {
       record,
@@ -4846,6 +5578,7 @@ ${formattedMessages}
       abortSignal,
       reflectionHooks,
       requestContext,
+      tracingContext,
     } = opts;
     // Clear debug entries at start of observation cycle
 
@@ -4856,11 +5589,19 @@ ${formattedMessages}
 
     // First, get all threads for this resource to access their per-thread lastObservedAt
     const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId } });
-    const threadMetadataMap = new Map<string, { lastObservedAt?: string }>();
+    const threadMetadataMap = new Map<
+      string,
+      { lastObservedAt?: string; currentTask?: string; suggestedResponse?: string; threadTitle?: string }
+    >();
 
     for (const thread of allThreads) {
       const omMetadata = getThreadOMMetadata(thread.metadata);
-      threadMetadataMap.set(thread.id, { lastObservedAt: omMetadata?.lastObservedAt });
+      threadMetadataMap.set(thread.id, {
+        lastObservedAt: omMetadata?.lastObservedAt,
+        currentTask: omMetadata?.currentTask,
+        suggestedResponse: omMetadata?.suggestedResponse,
+        threadTitle: thread.title,
+      });
     }
 
     // Load messages per-thread using each thread's own cursor
@@ -4997,9 +5738,16 @@ ${formattedMessages}
         }
       }
 
-      const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
+      const rawExistingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
 
-      // ═════════════════════════════════════════���══════════════════
+      // Apply observer context optimization (truncation, buffered-reflection inclusion, gating)
+      const { context: optimizedObservations, wasTruncated } = this.prepareObserverContext(
+        rawExistingObservations,
+        freshRecord ?? record,
+      );
+      const existingObservations = optimizedObservations ?? rawExistingObservations;
+
+      // ════════════════════════════════════════════════════════════
       // BATCHED MULTI-THREAD OBSERVATION: Single Observer call for all threads
       // This is much more efficient than calling the Observer for each thread individually
       // ════════════════════════════════════════════════════════════
@@ -5100,12 +5848,30 @@ ${formattedMessages}
 
       // Process batches in parallel
       const batchPromises = batches.map(async batch => {
+        const batchPriorMetadata = new Map<
+          string,
+          { currentTask?: string; suggestedResponse?: string; threadTitle?: string }
+        >();
+        for (const threadId of batch.threadIds) {
+          const metadata = threadMetadataMap.get(threadId);
+          if (metadata?.currentTask || metadata?.suggestedResponse || metadata?.threadTitle) {
+            batchPriorMetadata.set(threadId, {
+              currentTask: metadata.currentTask,
+              suggestedResponse: metadata.suggestedResponse,
+              threadTitle: metadata.threadTitle,
+            });
+          }
+        }
+
         const batchResult = await this.callMultiThreadObserver(
           existingObservations,
           batch.threadMap,
           batch.threadIds,
+          batchPriorMetadata,
           abortSignal,
           requestContext,
+          wasTruncated,
+          tracingContext,
         );
         return batchResult;
       });
@@ -5119,6 +5885,7 @@ ${formattedMessages}
           observations: string;
           currentTask?: string;
           suggestedContinuation?: string;
+          threadTitle?: string;
         }
       >();
       let totalBatchUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -5142,6 +5909,7 @@ ${formattedMessages}
           observations: string;
           currentTask?: string;
           suggestedContinuation?: string;
+          threadTitle?: string;
         };
       } | null> = [];
 
@@ -5164,7 +5932,9 @@ ${formattedMessages}
       }
 
       // Combine results: wrap each thread's observations and append to existing
-      let currentObservations = existingObservations;
+      // Use rawExistingObservations (not the truncated existingObservations) so
+      // we persist the full observation history rather than the context-window version
+      let currentObservations = rawExistingObservations;
       let cycleObservationTokens = 0; // Track total new observation tokens generated in this cycle
 
       for (const obsResult of observationResults) {
@@ -5175,16 +5945,33 @@ ${formattedMessages}
         // Track tokens generated for this thread
         cycleObservationTokens += this.tokenCounter.countObservations(result.observations);
 
+        // Use the max message timestamp as cursor — only for the messages we actually observed
+        const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
+
         // Wrap with thread tag and append (in thread order for consistency)
-        const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
-        currentObservations = this.replaceOrAppendThreadSection(currentObservations, threadId, threadSection);
+        const messageRange = this.retrieval ? buildMessageRange(threadMessages) : undefined;
+        const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
+        currentObservations = this.replaceOrAppendThreadSection(
+          currentObservations,
+          threadId,
+          threadSection,
+          threadLastObservedAt,
+        );
 
         // Update thread-specific metadata:
         // - lastObservedAt: ALWAYS update to track per-thread observation progress
         // - currentTask, suggestedResponse: explicitly clear when omitted to avoid stale hints
-        const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
         const thread = await this.storage.getThreadById({ threadId });
         if (thread) {
+          // Determine new title if thread title generation is enabled
+          let titleForUpdate = thread.title ?? '';
+          if (this.observationConfig.threadTitle && result.threadTitle) {
+            const newTitle = result.threadTitle.trim();
+            if (newTitle.length >= 3 && newTitle !== thread.title) {
+              titleForUpdate = newTitle;
+            }
+          }
+
           const newMetadata = setThreadOMMetadata(thread.metadata, {
             lastObservedAt: threadLastObservedAt.toISOString(),
             suggestedResponse: result.suggestedContinuation,
@@ -5193,7 +5980,7 @@ ${formattedMessages}
           });
           await this.storage.updateThread({
             id: threadId,
-            title: thread.title ?? '',
+            title: titleForUpdate,
             metadata: newMetadata,
           });
         }
@@ -5287,6 +6074,7 @@ ${formattedMessages}
         abortSignal,
         reflectionHooks,
         requestContext,
+        tracingContext,
       });
     } catch (error) {
       // Insert FAILED markers into each thread's last message on error
@@ -5307,19 +6095,16 @@ ${formattedMessages}
           // Stream the failed marker to the UI first - this adds the part via stream handler
           if (writer) {
             await writer.custom(failedMarker).catch(() => {
-              // Ignore errors from streaming - observation should continue
+              // Ignore errors from streaming
             });
           }
 
           // Then seal the message (skipPush since writer.custom already added the part)
         }
       }
-      // If aborted, re-throw so the main agent loop can handle cancellation
-      if (abortSignal?.aborted) {
-        throw error;
-      }
-      // Log the error but don't re-throw - observation failure should not crash the agent
-      omError('[OM] Resource-scoped observation failed', error);
+      // Re-throw the error - observation failure should crash the agent
+      // (the FAILED marker was already emitted above for debugging)
+      throw error;
     } finally {
       await this.storage.setObservingFlag(record.id, false);
       unregisterOp(record.id, 'observing');
@@ -5394,12 +6179,22 @@ ${formattedMessages}
     messageList?: MessageList;
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
     requestContext?: RequestContext;
+    tracingContext?: TracingContext;
   }): Promise<void> {
-    const { record, observationTokens, writer, abortSignal, messageList, reflectionHooks, requestContext } = opts;
+    const {
+      record,
+      observationTokens,
+      writer,
+      abortSignal,
+      messageList,
+      reflectionHooks,
+      requestContext,
+      tracingContext,
+    } = opts;
     const lockKey = this.getLockKey(record.threadId, record.resourceId);
     const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
 
-    // ════════════════════════════════════════════════════════════════════════
+    // ══════��═════════════════��═��═════════════════════════════════════════════
     // ASYNC BUFFERING: Trigger background reflection at bufferActivation ratio
     // This runs in the background and stores results to bufferedReflection.
     // ════════════════════════════════════════════════════════════════════════
@@ -5514,6 +6309,7 @@ ${formattedMessages}
         undefined,
         undefined,
         requestContext,
+        tracingContext,
       );
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
@@ -5563,12 +6359,9 @@ ${formattedMessages}
         });
         await writer.custom(failedMarker).catch(() => {});
       }
-      // If aborted, re-throw so the main agent loop can handle cancellation
-      if (abortSignal?.aborted) {
-        throw error;
-      }
-      // Log the error but don't re-throw - reflection failure should not crash the agent
-      omError('[OM] Reflection failed', error);
+      // Re-throw the error - reflection failure should crash the agent
+      // (the FAILED marker was already emitted above for debugging)
+      throw error;
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
       reflectionHooks?.onReflectionEnd?.();

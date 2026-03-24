@@ -5,12 +5,14 @@
  * For top-level observability infrastructure (instances, exporters, bridges, config),
  * see observability.ts.
  */
+import { EntityType } from '@internal/core/storage';
+
 import type { MastraError } from '../../error';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { LanguageModelUsage, ProviderMetadata, StepStartPayload } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
-import type { CustomSamplerOptions, ObservabilityInstance } from './core';
+import type { CustomSamplerOptions, ObservabilityInstance, CorrelationContext } from './core';
 import type { FeedbackInput } from './feedback';
 import type { ScoreInput } from './scores';
 
@@ -56,26 +58,7 @@ export enum SpanType {
   WORKFLOW_WAIT_EVENT = 'workflow_wait_event',
 }
 
-export enum EntityType {
-  /** Agent/Model execution */
-  AGENT = 'agent',
-  /** Eval */
-  EVAL = 'eval',
-  /** Input Processor */
-  INPUT_PROCESSOR = 'input_processor',
-  /** Input Step Processor */
-  INPUT_STEP_PROCESSOR = 'input_step_processor',
-  /** Output Processor */
-  OUTPUT_PROCESSOR = 'output_processor',
-  /** Output Step Processor */
-  OUTPUT_STEP_PROCESSOR = 'output_step_processor',
-  /** Workflow Step */
-  WORKFLOW_STEP = 'workflow_step',
-  /** Tool */
-  TOOL = 'tool',
-  /** Workflow */
-  WORKFLOW_RUN = 'workflow_run',
-}
+export { EntityType };
 
 // ============================================================================
 // Type-Specific Attributes Interfaces
@@ -400,6 +383,7 @@ export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
 // Span Interfaces
 // ============================================================================
 
+/** Error information attached to a span when it fails. */
 export interface SpanErrorInfo {
   message: string;
   id?: string;
@@ -490,6 +474,12 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   /** Find the closest parent span of a specific type by walking up the parent chain */
   findParent<T extends SpanType>(spanType: T): Span<T> | undefined;
 
+  /**
+   * Optional hook for implementations that expose canonical correlation
+   * context directly from the span instance.
+   */
+  getCorrelationContext?(): CorrelationContext;
+
   /** Returns a lightweight span ready for export */
   exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> | undefined;
 
@@ -535,6 +525,7 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   executeInContextSync<T>(fn: () => T): T;
 }
 
+/** Context for bridging Mastra spans with external tracing systems (e.g., OpenTelemetry). */
 export interface BridgeSpanContext {
   /**
    * Execute an async function within this span's tracing context.
@@ -620,6 +611,7 @@ export interface EndGenerationOptions extends EndSpanOptions<SpanType.MODEL_GENE
   providerMetadata?: ProviderMetadata;
 }
 
+/** Tracks model execution steps and streaming chunks within a MODEL_GENERATION span. */
 export interface IModelSpanTracker {
   getTracingContext(): TracingContext;
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void;
@@ -820,11 +812,13 @@ interface UpdateBaseOptions<TType extends SpanType> {
   metadata?: Record<string, any>;
 }
 
+/** Options for ending a span, with optional final attributes and output. */
 export interface EndSpanOptions<TType extends SpanType> extends UpdateBaseOptions<TType> {
   /** Output data */
   output?: any;
 }
 
+/** Options for updating a span's attributes, input, or output mid-flight. */
 export interface UpdateSpanOptions<TType extends SpanType> extends UpdateBaseOptions<TType> {
   /** Input data */
   input?: any;
@@ -832,6 +826,7 @@ export interface UpdateSpanOptions<TType extends SpanType> extends UpdateBaseOpt
   output?: any;
 }
 
+/** Options for recording an error on a span. */
 export interface ErrorSpanOptions<TType extends SpanType> extends UpdateBaseOptions<TType> {
   /** The error associated with the issue */
   error: MastraError | Error;
@@ -839,6 +834,7 @@ export interface ErrorSpanOptions<TType extends SpanType> extends UpdateBaseOpti
   endSpan?: boolean;
 }
 
+/** Options for retrieving an existing span or creating a new one from a tracing context. */
 export interface GetOrCreateSpanOptions<TType extends SpanType> {
   type: TType;
   name: string;
@@ -952,6 +948,7 @@ export interface TracingOptions {
   hideOutput?: boolean;
 }
 
+/** Trace and span identifiers for correlating spans across systems. */
 export interface SpanIds {
   traceId: string;
   spanId: string;
@@ -972,6 +969,8 @@ export interface TracingContext {
 export type TracingProperties = {
   /** Trace ID used on the execution (if the execution was traced). */
   traceId?: string;
+  /** Root span ID used on the execution (if the execution was traced). */
+  spanId?: string;
 };
 
 // ============================================================================

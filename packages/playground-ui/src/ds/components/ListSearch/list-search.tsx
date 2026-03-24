@@ -1,4 +1,4 @@
-import { useCallback, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 
@@ -16,6 +16,8 @@ export const ListSearch = ({ onSearch, label, placeholder, debounceMs = 300 }: L
   const debouncedSearch = useDebouncedCallback((val: string) => {
     onSearch(val);
   }, debounceMs);
+
+  useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -40,7 +42,7 @@ export const ListSearch = ({ onSearch, label, placeholder, debounceMs = 300 }: L
       value={value}
       onChange={handleChange}
       onReset={handleReset}
-      className="w-full max-w-[30rem] "
+      className="w-full max-w-[30rem]"
     />
   );
 };

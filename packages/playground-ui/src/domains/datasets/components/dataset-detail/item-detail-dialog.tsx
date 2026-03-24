@@ -1,19 +1,19 @@
+import type { DatasetItem } from '@mastra/client-js';
+import { format } from 'date-fns/format';
+import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, Pencil, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { DatasetItem } from '@mastra/client-js';
-import { SideDialog, type SideDialogRootProps } from '@/ds/components/SideDialog';
-import { TextAndIcon, getShortId } from '@/ds/components/Text';
-import { KeyValueList } from '@/ds/components/KeyValueList';
-import { Sections } from '@/ds/components/Sections';
+import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
+import { AlertDialog } from '@/ds/components/AlertDialog';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
+import { KeyValueList } from '@/ds/components/KeyValueList';
 import { Label } from '@/ds/components/Label';
+import { Sections } from '@/ds/components/Sections';
+import { SideDialog } from '@/ds/components/SideDialog';
+import type { SideDialogRootProps } from '@/ds/components/SideDialog';
+import { TextAndIcon, getShortId } from '@/ds/components/Text';
 import { Icon } from '@/ds/icons/Icon';
-import { AlertDialog } from '@/ds/components/AlertDialog';
-import { useLinkComponent } from '@/lib/framework';
 import { toast } from '@/lib/toast';
-import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, Pencil, Trash2 } from 'lucide-react';
-import { format } from 'date-fns/format';
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 
 export interface ItemDetailDialogProps {
   datasetId: string;
@@ -38,7 +38,6 @@ export function ItemDetailDialog({
   onItemChange,
   dialogLevel = 1,
 }: ItemDetailDialogProps) {
-  const { Link } = useLinkComponent();
   const { updateItem, deleteItem } = useDatasetMutations();
 
   // Edit mode state
@@ -202,7 +201,7 @@ export function ItemDetailDialog({
             isSaving={updateItem.isPending}
           />
         ) : (
-          <ReadOnlyContent item={item} Link={Link} />
+          <ReadOnlyContent item={item} />
         )}
       </SideDialog.Content>
 
@@ -230,7 +229,7 @@ export function ItemDetailDialog({
 /**
  * Read-only view of the dataset item details
  */
-function ReadOnlyContent({ item, Link }: { item: DatasetItem; Link: ReturnType<typeof useLinkComponent>['Link'] }) {
+function ReadOnlyContent({ item }: { item: DatasetItem }) {
   const metadataDisplay = item.metadata ? JSON.stringify(item.metadata, null, 2) : null;
 
   return (
@@ -262,7 +261,6 @@ function ReadOnlyContent({ item, Link }: { item: DatasetItem; Link: ReturnType<t
                 ]
               : []),
           ]}
-          LinkComponent={Link}
         />
 
         <SideDialog.CodeSection title="Input" icon={<FileInputIcon />} codeStr={JSON.stringify(item.input, null, 2)} />

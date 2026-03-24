@@ -9,13 +9,13 @@ import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsPropert
 
 # Agent.network()
 
+The `.network()` method enables multi-agent collaboration and routing. This method accepts messages and optional execution options.
+
 :::warning[Deprecated]
 
-Agent networks are deprecated and will be removed in a future release. Use the [supervisor pattern](/docs/agents/supervisor-agents) with `agent.stream()` or `agent.generate()` instead. See the [migration guide](/guides/migrations/network-to-supervisor) to upgrade.
+The `.network()` primitive has been deprecated and will be removed in a future major release. Use [supervisor agents](/docs/agents/supervisor-agents) with `agent.stream()` or `agent.generate()` instead. See the [migration guide](/guides/migrations/network-to-supervisor) to upgrade.
 
 :::
-
-The `.network()` method enables multi-agent collaboration and routing. This method accepts messages and optional execution options.
 
 ## Usage example
 
@@ -29,7 +29,7 @@ const agent = new Agent({
   id: 'network-agent',
   name: 'Network Agent',
   instructions: 'You are a network agent that can help users with a variety of tasks.',
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   agents: {
     agent1,
     agent2,
@@ -321,6 +321,13 @@ await agent.network(`
             isOptional: true,
             description:
               'The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.',
+          },
+          {
+            name: 'spanId',
+            type: 'string',
+            isOptional: true,
+            description:
+              'The root span ID associated with this execution when Tracing is enabled. Use this for span-level lookup and correlation.',
           },
           {
             name: 'onStepFinish',

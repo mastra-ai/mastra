@@ -162,6 +162,29 @@ const mastra = new Mastra({
 
 When `init()` is used, a global error-handling middleware is also registered as a safety net. Errors that reach this middleware are emitted via `ctx.app.emit('error', err, ctx)` following the standard Koa convention.
 
+## Protecting raw routes
+
+When you want Mastra-managed auth and route metadata such as `requiresAuth`, prefer [`registerApiRoute()`](/reference/server/register-api-route). For raw Koa routes mounted directly on the app, use `createAuthMiddleware()`:
+
+```typescript title="server.ts"
+import Koa from 'koa'
+import { createAuthMiddleware, MastraServer } from '@mastra/koa'
+import { mastra } from './mastra'
+
+const app = new Koa()
+const server = new MastraServer({ app, mastra })
+
+await server.init()
+
+app.use(createAuthMiddleware({ mastra }))
+app.use(async ctx => {
+  if (ctx.path !== '/custom/protected') return
+
+  const user = ctx.state.requestContext.get('user')
+  ctx.body = { user }
+})
+```
+
 ## Manual initialization
 
 For custom middleware ordering, call each method separately instead of `init()`. See [manual initialization](/docs/server/server-adapters#manual-initialization) for details.

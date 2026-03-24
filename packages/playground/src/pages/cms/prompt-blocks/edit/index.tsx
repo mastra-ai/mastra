@@ -153,6 +153,7 @@ function CmsPromptBlocksEditForm({ block, blockId, selectedVersionId, hasDraft }
           hasDraft={hasDraft}
           formResetKey={formResetKey}
           mode="edit"
+          blockId={blockId}
         />
       }
     >

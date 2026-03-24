@@ -8,13 +8,10 @@ import {
   DocsIcon,
   AgentIcon,
   AgentCombobox,
-  useIsCmsAvailable,
 } from '@mastra/playground-ui';
 import { Link } from 'react-router';
 
 export function AgentHeader({ agentId }: { agentId: string }) {
-  const { isCmsAvailable } = useIsCmsAvailable();
-
   return (
     <Header>
       <Breadcrumb>
@@ -25,7 +22,7 @@ export function AgentHeader({ agentId }: { agentId: string }) {
           Agents
         </Crumb>
         <Crumb as="span" to="" isCurrent>
-          <AgentCombobox value={agentId} variant="ghost" showSourceIcon={isCmsAvailable} />
+          <AgentCombobox value={agentId} variant="ghost" />
         </Crumb>
       </Breadcrumb>
 

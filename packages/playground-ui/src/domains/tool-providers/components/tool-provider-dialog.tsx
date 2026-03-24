@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { SideDialog } from '@/ds/components/SideDialog';
-import { Button } from '@/ds/components/Button';
-
+import { ToolList } from './tool-list';
 import { ToolkitList } from './toolkit-list';
-import { ProviderToolList } from './provider-tool-list';
+import { Button } from '@/ds/components/Button';
+import { SideDialog } from '@/ds/components/SideDialog';
 
 interface ToolProviderDialogProps {
   provider: { id: string; name: string; description?: string } | null;
@@ -90,7 +89,7 @@ export function ToolProviderDialog({ provider, onClose, selectedToolIds, onSubmi
 
         <div className="overflow-hidden">
           {provider && (
-            <ProviderToolList
+            <ToolList
               providerId={provider.id}
               toolkit={selectedToolkit}
               selectedIds={selectedIdSet}

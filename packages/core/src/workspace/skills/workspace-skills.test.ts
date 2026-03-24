@@ -420,6 +420,7 @@ describe('WorkspaceSkillsImpl', () => {
       const results = await skills.search('API');
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]?.skillName).toBe('api-skill');
+      expect(results[0]?.skillPath).toBe('skills/api-skill');
     });
 
     it('should use search engine when configured', async () => {
@@ -440,7 +441,7 @@ describe('WorkspaceSkillsImpl', () => {
 
       // Verify skill was indexed
       expect(searchEngine.indexedDocs.length).toBeGreaterThan(0);
-      expect(searchEngine.indexedDocs[0]?.metadata?.skillName).toBe('test-skill');
+      expect(searchEngine.indexedDocs[0]?.metadata?.skillPath).toBe('skills/test-skill');
     });
 
     it('should filter by skill names', async () => {
@@ -744,7 +745,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['node_modules/@company/skills'],
       });
 
-      const skill = await skills.get('test-skill');
+      const skill = await skills.get('node_modules/@company/skills/test-skill');
       expect(skill?.source.type).toBe('external');
     });
 
@@ -758,7 +759,7 @@ describe('WorkspaceSkillsImpl', () => {
         skills: ['.mastra/skills'],
       });
 
-      const skill = await skills.get('test-skill');
+      const skill = await skills.get('.mastra/skills/test-skill');
       expect(skill?.source.type).toBe('managed');
     });
   });
@@ -1188,6 +1189,7 @@ Instructions for the new skill.`;
       const results = await skills.search('API');
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]?.skillName).toBe('api-skill');
+      expect(results[0]?.skillPath).toBe('skills/api-skill');
     });
   });
 
@@ -1455,6 +1457,110 @@ Instructions for the new skill.`;
       const result = await skills.list();
       expect(result).toHaveLength(1);
       expect(result[0]?.name).toBe('test-skill');
+    });
+
+    it('should error when same-named skills share the same source type (e.g., two local skills)', async () => {
+      const shadowSkillMd = `---
+name: test-skill
+description: Shadow copy of the test skill
+license: MIT
+---
+
+Shadow instructions.`;
+
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        'custom-skills/test-skill/SKILL.md': shadowSkillMd,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills', 'custom-skills'],
+      });
+
+      // list() returns all candidates (both visible for disambiguation UI)
+      const result = await skills.list();
+      expect(result).toHaveLength(2);
+      const paths = result.map(s => s.path).sort();
+      expect(paths).toEqual(['custom-skills/test-skill', 'skills/test-skill']);
+
+      // get() by name throws because both are local (source-type tie can't resolve)
+      await expect(skills.get('test-skill')).rejects.toThrow(
+        'Cannot resolve skill "test-skill": multiple local skills found',
+      );
+
+      // get() by exact path (escape hatch) still works for each specific skill
+      const specific = await skills.get('skills/test-skill');
+      expect(specific?.instructions).toContain('This is the test skill instructions.');
+
+      const shadow = await skills.get('custom-skills/test-skill');
+      expect(shadow?.instructions).toContain('Shadow instructions.');
+    });
+
+    it('should prefer local skills over external skills with same name', async () => {
+      const externalSkillMd = `---
+name: test-skill
+description: External copy of the test skill
+license: MIT
+---
+
+External instructions.`;
+
+      const filesystem = createMockFilesystem({
+        'node_modules/@company/skills/test-skill/SKILL.md': externalSkillMd,
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['node_modules/@company/skills', 'skills'],
+      });
+
+      // list() returns all candidates (both visible for disambiguation)
+      const result = await skills.list();
+      expect(result).toHaveLength(2);
+      const paths = result.map(s => s.path).sort();
+      expect(paths).toEqual(['node_modules/@company/skills/test-skill', 'skills/test-skill']);
+
+      // get() by name returns local (tie-break winner: local > external)
+      const winner = await skills.get('test-skill');
+      expect(winner?.source.type).toBe('local');
+      expect(winner?.instructions).toContain('This is the test skill instructions.');
+
+      // Path-based escape hatch still works for the external one
+      const external = await skills.get('node_modules/@company/skills/test-skill');
+      expect(external?.source.type).toBe('external');
+      expect(external?.instructions).toContain('External instructions.');
+    });
+
+    it('should emit a warning when tie-breaking resolves same-named skills across source types', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const externalSkillMd = `---
+name: test-skill
+description: External copy
+license: MIT
+---
+
+External instructions.`;
+
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        'node_modules/@company/skills/test-skill/SKILL.md': externalSkillMd,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills', 'node_modules/@company/skills'],
+      });
+
+      // Trigger resolution — local wins over external, emits warning
+      const winner = await skills.get('test-skill');
+      expect(winner?.source.type).toBe('local');
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Multiple skills named "test-skill"'));
+
+      warnSpy.mockRestore();
     });
   });
 
@@ -1772,7 +1878,7 @@ These are the updated instructions.
       expect(await skills.has('api-skill')).toBe(true);
 
       // Surgically remove one
-      await skills.removeSkill('test-skill');
+      await skills.removeSkill('skills/test-skill');
 
       expect(await skills.has('test-skill')).toBe(false);
       expect(await skills.has('api-skill')).toBe(true);
@@ -1827,7 +1933,7 @@ These are the updated instructions.
 
       await skills.list();
 
-      await skills.removeSkill('test-skill');
+      await skills.removeSkill('skills/test-skill');
       const readFileCallsAfterRemove = (filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.length;
 
       // maybeRefresh should NOT trigger a full refresh since removeSkill bumped the timestamp
@@ -1859,11 +1965,11 @@ These are the updated instructions.
 
       await skills.list();
 
-      await skills.removeSkill('test-skill');
+      await skills.removeSkill('skills/test-skill');
 
       // Should have removed SKILL.md and reference entries
-      expect(removedIds).toContain('skill:test-skill:SKILL.md');
-      expect(removedIds).toContain('skill:test-skill:doc.md');
+      expect(removedIds).toContain('skill:skills/test-skill:SKILL.md');
+      expect(removedIds).toContain('skill:skills/test-skill:doc.md');
     });
   });
 

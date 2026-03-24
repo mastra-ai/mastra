@@ -23,7 +23,12 @@ export {
   type ObserveHooks,
 } from './observational-memory';
 
+// Observation utilities
+export { getObservationsAsOf } from './observation-utils';
+
 // Types
+export { ModelByInputTokens, type ModelByInputTokensConfig } from './model-by-input-tokens';
+
 export type {
   ObservationConfig,
   ReflectionConfig,
@@ -65,3 +70,14 @@ export type {
 
 // Utilities
 export { TokenCounter } from './token-counter';
+export { injectAnchorIds, stripEphemeralAnchorIds, parseAnchorId } from './anchor-ids';
+export {
+  parseObservationGroups,
+  stripObservationGroups,
+  wrapInObservationGroup,
+  renderObservationGroupsForReflection,
+  reconcileObservationGroupsFromReflection,
+  deriveObservationGroupProvenance,
+  combineObservationGroupRanges,
+  type ObservationGroup,
+} from './observation-groups';

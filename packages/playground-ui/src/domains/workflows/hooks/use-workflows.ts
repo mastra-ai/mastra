@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
+import { useQuery } from '@tanstack/react-query';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 export const useWorkflows = () => {
@@ -11,10 +11,7 @@ export const useWorkflows = () => {
     queryFn: async () => {
       const workflows = await client.listWorkflows(requestContext);
       // Filter out processor workflows - they're shown on the Processors tab instead
-      const filtered = Object.entries(workflows).filter(([_, workflow]) => !workflow.isProcessorWorkflow);
-      // Sort alphabetically by workflow name
-      filtered.sort(([, a], [, b]) => a.name.localeCompare(b.name));
-      return Object.fromEntries(filtered);
+      return Object.fromEntries(Object.entries(workflows).filter(([_, workflow]) => !workflow.isProcessorWorkflow));
     },
   });
 };

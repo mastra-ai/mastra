@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
-import { toast } from '@/lib/toast';
-import { Combobox, type ComboboxProps } from '@/ds/components/Combobox';
-import { useTools } from '../hooks/use-all-tools';
 import { useAgents } from '../../agents/hooks/use-agents';
+import { useTools } from '../hooks/use-all-tools';
+import { Combobox } from '@/ds/components/Combobox';
+import type { ComboboxProps } from '@/ds/components/Combobox';
 import { useLinkComponent } from '@/lib/framework';
+import { toast } from '@/lib/toast';
 
 export interface ToolComboboxProps {
   value?: string;

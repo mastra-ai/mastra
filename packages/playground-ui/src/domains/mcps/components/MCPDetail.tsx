@@ -1,15 +1,15 @@
-import { MainContentContent } from '@/ds/components/MainContent';
-import { CopyButton } from '@/ds/components/CopyButton';
+import type { McpToolInfo } from '@mastra/client-js';
+import type { ServerInfo } from '@mastra/core/mcp';
+import { useEffect, useRef, useState } from 'react';
+import { useMCPServerTools } from '../hooks/useMCPServerTools';
+import { ToolIconMap } from '@/domains/tools';
 import { Badge } from '@/ds/components/Badge';
+import { CopyButton } from '@/ds/components/CopyButton';
+import { Entity, EntityContent, EntityDescription, EntityIcon, EntityName } from '@/ds/components/Entity';
+import { MainContentContent } from '@/ds/components/MainContent';
 import { Txt } from '@/ds/components/Txt';
 import { FolderIcon, Icon, McpServerIcon } from '@/ds/icons';
-import { ServerInfo } from '@mastra/core/mcp';
 import { useLinkComponent } from '@/lib/framework';
-import { useMCPServerTools } from '../hooks/useMCPServerTools';
-import { useEffect, useRef, useState } from 'react';
-import { ToolIconMap } from '@/domains/tools';
-import { McpToolInfo } from '@mastra/client-js';
-import { Entity, EntityContent, EntityDescription, EntityIcon, EntityName } from '@/ds/components/Entity';
 
 export interface MCPDetailProps {
   isLoading: boolean;

@@ -116,7 +116,7 @@ export interface HarnessSubagent {
 
 /**
  * Schema type for harness state.
- * Accepts any PublicSchema variant: Zod v3/v4, JSON Schema, AI SDK Schema, or Standard Schema.
+ * Accepts any PublicSchema variant: Zod v4, JSON Schema, AI SDK Schema, or Standard Schema.
  */
 export type HarnessStateSchema<T> = PublicSchema<T>;
 
@@ -512,6 +512,16 @@ export interface HarnessDisplayState {
     args: unknown;
   } | null;
 
+  // ── Tool suspension ─────────────────────────────────────────────────
+  /** A tool awaiting resume data after calling suspend() (null when none) */
+  pendingSuspension: {
+    toolCallId: string;
+    toolName: string;
+    args: unknown;
+    suspendPayload: unknown;
+    resumeSchema?: string;
+  } | null;
+
   // ── Interactive prompts ──────────────────────────────────────────────
   /** A question from the agent awaiting user answer (null when none) */
   pendingQuestion: {
@@ -572,6 +582,7 @@ export function defaultDisplayState(): HarnessDisplayState {
     activeTools: new Map(),
     toolInputBuffers: new Map(),
     pendingApproval: null,
+    pendingSuspension: null,
     pendingQuestion: null,
     pendingPlanApproval: null,
     activeSubagents: new Map(),
@@ -631,12 +642,20 @@ export type HarnessEvent =
   | { type: 'thread_deleted'; threadId: string }
   | { type: 'state_changed'; state: Record<string, unknown>; changedKeys: string[] }
   | { type: 'agent_start' }
-  | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' }
+  | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
   | { type: 'message_start'; message: HarnessMessage }
   | { type: 'message_update'; message: HarnessMessage }
   | { type: 'message_end'; message: HarnessMessage }
   | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
   | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
+  | {
+      type: 'tool_suspended';
+      toolCallId: string;
+      toolName: string;
+      args: unknown;
+      suspendPayload: unknown;
+      resumeSchema?: string;
+    }
   | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
   | { type: 'tool_end'; toolCallId: string; result: unknown; isError: boolean }
   | { type: 'tool_input_start'; toolCallId: string; toolName: string }
@@ -734,6 +753,7 @@ export type HarnessEvent =
       messagesActivated: number;
       generationCount: number;
     }
+  | { type: 'om_thread_title_updated'; cycleId: string; threadId: string; oldTitle?: string; newTitle: string }
   | { type: 'sandbox_access_request'; questionId: string; path: string; reason: string }
   | {
       type: 'ask_question';
@@ -833,7 +853,8 @@ export type HarnessMessageContent =
       error: string;
       tokensAttempted?: number;
       operationType?: 'observation' | 'reflection';
-    };
+    }
+  | { type: 'om_thread_title_updated'; threadId: string; oldTitle?: string; newTitle: string };
 
 // =============================================================================
 // Request Context

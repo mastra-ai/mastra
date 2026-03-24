@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
 import { GitCompareIcon } from 'lucide-react';
+import { useState } from 'react';
+import { useDatasetItemVersions } from '../../hooks/use-dataset-item-versions';
+import type { DatasetItemVersion } from '../../hooks/use-dataset-item-versions';
 import { Button, ButtonWithTooltip } from '@/ds/components/Button';
-import { ItemList } from '@/ds/components/ItemList';
-import { Checkbox } from '@/ds/components/Checkbox';
-import { useDatasetItemVersions, type DatasetItemVersion } from '../../hooks/use-dataset-item-versions';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Checkbox } from '@/ds/components/Checkbox';
 import { Column } from '@/ds/components/Columns';
+import { ItemList } from '@/ds/components/ItemList';
 
 export interface DatasetItemVersionsPanelProps {
   datasetId: string;
@@ -112,7 +113,7 @@ export function DatasetItemVersionsPanel({
 
           <ItemList.Scroller>
             <ItemList.Items>
-              {versions?.map((item, index) => {
+              {versions?.map(item => {
                 const versionKey = String(item.datasetVersion);
                 const versionDate = typeof item.updatedAt === 'string' ? new Date(item.updatedAt) : item.updatedAt;
 
@@ -172,7 +173,7 @@ function DatasetItemVersionsListSkeleton() {
         {Array.from({ length: 3 }).map((_, index) => (
           <ItemList.Row key={index}>
             <ItemList.RowButton columns={[{ name: 'version', label: 'Item Version History', size: '1fr' }]}>
-              <ItemList.TextCell>Loading...</ItemList.TextCell>
+              <ItemList.TextCell isLoading>Loading...</ItemList.TextCell>
             </ItemList.RowButton>
           </ItemList.Row>
         ))}

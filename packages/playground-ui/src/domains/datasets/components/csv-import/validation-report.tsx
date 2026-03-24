@@ -1,8 +1,8 @@
 'use client';
 
 import { AlertTriangleIcon, CheckCircleIcon } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import type { CsvValidationResult, RowValidationResult } from '../../utils/csv-validation';
+import { cn } from '@/lib/utils';
 
 interface ValidationReportProps {
   result: CsvValidationResult;

@@ -10,7 +10,6 @@ import { getCustomProviderId, loadSettings } from '../onboarding/settings.js';
 import { opencodeClaudeMaxProvider, promptCacheMiddleware } from '../providers/claude-max.js';
 import { openaiCodexProvider } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
-import type { stateSchema } from '../schema.js';
 
 const authStorage = new AuthStorage();
 
@@ -30,6 +29,18 @@ type ResolvedModel =
   | ModelRouterLanguageModel
   | ReturnType<ReturnType<typeof createAnthropic>>
   | ReturnType<ReturnType<typeof createOpenAI>>;
+
+type ModelRequestHeaders = Record<string, string>;
+
+function getHarnessHeaders(requestContext?: RequestContext): ModelRequestHeaders | undefined {
+  const harnessContext = requestContext?.get('harness') as HarnessRequestContext<any> | undefined;
+  const headers = {
+    ...(harnessContext?.threadId ? { 'x-thread-id': harnessContext.threadId } : {}),
+    ...(harnessContext?.resourceId ? { 'x-resource-id': harnessContext.resourceId } : {}),
+  };
+
+  return Object.keys(headers).length > 0 ? headers : undefined;
+}
 
 export function remapOpenAIModelForCodexOAuth(modelId: string): string {
   if (!modelId.startsWith(OPENAI_PREFIX)) {
@@ -80,8 +91,8 @@ export function getOpenAIApiKey(): string | undefined {
  * Applies prompt caching but NOT the Claude Code identity middleware
  * (which is only required for Claude Max OAuth).
  */
-function anthropicApiKeyProvider(modelId: string, apiKey: string): LanguageModelV1 {
-  const anthropic = createAnthropic({ apiKey });
+function anthropicApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders): LanguageModelV1 {
+  const anthropic = createAnthropic({ apiKey, headers });
   return wrapLanguageModel({
     model: anthropic(modelId),
     middleware: [promptCacheMiddleware],
@@ -91,10 +102,11 @@ function anthropicApiKeyProvider(modelId: string, apiKey: string): LanguageModel
 /**
  * Create an OpenAI model using a direct API key from AuthStorage.
  */
-function openaiApiKeyProvider(modelId: string, apiKey: string): LanguageModelV1 {
-  const openai = createOpenAI({ apiKey });
+function openaiApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders): LanguageModelV1 {
+  const openai = createOpenAI({ apiKey, headers });
   return wrapLanguageModel({
     model: openai.responses(modelId),
+    middleware: [],
   });
 }
 
@@ -109,9 +121,10 @@ function openaiApiKeyProvider(modelId: string, apiKey: string): LanguageModelV1 
  */
 export function resolveModel(
   modelId: string,
-  options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean },
+  options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean; requestContext?: RequestContext },
 ): ResolvedModel {
   authStorage.reload();
+  const headers = getHarnessHeaders(options?.requestContext);
   const [providerId, modelName] = modelId.split('/', 2);
   const settings = loadSettings();
   const customProvider =
@@ -123,9 +136,10 @@ export function resolveModel(
 
   if (customProvider) {
     return new ModelRouterLanguageModel({
-      id: modelId,
+      id: modelId as `${string}/${string}`,
       url: customProvider.url,
       apiKey: customProvider.apiKey,
+      headers,
     });
   }
 
@@ -141,6 +155,7 @@ export function resolveModel(
       apiKey: process.env.MOONSHOT_AI_API_KEY!,
       baseURL: 'https://api.moonshot.ai/anthropic/v1',
       name: 'moonshotai.anthropicv1',
+      headers,
     })(modelId.substring('moonshotai/'.length));
   } else if (isAnthropicModel) {
     const bareModelId = modelId.substring('anthropic/'.length);
@@ -148,21 +163,21 @@ export function resolveModel(
 
     // Primary path: explicit OAuth credential
     if (storedCred?.type === 'oauth') {
-      return opencodeClaudeMaxProvider(bareModelId);
+      return opencodeClaudeMaxProvider(bareModelId, { headers });
     }
 
     // Secondary path: explicit stored API key credential
     if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
-      return anthropicApiKeyProvider(bareModelId, storedCred.key.trim());
+      return anthropicApiKeyProvider(bareModelId, storedCred.key.trim(), headers);
     }
 
     // Fallback: direct API key from AuthStorage
     const apiKey = getAnthropicApiKey();
     if (apiKey) {
-      return anthropicApiKeyProvider(bareModelId, apiKey);
+      return anthropicApiKeyProvider(bareModelId, apiKey, headers);
     }
     // No auth configured — attempt OAuth provider which will prompt login
-    return opencodeClaudeMaxProvider(bareModelId);
+    return opencodeClaudeMaxProvider(bareModelId, { headers });
   } else if (isOpenAIModel) {
     const bareModelId = modelId.substring(OPENAI_PREFIX.length);
     const storedCred = authStorage.get('openai-codex');
@@ -171,17 +186,18 @@ export function resolveModel(
       const resolvedModelId = options?.remapForCodexOAuth ? remapOpenAIModelForCodexOAuth(modelId) : modelId;
       return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
         thinkingLevel: options?.thinkingLevel,
+        headers,
       });
     }
 
     const apiKey = getOpenAIApiKey();
     if (apiKey) {
-      return openaiApiKeyProvider(bareModelId, apiKey);
+      return openaiApiKeyProvider(bareModelId, apiKey, headers);
     }
 
-    return new ModelRouterLanguageModel(modelId);
+    return new ModelRouterLanguageModel({ id: modelId as `${string}/${string}`, headers });
   } else {
-    return new ModelRouterLanguageModel(modelId);
+    return new ModelRouterLanguageModel({ id: modelId as `${string}/${string}`, headers });
   }
 }
 
@@ -190,7 +206,7 @@ export function resolveModel(
  * This allows runtime model switching via the /models picker.
  */
 export function getDynamicModel({ requestContext }: { requestContext: RequestContext }): ResolvedModel {
-  const harnessContext = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
+  const harnessContext = requestContext.get('harness') as HarnessRequestContext<any> | undefined;
 
   const modelId = harnessContext?.state?.currentModelId;
   if (!modelId) {
@@ -199,5 +215,5 @@ export function getDynamicModel({ requestContext }: { requestContext: RequestCon
 
   const thinkingLevel = harnessContext?.state?.thinkingLevel as ThinkingLevel | undefined;
 
-  return resolveModel(modelId, { thinkingLevel });
+  return resolveModel(modelId, { thinkingLevel, requestContext });
 }

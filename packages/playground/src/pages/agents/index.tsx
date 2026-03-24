@@ -1,71 +1,85 @@
 import {
+  Header,
+  HeaderTitle,
+  MainContentLayout,
+  MainContentContent,
+  Icon,
   Button,
+  ButtonWithTooltip,
+  HeaderAction,
+  DocsIcon,
   useAgents,
-  AgentList,
+  AgentsTable,
+  AgentsList,
   AgentIcon,
-  useIsCmsAvailable,
-  usePermissions,
-  useLinkComponent,
-  PageContent,
+  ListSearch,
   MainHeader,
+  EntityListPageLayout,
 } from '@mastra/playground-ui';
-import { ExternalLinkIcon, Plus } from 'lucide-react';
+import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
+import { BookIcon } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 
 function Agents() {
-  const { navigate } = useLinkComponent();
   const { data: agents = {}, isLoading, error } = useAgents();
-  const { isCmsAvailable } = useIsCmsAvailable();
-  const { canEdit } = usePermissions();
+  const { variant } = useExperimentalUI('entity-list-page');
+  const [search, setSearch] = useState('');
 
-  const canCreateAgent = isCmsAvailable && canEdit('stored-agents');
-
-  const handleCreateClick = () => {
-    navigate('/cms/agents/create');
-  };
-
-  return (
-    <PageContent>
-      <PageContent.TopBar>
-        <Button
-          as="a"
-          href="https://mastra.ai/en/docs/agents/overview"
-          target="_blank"
-          rel="noopener noreferrer"
-          variant="ghost"
-          size="md"
-        >
-          Agents Documentation
-          <ExternalLinkIcon />
-        </Button>
-      </PageContent.TopBar>
-      <PageContent.Main>
-        <div className="w-full max-w-[90rem] px-10 mx-auto grid h-full grid-rows-[auto_1fr] overflow-y-auto">
-          <MainHeader>
+  if (variant === 'new-proposal') {
+    return (
+      <EntityListPageLayout>
+        <EntityListPageLayout.Top>
+          <MainHeader withMargins={false}>
             <MainHeader.Column>
               <MainHeader.Title isLoading={isLoading}>
                 <AgentIcon /> Agents
               </MainHeader.Title>
             </MainHeader.Column>
-            {canCreateAgent && (
-              <MainHeader.Column>
-                <Button as={Link} to="/cms/agents/create" variant="primary">
-                  <Plus />
-                  Create Agent
-                </Button>
-              </MainHeader.Column>
-            )}
+            <MainHeader.Column className="flex justify-end gap-2">
+              <ButtonWithTooltip
+                as="a"
+                href="https://mastra.ai/en/docs/agents/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+                tooltipContent="Go to Agents documentation"
+              >
+                <BookIcon />
+              </ButtonWithTooltip>
+            </MainHeader.Column>
           </MainHeader>
+          <div className="max-w-[30rem]">
+            <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
+          </div>
+        </EntityListPageLayout.Top>
 
-          <AgentList
-            agents={agents}
-            isLoading={isLoading}
-            error={error}
-            onCreateClick={canCreateAgent ? handleCreateClick : undefined}
-          />
-        </div>
-      </PageContent.Main>
-    </PageContent>
+        <AgentsList agents={agents} isLoading={isLoading} error={error} search={search} />
+      </EntityListPageLayout>
+    );
+  }
+
+  return (
+    <MainContentLayout>
+      <Header>
+        <HeaderTitle>
+          <Icon>
+            <AgentIcon />
+          </Icon>
+          Agents
+        </HeaderTitle>
+
+        <HeaderAction>
+          <Button variant="ghost" size="md" as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
+            <DocsIcon />
+            Agents documentation
+          </Button>
+        </HeaderAction>
+      </Header>
+
+      <MainContentContent isCentered={!isLoading && Object.keys(agents || {}).length === 0}>
+        <AgentsTable agents={agents} isLoading={isLoading} error={error} />
+      </MainContentContent>
+    </MainContentLayout>
   );
 }
 
