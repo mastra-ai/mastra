@@ -13,16 +13,15 @@ const client = new MastraClient();
 const system = await client.getSystemPackages();
 
 // system.observabilityStorageType contains the class name of the observability store:
-// - 'ObservabilityStorageClickhouse' → full metrics support
-// - 'ObservabilityInMemory'          → metrics work but are not persisted across restarts
+// - 'ObservabilityInMemory' → metrics work but are not persisted across restarts
 // - 'ObservabilityPG', 'ObservabilityLibSQL', etc. → metrics not supported
 
 if (system.observabilityStorageType === 'ObservabilityInMemory') {
   console.warn('Metrics are not persisted — data will be lost on server restart.');
 }
 
-const SUPPORTED = new Set(['ObservabilityStorageClickhouse', 'ObservabilityInMemory']);
+const SUPPORTED = new Set(['ObservabilityInMemory']);
 if (!SUPPORTED.has(system.observabilityStorageType ?? '')) {
-  console.error('Metrics require ClickHouse, DuckDB, or in-memory observability storage.');
+  console.error('Metrics require in-memory observability storage.');
 }
 ```
