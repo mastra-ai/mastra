@@ -5,6 +5,7 @@ import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { injectAnchorIds, parseAnchorId, stripEphemeralAnchorIds } from '../anchor-ids';
+import { ModelByInputTokens } from '../model-by-input-tokens';
 import {
   deriveObservationGroupProvenance,
   parseObservationGroups,
@@ -11165,5 +11166,129 @@ describe('Single-thread replay red tests', () => {
 
     const remainingIds = messageList.get.all.db().map((m: any) => m.id);
     expect(remainingIds).toEqual(unobservedIds);
+  });
+});
+
+describe('ModelByInputTokens with ObservationalMemory', () => {
+  it('should select observer model based on input token count', async () => {
+    const modelSelector = new ModelByInputTokens({
+      upTo: {
+        5000: 'openai/gpt-4o-mini',
+        50000: 'openai/gpt-4o',
+      },
+    });
+
+    expect(modelSelector.resolve(1000)).toBe('openai/gpt-4o-mini');
+    expect(modelSelector.resolve(4000)).toBe('openai/gpt-4o-mini');
+    expect(modelSelector.resolve(10000)).toBe('openai/gpt-4o');
+  });
+
+  it('should throw when input exceeds the largest configured threshold', async () => {
+    const modelSelector = new ModelByInputTokens({
+      upTo: {
+        5000: 'openai/gpt-4o-mini',
+        50000: 'openai/gpt-4o',
+      },
+    });
+
+    // Tokens within range should work
+    expect(modelSelector.resolve(5000)).toBe('openai/gpt-4o-mini');
+    expect(modelSelector.resolve(50000)).toBe('openai/gpt-4o');
+
+    // Tokens exceeding largest threshold should throw
+    expect(() => modelSelector.resolve(50001)).toThrow('exceeds the largest configured threshold');
+  });
+
+  it('should correctly report thresholds in ascending order', () => {
+    const modelSelector = new ModelByInputTokens({
+      upTo: {
+        100000: 'model-c',
+        1000: 'model-a',
+        10000: 'model-b',
+      },
+    });
+
+    // getThresholds should return them sorted
+    expect(modelSelector.getThresholds()).toEqual([1000, 10000, 100000]);
+  });
+
+  it('should handle single threshold correctly', () => {
+    const modelSelector = new ModelByInputTokens({
+      upTo: {
+        5000: 'openai/gpt-4o-mini',
+      },
+    });
+
+    expect(modelSelector.resolve(1000)).toBe('openai/gpt-4o-mini');
+    expect(modelSelector.resolve(5000)).toBe('openai/gpt-4o-mini');
+    expect(() => modelSelector.resolve(5001)).toThrow('exceeds the largest configured threshold');
+  });
+
+  it('should reject thresholds with missing model targets', () => {
+    expect(
+      () =>
+        new ModelByInputTokens({
+          upTo: {
+            5000: undefined as any,
+          },
+        }),
+    ).toThrow('requires a valid model target for threshold 5000');
+  });
+
+  it('should accept object model targets', () => {
+    const modelSelector = new ModelByInputTokens({
+      upTo: {
+        5000: {
+          provider: 'openai',
+          modelId: 'gpt-4o-mini',
+        },
+      },
+    });
+
+    expect(modelSelector.resolve(1000)).toEqual({
+      provider: 'openai',
+      modelId: 'gpt-4o-mini',
+    });
+  });
+
+  it('should accept OpenAI-compatible model config targets', () => {
+    const modelSelector = new ModelByInputTokens({
+      upTo: {
+        5000: {
+          id: 'openai/gpt-4o-mini',
+          url: 'https://example.com/v1',
+        },
+        10000: {
+          providerId: 'openai',
+          modelId: 'gpt-4o',
+        },
+      },
+    });
+
+    expect(modelSelector.resolve(1000)).toEqual({
+      id: 'openai/gpt-4o-mini',
+      url: 'https://example.com/v1',
+    });
+    expect(modelSelector.resolve(9000)).toEqual({
+      providerId: 'openai',
+      modelId: 'gpt-4o',
+    });
+  });
+
+  it('should accept model instance targets', () => {
+    const modelInstance = {
+      provider: 'openai',
+      modelId: 'gpt-4o-mini',
+      doGenerate: async () => ({}) as any,
+      doStream: async () => ({}) as any,
+    } as any;
+
+    const modelSelector = new ModelByInputTokens({
+      upTo: {
+        5000: modelInstance,
+      },
+    });
+
+    expect(modelSelector.resolve(1000)).toBe(modelInstance);
   });
 });

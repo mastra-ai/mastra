@@ -1,5 +1,6 @@
 import type { AgentConfig } from '@mastra/core/agent';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
+import type { ModelByInputTokens } from './model-by-input-tokens';
 
 /**
  * Threshold can be a simple number or a dynamic range.
@@ -50,6 +51,8 @@ export interface ProviderOptions {
 /**
  * Configuration for the observation step (Observer agent).
  */
+export type ObservationalMemoryModel = Exclude<AgentConfig['model'], undefined> | ModelByInputTokens;
+
 export interface ObservationConfig {
   /**
    * Model for the Observer agent.
@@ -61,7 +64,7 @@ export interface ObservationConfig {
    *
    * @default 'google/gemini-2.5-flash'
    */
-  model?: AgentConfig['model'];
+  model?: ObservationalMemoryModel;
 
   /**
    * Token count of unobserved messages that triggers observation.
@@ -185,7 +188,7 @@ export interface ReflectionConfig {
    *
    * @default 'google/gemini-2.5-flash'
    */
-  model?: AgentConfig['model'];
+  model?: ObservationalMemoryModel;
 
   /**
    * Token count of observations that triggers reflection.
