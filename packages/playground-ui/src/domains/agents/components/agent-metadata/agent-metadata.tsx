@@ -314,6 +314,7 @@ export interface AgentMetadataSkillListProps {
     name: string;
     description: string;
     license?: string;
+    path: string;
   }>;
   agentId: string;
   workspaceId?: string;
@@ -342,12 +343,15 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
         );
 
         return (
-          <AgentMetadataListItem key={skill.name}>
+          <AgentMetadataListItem key={skill.path}>
             {isActivated ? (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Link href={paths.agentSkillLink(agentId, skill.name, workspaceId)} data-testid="skill-badge">
+                    <Link
+                      href={paths.agentSkillLink(agentId, skill.name, skill.path, workspaceId)}
+                      data-testid="skill-badge"
+                    >
                       {badge}
                     </Link>
                   </TooltipTrigger>
@@ -355,7 +359,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
                 </Tooltip>
               </TooltipProvider>
             ) : (
-              <Link href={paths.agentSkillLink(agentId, skill.name, workspaceId)} data-testid="skill-badge">
+              <Link href={paths.agentSkillLink(agentId, skill.name, skill.path, workspaceId)} data-testid="skill-badge">
                 {badge}
               </Link>
             )}
