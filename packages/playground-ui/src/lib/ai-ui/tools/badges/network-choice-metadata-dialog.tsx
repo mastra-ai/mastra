@@ -1,3 +1,6 @@
+import { Share2 } from 'lucide-react';
+import { useState } from 'react';
+import { CodeEditor } from '@/ds/components/CodeEditor';
 import {
   Dialog,
   DialogContent,
@@ -6,11 +9,8 @@ import {
   DialogTitle,
   DialogBody,
 } from '@/ds/components/Dialog';
-import { Txt } from '@/ds/components/Txt';
-import { CodeEditor } from '@/ds/components/CodeEditor';
 import { IconButton } from '@/ds/components/IconButton';
-import { Share2 } from 'lucide-react';
-import { useState } from 'react';
+import { Txt } from '@/ds/components/Txt';
 
 interface NetworkChoiceMetadataProps {
   selectionReason: string;

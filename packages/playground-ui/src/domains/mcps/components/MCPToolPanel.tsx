@@ -1,14 +1,14 @@
-import { resolveSerializedZodOutput } from '@/lib/form/utils';
 import type { JsonSchema } from '@mastra/schema-compat/json-to-zod';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
-import { z } from 'zod';
-import { Txt } from '@/ds/components/Txt';
-import { Skeleton } from '@/ds/components/Skeleton';
-import ToolExecutor from '@/domains/tools/components/ToolExecutor';
-import { useExecuteMCPTool, useMCPServerTool } from '@/domains/mcps/hooks/use-mcp-server-tool';
-import { toast } from '@/lib/toast';
 import { useEffect } from 'react';
+import { z } from 'zod';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { useExecuteMCPTool, useMCPServerTool } from '@/domains/mcps/hooks/use-mcp-server-tool';
+import ToolExecutor from '@/domains/tools/components/ToolExecutor';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Txt } from '@/ds/components/Txt';
+import { resolveSerializedZodOutput } from '@/lib/form/utils';
+import { toast } from '@/lib/toast';
 
 export interface MCPToolPanelProps {
   toolId: string;

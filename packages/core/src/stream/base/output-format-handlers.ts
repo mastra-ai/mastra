@@ -1,18 +1,20 @@
 import { TransformStream } from 'node:stream/web';
 import { isDeepEqualData, parsePartialJson } from '@internal/ai-sdk-v5';
 import { isZodType } from '@mastra/schema-compat';
-import type z3 from 'zod/v3';
-import type z4 from 'zod/v4';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { IMastraLogger } from '../../logger';
-import type { StandardSchemaWithJSON } from '../../schema';
-import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
+import type { ZodType, PublicSchema, StandardSchemaWithJSON } from '../../schema';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ValidationResult } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
 import { getTransformedSchema } from './schema';
 import type { ZodLikePartialSchema } from './schema';
+
+type StreamTransformerStructuredOutput<OUTPUT> = Omit<StructuredOutputOptions<OUTPUT>, 'schema'> & {
+  schema: PublicSchema<OUTPUT>;
+};
 
 /**
  * Escapes unescaped newlines, carriage returns, and tabs within JSON string values.
@@ -146,7 +148,7 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
   /**
    * Checks if the original schema is a Zod schema with safeParse method.
    */
-  protected isZodSchema(schema: unknown): schema is z3.ZodType<any, z3.ZodTypeDef, any> | z4.ZodType<any, any> {
+  protected isZodSchema(schema: unknown): schema is ZodType {
     return isZodType(schema);
   }
 
@@ -366,7 +368,7 @@ class ObjectFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> 
 class ArrayFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
   readonly type = 'array' as const;
   /** Previously filtered array to track changes */
-  private textPreviousFilteredArray: any[] = [];
+  private textPreviousFilteredArray: unknown[] = [];
   /** Whether we've emitted the initial empty array */
   private hasEmittedInitialArray = false;
 
@@ -380,7 +382,13 @@ class ArrayFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
     // using this.partialSchema / this.validatePartialChunks
     if (currentObjectJson !== undefined && !isDeepEqualData(previousObject, currentObjectJson)) {
       // For arrays, extract and filter elements
-      const rawElements = (currentObjectJson as any)?.elements || [];
+      const rawElements =
+        currentObjectJson &&
+        typeof currentObjectJson === 'object' &&
+        'elements' in currentObjectJson &&
+        Array.isArray(currentObjectJson.elements)
+          ? currentObjectJson.elements
+          : [];
       const filteredElements: Partial<OUTPUT>[] = [];
 
       // Filter out incomplete elements (like empty objects {})
@@ -391,12 +399,12 @@ class ArrayFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
         if (i === rawElements.length - 1 && parseState !== 'successful-parse') {
           // Only include the last element if it has meaningful content
           if (element && typeof element === 'object' && Object.keys(element).length > 0) {
-            filteredElements.push(element);
+            filteredElements.push(element as Partial<OUTPUT>);
           }
         } else {
           // Include all non-last elements that have content
           if (element && typeof element === 'object' && Object.keys(element).length > 0) {
-            filteredElements.push(element);
+            filteredElements.push(element as Partial<OUTPUT>);
           }
         }
       }
@@ -548,14 +556,10 @@ class EnumFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
  * @param transformedSchema - Wrapped/transformed schema used for LLM generation (arrays wrapped in {elements: []}, enums in {result: ""})
  * @returns Handler instance for the detected format type
  */
-function createOutputHandler<OUTPUT = undefined>({ schema }: { schema?: StandardSchemaWithJSON<OUTPUT> }) {
-  // Ensure the schema is a proper StandardSchemaWithJSON.
-  // Raw schemas (JSONSchema7, AI SDK Schema) may reach here when the handler is used
-  // outside the normal agent pipeline (e.g., direct createObjectStreamTransformer usage).
-  const normalizedSchema =
-    schema && !isStandardSchemaWithJSON(schema)
-      ? (toStandardSchema(schema as any) as StandardSchemaWithJSON<OUTPUT>)
-      : schema;
+function createOutputHandler<OUTPUT = undefined>({ schema }: { schema?: PublicSchema<OUTPUT> }) {
+  // Direct transformer callers can pass any PublicSchema; normalize it before
+  // selecting the format-specific handler.
+  const normalizedSchema = schema ? toStandardSchema(schema) : undefined;
 
   const transformedSchema = getTransformedSchema(normalizedSchema);
   switch (transformedSchema?.outputFormat) {
@@ -584,13 +588,13 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
   structuredOutput,
   logger,
 }: {
-  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  structuredOutput?: StreamTransformerStructuredOutput<OUTPUT>;
   logger?: IMastraLogger;
 }) {
-  const handler = createOutputHandler({ schema: structuredOutput?.schema });
+  const handler = createOutputHandler<OUTPUT>({ schema: structuredOutput?.schema });
 
   let accumulatedText = '';
-  let previousObject: any = undefined;
+  let previousObject: unknown = undefined;
   let currentRunId: string | undefined;
   let finalResult: ValidateAndTransformFinalResult<OUTPUT> | undefined;
 
@@ -677,7 +681,7 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
         from: ChunkFrom.AGENT,
         runId: currentRunId ?? '',
         type: 'object-result',
-        object: structuredOutput?.fallbackValue,
+        object: structuredOutput.fallbackValue as OUTPUT,
       });
     } else {
       controller.enqueue({

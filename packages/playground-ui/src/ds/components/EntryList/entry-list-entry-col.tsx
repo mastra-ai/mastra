@@ -1,5 +1,5 @@
-import { cn } from '@/lib/utils';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { cn } from '@/lib/utils';
 
 export type EntryListEntryTextColProps = {
   children: React.ReactNode;

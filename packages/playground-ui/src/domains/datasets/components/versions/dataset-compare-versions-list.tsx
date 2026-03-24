@@ -1,8 +1,8 @@
 import type { DatasetItem } from '@mastra/client-js';
+import { BanIcon, EqualIcon, PenIcon, PlusIcon } from 'lucide-react';
 import { ItemList } from '@/ds/components/ItemList';
-import { Chip, cn } from '@/index';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { ArrowRightIcon, BanIcon, EqualIcon, PenIcon, PlusIcon } from 'lucide-react';
+import { Chip, cn } from '@/index';
 
 export interface DatasetCompareVersionsListProps {
   datasetId: string;

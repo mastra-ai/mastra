@@ -1,7 +1,7 @@
 import { format } from 'date-fns';
+import { useDatasetVersions } from '../../hooks/use-dataset-versions';
 import { Column } from '@/ds/components/Columns';
 import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
-import { useDatasetVersions } from '../../hooks/use-dataset-versions';
 
 export interface DatasetCompareVersionToolbarProps {
   datasetId: string;

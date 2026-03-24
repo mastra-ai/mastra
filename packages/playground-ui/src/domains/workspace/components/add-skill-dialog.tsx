@@ -1,7 +1,9 @@
+import { Search, Download, ExternalLink, Loader2, Package, Github, Check, Folder } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { Search, Download, ExternalLink, Loader2, Package, Github, Check, Folder } from 'lucide-react';
-import { SkillIcon } from '@/ds/icons/SkillIcon';
+import { useSearchSkillsSh, usePopularSkillsSh, useSkillPreview, parseSkillSource } from '../hooks/use-skills-sh';
+import type { SkillsShSkill } from '../types';
+import { Button } from '@/ds/components/Button';
 import {
   Dialog,
   DialogContent,
@@ -10,13 +12,11 @@ import {
   DialogDescription,
   DialogBody,
 } from '@/ds/components/Dialog';
-import { Button } from '@/ds/components/Button';
 import { Input } from '@/ds/components/Input';
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
-import { useSearchSkillsSh, usePopularSkillsSh, useSkillPreview, parseSkillSource } from '../hooks/use-skills-sh';
-import type { SkillsShSkill } from '../types';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { SkillIcon } from '@/ds/icons/SkillIcon';
+import { cn } from '@/lib/utils';
 
 export interface WritableMount {
   path: string;

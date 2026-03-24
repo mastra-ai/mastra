@@ -51,6 +51,7 @@ const {
         id: `mock-dd-span-${parents.length}`,
         options,
         setTag: vi.fn(),
+        finish: vi.fn(),
       };
       spans.push(ddSpan);
       // Activate this span in scope for the duration of the callback
@@ -256,11 +257,9 @@ describe('DatadogExporter', () => {
         expect.objectContaining({
           tags: expect.objectContaining({
             error: true,
-            errorInfo: {
-              message: 'Something went wrong',
-              id: 'err-123',
-              category: 'validation',
-            },
+            'error.message': 'Something went wrong',
+            'error.id': 'err-123',
+            'error.category': 'validation',
           }),
         }),
       );
@@ -345,10 +344,8 @@ describe('DatadogExporter', () => {
             production: true,
             critical: true,
             error: true,
-            errorInfo: {
-              message: 'Something failed',
-              category: 'runtime',
-            },
+            'error.message': 'Something failed',
+            'error.category': 'runtime',
           },
         }),
       );
@@ -494,10 +491,13 @@ describe('DatadogExporter', () => {
       expect(mockTrace).toHaveBeenCalledWith(
         expect.objectContaining({
           startTime,
-          endTime: startTime,
         }),
         expect.any(Function),
       );
+
+      // endTime is set via ddSpan.finish() instead of trace options
+      const ddSpan = capturedSpans[0];
+      expect(ddSpan.finish).toHaveBeenCalledWith(startTime.getTime());
     });
 
     it('buffers event spans until parent exists and emits with parent context', async () => {

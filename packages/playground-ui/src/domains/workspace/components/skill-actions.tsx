@@ -1,6 +1,6 @@
 import { Trash2, Loader2, Download } from 'lucide-react';
-import { IconButton } from '@/ds/components/IconButton';
 import { AlertDialog } from '@/ds/components/AlertDialog';
+import { IconButton } from '@/ds/components/IconButton';
 
 export interface SkillUpdateButtonProps {
   skillName: string;

@@ -2,7 +2,7 @@ import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, it, expect, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { RequestContext } from '../../request-context';
 import { MockProvider } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';

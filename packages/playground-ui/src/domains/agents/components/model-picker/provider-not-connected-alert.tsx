@@ -1,5 +1,5 @@
+import type { Provider } from '@mastra/client-js';
 import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
-import { Provider } from '@mastra/client-js';
 
 export interface ProviderNotConnectedAlertProps {
   provider: Provider;

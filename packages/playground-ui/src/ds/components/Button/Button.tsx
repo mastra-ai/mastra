@@ -1,12 +1,12 @@
 import React from 'react';
-import { cn } from '@/lib/utils';
 import {
   formElementSizes,
   sharedFormElementStyle,
   sharedFormElementFocusStyle,
   sharedFormElementDisabledStyle,
-  type FormElementSize,
 } from '@/ds/primitives/form-element';
+import type { FormElementSize } from '@/ds/primitives/form-element';
+import { cn } from '@/lib/utils';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   as?: React.ElementType;
