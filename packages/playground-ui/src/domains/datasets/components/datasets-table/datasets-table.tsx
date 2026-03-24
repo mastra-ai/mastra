@@ -94,16 +94,15 @@ export function DatasetsTable({
               ))}
             </Tbody>
           </Table>
+          <ItemListNextPageLoading
+            isLoading={isFetchingNextPage}
+            hasMore={hasNextPage}
+            setEndOfListElement={setEndOfListElement}
+            loadingText="Loading more datasets..."
+            noMoreDataText="No more datasets to load"
+          />
         </ScrollableContainer>
       )}
-
-      <ItemListNextPageLoading
-        isLoading={isFetchingNextPage}
-        hasMore={hasNextPage}
-        setEndOfListElement={setEndOfListElement}
-        loadingText="Loading more datasets..."
-        noMoreDataText="No more datasets to load"
-      />
     </div>
   );
 }

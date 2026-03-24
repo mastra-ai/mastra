@@ -55,7 +55,7 @@ export function useInfiniteScrollQuery<TPage, TItem>({
     if (isEndOfListInView && query.hasNextPage && !query.isFetchingNextPage) {
       void query.fetchNextPage();
     }
-  }, [isEndOfListInView, query.hasNextPage, query.isFetchingNextPage]);
+  }, [isEndOfListInView, query.hasNextPage, query.isFetchingNextPage, query.fetchNextPage]);
 
   return { ...query, setEndOfListElement };
 }
