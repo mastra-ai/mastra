@@ -42,10 +42,17 @@ async function seedTrace(prompt, i) {
   }
 }
 
-async function fetchTraceIds() {
-  const res = await fetch(
-    `${BASE}/api/observability/traces?page=0&perPage=50&entityId=simple-assistant&entityType=agent`,
-  );
+async function fetchTraceIds(startedAfter) {
+  const params = new URLSearchParams({
+    page: '0',
+    perPage: '50',
+    entityId: 'simple-assistant',
+    entityType: 'agent',
+  });
+  if (startedAfter) {
+    params.set('startedAt', startedAfter);
+  }
+  const res = await fetch(`${BASE}/api/observability/traces?${params}`);
   if (!res.ok) {
     console.error(`Failed to fetch traces: ${res.status}`);
     return [];
@@ -90,6 +97,8 @@ async function seedScore(traceId, scorerId, score, reason) {
 
 console.log(`\n=== Seeding ${prompts.length} traces against simple-assistant ===\n`);
 
+const runStartTime = new Date().toISOString();
+
 for (let batch = 0; batch < prompts.length; batch += 5) {
   const slice = prompts.slice(batch, batch + 5);
   await Promise.all(slice.map((p, j) => seedTrace(p, batch + j)));
@@ -99,8 +108,8 @@ for (let batch = 0; batch < prompts.length; batch += 5) {
 console.log('\nWaiting 2s for traces to be persisted...');
 await new Promise(r => setTimeout(r, 2000));
 
-// Fetch trace IDs and seed scores
-const traceIds = await fetchTraceIds();
+// Fetch only traces created during this run
+const traceIds = await fetchTraceIds(runStartTime);
 console.log(`\n=== Found ${traceIds.length} traces, seeding scores ===\n`);
 
 if (traceIds.length === 0) {
