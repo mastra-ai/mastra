@@ -1,12 +1,12 @@
 import { Braces } from 'lucide-react';
 
+import { RequestContext } from './request-context';
+import { RequestContextSchemaForm } from '@/domains/request-context/components/request-context-schema-form';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
-import { Icon } from '@/ds/icons/Icon';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
 import { cn } from '@/lib/utils';
-import { RequestContextSchemaForm } from '@/domains/request-context/components/request-context-schema-form';
-import { RequestContext } from './request-context';
 
 interface AgentTopBarControlsProps {
   requestContextSchema?: string;

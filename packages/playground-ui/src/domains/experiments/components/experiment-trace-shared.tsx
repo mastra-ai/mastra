@@ -1,6 +1,6 @@
-import { AgentIcon, McpServerIcon, ToolsIcon, WorkflowIcon } from '@/ds/icons';
 import { BrainIcon } from 'lucide-react';
-import { type ExperimentUISpanStyle } from '../types';
+import type { ExperimentUISpanStyle } from '../types';
+import { AgentIcon, McpServerIcon, ToolsIcon, WorkflowIcon } from '@/ds/icons';
 
 export const spanTypePrefixes = ['agent', 'workflow', 'model', 'mcp', 'tool', 'other'];
 

@@ -1,5 +1,5 @@
-import { Button } from '@/ds/components/Button';
 import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
+import { Button } from '@/ds/components/Button';
 import { cn } from '@/lib/utils';
 
 export type SideDialogNavProps = {

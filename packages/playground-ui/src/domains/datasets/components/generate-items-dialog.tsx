@@ -1,22 +1,21 @@
-import { useState, useCallback, useRef } from 'react';
 import { Sparkles, Trash2, Plus } from 'lucide-react';
+import { useState, useCallback, useRef } from 'react';
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/ds/components/Dialog';
+import { useGenerationTasks } from '../context/generation-context';
+import { useDatasetMutations } from '../hooks/use-dataset-mutations';
+import { usePlaygroundModel } from '@/domains/agents/context/playground-model-context';
+import { LLMProviders, LLMModels, cleanProviderId } from '@/domains/llm';
 import { Button } from '@/ds/components/Button';
+import { Checkbox } from '@/ds/components/Checkbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/ds/components/Dialog';
+import { Input } from '@/ds/components/Input';
 import { Label } from '@/ds/components/Label';
-import { Textarea } from '@/ds/components/Textarea';
+import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Spinner } from '@/ds/components/Spinner';
+import { Textarea } from '@/ds/components/Textarea';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Checkbox } from '@/ds/components/Checkbox';
-import { Input } from '@/ds/components/Input';
 import { toast } from '@/lib/toast';
-import { LLMProviders, LLMModels, cleanProviderId } from '@/domains/llm';
-import { usePlaygroundModel } from '@/domains/agents/context/playground-model-context';
-import { useGenerationTasks } from '../context/generation-context';
-
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 
 interface GeneratedItem {
   input: unknown;

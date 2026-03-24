@@ -1,6 +1,6 @@
+import { X } from 'lucide-react';
 import { Badge } from '@/ds/components/Badge';
 import { IconButton } from '@/ds/components/IconButton';
-import { X } from 'lucide-react';
 
 interface VersionIndicatorProps {
   versionNumber: number;

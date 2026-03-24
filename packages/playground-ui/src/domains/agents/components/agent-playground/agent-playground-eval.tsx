@@ -1,3 +1,5 @@
+import { useMastraClient } from '@mastra/react';
+import { useQuery } from '@tanstack/react-query';
 import {
   CheckCircle,
   XCircle,
@@ -10,22 +12,22 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { useMastraClient } from '@mastra/react';
 
+import type { AgentExperiment } from '../../hooks/use-agent-experiments';
+import { useAgentVersions } from '../../hooks/use-agent-versions';
+import { formatVersionLabel } from './format-version-label';
+import { useDatasetExperimentResults, useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { TraceDialog } from '@/domains/observability/components/trace-dialog';
+import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Checkbox } from '@/ds/components/Checkbox';
-import { Icon } from '@/ds/icons/Icon';
-import { Spinner } from '@/ds/components/Spinner';
-import { Txt } from '@/ds/components/Txt';
-import { Badge } from '@/ds/components/Badge';
-import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible/collapsible';
 import { CopyButton } from '@/ds/components/CopyButton/copy-button';
-import { TraceDialog } from '@/domains/observability/components/trace-dialog';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Spinner } from '@/ds/components/Spinner';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
 import { cn } from '@/lib/utils';
-import { useDatasetExperimentResults, useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
-import type { AgentExperiment } from '../../hooks/use-agent-experiments';
 
 function formatTimestamp(dateStr: string | Date): string {
   const date = new Date(dateStr);
@@ -292,6 +294,10 @@ export function ExperimentResultsPanel({
   });
   const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experimentStatus);
 
+  const agentId = experiment.targetType === 'agent' ? experiment.targetId : '';
+  const { data: agentVersionsData } = useAgentVersions({ agentId });
+  const agentVersions = agentVersionsData?.versions ?? [];
+
   const { data: traceData, isLoading: isLoadingTrace } = useQuery({
     queryKey: ['trace', viewingTraceId],
     queryFn: () => client.getTrace(viewingTraceId!),
@@ -337,7 +343,15 @@ export function ExperimentResultsPanel({
         <div className="flex-1" />
         <ExperimentStatusBadge status={experiment.status} />
         <Txt variant="ui-xs" className="text-neutral2">
-          {experiment.datasetName} &middot; {experiment.startedAt ? formatTimestamp(experiment.startedAt) : '-'}
+          {experiment.datasetName}
+          {experiment.datasetVersion != null && ` ${formatVersionLabel('Dataset', experiment.datasetVersion)}`}
+          {experiment.agentVersion &&
+            (() => {
+              const av = agentVersions.find(v => v.id === experiment.agentVersion);
+              return ` · ${formatVersionLabel('Agent', av ? av.versionNumber : experiment.agentVersion)}`;
+            })()}
+          {' · '}
+          {experiment.startedAt ? formatTimestamp(experiment.startedAt) : '-'}
         </Txt>
       </div>
 

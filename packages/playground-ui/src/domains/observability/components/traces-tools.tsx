@@ -1,11 +1,11 @@
-import { SelectField } from '@/ds/components/FormFields';
-import { DateTimePicker } from '@/ds/components/DateTimePicker';
-import { Button } from '@/ds/components/Button/Button';
-import { Switch } from '@/ds/components/Switch/switch';
-import { cn } from '@/lib/utils';
+import type { EntityType } from '@mastra/core/observability';
 import { XIcon } from 'lucide-react';
-import { EntityType } from '@mastra/core/observability';
+import { Button } from '@/ds/components/Button/Button';
+import { DateTimePicker } from '@/ds/components/DateTimePicker';
+import { SelectField } from '@/ds/components/FormFields';
+import { Switch } from '@/ds/components/Switch/switch';
 import { Icon } from '@/ds/icons/Icon';
+import { cn } from '@/lib/utils';
 
 // UI-specific entity options that map to API EntityType values
 // Using the enum values (lowercase strings) for the type field
