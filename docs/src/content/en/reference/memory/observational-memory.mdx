@@ -925,7 +925,7 @@ const selector = new ModelByInputTokens({
 
 - Thresholds are sorted internally, so the order in the config object does not matter.
 - `inputTokens ≤ smallest threshold` → uses that threshold's model
-- `inputTokens > largest threshold` → throws an error
+- `inputTokens > largest threshold` → `resolve()` throws an error. If this happens during an OM Observer or Reflector run, OM aborts via TripWire, so callers receive an empty `text` result or streamed `tripwire` instead of a normal assistant response.
 - OM computes the input token count for the Observer or Reflector call and resolves the matching model tier directly
 
 #### Methods
@@ -936,7 +936,7 @@ const selector = new ModelByInputTokens({
     name: 'resolve',
     type: '(inputTokens: number) => MastraModelConfig',
     description:
-      'Returns the model for the given input token count. Throws if inputTokens exceeds the largest configured threshold.',
+      'Returns the model for the given input token count. Throws if inputTokens exceeds the largest configured threshold. When this happens during an OM run, callers receive a TripWire/empty-text outcome instead of a normal assistant response.',
   },
   {
     name: 'getThresholds',
