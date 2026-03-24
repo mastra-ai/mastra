@@ -239,15 +239,15 @@ describe('StagehandBrowser', () => {
     });
 
     it('should handle act failure gracefully', async () => {
-      mockStagehand.act.mockRejectedValueOnce(new Error('Element not found'));
+      mockStagehand.act.mockRejectedValueOnce(new Error('Act failed: Element not found'));
 
       const result = await browser.act({
         instruction: 'Click missing button',
       });
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('act_failed');
-      expect(result.message).toBe('Element not found');
+      expect((result as any).code).toBe('browser_error');
+      expect((result as any).message).toContain('Act failed');
     });
 
     it('should detect browser disconnection during act and set status to closed', async () => {
@@ -258,7 +258,7 @@ describe('StagehandBrowser', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('browser_closed');
+      expect((result as any).code).toBe('browser_closed');
       expect(browser.status).toBe('closed');
     });
 
@@ -307,7 +307,7 @@ describe('StagehandBrowser', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Extraction failed');
+      expect(result.message).toContain('Extraction failed');
     });
 
     it('should detect browser disconnection during extract and set status to closed', async () => {
@@ -318,7 +318,7 @@ describe('StagehandBrowser', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('browser_closed');
+      expect((result as any).code).toBe('browser_closed');
       expect(browser.status).toBe('closed');
     });
   });
@@ -371,8 +371,7 @@ describe('StagehandBrowser', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Observe failed');
-      expect(result.actions).toHaveLength(0);
+      expect((result as any).message).toContain('Observe failed');
     });
 
     it('should detect browser disconnection during observe and set status to closed', async () => {
@@ -383,7 +382,7 @@ describe('StagehandBrowser', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('browser_closed');
+      expect((result as any).code).toBe('browser_closed');
       expect(browser.status).toBe('closed');
     });
   });
@@ -428,7 +427,7 @@ describe('StagehandBrowser', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Navigation timeout');
+      expect((result as any).message).toContain('timed out');
     });
 
     it('should detect browser disconnection during navigate and set status to closed', async () => {
@@ -439,7 +438,7 @@ describe('StagehandBrowser', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('browser_closed');
+      expect((result as any).code).toBe('browser_closed');
       expect(browser.status).toBe('closed');
     });
 
@@ -451,7 +450,7 @@ describe('StagehandBrowser', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('no_page');
+      expect((result as any).message).toContain('page not available');
     });
   });
 
@@ -479,7 +478,7 @@ describe('StagehandBrowser', () => {
       const result = await browser.screenshot({});
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Screenshot failed');
+      expect(result.message).toContain('Screenshot failed');
     });
 
     it('should handle no page available', async () => {
@@ -488,7 +487,7 @@ describe('StagehandBrowser', () => {
       const result = await browser.screenshot({});
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('No page available');
+      expect((result as any).message).toContain('page not available');
     });
   });
 

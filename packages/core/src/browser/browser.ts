@@ -362,6 +362,8 @@ export abstract class MastraBrowser extends MastraBase {
   /**
    * Notify all registered callbacks that browser is ready.
    * Called internally after launch completes.
+   * Note: Callbacks remain registered and will fire again on subsequent launches.
+   * This supports browser restart scenarios (e.g., external close + re-launch).
    */
   protected notifyBrowserReady(): void {
     for (const callback of this._onReadyCallbacks) {
@@ -371,7 +373,8 @@ export abstract class MastraBrowser extends MastraBase {
         // Ignore callback errors
       }
     }
-    this._onReadyCallbacks.clear();
+    // Do NOT clear callbacks - they should persist across browser restarts
+    // so screencast can reconnect after external closure + re-launch
   }
 
   // ---------------------------------------------------------------------------

@@ -1,13 +1,10 @@
 /**
  * browser_evaluate - Execute JavaScript in the browser
  */
-
 import { createTool } from '@mastra/core/tools';
 import type { AgentBrowser } from '../agent-browser';
 import { evaluateInputSchema } from '../schemas';
 import { BROWSER_TOOLS } from './constants';
-import { handleBrowserError } from './error-handler';
-
 export function createEvaluateTool(browser: AgentBrowser) {
   return createTool({
     id: BROWSER_TOOLS.EVALUATE,
@@ -16,11 +13,7 @@ export function createEvaluateTool(browser: AgentBrowser) {
     inputSchema: evaluateInputSchema,
     execute: async input => {
       await browser.ensureReady();
-      try {
-        return await browser.evaluate(input);
-      } catch (error) {
-        return handleBrowserError(error, 'Evaluate', browser);
-      }
+      return browser.evaluate(input);
     },
   });
 }

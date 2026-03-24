@@ -1,13 +1,10 @@
 /**
  * browser_hover - Hover over an element
  */
-
 import { createTool } from '@mastra/core/tools';
 import type { AgentBrowser } from '../agent-browser';
 import { hoverInputSchema } from '../schemas';
 import { BROWSER_TOOLS } from './constants';
-import { handleBrowserError } from './error-handler';
-
 export function createHoverTool(browser: AgentBrowser) {
   return createTool({
     id: BROWSER_TOOLS.HOVER,
@@ -15,11 +12,7 @@ export function createHoverTool(browser: AgentBrowser) {
     inputSchema: hoverInputSchema,
     execute: async input => {
       await browser.ensureReady();
-      try {
-        return await browser.hover(input);
-      } catch (error) {
-        return handleBrowserError(error, 'Hover', browser);
-      }
+      return browser.hover(input);
     },
   });
 }

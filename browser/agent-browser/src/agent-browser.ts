@@ -1,5 +1,11 @@
-import { MastraBrowser, ScreencastStreamImpl } from '@mastra/core/browser';
-import type { ScreencastOptions, ScreencastStream, MouseEventParams, KeyboardEventParams } from '@mastra/core/browser';
+import { MastraBrowser, ScreencastStreamImpl, createError } from '@mastra/core/browser';
+import type {
+  BrowserToolError,
+  ScreencastOptions,
+  ScreencastStream,
+  MouseEventParams,
+  KeyboardEventParams,
+} from '@mastra/core/browser';
 import type { Tool } from '@mastra/core/tools';
 import type { BrowserManagerLike, BrowserPage, BrowserLocator, LaunchOptions } from './browser-types';
 import { loadBrowserManager } from './browser-types';
@@ -145,6 +151,47 @@ export class AgentBrowser extends MastraBrowser {
     }
   }
 
+  /**
+   * Create an error response from an exception.
+   * Handles disconnection detection and returns a consistent BrowserToolError.
+   */
+  private createErrorFromException(error: unknown, context: string): BrowserToolError {
+    const msg = error instanceof Error ? error.message : String(error);
+
+    // Check for browser disconnection errors first
+    if (this.isDisconnectionError(msg)) {
+      this.handleBrowserDisconnected();
+      return createError(
+        'browser_closed',
+        'Browser was closed externally.',
+        'The browser window was closed. Please retry to re-launch.',
+      );
+    }
+
+    if (msg.includes('timeout') || msg.includes('Timeout') || msg.includes('aborted')) {
+      return createError('timeout', `${context} timed out.`, 'Try again or increase timeout.');
+    }
+    if (msg.includes('not launched') || msg.includes('Browser is not launched')) {
+      return createError(
+        'browser_error',
+        'Browser was not initialized.',
+        'This is an internal error - please try again.',
+      );
+    }
+    if (msg.includes('stale') || msg.includes('Stale')) {
+      return createError('stale_ref', 'Element ref is no longer valid.', 'Get a fresh snapshot and use updated refs.');
+    }
+    if (msg.includes('not found') || msg.includes('No element')) {
+      return createError(
+        'element_not_found',
+        `Element not found.`,
+        'Check the ref is correct or get a fresh snapshot.',
+      );
+    }
+
+    return createError('browser_error', `${context} failed: ${msg}`, 'Check the browser state and try again.');
+  }
+
   private requireLocator(ref: string): BrowserLocator | null {
     if (!this.browserManager) {
       throw new Error('Browser not launched');
@@ -212,103 +259,105 @@ export class AgentBrowser extends MastraBrowser {
   // 1. browser_goto - Navigate to URL
   // ---------------------------------------------------------------------------
 
-  async goto(input: GotoInput): Promise<{
-    success: boolean;
-    url: string;
-    title: string;
-    hint?: string;
-  }> {
-    const page = this.getPage();
+  async goto(
+    input: GotoInput,
+  ): Promise<{ success: true; url: string; title: string; hint: string } | BrowserToolError> {
+    try {
+      const page = this.getPage();
 
-    await page.goto(input.url, {
-      timeout: input.timeout ?? this.defaultTimeout,
-      waitUntil: input.waitUntil ?? 'domcontentloaded',
-    });
+      await page.goto(input.url, {
+        timeout: input.timeout ?? this.defaultTimeout,
+        waitUntil: input.waitUntil ?? 'domcontentloaded',
+      });
 
-    return {
-      success: true,
-      url: page.url(),
-      title: await page.title(),
-      hint: 'Take a snapshot to see interactive elements and get refs.',
-    };
+      return {
+        success: true,
+        url: page.url(),
+        title: await page.title(),
+        hint: 'Take a snapshot to see interactive elements and get refs.',
+      };
+    } catch (error) {
+      return this.createErrorFromException(error, 'Goto');
+    }
   }
 
   // ---------------------------------------------------------------------------
   // 2. browser_snapshot - Capture accessibility tree
   // ---------------------------------------------------------------------------
 
-  async snapshot(input: SnapshotInput): Promise<{
-    success: boolean;
-    snapshot: string;
-    url: string;
-    title: string;
-    elementCount: number;
-    scroll: string;
-    hint?: string;
-  }> {
-    if (!this.browserManager) throw new Error('Browser not launched');
+  async snapshot(input: SnapshotInput): Promise<
+    | {
+        success: true;
+        snapshot: string;
+        url: string;
+        title: string;
+        elementCount: number;
+        scroll: string;
+        hint?: string;
+      }
+    | BrowserToolError
+  > {
+    try {
+      if (!this.browserManager) throw new Error('Browser not launched');
 
-    const page = this.getPage();
-    const rawSnapshot = await this.browserManager.getSnapshot({
-      interactive: input.interactiveOnly ?? true,
-      compact: true,
-    });
+      const page = this.getPage();
+      const rawSnapshot = await this.browserManager.getSnapshot({
+        interactive: input.interactiveOnly ?? true,
+        compact: true,
+      });
 
-    // Transform tree refs from [ref=e1] format to @e1 format for consistency
-    const snapshot = (rawSnapshot.snapshot ?? rawSnapshot.tree ?? '').replace(/\[ref=(\w+)\]/g, '@$1');
+      // Transform tree refs from [ref=e1] format to @e1 format for consistency
+      const snapshot = (rawSnapshot.snapshot ?? rawSnapshot.tree ?? '').replace(/\[ref=(\w+)\]/g, '@$1');
 
-    // Get scroll position info
-    const scrollInfo = await this.getScrollInfo();
-    let scrollText: string;
-    if (scrollInfo.atTop && !scrollInfo.atBottom) {
-      scrollText = 'TOP - more content below';
-    } else if (scrollInfo.atBottom) {
-      scrollText = 'BOTTOM of page';
-    } else {
-      scrollText = `${scrollInfo.percentDown}% down`;
+      // Get scroll position info
+      const scrollInfo = await this.getScrollInfo();
+      let scrollText: string;
+      if (scrollInfo.atTop && !scrollInfo.atBottom) {
+        scrollText = 'TOP - more content below';
+      } else if (scrollInfo.atBottom) {
+        scrollText = 'BOTTOM of page';
+      } else {
+        scrollText = `${scrollInfo.percentDown}% down`;
+      }
+
+      // Count refs
+      const refs = snapshot.match(/@e\d+/g) || [];
+      const elementCount = new Set(refs).size;
+
+      return {
+        success: true,
+        snapshot,
+        url: page.url(),
+        title: await page.title(),
+        elementCount,
+        scroll: scrollText,
+        hint:
+          elementCount === 0
+            ? 'No interactive elements found. Try scrolling or setting interactiveOnly:false.'
+            : undefined,
+      };
+    } catch (error) {
+      return this.createErrorFromException(error, 'Snapshot');
     }
-
-    // Count refs
-    const refs = snapshot.match(/@e\d+/g) || [];
-    const elementCount = new Set(refs).size;
-
-    return {
-      success: true,
-      snapshot,
-      url: page.url(),
-      title: await page.title(),
-      elementCount,
-      scroll: scrollText,
-      hint:
-        elementCount === 0
-          ? 'No interactive elements found. Try scrolling or setting interactiveOnly:false.'
-          : undefined,
-    };
   }
 
   // ---------------------------------------------------------------------------
   // 3. browser_click - Click on element
   // ---------------------------------------------------------------------------
 
-  async click(input: ClickInput): Promise<{
-    success: boolean;
-    url: string;
-    hint: string;
-    error?: { code: string; message: string };
-  }> {
-    const page = this.getPage();
-    const locator = this.requireLocator(input.ref);
-
-    if (!locator) {
-      return {
-        success: false,
-        url: page.url(),
-        hint: 'IMPORTANT: Take a new snapshot NOW to see the current page state and get fresh refs.',
-        error: { code: 'stale_ref', message: `Ref ${input.ref} not found. The page has changed.` },
-      };
-    }
-
+  async click(input: ClickInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
     try {
+      const page = this.getPage();
+      const locator = this.requireLocator(input.ref);
+
+      if (!locator) {
+        return createError(
+          'stale_ref',
+          `Ref ${input.ref} not found. The page has changed.`,
+          'Take a new snapshot to see the current page state and get fresh refs.',
+        );
+      }
+
       await locator.click({
         button: input.button ?? 'left',
         clickCount: input.clickCount ?? 1,
@@ -325,29 +374,14 @@ export class AgentBrowser extends MastraBrowser {
       const errorMsg = error instanceof Error ? error.message : String(error);
 
       if (errorMsg.includes('intercepts pointer events')) {
-        return {
-          success: false,
-          url: page.url(),
-          hint: 'Take a new snapshot to see what is blocking. Dismiss any modals or scroll the element into view.',
-          error: { code: 'element_blocked', message: `Element ${input.ref} is blocked by another element.` },
-        };
+        return createError(
+          'element_blocked',
+          `Element ${input.ref} is blocked by another element.`,
+          'Take a new snapshot to see what is blocking. Dismiss any modals or scroll the element into view.',
+        );
       }
 
-      if (errorMsg.includes('Timeout')) {
-        return {
-          success: false,
-          url: page.url(),
-          hint: 'Take a new snapshot - the element may have moved or the page may have changed.',
-          error: { code: 'timeout', message: `Click on ${input.ref} timed out.` },
-        };
-      }
-
-      return {
-        success: false,
-        url: page.url(),
-        hint: 'Take a new snapshot to see the current page state.',
-        error: { code: 'browser_error', message: `Click failed: ${errorMsg}` },
-      };
+      return this.createErrorFromException(error, 'Click');
     }
   }
 
@@ -355,26 +389,21 @@ export class AgentBrowser extends MastraBrowser {
   // 4. browser_type - Type text into element
   // ---------------------------------------------------------------------------
 
-  async type(input: TypeInput): Promise<{
-    success: boolean;
-    value?: string;
-    url: string;
-    hint: string;
-    error?: { code: string; message: string };
-  }> {
-    const page = this.getPage();
-    const locator = this.requireLocator(input.ref);
-
-    if (!locator) {
-      return {
-        success: false,
-        url: page.url(),
-        hint: 'IMPORTANT: Take a new snapshot NOW to see the current page state and get fresh refs.',
-        error: { code: 'stale_ref', message: `Ref ${input.ref} not found. The page has changed.` },
-      };
-    }
-
+  async type(
+    input: TypeInput,
+  ): Promise<{ success: true; value: string; url: string; hint: string } | BrowserToolError> {
     try {
+      const page = this.getPage();
+      const locator = this.requireLocator(input.ref);
+
+      if (!locator) {
+        return createError(
+          'stale_ref',
+          `Ref ${input.ref} not found. The page has changed.`,
+          'Take a new snapshot to see the current page state and get fresh refs.',
+        );
+      }
+
       if (input.clear) {
         await locator.fill('', { timeout: this.defaultTimeout });
       }
@@ -407,20 +436,14 @@ export class AgentBrowser extends MastraBrowser {
         errorMsg.includes('Cannot type') ||
         errorMsg.includes('not focusable')
       ) {
-        return {
-          success: false,
-          url: page.url(),
-          hint: 'Take a new snapshot and look for elements with role "textbox" or "searchbox".',
-          error: { code: 'not_editable', message: `Element ${input.ref} is not a text input field.` },
-        };
+        return createError(
+          'not_focusable',
+          `Element ${input.ref} is not a text input field.`,
+          'Take a new snapshot and look for elements with role "textbox" or "searchbox".',
+        );
       }
 
-      return {
-        success: false,
-        url: page.url(),
-        hint: 'Take a new snapshot to see the current page state.',
-        error: { code: 'browser_error', message: `Type failed: ${errorMsg}` },
-      };
+      return this.createErrorFromException(error, 'Type');
     }
   }
 
@@ -428,309 +451,302 @@ export class AgentBrowser extends MastraBrowser {
   // 5. browser_press - Press keyboard key(s)
   // ---------------------------------------------------------------------------
 
-  async press(input: PressInput): Promise<{
-    success: boolean;
-    url: string;
-    hint: string;
-  }> {
-    const page = this.getPage();
-    await page.keyboard.press(input.key);
+  async press(input: PressInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
+    try {
+      const page = this.getPage();
+      await page.keyboard.press(input.key);
 
-    return {
-      success: true,
-      url: page.url(),
-      hint: 'Take a new snapshot if the page may have changed.',
-    };
+      return {
+        success: true,
+        url: page.url(),
+        hint: 'Take a new snapshot if the page may have changed.',
+      };
+    } catch (error) {
+      return this.createErrorFromException(error, 'Press');
+    }
   }
 
   // ---------------------------------------------------------------------------
   // 6. browser_select - Select dropdown option
   // ---------------------------------------------------------------------------
 
-  async select(input: SelectInput): Promise<{
-    success: boolean;
-    selected: string[];
-    url: string;
-    hint: string;
-    error?: { code: string; message: string };
-  }> {
-    const page = this.getPage();
-    const locator = this.requireLocator(input.ref);
+  async select(
+    input: SelectInput,
+  ): Promise<{ success: true; selected: string[]; url: string; hint: string } | BrowserToolError> {
+    try {
+      const page = this.getPage();
+      const locator = this.requireLocator(input.ref);
 
-    if (!locator) {
+      if (!locator) {
+        return createError(
+          'stale_ref',
+          `Ref ${input.ref} not found. The page has changed.`,
+          'Take a new snapshot to get fresh refs.',
+        );
+      }
+
+      const selectValue: { value?: string; label?: string; index?: number } = {};
+      if (input.value) selectValue.value = input.value;
+      if (input.label) selectValue.label = input.label;
+      if (input.index !== undefined) selectValue.index = input.index;
+
+      const selected = await locator.selectOption(selectValue, {
+        timeout: this.defaultTimeout,
+      });
+
       return {
-        success: false,
-        selected: [],
+        success: true,
+        selected,
         url: page.url(),
-        hint: 'IMPORTANT: Take a new snapshot NOW to get fresh refs.',
-        error: { code: 'stale_ref', message: `Ref ${input.ref} not found. The page has changed.` },
+        hint: 'Selection complete. Take a snapshot if you need to continue.',
       };
+    } catch (error) {
+      return this.createErrorFromException(error, 'Select');
     }
-
-    const selectValue: { value?: string; label?: string; index?: number } = {};
-    if (input.value) selectValue.value = input.value;
-    if (input.label) selectValue.label = input.label;
-    if (input.index !== undefined) selectValue.index = input.index;
-
-    const selected = await locator.selectOption(selectValue, {
-      timeout: this.defaultTimeout,
-    });
-
-    return {
-      success: true,
-      selected,
-      url: page.url(),
-      hint: 'Selection complete. Take a snapshot if you need to continue.',
-    };
   }
 
   // ---------------------------------------------------------------------------
   // 7. browser_scroll - Scroll page or element
   // ---------------------------------------------------------------------------
 
-  async scroll(input: ScrollInput): Promise<{
-    success: boolean;
-    position: { x: number; y: number };
-    scroll: string;
-    hint: string;
-  }> {
-    const page = this.getPage();
+  async scroll(
+    input: ScrollInput,
+  ): Promise<{ success: true; position: { x: number; y: number }; scroll: string; hint: string } | BrowserToolError> {
+    try {
+      const page = this.getPage();
 
-    if (input.ref) {
-      const locator = this.requireLocator(input.ref);
-      if (locator) {
-        await locator.scrollIntoViewIfNeeded({ timeout: this.defaultTimeout });
+      if (input.ref) {
+        const locator = this.requireLocator(input.ref);
+        if (locator) {
+          await locator.scrollIntoViewIfNeeded({ timeout: this.defaultTimeout });
+        }
+      } else {
+        const direction = input.direction;
+        const amount = input.amount ?? 300;
+
+        let deltaX = 0;
+        let deltaY = 0;
+
+        switch (direction) {
+          case 'up':
+            deltaY = -amount;
+            break;
+          case 'down':
+            deltaY = amount;
+            break;
+          case 'left':
+            deltaX = -amount;
+            break;
+          case 'right':
+            deltaX = amount;
+            break;
+        }
+
+        await page.evaluate(
+          ({ x, y }: { x: number; y: number }) => {
+            (globalThis as any).scrollBy(x, y);
+          },
+          { x: deltaX, y: deltaY },
+        );
       }
-    } else {
-      const direction = input.direction;
-      const amount = input.amount ?? 300;
 
-      let deltaX = 0;
-      let deltaY = 0;
-
-      switch (direction) {
-        case 'up':
-          deltaY = -amount;
-          break;
-        case 'down':
-          deltaY = amount;
-          break;
-        case 'left':
-          deltaX = -amount;
-          break;
-        case 'right':
-          deltaX = amount;
-          break;
+      // Get new scroll position
+      const scrollInfo = await this.getScrollInfo();
+      let scrollText: string;
+      if (scrollInfo.atTop && !scrollInfo.atBottom) {
+        scrollText = 'TOP - more content below';
+      } else if (scrollInfo.atBottom) {
+        scrollText = 'BOTTOM of page';
+      } else {
+        scrollText = `${scrollInfo.percentDown}% down`;
       }
 
-      await page.evaluate(
-        ({ x, y }: { x: number; y: number }) => {
-          (globalThis as any).scrollBy(x, y);
-        },
-        { x: deltaX, y: deltaY },
-      );
+      return {
+        success: true,
+        position: { x: 0, y: scrollInfo.scrollY },
+        scroll: scrollText,
+        hint: 'Take a new snapshot to see elements in the new viewport.',
+      };
+    } catch (error) {
+      return this.createErrorFromException(error, 'Scroll');
     }
-
-    // Get new scroll position
-    const scrollInfo = await this.getScrollInfo();
-    let scrollText: string;
-    if (scrollInfo.atTop && !scrollInfo.atBottom) {
-      scrollText = 'TOP - more content below';
-    } else if (scrollInfo.atBottom) {
-      scrollText = 'BOTTOM of page';
-    } else {
-      scrollText = `${scrollInfo.percentDown}% down`;
-    }
-
-    return {
-      success: true,
-      position: { x: 0, y: scrollInfo.scrollY },
-      scroll: scrollText,
-      hint: 'Take a new snapshot to see elements in the new viewport.',
-    };
   }
 
   // ---------------------------------------------------------------------------
   // 8. browser_screenshot - Take screenshot
   // ---------------------------------------------------------------------------
 
-  async screenshot(input: ScreenshotInput): Promise<{
-    success: boolean;
-    base64: string;
-  }> {
-    const page = this.getPage();
+  async screenshot(input: ScreenshotInput): Promise<{ success: true; base64: string } | BrowserToolError> {
+    try {
+      const page = this.getPage();
 
-    const options: { fullPage?: boolean; type?: string } = {
-      fullPage: input.fullPage ?? false,
-    };
+      const options: { fullPage?: boolean; type?: string } = {
+        fullPage: input.fullPage ?? false,
+      };
 
-    let buffer: Buffer;
-    if (input.ref) {
-      const locator = this.requireLocator(input.ref);
-      if (!locator) {
-        throw new Error(`Ref ${input.ref} not found. Take a new snapshot to get fresh refs.`);
+      let buffer: Buffer;
+      if (input.ref) {
+        const locator = this.requireLocator(input.ref);
+        if (!locator) {
+          return createError('stale_ref', `Ref ${input.ref} not found.`, 'Take a new snapshot to get fresh refs.');
+        }
+        buffer = await locator.screenshot(options);
+      } else {
+        buffer = await page.screenshot(options);
       }
-      buffer = await locator.screenshot(options);
-    } else {
-      buffer = await page.screenshot(options);
-    }
 
-    return { success: true, base64: buffer.toString('base64') };
+      return { success: true, base64: buffer.toString('base64') };
+    } catch (error) {
+      return this.createErrorFromException(error, 'Screenshot');
+    }
   }
 
   // ---------------------------------------------------------------------------
   // 9. browser_hover - Hover over element
   // ---------------------------------------------------------------------------
 
-  async hover(input: HoverInput): Promise<{
-    success: boolean;
-    url: string;
-    hint: string;
-    error?: { code: string; message: string };
-  }> {
-    const page = this.getPage();
-    const locator = this.requireLocator(input.ref);
+  async hover(input: HoverInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
+    try {
+      const page = this.getPage();
+      const locator = this.requireLocator(input.ref);
 
-    if (!locator) {
+      if (!locator) {
+        return createError(
+          'stale_ref',
+          `Ref ${input.ref} not found. The page has changed.`,
+          'Take a new snapshot to get fresh refs.',
+        );
+      }
+
+      await locator.hover({ timeout: this.defaultTimeout });
+
       return {
-        success: false,
+        success: true,
         url: page.url(),
-        hint: 'IMPORTANT: Take a new snapshot NOW to get fresh refs.',
-        error: { code: 'stale_ref', message: `Ref ${input.ref} not found. The page has changed.` },
+        hint: 'Take a new snapshot to see any hover-triggered elements (dropdowns, tooltips).',
       };
+    } catch (error) {
+      return this.createErrorFromException(error, 'Hover');
     }
-
-    await locator.hover({ timeout: this.defaultTimeout });
-
-    return {
-      success: true,
-      url: page.url(),
-      hint: 'Take a new snapshot to see any hover-triggered elements (dropdowns, tooltips).',
-    };
   }
 
   // ---------------------------------------------------------------------------
   // 10. browser_back - Navigate back
   // ---------------------------------------------------------------------------
 
-  async back(): Promise<{
-    success: boolean;
-    url: string;
-    title: string;
-    hint: string;
-  }> {
-    const page = this.getPage();
-    await page.goBack({ timeout: this.defaultTimeout });
+  async back(): Promise<{ success: true; url: string; title: string; hint: string } | BrowserToolError> {
+    try {
+      const page = this.getPage();
+      await page.goBack({ timeout: this.defaultTimeout });
 
-    return {
-      success: true,
-      url: page.url(),
-      title: await page.title(),
-      hint: 'Take a new snapshot to see the previous page.',
-    };
+      return {
+        success: true,
+        url: page.url(),
+        title: await page.title(),
+        hint: 'Take a new snapshot to see the previous page.',
+      };
+    } catch (error) {
+      return this.createErrorFromException(error, 'Back');
+    }
   }
 
   // ---------------------------------------------------------------------------
   // 11. browser_upload - Upload file(s)
   // ---------------------------------------------------------------------------
 
-  async upload(input: UploadInput): Promise<{
-    success: boolean;
-    url: string;
-    hint: string;
-    error?: { code: string; message: string };
-  }> {
-    const page = this.getPage();
-    const locator = this.requireLocator(input.ref);
+  async upload(input: UploadInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
+    try {
+      const page = this.getPage();
+      const locator = this.requireLocator(input.ref);
 
-    if (!locator) {
+      if (!locator) {
+        return createError(
+          'stale_ref',
+          `Ref ${input.ref} not found. The page has changed.`,
+          'Take a new snapshot to get fresh refs.',
+        );
+      }
+
+      await locator.setInputFiles(input.files, { timeout: this.defaultTimeout });
+
       return {
-        success: false,
+        success: true,
         url: page.url(),
-        hint: 'IMPORTANT: Take a new snapshot NOW to get fresh refs.',
-        error: { code: 'stale_ref', message: `Ref ${input.ref} not found. The page has changed.` },
+        hint: 'File(s) uploaded. Take a snapshot to see updated state.',
       };
+    } catch (error) {
+      return this.createErrorFromException(error, 'Upload');
     }
-
-    await locator.setInputFiles(input.files, { timeout: this.defaultTimeout });
-
-    return {
-      success: true,
-      url: page.url(),
-      hint: 'File(s) uploaded. Take a snapshot to see updated state.',
-    };
   }
 
   // ---------------------------------------------------------------------------
   // 12. browser_dialog - Handle dialogs (alert/confirm/prompt)
   // ---------------------------------------------------------------------------
 
-  async dialog(input: DialogInput): Promise<{
-    success: boolean;
-    action: 'accept' | 'dismiss';
-    hint: string;
-  }> {
-    const page = this.getPage();
+  async dialog(
+    input: DialogInput,
+  ): Promise<{ success: true; action: 'accept' | 'dismiss'; hint: string } | BrowserToolError> {
+    try {
+      const page = this.getPage();
 
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Dialog handler timed out. Make sure the dialog is triggered before calling this.'));
-      }, this.defaultTimeout);
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Dialog handler timed out. Make sure the dialog is triggered before calling this.'));
+        }, this.defaultTimeout);
 
-      (page as any).once('dialog', async (dialog: any) => {
-        clearTimeout(timeout);
-        try {
-          if (input.action === 'accept') {
-            await dialog.accept(input.text);
-          } else {
-            await dialog.dismiss();
+        (page as any).once('dialog', async (dialog: any) => {
+          clearTimeout(timeout);
+          try {
+            if (input.action === 'accept') {
+              await dialog.accept(input.text);
+            } else {
+              await dialog.dismiss();
+            }
+            resolve({
+              success: true,
+              action: input.action,
+              hint: 'Dialog handled. Take a snapshot to continue.',
+            });
+          } catch (e) {
+            reject(e);
           }
-          resolve({
-            success: true,
-            action: input.action,
-            hint: 'Dialog handled. Take a snapshot to continue.',
-          });
-        } catch (e) {
-          reject(e);
-        }
+        });
       });
-    });
+    } catch (error) {
+      return this.createErrorFromException(error, 'Dialog');
+    }
   }
 
   // ---------------------------------------------------------------------------
   // 13. browser_wait - Wait for element or condition
   // ---------------------------------------------------------------------------
 
-  async wait(input: WaitInput): Promise<{
-    success: boolean;
-    hint: string;
-    error?: { code: string; message: string };
-  }> {
-    const timeout = input.timeout ?? this.defaultTimeout;
+  async wait(input: WaitInput): Promise<{ success: true; hint: string } | BrowserToolError> {
+    try {
+      const timeout = input.timeout ?? this.defaultTimeout;
 
-    if (input.ref) {
-      const locator = this.requireLocator(input.ref);
-      if (!locator) {
+      if (input.ref) {
+        const locator = this.requireLocator(input.ref);
+        if (!locator) {
+          return createError('stale_ref', `Ref ${input.ref} not found.`, 'Take a new snapshot to get fresh refs.');
+        }
+
+        const state = input.state ?? 'visible';
+        await locator.waitFor({ state, timeout });
+
         return {
-          success: false,
-          hint: 'Ref not found. Take a new snapshot to get fresh refs.',
-          error: { code: 'stale_ref', message: `Ref ${input.ref} not found.` },
+          success: true,
+          hint: `Element is now ${state}. Take a snapshot to continue.`,
+        };
+      } else {
+        await this.getPage().waitForTimeout(timeout);
+        return {
+          success: true,
+          hint: 'Wait complete. Take a snapshot to see current state.',
         };
       }
-
-      const state = input.state ?? 'visible';
-      await locator.waitFor({ state, timeout });
-
-      return {
-        success: true,
-        hint: `Element is now ${state}. Take a snapshot to continue.`,
-      };
-    } else {
-      await this.getPage().waitForTimeout(timeout);
-      return {
-        success: true,
-        hint: 'Wait complete. Take a snapshot to see current state.',
-      };
+    } catch (error) {
+      return this.createErrorFromException(error, 'Wait');
     }
   }
 
@@ -738,57 +754,106 @@ export class AgentBrowser extends MastraBrowser {
   // 14. browser_tabs - Manage browser tabs
   // ---------------------------------------------------------------------------
 
-  async tabs(input: TabsInput): Promise<unknown> {
-    const browser = this.browserManager;
-    if (!browser) throw new Error('Browser not launched');
-
-    switch (input.action) {
-      case 'list': {
-        if (!browser.listTabs) throw new Error('Tab management not supported');
-        const tabsList = await browser.listTabs();
-        return {
-          success: true,
-          tabs: tabsList,
-          hint: 'Use browser_tabs with action:"switch" and index to change tabs.',
-        };
+  async tabs(input: TabsInput): Promise<
+    | {
+        success: true;
+        tabs?: unknown[];
+        index?: number;
+        url?: string;
+        title?: string;
+        remaining?: number;
+        hint: string;
+      }
+    | BrowserToolError
+  > {
+    try {
+      const browser = this.browserManager;
+      if (!browser) {
+        return createError(
+          'browser_closed',
+          'Browser not launched',
+          'Call a navigation tool first to launch the browser.',
+        );
       }
 
-      case 'new': {
-        if (!browser.newTab) throw new Error('Tab management not supported');
-        const result = await browser.newTab(input.url);
-        return {
-          success: true,
-          ...result,
-          hint: 'New tab opened. Take a snapshot to see its content.',
-        };
-      }
+      switch (input.action) {
+        case 'list': {
+          if (!browser.listTabs) {
+            return createError(
+              'browser_error',
+              'Tab management not supported',
+              'This browser provider does not support tab management.',
+            );
+          }
+          const tabsList = await browser.listTabs();
+          return {
+            success: true,
+            tabs: tabsList,
+            hint: 'Use browser_tabs with action:"switch" and index to change tabs.',
+          };
+        }
 
-      case 'switch': {
-        if (!browser.switchTo) throw new Error('Tab management not supported');
-        await browser.switchTo(input.index!);
-        const page = browser.getPage();
-        return {
-          success: true,
-          index: input.index,
-          url: page.url(),
-          title: await page.title(),
-          hint: 'Tab switched. Take a snapshot to see its content.',
-        };
-      }
+        case 'new': {
+          if (!browser.newTab) {
+            return createError(
+              'browser_error',
+              'Tab management not supported',
+              'This browser provider does not support tab management.',
+            );
+          }
+          const result = await browser.newTab(input.url);
+          return {
+            success: true,
+            ...result,
+            hint: 'New tab opened. Take a snapshot to see its content.',
+          };
+        }
 
-      case 'close': {
-        if (!browser.closeTab) throw new Error('Tab management not supported');
-        await browser.closeTab(input.index);
-        const tabsList = (await browser.listTabs?.()) ?? [];
-        return {
-          success: true,
-          remaining: tabsList.length,
-          hint: tabsList.length > 0 ? 'Tab closed. Take a snapshot to see current tab.' : 'All tabs closed.',
-        };
-      }
+        case 'switch': {
+          if (!browser.switchTo) {
+            return createError(
+              'browser_error',
+              'Tab management not supported',
+              'This browser provider does not support tab management.',
+            );
+          }
+          await browser.switchTo(input.index!);
+          const page = browser.getPage();
+          return {
+            success: true,
+            index: input.index,
+            url: page.url(),
+            title: await page.title(),
+            hint: 'Tab switched. Take a snapshot to see its content.',
+          };
+        }
 
-      default:
-        throw new Error(`Unknown tabs action: ${(input as any).action}`);
+        case 'close': {
+          if (!browser.closeTab) {
+            return createError(
+              'browser_error',
+              'Tab management not supported',
+              'This browser provider does not support tab management.',
+            );
+          }
+          await browser.closeTab(input.index);
+          const tabsList = (await browser.listTabs?.()) ?? [];
+          return {
+            success: true,
+            remaining: tabsList.length,
+            hint: tabsList.length > 0 ? 'Tab closed. Take a snapshot to see current tab.' : 'All tabs closed.',
+          };
+        }
+
+        default:
+          return createError(
+            'browser_error',
+            `Unknown tabs action: ${(input as any).action}`,
+            'Use "list", "new", "switch", or "close".',
+          );
+      }
+    } catch (error) {
+      return this.createErrorFromException(error, 'Tabs');
     }
   }
 
@@ -796,77 +861,75 @@ export class AgentBrowser extends MastraBrowser {
   // 15. browser_drag - Drag element to target
   // ---------------------------------------------------------------------------
 
-  async drag(input: DragInput): Promise<{
-    success: boolean;
-    url: string;
-    hint: string;
-    error?: { code: string; message: string };
-  }> {
-    const page = this.getPage();
-    const sourceLocator = this.requireLocator(input.sourceRef);
-    const targetLocator = this.requireLocator(input.targetRef);
+  async drag(input: DragInput): Promise<{ success: true; url: string; hint: string } | BrowserToolError> {
+    try {
+      const page = this.getPage();
+      const sourceLocator = this.requireLocator(input.sourceRef);
+      const targetLocator = this.requireLocator(input.targetRef);
 
-    if (!sourceLocator) {
+      if (!sourceLocator) {
+        return createError(
+          'stale_ref',
+          `Source ref ${input.sourceRef} not found.`,
+          'Take a new snapshot to get fresh refs.',
+        );
+      }
+
+      if (!targetLocator) {
+        return createError(
+          'stale_ref',
+          `Target ref ${input.targetRef} not found.`,
+          'Take a new snapshot to get fresh refs.',
+        );
+      }
+
+      await sourceLocator.dragTo(targetLocator, { timeout: this.defaultTimeout });
+
       return {
-        success: false,
+        success: true,
         url: page.url(),
-        hint: 'IMPORTANT: Take a new snapshot NOW to get fresh refs.',
-        error: { code: 'stale_ref', message: `Source ref ${input.sourceRef} not found.` },
+        hint: 'Drag complete. Take a snapshot to see the result.',
       };
+    } catch (error) {
+      return this.createErrorFromException(error, 'Drag');
     }
-
-    if (!targetLocator) {
-      return {
-        success: false,
-        url: page.url(),
-        hint: 'IMPORTANT: Take a new snapshot NOW to get fresh refs.',
-        error: { code: 'stale_ref', message: `Target ref ${input.targetRef} not found.` },
-      };
-    }
-
-    await sourceLocator.dragTo(targetLocator, { timeout: this.defaultTimeout });
-
-    return {
-      success: true,
-      url: page.url(),
-      hint: 'Drag complete. Take a snapshot to see the result.',
-    };
   }
 
   // ---------------------------------------------------------------------------
   // 16. browser_evaluate - Execute JavaScript
   // ---------------------------------------------------------------------------
 
-  async evaluate(input: EvaluateInput): Promise<{
-    success: boolean;
-    result: unknown;
-    hint: string;
-  }> {
-    const page = this.getPage();
-    // Wrap script in an async function to allow return statements
-    const wrappedScript = `(async () => { ${input.script} })()`;
-    const result = await page.evaluate(wrappedScript);
+  async evaluate(input: EvaluateInput): Promise<{ success: true; result: unknown; hint: string } | BrowserToolError> {
+    try {
+      const page = this.getPage();
+      // Wrap script in an async function to allow return statements
+      const wrappedScript = `(async () => { ${input.script} })()`;
+      const result = await page.evaluate(wrappedScript);
 
-    return {
-      success: true,
-      result,
-      hint: 'JavaScript executed. Take a snapshot if the page may have changed.',
-    };
+      return {
+        success: true,
+        result,
+        hint: 'JavaScript executed. Take a snapshot if the page may have changed.',
+      };
+    } catch (error) {
+      return this.createErrorFromException(error, 'Evaluate');
+    }
   }
 
   // ---------------------------------------------------------------------------
   // 17. browser_close - Close browser
   // ---------------------------------------------------------------------------
 
-  async closeBrowser(): Promise<{
-    success: boolean;
-    hint: string;
-  }> {
-    await this.close();
-    return {
-      success: true,
-      hint: 'Browser closed. Call browser_goto to start a new session.',
-    };
+  async closeBrowser(): Promise<{ success: true; hint: string } | BrowserToolError> {
+    try {
+      await this.close();
+      return {
+        success: true,
+        hint: 'Browser closed. Call browser_goto to start a new session.',
+      };
+    } catch (error) {
+      return this.createErrorFromException(error, 'Close');
+    }
   }
 
   // ---------------------------------------------------------------------------

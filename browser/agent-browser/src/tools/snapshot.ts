@@ -1,13 +1,10 @@
 /**
  * browser_snapshot - Get accessibility tree snapshot
  */
-
 import { createTool } from '@mastra/core/tools';
 import type { AgentBrowser } from '../agent-browser';
 import { snapshotInputSchema } from '../schemas';
 import { BROWSER_TOOLS } from './constants';
-import { handleBrowserError } from './error-handler';
-
 export function createSnapshotTool(browser: AgentBrowser) {
   return createTool({
     id: BROWSER_TOOLS.SNAPSHOT,
@@ -16,11 +13,7 @@ export function createSnapshotTool(browser: AgentBrowser) {
     inputSchema: snapshotInputSchema,
     execute: async input => {
       await browser.ensureReady();
-      try {
-        return await browser.snapshot(input);
-      } catch (error) {
-        return handleBrowserError(error, 'Snapshot', browser);
-      }
+      return browser.snapshot(input);
     },
   });
 }

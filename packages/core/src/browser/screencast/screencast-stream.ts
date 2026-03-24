@@ -141,6 +141,7 @@ export class ScreencastStream extends EventEmitter {
 
   /**
    * Stop the screencast and release resources.
+   * Safe to call even if browser/CDP session is already closed.
    */
   async stop(): Promise<void> {
     if (!this.active) {
@@ -148,27 +149,30 @@ export class ScreencastStream extends EventEmitter {
     }
 
     this.active = false;
+    let hadError = false;
 
-    try {
-      if (this.cdpSession) {
-        // Remove frame handler
-        if (this.frameHandler && this.cdpSession.off) {
-          this.cdpSession.off('Page.screencastFrame', this.frameHandler);
-        }
-        this.frameHandler = null;
-
-        // Stop screencast
-        await this.cdpSession.send('Page.stopScreencast');
-
-        // Don't detach - the session may be shared
-        this.cdpSession = null;
+    // Clean up handler regardless of CDP state
+    if (this.cdpSession && this.frameHandler && this.cdpSession.off) {
+      try {
+        this.cdpSession.off('Page.screencastFrame', this.frameHandler);
+      } catch {
+        // Ignore - session may be dead
       }
-
-      this.emit('stop', 'manual');
-    } catch (error) {
-      console.warn('[ScreencastStream] Error stopping screencast:', error);
-      this.emit('stop', 'error');
     }
+    this.frameHandler = null;
+
+    // Try to stop screencast via CDP (may fail if browser closed)
+    if (this.cdpSession) {
+      try {
+        await this.cdpSession.send('Page.stopScreencast');
+      } catch {
+        // Browser/session already closed - this is expected in external close scenarios
+        hadError = true;
+      }
+      this.cdpSession = null;
+    }
+
+    this.emit('stop', hadError ? 'error' : 'manual');
   }
 
   /**
