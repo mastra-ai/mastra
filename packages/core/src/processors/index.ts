@@ -245,10 +245,6 @@ export interface ToolCallInfo {
 export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
   /** The current step number (0-indexed) */
   stepNumber: number;
-  /** The active assistant response message ID for this step, when this processor is running inside an agent loop */
-  messageId?: string;
-  /** Mark the current assistant response message ID as complete and rotate to a fresh one, when supported by the caller */
-  rotateResponseMessageId?: () => string;
   /** The finish reason from the LLM (stop, tool-use, length, etc.) */
   finishReason?: string;
   /** Tool calls made in this step (if any) */

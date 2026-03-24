@@ -1,10 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { WritableStream } from 'node:stream/web';
 import type { CoreMessage, UIMessage, Tool } from '@internal/ai-sdk-v4';
-import type { StepResult } from '@internal/ai-sdk-v5';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema } from 'zod/v3';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { MastraLLMV1 } from '../llm/model';
 import type {
@@ -30,21 +28,15 @@ import {
   createObservabilityContext,
   resolveObservabilityContext,
 } from '../observability';
-import type {
-  InputProcessorOrWorkflow,
-  OutputProcessorOrWorkflow,
-  ProcessorStreamWriter,
-  ToolCallInfo,
-} from '../processors/index';
-import type { ProcessorState } from '../processors/runner';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { ChunkType } from '../stream/types';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { MessageList } from './message-list';
 import type { MastraDBMessage, MessageListInput, UIMessageWithMetadata } from './message-list/index';
-
 import type {
+  ZodSchema,
   AgentGenerateOptions,
   AgentStreamOptions,
   AgentInstructions,
@@ -52,6 +44,7 @@ import type {
   ToolsInput,
   AgentMethodType,
 } from './types';
+
 import { resolveThreadIdFromArgs } from './utils';
 
 /**
@@ -134,30 +127,6 @@ export interface AgentLegacyCapabilities {
       requestContext: RequestContext;
       messageList: MessageList;
       stepNumber?: number;
-      processorStates?: Map<string, ProcessorState>;
-    },
-  ): Promise<{
-    messageList: MessageList;
-    tripwire?: {
-      reason: string;
-      retry?: boolean;
-      metadata?: unknown;
-      processorId?: string;
-    };
-  }>;
-  /** Run processOutputStep phase on output processors (for legacy path compatibility) */
-  __runProcessOutputStep(
-    args: Partial<ObservabilityContext> & {
-      requestContext: RequestContext;
-      messageList: MessageList;
-      stepNumber?: number;
-      steps?: Array<StepResult<any>>;
-      finishReason?: string;
-      toolCalls?: ToolCallInfo[];
-      text?: string;
-      retryCount?: number;
-      writer?: ProcessorStreamWriter;
-      processorStates?: Map<string, ProcessorState>;
     },
   ): Promise<{
     messageList: MessageList;
@@ -868,48 +837,6 @@ export class AgentLegacyHandler {
           resourceId,
           requestContext,
           onStepFinish: async (props: any) => {
-            const stepWriter =
-              props.writer ??
-              (writableStream
-                ? {
-                    custom: async (data: { type: string }) => {
-                      const streamWriter = writableStream.getWriter();
-                      try {
-                        await streamWriter.write(data as ChunkType);
-                      } finally {
-                        streamWriter.releaseLock();
-                      }
-                    },
-                  }
-                : undefined);
-
-            const outputStepResult = await this.capabilities.__runProcessOutputStep({
-              requestContext,
-              ...resolveObservabilityContext(args as Partial<ObservabilityContext>),
-              messageList,
-              stepNumber: props.stepNumber,
-              steps: props.steps,
-              finishReason: props.finishReason,
-              toolCalls: props.toolCalls,
-              text: props.text,
-              writer: stepWriter,
-            });
-
-            if (outputStepResult.tripwire) {
-              agentSpan?.end({
-                output: { tripwire: outputStepResult.tripwire },
-                attributes: {
-                  tripwireAbort: {
-                    reason: outputStepResult.tripwire.reason,
-                    processorId: outputStepResult.tripwire.processorId,
-                    retry: outputStepResult.tripwire.retry,
-                    metadata: outputStepResult.tripwire.metadata,
-                  },
-                },
-              });
-              throw new Error(outputStepResult.tripwire.reason);
-            }
-
             if (savePerStep) {
               if (!threadExists && !threadCreatedByStep && memory && thread) {
                 await memory.createThread({
@@ -1327,8 +1254,8 @@ export class AgentLegacyHandler {
     messages: MessageListInput,
     streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<
-    | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
-    | (StreamObjectResult<OUTPUT extends ZodSchema ? OUTPUT : never> & TracingProperties)
+    | StreamTextResult<any, EXPERIMENTAL_OUTPUT>
+    | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties)
   > {
     const defaultStreamOptionsLegacy = await Promise.resolve(
       this.capabilities.getDefaultStreamOptionsLegacy({
@@ -1442,8 +1369,8 @@ export class AgentLegacyHandler {
       };
 
       return emptyResult as unknown as
-        | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
-        | (StreamObjectResult<OUTPUT extends ZodSchema ? OUTPUT : never> & TracingProperties);
+        | StreamTextResult<any, EXPERIMENTAL_OUTPUT>
+        | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties);
     }
 
     const { onFinish, runId, output, experimental_output, agentSpan, messageList, requestContext, ...llmOptions } =
@@ -1512,8 +1439,8 @@ export class AgentLegacyHandler {
       (streamResult as any).spanId = spanId;
 
       return streamResult as unknown as
-        | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
-        | (StreamObjectResult<OUTPUT extends ZodSchema ? OUTPUT : never> & TracingProperties);
+        | StreamTextResult<any, EXPERIMENTAL_OUTPUT>
+        | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties);
     }
 
     this.capabilities.logger.debug(`Starting agent ${this.capabilities.name} llm streamObject call`, {
@@ -1590,6 +1517,7 @@ export class AgentLegacyHandler {
     (streamObjectResult as any).traceId = traceId;
     (streamObjectResult as any).spanId = spanId;
 
-    return streamObjectResult as StreamObjectResult<OUTPUT extends ZodSchema ? OUTPUT : never> & TracingProperties;
+    return streamObjectResult as StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> &
+      TracingProperties;
   }
 }

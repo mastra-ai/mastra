@@ -1,10 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
-import type { StepResult } from '@internal/ai-sdk-v5';
 import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema, z as z3 } from 'zod/v3';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
@@ -47,8 +45,6 @@ import type {
   OutputProcessorOrWorkflow,
   ProcessorWorkflow,
   Processor,
-  ProcessorStreamWriter,
-  ToolCallInfo,
 } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { SkillsProcessor } from '../processors/processors/skills';
@@ -103,6 +99,7 @@ import type {
   StructuredOutputOptions,
   PublicStructuredOutputOptions,
   ModelWithRetries,
+  ZodSchema,
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
@@ -1157,7 +1154,6 @@ export class Agent<
         getMemoryMessages: (...args) => this.getMemoryMessages(...args),
         __runInputProcessors: this.__runInputProcessors.bind(this),
         __runProcessInputStep: this.__runProcessInputStep.bind(this),
-        __runProcessOutputStep: this.__runProcessOutputStep.bind(this),
         getMostRecentUserMessage: this.getMostRecentUserMessage.bind(this),
         genTitle: this.genTitle.bind(this),
         resolveTitleGenerationConfig: this.resolveTitleGenerationConfig.bind(this),
@@ -2341,99 +2337,6 @@ export class Agent<
               domain: ErrorDomain.AGENT,
               category: ErrorCategory.USER,
               text: `[Agent:${this.name}] - Input step processor error`,
-            },
-            error,
-          );
-        }
-      }
-    }
-
-    return {
-      messageList,
-      tripwire,
-    };
-  }
-
-  /**
-   * Runs processOutputStep phase on output processors.
-   * Used by legacy path to execute per-step output processing (e.g., same-turn tool-call guardrails)
-   * that would otherwise only run in the v5 agentic loop.
-   * @internal
-   */
-  private async __runProcessOutputStep(
-    args: Partial<ObservabilityContext> & {
-      requestContext: RequestContext;
-      messageList: MessageList;
-      stepNumber?: number;
-      steps?: Array<StepResult<any>>;
-      finishReason?: string;
-      toolCalls?: ToolCallInfo[];
-      text?: string;
-      retryCount?: number;
-      writer?: ProcessorStreamWriter;
-      processorStates?: Map<string, ProcessorState>;
-    },
-  ): Promise<{
-    messageList: MessageList;
-    tripwire?: {
-      reason: string;
-      retry?: boolean;
-      metadata?: unknown;
-      processorId?: string;
-    };
-  }> {
-    const {
-      requestContext,
-      messageList,
-      stepNumber = 0,
-      steps = [],
-      finishReason,
-      toolCalls,
-      text,
-      retryCount = 0,
-      writer,
-      processorStates,
-      ...rest
-    } = args;
-    const observabilityContext = resolveObservabilityContext(rest);
-
-    let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
-
-    if (this.#outputProcessors || this.#memory) {
-      const runner = await this.getProcessorRunner({
-        requestContext,
-        processorStates,
-      });
-
-      try {
-        await runner.runProcessOutputStep({
-          messageList,
-          messages: messageList.get.all.db(),
-          stepNumber,
-          finishReason,
-          toolCalls,
-          text,
-          steps,
-          retryCount,
-          writer,
-          ...observabilityContext,
-          requestContext,
-        });
-      } catch (error) {
-        if (error instanceof TripWire) {
-          tripwire = {
-            reason: error.message,
-            retry: error.options?.retry,
-            metadata: error.options?.metadata,
-            processorId: error.processorId,
-          };
-        } else {
-          throw new MastraError(
-            {
-              id: 'AGENT_OUTPUT_STEP_PROCESSOR_ERROR',
-              domain: ErrorDomain.AGENT,
-              category: ErrorCategory.USER,
-              text: `[Agent:${this.name}] - Output step processor error`,
             },
             error,
           );
@@ -5339,11 +5242,11 @@ export class Agent<
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateTextResult<any, undefined>>;
-  async generateLegacy<OUTPUT extends z3.ZodSchema | JSONSchema7>(
+  async generateLegacy<OUTPUT extends ZodSchema | JSONSchema7>(
     messages: MessageListInput,
     args?: AgentGenerateOptions<OUTPUT, undefined> & { output?: OUTPUT; experimental_output?: never },
   ): Promise<GenerateObjectResult<OUTPUT>>;
-  async generateLegacy<EXPERIMENTAL_OUTPUT extends z3.ZodSchema | JSONSchema7>(
+  async generateLegacy<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7>(
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, EXPERIMENTAL_OUTPUT> & {
       output?: never;

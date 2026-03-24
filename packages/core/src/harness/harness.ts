@@ -1531,19 +1531,6 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
           });
           break;
         }
-        case 'data-system-reminder': {
-          const data = (part as { data?: Record<string, unknown> }).data ?? {};
-          const message = data.message;
-          if (typeof message === 'string') {
-            content.push({
-              type: 'system_reminder',
-              message,
-              reminderType: typeof data.reminderType === 'string' ? data.reminderType : undefined,
-              path: typeof data.path === 'string' ? data.path : undefined,
-            });
-          }
-          break;
-        }
         case 'file':
           if (typeof part.data !== 'string') {
             console.warn('[Harness] Skipping file part with non-string data:', typeof part.data);
@@ -1928,20 +1915,6 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
 
             abortForOmFailure({ operationType, stage: 'run', error });
             return { message: currentMessage };
-          }
-          break;
-        }
-        case 'data-system-reminder': {
-          const payload = (chunk as any).data as Record<string, unknown> | undefined;
-          const message = payload?.message;
-          if (typeof message === 'string') {
-            currentMessage.content.push({
-              type: 'system_reminder',
-              message,
-              reminderType: typeof payload?.reminderType === 'string' ? payload.reminderType : undefined,
-              path: typeof payload?.path === 'string' ? payload.path : undefined,
-            });
-            this.emit({ type: 'message_update', message: { ...currentMessage } });
           }
           break;
         }

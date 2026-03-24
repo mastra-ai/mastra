@@ -1505,53 +1505,6 @@ describe('ProcessorRunner', () => {
   });
 
   describe('processOutputStep', () => {
-    it('should pass rotated response ids between output-step processors', async () => {
-      const seenMessageIds: string[] = [];
-      const rotateResponseMessageId = vi.fn(() => 'response-2');
-
-      const outputProcessors: Processor[] = [
-        {
-          id: 'rotate-processor',
-          processOutputStep: async ({ messageId, rotateResponseMessageId }) => {
-            if (messageId) {
-              seenMessageIds.push(messageId);
-            }
-            rotateResponseMessageId?.();
-            return [];
-          },
-        },
-        {
-          id: 'observe-processor',
-          processOutputStep: async ({ messageId }) => {
-            if (messageId) {
-              seenMessageIds.push(messageId);
-            }
-            return [];
-          },
-        },
-      ];
-
-      runner = new ProcessorRunner({
-        inputProcessors: [],
-        outputProcessors,
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      messageList.add([createMessage('user message', 'user')], 'user');
-
-      await runner.runProcessOutputStep({
-        steps: [],
-        messages: messageList.get.all.db(),
-        messageList,
-        stepNumber: 0,
-        messageId: 'response-1',
-        rotateResponseMessageId,
-      });
-
-      expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
-      expect(seenMessageIds).toEqual(['response-1', 'response-2']);
-    });
     it('should run output step processors in order', async () => {
       const executionOrder: string[] = [];
       const outputProcessors: Processor[] = [
