@@ -6,14 +6,14 @@ import { createTool } from '../../tools';
 import { dialogInputSchema } from '../schemas';
 import { BROWSER_TOOLS } from './constants';
 import { handleBrowserError } from './error-handler';
-import { requireBrowser } from './helpers';
+import { ensureBrowserReady } from './helpers';
 
 export const browserDialogTool = createTool({
   id: BROWSER_TOOLS.DIALOG,
   description: 'Handle browser dialogs (alert, confirm, prompt). Accept or dismiss them.',
   inputSchema: dialogInputSchema,
   execute: async (input, context) => {
-    const browser = requireBrowser(context);
+    const browser = await ensureBrowserReady(context);
     try {
       return await browser.dialog(input);
     } catch (error) {

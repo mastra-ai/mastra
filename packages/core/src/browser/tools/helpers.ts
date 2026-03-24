@@ -32,7 +32,7 @@ export interface BrowserToolExecutionContext extends ToolExecutionContext {
  * Usage in tools:
  * ```ts
  * execute: async (input, context) => {
- *   const browser = requireBrowser(context);
+ *   const browser = await requireBrowser(context);
  *   return browser.navigate(input);
  * }
  * ```
@@ -42,5 +42,23 @@ export function requireBrowser(context: ToolExecutionContext): MastraBrowser {
   if (!browser) {
     throw new BrowserNotAvailableError();
   }
+  return browser;
+}
+
+/**
+ * Extract browser from context and ensure it's ready (launched).
+ * This lazily launches the browser on first tool use.
+ *
+ * Usage in tools:
+ * ```ts
+ * execute: async (input, context) => {
+ *   const browser = await ensureBrowserReady(context);
+ *   return browser.goto(input);
+ * }
+ * ```
+ */
+export async function ensureBrowserReady(context: ToolExecutionContext): Promise<MastraBrowser> {
+  const browser = requireBrowser(context);
+  await browser.ensureReady();
   return browser;
 }

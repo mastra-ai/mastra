@@ -15,4 +15,4 @@ export * from './tools';
 export { createBrowserTools, getBrowserToolNames } from './factory';
 
 // Export helpers
-export { requireBrowser } from './helpers';
+export { requireBrowser, ensureBrowserReady } from './helpers';
