@@ -1,11 +1,11 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
-import { Skeleton } from '@/ds/components/Skeleton';
 import { ChevronRight, ChevronDown, Brain, ExternalLink, Info } from 'lucide-react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useObservationalMemoryContext } from '@/domains/agents/context';
+import { useObservationalMemory, useMemoryWithOMStatus, useMemoryConfig } from '@/domains/memory/hooks';
 import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { useObservationalMemory, useMemoryWithOMStatus, useMemoryConfig } from '@/domains/memory/hooks';
-import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { ObservationRenderer } from '@/lib/ai-ui/tools/badges/observation-renderer';
 
 // Format tokens helper

@@ -1,6 +1,6 @@
-import { ClientScoreRowData } from '@mastra/client-js';
-import { EntryList } from '@/ds/components/EntryList';
+import type { ClientScoreRowData } from '@mastra/client-js';
 import { format, isToday } from 'date-fns';
+import { EntryList } from '@/ds/components/EntryList';
 
 export const scoresListColumns = [
   { name: 'date', label: 'Date', size: '4.5rem' },

@@ -47,7 +47,6 @@ export type ProviderModelsMap = {
   ];
   readonly zenmux: readonly [
     'anthropic/claude-3.5-haiku',
-    'anthropic/claude-3.5-sonnet',
     'anthropic/claude-3.7-sonnet',
     'anthropic/claude-haiku-4.5',
     'anthropic/claude-opus-4',
@@ -65,7 +64,9 @@ export type ProviderModelsMap = {
     'google/gemini-2.5-flash-lite',
     'google/gemini-2.5-pro',
     'google/gemini-3-flash-preview',
+    'google/gemini-3-pro-image-preview',
     'google/gemini-3-pro-preview',
+    'google/gemini-3.1-flash-lite-preview',
     'google/gemini-3.1-pro-preview',
     'inclusionai/ling-1t',
     'inclusionai/ring-1t',
@@ -75,6 +76,8 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2.1',
     'minimax/minimax-m2.5',
     'minimax/minimax-m2.5-lightning',
+    'minimax/minimax-m2.7',
+    'minimax/minimax-m2.7-highspeed',
     'moonshotai/kimi-k2-0905',
     'moonshotai/kimi-k2-thinking',
     'moonshotai/kimi-k2-thinking-turbo',
@@ -88,12 +91,21 @@ export type ProviderModelsMap = {
     'openai/gpt-5.2',
     'openai/gpt-5.2-codex',
     'openai/gpt-5.2-pro',
+    'openai/gpt-5.3-chat',
+    'openai/gpt-5.3-codex',
+    'openai/gpt-5.4',
+    'openai/gpt-5.4-mini',
+    'openai/gpt-5.4-nano',
+    'openai/gpt-5.4-pro',
     'qwen/qwen3-coder-plus',
     'qwen/qwen3-max',
+    'qwen/qwen3.5-flash',
+    'qwen/qwen3.5-plus',
     'stepfun/step-3',
     'stepfun/step-3.5-flash',
     'stepfun/step-3.5-flash-free',
     'volcengine/doubao-seed-1.8',
+    'volcengine/doubao-seed-2.0-code',
     'volcengine/doubao-seed-2.0-lite',
     'volcengine/doubao-seed-2.0-mini',
     'volcengine/doubao-seed-2.0-pro',
@@ -102,9 +114,13 @@ export type ProviderModelsMap = {
     'x-ai/grok-4-fast',
     'x-ai/grok-4.1-fast',
     'x-ai/grok-4.1-fast-non-reasoning',
+    'x-ai/grok-4.2-fast',
+    'x-ai/grok-4.2-fast-non-reasoning',
     'x-ai/grok-code-fast-1',
     'xiaomi/mimo-v2-flash',
     'xiaomi/mimo-v2-flash-free',
+    'xiaomi/mimo-v2-omni',
+    'xiaomi/mimo-v2-pro',
     'z-ai/glm-4.5',
     'z-ai/glm-4.5-air',
     'z-ai/glm-4.6',
@@ -115,6 +131,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.7-flash-free',
     'z-ai/glm-4.7-flashx',
     'z-ai/glm-5',
+    'z-ai/glm-5-turbo',
   ];
   readonly 'io-net': readonly [
     'Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar',
@@ -193,6 +210,7 @@ export type ProviderModelsMap = {
     'nvidia/llama3-chatqa-1.5-70b',
     'nvidia/nemoretriever-ocr-v1',
     'nvidia/nemotron-3-nano-30b-a3b',
+    'nvidia/nemotron-3-super-120b-a12b',
     'nvidia/nemotron-4-340b-instruct',
     'nvidia/nvidia-nemotron-nano-9b-v2',
     'nvidia/parakeet-tdt-0.6b-v2',
@@ -225,6 +243,7 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-20b',
     'qwen/qwen3-coder',
     'x-ai/grok-4',
+    'z-ai/glm-5',
   ];
   readonly iflowcn: readonly [
     'deepseek-r1',
@@ -318,7 +337,7 @@ export type ProviderModelsMap = {
     'perplexity/sonar',
     'xai/grok-4-1-fast-non-reasoning',
   ];
-  readonly xiaomi: readonly ['mimo-v2-flash'];
+  readonly xiaomi: readonly ['mimo-v2-flash', 'mimo-v2-omni', 'mimo-v2-pro'];
   readonly synthetic: readonly [
     'hf:MiniMaxAI/MiniMax-M2',
     'hf:MiniMaxAI/MiniMax-M2.1',
@@ -514,6 +533,7 @@ export type ProviderModelsMap = {
     'minimax-m2',
     'minimax-m2.1',
     'minimax-m2.5',
+    'minimax-m2.7',
     'ministral-3:14b',
     'ministral-3:3b',
     'ministral-3:8b',
@@ -541,9 +561,12 @@ export type ProviderModelsMap = {
     'pixtral-12b-2409',
     'qwen3-235b-a22b-instruct-2507',
     'qwen3-coder-30b-a3b-instruct',
+    'qwen3-embedding-8b',
+    'qwen3.5-397b-a17b',
     'voxtral-small-24b-2507',
     'whisper-large-v3',
   ];
+  readonly dinference: readonly ['glm-4.7', 'glm-5', 'gpt-oss-120b'];
   readonly 'kuae-cloud-coding-plan': readonly ['GLM-4.7'];
   readonly upstage: readonly ['solar-mini', 'solar-pro2', 'solar-pro3'];
   readonly inception: readonly ['mercury', 'mercury-2', 'mercury-coder', 'mercury-edit'];
@@ -558,7 +581,14 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.5-FP8',
   ];
-  readonly 'minimax-cn-coding-plan': readonly ['MiniMax-M2', 'MiniMax-M2.1', 'MiniMax-M2.5', 'MiniMax-M2.5-highspeed'];
+  readonly 'minimax-cn-coding-plan': readonly [
+    'MiniMax-M2',
+    'MiniMax-M2.1',
+    'MiniMax-M2.5',
+    'MiniMax-M2.5-highspeed',
+    'MiniMax-M2.7',
+    'MiniMax-M2.7-highspeed',
+  ];
   readonly 'novita-ai': readonly [
     'baichuan/baichuan-m2-32b',
     'baidu/ernie-4.5-21B-a3b',
@@ -670,9 +700,12 @@ export type ProviderModelsMap = {
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
     'gpt-5.4',
+    'gpt-5.4-mini',
+    'gpt-5.4-nano',
     'gpt-5.4-pro',
     'kimi-k2.5',
-    'mimo-v2-flash-free',
+    'mimo-v2-omni-free',
+    'mimo-v2-pro-free',
     'minimax-m2.5',
     'minimax-m2.5-free',
     'nemotron-3-super-free',
@@ -809,7 +842,14 @@ export type ProviderModelsMap = {
     'qwen3-max-2026-01-23',
     'qwen3.5-plus',
   ];
-  readonly 'minimax-cn': readonly ['MiniMax-M2', 'MiniMax-M2.1', 'MiniMax-M2.5', 'MiniMax-M2.5-highspeed'];
+  readonly 'minimax-cn': readonly [
+    'MiniMax-M2',
+    'MiniMax-M2.1',
+    'MiniMax-M2.5',
+    'MiniMax-M2.5-highspeed',
+    'MiniMax-M2.7',
+    'MiniMax-M2.7-highspeed',
+  ];
   readonly bailing: readonly ['Ling-1T', 'Ring-1T'];
   readonly alibaba: readonly [
     'qvq-max',
@@ -885,7 +925,9 @@ export type ProviderModelsMap = {
     '@cf/meta/m2m100-1.2b',
     '@cf/mistral/mistral-7b-instruct-v0.1',
     '@cf/mistralai/mistral-small-3.1-24b-instruct',
+    '@cf/moonshotai/kimi-k2.5',
     '@cf/myshell-ai/melotts',
+    '@cf/nvidia/nemotron-3-120b-a12b',
     '@cf/openai/gpt-oss-120b',
     '@cf/openai/gpt-oss-20b',
     '@cf/pfnet/plamo-embedding-1b',
@@ -976,7 +1018,14 @@ export type ProviderModelsMap = {
     'qwen3-max-2026-01-23',
     'qwen3.5-plus',
   ];
-  readonly 'minimax-coding-plan': readonly ['MiniMax-M2', 'MiniMax-M2.1', 'MiniMax-M2.5', 'MiniMax-M2.5-highspeed'];
+  readonly 'minimax-coding-plan': readonly [
+    'MiniMax-M2',
+    'MiniMax-M2.1',
+    'MiniMax-M2.5',
+    'MiniMax-M2.5-highspeed',
+    'MiniMax-M2.7',
+    'MiniMax-M2.7-highspeed',
+  ];
   readonly 'kimi-for-coding': readonly ['k2p5', 'kimi-k2-thinking'];
   readonly mistral: readonly [
     'codestral-latest',
@@ -1214,6 +1263,7 @@ export type ProviderModelsMap = {
     'glm-4.6v-flash',
     'glm-4.7',
     'glm-5',
+    'glm-5-turbo',
   ];
   readonly deepseek: readonly ['deepseek-chat', 'deepseek-reasoner'];
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
@@ -1293,6 +1343,7 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2',
     'minimax/minimax-m2.1',
     'minimax/minimax-m2.5',
+    'minimax/minimax-m2.7',
     'mistralai/codestral-2508',
     'mistralai/devstral-2512',
     'mistralai/devstral-2512:free',
@@ -1319,6 +1370,8 @@ export type ProviderModelsMap = {
     'nousresearch/hermes-4-405b',
     'nousresearch/hermes-4-70b',
     'nvidia/nemotron-3-nano-30b-a3b:free',
+    'nvidia/nemotron-3-super-120b-a12b',
+    'nvidia/nemotron-3-super-120b-a12b-free',
     'nvidia/nemotron-nano-12b-v2-vl:free',
     'nvidia/nemotron-nano-9b-v2',
     'nvidia/nemotron-nano-9b-v2:free',
@@ -1343,6 +1396,8 @@ export type ProviderModelsMap = {
     'openai/gpt-5.2-pro',
     'openai/gpt-5.3-codex',
     'openai/gpt-5.4',
+    'openai/gpt-5.4-mini',
+    'openai/gpt-5.4-nano',
     'openai/gpt-5.4-pro',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-120b:exacto',
@@ -1407,6 +1462,8 @@ export type ProviderModelsMap = {
     'x-ai/grok-4.20-multi-agent-beta',
     'x-ai/grok-code-fast-1',
     'xiaomi/mimo-v2-flash',
+    'xiaomi/mimo-v2-omni',
+    'xiaomi/mimo-v2-pro',
     'z-ai/glm-4.5',
     'z-ai/glm-4.5-air',
     'z-ai/glm-4.5-air:free',
@@ -1630,7 +1687,7 @@ export type ProviderModelsMap = {
     'glm-5',
     'glm-5-turbo',
   ];
-  readonly 'opencode-go': readonly ['glm-5', 'kimi-k2.5', 'minimax-m2.5'];
+  readonly 'opencode-go': readonly ['glm-5', 'kimi-k2.5', 'minimax-m2.5', 'minimax-m2.7'];
   readonly drun: readonly ['public/deepseek-r1', 'public/deepseek-v3', 'public/minimax-m25'];
   readonly firmware: readonly [
     'claude-haiku-4-5',
@@ -2014,6 +2071,8 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2.1-lightning',
     'minimax/minimax-m2.5',
     'minimax/minimax-m2.5-highspeed',
+    'minimax/minimax-m2.7',
+    'minimax/minimax-m2.7-highspeed',
     'mistral/codestral',
     'mistral/codestral-embed',
     'mistral/devstral-2',
@@ -2070,6 +2129,8 @@ export type ProviderModelsMap = {
     'openai/gpt-5.3-chat',
     'openai/gpt-5.3-codex',
     'openai/gpt-5.4',
+    'openai/gpt-5.4-mini',
+    'openai/gpt-5.4-nano',
     'openai/gpt-5.4-pro',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
@@ -2119,6 +2180,7 @@ export type ProviderModelsMap = {
     'xai/grok-imagine-image',
     'xai/grok-imagine-image-pro',
     'xiaomi/mimo-v2-flash',
+    'xiaomi/mimo-v2-pro',
     'zai/glm-4.5',
     'zai/glm-4.5-air',
     'zai/glm-4.5v',
@@ -2129,6 +2191,7 @@ export type ProviderModelsMap = {
     'zai/glm-4.7-flash',
     'zai/glm-4.7-flashx',
     'zai/glm-5',
+    'zai/glm-5-turbo',
   ];
   readonly openai: readonly [
     'codex-mini-latest',
@@ -2161,6 +2224,8 @@ export type ProviderModelsMap = {
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
     'gpt-5.4',
+    'gpt-5.4-mini',
+    'gpt-5.4-nano',
     'gpt-5.4-pro',
     'o1',
     'o1-mini',
@@ -2178,7 +2243,14 @@ export type ProviderModelsMap = {
   ];
   readonly moark: readonly ['GLM-4.7', 'MiniMax-M2.1'];
   readonly morph: readonly ['auto', 'morph-v3-fast', 'morph-v3-large'];
-  readonly minimax: readonly ['MiniMax-M2', 'MiniMax-M2.1', 'MiniMax-M2.5', 'MiniMax-M2.5-highspeed'];
+  readonly minimax: readonly [
+    'MiniMax-M2',
+    'MiniMax-M2.1',
+    'MiniMax-M2.5',
+    'MiniMax-M2.5-highspeed',
+    'MiniMax-M2.7',
+    'MiniMax-M2.7-highspeed',
+  ];
   readonly vultr: readonly [
     'DeepSeek-R1-Distill-Llama-70B',
     'DeepSeek-R1-Distill-Qwen-32B',
@@ -2196,7 +2268,7 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-V3-0324',
     'deepseek-ai/DeepSeek-V3.1',
     'moonshotai/Kimi-K2.5',
-    'nvidia/Nemotron-3-Super',
+    'nvidia/Nemotron-120B-A12B',
     'openai/gpt-oss-120b',
     'zai-org/GLM-4.6',
     'zai-org/GLM-4.7',
@@ -2333,6 +2405,16 @@ export type ProviderModelsMap = {
     'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
     'claude-sonnet-4-6',
+  ];
+  readonly 'tencent-coding-plan': readonly [
+    'glm-5',
+    'hunyuan-2.0-instruct',
+    'hunyuan-2.0-thinking',
+    'hunyuan-t1',
+    'hunyuan-turbos',
+    'kimi-k2.5',
+    'minimax-m2.5',
+    'tc-code-latest',
   ];
   readonly friendli: readonly [
     'MiniMaxAI/MiniMax-M2.1',
@@ -3043,6 +3125,7 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2-her',
     'minimax/minimax-m2.1',
     'minimax/minimax-m2.5',
+    'minimax/minimax-m2.7',
     'miromind-ai/mirothinker-v1.5-235b',
     'mistral-small-31-24b-instruct',
     'mistralai/Devstral-Small-2505',
@@ -3201,6 +3284,10 @@ export type ProviderModelsMap = {
   readonly cerebras: readonly ['gpt-oss-120b', 'llama3.1-8b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.7'];
   readonly cortecs: readonly [
     'claude-4-5-sonnet',
+    'claude-4-6-sonnet',
+    'claude-haiku-4-5',
+    'claude-opus4-5',
+    'claude-opus4-6',
     'claude-sonnet-4',
     'deepseek-v3-0324',
     'devstral-2512',
@@ -3219,6 +3306,7 @@ export type ProviderModelsMap = {
     'llama-3.1-405b-instruct',
     'minimax-m2',
     'minimax-m2.1',
+    'minimax-m2.5',
     'nova-pro-v1',
     'qwen3-32b',
     'qwen3-coder-480b-a35b-instruct',
@@ -3244,14 +3332,15 @@ export type ProviderModelsMap = {
     'grok-4-1-fast-non-reasoning',
     'grok-4-fast',
     'grok-4-fast-non-reasoning',
-    'grok-4.20-beta-latest-non-reasoning',
-    'grok-4.20-beta-latest-reasoning',
-    'grok-4.20-multi-agent-beta-latest',
+    'grok-4.20-0309-non-reasoning',
+    'grok-4.20-0309-reasoning',
+    'grok-4.20-multi-agent-0309',
     'grok-beta',
     'grok-code-fast-1',
     'grok-vision-beta',
   ];
   readonly 'alibaba-cn': readonly [
+    'MiniMax-M2.5',
     'MiniMax/MiniMax-M2.5',
     'deepseek-r1',
     'deepseek-r1-0528',
@@ -3268,7 +3357,6 @@ export type ProviderModelsMap = {
     'kimi-k2-thinking',
     'kimi-k2.5',
     'kimi/kimi-k2.5',
-    'minimax-m2.5',
     'moonshot-kimi-k2-instruct',
     'qvq-max',
     'qwen-deep-research',
@@ -3452,6 +3540,10 @@ export type ProviderModelsMap = {
     'openai/gpt-5.3-codex',
     'openai/gpt-5.4',
     'openai/gpt-5.4-2026-03-05',
+    'openai/gpt-5.4-mini',
+    'openai/gpt-5.4-mini-2026-03-17',
+    'openai/gpt-5.4-nano',
+    'openai/gpt-5.4-nano-2026-03-17',
     'openai/gpt-5.4-pro',
     'openai/gpt-5.4-pro-2026-03-05',
     'openai/o3',

@@ -1,6 +1,6 @@
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { AutoFormFieldProps } from '@autoform/react';
+import type { AutoFormFieldProps } from '@autoform/react';
 import React from 'react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 
 export const SelectField: React.FC<AutoFormFieldProps> = ({ field, inputProps, error, id, value }) => {
   const { key, ...props } = inputProps;

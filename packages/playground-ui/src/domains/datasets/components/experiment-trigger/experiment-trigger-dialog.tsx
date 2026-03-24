@@ -1,8 +1,11 @@
-import { useRef, useState } from 'react';
 import { format } from 'date-fns';
+import { useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { TargetSelector, TargetType } from './target-selector';
 import { ScorerSelector } from './scorer-selector';
+import type { TargetType } from './target-selector';
+import { TargetSelector } from './target-selector';
+import { Button } from '@/ds/components/Button';
 import {
   Dialog,
   DialogContent,
@@ -12,9 +15,7 @@ import {
   DialogBody,
   DialogFooter,
 } from '@/ds/components/Dialog';
-import { Button } from '@/ds/components/Button';
 import { Spinner } from '@/ds/components/Spinner';
-import { toast } from 'sonner';
 
 export interface ExperimentTriggerDialogProps {
   datasetId: string;

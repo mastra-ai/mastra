@@ -3,7 +3,6 @@ import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
 import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema, z as z3 } from 'zod/v3';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
@@ -61,7 +60,7 @@ import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { makeCoreTool, createMastraProxy, ensureToolProperties, isZodType, deepMerge } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
 import type { ToolOptions } from '../utils';
 import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
@@ -100,6 +99,7 @@ import type {
   StructuredOutputOptions,
   PublicStructuredOutputOptions,
   ModelWithRetries,
+  ZodSchema,
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
@@ -174,7 +174,7 @@ export class Agent<
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
-  #requestContextSchema?: ZodSchema<TRequestContext>;
+  #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
 
@@ -314,7 +314,7 @@ export class Agent<
     }
 
     if (config.requestContextSchema) {
-      this.#requestContextSchema = config.requestContextSchema;
+      this.#requestContextSchema = toStandardSchema(config.requestContextSchema);
     }
 
     // @ts-expect-error Flag for agent network messages
@@ -380,13 +380,18 @@ export class Agent<
    * Throws an error if validation fails.
    */
   async #validateRequestContext(requestContext?: RequestContext) {
-    if (this.#requestContextSchema && isZodType(this.#requestContextSchema)) {
+    if (this.#requestContextSchema) {
       const contextValues = requestContext?.all ?? {};
-      const validatedRequestContext = await this.#requestContextSchema.safeParseAsync(contextValues);
+      const validation = await this.#requestContextSchema['~standard'].validate(contextValues);
 
-      if (!validatedRequestContext.success) {
-        const errors = validatedRequestContext.error.issues;
-        const errorMessages = errors.map((e: any) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+      if (validation.issues) {
+        const errors = validation.issues;
+        const errorMessages = errors
+          .map(e => {
+            const pathStr = e.path?.map((p: any) => (typeof p === 'object' ? p.key : p)).join('.');
+            return `- ${pathStr}: ${e.message}`;
+          })
+          .join('\n');
         throw new MastraError({
           id: 'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
           domain: ErrorDomain.AGENT,
@@ -5237,11 +5242,11 @@ export class Agent<
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateTextResult<any, undefined>>;
-  async generateLegacy<OUTPUT extends z3.ZodSchema | JSONSchema7>(
+  async generateLegacy<OUTPUT extends ZodSchema | JSONSchema7>(
     messages: MessageListInput,
     args?: AgentGenerateOptions<OUTPUT, undefined> & { output?: OUTPUT; experimental_output?: never },
   ): Promise<GenerateObjectResult<OUTPUT>>;
-  async generateLegacy<EXPERIMENTAL_OUTPUT extends z3.ZodSchema | JSONSchema7>(
+  async generateLegacy<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7>(
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, EXPERIMENTAL_OUTPUT> & {
       output?: never;

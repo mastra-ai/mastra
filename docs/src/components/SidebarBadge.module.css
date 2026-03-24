@@ -4,6 +4,7 @@
   padding: 0 0.5rem;
   height: 18px;
   font-size: 0.65rem;
+  line-height: 18px;
   font-weight: 600;
   border-radius: 9px;
   margin-left: 0.5rem;
@@ -54,4 +55,15 @@
 [data-theme='dark'] .badge--alpha {
   background-color: rgba(168, 85, 247, 0.2);
   color: rgb(192, 132, 252);
+}
+
+/* Deprecated badge - Gray */
+.badge--deprecated {
+  background-color: #f4f4f4;
+  color: #6f6f6f;
+}
+
+[data-theme='dark'] .badge--deprecated {
+  background-color: #262626;
+  color: #8e8e8e;
 }

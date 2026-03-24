@@ -1,13 +1,11 @@
 import { Check, ChevronDown, Clock, Info, MessageSquare, Save } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
 
-import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
-import { Spinner } from '@/ds/components/Spinner';
+import { useAgentVersions } from '../../hooks/use-agent-versions';
 import { Badge } from '@/ds/components/Badge';
-import { Txt } from '@/ds/components/Txt';
+import { Button } from '@/ds/components/Button';
 import { Combobox } from '@/ds/components/Combobox';
-import { Input } from '@/ds/components/Input';
+import { CopyButton } from '@/ds/components/CopyButton';
 import {
   Dialog,
   DialogContent,
@@ -18,9 +16,12 @@ import {
   DialogFooter,
 } from '@/ds/components/Dialog';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { Input } from '@/ds/components/Input';
 import { Label } from '@/ds/components/Label';
 import { HoverPopover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
-import { useAgentVersions } from '../../hooks/use-agent-versions';
+import { Spinner } from '@/ds/components/Spinner';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
 
 interface AgentPlaygroundVersionBarProps {
   agentId: string;
@@ -127,6 +128,8 @@ export function AgentPlaygroundVersionBar({
             No versions yet
           </Txt>
         )}
+
+        {currentValue && <CopyButton content={currentValue} tooltip="Copy version ID" size="sm" />}
 
         <HoverPopover>
           <PopoverTrigger asChild>
@@ -241,7 +244,7 @@ export function AgentPlaygroundVersionBar({
                   onChange={e => setChangeMessage(e.target.value)}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
-                      handleSaveWithMessage();
+                      void handleSaveWithMessage();
                     }
                   }}
                   disabled={isSavingDraft}

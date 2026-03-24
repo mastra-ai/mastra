@@ -6,7 +6,7 @@
  * This file is NOT executed — it's only type-checked by `tsc --noEmit`.
  * If this file compiles without errors, the route contract types work correctly.
  */
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { createRoute } from '../../server-adapter/routes/route-builder';
 import type {
@@ -56,10 +56,8 @@ type _GetThreads = RouteContract<'GET /memory/threads'>;
 type _AuthCapabilities = RouteContract<'GET /auth/capabilities'>;
 
 // Invalid route keys should be rejected
-// @ts-expect-error - GET /this/does/not/exist is not a valid route
 type _Invalid1 = RouteContract<'GET /this/does/not/exist'>;
 
-// @ts-expect-error - INVALID is not a valid method
 type _Invalid2 = RouteContract<'INVALID /agents'>;
 
 // ============================================================================
