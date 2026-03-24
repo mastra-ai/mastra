@@ -154,9 +154,7 @@ export class TypeDetector {
       if (
         'toolCallId' in part &&
         'state' in part &&
-        (part.state === 'approval-requested' ||
-          part.state === 'approval-responded' ||
-          part.state === 'output-denied')
+        (part.state === 'approval-requested' || part.state === 'approval-responded' || part.state === 'output-denied')
       ) {
         return true;
       }

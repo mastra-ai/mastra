@@ -34,9 +34,7 @@ function getToolNameFromType(type: string): string {
 }
 
 function normalizeToolArgs(input: unknown): Record<string, unknown> {
-  return typeof input === 'object' && input !== null && !Array.isArray(input)
-    ? (input as Record<string, unknown>)
-    : {};
+  return typeof input === 'object' && input !== null && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
 }
 
 function isV6OnlyToolState(
@@ -57,7 +55,9 @@ function toMastraApproval(
   };
 }
 
-function toMastraProviderMetadata(providerMetadata: AIV6Type.ProviderMetadata | undefined): MastraProviderMetadata | undefined {
+function toMastraProviderMetadata(
+  providerMetadata: AIV6Type.ProviderMetadata | undefined,
+): MastraProviderMetadata | undefined {
   return providerMetadata as MastraProviderMetadata | undefined;
 }
 
@@ -562,8 +562,10 @@ export class AIV6Adapter {
 
     switch (part.type) {
       case 'text':
-        return withOptionalFields({ type: 'text', text: part.text }, { providerMetadata: part.providerMetadata }) as
-          AIV6Type.UIMessage['parts'][number];
+        return withOptionalFields(
+          { type: 'text', text: part.text },
+          { providerMetadata: part.providerMetadata },
+        ) as AIV6Type.UIMessage['parts'][number];
 
       case 'reasoning':
         return withOptionalFields(
