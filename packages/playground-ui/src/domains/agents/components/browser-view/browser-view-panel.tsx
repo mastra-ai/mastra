@@ -35,7 +35,6 @@ export function BrowserViewPanel({ agentId }: BrowserViewPanelProps) {
   const handleStatusChange = useCallback(
     (newStatus: StreamStatus) => {
       setStatus(newStatus);
-      console.log('[BrowserViewPanel] status changed:', newStatus);
 
       if (newStatus === 'streaming') {
         show();
