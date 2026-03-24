@@ -72,6 +72,10 @@ type MemoryConstructorConfig = Omit<SharedMemoryConfig, 'options'> & {
   options?: MemoryOptions;
 };
 
+type RuntimeMemoryConfig = Omit<MemoryConfig, 'observationalMemory'> & {
+  observationalMemory?: boolean | MemoryObservationalMemoryOptions;
+};
+
 type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions;
 
 function normalizeObservationalMemoryConfig(
@@ -1974,9 +1978,17 @@ Notes:
     );
 
     // Get effective config (runtime config merged with instance config)
-    const memoryContext = context?.get('MastraMemory') as { memoryConfig?: MemoryConfig } | undefined;
+    const memoryContext = context?.get('MastraMemory') as { memoryConfig?: RuntimeMemoryConfig } | undefined;
     const runtimeMemoryConfig = memoryContext?.memoryConfig;
-    const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
+    const effectiveConfig = runtimeMemoryConfig
+      ? this.getMergedThreadConfig({
+          ...runtimeMemoryConfig,
+          observationalMemory: runtimeMemoryConfig.observationalMemory as
+            | ObservationalMemoryOptions
+            | boolean
+            | undefined,
+        })
+      : this.threadConfig;
 
     // Add ObservationalMemory processor if configured and not already present
     const omConfig = normalizeObservationalMemoryConfig(effectiveConfig.observationalMemory);
