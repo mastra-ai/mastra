@@ -57,8 +57,10 @@ export class AgentBrowser extends MastraBrowser {
       headless: localConfig.headless ?? true,
     };
 
+    // Resolve CDP URL if provided (can be string or function)
     if (localConfig.cdpUrl) {
-      launchOptions.cdpEndpoint = localConfig.cdpUrl;
+      const cdpUrl = typeof localConfig.cdpUrl === 'function' ? await localConfig.cdpUrl() : localConfig.cdpUrl;
+      launchOptions.cdpEndpoint = cdpUrl;
     }
 
     await this.browserManager.launch(launchOptions);

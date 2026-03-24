@@ -2,7 +2,7 @@
 export { AgentBrowser } from './agent-browser.js';
 
 // Type exports
-export type { BrowserConfig } from './types.js';
+export type { BrowserConfig, CdpUrlProvider } from './types.js';
 export type {
   BrowserLocator,
   BrowserPage,
