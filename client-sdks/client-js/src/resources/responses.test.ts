@@ -62,6 +62,20 @@ describe('Responses Resource', () => {
       status: 'completed',
       output: [
         {
+          id: 'call_123',
+          type: 'function_call',
+          call_id: 'call_123',
+          name: 'weather',
+          arguments: '{"city":"Lagos"}',
+          status: 'completed',
+        },
+        {
+          id: 'call_123_output',
+          type: 'function_call_output',
+          call_id: 'call_123',
+          output: '{"weather":"sunny"}',
+        },
+        {
           id: 'msg_123',
           type: 'message',
           role: 'assistant',

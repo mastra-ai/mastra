@@ -4,7 +4,7 @@ import type { StorageThreadType } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
-import type { ResponseObject, ResponseUsage } from '../schemas/responses';
+import type { ResponseObject, ResponseTool, ResponseUsage } from '../schemas/responses';
 import { getEffectiveResourceId, validateThreadOwnership } from './utils';
 
 export type ThreadExecutionContext = {
@@ -22,7 +22,7 @@ export type UsageLike = {
 
 export type ProviderMetadataLike = Record<string, Record<string, unknown> | undefined> | undefined;
 
-export type StoredResponseMetadata = {
+export type StoredResponseTurnMetadata = {
   agentId: string;
   model: string;
   createdAt: number;
@@ -32,12 +32,13 @@ export type StoredResponseMetadata = {
   instructions?: string;
   previousResponseId?: string;
   providerOptions?: ProviderMetadataLike;
+  tools: ResponseTool[];
   store: boolean;
   messageIds: string[];
 };
 
-export type StoredResponseMatch = {
-  metadata: StoredResponseMetadata;
+export type StoredResponseTurn = {
+  metadata: StoredResponseTurnMetadata;
   message: MastraDBMessage;
   messages: MastraDBMessage[];
   thread: StorageThreadType;
@@ -78,7 +79,7 @@ export async function getMemoryStore(mastra: Mastra | undefined): Promise<Memory
 /**
  * Reads the Responses-specific metadata attached to a stored assistant message.
  */
-function getStoredResponseMetadata(message: MastraDBMessage): StoredResponseMetadata | null {
+function getStoredResponseTurnMetadata(message: MastraDBMessage): StoredResponseTurnMetadata | null {
   const mastraMetadata = isPlainObject(message.content?.metadata?.mastra) ? message.content.metadata.mastra : null;
   const responseMetadata = mastraMetadata && isPlainObject(mastraMetadata.response) ? mastraMetadata.response : null;
 
@@ -90,6 +91,7 @@ function getStoredResponseMetadata(message: MastraDBMessage): StoredResponseMeta
     (responseMetadata.completedAt !== null && typeof responseMetadata.completedAt !== 'number') ||
     (responseMetadata.instructions !== undefined && typeof responseMetadata.instructions !== 'string') ||
     (responseMetadata.previousResponseId !== undefined && typeof responseMetadata.previousResponseId !== 'string') ||
+    !Array.isArray(responseMetadata.tools) ||
     typeof responseMetadata.store !== 'boolean' ||
     !Array.isArray(responseMetadata.messageIds)
   ) {
@@ -106,6 +108,7 @@ function getStoredResponseMetadata(message: MastraDBMessage): StoredResponseMeta
     instructions: responseMetadata.instructions,
     previousResponseId: responseMetadata.previousResponseId,
     providerOptions: responseMetadata.providerOptions as ProviderMetadataLike,
+    tools: responseMetadata.tools as ResponseTool[],
     store: responseMetadata.store,
     messageIds: responseMetadata.messageIds.filter((value): value is string => typeof value === 'string'),
   };
@@ -114,7 +117,10 @@ function getStoredResponseMetadata(message: MastraDBMessage): StoredResponseMeta
 /**
  * Attaches Responses-specific metadata to the persisted assistant message.
  */
-function setStoredResponseMetadata(message: MastraDBMessage, metadata: StoredResponseMetadata): MastraDBMessage {
+function setStoredResponseTurnMetadata(
+  message: MastraDBMessage,
+  metadata: StoredResponseTurnMetadata,
+): MastraDBMessage {
   const contentMetadata = isPlainObject(message.content?.metadata) ? message.content.metadata : {};
   const mastraMetadata = isPlainObject(contentMetadata.mastra) ? contentMetadata.mastra : {};
 
@@ -136,7 +142,7 @@ function setStoredResponseMetadata(message: MastraDBMessage, metadata: StoredRes
 /**
  * Looks up a stored response by assistant message ID.
  */
-export async function findStoredResponseMessage({
+export async function findStoredResponseTurn({
   mastra,
   responseId,
   requestContext,
@@ -144,7 +150,7 @@ export async function findStoredResponseMessage({
   mastra: Mastra | undefined;
   responseId: string;
   requestContext: RequestContext;
-}): Promise<StoredResponseMatch | null> {
+}): Promise<StoredResponseTurn | null> {
   const memoryStore = await getMemoryStore(mastra);
   if (!memoryStore) {
     return null;
@@ -157,7 +163,7 @@ export async function findStoredResponseMessage({
     return null;
   }
 
-  const metadata = getStoredResponseMetadata(message);
+  const metadata = getStoredResponseTurnMetadata(message);
   if (!metadata) {
     return null;
   }
@@ -204,7 +210,7 @@ function createSyntheticResponseMessage({
 /**
  * Resolves the response messages that should represent the stored assistant turn.
  */
-export async function resolveResponseMessages({
+export async function resolveStoredResponseTurnMessages({
   result,
   responseId,
   text,
@@ -232,7 +238,7 @@ export async function resolveResponseMessages({
 /**
  * Persists the response turn and records the response metadata on the final assistant message.
  */
-export async function persistStoredResponse({
+export async function persistStoredResponseTurn({
   mastra,
   responseId,
   metadata,
@@ -241,7 +247,7 @@ export async function persistStoredResponse({
 }: {
   mastra: Mastra | undefined;
   responseId: string;
-  metadata: StoredResponseMetadata;
+  metadata: StoredResponseTurnMetadata;
   threadContext: ThreadExecutionContext;
   messages: MastraDBMessage[];
 }): Promise<void> {
@@ -287,7 +293,7 @@ export async function persistStoredResponse({
       ? [messages[lastAssistantIndex]!.id]
       : [];
 
-  const storedMessage = setStoredResponseMetadata(lastAssistantMessage, {
+  const storedMessage = setStoredResponseTurnMetadata(lastAssistantMessage, {
     ...metadata,
     messageIds: normalizedMessages.map(message => message.id),
   });
@@ -308,7 +314,7 @@ export async function persistStoredResponse({
 /**
  * Removes all persisted messages for a stored response.
  */
-export async function deleteStoredResponseMessage({
+export async function deleteStoredResponseTurn({
   mastra,
   responseId,
   requestContext,
@@ -317,7 +323,7 @@ export async function deleteStoredResponseMessage({
   responseId: string;
   requestContext: RequestContext;
 }): Promise<boolean> {
-  const match = await findStoredResponseMessage({ mastra, responseId, requestContext });
+  const match = await findStoredResponseTurn({ mastra, responseId, requestContext });
   if (!match) {
     return false;
   }

@@ -7,12 +7,14 @@
 
 You can now call Mastra through a Responses API flow and continue stored turns with
 `previous_response_id`, while keeping `model` as a Mastra model string and using
-`agent_id` to target the registered Mastra agent that handles the request. Advanced provider-native settings can
+`agent_id` to target the registered Mastra agent that handles the request. This API acts as an agent-backed
+adapter layer on top of Mastra memory and storage. Advanced provider-native settings can
 also be passed through with `providerOptions`, and provider-returned continuation state
 is surfaced back on the response under the same `providerOptions` field. Stored
 response IDs now map directly to the persisted assistant turn ID in Mastra memory.
-Tool-using agent turns are also surfaced through the Responses payload, and the
-migration demo now includes memory-backed, tool-using, and provider-backed flows.
+Configured tool definitions are returned under `tools`, while executed tool activity
+is surfaced through `output` items such as `function_call`, `function_call_output`,
+and the final assistant message.
 
 ```ts
 import { MastraClient } from '@mastra/client-js';

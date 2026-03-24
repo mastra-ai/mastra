@@ -9,6 +9,8 @@ packages:
 
 The Responses API adds an OpenAI-style namespace to `MastraClient` so you can call Mastra's built-in `/v1/responses` routes with `client.responses.create()`, `client.responses.retrieve()`, `client.responses.stream()`, and `client.responses.delete()`.
 
+These routes are a Mastra agent-backed adapter layer. They expose an OpenAI-like Responses surface while still executing through registered Mastra agents, agent memory, and Mastra storage.
+
 `model` is always the target model string, such as `openai/gpt-5`, and `agent_id` selects the registered Mastra agent that executes the request. Initial requests must provide `agent_id`. Stored follow-up turns can omit it when continuing with `previous_response_id`.
 
 If you want to compare this with the official `openai` SDK migration path, see the [OpenAI Responses migration example](https://github.com/mastra-ai/mastra/tree/main/examples/openai-responses-migration).
@@ -131,6 +133,8 @@ const response = await client.responses.create({
 
 **Returns:** `Promise<ResponsesResponse>` when `stream` is omitted or `false`.
 
+Configured tool definitions are exposed on `response.tools`. If the agent actually calls a tool, that activity appears in `response.output` as `function_call` and `function_call_output` items alongside the assistant `message`.
+
 When `stream: true`, `create()` returns an async iterable of SSE event payloads:
 
 ```typescript
@@ -224,6 +228,10 @@ await client.responses.delete('msg_123')
 
 **Returns:** `Promise<{ id: string; object: 'response'; deleted: true }>`.
 
-## Additional configuration
+## Response shape
 
-The client SDK adds an `output_text` convenience field to non-streaming response objects and to the `response` payload on `response.created`, `response.in_progress`, and `response.completed` stream events. The underlying response object also includes OpenAI-style fields such as `completed_at`, `error`, `incomplete_details`, `tools`, token detail objects, and provider-returned `providerOptions` when the Mastra server provides them. Streaming events preserve the server-provided `sequence_number` field and surface `response.content_part.*` plus `response.output_item.done` when the server emits them.
+The client SDK adds an `output_text` convenience field to non-streaming response objects and to the `response` payload on `response.created`, `response.in_progress`, and `response.completed` stream events. The underlying response object also includes OpenAI-style fields such as `completed_at`, `error`, `incomplete_details`, `tools`, token detail objects, and provider-returned `providerOptions` when the Mastra server provides them.
+
+`tools` contains the configured tool definitions for the response. Executed tool activity is represented in `output`, where you can inspect `function_call`, `function_call_output`, and assistant `message` items in order.
+
+Streaming events preserve the server-provided `sequence_number` field and surface `response.content_part.*` plus `response.output_item.done` when the server emits them.

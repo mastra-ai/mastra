@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import type { ResponseInputMessage, ResponseObject, ResponseTool } from '../schemas/responses';
-import type { StoredResponseMatch, ProviderMetadataLike, UsageLike } from './responses.storage';
+import { isProviderDefinedTool } from '@mastra/core/tools';
+import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
+import type { ResponseInputMessage, ResponseObject, ResponseOutputItem, ResponseTool } from '../schemas/responses';
+import type { StoredResponseTurn, ProviderMetadataLike, UsageLike } from './responses.storage';
 
 export type InputMessage = {
   role: 'system' | 'user' | 'assistant';
@@ -28,45 +30,230 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function getMessageRole(message: MastraDBMessage): string {
+  return (message as { role?: string }).role ?? '';
+}
+
 function getToolKey(toolCallId: string | null, messageId: string, partIndex: number) {
   return toolCallId ?? `${messageId}:${partIndex}`;
 }
 
+function normalizeToolParameters(schema: unknown): unknown {
+  if (!isRecord(schema)) {
+    return schema;
+  }
+
+  if (isRecord(schema.json) && Object.keys(schema).length === 1) {
+    return schema.json;
+  }
+
+  return schema;
+}
+
 /**
- * Collects tool invocations/results from response messages into a compact response-friendly shape.
+ * Converts configured Mastra tools into the Responses API tool definition shape.
  */
-export function extractResponseTools(messages: MastraDBMessage[] | undefined): ResponseTool[] {
-  if (!messages?.length) {
+export function serializeResponseTools(tools: Record<string, unknown> | undefined): ResponseTool[] {
+  if (!tools) {
     return [];
   }
 
-  const tools = new Map<string, ResponseTool>();
+  return Object.values(tools).flatMap(tool => {
+    if (!isRecord(tool)) {
+      return [];
+    }
+
+    const name = typeof tool.id === 'string' ? tool.id : typeof tool.name === 'string' ? tool.name : null;
+    if (!name) {
+      return [];
+    }
+
+    const description = typeof tool.description === 'string' ? tool.description : undefined;
+
+    let parameters: unknown;
+    if (isProviderDefinedTool(tool)) {
+      const resolvedSchema = typeof tool.inputSchema === 'function' ? tool.inputSchema() : tool.inputSchema;
+      parameters =
+        isRecord(resolvedSchema) && 'jsonSchema' in resolvedSchema
+          ? normalizeToolParameters(resolvedSchema.jsonSchema)
+          : undefined;
+    } else if ('inputSchema' in tool && tool.inputSchema) {
+      parameters = normalizeToolParameters(zodToJsonSchema(tool.inputSchema as never));
+    }
+
+    return [
+      {
+        type: 'function',
+        name,
+        ...(description ? { description } : {}),
+        ...(parameters !== undefined ? { parameters: JSON.parse(JSON.stringify(parameters)) } : {}),
+      } satisfies ResponseTool,
+    ];
+  });
+}
+
+function stringifyToolPayload(value: unknown) {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  return JSON.stringify(value ?? {});
+}
+
+function createOutputMessage({
+  messageId,
+  status,
+  text,
+}: {
+  messageId: string;
+  status: ResponseObject['status'];
+  text: string;
+}) {
+  const responseStatus: Extract<ResponseObject['output'][number], { type: 'message' }>['status'] =
+    status === 'completed' ? 'completed' : 'incomplete';
+
+  return {
+    id: messageId,
+    type: 'message' as const,
+    role: 'assistant' as const,
+    status: responseStatus,
+    content: [createOutputTextPart(text)],
+  };
+}
+
+function createFunctionCallItem({
+  itemId,
+  callId,
+  name,
+  args,
+}: {
+  itemId: string;
+  callId: string;
+  name: string;
+  args: unknown;
+}) {
+  return {
+    id: itemId,
+    type: 'function_call' as const,
+    call_id: callId,
+    name,
+    arguments: stringifyToolPayload(args),
+    status: 'completed' as const,
+  };
+}
+
+function createFunctionCallOutputItem({ itemId, callId, output }: { itemId: string; callId: string; output: unknown }) {
+  return {
+    id: itemId,
+    type: 'function_call_output' as const,
+    call_id: callId,
+    output: stringifyToolPayload(output),
+  };
+}
+
+/**
+ * Converts stored response-turn messages into Responses API output items.
+ */
+export function buildResponseOutput({
+  messages,
+  outputMessageId,
+  status,
+  fallbackText,
+}: {
+  messages: MastraDBMessage[] | undefined;
+  outputMessageId: string;
+  status: ResponseObject['status'];
+  fallbackText: string;
+}): ResponseOutputItem[] {
+  if (!messages?.length) {
+    return [createOutputMessage({ messageId: outputMessageId, status, text: fallbackText })];
+  }
+
+  const output: ResponseOutputItem[] = [];
+  const toolResultCallIds = new Set<string>();
+  const emittedCallIds = new Set<string>();
+  const emittedResultCallIds = new Set<string>();
+  const lastAssistantIndex = [...messages].map(message => message.role).lastIndexOf('assistant');
 
   for (const message of messages) {
     const parts = Array.isArray(message.content?.parts) ? message.content.parts : [];
+    for (const [partIndex, part] of parts.entries()) {
+      if (!isRecord(part) || part.type !== 'tool-invocation' || !isRecord(part.toolInvocation)) {
+        continue;
+      }
+
+      const toolInvocation = part.toolInvocation;
+      const toolCallId =
+        typeof toolInvocation.toolCallId === 'string'
+          ? toolInvocation.toolCallId
+          : getToolKey(null, message.id, partIndex);
+
+      if (getMessageRole(message) === 'tool' && toolInvocation.result !== undefined) {
+        toolResultCallIds.add(toolCallId);
+      }
+    }
+  }
+
+  for (const [messageIndex, message] of messages.entries()) {
+    const parts = Array.isArray(message.content?.parts) ? message.content.parts : [];
+    const text = getMessageText(message);
 
     for (const [partIndex, part] of parts.entries()) {
       if (!isRecord(part) || part.type !== 'tool-invocation' || !isRecord(part.toolInvocation)) {
         continue;
       }
 
-      const invocation = part.toolInvocation;
-      const toolCallId = typeof invocation.toolCallId === 'string' ? invocation.toolCallId : null;
-      const key = getToolKey(toolCallId, message.id, partIndex);
-      const existingTool = tools.get(key);
+      const toolInvocation = part.toolInvocation;
+      const toolName = typeof toolInvocation.toolName === 'string' ? toolInvocation.toolName : null;
+      const toolCallId =
+        typeof toolInvocation.toolCallId === 'string'
+          ? toolInvocation.toolCallId
+          : getToolKey(null, message.id, partIndex);
 
-      tools.set(key, {
-        type: 'tool',
-        toolCallId,
-        toolName: typeof invocation.toolName === 'string' ? invocation.toolName : (existingTool?.toolName ?? null),
-        state: typeof invocation.state === 'string' ? invocation.state : (existingTool?.state ?? null),
-        args: invocation.args ?? existingTool?.args,
-        result: invocation.result ?? existingTool?.result,
-      });
+      if (getMessageRole(message) === 'assistant' && toolName && !emittedCallIds.has(toolCallId)) {
+        output.push(
+          createFunctionCallItem({
+            itemId: `${message.id}:${partIndex}:call`,
+            callId: toolCallId,
+            name: toolName,
+            args: toolInvocation.args,
+          }),
+        );
+        emittedCallIds.add(toolCallId);
+      }
+
+      if (
+        toolInvocation.result !== undefined &&
+        !emittedResultCallIds.has(toolCallId) &&
+        (getMessageRole(message) === 'tool' || !toolResultCallIds.has(toolCallId))
+      ) {
+        output.push(
+          createFunctionCallOutputItem({
+            itemId: `${message.id}:${partIndex}:output`,
+            callId: toolCallId,
+            output: toolInvocation.result,
+          }),
+        );
+        emittedResultCallIds.add(toolCallId);
+      }
+    }
+
+    if (getMessageRole(message) === 'assistant' && text) {
+      output.push(
+        createOutputMessage({
+          messageId: messageIndex === lastAssistantIndex ? outputMessageId : message.id,
+          status,
+          text,
+        }),
+      );
     }
   }
 
-  return [...tools.values()];
+  if (!output.some(item => item.type === 'message') && fallbackText) {
+    output.push(createOutputMessage({ messageId: outputMessageId, status, text: fallbackText }));
+  }
+
+  return output;
 }
 
 /**
@@ -153,6 +340,7 @@ export function buildResponseObject({
   instructions,
   previousResponseId,
   providerOptions,
+  tools,
   store,
   messages,
 }: {
@@ -167,6 +355,7 @@ export function buildResponseObject({
   instructions?: string;
   previousResponseId?: string;
   providerOptions?: ProviderMetadataLike;
+  tools: ResponseTool[];
   store: boolean;
   messages?: MastraDBMessage[];
 }): ResponseObject {
@@ -177,22 +366,19 @@ export function buildResponseObject({
     completed_at: completedAt,
     model,
     status,
-    output: [
-      {
-        id: outputMessageId,
-        type: 'message',
-        role: 'assistant',
-        status: status === 'completed' ? 'completed' : 'incomplete',
-        content: [createOutputTextPart(text)],
-      },
-    ],
+    output: buildResponseOutput({
+      messages,
+      outputMessageId,
+      status,
+      fallbackText: text,
+    }),
     usage: toResponseUsage(usage),
     error: null,
     incomplete_details: null,
     instructions: instructions ?? null,
     previous_response_id: previousResponseId ?? null,
     providerOptions,
-    tools: extractResponseTools(messages),
+    tools,
     store,
   };
 }
@@ -206,6 +392,7 @@ export function buildCreatedResponseObject({
   createdAt,
   instructions,
   previousResponseId,
+  tools,
   store,
 }: {
   responseId: string;
@@ -214,6 +401,7 @@ export function buildCreatedResponseObject({
   instructions?: string;
   previousResponseId?: string;
   store: boolean;
+  tools?: ResponseTool[];
 }): ResponseObject {
   return {
     id: responseId,
@@ -228,7 +416,7 @@ export function buildCreatedResponseObject({
     incomplete_details: null,
     instructions: instructions ?? null,
     previous_response_id: previousResponseId ?? null,
-    tools: [],
+    tools: tools ?? [],
     store,
   };
 }
@@ -236,7 +424,7 @@ export function buildCreatedResponseObject({
 /**
  * Reconstructs a stored response object from the assistant message that owns the turn.
  */
-export function buildStoredResponseObject(match: StoredResponseMatch): ResponseObject {
+export function buildStoredResponseObject(match: StoredResponseTurn): ResponseObject {
   return {
     id: match.message.id,
     object: 'response',
@@ -244,22 +432,19 @@ export function buildStoredResponseObject(match: StoredResponseMatch): ResponseO
     completed_at: match.metadata.completedAt,
     model: match.metadata.model,
     status: match.metadata.status,
-    output: [
-      {
-        id: match.message.id,
-        type: 'message',
-        role: 'assistant',
-        status: match.metadata.status === 'completed' ? 'completed' : 'incomplete',
-        content: [createOutputTextPart(getMessageText(match.message))],
-      },
-    ],
+    output: buildResponseOutput({
+      messages: match.messages,
+      outputMessageId: match.message.id,
+      status: match.metadata.status,
+      fallbackText: getMessageText(match.message),
+    }),
     usage: match.metadata.usage,
     error: null,
     incomplete_details: null,
     instructions: match.metadata.instructions ?? null,
     previous_response_id: match.metadata.previousResponseId ?? null,
     providerOptions: match.metadata.providerOptions,
-    tools: extractResponseTools(match.messages),
+    tools: match.metadata.tools,
     store: match.metadata.store,
   };
 }

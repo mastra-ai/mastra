@@ -73,6 +73,22 @@ export const responseOutputMessageSchema = z.object({
   content: z.array(responseOutputTextSchema),
 });
 
+export const responseOutputFunctionCallSchema = z.object({
+  id: z.string(),
+  type: z.literal('function_call'),
+  call_id: z.string(),
+  name: z.string(),
+  arguments: z.string(),
+  status: z.enum(['in_progress', 'completed', 'incomplete']).optional(),
+});
+
+export const responseOutputFunctionCallOutputSchema = z.object({
+  id: z.string(),
+  type: z.literal('function_call_output'),
+  call_id: z.string(),
+  output: z.string(),
+});
+
 export const responseUsageSchema = z.object({
   input_tokens: z.number(),
   output_tokens: z.number(),
@@ -92,15 +108,21 @@ export const responseUsageSchema = z.object({
 export type ResponseUsage = z.infer<typeof responseUsageSchema>;
 
 export const responseToolSchema = z.object({
-  type: z.literal('tool'),
-  toolCallId: z.string().nullable(),
-  toolName: z.string().nullable(),
-  state: z.string().nullable(),
-  args: z.unknown().optional(),
-  result: z.unknown().optional(),
+  type: z.literal('function'),
+  name: z.string(),
+  description: z.string().optional(),
+  parameters: z.unknown().optional(),
 });
 
 export type ResponseTool = z.infer<typeof responseToolSchema>;
+
+export const responseOutputItemSchema = z.union([
+  responseOutputMessageSchema,
+  responseOutputFunctionCallSchema,
+  responseOutputFunctionCallOutputSchema,
+]);
+
+export type ResponseOutputItem = z.infer<typeof responseOutputItemSchema>;
 
 export const responseObjectSchema = z.object({
   id: z.string(),
@@ -109,7 +131,7 @@ export const responseObjectSchema = z.object({
   completed_at: z.number().nullable(),
   model: z.string(),
   status: z.enum(['in_progress', 'completed', 'incomplete']),
-  output: z.array(responseOutputMessageSchema),
+  output: z.array(responseOutputItemSchema),
   usage: responseUsageSchema.nullable(),
   error: z.null().optional(),
   incomplete_details: z.null().optional(),

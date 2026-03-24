@@ -2,7 +2,9 @@ import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import { InMemoryStore } from '@mastra/core/storage';
+import { createTool } from '@mastra/core/tools';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import { CREATE_RESPONSE_ROUTE, DELETE_RESPONSE_ROUTE, GET_RESPONSE_ROUTE } from './responses';
 import { createTestServerContext } from './test-utils';
@@ -155,6 +157,7 @@ describe('Responses Handlers', () => {
   let storage: InMemoryStore;
   let memory: MockMemory;
   let agent: Agent;
+  let toolAgent: Agent;
   let mastra: Mastra;
 
   beforeEach(() => {
@@ -169,15 +172,37 @@ describe('Responses Handlers', () => {
       memory,
     });
 
+    const weatherTool = createTool({
+      id: 'weather',
+      description: 'Gets the current weather for a city',
+      inputSchema: z.object({
+        city: z.string(),
+      }),
+      execute: async () => ({ weather: 'sunny' }),
+    });
+
+    toolAgent = new Agent({
+      id: 'tool-agent',
+      name: 'tool-agent',
+      instructions: 'tool instructions',
+      model: {} as never,
+      memory,
+      tools: {
+        weather: weatherTool,
+      },
+    });
+
     mastra = new Mastra({
       logger: false,
       storage,
       agents: {
         'test-agent': agent,
+        'tool-agent': toolAgent,
       },
     });
 
     mockAgentSpecVersion(agent);
+    mockAgentSpecVersion(toolAgent);
   });
 
   it('creates and retrieves a stored non-streaming response', async () => {
@@ -556,7 +581,7 @@ describe('Responses Handlers', () => {
   });
 
   it('stores tool-backed turns on the final assistant message', async () => {
-    const generateSpy = vi.spyOn(agent, 'generate').mockResolvedValue(
+    const generateSpy = vi.spyOn(toolAgent, 'generate').mockResolvedValue(
       createGenerateResult({
         text: 'The weather is sunny.',
         dbMessages: [
@@ -607,7 +632,7 @@ describe('Responses Handlers', () => {
     const response = (await CREATE_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
       model: 'openai/gpt-5',
-      agent_id: 'test-agent',
+      agent_id: 'tool-agent',
       input: 'What is the weather in Lagos?',
       store: true,
       stream: false,
@@ -616,16 +641,43 @@ describe('Responses Handlers', () => {
     const created = await readJson(response);
     const threadId = (generateSpy.mock.calls[0]?.[1] as { memory?: { thread?: string } })?.memory?.thread;
     const storedMessages = await memory.recall({ threadId: threadId!, perPage: false });
+    const responseMessage = created.output.find((item: { type: string }) => item.type === 'message');
 
-    expect(created.id).toBe(created.output[0].id);
+    expect(responseMessage?.id).toBe(created.id);
     expect(created.tools).toEqual([
+      expect.objectContaining({
+        type: 'function',
+        name: 'weather',
+        description: 'Gets the current weather for a city',
+        parameters: expect.objectContaining({
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            city: {
+              type: 'string',
+            },
+          },
+          required: ['city'],
+        }),
+      }),
+    ]);
+    expect(created.output).toMatchObject([
       {
-        type: 'tool',
-        toolCallId: 'call_1',
-        toolName: 'weather',
-        state: 'result',
-        args: { city: 'Lagos' },
-        result: { weather: 'sunny' },
+        type: 'function_call',
+        call_id: 'call_1',
+        name: 'weather',
+        arguments: JSON.stringify({ city: 'Lagos' }),
+      },
+      {
+        type: 'function_call_output',
+        call_id: 'call_1',
+        output: JSON.stringify({ weather: 'sunny' }),
+      },
+      {
+        id: created.id,
+        type: 'message',
+        role: 'assistant',
+        content: [{ text: 'The weather is sunny.' }],
       },
     ]);
     expect(storedMessages.messages.map(message => message.id)).toEqual(
@@ -642,17 +694,25 @@ describe('Responses Handlers', () => {
       id: created.id,
       tools: [
         {
-          type: 'tool',
-          toolCallId: 'call_1',
-          toolName: 'weather',
-          state: 'result',
-          args: { city: 'Lagos' },
-          result: { weather: 'sunny' },
+          type: 'function',
+          name: 'weather',
         },
       ],
       output: [
         {
+          type: 'function_call',
+          call_id: 'call_1',
+          name: 'weather',
+          arguments: JSON.stringify({ city: 'Lagos' }),
+        },
+        {
+          type: 'function_call_output',
+          call_id: 'call_1',
+          output: JSON.stringify({ weather: 'sunny' }),
+        },
+        {
           id: created.id,
+          type: 'message',
           content: [{ text: 'The weather is sunny.' }],
         },
       ],
@@ -660,7 +720,7 @@ describe('Responses Handlers', () => {
   });
 
   it('deletes all persisted messages for a tool-backed turn', async () => {
-    vi.spyOn(agent, 'generate').mockResolvedValue(
+    vi.spyOn(toolAgent, 'generate').mockResolvedValue(
       createGenerateResult({
         text: 'Tool-backed answer',
         dbMessages: [
@@ -693,7 +753,7 @@ describe('Responses Handlers', () => {
     const response = (await CREATE_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
       model: 'openai/gpt-5',
-      agent_id: 'test-agent',
+      agent_id: 'tool-agent',
       input: 'Use the tool',
       store: true,
       stream: false,

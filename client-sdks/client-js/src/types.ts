@@ -107,6 +107,22 @@ export type ResponseOutputMessage = {
   content: ResponseOutputText[];
 };
 
+export type ResponseOutputFunctionCall = {
+  id: string;
+  type: 'function_call';
+  call_id: string;
+  name: string;
+  arguments: string;
+  status?: 'in_progress' | 'completed' | 'incomplete';
+};
+
+export type ResponseOutputFunctionCallOutput = {
+  id: string;
+  type: 'function_call_output';
+  call_id: string;
+  output: string;
+};
+
 export type ResponseUsage = {
   input_tokens: number;
   output_tokens: number;
@@ -120,13 +136,13 @@ export type ResponseUsage = {
 };
 
 export type ResponseTool = {
-  type: 'tool';
-  toolCallId: string | null;
-  toolName: string | null;
-  state: string | null;
-  args?: unknown;
-  result?: unknown;
+  type: 'function';
+  name: string;
+  description?: string;
+  parameters?: unknown;
 };
+
+export type ResponseOutputItem = ResponseOutputMessage | ResponseOutputFunctionCall | ResponseOutputFunctionCallOutput;
 
 export type ResponsesResponse = {
   id: string;
@@ -135,7 +151,7 @@ export type ResponsesResponse = {
   completed_at?: number | null;
   model: string;
   status: 'in_progress' | 'completed' | 'incomplete';
-  output: ResponseOutputMessage[];
+  output: ResponseOutputItem[];
   usage: ResponseUsage | null;
   error?: null;
   incomplete_details?: null;

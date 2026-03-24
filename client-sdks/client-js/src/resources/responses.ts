@@ -2,6 +2,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type {
   ClientOptions,
   CreateResponseParams,
+  ResponseOutputItem,
   ResponseOutputMessage,
   ResponsesDeleteResponse,
   ResponsesResponse,
@@ -12,9 +13,9 @@ import { BaseResource } from './base';
 
 type ResponsePayload = Omit<ResponsesResponse, 'output_text'>;
 
-function getOutputText(output: ResponseOutputMessage[]): string {
+function getOutputText(output: ResponseOutputItem[]): string {
   return output
-    .flatMap(message => message.content)
+    .flatMap(item => (item.type === 'message' ? item.content : []))
     .map(part => part.text)
     .join('');
 }
@@ -53,7 +54,7 @@ function hydrateStreamEvent(event: ResponsesStreamEvent | ResponsePayload): Resp
       ...event,
       item: {
         ...(event.item as ResponseOutputMessage),
-        content: (event.item as ResponseOutputMessage).content ?? [],
+        content: 'content' in (event.item as object) ? ((event.item as any).content ?? []) : [],
       },
     } as ResponsesStreamEvent;
   }
