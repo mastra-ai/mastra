@@ -22,6 +22,7 @@ exports[`MetaSchemaCompatLayer > Snapshot Tests - Full JSON Schema Output > shou
                 "additionalProperties": {
                   "type": "string",
                 },
+                "required": [],
                 "type": "object",
               },
               "name": {
@@ -200,6 +201,7 @@ exports[`MetaSchemaCompatLayer > Snapshot Tests - Full JSON Schema Output > shou
           },
         ],
       },
+      "required": [],
       "type": "object",
     },
     "preferences": {
@@ -316,6 +318,163 @@ constraints: greater than or equal to 0, lower than or equal to 1",
     "temperature",
     "maxTokens",
   ],
+  "type": "object",
+}
+`;
+
+exports[`MetaSchemaCompatLayer > ZodIntersection > should handle chained .and().and() (three-way merge) 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "person": {
+      "additionalProperties": false,
+      "properties": {
+        "age": {
+          "type": "number",
+        },
+        "email": {
+          "type": "string",
+        },
+        "name": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "name",
+        "age",
+        "email",
+      ],
+      "type": "object",
+    },
+  },
+  "required": [
+    "person",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`MetaSchemaCompatLayer > ZodIntersection > should handle intersection inside a parent object 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "label": {
+      "type": "string",
+    },
+    "metadata": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string",
+        },
+        "value": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "key",
+        "value",
+      ],
+      "type": "object",
+    },
+  },
+  "required": [
+    "metadata",
+    "label",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`MetaSchemaCompatLayer > ZodIntersection > should handle intersection nested inside a union (allOf inside anyOf) 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "locate": {
+      "additionalProperties": false,
+      "properties": {
+        "prompt": {
+          "anyOf": [
+            {
+              "type": "string",
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "convertHttpImage2Base64": {
+                  "type": "boolean",
+                },
+                "images": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                      },
+                      "url": {
+                        "type": "string",
+                      },
+                    },
+                    "required": [
+                      "name",
+                      "url",
+                    ],
+                    "type": "object",
+                  },
+                  "type": "array",
+                },
+                "prompt": {
+                  "type": "string",
+                },
+              },
+              "required": [
+                "prompt",
+                "images",
+                "convertHttpImage2Base64",
+              ],
+              "type": "object",
+            },
+          ],
+        },
+      },
+      "required": [
+        "prompt",
+      ],
+      "type": "object",
+    },
+  },
+  "required": [
+    "locate",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`MetaSchemaCompatLayer > ZodIntersection > should handle optional intersection wrapper 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "a": {
+          "type": "string",
+        },
+        "b": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "a",
+        "b",
+      ],
+      "type": "object",
+    },
+  },
   "type": "object",
 }
 `;
@@ -1040,6 +1199,7 @@ exports[`MetaSchemaCompatLayer > processZodType - Records > should handle record
       "additionalProperties": {
         "type": "boolean",
       },
+      "required": [],
       "type": "object",
     },
   },
@@ -1059,6 +1219,7 @@ exports[`MetaSchemaCompatLayer > processZodType - Records > should handle record
       "additionalProperties": {
         "type": "number",
       },
+      "required": [],
       "type": "object",
     },
   },

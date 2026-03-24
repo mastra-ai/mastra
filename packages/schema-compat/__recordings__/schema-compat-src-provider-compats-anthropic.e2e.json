@@ -1,0 +1,443 @@
+{
+  "meta": {
+    "name": "schema-compat-src-provider-compats-anthropic.e2e",
+    "testFile": "packages/schema-compat/src/provider-compats/anthropic.e2e.test.ts",
+    "testName": "Anthropic e2e test",
+    "model": "claude-sonnet-4-0",
+    "createdAt": "2026-03-24T09:52:48.839Z"
+  },
+  "recordings": [
+    {
+      "hash": "7327662a54ee28b4",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-0",
+          "max_tokens": 64000,
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "You are a test agent. Your task is to respond with valid JSON matching the schema provided."
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "name": "json",
+              "description": "Respond with a JSON object.",
+              "input_schema": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "string": {
+                    "type": "string",
+                    "description": "Sample text"
+                  },
+                  "stringMin": {
+                    "type": "string",
+                    "minLength": 5,
+                    "description": "sample text with a minimum of 5 characters"
+                  },
+                  "stringMax": {
+                    "type": "string",
+                    "maxLength": 10,
+                    "description": "sample text with a maximum of 10 characters"
+                  },
+                  "stringEmail": {
+                    "type": "string",
+                    "format": "email",
+                    "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+                    "description": "a sample email address"
+                  },
+                  "stringEmoji": {
+                    "type": "string",
+                    "format": "emoji",
+                    "pattern": "^(\\p{Extended_Pictographic}|\\p{Emoji_Component})+$",
+                    "description": "a valid sample emoji"
+                  },
+                  "stringUrl": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "a valid sample url"
+                  },
+                  "stringUuid": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "description": "a valid sample uuid"
+                  },
+                  "stringCuid": {
+                    "type": "string",
+                    "format": "cuid",
+                    "pattern": "^[cC][^\\s-]{8,}$",
+                    "description": "a valid sample cuid"
+                  },
+                  "stringRegex": {
+                    "type": "string",
+                    "pattern": "^test-",
+                    "description": "a valid sample string that satisfies the regex"
+                  },
+                  "number": {
+                    "type": "number",
+                    "description": "any valid sample number"
+                  },
+                  "numberGt": {
+                    "type": "number",
+                    "exclusiveMinimum": 3,
+                    "description": "any valid sample number greater than 3"
+                  },
+                  "numberLt": {
+                    "type": "number",
+                    "exclusiveMaximum": 6,
+                    "description": "any valid sample number less than 6"
+                  },
+                  "numberGte": {
+                    "type": "number",
+                    "minimum": 1,
+                    "description": "any valid sample number greater than or equal to 1"
+                  },
+                  "numberLte": {
+                    "type": "number",
+                    "maximum": 1,
+                    "description": "any valid sample number less than or equal to 1"
+                  },
+                  "numberMultipleOf": {
+                    "type": "number",
+                    "multipleOf": 2,
+                    "description": "any valid sample number that is a multiple of 2"
+                  },
+                  "numberInt": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991,
+                    "description": "any valid sample number that is an integer"
+                  },
+                  "exampleArray": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "any valid array of example strings"
+                  },
+                  "arrayMin": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "any valid sample array of strings with a minimum of 1 string"
+                  },
+                  "arrayMax": {
+                    "maxItems": 5,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "any valid sample array of strings with a maximum of 5 strings"
+                  },
+                  "date": {
+                    "description": "a valid sample date",
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "dateAfter": {
+                    "description": "a valid sample date after 2024-01-01",
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "dateBefore": {
+                    "description": "a valid sample date before today",
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "object": {
+                    "type": "object",
+                    "properties": {
+                      "foo": {
+                        "type": "string"
+                      },
+                      "bar": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["foo", "bar"],
+                    "description": "any valid sample object with a string and a number",
+                    "additionalProperties": false
+                  },
+                  "objectNested": {
+                    "type": "object",
+                    "properties": {
+                      "user": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 2
+                          },
+                          "age": {
+                            "type": "number",
+                            "minimum": 18
+                          }
+                        },
+                        "required": ["name", "age"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["user"],
+                    "description": "any valid sample data",
+                    "additionalProperties": false
+                  },
+                  "objectPassthrough": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": true,
+                    "description": "any sample object with example keys and data"
+                  },
+                  "objectLoose": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": true,
+                    "description": "any sample object with example keys and data"
+                  },
+                  "optional": {
+                    "description": "leave this field empty as an example of an optional field",
+                    "type": "string"
+                  },
+                  "nullable": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "leave this field empty as an example of a nullable field"
+                  },
+                  "enum": {
+                    "type": "string",
+                    "enum": ["A", "B", "C"],
+                    "description": "The letter A, B, or C"
+                  },
+                  "nativeEnum": {
+                    "type": "string",
+                    "enum": ["A", "B", "C"],
+                    "description": "The letter A, B, or C"
+                  },
+                  "unionPrimitives": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "description": "sample text or number"
+                  },
+                  "unionObjects": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "amount": {
+                            "type": "number"
+                          },
+                          "inventoryItemName": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["amount", "inventoryItemName"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          },
+                          "permissions": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": ["type", "permissions"],
+                        "additionalProperties": false
+                      }
+                    ],
+                    "description": "give an valid object"
+                  },
+                  "default": {
+                    "default": "test",
+                    "description": "sample text that is the default value",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "string",
+                  "stringMin",
+                  "stringMax",
+                  "stringEmail",
+                  "stringEmoji",
+                  "stringUrl",
+                  "stringUuid",
+                  "stringCuid",
+                  "stringRegex",
+                  "number",
+                  "numberGt",
+                  "numberLt",
+                  "numberGte",
+                  "numberLte",
+                  "numberMultipleOf",
+                  "numberInt",
+                  "exampleArray",
+                  "arrayMin",
+                  "arrayMax",
+                  "date",
+                  "dateAfter",
+                  "dateBefore",
+                  "object",
+                  "objectNested",
+                  "objectPassthrough",
+                  "objectLoose",
+                  "nullable",
+                  "enum",
+                  "nativeEnum",
+                  "unionPrimitives",
+                  "unionObjects"
+                ],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": {
+            "type": "any",
+            "disable_parallel_tool_use": true
+          }
+        },
+        "timestamp": 1774345959189
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
+          "anthropic-ratelimit-input-tokens-limit": "2000000",
+          "anthropic-ratelimit-input-tokens-remaining": "1999000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-03-24T09:52:40Z",
+          "anthropic-ratelimit-output-tokens-limit": "400000",
+          "anthropic-ratelimit-output-tokens-remaining": "399000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-03-24T09:52:48Z",
+          "anthropic-ratelimit-requests-limit": "20000",
+          "anthropic-ratelimit-requests-remaining": "19999",
+          "anthropic-ratelimit-requests-reset": "2026-03-24T09:52:39Z",
+          "anthropic-ratelimit-tokens-limit": "2400000",
+          "anthropic-ratelimit-tokens-remaining": "2398000",
+          "anthropic-ratelimit-tokens-reset": "2026-03-24T09:52:40Z",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e14c8c5ceab5e0e-BRU",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "application/json",
+          "date": "Tue, 24 Mar 2026 09:52:48 GMT",
+          "request-id": "req_011CZMhaTygCn9ordgLjxXF8",
+          "server": "cloudflare",
+          "server-timing": "x-originResponse;dur=9438",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "vary": "Accept-Encoding",
+          "x-envoy-upstream-service-time": "9436",
+          "x-robots-tag": "none"
+        },
+        "body": {
+          "model": "claude-sonnet-4-20250514",
+          "id": "msg_01VSEAak5PWyT6VedkhdCPL7",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "toolu_011fH69326wgEyL34imyejek",
+              "name": "json",
+              "input": {
+                "string": "Sample text content",
+                "stringMin": "Hello world",
+                "stringMax": "Short text",
+                "stringEmail": "test@example.com",
+                "stringEmoji": "🎉",
+                "stringUrl": "https://example.com",
+                "stringUuid": "550e8400-e29b-41d4-a716-446655440000",
+                "stringCuid": "cjld2cjxh0000qzrmn831i7rn",
+                "stringRegex": "test-sample",
+                "number": 42.5,
+                "numberGt": 5.7,
+                "numberLt": 4.2,
+                "numberGte": 3,
+                "numberLte": 0.5,
+                "numberMultipleOf": 8,
+                "numberInt": 123,
+                "exampleArray": ["apple", "banana", "cherry"],
+                "arrayMin": ["required item"],
+                "arrayMax": ["item1", "item2", "item3"],
+                "date": "2024-03-15T10:30:00Z",
+                "dateAfter": "2024-06-01T14:20:00Z",
+                "dateBefore": "2024-01-01T09:00:00Z",
+                "object": {
+                  "foo": "example string",
+                  "bar": 123
+                },
+                "objectNested": {
+                  "user": {
+                    "name": "John Doe",
+                    "age": 25
+                  }
+                },
+                "objectPassthrough": {
+                  "sampleKey": "sampleValue",
+                  "anotherKey": 456
+                },
+                "objectLoose": {
+                  "example": "data",
+                  "count": 10,
+                  "active": true
+                },
+                "nullable": null,
+                "enum": "A",
+                "nativeEnum": "B",
+                "unionPrimitives": "Hello world",
+                "unionObjects": {
+                  "amount": 150,
+                  "inventoryItemName": "Widget A"
+                }
+              },
+              "caller": {
+                "type": "direct"
+              }
+            }
+          ],
+          "stop_reason": "tool_use",
+          "stop_sequence": null,
+          "usage": {
+            "input_tokens": 2027,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 777,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          }
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

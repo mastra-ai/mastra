@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`AnthropicSchemaCompatLayer > ZodIntersection > should handle chained .and().and() (three-way merge) 1`] = `
+exports[`OpenAIReasoningSchemaCompatLayer > ZodIntersection > should handle chained .and().and() (three-way merge) 1`] = `
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
@@ -53,7 +53,7 @@ exports[`AnthropicSchemaCompatLayer > ZodIntersection > should handle chained .a
 }
 `;
 
-exports[`AnthropicSchemaCompatLayer > ZodIntersection > should handle intersection inside a parent object 1`] = `
+exports[`OpenAIReasoningSchemaCompatLayer > ZodIntersection > should handle intersection inside a parent object 1`] = `
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
@@ -98,7 +98,7 @@ exports[`AnthropicSchemaCompatLayer > ZodIntersection > should handle intersecti
 }
 `;
 
-exports[`AnthropicSchemaCompatLayer > ZodIntersection > should handle intersection nested inside a union (allOf inside anyOf) 1`] = `
+exports[`OpenAIReasoningSchemaCompatLayer > ZodIntersection > should handle intersection nested inside a union (allOf inside anyOf) 1`] = `
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
@@ -175,7 +175,7 @@ exports[`AnthropicSchemaCompatLayer > ZodIntersection > should handle intersecti
 }
 `;
 
-exports[`AnthropicSchemaCompatLayer > ZodIntersection > should handle optional intersection wrapper 1`] = `
+exports[`OpenAIReasoningSchemaCompatLayer > ZodIntersection > should handle optional intersection wrapper 1`] = `
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,

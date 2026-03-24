@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`GroqSchemaCompatLayer > ZodIntersection > should handle chained .and().and() (three-way merge) 1`] = `
+exports[`OpenAISchemaCompatLayer > ZodIntersection > should handle chained .and().and() (three-way merge) 1`] = `
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
@@ -33,7 +33,7 @@ exports[`GroqSchemaCompatLayer > ZodIntersection > should handle chained .and().
 }
 `;
 
-exports[`GroqSchemaCompatLayer > ZodIntersection > should handle intersection inside a parent object 1`] = `
+exports[`OpenAISchemaCompatLayer > ZodIntersection > should handle intersection inside a parent object 1`] = `
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
@@ -66,7 +66,7 @@ exports[`GroqSchemaCompatLayer > ZodIntersection > should handle intersection in
 }
 `;
 
-exports[`GroqSchemaCompatLayer > ZodIntersection > should handle intersection nested inside a union (allOf inside anyOf) 1`] = `
+exports[`OpenAISchemaCompatLayer > ZodIntersection > should handle intersection nested inside a union (allOf inside anyOf) 1`] = `
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
@@ -131,7 +131,7 @@ exports[`GroqSchemaCompatLayer > ZodIntersection > should handle intersection ne
 }
 `;
 
-exports[`GroqSchemaCompatLayer > ZodIntersection > should handle optional intersection wrapper 1`] = `
+exports[`OpenAISchemaCompatLayer > ZodIntersection > should handle optional intersection wrapper 1`] = `
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,

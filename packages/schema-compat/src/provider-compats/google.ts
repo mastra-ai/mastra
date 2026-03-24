@@ -14,6 +14,7 @@ import {
   isEnumSchema,
 } from '../json-schema/utils';
 import { SchemaCompatLayer } from '../schema-compatibility';
+import type { PublicSchema } from '../schema.types';
 import type { ModelInformation } from '../types';
 import { isOptional, isNullable, isNull, isObj, isArr, isUnion, isString, isNumber, isIntersection } from '../zodTypes';
 
@@ -148,7 +149,7 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
     return this.defaultUnsupportedZodTypeHandler(value as ZodObjectV4<any> | ZodObjectV3<any>);
   }
 
-  processToJSONSchema(zodSchema: ZodTypeV3 | ZodTypeV4, io: 'input' | 'output' = 'input'): JSONSchema7 {
+  public processToJSONSchema(zodSchema: PublicSchema<any>, io?: 'input' | 'output'): JSONSchema7 {
     const result = super.processToJSONSchema(zodSchema, io);
     // Fix union type arrays that Gemini doesn't support
     return fixNullableUnionTypes(result as Record<string, any>) as JSONSchema7;

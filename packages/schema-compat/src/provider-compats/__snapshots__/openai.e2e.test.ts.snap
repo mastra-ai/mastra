@@ -1,0 +1,381 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`OpenAI e2e test > should pass 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "arrayMax": {
+      "description": "any valid sample array of strings with a maximum of 5 strings
+constraints: maximum length 5",
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+    "arrayMin": {
+      "description": "any valid sample array of strings with a minimum of 1 string
+constraints: minimum length 1",
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+    "date": {
+      "description": "a valid sample date
+constraints: a valid date-time",
+      "type": "string",
+    },
+    "dateAfter": {
+      "description": "a valid sample date after 2024-01-01
+constraints: a valid date-time",
+      "type": "string",
+    },
+    "dateBefore": {
+      "description": "a valid sample date before today
+constraints: a valid date-time",
+      "type": "string",
+    },
+    "default": {
+      "default": "test",
+      "description": "sample text that is the default value",
+      "type": [
+        "null",
+        "string",
+      ],
+    },
+    "enum": {
+      "description": "The letter A, B, or C",
+      "enum": [
+        "A",
+        "B",
+        "C",
+      ],
+      "type": "string",
+    },
+    "exampleArray": {
+      "description": "any valid array of example strings",
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+    "nativeEnum": {
+      "description": "The letter A, B, or C",
+      "enum": [
+        "A",
+        "B",
+        "C",
+      ],
+      "type": "string",
+    },
+    "nullable": {
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "null",
+        },
+      ],
+      "description": "leave this field empty as an example of a nullable field",
+    },
+    "number": {
+      "description": "any valid sample number",
+      "type": "number",
+    },
+    "numberGt": {
+      "description": "any valid sample number greater than 3",
+      "exclusiveMinimum": 3,
+      "type": "number",
+    },
+    "numberGte": {
+      "description": "any valid sample number greater than or equal to 1",
+      "minimum": 1,
+      "type": "number",
+    },
+    "numberInt": {
+      "description": "any valid sample number that is an integer",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer",
+    },
+    "numberLt": {
+      "description": "any valid sample number less than 6",
+      "exclusiveMaximum": 6,
+      "type": "number",
+    },
+    "numberLte": {
+      "description": "any valid sample number less than or equal to 1",
+      "maximum": 1,
+      "type": "number",
+    },
+    "numberMultipleOf": {
+      "description": "any valid sample number that is a multiple of 2",
+      "multipleOf": 2,
+      "type": "number",
+    },
+    "object": {
+      "additionalProperties": false,
+      "description": "any valid sample object with a string and a number",
+      "properties": {
+        "bar": {
+          "type": "number",
+        },
+        "foo": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "foo",
+        "bar",
+      ],
+      "type": "object",
+    },
+    "objectLoose": {
+      "additionalProperties": false,
+      "description": "any sample object with example keys and data",
+      "properties": {},
+      "required": [],
+      "type": "object",
+    },
+    "objectNested": {
+      "additionalProperties": false,
+      "description": "any valid sample data",
+      "properties": {
+        "user": {
+          "additionalProperties": false,
+          "properties": {
+            "age": {
+              "minimum": 18,
+              "type": "number",
+            },
+            "name": {
+              "description": "constraints: minimum length 2",
+              "type": "string",
+            },
+          },
+          "required": [
+            "name",
+            "age",
+          ],
+          "type": "object",
+        },
+      },
+      "required": [
+        "user",
+      ],
+      "type": "object",
+    },
+    "objectPassthrough": {
+      "additionalProperties": false,
+      "description": "any sample object with example keys and data",
+      "properties": {},
+      "required": [],
+      "type": "object",
+    },
+    "optional": {
+      "description": "leave this field empty as an example of an optional field",
+      "type": [
+        "null",
+        "string",
+      ],
+    },
+    "string": {
+      "description": "Sample text",
+      "type": "string",
+    },
+    "stringCuid": {
+      "description": "a valid sample cuid",
+      "type": "string",
+    },
+    "stringEmail": {
+      "description": "a sample email address
+constraints: a valid email",
+      "type": "string",
+    },
+    "stringEmoji": {
+      "description": "a valid sample emoji",
+      "type": "string",
+    },
+    "stringMax": {
+      "description": "sample text with a maximum of 10 characters
+constraints: maximum length 10",
+      "type": "string",
+    },
+    "stringMin": {
+      "description": "sample text with a minimum of 5 characters
+constraints: minimum length 5",
+      "type": "string",
+    },
+    "stringRegex": {
+      "description": "a valid sample string that satisfies the regex
+constraints: input must match this regex ^test-",
+      "type": "string",
+    },
+    "stringUrl": {
+      "description": "a valid sample url",
+      "type": "string",
+    },
+    "stringUuid": {
+      "description": "a valid sample uuid
+constraints: a valid uuid",
+      "type": "string",
+    },
+    "unionObjects": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "amount": {
+              "type": "number",
+            },
+            "inventoryItemName": {
+              "type": "string",
+            },
+          },
+          "required": [
+            "amount",
+            "inventoryItemName",
+          ],
+          "type": "object",
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "permissions": {
+              "items": {
+                "type": "string",
+              },
+              "type": "array",
+            },
+            "type": {
+              "type": "string",
+            },
+          },
+          "required": [
+            "type",
+            "permissions",
+          ],
+          "type": "object",
+        },
+      ],
+      "description": "give an valid object",
+    },
+    "unionPrimitives": {
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
+      ],
+      "description": "sample text or number",
+    },
+  },
+  "required": [
+    "string",
+    "stringMin",
+    "stringMax",
+    "stringEmail",
+    "stringEmoji",
+    "stringUrl",
+    "stringUuid",
+    "stringCuid",
+    "stringRegex",
+    "number",
+    "numberGt",
+    "numberLt",
+    "numberGte",
+    "numberLte",
+    "numberMultipleOf",
+    "numberInt",
+    "exampleArray",
+    "arrayMin",
+    "arrayMax",
+    "date",
+    "dateAfter",
+    "dateBefore",
+    "object",
+    "objectNested",
+    "objectPassthrough",
+    "objectLoose",
+    "nullable",
+    "enum",
+    "nativeEnum",
+    "unionPrimitives",
+    "unionObjects",
+    "optional",
+    "default",
+  ],
+  "type": "object",
+  "x-optional": [
+    "optional",
+    "default",
+  ],
+}
+`;
+
+exports[`OpenAI e2e test > should pass 2`] = `
+{
+  "value": {
+    "arrayMax": [
+      "one",
+      "two",
+      "three",
+      "four",
+      "five",
+    ],
+    "arrayMin": [
+      "item1",
+    ],
+    "date": 2022-09-15T12:34:56.000Z,
+    "dateAfter": 2024-06-05T10:00:00.000Z,
+    "dateBefore": 2024-06-09T00:00:00.000Z,
+    "default": "",
+    "enum": "B",
+    "exampleArray": [
+      "alpha",
+      "beta",
+      "gamma",
+    ],
+    "nativeEnum": "C",
+    "nullable": null,
+    "number": 42,
+    "numberGt": 4,
+    "numberGte": 1,
+    "numberInt": 3,
+    "numberLt": 5,
+    "numberLte": 1,
+    "numberMultipleOf": 8,
+    "object": {
+      "bar": 123,
+      "foo": "bar",
+    },
+    "objectLoose": {},
+    "objectNested": {
+      "user": {
+        "age": 30,
+        "name": "Tim",
+      },
+    },
+    "objectPassthrough": {},
+    "optional": undefined,
+    "string": "Sample text",
+    "stringCuid": "cjo8b6bqv0001jql96l0f8n4w",
+    "stringEmail": "sample@example.com",
+    "stringEmoji": "😊",
+    "stringMax": "shortText",
+    "stringMin": "Hello",
+    "stringRegex": "test-value",
+    "stringUrl": "https://example.com",
+    "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
+    "unionObjects": {
+      "amount": 10,
+      "inventoryItemName": "Widget",
+    },
+    "unionPrimitives": "foo",
+  },
+}
+`;
