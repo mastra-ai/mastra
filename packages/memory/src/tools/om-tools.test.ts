@@ -1373,7 +1373,13 @@ describe('om-tools', () => {
       messages = [],
       threads = [],
     }: {
-      searchResults?: Array<{ messageId: string; threadId: string; score: number }>;
+      searchResults?: Array<{
+        threadId: string;
+        score: number;
+        groupId?: string;
+        range?: string;
+        text?: string;
+      }>;
       messages?: MastraDBMessage[];
       threads?: Array<{ id: string; title?: string; resourceId: string; createdAt: Date; updatedAt: Date }>;
     }) {
@@ -1390,29 +1396,7 @@ describe('om-tools', () => {
       };
     }
 
-    it('should return matching messages grouped by thread', async () => {
-      const messages: MastraDBMessage[] = [
-        {
-          id: 'msg-1',
-          threadId: 'thread-a',
-          resourceId: 'res',
-          role: 'user',
-          content: { format: 2, parts: [{ type: 'text', text: 'How do I configure vector search?' }] },
-          createdAt: new Date('2024-01-01'),
-        },
-        {
-          id: 'msg-2',
-          threadId: 'thread-b',
-          resourceId: 'res',
-          role: 'assistant',
-          content: {
-            format: 2,
-            parts: [{ type: 'text', text: 'Vector search uses embeddings to find similar content.' }],
-          },
-          createdAt: new Date('2024-01-02'),
-        },
-      ];
-
+    it('should return markdown-formatted observation search results with raw observation text', async () => {
       const threads = [
         {
           id: 'thread-a',
@@ -1432,10 +1416,21 @@ describe('om-tools', () => {
 
       const memory = makeMockMemory({
         searchResults: [
-          { messageId: 'msg-1', threadId: 'thread-a', score: 0.95 },
-          { messageId: 'msg-2', threadId: 'thread-b', score: 0.82 },
+          {
+            threadId: 'thread-a',
+            groupId: 'group-1',
+            range: 'msg-1:msg-3',
+            score: 0.95,
+            text: 'Observed setup discussion about vector search.',
+          },
+          {
+            threadId: 'thread-b',
+            groupId: 'group-2',
+            range: 'msg-4:msg-5',
+            score: 0.82,
+            text: 'Observed search documentation discussion.',
+          },
         ],
-        messages,
         threads,
       });
 
@@ -1447,13 +1442,19 @@ describe('om-tools', () => {
       });
 
       expect(result.count).toBe(2);
-      expect(result.results).toContain('Setup Help');
-      expect(result.results).toContain('← current');
-      expect(result.results).toContain('Search Docs');
-      expect(result.results).toContain('0.95');
-      expect(result.results).toContain('0.82');
-      expect(result.results).toContain('msg-1');
-      expect(result.results).toContain('msg-2');
+      expect(result.results).toContain('### Current thread memory');
+      expect(result.results).toContain('### Older memory from another thread');
+      expect(result.results).toContain('This result came from the current thread.');
+      expect(result.results).toContain('This result came from an older memory generation in another thread.');
+      expect(result.results).toContain('- thread: thread-a (Setup Help)');
+      expect(result.results).toContain('- thread: thread-b (Search Docs)');
+      expect(result.results).toContain('- source: raw messages from ID msg-1 through ID msg-3');
+      expect(result.results).toContain('- source: raw messages from ID msg-4 through ID msg-5');
+      expect(result.results).toContain('- observation group: group-1');
+      expect(result.results).toContain('- observation group: group-2');
+      expect(result.results).toContain('```text');
+      expect(result.results).toContain('Observed setup discussion about vector search.');
+      expect(result.results).toContain('Observed search documentation discussion.');
     });
 
     it('should return empty message when no results found', async () => {
@@ -1487,21 +1488,9 @@ describe('om-tools', () => {
       expect(result.results).toContain('retrieval: { vector: true }');
     });
 
-    it('should handle messages with no text parts', async () => {
-      const messages: MastraDBMessage[] = [
-        {
-          id: 'msg-no-text',
-          threadId: 'thread-a',
-          resourceId: 'res',
-          role: 'assistant',
-          content: { format: 2, parts: [{ type: 'data-observation', data: {} }] },
-          createdAt: new Date('2024-01-01'),
-        },
-      ];
-
+    it('should fall back when observation text is unavailable', async () => {
       const memory = makeMockMemory({
-        searchResults: [{ messageId: 'msg-no-text', threadId: 'thread-a', score: 0.7 }],
-        messages,
+        searchResults: [{ threadId: 'thread-a', groupId: 'group-empty', range: 'msg-1:msg-2', score: 0.7, text: '' }],
       });
 
       const result = await searchMessagesForResource({
@@ -1510,39 +1499,35 @@ describe('om-tools', () => {
         query: 'test',
       });
 
-      // data-observation parts are invisible — message still counted but no content rendered
       expect(result.count).toBe(1);
-      expect(result.results).toContain('thread-a');
+      expect(result.results).toContain('- thread: thread-a');
+      expect(result.results).toContain('_Observation text unavailable._');
     });
 
-    it('should render search results using the standard message format', async () => {
-      const messages: MastraDBMessage[] = [
-        {
-          id: 'msg-long',
-          threadId: 'thread-a',
-          resourceId: 'res',
-          role: 'user',
-          content: { format: 2, parts: [{ type: 'text', text: 'Hello world' }] },
-          createdAt: new Date('2024-01-01'),
-        },
-      ];
-
+    it('should apply a final token cap to the assembled markdown output', async () => {
       const memory = makeMockMemory({
-        searchResults: [{ messageId: 'msg-long', threadId: 'thread-a', score: 0.9 }],
-        messages,
+        searchResults: [
+          {
+            threadId: 'thread-a',
+            groupId: 'group-long',
+            range: 'msg-1:msg-99',
+            score: 0.9,
+            text: Array.from({ length: 300 }, () => 'observation').join(' '),
+          },
+        ],
       });
 
       const result = await searchMessagesForResource({
         memory,
         resourceId: 'res',
+        currentThreadId: 'thread-a',
         query: 'test',
+        maxTokens: 40,
       });
 
-      // Should use standard format: role header with message ID, part indices, score prefix
-      expect(result.results).toContain('[msg-long]');
-      expect(result.results).toContain('[p0]');
-      expect(result.results).toContain('[0.90]');
-      expect(result.results).toContain('Hello world');
+      expect(result.count).toBe(1);
+      expect(result.results).toContain('### Current thread memory');
+      expect(result.results.length).toBeLessThan(Array.from({ length: 300 }, () => 'observation').join(' ').length);
     });
 
     it('should return helpful message when search is not configured', async () => {

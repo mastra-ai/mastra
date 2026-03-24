@@ -1208,8 +1208,34 @@ Notes:
     return Boolean(isMDWorkingMemory && isMDWorkingMemory.version === `vnext`);
   }
 
+  private getObservationEmbeddingIndexName(dimensions?: number): string {
+    const defaultDimensions = 384;
+    const usedDimensions = dimensions ?? defaultDimensions;
+    const separator = this.vector?.indexSeparator ?? '_';
+    return `memory${separator}observations${separator}${usedDimensions}`;
+  }
+
+  private async createObservationEmbeddingIndex(dimensions?: number): Promise<{ indexName: string }> {
+    const defaultDimensions = 384;
+    const usedDimensions = dimensions ?? defaultDimensions;
+    const indexName = this.getObservationEmbeddingIndexName(dimensions);
+
+    if (typeof this.vector === `undefined`) {
+      throw new Error(
+        `Tried to create observation embedding index but no vector db is attached to this Memory instance.`,
+      );
+    }
+
+    await this.vector.createIndex({
+      indexName,
+      dimension: usedDimensions,
+    } as any);
+
+    return { indexName };
+  }
+
   /**
-   * Search messages across threads by semantic similarity.
+   * Search observation groups across threads by semantic similarity.
    * Requires a vector store and embedder to be configured.
    */
   public async searchMessages({
@@ -1220,15 +1246,29 @@ Notes:
     query: string;
     resourceId: string;
     topK?: number;
-  }): Promise<{ results: Array<{ messageId: string; threadId: string; score: number }> }> {
+  }): Promise<{
+    results: Array<{
+      threadId: string;
+      score: number;
+      groupId?: string;
+      range?: string;
+      text?: string;
+    }>;
+  }> {
     if (!this.vector) {
       throw new Error('searchMessages requires a vector store. Configure vector and embedder on your Memory instance.');
     }
 
     const { embeddings, dimension } = await this.embedMessageContent(query);
-    const { indexName } = await this.createEmbeddingIndex(dimension);
+    const { indexName } = await this.createObservationEmbeddingIndex(dimension);
 
-    const queryResults: Array<{ messageId: string; threadId: string; score: number }> = [];
+    const queryResults: Array<{
+      threadId: string;
+      score: number;
+      groupId?: string;
+      range?: string;
+      text?: string;
+    }> = [];
 
     await Promise.all(
       embeddings.map(async embedding => {
@@ -1239,30 +1279,79 @@ Notes:
           filter: { resource_id: resourceId },
         });
         for (const r of results) {
-          if (r.metadata?.message_id && r.metadata?.thread_id) {
-            queryResults.push({
-              messageId: r.metadata.message_id,
-              threadId: r.metadata.thread_id,
-              score: r.score,
-            });
+          if (!r.metadata?.thread_id) {
+            continue;
           }
+
+          const groupId = typeof r.metadata.group_id === 'string' ? r.metadata.group_id : undefined;
+          if (!groupId) {
+            continue;
+          }
+
+          queryResults.push({
+            threadId: r.metadata.thread_id,
+            score: r.score,
+            groupId,
+            range: typeof r.metadata.range === 'string' ? r.metadata.range : undefined,
+            text: typeof r.metadata.text === 'string' ? r.metadata.text : undefined,
+          });
         }
       }),
     );
 
-    // Deduplicate by messageId (multiple chunks from same message), keep highest score
-    const byMessage = new Map<string, (typeof queryResults)[0]>();
-    for (const r of queryResults) {
-      const existing = byMessage.get(r.messageId);
-      if (!existing || r.score > existing.score) {
-        byMessage.set(r.messageId, r);
+    const bestByGroup = new Map<string, (typeof queryResults)[0]>();
+    for (const result of queryResults) {
+      if (!result.groupId) {
+        continue;
+      }
+
+      const existing = bestByGroup.get(result.groupId);
+      if (!existing || result.score > existing.score) {
+        bestByGroup.set(result.groupId, result);
       }
     }
 
-    // Sort by score descending
-    const results = [...byMessage.values()].sort((a, b) => b.score - a.score);
+    const results = [...bestByGroup.values()].sort((a, b) => b.score - a.score);
 
     return { results };
+  }
+
+  /**
+   * Index a single observation group into the observation vector store.
+   */
+  public async indexObservation({
+    text,
+    groupId,
+    range,
+    threadId,
+    resourceId,
+  }: {
+    text: string;
+    groupId: string;
+    range: string;
+    threadId: string;
+    resourceId: string;
+  }): Promise<void> {
+    if (!this.vector || !this.embedder) return;
+
+    const embedResult = await this.embedMessageContent(text);
+    if (embedResult.embeddings.length === 0 || embedResult.dimension === undefined) {
+      return;
+    }
+
+    const { indexName } = await this.createObservationEmbeddingIndex(embedResult.dimension);
+
+    await this.vector.upsert({
+      indexName,
+      vectors: embedResult.embeddings,
+      metadata: embedResult.chunks.map(chunk => ({
+        group_id: groupId,
+        range,
+        thread_id: threadId,
+        resource_id: resourceId,
+        text: chunk,
+      })),
+    });
   }
 
   /**
@@ -2269,10 +2358,10 @@ Notes:
     // import errors when paired with an older @mastra/core version
     const { ObservationalMemory } = await import('./processors/observational-memory');
 
-    // Build onIndexMessages callback if vector search is configured
-    const onIndexMessages = this.hasRetrievalSearch(omConfig.retrieval)
-      ? async (messages: MastraDBMessage[]) => {
-          await this.indexMessagesList(messages);
+    // Build onIndexObservations callback if vector search is configured
+    const onIndexObservations = this.hasRetrievalSearch(omConfig.retrieval)
+      ? async (observation: { text: string; groupId: string; range: string; threadId: string; resourceId: string }) => {
+          await this.indexObservation(observation);
         }
       : undefined;
 
@@ -2286,7 +2375,7 @@ Notes:
       retrievalScope,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
-      onIndexMessages,
+      onIndexObservations,
       observation: omConfig.observation
         ? {
             model: omConfig.observation.model,

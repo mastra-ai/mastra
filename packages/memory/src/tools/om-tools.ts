@@ -28,6 +28,14 @@ type RecallThread = {
   updatedAt: Date;
 };
 
+type RecallSearchResult = {
+  threadId: string;
+  score: number;
+  groupId?: string;
+  range?: string;
+  text?: string;
+};
+
 type RecallMemory = {
   getMemoryStore: () => Promise<{
     listMessagesById: (args: { messageIds: string[] }) => Promise<{ messages: MastraDBMessage[] }>;
@@ -57,7 +65,7 @@ type RecallMemory = {
     query: string;
     resourceId: string;
     topK?: number;
-  }) => Promise<{ results: Array<{ messageId: string; threadId: string; score: number }> }>;
+  }) => Promise<{ results: RecallSearchResult[] }>;
   getThreadById?: (args: { threadId: string }) => Promise<RecallThread | null>;
 };
 
@@ -268,13 +276,6 @@ export async function searchMessagesForResource({
     };
   }
 
-  // Fetch actual message content
-  const memoryStore = await memory.getMemoryStore();
-  const messageIds = results.map(r => r.messageId);
-  const { messages } = await memoryStore.listMessagesById({ messageIds });
-  const messageMap = new Map(messages.map(m => [m.id, m]));
-
-  // Fetch thread info for context
   const threadIds = [...new Set(results.map(r => r.threadId))];
   const threadMap = new Map<string, RecallThread>();
   if (memory.getThreadById) {
@@ -286,82 +287,66 @@ export async function searchMessagesForResource({
     );
   }
 
-  // Filter by date if specified
   const beforeDate = before ? new Date(before) : undefined;
   const afterDate = after ? new Date(after) : undefined;
-  const dateFilteredThreadIds = new Set(
-    threadIds.filter(id => {
-      const thread = threadMap.get(id);
-      if (!thread) return true; // keep if no thread info
-      const created = new Date(thread.createdAt);
-      if (beforeDate && created >= beforeDate) return false;
-      if (afterDate && created <= afterDate) return false;
-      return true;
-    }),
-  );
 
-  // Group results by thread (filtered)
-  const byThread = new Map<string, Array<{ messageId: string; score: number; message: MastraDBMessage }>>();
-  for (const r of results) {
-    if (threadScope && r.threadId !== threadScope) continue;
-    if (!dateFilteredThreadIds.has(r.threadId)) continue;
-    const msg = messageMap.get(r.messageId);
-    if (!msg) continue;
-    const group = byThread.get(r.threadId) || [];
-    group.push({ messageId: r.messageId, score: r.score, message: msg });
-    byThread.set(r.threadId, group);
-  }
+  const filteredMatches = results.filter(match => {
+    if (threadScope && match.threadId !== threadScope) return false;
 
-  const filteredCount = [...byThread.values()].reduce((sum, matches) => sum + matches.length, 0);
+    const thread = threadMap.get(match.threadId);
+    if (!thread) return true;
 
-  if (filteredCount === 0) {
+    const created = new Date(thread.createdAt);
+    if (beforeDate && created >= beforeDate) return false;
+    if (afterDate && created <= afterDate) return false;
+    return true;
+  });
+
+  if (filteredMatches.length === 0) {
     return { results: 'No matching messages found.', count: 0 };
   }
 
-  // Render each thread group using the same format as cursor-based recall
-  const threadCount = byThread.size;
-  const perThreadBudget = Math.floor(maxTokens / threadCount);
-  const sections: string[] = [];
-
-  for (const [threadId, matches] of byThread) {
-    const thread = threadMap.get(threadId);
+  const sections = filteredMatches.map(match => {
+    const thread = threadMap.get(match.threadId);
     const title = thread?.title || '(untitled)';
-    const isCurrent = threadId === currentThreadId;
-    const marker = isCurrent ? ' ← current' : '';
-    const date = thread ? formatTimestamp(thread.updatedAt) : '';
+    const isCurrentThread = match.threadId === currentThreadId;
+    const generationLabel = isCurrentThread ? 'Current thread memory' : 'Older memory from another thread';
+    const generationDetail = isCurrentThread
+      ? 'This result came from the current thread.'
+      : 'This result came from an older memory generation in another thread.';
+    const threadLine = `- thread: ${match.threadId}${thread ? ` (${title})` : ''}`;
+    const sourceLine = match.range
+      ? `- source: raw messages from ID ${match.range.split(':')[0] ?? '(unknown)'} through ID ${match.range.split(':')[1] ?? '(unknown)'}`
+      : '- source: raw message range unavailable';
+    const updatedLine = thread ? `- thread updated: ${formatTimestamp(thread.updatedAt)}` : undefined;
+    const groupLine = match.groupId ? `- observation group: ${match.groupId}` : undefined;
+    const scoreLine = `- score: ${match.score.toFixed(2)}`;
+    const body = (match.text || '').trim() || '_Observation text unavailable._';
 
-    // Format messages using the standard pipeline
-    const parts: FormattedPart[] = [];
-    const timestamps = new Map<string, Date>();
-    for (const match of matches) {
-      const msgParts = formatMessageParts(match.message, 'low');
-      // Prepend score to first visible part
-      const first = msgParts[0];
-      if (first) {
-        msgParts[0] = {
-          ...first,
-          text: `[${match.score.toFixed(2)}] ${first.text}`,
-          fullText: `[${match.score.toFixed(2)}] ${first.fullText}`,
-        };
-      }
-      parts.push(...msgParts);
-      if (match.message.createdAt) {
-        timestamps.set(match.messageId, new Date(match.message.createdAt));
-      }
-    }
+    return [
+      `### ${generationLabel}`,
+      '',
+      generationDetail,
+      threadLine,
+      sourceLine,
+      updatedLine,
+      groupLine,
+      scoreLine,
+      '',
+      '```text',
+      body,
+      '```',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  });
 
-    const { text: rendered } = renderFormattedParts(parts, timestamps, {
-      detail: 'low',
-      maxTokens: perThreadBudget,
-    });
-
-    const header = `**${title}**${marker}\n  thread: ${threadId}${date ? ` | updated: ${date}` : ''}`;
-    sections.push(`${header}\n${rendered}`);
-  }
+  const assembled = sections.join('\n\n');
+  const { text: limited } = truncateByTokens(assembled, maxTokens);
 
   return {
-    results: sections.join('\n\n'),
-    count: filteredCount,
+    results: limited,
+    count: filteredMatches.length,
   };
 }
 

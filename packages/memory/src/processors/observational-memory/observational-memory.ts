@@ -72,7 +72,7 @@ import {
   createObservationStartMarker,
   createThreadUpdateMarker,
 } from './markers';
-import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
+import { generateAnchorId, renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import {
   buildObserverSystemPrompt,
   buildObserverTaskPrompt,
@@ -217,11 +217,17 @@ export interface ObservationalMemoryConfig {
   retrievalScope?: 'thread' | 'resource';
 
   /**
-   * Callback invoked after observation completes to index observed messages
+   * Callback invoked after observation completes to index observation groups
    * for semantic search. Called fire-and-forget — errors are logged but don't
    * block observation.
    */
-  onIndexMessages?: (messages: MastraDBMessage[]) => Promise<void>;
+  onIndexObservations?: (observation: {
+    text: string;
+    groupId: string;
+    range: string;
+    threadId: string;
+    resourceId: string;
+  }) => Promise<void>;
 
   /**
    * Model for both Observer and Reflector agents.
@@ -517,7 +523,13 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private scope: 'resource' | 'thread';
   private retrieval: boolean = false;
   private retrievalScope: 'thread' | 'resource' = 'resource';
-  private onIndexMessages?: (messages: MastraDBMessage[]) => Promise<void>;
+  private onIndexObservations?: (observation: {
+    text: string;
+    groupId: string;
+    range: string;
+    threadId: string;
+    resourceId: string;
+  }) => Promise<void>;
   private observationConfig: ResolvedObservationConfig;
   private reflectionConfig: ResolvedReflectionConfig;
   private onDebugEvent?: (event: ObservationDebugEvent) => void;
@@ -927,7 +939,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.retrievalScope = config.retrievalScope ?? 'resource';
 
     // Store indexing callback for observe-time vectorization
-    this.onIndexMessages = config.onIndexMessages;
+    this.onIndexObservations = config.onIndexObservations;
 
     // Resolve "default" to the default model
     const resolveModel = (m: typeof config.model) =>
@@ -4122,11 +4134,18 @@ ${formattedMessages}
    * Wrap observations in a thread attribution tag.
    * Used in resource scope to track which thread observations came from.
    */
-  private async wrapWithThreadTag(threadId: string, observations: string, messageRange?: string): Promise<string> {
+  private async wrapWithThreadTag(
+    threadId: string,
+    observations: string,
+    messageRange?: string,
+    observationGroupId?: string,
+  ): Promise<string> {
     // First strip any thread tags the Observer might have added
     const cleanObservations = this.stripThreadTags(observations);
     const groupedObservations =
-      this.retrieval && messageRange ? wrapInObservationGroup(cleanObservations, messageRange) : cleanObservations;
+      this.retrieval && messageRange
+        ? wrapInObservationGroup(cleanObservations, messageRange, observationGroupId)
+        : cleanObservations;
     const obscuredId = await this.representThreadIDInContext(threadId);
     return `<thread id="${obscuredId}">\n${groupedObservations}\n</thread>`;
   }
@@ -4335,10 +4354,16 @@ ${formattedMessages}
       // Build new observations (use freshRecord if available)
       const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
       const messageRange = this.retrieval ? buildMessageRange(messagesToObserve) : undefined;
+      const observationGroupId = this.retrieval && messageRange ? generateAnchorId() : undefined;
       let newObservations: string;
       if (this.scope === 'resource') {
         // In resource scope: wrap with thread tag and replace/append
-        const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
+        const threadSection = await this.wrapWithThreadTag(
+          threadId,
+          result.observations,
+          messageRange,
+          observationGroupId,
+        );
         newObservations = this.replaceOrAppendThreadSection(
           existingObservations,
           threadId,
@@ -4427,10 +4452,16 @@ ${formattedMessages}
         observedMessageIds: allObservedIds,
       });
 
-      // Fire-and-forget: index observed messages for semantic search
-      // Skip when async buffering is enabled — messages were already indexed at buffer time.
-      if (this.onIndexMessages && !this.isAsyncObservationEnabled()) {
-        this.onIndexMessages(messagesToObserve).catch(err => {
+      // Fire-and-forget: index observed observation groups for semantic search
+      // Skip when async buffering is enabled — observations were already indexed at buffer time.
+      if (this.onIndexObservations && !this.isAsyncObservationEnabled() && messageRange && observationGroupId) {
+        this.onIndexObservations({
+          text: result.observations,
+          groupId: observationGroupId,
+          range: messageRange,
+          threadId,
+          resourceId: record.resourceId,
+        }).catch((err: unknown) => {
           omError('[OM] Observe-time indexing failed (non-fatal)', err);
         });
       }
@@ -4811,13 +4842,14 @@ ${formattedMessages}
     // Get the new observations to buffer (just the new content, not merged)
     // The storage adapter will handle appending to existing buffered content
     const messageRange = this.retrieval ? buildMessageRange(messagesToBuffer) : undefined;
+    const observationGroupId = this.retrieval && messageRange ? generateAnchorId() : undefined;
     let newObservations: string;
     if (this.scope === 'resource') {
-      newObservations = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
+      newObservations = await this.wrapWithThreadTag(threadId, result.observations, messageRange, observationGroupId);
     } else {
       newObservations =
         this.retrieval && messageRange
-          ? wrapInObservationGroup(result.observations, messageRange)
+          ? wrapInObservationGroup(result.observations, messageRange, observationGroupId)
           : result.observations;
     }
 
@@ -4848,9 +4880,15 @@ ${formattedMessages}
       lastBufferedAtTime: lastObservedAt,
     });
 
-    // Fire-and-forget: index buffered messages for semantic search
-    if (this.onIndexMessages) {
-      this.onIndexMessages(messagesToBuffer).catch(err => {
+    // Fire-and-forget: index buffered observation groups for semantic search
+    if (this.onIndexObservations && messageRange && observationGroupId) {
+      this.onIndexObservations({
+        text: result.observations,
+        groupId: observationGroupId,
+        range: messageRange,
+        threadId,
+        resourceId: record.resourceId,
+      }).catch((err: unknown) => {
         omError('[OM] Buffer-time indexing failed (non-fatal)', err);
       });
     }
@@ -5760,7 +5798,13 @@ ${formattedMessages}
 
         // Wrap with thread tag and append (in thread order for consistency)
         const messageRange = this.retrieval ? buildMessageRange(threadMessages) : undefined;
-        const threadSection = await this.wrapWithThreadTag(threadId, result.observations, messageRange);
+        const observationGroupId = this.retrieval && messageRange ? generateAnchorId() : undefined;
+        const threadSection = await this.wrapWithThreadTag(
+          threadId,
+          result.observations,
+          messageRange,
+          observationGroupId,
+        );
         currentObservations = this.replaceOrAppendThreadSection(
           currentObservations,
           threadId,
@@ -5840,12 +5884,7 @@ ${formattedMessages}
         observedMessageIds: allObservedIds,
       });
 
-      // Fire-and-forget: index observed messages for semantic search
-      if (this.onIndexMessages && observedMessages.length > 0) {
-        this.onIndexMessages(observedMessages).catch(err => {
-          omError('[OM] Observe-time indexing failed (non-fatal)', err);
-        });
-      }
+      // Observation groups were already indexed per-thread while building currentObservations.
 
       // ════════════════════════════════════════════════════════════════════════
       // INSERT END MARKERS into each thread's last message

@@ -144,7 +144,7 @@ const memory = new Memory({
 })
 ```
 
-When vector search is configured, new messages are automatically indexed at buffer time and during synchronous observation (fire-and-forget, non-blocking).
+When vector search is configured, new observation groups are automatically indexed at buffer time and during synchronous observation (fire-and-forget, non-blocking). Semantic search returns observation-group matches with their raw source message ID ranges, so the recall tool can show the summarized memory alongside where it came from.
 
 #### Restricting to the current thread
 
